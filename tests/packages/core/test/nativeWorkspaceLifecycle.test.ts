@@ -8,7 +8,7 @@ import { NativeProjectPendingStore } from "../../../../core/packages/core/src/na
 import type { NativeWorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { shutdownHost, startHost } from "../../../../core/packages/core/src/hostLifecycle.js";
-import { startWorkspace, restartWorkspace, updateWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { setupWorkspace, startWorkspace, restartWorkspace, updateWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 import { workspaceRootSnapshotPath } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
 import { cleanupNativeProjectFixtures, nativeFixture, rewriteJson,
   type NativeFixture } from "../../cli/test/nativeProjectCommandsFixture.js";
@@ -72,6 +72,26 @@ describe("native workspace lifecycle", () => {
     expect(context.runner.calls.some((call) => call.includes("dim-gitea"))).toBe(false);
   });
 
+  it("rejects an environment change before stopping a native workspace", async () => {
+    const context = await lifecycleFixture("ready", true);
+    const current = { ...context.workspace, environment: "custom" as const };
+    await context.state.writeWorkspace(current);
+
+    await expect(restartWorkspace(context.runner, context.options, current.name)).rejects.toThrow(/environment changed/);
+    expect(context.runner.events).not.toContain("stop");
+    await expect(context.state.readWorkspace(current.name)).resolves.toMatchObject({ phase: "ready", environment: "custom" });
+  });
+
+  it("rejects an environment change before inspecting or fencing a native update", async () => {
+    const context = await lifecycleFixture("ready", true);
+    const current = { ...context.workspace, environment: "custom" as const };
+    await context.state.writeWorkspace(current);
+
+    await expect(updateWorkspace(context.runner, context.options, current.name)).rejects.toThrow(/environment changed/);
+    expect(context.runner.calls).toEqual([]);
+    await expect(context.state.readWorkspace(current.name)).resolves.toMatchObject({ phase: "ready", environment: "custom" });
+  });
+
   it("preserves native workspace state when fresh readiness is rejected", async () => {
     // Given
     const context = await lifecycleFixture("ready", true);
@@ -90,6 +110,19 @@ describe("native workspace lifecycle", () => {
     await expect(operation).rejects.toThrow(/readiness/);
     await expect(context.state.readWorkspace(context.workspace.name)).resolves.toEqual(before);
     expect(context.runner.calls).toEqual([]);
+  });
+
+  it("demotes ready and publishes relay error when native setup reconciliation fails", async () => {
+    const context = await lifecycleFixture("ready", true);
+    const current = { ...context.workspace, environment: "recommended" as const };
+    await context.state.writeWorkspace(current);
+    const runner = new NativeLifecycleRunner(current, workspaceRootSnapshotPath(context.fixture.stateRoot, current), true, true);
+
+    await expect(setupWorkspace(runner, context.options, current.name)).rejects.toThrow(/host input helper/);
+
+    await expect(context.state.readWorkspace(current.name)).resolves.toMatchObject({ phase: "error" });
+    expect(runner.calls.filter((call) => call.at(-2) === "phase").map((call) => call.at(-1)))
+      .toEqual(["setting-up", "error"]);
   });
 
   it("shuts down and restores only schema-9 workspaces from a fresh readiness proof", async () => {
@@ -208,7 +241,8 @@ class NativeLifecycleRunner implements StreamingCommandRunner {
   constructor(
     private readonly workspace: NativeWorkspaceRecord,
     private mountedRoot: string,
-    private running: boolean
+    private running: boolean,
+    private readonly failHostInput = false
   ) {}
 
   async run(command: string, args: string[]): Promise<CommandResult> {
@@ -244,6 +278,9 @@ class NativeLifecycleRunner implements StreamingCommandRunner {
     }
     if (args.includes("cgroup.subtree_control")) {
       return result(command, args, "systemd\ncgroup2fs\nyes\ncpu pids\n");
+    }
+    if (this.failHostInput && args.some((argument) => argument.startsWith("DIM_HOST_INPUT_HELPER_B64="))) {
+      return result(command, args, "", 1, "injected helper failure");
     }
     if (args.at(-2) === "-f") return result(command, args, "", 1);
     return result(command, args);

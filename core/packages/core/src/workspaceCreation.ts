@@ -19,6 +19,8 @@ import {
   validateWorkspaceResources
 } from "./workspaceValidation.js";
 import { createNativeWorkspace } from "./nativeWorkspaceCreation.js";
+import { selectWorkspaceEnvironment } from "./workspaceEnvironment.js";
+import { allocateWorkspaceResourceBudget } from "./workspaceResourceBudget.js";
 
 export async function createWorkspace(
   runner: StreamingCommandRunner,
@@ -46,11 +48,12 @@ export async function createWorkspace(
     const project = validateLifecycleName(input.project, "project");
     const name = validateLifecycleName(input.name, "workspace");
     const profiles = validateWorkspaceProfiles(input.profiles);
-    validateWorkspaceResources({
+    const resources = {
       cpuCount: input.cpuCount ?? options.cpuCount,
       memory: input.memory ?? options.memory,
       pidsLimit: input.pidsLimit ?? options.pidsLimit
-    });
+    };
+    validateWorkspaceResources(resources);
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
     try {
@@ -83,6 +86,10 @@ export async function createWorkspace(
         } catch (error) {
           if (!(error instanceof MissingRecordError)) throw error;
         }
+        const environment = existing === undefined
+          ? await selectWorkspaceEnvironment(selectedRoot.rootSnapshotPath)
+          : existing.environment ?? "custom";
+        allocateWorkspaceResourceBudget(environment, resources);
         const workspaceId = existing?.workspaceId ?? randomBytes(32).toString("base64url");
         setStage("workspace capability resolution");
         const capabilities = await resolveWorkspaceCapabilities(
@@ -144,6 +151,7 @@ export async function createWorkspace(
             rootRef: selectedRoot.rootRef,
             rootCommit: selectedRoot.rootCommit,
             workspaceDataPath: "/var/lib/dim/workspace-data",
+            environment,
             phase: "creating",
             profiles,
             capabilities,
@@ -153,9 +161,7 @@ export async function createWorkspace(
             dockerVolumeName: `dim-ws-${name}-docker`,
             runtimeBackend: input.runtimeBackend,
             kvm,
-            cpuCount: input.cpuCount ?? options.cpuCount,
-            memory: input.memory ?? options.memory,
-            pidsLimit: input.pidsLimit ?? options.pidsLimit,
+            ...resources,
             routes: [],
             gitUserName,
             gitUserEmail,

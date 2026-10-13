@@ -62,6 +62,7 @@ export class UpdateRunner implements StreamingCommandRunner {
   containerRootSnapshotPath = "";
   containerExists = true;
   workspaceId = WORKSPACE_IDENTITY.workspaceId;
+  private resources = { cpuCount: "2", memory: "4294967296", pidsLimit: "2048" };
 
   constructor(
     private remainingManifestFailures = 0,
@@ -99,6 +100,10 @@ export class UpdateRunner implements StreamingCommandRunner {
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
       return result(command, args, registryCacheInspect("registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33"));
     }
+    if (args[0] === "container" && args[1] === "inspect" && args.at(-1)?.includes("HostConfig.NanoCpus")) {
+      return result(command, args,
+        `${Number(this.resources.cpuCount) * 1_000_000_000}|${this.resources.memory}|${this.resources.memory}|${this.resources.pidsLimit}\n`);
+    }
     if (args[0] === "exec" && args[1] === "gitea-container-id"
       && args.some((argument) => argument.includes("/data/dim/credentials.json"))) {
       return result(command, args, CREDENTIALS);
@@ -127,6 +132,14 @@ export class UpdateRunner implements StreamingCommandRunner {
       this.containerExists = true;
       this.lifecycleEvents.push("container-create");
       return result(command, args, "workspace-container-id\n");
+    }
+    if (args[0] === "update") {
+      this.resources = {
+        cpuCount: args[args.indexOf("--cpus") + 1] ?? "",
+        memory: memoryBytes(args[args.indexOf("--memory") + 1] ?? ""),
+        pidsLimit: args[args.indexOf("--pids-limit") + 1] ?? ""
+      };
+      return result(command, args);
     }
     if (args.includes("{{.State.Running}}")) return result(command, args, "true\n");
     if (args.includes("git") && args.includes("merge") && args.includes("--ff-only")) {
@@ -159,6 +172,14 @@ export class UpdateRunner implements StreamingCommandRunner {
     }
     return 0;
   }
+}
+
+function memoryBytes(value: string): string {
+  const match = /^(\d+)([kmgt]?)$/i.exec(value);
+  const amount = match?.[1];
+  const unit = match?.[2]?.toLowerCase();
+  if (amount === undefined || unit === undefined) return value;
+  return (BigInt(amount) * (1024n ** BigInt(["", "k", "m", "g", "t"].indexOf(unit)))).toString();
 }
 
 export class LockInterleaving {

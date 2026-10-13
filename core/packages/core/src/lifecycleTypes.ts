@@ -285,6 +285,7 @@ interface WorkspaceRecordBase {
   rootRef: string;
   rootCommit: string;
   workspaceDataPath: string;
+  environment?: "recommended" | "minimal" | "custom";
   phase: WorkspacePhase;
   profiles: string[];
   capabilities?: WorkspaceCapabilityRecord[];

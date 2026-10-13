@@ -134,6 +134,18 @@ it("builds a persistent container with credentials but no host mounts or socket"
     expect(withoutKvm).not.toContain("/dev/kvm");
     expect(withoutKvm).not.toContain("--group-add");
 
+    const recommended = workspaceContainerArgs(options, { ...record, cpuCount: "2", memory: "4g", pidsLimit: "2048" }, {
+      username: "writer", token: "token", userName: "Agent", userEmail: "agent@example.invalid"
+    }, undefined, () => 992, undefined, "recommended");
+    expect(recommended).toEqual(expect.arrayContaining([
+      "--cpus", "0.5",
+      "--memory", "1073741824",
+      "--memory-swap", "1073741824",
+      "--pids-limit", "512",
+      "--label", "dim.resource-budget=split-v1",
+      "--label", "dim.resource-budget-role=outer"
+    ]));
+
     const { gitBaseUrl: providerGitBaseUrl, ...workspaceBase } = record;
     expect(providerGitBaseUrl).toBe("http://172.20.0.2:3000/dim-project");
     const nativeArgs = workspaceContainerArgs(options, {

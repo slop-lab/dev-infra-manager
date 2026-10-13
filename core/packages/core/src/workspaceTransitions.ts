@@ -24,6 +24,8 @@ import {
 import { readWorkspaceForOperation, validateWorkspaceProfiles } from "./workspaceValidation.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 import { transitionNativeWorkspace } from "./nativeWorkspaceTransitions.js";
+import { selectWorkspaceEnvironmentTransition } from "./workspaceEnvironmentTransition.js";
+import { notifyRecommendedWorkspaceRelayPhase } from "./workspaceAgentLifecycle.js";
 
 export async function updateWorkspace(
   runner: StreamingCommandRunner,
@@ -58,9 +60,11 @@ export async function updateWorkspace(
         const oldProfiles = record.profiles;
         setStage("profile validation");
         const nextProfiles = profiles === undefined ? oldProfiles : validateWorkspaceProfiles(profiles);
+        await selectWorkspaceEnvironmentTransition(record, selectedRoot.rootSnapshotPath);
         setStage("workspace container readiness");
         let containerId = await assertContainerRunning(runner, options.stateRoot, record);
         if (record.rootCommit !== selectedRoot.rootCommit) {
+          await notifyRecommendedWorkspaceRelayPhase(runner, record, containerId, "setting-up");
           setStage("selected root recording");
           record = await recordSelectedRoot(state, record, selectedRoot);
           setStage("workspace reconciliation");
@@ -216,6 +220,7 @@ export async function restartWorkspace(
           );
         }
         if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+        await selectWorkspaceEnvironmentTransition(record, selectedRoot.rootSnapshotPath);
         setStage("workspace container readiness");
         const containerId = await assertContainerRunning(runner, options.stateRoot, record);
         setStage("workspace stop");

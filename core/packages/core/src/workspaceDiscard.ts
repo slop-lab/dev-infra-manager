@@ -13,6 +13,7 @@ import {
   isMissingVolume
 } from "./workspaceResourceOwnership.js";
 import { readWorkspaceForOperation } from "./workspaceValidation.js";
+import { discardWorkspaceAgentResources, notifyRecommendedWorkspaceRelayPhase } from "./workspaceAgentLifecycle.js";
 
 export async function discardWorkspace(
   runner: StreamingCommandRunner,
@@ -29,7 +30,26 @@ export async function discardWorkspace(
     let record: WorkspaceRecord;
     try {
       record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
+      if (keepVolume && record.environment === "recommended") {
+        throw new UserError(
+          `recommended workspace '${record.name}' does not support --keep-volume because its private home, checkout, and Docker volumes are identity-bound; preserve data by leaving the workspace intact or copying it before discard`
+        );
+      }
       const discarding = { ...record, phase: "discarding" as const, updatedAt: new Date().toISOString() };
+      let container;
+      try {
+        container = await inspectWorkspaceContainer(runner, record);
+      } catch (error) {
+        await state.writeWorkspace(discarding);
+        throw error;
+      }
+      if (container !== undefined
+        && container.rootSnapshotPath !== workspaceRootSnapshotPath(options.stateRoot, record)) {
+        throw new UserError(`workspace '${record.name}' container root does not match its recorded immutable root`);
+      }
+      if (container?.running) {
+        await notifyRecommendedWorkspaceRelayPhase(runner, record, container.id, "discarding");
+      }
       await state.writeWorkspace(discarding);
       await state.removeWorkspaceGrant(record);
       await state.removeAgentGrant(record);
@@ -48,10 +68,11 @@ export async function discardWorkspace(
     }
     const container = await inspectWorkspaceContainer(runner, record);
     const volume = await inspectWorkspaceVolume(runner, record);
+    const environment = record.environment ?? "custom";
+    if (environment === "recommended") {
+      await discardWorkspaceAgentResources(runner, record, keepVolume, container?.id ?? null);
+    }
     if (container !== undefined) {
-    if (container.rootSnapshotPath !== workspaceRootSnapshotPath(options.stateRoot, record)) {
-        throw new UserError(`workspace '${record.name}' container root does not match its recorded immutable root`);
-      }
       const inspectedRecord = { ...record, containerName: container.id };
       if (!container.running) {
         const started = await runner.run("docker", ["start", container.id]);

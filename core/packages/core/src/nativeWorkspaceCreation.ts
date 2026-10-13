@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { join } from "node:path";
 import { MissingRecordError, UserError } from "./errors.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
@@ -12,6 +13,8 @@ import { setupWorkspaceLocked, reconcileNativeWorkspace } from "./workspaceSetup
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 import { readWorkspaceForOperation, resolveWorkspaceCapabilities, resolveWorkspaceKvm,
   validateWorkspaceProfiles, validateWorkspaceResources } from "./workspaceValidation.js";
+import { selectWorkspaceEnvironment } from "./workspaceEnvironment.js";
+import { allocateWorkspaceResourceBudget } from "./workspaceResourceBudget.js";
 
 type NativeWorkspaceCreateRequest = {
   readonly project: string;
@@ -68,6 +71,12 @@ export async function createNativeWorkspace(input: NativeWorkspaceCreationInput)
       } catch (error) {
         if (!(error instanceof MissingRecordError)) throw error;
       }
+      const environment = existing === undefined
+        ? await selectWorkspaceEnvironment(join(
+          input.options.stateRoot, "assets", "native-project-roots", project.projectId, proof.commit
+        ))
+        : existing.environment ?? "custom";
+      allocateWorkspaceResourceBudget(environment, resources);
       const workspaceId = existing?.workspaceId ?? randomBytes(32).toString("base64url");
       const capabilities = await resolveWorkspaceCapabilities({
         required: input.request.requiredCapabilities ?? [],
@@ -85,7 +94,7 @@ export async function createNativeWorkspace(input: NativeWorkspaceCreationInput)
         record = {
           schemaVersion: 9, workspaceId, name, projectId: project.projectId, projectName,
           rootRepositoryAlias: project.rootAlias, rootRef: proof.protectedRef,
-          rootCommit: proof.commit, workspaceDataPath: "/var/lib/dim/workspace-data",
+          rootCommit: proof.commit, workspaceDataPath: "/var/lib/dim/workspace-data", environment,
           phase: "creating", profiles, capabilities, composeProjectName: `dim-${name}`,
           containerName: `dim-ws-${name}`, networkName: "bridge",
           dockerVolumeName: `dim-ws-${name}-docker`, runtimeBackend: input.request.runtimeBackend,

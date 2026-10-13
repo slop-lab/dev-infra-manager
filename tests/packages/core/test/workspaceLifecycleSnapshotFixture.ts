@@ -67,6 +67,9 @@ export class LifecycleRunner implements StreamingCommandRunner {
         exitCode: 0
       };
     }
+    if (args[0] === "container" && args[1] === "inspect" && args[2]?.startsWith("dim-agent-")) {
+      return { command, args, stdout: "", stderr: `Error: No such container: ${args[2]}`, exitCode: 1 };
+    }
     if (args[0] === "exec" && (args[1] === "dim-gitea" || args[1] === "gitea-container-id")
       && args.some((argument) => argument.includes("/data/dim/credentials.json"))) {
       return { command, args, stdout: JSON.stringify({

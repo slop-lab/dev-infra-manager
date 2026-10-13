@@ -16,6 +16,7 @@ import {
   workspaceRootSnapshotPath,
   WORKSPACE_RUNTIME_CONFIG_VERSION,
   WORKSPACE_USER,
+  workspaceGitBaseUrl,
   type WorkspaceGitEnvironment
 } from "./workspaceLifecycleTypes.js";
 import { assertRootSnapshot } from "./workspaceProjectCommands.js";
@@ -27,6 +28,11 @@ import {
   workspaceContainerLabels,
   workspaceVolumeLabels
 } from "./workspaceResourceOwnership.js";
+import type { WorkspaceEnvironment } from "./workspaceEnvironment.js";
+import {
+  allocateWorkspaceResourceBudget,
+  workspaceResourceBudgetLabels
+} from "./workspaceResourceBudget.js";
 
 export async function assertContainerRunning(
   runner: StreamingCommandRunner,
@@ -50,6 +56,7 @@ export async function reconcileContainer(
   git: WorkspaceGitEnvironment
 ): Promise<string> {
   await assertRootSnapshot(options.stateRoot, record);
+  const environment = record.environment ?? "custom";
   if (record.kvm) {
     try {
       await probeKvmDevice();
@@ -68,7 +75,7 @@ export async function reconcileContainer(
   let container = await inspectWorkspaceContainer(runner, record);
   if (container === undefined) {
     const created = await runner.run("docker", workspaceContainerArgs(
-      options, record, effectiveGit, controllerGrant, undefined, agentGrant
+      options, record, effectiveGit, controllerGrant, undefined, agentGrant, environment
     ));
     container = await inspectWorkspaceContainer(runner, record);
     if (container === undefined) {
@@ -84,7 +91,7 @@ export async function reconcileContainer(
       throw new UserError(`failed to replace workspace container: ${removed.stderr.trim()}`);
     }
     const created = await runner.run("docker", workspaceContainerArgs(
-      options, record, effectiveGit, controllerGrant, undefined, agentGrant
+      options, record, effectiveGit, controllerGrant, undefined, agentGrant, environment
     ));
     container = await inspectWorkspaceContainer(runner, record);
     if (container === undefined) {
@@ -133,9 +140,11 @@ export function workspaceContainerArgs(
   git: WorkspaceGitEnvironment,
   controllerGrant?: string,
   kvmGroupId: () => number = () => statSync("/dev/kvm").gid,
-  agentGrant?: string
+  agentGrant?: string,
+  environment: WorkspaceEnvironment = "custom"
 ): string[] {
   const plan = workspaceRuntimePlan(record.runtimeBackend, options);
+  const resources = allocateWorkspaceResourceBudget(environment, record).outer;
   const args = [
     "run", "--detach",
     "--name", record.containerName,
@@ -143,15 +152,18 @@ export function workspaceContainerArgs(
     "--add-host", "host.docker.internal:host-gateway",
     ...DOCKER_HUB_DIRECT_HOSTNAMES.map((hostname) => `--add-host=${hostname}:127.0.0.1`),
     "--runtime", plan.dockerRuntime,
-    "--cpus", record.cpuCount,
-    "--memory", record.memory,
-    "--memory-swap", record.memory,
-    "--pids-limit", record.pidsLimit,
+    "--cpus", resources.cpuCount,
+    "--memory", resources.memory,
+    "--memory-swap", resources.memory,
+    "--pids-limit", resources.pidsLimit,
     "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
     "--mount", `type=bind,source=${workspaceRootSnapshotPath(options.stateRoot, record)},target=${PROJECT_ROOT},readonly`,
     "--mount", `type=bind,source=${path.dirname(options.controllerSocketPath)},target=/run/dim/controller`,
     "--mount", `type=bind,source=${path.dirname(options.agentControllerSocketPath)},target=/run/dim/agent-controller`,
     ...workspaceContainerLabels(record).flatMap((label) => ["--label", label]),
+    ...(environment === "recommended"
+      ? workspaceResourceBudgetLabels("outer").flatMap((label) => ["--label", label])
+      : []),
     "--label", `dim.runtime-config=${WORKSPACE_RUNTIME_CONFIG_VERSION}`,
     "--env", `DIM_GIT_USERNAME=${git.username}`,
     "--env", `DIM_GIT_TOKEN=${git.token}`,
@@ -177,6 +189,13 @@ export function workspaceContainerArgs(
     args.push("--env", `DIM_AGENT_CONTROLLER_TOKEN=${agentGrant}`);
   }
   if (git.brokerToken !== undefined) args.push("--env", `DIM_NATIVE_GIT_BROKER_TOKEN=${git.brokerToken}`);
+  if (environment === "recommended") {
+    const gitBase = workspaceGitBaseUrl(record);
+    const gitPath = new URL(`${gitBase.endsWith("/") ? gitBase : `${gitBase}/`}${record.rootRepositoryAlias}.git`).pathname;
+    args.push("--env", `DIM_AGENT_GIT_RELAY_MODE=${record.schemaVersion === 9 ? "native" : "managed"}`);
+    args.push("--env", `DIM_AGENT_GIT_UPSTREAM=${record.schemaVersion === 9 ? "http://127.0.0.1:19418" : record.gitBaseUrl}`);
+    args.push("--env", `DIM_AGENT_GIT_PATH=${gitPath}`);
+  }
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
   for (const provision of record.capabilities ?? []) {
     if (provision.status !== "provided") continue;

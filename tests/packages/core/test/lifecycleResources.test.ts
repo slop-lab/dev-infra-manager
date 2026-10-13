@@ -21,6 +21,7 @@ import {
 import { workspaceRuntimePlan } from "../../../../core/packages/core/src/runtimeBackends.js";
 import { rootRepositorySnapshot } from "./lifecycleFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
+import { workspaceAgentContainerLabels, workspaceAgentIdentity } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
 
 describe("project and workspace lifecycle", () => {
   let root: string;
@@ -46,6 +47,7 @@ it("updates a claimed workspace container and persists its effective resources",
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
       workspaceDataPath: "/var/lib/dim/workspace-data",
+      environment: "recommended",
       phase: "ready",
       profiles: [],
       composeProjectName: "dim-work-1",
@@ -72,6 +74,30 @@ it("updates a claimed workspace container and persists its effective resources",
       async run(command: string, args: string[]): Promise<CommandResult> {
         calls.push([command, ...args]);
         if ((args[0] === "container" && args[1] === "inspect") || args[0] === "inspect") {
+          if (args.includes("{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}")) {
+            const agent = args[2] === "a".repeat(64);
+            return { command, args, stdout: agent
+              ? "1500000000|2415919104|2415919104|768\n"
+              : "500000000|805306368|805306368|256\n", stderr: "", exitCode: 0 };
+          }
+          if (args[2] === "dim-agent-work-1") {
+            const identity = workspaceAgentIdentity(record);
+            const labels = JSON.stringify(Object.fromEntries(
+              workspaceAgentContainerLabels(record).map((label) => label.split("=", 2))
+            ));
+            const mounts = JSON.stringify([
+              { Type: "volume", Name: identity.homeVolumeName,
+                Source: `/docker/volumes/${identity.homeVolumeName}/_data`, Destination: "/home/dim", RW: true },
+              { Type: "volume", Name: identity.checkoutVolumeName,
+                Source: `/docker/volumes/${identity.checkoutVolumeName}/_data`, Destination: "/workspace", RW: true },
+              { Type: "volume", Name: identity.dockerVolumeName,
+                Source: `/docker/volumes/${identity.dockerVolumeName}/_data`,
+                Destination: "/var/lib/docker", RW: true }
+            ]);
+            return { command, args,
+              stdout: `${"a".repeat(64)}|true|sha256:${"f".repeat(64)}|sysbox-runc|false|${labels}|${mounts}\n`,
+              stderr: "", exitCode: 0 };
+          }
           return { command, args, stdout: `${workspaceContainerInspect(record, {
             rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
           })}\n`, stderr: "", exitCode: 0 };
@@ -94,13 +120,21 @@ it("updates a claimed workspace container and persists its effective resources",
       memory: "3g",
       pidsLimit: "1024"
     });
-    expect(calls.at(-1)).toEqual([
+    expect(calls).toContainEqual([
       "docker", "update",
-      "--cpus", "2",
-      "--memory", "3g",
-      "--memory-swap", "3g",
-      "--pids-limit", "1024",
+      "--cpus", "0.5",
+      "--memory", "805306368",
+      "--memory-swap", "805306368",
+      "--pids-limit", "256",
       "workspace-container-id"
+    ]);
+    expect(calls).toContainEqual([
+      "docker", "update",
+      "--cpus", "1.5",
+      "--memory", "2415919104",
+      "--memory-swap", "2415919104",
+      "--pids-limit", "768",
+      "a".repeat(64)
     ]);
   });
 });

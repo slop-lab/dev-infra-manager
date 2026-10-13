@@ -1,9 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { bootstrapNativeProjectRoot, UserError } from "@slop-lab/dim-core";
+import {
+  bootstrapNativeProjectRoot,
+  compileNativeRootBootstrapPolicy,
+  UserError
+} from "@slop-lab/dim-core";
 import type { Command } from "commander";
 import { print, type JsonFlags } from "./cli-support.js";
+import { readNativeReviewPolicyFile } from "./native-review-policy-file.js";
 
 type NativeBootstrapFlags = JsonFlags & {
   readonly projectId: string;
@@ -12,6 +17,7 @@ type NativeBootstrapFlags = JsonFlags & {
   readonly registrarConnection: string;
   readonly importerConnection: string;
   readonly gitExecutable: string;
+  readonly reviewPolicy?: string;
 };
 
 export function registerNativeProjectBootstrapCommand(project: Command): void {
@@ -24,15 +30,24 @@ export function registerNativeProjectBootstrapCommand(project: Command): void {
     .requiredOption("--registrar-connection <absolute-path>", "owner-only native registrar connection")
     .requiredOption("--importer-connection <absolute-path>", "owner-only native root importer connection")
     .option("--git-executable <absolute-path>", "trusted host Git executable", "/usr/bin/git")
+    .option("--review-policy <absolute-private-file>", "external reviewed policy for a manifest-free root")
     .option("--json", "print machine-readable JSON")
     .action(runNativeProjectBootstrap);
 }
 
 async function runNativeProjectBootstrap(name: string, flags: NativeBootstrapFlags): Promise<void> {
   const localPaths = [flags.sourceRepository, flags.registrarConnection,
-    flags.importerConnection, flags.gitExecutable];
+    flags.importerConnection, flags.gitExecutable,
+    ...(flags.reviewPolicy === undefined ? [] : [flags.reviewPolicy])];
   if (localPaths.some((value) => !path.isAbsolute(value))) {
     throw new UserError("native root bootstrap paths must be absolute");
+  }
+  const externalPolicy = flags.reviewPolicy === undefined
+    ? undefined
+    : await readNativeReviewPolicyFile(flags.reviewPolicy);
+  if (externalPolicy !== undefined) {
+    compileNativeRootBootstrapPolicy({ rootAlias: externalPolicy.rootAlias,
+      protectedRef: flags.sourceRef, review: externalPolicy.review });
   }
   const stateRoot = path.resolve(process.env.DIM_STATE_ROOT
     ?? path.join(os.homedir(), ".local/state/dim"));
@@ -47,7 +62,9 @@ async function runNativeProjectBootstrap(name: string, flags: NativeBootstrapFla
     registrarConnectionFile: flags.registrarConnection,
     importerConnectionFile: flags.importerConnection,
     gitExecutable: flags.gitExecutable,
-    policySource: { kind: "reviewed-manifest" },
+    policySource: externalPolicy === undefined
+      ? { kind: "reviewed-manifest" }
+      : { kind: "manifest-free", rootAlias: externalPolicy.rootAlias, review: externalPolicy.review },
     signal: AbortSignal.timeout(120_000)
   });
   print({

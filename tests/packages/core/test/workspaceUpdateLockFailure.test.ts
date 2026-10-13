@@ -99,6 +99,21 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
     });
   });
 
+  it("publishes relay error when recommended managed reconciliation fails", async () => {
+    const recommended = { ...workspace, environment: "recommended" as const };
+    await state.writeWorkspace(recommended);
+    const run = runner.run.bind(runner);
+    runner.run = async (command, args) => args.some((argument) => argument.startsWith("DIM_HOST_INPUT_HELPER_B64="))
+      ? { command, args, stdout: "", stderr: "injected permission failure", exitCode: 1 }
+      : run(command, args);
+
+    await expect(updateWorkspace(runner, options(root), recommended.name)).rejects.toThrow(/host-input helper installation/);
+
+    await expect(state.readWorkspace(recommended.name)).resolves.toMatchObject({ phase: "error" });
+    expect(runner.runCalls.filter((call) => call.at(-2) === "phase").map((call) => call.at(-1)))
+      .toEqual(["setting-up", "error"]);
+  });
+
   it("identifies invalid update profiles as profile validation", async () => {
     // Given / When
     const updating = updateWorkspace(runner, options(root), workspace.name, ["bad,profile"]);

@@ -4,7 +4,9 @@ import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnectio
 import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
 import { proveNativeProjectReadiness } from "./nativeProjectReadinessClient.js";
 import { createNativeGitWorkspaceWriteIssuerClient } from "./nativeGitWorkspaceWriteIssuerClient.js";
-import type { NativeWorkspaceRecord } from "./lifecycleTypes.js";
+import type { NativeWorkspaceRecord, WorkspacePhase } from "./lifecycleTypes.js";
+
+type NativeGitOperation = "read" | "write";
 
 export type NativeWorkspaceGitRequest = {
   readonly stateRoot: string;
@@ -19,8 +21,13 @@ export type NativeWorkspaceGitRequest = {
 export async function serveNativeWorkspaceGit(input: NativeWorkspaceGitRequest): Promise<void> {
   const { stateRoot, connection, workspace, request, response, url } = input;
   const upstreamPath = url.pathname.slice("/api/native-git".length);
-  if (!allowed(request.method, upstreamPath, url.search, request.headers["content-type"])) {
+  const operation = allowed(request.method, upstreamPath, url.search, request.headers["content-type"]);
+  if (operation === undefined) {
     response.writeHead(404).end();
+    return;
+  }
+  if (!workspaceGitOperationAllowed(workspace.phase, operation)) {
+    response.writeHead(409).end();
     return;
   }
   const project = await new NativeProjectPendingStore(stateRoot).read(workspace.projectName, connection.hostId);
@@ -87,16 +94,25 @@ export async function serveNativeWorkspaceGit(input: NativeWorkspaceGitRequest):
   request.pipe(upstream);
 }
 
-function allowed(method: string | undefined, path: string, search: string, contentType: string | undefined): boolean {
+export function workspaceGitOperationAllowed(phase: WorkspacePhase, operation: NativeGitOperation): boolean {
+  return phase === "ready" || (phase === "setting-up" && operation === "read");
+}
+
+function allowed(method: string | undefined, path: string, search: string,
+  contentType: string | undefined): NativeGitOperation | undefined {
   const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/root\.git\/(info\/refs|git-upload-pack|git-receive-pack)$/
     .exec(path);
   const endpoint = match?.[2];
   if (method === "GET" && endpoint === "info/refs") {
     const query = new URLSearchParams(search);
-    return query.size === 1 && (query.get("service") === "git-upload-pack"
-      || query.get("service") === "git-receive-pack");
+    if (query.size !== 1) return undefined;
+    const service = query.get("service");
+    if (service === "git-upload-pack") return "read";
+    if (service === "git-receive-pack") return "write";
+    return undefined;
   }
-  if (method !== "POST" || search !== "") return false;
-  return (endpoint === "git-upload-pack" && contentType === "application/x-git-upload-pack-request")
-    || (endpoint === "git-receive-pack" && contentType === "application/x-git-receive-pack-request");
+  if (method !== "POST" || search !== "") return undefined;
+  if (endpoint === "git-upload-pack" && contentType === "application/x-git-upload-pack-request") return "read";
+  if (endpoint === "git-receive-pack" && contentType === "application/x-git-receive-pack-request") return "write";
+  return undefined;
 }

@@ -104,3 +104,4 @@ export * from "./userConfig.js";
 export * from "./workspaceLifecycle.js";
 export * from "./workspaceImage.js";
 export * from "./workspaceImageReference.js";
+export * from "./workspaceEnvironment.js";

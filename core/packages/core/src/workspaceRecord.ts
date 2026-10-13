@@ -19,6 +19,10 @@ export function assertWorkspaceRecord(value: unknown, source: string): asserts v
   if (Object.hasOwn(value, "projectPath") || value.workspaceDataPath !== WORKSPACE_DATA_PATH) {
     throw new UserError(`workspace '${name}' has an invalid workspace data path; export needed data and recreate the workspace`);
   }
+  if (value.environment !== undefined
+    && value.environment !== "recommended" && value.environment !== "minimal" && value.environment !== "custom") {
+    throw new UserError(`workspace '${name}' has an invalid environment selection`);
+  }
   if (value.schemaVersion === 9) {
     if (Object.hasOwn(value, "gitBaseUrl")) {
       throw new UserError(`workspace '${name}' mixes native and provider Git state`);

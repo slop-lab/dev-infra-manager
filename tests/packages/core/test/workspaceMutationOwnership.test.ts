@@ -16,13 +16,26 @@ import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
 class MutationRunner implements StreamingCommandRunner {
   readonly calls: string[][] = [];
+  private resources = { cpuCount: "2", memory: "4294967296", pidsLimit: "2048" };
 
   constructor(private readonly inspectOutput: string) {}
 
   async run(command: string, args: string[]): Promise<CommandResult> {
     this.calls.push([command, ...args]);
     if (args[0] === "container" && args[1] === "inspect") {
+      if (args.at(-1)?.includes("HostConfig.NanoCpus")) {
+        return { command, args,
+          stdout: `${Number(this.resources.cpuCount) * 1_000_000_000}|${this.resources.memory}|${this.resources.memory}|${this.resources.pidsLimit}\n`,
+          stderr: "", exitCode: 0 };
+      }
       return { command, args, stdout: `${this.inspectOutput}\n`, stderr: "", exitCode: 0 };
+    }
+    if (args[0] === "update") {
+      this.resources = {
+        cpuCount: args[args.indexOf("--cpus") + 1] ?? "",
+        memory: memoryBytes(args[args.indexOf("--memory") + 1] ?? ""),
+        pidsLimit: args[args.indexOf("--pids-limit") + 1] ?? ""
+      };
     }
     return { command, args, stdout: "", stderr: "", exitCode: 0 };
   }
@@ -97,4 +110,12 @@ function expectCompleteInspection(runner: MutationRunner): void {
 
 function labelValue(label: string): string {
   return label.slice(label.indexOf("=") + 1);
+}
+
+function memoryBytes(value: string): string {
+  const match = /^(\d+)([kmgt]?)$/i.exec(value);
+  const amount = match?.[1];
+  const unit = match?.[2]?.toLowerCase();
+  if (amount === undefined || unit === undefined) return value;
+  return (BigInt(amount) * (1024n ** BigInt(["", "k", "m", "g", "t"].indexOf(unit)))).toString();
 }

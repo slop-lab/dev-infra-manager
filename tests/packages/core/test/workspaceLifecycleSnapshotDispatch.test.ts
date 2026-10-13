@@ -52,7 +52,10 @@ describe("immutable workspace lifecycle dispatch", () => {
       createdAt: "now",
       updatedAt: "now"
     };
-    await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
+    const snapshot = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    await mkdir(join(snapshot, ".dim"), { recursive: true });
+    await writeFile(join(snapshot, ".dim", "setup.sh"), "#!/bin/sh\n");
+    await writeFile(join(snapshot, ".dim", "entrypoint.sh"), "#!/bin/sh\n");
     await state.claimProject(project);
     await claimTestGiteaService(root, 3300);
     await state.claimWorkspace(record);

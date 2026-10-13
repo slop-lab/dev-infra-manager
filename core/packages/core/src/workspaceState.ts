@@ -11,6 +11,10 @@ import {
 } from "./workspaceResourceOwnership.js";
 import { readWorkspaceForOperation, validateWorkspaceResources } from "./workspaceValidation.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
+import { notifyRecommendedWorkspaceRelayPhase, stopWorkspaceAgent } from "./workspaceAgentLifecycle.js";
+import { applyWorkspaceResourceUpdate } from "./workspaceAgentResources.js";
+import { inspectWorkspaceAgentContainer } from "./workspaceAgentInspection.js";
+import { publishWorkspacePhase } from "./workspacePhasePublication.js";
 
 export async function assertSelectedProjectUnchanged(
   state: LifecycleState,
@@ -44,13 +48,33 @@ export async function reconcileWorkspaceRuntimeState(
   if (record.phase !== "ready" && record.phase !== "stopped") return record;
   const container = await inspectWorkspaceContainer(runner, record);
   const running = container?.running ?? false;
+  if (record.phase === "stopped" && record.environment === "recommended") {
+    if (container?.running) {
+      await notifyRecommendedWorkspaceRelayPhase(runner, record, container.id, "stopped");
+    }
+    await stopWorkspaceAgent(runner, record);
+  }
   // A running outer container is not sufficient evidence that reviewed Project
   // setup completed. Only DIM setup may promote a workspace back to ready.
-  if (running && container?.rootSnapshotPath !== workspaceRootSnapshotPath(stateRoot, record)) {
+  if (container?.running === true && container.rootSnapshotPath !== workspaceRootSnapshotPath(stateRoot, record)) {
     const error = "workspace container root does not match its recorded immutable root";
     const reconciled = { ...record, phase: "error" as const, error, updatedAt: new Date().toISOString() };
-    await state.writeWorkspace(reconciled);
+    await publishWorkspacePhase({ runner, state, record: reconciled, containerId: container.id, notifyRelay: true });
+    if (record.environment === "recommended") await stopWorkspaceAgent(runner, record);
     return reconciled;
+  }
+  if (!running && record.environment === "recommended") await stopWorkspaceAgent(runner, record);
+  if (container?.running === true && record.environment === "recommended") {
+    const agent = await inspectWorkspaceAgentContainer(runner, record);
+    if (agent === undefined || !agent.running) {
+      const error = "recommended workspace agent is not running; run dim workspace setup";
+      const reconciled = { ...record, phase: "setup-error" as const, error, updatedAt: new Date().toISOString() };
+      await publishWorkspacePhase({ runner, state, record: reconciled, containerId: container.id, notifyRelay: true });
+      return reconciled;
+    }
+    if (record.phase === "ready") {
+      await notifyRecommendedWorkspaceRelayPhase(runner, record, container.id, "ready");
+    }
   }
   if (running || record.phase === "stopped") return record;
   const reconciled = { ...record, phase: "stopped" as const, updatedAt: new Date().toISOString() };
@@ -127,19 +151,19 @@ export async function updateWorkspaceResources(
     if (container === undefined) {
       throw new UserError(`workspace container '${record.containerName}' is not available`);
     }
-    const updated = await runner.run("docker", [
-      "update",
-      "--cpus", resources.cpuCount,
-      "--memory", resources.memory,
-      "--memory-swap", resources.memory,
-      "--pids-limit", resources.pidsLimit,
-      container.id
-    ]);
-    if (updated.exitCode !== 0) {
-      throw new UserError(`failed to update workspace resources: ${updated.stderr.trim()}`);
+    if (record.environment === "recommended"
+      && await inspectWorkspaceAgentContainer(runner, record) === undefined) {
+      throw new UserError(`recommended agent for workspace '${record.name}' is unavailable`);
     }
     const next = { ...record, ...resources, updatedAt: new Date().toISOString() };
-    await state.writeWorkspace(next);
+    await applyWorkspaceResourceUpdate({
+      runner,
+      record,
+      outerContainerId: container.id,
+      resources,
+      publish: () => state.writeWorkspace(next),
+      restore: () => state.writeWorkspace(record)
+    });
     return next;
   } finally {
     await release();
@@ -180,6 +204,10 @@ export async function stopWorkspaceForHostShutdown(
       return;
     }
     const container = await inspectWorkspaceContainer(runner, record);
+    if (container?.running) {
+      await notifyRecommendedWorkspaceRelayPhase(runner, record, container.id, "discarding");
+    }
+    if (record.environment === "recommended") await stopWorkspaceAgent(runner, record);
     if (!container?.running) return;
     const stopped = await runner.run("docker", ["stop", container.id]);
     if (stopped.exitCode !== 0 && !isMissingContainer(stopped.stderr, container.id)) {
@@ -197,6 +225,10 @@ export async function stopWorkspaceLocked(
 ): Promise<void> {
   assertWorkspaceLifecycleActive(initialRecord);
   const container = await inspectWorkspaceContainer(runner, initialRecord);
+  if (container?.running) {
+    await notifyRecommendedWorkspaceRelayPhase(runner, initialRecord, container.id, "stopped");
+  }
+  if (initialRecord.environment === "recommended") await stopWorkspaceAgent(runner, initialRecord);
   if (container?.running) {
     const stopped = await runner.run("docker", ["stop", container.id]);
     if (stopped.exitCode !== 0 && !isMissingContainer(stopped.stderr, container.id)) {

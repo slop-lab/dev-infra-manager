@@ -11,6 +11,9 @@ import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 import { reconcileNativeWorkspace, setupWorkspaceLocked } from "./workspaceSetup.js";
 import { reconcileWorkspaceRuntimeState, stopWorkspaceLocked } from "./workspaceState.js";
 import { readWorkspaceForOperation, validateWorkspaceProfiles } from "./workspaceValidation.js";
+import { workspaceRootSnapshotPath } from "./workspaceLifecycleTypes.js";
+import { selectWorkspaceEnvironmentTransition } from "./workspaceEnvironmentTransition.js";
+import { notifyRecommendedWorkspaceRelayPhase } from "./workspaceAgentLifecycle.js";
 
 type NativeTransitionInput = {
   readonly operation: "start" | "update" | "restart";
@@ -54,9 +57,14 @@ export async function transitionNativeWorkspace(input: NativeTransitionInput): P
         const nextProfiles = input.profiles === undefined
           ? current.profiles
           : validateWorkspaceProfiles(input.profiles);
+        const environment = await selectWorkspaceEnvironmentTransition(
+          current,
+          workspaceRootSnapshotPath(input.options.stateRoot, selected)
+        );
         input.setStage("workspace container readiness");
-        await assertContainerRunning(input.runner, input.options.stateRoot, current);
-        current = applySelection(current, selected, nextProfiles);
+        const containerId = await assertContainerRunning(input.runner, input.options.stateRoot, current);
+        await notifyRecommendedWorkspaceRelayPhase(input.runner, current, containerId, "setting-up");
+        current = { ...applySelection(current, selected, nextProfiles, environment), phase: "setting-up" };
         input.setStage("workspace state publication");
         await state.writeWorkspace(current);
         const reconciled = await reconcileNativeWorkspace(
@@ -90,6 +98,10 @@ export async function transitionNativeWorkspace(input: NativeTransitionInput): P
       if (input.operation === "start" && current.phase !== "stopped") {
         throw new UserError(`workspace '${current.name}' is not a stopped native workspace`);
       }
+      const environment = await selectWorkspaceEnvironmentTransition(
+        current,
+        workspaceRootSnapshotPath(input.options.stateRoot, selected)
+      );
       if (input.operation === "restart" && input.recovery !== true && current.phase !== "stopped") {
         input.setStage("workspace container readiness");
         await assertContainerRunning(input.runner, input.options.stateRoot, current);
@@ -97,7 +109,7 @@ export async function transitionNativeWorkspace(input: NativeTransitionInput): P
         await stopWorkspaceLocked(input.runner, state, current);
         current = { ...current, phase: "stopped" };
       }
-      current = applySelection(current, selected, current.profiles);
+      current = applySelection(current, selected, current.profiles, environment);
       input.setStage("workspace state publication");
       await state.writeWorkspace(current);
       const reconciled = await reconcileNativeWorkspace(
@@ -141,9 +153,10 @@ function requireNative(record: WorkspaceRecord): NativeWorkspaceRecord {
 function applySelection(
   current: NativeWorkspaceRecord,
   selected: NativeWorkspaceRecord,
-  profiles: string[]
+  profiles: string[],
+  environment: NativeWorkspaceRecord["environment"]
 ): NativeWorkspaceRecord {
   return { ...current, rootRepositoryAlias: selected.rootRepositoryAlias,
     rootRef: selected.rootRef, rootCommit: selected.rootCommit, source: selected.source,
-    profiles, updatedAt: new Date().toISOString() };
+    profiles, ...(environment === undefined ? {} : { environment }), updatedAt: new Date().toISOString() };
 }

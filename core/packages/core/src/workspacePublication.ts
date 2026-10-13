@@ -3,16 +3,21 @@ import type { WorkspaceRecord } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { writeProjectManifest } from "./workspaceRepositorySnapshot.js";
 import type { WorkspacePublicationTarget } from "./workspaceLifecycleTypes.js";
+import { selectWorkspaceEnvironmentTransition } from "./workspaceEnvironmentTransition.js";
+import { notifyRecommendedWorkspaceRelayPhase } from "./workspaceAgentLifecycle.js";
 
 export async function recordSelectedRoot(
   state: LifecycleState,
   record: WorkspaceRecord,
   target: WorkspacePublicationTarget
 ): Promise<WorkspaceRecord> {
+  const selectedEnvironment = await selectWorkspaceEnvironmentTransition(record, target.rootSnapshotPath);
+  const environment = selectedEnvironment === undefined ? {} : { environment: selectedEnvironment };
   const updating = {
     ...record,
     rootRef: target.rootRef,
     rootCommit: target.rootCommit,
+    ...environment,
     phase: "setting-up" as const,
     updatedAt: new Date().toISOString()
   };
@@ -28,12 +33,14 @@ export async function applySelectedRoot(input: {
   readonly target: WorkspacePublicationTarget;
   readonly containerId: string;
 }): Promise<WorkspaceRecord> {
+  await notifyRecommendedWorkspaceRelayPhase(input.runner, input.record, input.containerId, "setting-up");
   const updating = await recordSelectedRoot(input.state, input.record, input.target);
   const runtimeRecord = { ...input.record, containerName: input.containerId };
   try {
     await writeProjectManifest(input.runner, { ...updating, containerName: runtimeRecord.containerName });
     return updating;
   } catch (error) {
+    await notifyRecommendedWorkspaceRelayPhase(input.runner, input.record, input.containerId, "setup-error");
     await input.state.writeWorkspace({
       ...updating,
       phase: "setup-error",

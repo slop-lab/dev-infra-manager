@@ -3,7 +3,7 @@ import { adminStreamCall, interactive } from "./cli-support.js";
 
 export function registerWorkspaceExecutionCommands(program: Command, workspace: Command): void {
   program.command("exec")
-  .description("Execute a raw command in a running workspace")
+  .description("Execute in the recommended agent, or trusted outer workspace for explicit minimal/custom environments")
   .argument("<workspace>")
   .argument("<command...>")
   .allowUnknownOption(true)
@@ -17,7 +17,7 @@ export function registerWorkspaceExecutionCommands(program: Command, workspace: 
   });
 
 program.command("run")
-  .description("Run a root project task through .dim/entrypoint.sh")
+  .description("Run recommended shell/exec/custom commands or a custom Project task")
   .argument("<workspace>")
   .argument("<task...>")
   .allowUnknownOption(true)
@@ -31,7 +31,7 @@ program.command("run")
   });
 
 workspace.command("exec")
-  .description("Execute a raw command in a running workspace")
+  .description("Execute in the recommended agent, or trusted outer workspace for explicit minimal/custom environments")
   .argument("<workspace>")
   .argument("<command...>")
   .allowUnknownOption(true)
@@ -43,7 +43,7 @@ workspace.command("exec")
   });
 
 workspace.command("run")
-  .description("Run a root project task through .dim/entrypoint.sh")
+  .description("Run recommended shell/exec/custom commands or a custom Project task")
   .argument("<workspace>")
   .argument("<task...>")
   .allowUnknownOption(true)

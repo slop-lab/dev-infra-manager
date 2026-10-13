@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -84,7 +84,9 @@ describe("lifecycle file probes", () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-lifecycle-probe-"));
     record = workspaceFixture(root);
-    await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
+    const snapshot = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    await mkdir(join(snapshot, ".dim"), { recursive: true });
+    await writeFile(join(snapshot, ".dim", "entrypoint.sh"), "#!/bin/sh\n");
     await new LifecycleState(root).claimWorkspace(record);
   });
 

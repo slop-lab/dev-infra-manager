@@ -91,7 +91,10 @@ describe("partial controller body discard ordering", () => {
 
 function emptyRunner(): StreamingCommandRunner {
   return {
-    run: async (command, args) => ({ command, args, stdout: "", stderr: "", exitCode: 0 }),
+    run: async (command, args) => ({ command, args, stdout: "",
+      stderr: args[0] === "container" && args[1] === "inspect"
+        ? `Error: No such container: ${args[2] ?? ""}` : "",
+      exitCode: args[0] === "container" && args[1] === "inspect" ? 1 : 0 }),
     runStreaming: async () => 0
   };
 }

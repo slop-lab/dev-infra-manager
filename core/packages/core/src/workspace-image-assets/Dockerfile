@@ -1,4 +1,4 @@
-FROM docker:29.1.3-dind
+FROM docker:29.1.3-dind@sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c9995f190ef6f3f5
 
 ARG DIM_UID=1000
 ARG DIM_GID=1000
@@ -26,8 +26,14 @@ COPY entrypoint.bash /usr/local/bin/dim-project-entrypoint
 COPY git-askpass.sh /usr/local/bin/dim-git-askpass
 COPY route-relay.mjs /usr/local/lib/dim/route-relay.mjs
 COPY project-cgroup.bash /usr/local/bin/dim-project-cgroup
+COPY agent-checkout.bash /usr/local/bin/dim-agent-checkout
+COPY agent-entrypoint.bash /usr/local/bin/dim-agent-entrypoint
+COPY agent-git-relay.mjs /usr/local/lib/dim/agent-git-relay.mjs
+COPY agent-git-relay-supervisor.mjs /usr/local/lib/dim/agent-git-relay-supervisor.mjs
 COPY controller-proxy /usr/local/lib/dim/controller-proxy
 RUN chmod +x /usr/local/bin/dim-project-entrypoint /usr/local/bin/dim-git-askpass \
+  /usr/local/bin/dim-agent-checkout \
+  /usr/local/bin/dim-agent-entrypoint \
   /usr/local/bin/dim-project-cgroup \
   /usr/local/lib/dim/controller-proxy/cli.js \
   /usr/local/lib/dim/controller-proxy/development-service-cli.js \
