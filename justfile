@@ -22,10 +22,18 @@ test:
 build-packages:
     pnpm run workspace:build
 
-# Run the complete source gate; requires only Node.js and pnpm.
+# Run the complete source gate in the pinned Git integration profile.
 check-source:
+    bash verification/scripts/source-gate-preflight.bash
+    bash verification/scripts/source-gate-preflight-test.bash
     bash verification/scripts/repository-materialization-smoke.bash
     just typecheck
+    pnpm --filter @slop-lab/dim-contracts-external-url run build
+    pnpm --filter @slop-lab/dim-controller-proxy run build
+    pnpm --filter @slop-lab/dim-core run build
+    pnpm --filter @slop-lab/dim-native-git run build
+    pnpm --filter @slop-lab/dim-cli run build
+    bash verification/scripts/source-gate-preflight.bash --require-artifacts
     just test
     just build-packages
 
