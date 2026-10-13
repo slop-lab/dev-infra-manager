@@ -4,6 +4,17 @@ qemu_preflight_error() {
   QEMU_PREFLIGHT_FAILURES+=("$1")
 }
 
+qemu_host_architecture() {
+  /usr/bin/uname -m
+}
+
+qemu_check_host_architecture() {
+  local architecture
+  architecture="$(qemu_host_architecture)"
+  [[ "$architecture" == x86_64 ]] ||
+    qemu_preflight_error "unsupported QEMU KVM host architecture: $architecture (requires x86_64)"
+}
+
 qemu_validate_trusted_node() {
   local node_path="$1" component metadata mode version
   if [[ "$node_path" != /* || ! -f "$node_path" || ! -x "$node_path" || -L "$node_path" ]]; then
@@ -46,6 +57,7 @@ qemu_check_command() {
 qemu_host_preflight() {
   local file node_error passwd_record
   QEMU_PREFLIGHT_FAILURES=()
+  qemu_check_host_architecture
 
   passwd_record="$(/usr/bin/getent passwd "$invoking_uid" 2>/dev/null)" || passwd_record=""
   if [[ -z "$passwd_record" || "${passwd_record%%:*}" == root ]]; then

@@ -48,24 +48,55 @@ review-policy provisioning described below.
 
 ### Source and QEMU prerequisites are separate profiles
 
-Run these checks independently; a failure in one does not hide the other:
+Run the source gate without installing its pinned toolchain on the host:
 
 ```bash
-TMPDIR=/tmp bash verification/scripts/source-gate-preflight.bash
-DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
-  bash verification/scripts/kvm-host-install-smoke.bash --preflight-only
+bash verification/scripts/source-gate-container.bash
 ```
 
 The complete source suite uses an integration fixture pinned to
 `/usr/bin/git` 2.43.0, Node.js 24/26, and pnpm 10.13.1. It also includes
-root-owned ownership fixtures. Run that suite in the reviewed pinned disposable
-test container or VM, not by invoking the whole source gate with sudo on a live
-host. A PATH Git shim does not satisfy the absolute fixture binary contract.
-The preflight aggregates toolchain, temporary-directory ancestry, ownership
-capability, and optional distribution-artifact errors. `just check-source`
-builds distribution-consuming test dependencies before testing; it does not
-weaken Git pins or repair the host. Use `just typecheck` for compiler-only
-feedback on an ordinary supported Node.js host.
+root-owned ownership fixtures. `just check-source` builds and runs that suite
+in its pinned disposable container, without mounting the checkout writable or
+passing the host Docker socket. It needs no host pnpm, Git downgrade, or sudo.
+The current worktree is copied without generated state or conventional
+credentials; submit only reviewed source without other secret-bearing files.
+Network access remains available for installer tests. The gate uses its exact
+built image ID and retains the complete recursive source suite. Real Docker
+executor checks remain under `just verify native-ordinary-executor-live` and
+require Sysbox plus explicit digest-pinned fixture images; missing capability
+is unavailable, not success.
+
+Use `just check-source-native` only inside an already pinned environment.
+A PATH Git shim does not satisfy its absolute fixture binary contract. Its
+preflight aggregates toolchain, temporary-directory ancestry, ownership
+capability, and optional distribution-artifact errors. Both paths build test
+dependencies before testing. Use `just typecheck` for compiler-only feedback
+on an ordinary supported Node.js host.
+
+Prepare QEMU separately on the reviewed amd64 Ubuntu host, with explicit
+confirmation of package, Node, and group changes:
+
+```bash
+bash verification/scripts/install-kvm-verify-deps-ubuntu.bash
+newgrp kvm
+```
+
+Inside the refreshed normal-user shell:
+
+```bash
+export DIM_QEMU_NODE_EXECUTABLE=/usr/local/lib/dim-qemu-node-24.19.0/bin/node
+sudo -v
+bash verification/scripts/kvm-host-install-smoke.bash --preflight-only
+just verify environments-kvm
+```
+
+The installer verifies a fixed checksum for Node.js 24.19.0, installs it under
+a dedicated root-owned path, and leaves `/usr/local/bin/node` and user-managed
+Node trees untouched. It configures persistent KVM group membership, not
+world-writable device permissions. Physical KVM availability and operator sudo
+approval still require the actual host; this procedure does not claim they
+were exercised by a source-only container run.
 
 The QEMU gate instead runs as the normal host operator. Its preflight reports
 trusted-interpreter, non-root user, sudo authorization, setpriv, KVM access, and

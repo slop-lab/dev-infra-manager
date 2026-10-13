@@ -73,6 +73,21 @@ afterEach(async () => {
 });
 
 describe("KVM host prerequisite preflight", () => {
+  it("rejects a non-x86_64 host before QEMU execution", () => {
+    // Given / When
+    const result = spawnSync("/usr/bin/bash", ["-c", `
+source "$1"
+QEMU_PREFLIGHT_FAILURES=()
+qemu_host_architecture() { printf 'aarch64\\n'; }
+qemu_check_host_architecture
+printf '%s\\n' "\${QEMU_PREFLIGHT_FAILURES[@]}"
+`, "preflight-architecture-test", prerequisites], { encoding: "utf8" });
+
+    // Then
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("unsupported QEMU KVM host architecture: aarch64");
+  });
+
   it("reports Node, sudo, and KVM deficiencies together without creating privileged runtime state", async () => {
     // Given
     const fixture = await preflightFixture();

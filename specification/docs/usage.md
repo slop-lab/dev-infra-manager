@@ -211,18 +211,28 @@ bash verification/scripts/install-host-ubuntu.bash sysbox
 The script records `sysbox` in DIM user configuration. From this source
 checkout, run `just run-cli doctor` after installation.
 
-Test installation destructively inside a disposable KVM-backed Ubuntu VM, without installing a backend on the host:
+Prepare a normal Ubuntu operator for destructive installation testing inside a
+disposable KVM-backed VM, without installing a backend on the host. This gate
+currently requires an `amd64` host because it boots an x86-64 guest with KVM;
+the installer rejects other host architectures before confirmation or mutation:
 
 ```bash
+bash verification/scripts/install-kvm-verify-deps-ubuntu.bash
+newgrp kvm
+```
+
+`newgrp kvm` starts one shell with the newly installed group membership. A full
+logout and login is equivalent. In that refreshed normal-user shell, use the
+installer's dedicated canonical Node path and prime ordinary sudo authorization
+before the preflight or full gate:
+
+```bash
+export DIM_QEMU_NODE_EXECUTABLE=/usr/local/lib/dim-qemu-node-24.19.0/bin/node
 sudo -v
-DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
-  bash verification/scripts/kvm-host-install-smoke.bash --preflight-only
-DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
-  just verify environments-kvm       # Sysbox in one clean VM
-DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
-  just verify environments-kvm --verbose
-DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
-  bash verification/scripts/kvm-host-install-smoke.bash --verbose
+bash verification/scripts/kvm-host-install-smoke.bash --preflight-only
+just verify environments-kvm       # Sysbox in one clean VM
+just verify environments-kvm --verbose
+bash verification/scripts/kvm-host-install-smoke.bash --verbose
 ```
 
 Run this gate as the normal invoking user. It performs a noninteractive
@@ -234,12 +244,23 @@ is copied to an invoking-user-readable per-run handoff; guest extraction does
 not preserve the host UID. This does not grant the user access to the root-only
 service run directory.
 
+The dependency installer downloads the reviewed Node.js `v24.19.0` x64 archive
+for the supported `amd64` host, verifies its built-in fixed SHA-256 without
+fetching a remote manifest, and installs it only at
+`/usr/local/lib/dim-qemu-node-24.19.0`. The archive, extraction directory, and
+installed tree are created by root beneath a safe root-owned ancestor; the
+installer does not create or replace `/usr/local/bin/node`. It accepts an
+existing target only when its canonical executable has the exact pinned
+version and trusted ownership/mode chain. Otherwise it fails without replacing,
+removing, or changing ownership of that tree.
+
 `DIM_QEMU_NODE_EXECUTABLE` must name an absolute, canonical, non-symlink Node.js
 24 or 26 executable that is root-owned mode `0755`, beneath only root-owned
 directories that are not group- or world-writable. Install Node through a
 reviewed system/vendor package or a reviewed root installation under
 `/usr/local`; do not `chown` a mise, nvm, home-directory, or other user-managed
-Node tree and treat it as trusted. The default is `/usr/bin/node`. Run `sudo -v`
+Node tree and treat it as trusted. The default is `/usr/bin/node`, but the host
+installer reports the explicit dedicated path above. Run `sudo -v`
 as shown to cache the operator's normal sudo authorization; the gate requires
 only that subsequent `sudo -n` calls succeed, not a blanket permanent
 `NOPASSWD` rule. `--preflight-only` reports every detected identity, Node trust,

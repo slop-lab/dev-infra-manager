@@ -53,10 +53,25 @@ DIM user configuration. From a source checkout, the operator runs
 ## KVM Host-install Smoke
 
 `verification/scripts/install-kvm-verify-deps-ubuntu.bash` installs QEMU, qcow2,
-cloud-image, and SSH tooling and adds the invoking non-root user to the `kvm`
-group; it does not install a runtime backend. It requires the exact
-confirmation `yes` and explains that the login session must be refreshed
-before the new group membership is active.
+cloud-image, SSH, curl, and xz tooling, provisions pinned Node.js `v24.19.0`,
+and adds the invoking non-root user to the `kvm` group; it does not install a
+runtime backend. Before mutation it reports the exact APT package set, selected
+Node URL, fixed literal SHA-256, canonical destination, preservation policy,
+and group change. It requires the exact confirmation `yes` and explains that
+the login session must be refreshed before the new group membership is active.
+The KVM host installer accepts only `amd64` because the verification gate boots
+an x86-64 guest with KVM; it rejects all other host architectures before
+confirmation or mutation. The selected official Linux `x64` archive has SHA-256
+`14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647` and
+the helper retains the independently vetted Linux `arm64` archive SHA-256
+`01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc`.
+The helper downloads directly into a private root-owned directory under
+`/usr/local/lib`, verifies that staged immutable file without consulting a
+remote manifest, and extracts only afterward. It installs the canonical
+root-owned mode-`0755` executable at
+`/usr/local/lib/dim-qemu-node-24.19.0/bin/node`, never publishes or replaces
+`/usr/local/bin/node`, and refuses an unsafe, mismatched, or foreign existing
+target without removing, overwriting, or changing ownership of it.
 `verification/scripts/kvm-host-install-smoke.bash [--preflight-only] [--verbose]` and
 `just verify environments-kvm [--verbose]` verify Sysbox in a clean VM. The check boots a checksum-verified Ubuntu cloud-image VM with
 `/dev/kvm`, clones the committed repository state from a Git bundle, installs
@@ -72,7 +87,8 @@ blanket `NOPASSWD` rule is required. Root service execution uses only the
 absolute `DIM_QEMU_NODE_EXECUTABLE`, defaulting to `/usr/bin/node`, after
 requiring a canonical non-symlink root-owned mode-`0755` Node.js 24 or 26 file
 and a root-owned, non-group/world-writable ancestor chain. It never selects a
-user-managed Node executable from `PATH`. `--preflight-only` aggregates all
+user-managed Node executable from `PATH`, and it checks that ancestor chain
+before executing Node for version discovery. `--preflight-only` aggregates all
 identity, trusted closure, Node, sudo, `setpriv`, readable/writable character
 `/dev/kvm`, and launcher dependency failures without creating service state.
 Dependency lookup uses the exact root service and gate `PATH=/usr/bin:/bin`,
@@ -83,6 +99,13 @@ Privileged retirement, exact-PID signaling, wrapper waits, and directory
 cleanup are bounded; the service directory is removed only after exact service
 shutdown is proved, and otherwise remains for operator recovery with a
 non-zero result.
+After installation, the normal operator logs in again or runs `newgrp kvm`,
+sets
+`DIM_QEMU_NODE_EXECUTABLE=/usr/local/lib/dim-qemu-node-24.19.0/bin/node`, runs
+`sudo -v`, and then invokes
+`bash verification/scripts/kvm-host-install-smoke.bash --preflight-only` before
+`just verify environments-kvm`. No blanket `NOPASSWD` policy, `/dev/kvm` mode
+change, or silent group re-exec is part of the installer.
 The check installs the source verification toolchain after the host installer
 and runs `just verify self-development`, covering the canonical
 Project's agent inside its private rootless DinD end to end. The QEMU
