@@ -64,4 +64,4 @@ build-workspace-image:
 
 # Build the Docker-compatible Project workspace runtime image for local sources.
 build-local-workspace-image:
-    image_version="$(bash verification/scripts/local-build-version.bash)"; DIM_LOCAL_BUILD_VERSION="$image_version" just run-cli workspace image build
+    image_version="$(bash verification/scripts/local-build-version.bash)"; DIM_LOCAL_BUILD_VERSION="$image_version" DIM_WORKSPACE_IMAGE="dev-infra-project-workspace:$image_version" just run-cli workspace image build

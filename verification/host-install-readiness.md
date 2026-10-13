@@ -104,6 +104,37 @@ The raw-container script
 component gate. It does not replace steps 3-6 or constitute the full installed
 DIM CLI journey.
 
+### Diagnose both nested Docker paths before the full journey
+
+On the target host, use the **exact installed workspace image reference** from
+`dim workspace image status` and a digest-pinned probe image already present in
+that host's Docker image store. The diagnostic refuses a missing image instead
+of pulling or mutating host Docker storage:
+
+```bash
+docker image inspect 'alpine@sha256:REPLACE_WITH_HOST_CACHED_DIGEST'
+bash verification/scripts/native-workspace-nested-docker-diagnostic.bash \
+  'dev-infra-project-workspace:REPLACE_WITH_EXACT_PREPARED_VERSION' \
+  'alpine@sha256:REPLACE_WITH_HOST_CACHED_DIGEST'
+```
+
+It runs the trusted outer runc lane and the recommended Sysbox agent lane
+independently in disposable, ownership-labelled containers/volumes. Both must
+load the same exported image from the host cache and actually run an inner
+container. It records each lane's driver, backing filesystem, image store,
+cgroup settings, runtime data root, failure stage, and the daemon's error; a
+failure in one lane does not hide the other. `PASS` means nested image execution
+worked for that lane, `FAIL` reports the stage/error, `IMAGE_UNAVAILABLE` means
+the exact images need provisioning, and `UNAVAILABLE` means the runtime or host
+Docker was absent. The aggregate exits nonzero unless both lanes pass. It does
+not repair or delete an existing Docker data root.
+
+The development agent's runc-only daemon currently reports a cgroup permission
+error at `nested-image-run`; the earlier capable host report describes an
+overlay-mount `invalid argument`. These are observations from different hosts,
+not a confirmed common cause. Preserve both outputs, inspect fresh disposable
+volumes and the reported storage backing before changing any daemon setting.
+
 ## P1: integrations needed by the chosen real-use profile
 
 - **Resource and development-URL helpers:** the recommended agent currently
@@ -133,6 +164,12 @@ These are not prerequisites for a basic workspace:
    the fixed host and runner-image KVM readiness probes. Prove normal completion,
    cancellation failure, timeout failure, and owned cleanup; a QMP capability
    probe is not a completed CI job.
+   The repository QEMU gate additionally needs a non-root invoking user,
+   passwordless `sudo -n` for the narrowly staged root service, a root-owned
+   mode-`0755` Node.js interpreter, and `/usr/bin/setpriv`. Run the gate as that
+   user, never as root. Test both a normal run and an actual `--input NAME=PATH`
+   run, including guest reads as UID 1001; local staging/readability tests are
+   not a substitute for the guest test.
 2. Provision global ordinary/QEMU service role files, units, immutable images,
    registry and transport trust, and the four Project policy fixtures. Verify
    Docker `type=image` support on the execution host. Those operator inputs

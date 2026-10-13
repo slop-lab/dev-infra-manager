@@ -59,7 +59,7 @@ docker run --rm \
   --runtime sysbox-runc \
   --cpus 1 \
   --memory 256m \
-  --pids 128 \
+  --pids-limit 128 \
   --env HOST_PROBE_IMAGE="$host_probe_image" \
   --env INNER_PROBE_IMAGE="$inner_probe_image" \
   "$workspace_image" \

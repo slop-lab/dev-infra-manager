@@ -383,15 +383,22 @@ describe("local source build policy", () => {
     expect(imageConsumers.every((script) => !script.includes("dev-infra-project-workspace:latest"))).toBe(true);
   });
 
-  it("routes the aggregate local version through the source CLI workspace-image build", async () => {
+  it.each([
+    { name: "without an inherited image", inheritedEnvironment: {} },
+    {
+      name: "instead of an unrelated inherited image",
+      inheritedEnvironment: { DIM_WORKSPACE_IMAGE: "dev-infra-project-workspace:unrelated-probe" }
+    }
+  ] as const)("builds the workspace image under the aggregate local version $name", async ({ inheritedEnvironment }) => {
     // Given
     const fixtureRoot = await mkdtemp(resolve(tmpdir(), "dim-local-workspace-recipe-"));
     fixtureRoots.push(fixtureRoot);
     const log = resolve(fixtureRoot, "invocations.log");
     const tools = resolve(fixtureRoot, "tools"); await mkdir(tools);
     await writeFile(
-      resolve(tools, "just"),
-      "#!/usr/bin/env bash\n  printf 'version=%s\\n' \"$DIM_LOCAL_BUILD_VERSION\" >>\"$DIM_INVOCATIONS\"\n  printf 'just' >>\"$DIM_INVOCATIONS\"\n  printf ' %s' \"$@\" >>\"$DIM_INVOCATIONS\"\n  printf '\\n' >>\"$DIM_INVOCATIONS\"\n", { mode: 0o755 }
+      resolve(tools, "docker"),
+      "#!/usr/bin/env bash\nprintf 'version=%s\\n' \"${DIM_LOCAL_BUILD_VERSION:-unset}\" >>\"$DIM_INVOCATIONS\"\nprintf 'docker' >>\"$DIM_INVOCATIONS\"\nprintf ' %s' \"$@\" >>\"$DIM_INVOCATIONS\"\nprintf '\\n' >>\"$DIM_INVOCATIONS\"\n",
+      { mode: 0o755 }
     );
     const expectedVersion = spawnSync("/usr/bin/bash", [resolve(workspaceRoot, "verification/scripts/local-build-version.bash")], {
       cwd: workspaceRoot,
@@ -405,6 +412,7 @@ describe("local source build policy", () => {
       encoding: "utf8",
       env: {
         ...process.env,
+        ...inheritedEnvironment,
         PATH: `${tools}:${process.env.PATH ?? "/usr/bin:/bin"}`,
         DIM_INVOCATIONS: log
       }
@@ -414,7 +422,10 @@ describe("local source build policy", () => {
     // Then
     expect(expectedVersion.status).toBe(0);
     expect(result.status).toBe(0);
-    expect(invocations).toBe(`version=${expectedVersion.stdout.trim()}\njust run-cli workspace image build\n`);
+    expect(invocations).toContain(`version=${expectedVersion.stdout.trim()}\n`);
+    expect(invocations).toContain(` --tag dev-infra-project-workspace:${expectedVersion.stdout.trim()} `);
+    expect(invocations).not.toContain(" --tag dev-infra-project-workspace:0.9.0 ");
+    expect(invocations).not.toContain("unrelated-probe");
     expect(invocations).not.toMatch(/(?:install|restart|latest)/);
   });
 
