@@ -28,6 +28,7 @@ remove_owned_container() {
   inspected="$(docker container inspect --format \
     '{{.Id}}|{{index .Config.Labels "org.dim.verification"}}|{{index .Config.Labels "org.dim.resource"}}' \
     "$name" 2>&1)" || {
+      while [[ "$inspected" == $'\n'* ]]; do inspected="${inspected#$'\n'}"; done
       case "$inspected" in
         "Error: No such container: $name"|"Error: No such object: $name"|\
         "Error response from daemon: No such container: $name"|"Error response from daemon: No such object: $name") return 0 ;;
@@ -59,6 +60,7 @@ remove_owned_volume() {
   inspected="$(docker volume inspect --format \
     '{{.Name}}|{{index .Labels "org.dim.verification"}}|{{index .Labels "org.dim.resource"}}' \
     "$name" 2>&1)" || {
+      while [[ "$inspected" == $'\n'* ]]; do inspected="${inspected#$'\n'}"; done
       case "$inspected" in
         "Error: No such volume: $name"|"Error response from daemon: No such volume: $name"|\
         "Error response from daemon: get $name: no such volume") return 0 ;;

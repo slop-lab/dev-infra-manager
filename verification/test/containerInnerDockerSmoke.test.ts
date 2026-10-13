@@ -78,7 +78,11 @@ case "$command" in
     case "$operation" in
       create) : >"$DIM_TEST_STATE/volume-$name"; printf '%s\n' "$name" ;;
       inspect)
-        [[ -f "$DIM_TEST_STATE/volume-$name" ]] || { printf 'Error: No such volume: %s\n' "$name" >&2; exit 1; }
+        [[ -f "$DIM_TEST_STATE/volume-$name" ]] || {
+          [[ "$DIM_TEST_FAILURE" != missing-leading-blank ]] || printf '\n' >&2
+          printf 'Error: No such volume: %s\n' "$name" >&2
+          exit 1
+        }
         [[ "$DIM_TEST_FAILURE" != volume-inspect-error ]] || { printf 'daemon API unavailable\n' >&2; exit 125; }
         verification="\${name#dim-root-replacement-data-}"
         [[ "$verification" != "$name" ]] || verification="\${name#dim-root-replacement-incompatible-}"
@@ -96,7 +100,11 @@ case "$command" in
     case "$operation" in
       inspect)
         name="\${!#}"
-        [[ -f "$DIM_TEST_STATE/container-$name" ]] || { printf 'Error: No such container: %s\n' "$name" >&2; exit 1; }
+        [[ -f "$DIM_TEST_STATE/container-$name" ]] || {
+          [[ "$DIM_TEST_FAILURE" != missing-leading-blank ]] || printf '\n' >&2
+          printf 'Error: No such container: %s\n' "$name" >&2
+          exit 1
+        }
         [[ "$DIM_TEST_FAILURE" != container-inspect-error ]] || { printf 'daemon API unavailable\n' >&2; exit 125; }
         verification="\${name#dim-inner-smoke-}"
         [[ "$verification" != "$name" ]] || { verification="\${name#dim-root-replacement-}"; verification="\${verification%-incompatible}"; }
@@ -201,6 +209,19 @@ describe("container inner Docker smoke", () => {
 
     // When
     const result = runFixture(fixture, "none");
+
+    // Then
+    expect(result, `${result.stderr}\n${result.stdout}`).toMatchObject({ status: 0 });
+    expect(result.stdout).toContain("container-inner-docker-smoke-ok");
+    expect(await resourceState(fixture)).toEqual([]);
+  });
+
+  it("accepts Docker 29 missing-resource diagnostics with a leading blank line", async () => {
+    // Given
+    const fixture = await createFixture();
+
+    // When
+    const result = runFixture(fixture, "missing-leading-blank");
 
     // Then
     expect(result, `${result.stderr}\n${result.stdout}`).toMatchObject({ status: 0 });
