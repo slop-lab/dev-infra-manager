@@ -243,7 +243,8 @@ directory, mode 0600, owned by the service user, and single-linked. The exact
 schemas are `NativeGitProjectRegistrarConnection`,
 `NativeGitRootImporterConnection`, and `NativeControlPlaneConnection`; do not
 merge their credentials. Bootstrap accepts only the already-local reviewed
-repository and one full branch ref:
+repository and one full branch ref. A root without `.dim/repos.yml` also needs
+the explicit private review policy shown after this command:
 
 ```bash
 set +x
@@ -279,6 +280,26 @@ DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE="$OPERATOR_DIR/control-plane.json" \
 DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE="$OPERATOR_DIR/control-plane.json" \
   dim workspace show work-1 --json
 ```
+
+For a manifest-free root, create this caller-owned mode-0600 file inside the
+private operator directory:
+
+```json
+{
+  "schemaVersion": 1,
+  "rootAlias": "root",
+  "review": {
+    "requiredReviewerIds": ["owner"],
+    "requiredJobs": []
+  }
+}
+```
+
+Add `--review-policy "$OPERATOR_DIR/review-policy.json"` to bootstrap. The
+absolute file must be a single-link, non-symlink regular file owned by the
+caller and not writable by the group or world. Bootstrap never falls back to
+automatic approval, and policy files must not contain model or provider
+secrets.
 
 Bootstrap output deliberately omits endpoint, username, password, connection
 path, authorization data, and import nonce. The source repository may be an

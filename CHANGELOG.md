@@ -47,13 +47,40 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Make the recommended workspace environment the default for roots without
+  custom `.dim` lifecycle files. DIM now reconciles a host-side unprivileged
+  Sysbox agent before readiness, with persistent home, checkout, and private
+  Docker volumes, proposal-scoped Git, and no host or trusted-runtime socket or
+  raw credential. An exact schema-1 `environment: minimal` selector opts out to
+  trusted outer-workspace `exec`, while existing custom lifecycle hooks retain
+  the advanced Project-owned contract. Environment changes require explicit
+  discard and recreation after preserving needed data, and old records without
+  a selector remain custom. Recommended resources are one combined budget with
+  a deterministic 25-percent outer and exact-remainder agent split, aggregate
+  minimums of 1 CPU, 1 GiB, and 256 PIDs, no extra swap, exact runtime readback,
+  and rollback before state publication. An unprovable rollback reports
+  uncertain resource state. Initial checkout seeds the exact selected root once
+  through recoverable owned staging. Later protected-root movement refreshes
+  immutable lifecycle selection while leaving checkout `HEAD`, index, user
+  files, and local commits unchanged; setup remains successful, prints an
+  explicit fetch/review/rebase-or-merge notice, and keeps agent commands
+  available. Product root changes need no recreation; environment-mode changes
+  still do. Recommended `discard
+  --keep-volume` rejects before mutation because its three data volumes are
+  workspace-identity-bound; operators must leave it intact or explicitly copy
+  data before full discard. Native root bootstrap also accepts an explicit
+  owner-private reviewed policy for manifest-free roots, with no automatic
+  approval fallback. The physical recommended-environment Sysbox smoke remains
+  blocked in the current runc-only environment without the required host lab;
+  this entry does not claim operational acceptance.
+
 - Workspaces now expose reviewed root lifecycle bytes read-only while Project
   code owns repository aliases, refs, materialization, and persistent checkout
   paths. The canonical Project stages hook-safe checkouts under workspace data,
   preserves existing agent work, and maps that Project-owned tree into the
   nested agent runtime.
 
-- `workspace discard --keep-volume` now tells reviewed Project teardown to
+- Custom `workspace discard --keep-volume` now tells reviewed Project teardown to
   preserve nested named data and retains the DIM-managed nested-engine volume
   for a later same-name workspace recreation. Ordinary discard keeps its
   destructive cleanup behavior.

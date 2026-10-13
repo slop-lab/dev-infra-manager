@@ -1,10 +1,12 @@
 # Single-Repository Project
 
-This is the default DIM Project shape: one application repository, no
+This is a custom-lifecycle DIM Project shape: one application repository, no
 `.dim/repos.yml`, no secret-bearing service, and no mandatory human review of
 agent changes. It demonstrates persistent workspace state, explicit resource
 limits, a Project-owned unprivileged agent container, its private rootless
-DinD sidecar, lifecycle hooks, and an optional controlled external URL.
+DinD sidecar, lifecycle hooks, and an optional controlled external URL. For a
+repository that needs none of those custom hooks or services, omit `.dim` and
+use DIM's recommended host-side Sysbox agent.
 
 Because this example assumes the repository contains no protected or
 secret-bearing authority, it deliberately does **not** configure branch

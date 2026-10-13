@@ -210,16 +210,22 @@ dim project bootstrap-native-root PROJECT \
   --source-ref refs/heads/BRANCH \
   --registrar-connection /absolute/path/to/registrar.json \
   --importer-connection /absolute/path/to/importer.json \
+  [--review-policy /absolute/path/to/review-policy.json] \
   [--git-executable /absolute/path/to/git] [--json]
 ```
 
-All five named options are required except `--git-executable`, which defaults
-to `/usr/bin/git`. The source repository, connection files, and Git executable
-must be absolute local paths. `--source-ref` must be one canonical full branch
-ref and is resolved once to the exact reviewed commit. The command reads the
-native-only policy from that commit's `.dim/repos.yml`; it has no URL, fetch,
-manifest-free-policy, moving-tag, or Gitea mode. `--project-id` supplies the
-stable native service identity and is not derived from the display name.
+All five named options are required except `--review-policy` and
+`--git-executable`, which defaults to `/usr/bin/git`. The source repository,
+connection files, optional review policy, and Git executable must be absolute
+local paths. `--source-ref` must be one canonical full branch ref and is
+resolved once to the exact reviewed commit. Without `--review-policy`, the
+command reads the native-only policy from that commit's `.dim/repos.yml`. With
+it, the repository may be manifest-free and the caller-owned private JSON file
+must contain exactly `schemaVersion: 1`, `rootAlias`, and `review`. The file
+must be a caller-owned, single-link, non-symlink regular file that is not group
+or world writable and is at most 64 KiB. There is no URL, fetch, moving-tag,
+auto-approval, or Gitea mode. `--project-id` supplies the stable native service
+identity and is not derived from the display name.
 
 The command uses `DIM_STATE_ROOT`, or the normal private DIM state root when
 unset, for both its retained schema-2 draft and disposable mode-0700 scratch.
@@ -1340,10 +1346,24 @@ smart-HTTP discovery and RPC obtains a fresh lease inside the broker. A broker
 or issuer outage, expiry, or restart fails only the current Git request unless
 a lifecycle mutation has already entered its documented non-ready recovery
 phase; it does not revoke Project readiness or turn CI into a prerequisite.
-`resources` requires at least one flag, applies the complete effective limit
-set to the existing top-level container with `docker update`, and persists
-state only after the runtime accepts the update. Omitted flags retain their
-current per-workspace values. Running and stopped containers are supported.
+`resources` requires at least one flag. Omitted flags retain their current
+per-workspace values, and running and stopped containers are supported. For
+minimal and custom, it applies the complete effective limit set to the
+top-level container and persists state only after exact Docker readback. For
+recommended, the recorded values are one combined budget with minimums of 1
+CPU, 1 GiB memory, and 256 PIDs. DIM assigns the floor of 25 percent of each to
+the trusted outer container and the exact remainder to the agent; both memory
+swap limits equal their respective memory limits. It updates outer, then agent,
+verifies exact readback, and publishes only after both succeed. Failure rolls
+back each attempted runtime and state mutation. A rollback or readback failure
+MUST report explicitly that workspace resource state is uncertain.
+
+Recommended `discard --keep-volume` MUST fail before publishing `discarding`,
+revoking any grant or route, invoking a hook, or changing a container, record,
+or volume. The diagnostic MUST direct the operator to leave the workspace
+intact or copy its home, checkout, and private Docker data before ordinary full
+discard. Custom `--keep-volume` retains its existing teardown and outer-engine
+volume contract.
 
 **CLI-WORKSPACE-RESOURCES-READ-001:** The workspace image MUST provide
 `dim-workspace-resources show` and `dim-nproc`. Both commands MUST use only
@@ -1442,16 +1462,25 @@ Top-level `dim run` and
 `dim exec` are convenience aliases for `dim workspace run` and `dim workspace
 exec`. Other workspace lifecycle commands exist only below `dim workspace`.
 
-`run` dispatches through immutable `.dim/entrypoint.sh` snapshot bytes when
-present. `exec` always
-bypasses it. `discard` follows `WORKSPACE-DISCARD-VOLUMES-001` for Project
+In the recommended environment, `run` accepts only `shell`, `exec`, or
+`custom`, and `exec` also dispatches to the DIM-managed agent. Minimal rejects
+`run` and sends `exec` to the trusted outer workspace. Custom `run` requires
+and dispatches through immutable `.dim/entrypoint.sh` snapshot bytes; custom
+`exec` bypasses it. After a recommended checkout is initially seeded, a
+lifecycle command that selects newer immutable root bytes MUST preserve its
+mutable checkout and complete without treating checkout divergence as a setup
+failure. It MUST print a notice directing the user to run `git fetch origin`
+and explicitly review, rebase, or merge the desired source in the agent;
+normal recommended `run` and `exec` commands remain available. `discard`
+follows `WORKSPACE-DISCARD-VOLUMES-001` for Project
 teardown and removal of the top-level container, inner-engine volume, and
-workspace state. `--keep-volume` retains the labeled DIM-managed volume;
-recreating the same workspace name validates and reuses it.
+workspace state. For minimal and custom, `--keep-volume` retains the labeled
+DIM-managed outer-engine volume; recreating the same workspace name validates
+and reuses it. Recommended rejects that option before mutation.
 For probes of `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, and
 `.dim/docker-compose.yml`, only exit code `1` means the file is absent. Any
 other probe failure MUST abort the lifecycle or task operation before DIM
-dispatches a hook, Compose command, or direct-command fallback.
+dispatches a hook, Compose command, or environment-specific command.
 
 Commands that permanently delete Projects, repositories, CI runners, or
 workspaces accept confirmation from an interactive terminal. In a

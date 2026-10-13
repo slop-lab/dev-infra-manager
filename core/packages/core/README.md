@@ -8,6 +8,8 @@ implements:
 - provider-neutral Project CI runner lifecycle with an initial managed-Gitea
   coordinator adapter and isolated container executor;
 - persistent workspace create/start/restart/update/discard lifecycle;
+- recommended host-side Sysbox agents with persistent home, checkout, and
+  private Docker volumes, plus explicit minimal and custom environments;
 - a Sysbox workspace runtime plan with runc reserved for trusted infrastructure;
 - host-readiness checks;
 - plugin manifest loading and version validation.
@@ -70,6 +72,37 @@ Lifecycle methods reconcile Docker containers, volumes, networks, and a local
 managed Gitea service. They are not pure data helpers. Callers must provide a
 usable host environment and surface `UserError` messages to users without
 discarding the underlying operation result.
+
+Workspace creation selects its environment from the immutable root. No `.dim`
+directory, or one without lifecycle files or `environment.yml`, selects the
+recommended agent. The exact selector below opts out:
+
+```yaml
+schemaVersion: 1
+environment: minimal
+```
+
+Unknown selector fields and custom lifecycle files combined with minimal are
+rejected. Any custom lifecycle file without the selector selects custom.
+Creation and setup reconcile the recommended agent before ready publication.
+Mode changes require discard and recreation; older records without an
+environment continue as custom without rewriting their data.
+
+Creation seeds the recommended checkout at the exact selected root once through
+recoverable owned staging. Later lifecycle root selection refreshes immutable
+setup bytes only: the retained checkout's `HEAD`, index, user files, and local
+commits remain unchanged, and checkout divergence does not fail setup or block
+normal agent commands. The lifecycle notice directs users to fetch `origin`
+and explicitly review, rebase, or merge product changes in the agent. Product
+root changes do not require workspace recreation; environment-mode changes do.
+
+Recommended resource values are one combined budget. DIM assigns the floor of
+25 percent of CPU, memory, and PIDs to the trusted outer container and the
+exact remainder to the agent, with aggregate minimums of 1 CPU, 1 GiB, and 256
+PIDs. Both swap limits equal memory. Updates verify each runtime readback before
+state publication and restore attempted changes on failure; failed rollback is
+reported as uncertain. Recommended `discard --keep-volume` rejects before any
+mutation because its three persistent volumes are workspace-identity-bound.
 
 `importProjectRepository` is a low-level mirror import and copies every source
 ref. Applications that want the CLI's branches-and-tags-only default should

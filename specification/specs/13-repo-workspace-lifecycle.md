@@ -668,7 +668,11 @@ single concrete branch covered by the root repository's applied protection,
 pins its exact commit, and atomically publishes the complete commit tree below
 the controller-owned content-addressed assets path. The implemented Gitea
 workspace record uses schema version `8` and records a fresh 256-bit workspace instance ID together
-with that root ref, commit, and the canonical workspace-data path. The
+with that root ref, commit, the canonical workspace-data path, and the selected
+`recommended`, `minimal`, or `custom` environment. Historical schema-8 records
+without `environment` are accepted only as custom and remain
+environment-undefined; their user data and hook behavior are not
+reinterpreted. The
 protected-root path is derived from the state root,
 Project ID, and exact commit rather than persisted. The record contains no repository catalog or
 per-repository ref overrides. Schema `7`, older workspace schemas, and records containing
@@ -803,13 +807,31 @@ The root repository owns the optional:
 .dim/entrypoint.sh
 .dim/teardown.sh
 .dim/docker-compose.yml
+.dim/environment.yml
 .dim/repos.yml
 ```
+
+`environment.yml` is an exact selector, not a general manifest. It accepts
+only:
+
+```yaml
+schemaVersion: 1
+environment: minimal
+```
+
+Unknown fields are invalid. The selector cannot coexist with `setup.sh`,
+`entrypoint.sh`, `teardown.sh`, or `docker-compose.yml`. Without a selector,
+any of those four lifecycle files selects `custom`; their complete absence
+selects `recommended`. Creation stores the selection in workspace state.
+Setup, start, restart, and update MUST reject a changed selection and preserve
+all state and data until the operator explicitly discards and recreates the
+workspace. Historical records without an environment field retain `custom`
+semantics and MUST NOT reinterpret existing user data.
 
 DIM probes each optional lifecycle file inside the immutable root snapshot.
 Probe exit code `0` means present and only exit code `1` means absent. Every
 other result is a probe failure and MUST abort before DIM dispatches a setup,
-entrypoint, teardown, Compose, or direct-command fallback.
+entrypoint, teardown, Compose, or environment-specific command.
 
 It also owns checkout and reconciliation of any additional Project
 repositories. DIM supplies a read-only runtime manifest and environment to
@@ -910,19 +932,58 @@ DIM_AGENT_CONTROLLER_SOCKET
 DIM_AGENT_CONTROLLER_TOKEN
 ```
 
-Agent containers are ordinary, reviewed Project workloads. A Project may
-declare one directly in `.dim/docker-compose.yml` or create one inside a
-Project-owned private runtime started by `.dim/setup.sh`, then dispatch fixed
-tasks from `.dim/entrypoint.sh`. Core owns none of its image, service, volume,
-privilege, or task configuration. `dim workspace run WORKSPACE TASK` always
-follows the checked-in `.dim/entrypoint.sh` contract when present.
-Top-level `dim run` is the same Project task boundary. Top-level `dim exec`
-and `dim workspace exec` bypass the entrypoint and provide raw access to the
-trusted workspace container; they are recovery and lifecycle-administration
-paths, not agent entrypoints.
+In the recommended environment, DIM core owns a host-side unprivileged
+`sysbox-runc` agent, its network, and persistent home, checkout, and private
+Docker volumes. It receives no host or trusted outer runtime socket and no raw
+operator, provider, native-Git, or product credential. A trusted outer relay
+provides workspace-scoped Git access. Setup MUST reconcile the agent and
+seed an empty checkout volume at the exact selected protected-root commit
+before publishing ready. Initial checkout MUST clone, fetch, and check out in
+an ownership-bound disposable staging directory and publish the complete
+repository only after success. An interrupted publication MUST leave no
+partially adopted repository; an identical setup MUST recover or safely replace
+only its owned stage and converge.
+
+That publication is the only automatic mutation of the mutable checkout. On
+later setup, start, restart, or update, DIM MAY select or reapply newer
+immutable lifecycle bytes, but MUST leave the checkout's `HEAD`, index,
+tracked, staged, untracked, ignored, and locally committed content unchanged.
+A difference between the selected protected root and the checkout's original
+seed MUST NOT fail setup or make normal agent commands unavailable. DIM MUST
+print a notice that the lifecycle root changed while the checkout was
+preserved, and direct the user to fetch `origin` and review, rebase, or merge
+the desired source explicitly inside the agent.
+
+The workspace record's CPU, memory, and PID values are the recommended
+environment's combined budget, not per-container values. The combined minimum
+is 1 CPU, 1 GiB memory, and 256 PIDs. DIM MUST assign the integer floor of 25
+percent of each value to the trusted outer container and the exact remainder to
+the agent. CPU precision is at most nine decimal places. Each container's swap
+limit MUST equal its memory limit. Creation, reconciliation, and resource
+updates MUST use the same deterministic split and ownership labels.
+
+A live resource update MUST apply and exactly read back the outer limit, then
+apply and exactly read back the agent limit, then publish the complete recorded
+budget. On failure it MUST restore every attempted runtime limit and any
+attempted state publication. If rollback or readback fails, DIM MUST report
+that resource state is uncertain and MUST NOT claim either budget is effective.
+
+Recommended `run` accepts only `shell` with no arguments, or `exec` and
+`custom` followed by a command. All three and `workspace exec` run in the agent
+at `/workspace`. Minimal creates no agent, rejects `run`, and sends only
+`workspace exec` to the trusted outer workspace.
+
+In a custom environment, agent containers remain ordinary reviewed Project
+workloads. A Project may declare one directly in `.dim/docker-compose.yml` or
+create one inside a Project-owned private runtime started by `.dim/setup.sh`,
+then dispatch fixed tasks from `.dim/entrypoint.sh`. Core owns none of the
+custom agent's image, service, volume, privilege, or task configuration.
+Custom `run` requires and follows `.dim/entrypoint.sh`; it fails when that file
+is absent. Custom `exec` bypasses the entrypoint and provides raw access to the
+trusted workspace container for recovery and lifecycle administration.
 
 **WORKSPACE-AGENT-SETUP-001:** Coding-agent tool installation MUST be an
-explicit workspace-user action inside a Project-owned agent. DIM and trusted
+explicit workspace-user action inside the selected agent boundary. DIM and trusted
 `.dim/setup.sh` lifecycle code MUST NOT perform it automatically. A Project may
 publish a user-run bootstrap script, but invoking that script MUST happen
 through a Project task such as the conventional
@@ -1539,18 +1600,19 @@ configuration or authority.
 
 ## Applying changes
 
-DIM never applies Project or root remote changes to a running workspace
-automatically.
+DIM never applies remote product-source changes to a mutable checkout.
+Explicit lifecycle commands may select reviewed immutable lifecycle bytes as
+described below without making those bytes the checkout's source state.
 
-- `start` selects and stages one approved root commit, starts a stopped runtime,
-  fast-forward merges that commit, and runs setup. The built-in Compose fallback MUST
+- `start` selects and stages one approved root commit as the immutable
+  lifecycle root, starts a stopped runtime, and runs setup. The built-in Compose fallback MUST
   force-recreate services because stopping the outer workspace also terminates
   their runtime processes; Project-owned setup remains responsible for its own
   equivalent reconciliation.
 - `restart` selects and stages one approved root commit, then stops a running
   runtime and performs the same start/apply/setup sequence.
-- `update` selects and stages one approved root commit, performs the
-  fast-forward and setup, and may also replace Compose profiles. When the
+- `update` selects and stages one approved root commit as the immutable
+  lifecycle root, runs setup, and may also replace Compose profiles. When the
   selected root is unchanged, DIM reuses the running workspace container and
   does not interrupt its nested runtime merely to repeat setup. When the
   selected root changes, DIM replaces the owned outer container before
@@ -1594,11 +1656,12 @@ this recovery. `update` MUST
 be able to select and publish a root again; only successful setup may return
 the workspace to `ready`.
 
-Project-owned setup decides how mutable checkouts are reconciled and must not
-silently rewrite an existing agent checkout. DIM restart selects reviewed root
+Project-owned setup decides how custom mutable checkouts are reconciled and
+must not silently rewrite one. The recommended mutable checkout is exclusively
+user-controlled after its initial seed. DIM restart selects reviewed lifecycle
 bytes before stopping the container, then dispatches setup from those immutable
-bytes. Stop/start and restart preserve workspace data and the named
-inner-engine volume.
+bytes without changing recommended checkout source. Stop/start and restart
+preserve workspace data and the named inner-engine volume.
 Create may request plugin-provided workspace capabilities as `required` or
 `recommended`. Provider registration names match request names exactly.
 Missing or failed required capabilities abort creation; recommended ones are
@@ -1609,15 +1672,25 @@ options, devices, and environment entries before applying them.
 
 ## Cleanup
 
-**WORKSPACE-DISCARD-VOLUMES-001:** `discard --yes` MUST invoke a custom
-`.dim/teardown.sh` with `DIM_WORKSPACE_DISCARD_KEEP_VOLUME=0`. With
+**WORKSPACE-DISCARD-VOLUMES-001:** Recommended `discard --keep-volume` MUST
+reject while the workspace is still unchanged, before publishing `discarding`,
+revoking authority, invoking cleanup, or mutating any runtime, record, or
+volume. Recommended home, checkout, and private-Docker volumes are
+workspace-identity-bound and cannot be transferred by this flag. Operators MUST
+leave the workspace intact or explicitly copy or back up needed data before
+ordinary full discard and mode-changing recreation.
+
+For minimal, custom, and historical environment-undefined workspaces,
+`discard --yes` invokes the existing teardown path. When a custom
+`.dim/teardown.sh` exists, DIM MUST invoke it with
+`DIM_WORKSPACE_DISCARD_KEEP_VOLUME=0`. With
 `--keep-volume`, DIM MUST pass `DIM_WORKSPACE_DISCARD_KEEP_VOLUME=1`. At `1`,
 Project teardown MUST NOT delete nested named data that the Project intends to
 survive recreation of the same workspace name. At `0`, Project teardown keeps
 its ordinary cleanup authority. In both cases, external volumes remain
 Project-owned and outside DIM cleanup.
 
-DIM then removes the workspace container and record. The named inner-engine
+After custom teardown, DIM removes the workspace container and record. The named inner-engine
 volume is an outer DIM-managed volume that stores the workspace container's
 nested engine. `--keep-volume` retains that volume so a later same-name create
 can validate and reuse it; ordinary discard removes it. Nested named volumes
@@ -1626,7 +1699,7 @@ created inside that engine are Project-owned resources. Their retention at
 outer engine volume. Discard does not delete Project metadata or managed Git
 repositories.
 
-Both discard forms MUST revoke workspace and agent grants and External URL
+Both custom discard forms MUST revoke workspace and agent grants and External URL
 routes before state removal. `--keep-volume` retains data only. A later
 same-name create MUST use a fresh workspace ID and fresh grants, and every
 token, route ID, approval, slug, or permalink bound to the discarded ID MUST
@@ -1692,10 +1765,12 @@ Required tests cover:
   canonical path derivation without `rootSnapshotPath` retention, read-only outer mounting, mutable-file
   substitution resistance, missing snapshot rejection, and retry/discard
   provenance pinning;
-- selected-root metadata publication before checkout or manifest mutation,
-  non-ready state and `run` rejection after fault-injected checkout, manifest,
-  and final ready-state write failures, plus recovery through `setup` and
-  `update`;
+- initial selected-root checkout publication from a recoverable owned stage,
+  with no partial repository adoption after an injected interruption;
+- later selected-root metadata publication before manifest mutation, immutable
+  lifecycle refresh without mutable checkout mutation, a successful notice on
+  root divergence, and recovery from manifest and final ready-state write
+  failures through `setup` and `update`;
 - explicit, checksum-verified workspace-user setup through the Project task
   boundary, with user-home-only mutation and no automatic lifecycle install;
 - explicit authenticated Web launch with bad-input and missing-prerequisite

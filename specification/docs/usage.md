@@ -61,21 +61,59 @@ bash verification/scripts/install-host-ubuntu.bash sysbox
 just run-cli doctor
 ```
 
-Projects may start a development-agent service from `.dim/setup.sh` and route
-fixed tasks into it from `.dim/entrypoint.sh`. The service is ordinary
-Project-owned Compose configuration; DIM core does not define or manage an
-agent resource.
+The recommended environment needs no `.dim` directory. DIM creates a host-side
+unprivileged Sysbox agent with persistent home, checkout, and private Docker
+volumes. Enter it with `dim run WORKSPACE shell`, run a command with `dim run
+WORKSPACE exec -- COMMAND`, or use `dim exec WORKSPACE -- COMMAND`. The agent
+receives no host or trusted outer runtime socket and no raw credentials.
+Its recorded CPU, memory, and PID values are one combined budget: the trusted
+outer container receives the floor of 25 percent and the agent receives the
+exact remainder. The minimum is 1 CPU, 1 GiB, and 256 PIDs, with no swap beyond
+each container's memory limit. Updates require exact readback and rollback on
+failure; DIM reports uncertainty when rollback cannot be proved.
 
-Enter that Project-owned task boundary with `dim run WORKSPACE bash`. Use
-`dim exec WORKSPACE -- bash` only when raw access to the trusted workspace is
-needed for recovery or lifecycle administration. `run`, `exec`, and trusted
-`.dim/setup.sh` do not install coding-agent tools automatically.
+An exact `.dim/environment.yml` containing only `schemaVersion: 1` and
+`environment: minimal` opts out of the agent. Minimal supports only `dim exec
+WORKSPACE -- COMMAND`, which runs in the trusted outer workspace. Any custom
+lifecycle file selects the custom Project contract instead. Custom Projects
+may start their own agent from `.dim/setup.sh` and route tasks through the
+required `.dim/entrypoint.sh`.
+
+None of these paths installs a coding-agent provider, performs provider login,
+or runs Project-specific tool setup automatically.
+
+Creation seeds the recommended checkout at the exact selected protected-root
+commit once. Later setup, start, restart, or update may refresh immutable
+lifecycle bytes, but never resets the retained checkout, its `HEAD`, or any
+tracked, staged, untracked, ignored, or locally committed work. DIM prints a
+notice when lifecycle selection advances; normal agent commands remain usable.
+Adopt product changes explicitly after review:
+
+```bash
+dim workspace update WORKSPACE
+dim workspace run WORKSPACE exec -- git fetch origin
+dim workspace run WORKSPACE exec -- git log --oneline HEAD..origin/main
+dim workspace run WORKSPACE exec -- git rebase origin/main
+# Or merge origin/main after review.
+```
+
+Replace `main` with the Project's configured protected branch when it differs.
+
+An updated product root does not require a fresh workspace. Environment-mode
+changes do: preserve needed data, discard, and recreate.
+
+Recommended `discard --keep-volume` rejects before any mutation because its
+home, checkout, and private-Docker volumes are bound to the current workspace
+identity. Leave it intact or explicitly copy or back up needed data before a
+full discard or mode change. Minimal and custom keep-volume behavior is
+unchanged.
 
 A Project may document an optional workspace-user bootstrap and map the
 generic `tool-setup` and `agent` tasks to it. Fetch its script and `.sha256`
 file from the same full development commit, verify the checksum, then execute
 the verified local bytes through the Project's reviewed task contract. The
-canonical no-checkout flow uses `dim run WORKSPACE bash -- -s`; complete
+canonical custom-Project no-checkout flow uses `dim run WORKSPACE bash -- -s`;
+complete
 examples may stream to `tool-setup` because their checked-in mapping is
 `bash -s`. Never pipe a branch, tag, or `latest` URL directly into a shell. The
 bootstrap may change only the persistent agent user home and must exclude
@@ -368,16 +406,17 @@ controller replacement, setup-error recovery, and backup/discard/restore.
 ## Project Workspaces
 
 For installing `dim` and the minimal single-repository "create a Project"
-shape, see the root [README](../README.md#install-the-dim-cli). For a
+shape, see the root [README](../../README.md#install-the-dim-cli). For a
 complete, tested nested-container walkthrough with named external URL ingresses, see
 [Example: External URLs](../../examples/features/external-urls/README.md).
 For a combined, stateful adoption and recovery walkthrough, see
 [Full development flow](../../examples/projects/full-development-flow/README.md).
 
 `run` does not repeat setup. Environment reconciliation happens on `create`,
-`start`, `restart`, `setup`, and after a fast-forward-only `update`. Only the
-optional files under `.dim` have special meaning; root Compose files are
-never auto-discovered.
+`start`, `restart`, `setup`, and after a fast-forward-only `update`. A root with
+no lifecycle files selects the recommended agent, not custom no-op setup. The
+exact minimal selector opts out, and any custom lifecycle file retains the
+advanced Project-owned contract. Root Compose files are never auto-discovered.
 Agent-tool installation, when a Project offers it, is a separate explicit
 workspace-user action through the Project task boundary.
 

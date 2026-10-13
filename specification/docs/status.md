@@ -210,10 +210,11 @@ installs the unified runtime via `installer install core|plugin` and
   proxies operational commands to its managed `@slop-lab/dim-cli`,
   verified through `mise use --raw --global` in a disposable container and against the
   canonical Project example.
-- Root-ref refresh on workspace start/restart without live mutation of running
-  workspaces.
-- Atomic running-workspace restart preflight: dirty and divergent roots are
-  rejected before the workspace or its Project services are stopped.
+- Immutable root-lifecycle refresh on workspace start/restart without automatic
+  mutation of the recommended checkout; users adopt product source explicitly
+  with agent-run Git commands.
+- Atomic custom-workspace restart preflight: Project-owned dirty and divergent
+  roots are rejected before the workspace or its Project services are stopped.
 - TypeScript unit tests and nested-container lifecycle smoke tests.
 - Reproducible local Node.js 24/26, container, Sysbox, and KVM CI entrypoints.
 - Source CLI execution through `just run-cli`, which builds core and runs the

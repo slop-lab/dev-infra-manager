@@ -204,10 +204,12 @@ It should stage a new checkout, disable inherited Git hooks and configuration,
 and publish atomically. Existing checkout paths are agent data and must not be
 silently rewritten.
 
-`dim run` dispatches through the Project's reviewed entrypoint and is the
-normal way to enter a Project-owned agent task. `dim exec` bypasses that
-entrypoint and provides raw trusted-workspace access for recovery or lifecycle
-administration. Neither command installs coding-agent tools automatically.
+In the recommended environment, `dim run WORKSPACE shell`, `run ... exec`,
+`run ... custom`, and `dim exec` enter DIM's unprivileged Sysbox agent. Minimal
+rejects `run` and sends `exec` to the trusted outer workspace. In a custom
+environment, `run` requires the Project's reviewed entrypoint and `exec`
+bypasses it for trusted-workspace recovery or lifecycle administration. None of
+these commands installs or authenticates coding-agent tools automatically.
 
 Project or remote changes never alter a running workspace automatically.
 Trusted Project lifecycle code never executes from Project-owned mutable data.
@@ -217,7 +219,7 @@ their relative helpers and build contexts.
 
 DIM treats only exit code `1` from an optional lifecycle-file probe as
 absence. Any other probe failure stops the operation before it runs a hook,
-Compose, or a direct-command fallback.
+Compose, or an environment-specific command.
 
 Project-owned key-only agent SSH accepts the configured client key for the
 non-root `dim-agent` account. Root login stays disabled and is rejected even

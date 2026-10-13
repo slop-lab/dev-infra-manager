@@ -792,7 +792,7 @@ separate explicit journey; it is not a parser migration test.
 For `WORKSPACE-AUTHORITY-001` and `URL-APPROVAL-001`, one continuous journey
 MUST distinguish stop/start of one workspace ID from discard and same-name
 creation of a fresh ID. It MUST prove that declared retained data and agent
-home bytes survive `--keep-volume`, while old grants, tokens, sockets, route
+home bytes survive custom `--keep-volume`, while old grants, tokens, sockets, route
 IDs, approvals, slugs, permalinks, device grants, and runtime generations do
 not authorize the new instance. An approval-required route MUST be unreachable
 in `pending`, reachable only after host approval, unavailable while stopped,
@@ -811,12 +811,36 @@ input while it owns the workspace setup lock, and that a valid agent grant with
 an incomplete or oversized request body never acquires workspace authority or
 delays durable discard denial.
 
-For `PROJECT-HOOK-DEFAULTS-001`, every backend MUST test hook-present, Compose
-fallback, no-op setup, entrypoint-present, direct-command fallback,
-teardown-present, and Compose/no-op teardown cases from one immutable root.
+For `PROJECT-HOOK-DEFAULTS-001`, every backend MUST test all three environment
+selections from immutable roots. Recommended coverage MUST create and attest the
+core-managed agent before readiness, preserve its three named volumes, route
+`run shell`, `run exec`, `run custom`, and `exec` into it, reject malformed
+operations, and seed the exact selected protected-root commit once. After that
+seed, a protected-root move MUST update or reapply immutable lifecycle
+selection while preserving checkout `HEAD`, index, dirty, staged, untracked,
+ignored, and locally committed work; setup MUST succeed, normal agent commands
+MUST remain available, and a notice MUST direct the user to explicit fetch and
+review/rebase/merge. Initial checkout coverage MUST interrupt clone, fetch,
+checkout, and publication boundaries, prove no partial repository is adopted,
+and prove a retry recovers or safely replaces only the owned stage before
+publishing the complete checkout. Recommended resource coverage MUST prove the
+exact 25/75 combined-budget split, exact sum, 1 CPU/1 GiB/256 PID minimums, no
+extra swap, readback before state publication, complete rollback after each
+injected failure, and explicit uncertain-state failure when rollback cannot be
+proved. Recommended `discard --keep-volume` MUST reject before any phase,
+grant, route, hook, runtime, state, or volume mutation. Minimal coverage MUST
+accept only the exact two-field selector, reject unknown fields and
+selector/hook conflicts, create no agent, reject `run`, and route `exec` to the
+trusted outer workspace.
+Custom coverage MUST test hook-present, Compose fallback, no-op setup,
+entrypoint-present and absent, teardown-present, and Compose/no-op teardown.
 Guest mutation, symlink escape, moved root, and missing lifecycle-file probe
 failure MUST start no trusted hook. VM evidence MUST show that hook authority
 and secret-bearing operations remain outside the guest.
+
+The recommended-environment physical Sysbox smoke requires a capable external
+host. A runc-only development environment without that lab access records this
+gate as blocked, not passed, and MUST NOT be cited as operational acceptance.
 
 ## Scope
 
@@ -1276,7 +1300,7 @@ recovery MUST neither fetch nor resolve a non-root repository ref.
 Lifecycle-file probe tests MUST cover `.dim/setup.sh`, `.dim/entrypoint.sh`,
 `.dim/teardown.sh`, and `.dim/docker-compose.yml`. They MUST prove that exit
 code `0` means present, only exit code `1` means absent, and every other exit
-code aborts before hook, Compose, or direct-command fallback dispatch.
+code aborts before hook, Compose, or environment-specific command dispatch.
 
 Workspace selection tests MUST prove that schema `8` records one immutable root
 selection and the canonical persistent data path without a persisted snapshot

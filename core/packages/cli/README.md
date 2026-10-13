@@ -13,13 +13,15 @@ A DIM **Project** is lightweight metadata:
 - one required **root repository** and an optional branch ref;
 - any additional repositories that belong to the Project.
 
-Each **workspace** mounts an immutable snapshot of the reviewed root repository. The root repository's
-optional `.dim/setup.sh`, `.dim/entrypoint.sh`, and Docker Compose
-configuration own all mutable checkouts and nested containers. A repository
-does not need to correspond one-to-one with a container. DIM therefore tracks
-one root ref instead of prescribing a multi-repository runtime layout. When no
-root ref is configured, DIM resolves the repository's symbolic `HEAD`;
-workspace creation fails if the repository has no `HEAD`.
+Each **workspace** mounts an immutable snapshot of the reviewed root repository.
+With no custom `.dim` lifecycle files, DIM creates the recommended unprivileged
+Sysbox agent with persistent home, checkout, and private Docker data. An exact
+minimal selector opts out. Projects that provide lifecycle files retain full
+ownership of their mutable checkouts, nested containers, and task dispatch. A
+repository does not need to correspond one-to-one with a container. DIM
+therefore tracks one root ref instead of prescribing a multi-repository runtime
+layout. When no root ref is configured, DIM resolves the repository's symbolic
+`HEAD`; workspace creation fails if the repository has no `HEAD`.
 
 A running workspace is never changed automatically when the Project changes.
 `dim workspace start`, `dim workspace restart`, and `dim workspace update`
@@ -107,8 +109,8 @@ root-read and workspace-write issuer credentials. DIM reloads it under the
 Project lock for readiness and workspace lifecycle operations, while retaining
 the original import receipt generation unchanged.
 Create the initial schema-2 draft from one already-local reviewed repository.
-This command does not fetch, accept a tag, or accept policy JSON outside the
-selected commit's `.dim/repos.yml`:
+This command does not fetch or accept a tag. By default it reads policy from
+the selected commit's `.dim/repos.yml`:
 
 ```bash
 dim project bootstrap-native-root acme \
@@ -126,6 +128,26 @@ Bootstrap retains the exact bundle and policy below the private DIM state root,
 imports the protected root, and prints a credential-free `root-imported` view.
 Exact replay converges. It does not create runnable Project state.
 
+For a manifest-free repository, create an absolute private JSON file with no
+unknown fields:
+
+```json
+{
+  "schemaVersion": 1,
+  "rootAlias": "root",
+  "review": {
+    "requiredReviewerIds": ["owner"],
+    "requiredJobs": []
+  }
+}
+```
+
+Then add `--review-policy /absolute/operator/review-policy.json`. The file must
+be a caller-owned, single-link, non-symlink regular file that is not group or
+world writable. This policy is required for manifest-free bootstrap. There is
+no auto-approval fallback, and the file must contain no model or provider
+secret.
+
 After bootstrap has published that draft:
 
 ```bash
@@ -133,8 +155,8 @@ dim project create acme --json
 dim project list --json
 dim project show acme --json
 dim workspace create acme feature-123
-dim workspace exec feature-123 -- bash
-dim workspace run feature-123 TASK
+dim workspace run feature-123 shell
+dim workspace run feature-123 exec -- git status
 ```
 
 Create first publishes `admission-pending`, obtains a fresh service readiness
@@ -343,13 +365,15 @@ Create and enter a persistent workspace:
 ```bash
 dim workspace create acme feature-123 --profile development
 dim workspace create acme feature-123 --recommend-capability writable-cgroup
-dim workspace exec feature-123 -- bash
+dim workspace run feature-123 shell
 ```
 
-Run a task through the root repository's `.dim/entrypoint.sh`:
+For the recommended environment, use its explicit command operations:
 
 ```bash
-dim workspace run feature-123 bash
+dim workspace run feature-123 exec -- just test
+dim workspace run feature-123 custom -- ./scripts/reviewed-helper
+dim workspace exec feature-123 -- git status
 ```
 
 The controller command session forwards task stdin even when redirected or
@@ -357,7 +381,47 @@ piped, so Project-defined streaming tasks can use contracts such as `dim
 workspace run feature-123 restore <backup.tar.gz`. Input bytes and EOF remain
 ordered, and a TTY is allocated only for an interactive terminal.
 
-`exec` is the raw escape hatch; `run` uses the Project-defined task contract.
+`shell` accepts no arguments. `exec` and `custom` require a command. These
+commands run in the recommended agent and don't install or authenticate an
+agent provider.
+
+The `--cpus`, `--memory`, and `--pids` values are one combined recommended
+budget. DIM assigns the floor of 25 percent to the trusted outer container and
+the exact remainder to the agent. The minimum is 1 CPU, 1 GiB memory, and 256
+PIDs, and each swap limit equals memory. `workspace resources` reads back both
+updates before publishing state, rolls back all attempted changes after a
+failure, and reports an uncertain state if rollback cannot be proved.
+
+To opt out, commit an exact `.dim/environment.yml` containing only
+`schemaVersion: 1` and `environment: minimal`. Minimal creates no agent and
+supports only trusted outer-workspace `exec`. Any custom lifecycle file without
+that selector chooses the custom environment, where `run` requires
+`.dim/entrypoint.sh` and `exec` bypasses it. Unknown selector fields and a
+minimal selector combined with custom hooks are rejected.
+
+The selected environment is fixed for the workspace. A mode change requires
+discard and recreation. Older records without an environment remain custom and
+keep their existing data and hook behavior. Recommended creation seeds the
+exact selected root into the empty checkout once. Recoverable owned staging
+ensures an interrupted clone, fetch, checkout, or publication does not adopt a
+partial repository and an identical setup can retry.
+
+Later lifecycle selection may advance immutable setup bytes, but it never
+resets the retained checkout. Its `HEAD`, index, dirty, staged, untracked,
+ignored, and locally committed content stays unchanged; setup succeeds, prints
+a manual-adoption notice, and leaves normal agent commands usable. Fetch and
+review product changes explicitly in the agent:
+
+```bash
+dim workspace update feature-123
+dim workspace run feature-123 exec -- git fetch origin
+dim workspace run feature-123 exec -- git log --oneline --decorate HEAD..origin/main
+dim workspace run feature-123 exec -- git rebase origin/main
+# Or merge origin/main after review.
+```
+
+Product root-code changes do not require workspace recreation. Only an
+environment-mode change requires preserving data, discarding, and recreating.
 
 ## Everyday lifecycle
 
@@ -370,24 +434,29 @@ dim workspace start feature-123
 dim workspace restart feature-123 review-456
 dim workspace update feature-123
 dim workspace setup feature-123
-dim workspace discard feature-123 --keep-volume --yes
+dim workspace discard feature-123 --yes
 ```
 
 - `stop` preserves the checkout and nested container-engine storage.
 - `resources` changes any supplied live or stopped workspace limits and keeps
   omitted limits unchanged.
-- `start` refreshes the root ref and runs setup.
-- `restart` is the explicit way to apply merged root-repository changes to one
-  or more workspaces. Multiple names are processed in command-line order; a
-  failure stops before later names while keeping earlier restarts complete.
+- `start` refreshes immutable lifecycle selection and runs setup without
+  changing a recommended mutable checkout.
+- `restart` applies reviewed immutable root lifecycle changes to one or more
+  workspaces without adopting product source in a recommended checkout.
+  Multiple names are processed in command-line order; a failure stops before
+  later names while keeping earlier restarts complete.
 - `update` reuses the running outer container when the selected root is
   unchanged. A changed root replaces that container before setup and may
   interrupt outer processes and nested runtimes while preserving named
   persistent data.
 - `setup` retries setup without changing the root ref.
-- `discard` permanently removes the workspace and unpushed changes; use
-  `--keep-volume` to retain DIM-managed nested-engine data for recreation with
-  the same workspace name.
+- `discard` permanently removes the workspace and unpushed changes.
+  Recommended `--keep-volume` rejects before any mutation because home,
+  checkout, and private-Docker volumes are workspace-identity-bound. Leave the
+  workspace intact or copy needed data before full discard. Minimal, custom,
+  and historical custom workspaces retain the existing outer-engine
+  `--keep-volume` behavior.
 
 If a controller command session for `create`, `setup`, `update`, `start`, or
 `restart` fails, the CLI preserves the failure context and recommends running
@@ -401,8 +470,9 @@ output clears the transient status first. Redirected output, JSON stdout, and
 interactive `exec` or `run` streams never receive progress or terminal-control
 bytes.
 
-DIM only performs fast-forward root updates. It will not overwrite divergent
-workspace history.
+DIM selects protected lifecycle roots only by fast-forward. That selection does
+not overwrite recommended workspace checkout history; source adoption is the
+agent user's explicit Git operation.
 
 ## Multiple repositories
 

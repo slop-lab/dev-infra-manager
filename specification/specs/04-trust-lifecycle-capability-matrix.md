@@ -292,7 +292,8 @@ not retained authority.
 | `restart` or `update` | Keeps the workspace ID and data; runtime generation may change | Selects and stages one approved root before lifecycle mutation, then runs setup; MUST NOT reuse the recorded root as a recovery fallback | Cannot broaden a grant; a changed route tuple requires a new pending request |
 | `setup` recovery | Keeps identity and data unchanged | Replays only the recorded immutable root | Cannot mint unrelated authority or follow a moved ref |
 | ordinary `discard` | Removes runtime, record, and DIM-owned data after ownership checks | Runs teardown with keep-volume false | Revokes routes and all server-side grants before removing state |
-| `discard --keep-volume` | Removes runtime and record but retains only owned Project/user data | Runs teardown with keep-volume true | Revokes exactly as ordinary discard; retained bytes confer no authority |
+| custom `discard --keep-volume` | Removes runtime and record but retains only owned Project/user data | Runs teardown with keep-volume true | Revokes exactly as ordinary discard; retained bytes confer no authority |
+| recommended `discard --keep-volume` | Rejects before phase, grant, route, runtime, record, or volume mutation; leaves the workspace intact | Runs no teardown | Revokes nothing because discard does not begin |
 | same-name recreation | Creates a new workspace ID and fresh runtime generation; may reuse validated retained data | Selects a currently approved immutable root | Issues fresh grants; old tokens, sockets, route IDs, approvals, slugs, and permalinks remain invalid |
 
 Retained data MAY include agent home, installed user tools, authorized agent SSH
@@ -302,6 +303,14 @@ socket path, URL credential, or approval ID MUST fail server-side
 authentication because it names the discarded workspace ID. Creation MUST
 recompute backend/device capabilities and MUST NOT infer them from retained
 data.
+
+Recommended home, checkout, and private-Docker volumes are bound to the current
+workspace identity and cannot be retained through `--keep-volume`. An operator
+who needs those bytes MUST leave the workspace intact or explicitly copy or
+back them up before ordinary full discard. Changing a recommended workspace to
+minimal or custom, or changing another selected mode, still requires discard
+and fresh creation after that preservation step. The legacy custom
+`--keep-volume` contract remains unchanged.
 
 Discard MUST atomically publish the non-ready `discarding` phase and revoke
 controller grants before invoking route or Project cleanup. Authenticated
@@ -357,20 +366,33 @@ same-name workspace recreation, MUST receive a fresh route ID and permalink.
 Raw TCP routes remain address-and-port routes and MUST NOT return or reserve a
 hostname permalink.
 
-## Project-owned hook defaults
+## Workspace environment selection and Project-owned hooks
 
-**PROJECT-HOOK-DEFAULTS-001:** Hook presence and hook bytes are selected only
-from the immutable approved root. Mutable workspace or guest data MUST NOT add,
-replace, or redirect a lifecycle hook. A backend MUST preserve these defaults:
+**PROJECT-HOOK-DEFAULTS-001:** Hook presence, environment selection, and hook
+bytes are selected only from the immutable approved root. Mutable workspace or
+guest data MUST NOT add, replace, or redirect a lifecycle hook or selector.
+An exact `.dim/environment.yml` containing only `schemaVersion: 1` and
+`environment: minimal` selects the minimal environment and MUST be rejected if
+any custom lifecycle file is present. With no selector, any custom lifecycle
+file selects custom; no custom lifecycle file selects recommended. A backend
+MUST preserve these defaults:
 
 | Root contents | Setup behavior | Task behavior | Discard behavior |
 | --- | --- | --- | --- |
 | `.dim/setup.sh` present | Trusted lifecycle area executes those immutable bytes | Unchanged | Unchanged |
 | no setup hook, `.dim/docker-compose.yml` present | Trusted lifecycle area performs the documented Compose setup | Unchanged | Documented Compose teardown when no teardown hook exists |
-| neither setup hook nor Compose file | Successful no-op | Unchanged | Successful no-op when no teardown hook exists |
+| recommended, with no custom lifecycle file | Reconcile the DIM-managed agent before readiness | `run shell`, `run exec`, and `run custom` dispatch in the agent; `exec` also dispatches there | Full discard removes agent volumes; `--keep-volume` rejects before mutation |
+| explicit minimal selector | No Project setup and no agent | Reject `run`; `exec` dispatches in the trusted outer workspace | No Project teardown |
+| custom, with neither setup hook nor Compose file | Successful no-op | Dispatch only through `.dim/entrypoint.sh`; reject `run` when absent, while `exec` bypasses it | Successful no-op when no teardown hook exists |
 | `.dim/entrypoint.sh` present | Unchanged | Dispatch through its immutable reviewed mapping | Unchanged |
-| no entrypoint hook | Unchanged | Direct-command fallback in the backend's workspace execution boundary | Unchanged |
+| no entrypoint hook | Unchanged | Recommended uses its built-in operations; minimal rejects `run`; custom rejects `run` | Unchanged |
 | `.dim/teardown.sh` present | Unchanged | Unchanged | Trusted lifecycle area executes it with the exact keep-volume value |
+
+Recommended setup seeds the mutable checkout from the exact selected root only
+when it has not yet been initialized. Later immutable lifecycle selection MUST
+leave checkout `HEAD`, index, user files, and local commits unchanged, MUST NOT
+fail setup because the lifecycle root moved, and MUST notify the user to fetch,
+review, and explicitly rebase or merge source through normal agent commands.
 
 For the `vm` backend, the trusted lifecycle area in this table is outside the
 guest. A hook may use the bounded backend adapter to prepare or dispatch guest

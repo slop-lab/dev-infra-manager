@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Select a recommended core-managed workspace environment when the immutable
+  root has no custom lifecycle files. Setup now requires a host-side
+  unprivileged Sysbox agent to be running and its proposal-scoped checkout to be
+  initialized before ready publication. Its home, checkout, and private Docker
+  data use separately owned persistent volumes, with no host or trusted outer
+  runtime socket or raw credential. A strict schema-1 `environment: minimal`
+  selector opts out to trusted outer-workspace `exec`; custom lifecycle files
+  preserve the Project-owned hook contract. Mode changes fail until explicit
+  discard and recreation after data preservation, and old environment-less
+  records remain custom. Recorded resources are one combined budget split by
+  floor-quarter to outer and exact remainder to agent, with aggregate minimums
+  of 1 CPU, 1 GiB, and 256 PIDs, swap equal to memory, exact readback, and
+  rollback before state publication. Rollback uncertainty is explicit. Initial
+  checkout seeds the exact selected root once through recoverable owned staging.
+  Later root selection refreshes immutable lifecycle bytes without changing
+  checkout `HEAD`, index, user files, or local commits; setup succeeds with a
+  manual fetch/review/rebase-or-merge notice and agent commands remain usable.
+  Product root changes need no recreation; environment-mode changes still do.
+  Recommended `--keep-volume` rejects before mutation because all three volumes
+  are bound to the current workspace identity. The native bootstrap CLI now
+  accepts an absolute caller-private strict review-policy JSON file for
+  manifest-free roots and never falls back to automatic approval. Runtime and
+  source checks do not replace the still blocked physical Sysbox smoke on a
+  suitable host.
+
 - Add strict native QEMU scheduler configuration and SQLite capacity fencing,
   dedicated native-Git QEMU authority state/routes, a packaged scheduler image,
   an owned KVM host execution path, and a separate durable QEMU review outbox

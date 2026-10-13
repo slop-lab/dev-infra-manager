@@ -15,15 +15,22 @@ workspace backend.
 `DIM_WORKSPACE_PRIVILEGED` are advanced trusted-infrastructure overrides; they
 do not change the recorded Sysbox backend.
 
-CPU, memory, and PID limits apply to the workspace boundary. Nested
-Project-owned services share that budget unless their Compose definition adds
-stricter child limits. Nested Docker state is persisted in DIM's outer managed
-`/var/lib/docker` engine volume. `discard --keep-volume --yes` retains that
-volume for same-name recreation and signals custom Project teardown to retain
-nested named data intended to survive that recreation. Those nested named
-volumes are Project-owned resources inside the retained engine store. External
-volumes remain Project-owned outside the store. Ordinary discard preserves the
-Project's cleanup authority and removes DIM's engine volume.
+Recommended CPU, memory, and PID values are one combined budget. DIM assigns
+the integer floor of 25 percent to trusted runc infrastructure and the exact
+remainder to the Sysbox agent. The minimum is 1 CPU, 1 GiB memory, and 256 PIDs;
+each container's swap limit equals its memory limit. Resource updates verify
+exact readback before state publication and roll back every attempted change on
+failure, reporting an uncertain state if rollback cannot be proved.
+
+Custom Project-owned services share the outer-workspace budget unless Compose
+adds stricter child limits. Their nested Docker state is persisted in DIM's
+outer managed `/var/lib/docker` engine volume. Custom `discard --keep-volume
+--yes` retains that volume for same-name recreation and signals custom Project
+teardown to retain intended nested named data. Recommended mode instead owns
+separate home, checkout, and private-Docker volumes: its `--keep-volume` request
+is rejected before any mutation. Leave the recommended workspace intact or
+copy needed data before ordinary full discard. External volumes remain
+Project-owned outside either store.
 
 KVM is optional and independent of Sysbox readiness. When available and
 approved at workspace creation, DIM forwards `/dev/kvm` and its numeric group.

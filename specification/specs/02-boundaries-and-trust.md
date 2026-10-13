@@ -58,11 +58,14 @@ Agent containers:
   This is not an intra-agent isolation boundary: a process with the socket can
   expose a loopback service available through the agent's existing network
   authority.
-- Must belong to a named workspace and be declared by reviewed Project code;
-  DIM core does not define an agent resource.
-- Must remain inside the resource-limited outer workspace boundary. A Project
-  may add stricter per-service limits, but core does not currently impose
-  separate agent-container limits.
+- Must belong to a named workspace. In the recommended environment, DIM core
+  defines the agent as a host-side, unprivileged `sysbox-runc` container. In a
+  custom environment, reviewed Project code defines any agent services.
+- Must remain inside the recorded workspace resource budget. For the
+  recommended environment, DIM assigns 25 percent of each recorded CPU,
+  memory, and PID limit to the trusted outer container and the exact remainder
+  to the agent. Custom Projects may add stricter per-service limits beneath
+  their recorded outer-workspace boundary.
 
 The agent's actual influence over anything outside its container and inner
 runtime is limited to explicit constrained interfaces and pushing proposals for
@@ -122,6 +125,20 @@ Trusted Project lifecycle code:
   interactive creation confirms this recommended grant for the current
   container profile. Host devices must not be passed into an untrusted agent
   container or VM guest.
+
+The recommended environment has no Project lifecycle hooks. Host-side DIM
+creates its agent only after establishing the trusted outer workspace, then
+requires agent reconciliation and checkout initialization to succeed before
+publishing the workspace as ready. The agent has separate persistent named
+volumes for its home, checkout, and private Docker data. It receives no host or
+outer-workspace runtime socket and no raw operator, native-Git, provider, or
+product credential. Its bounded Git path is the workspace relay and
+workspace-scoped proposal authority.
+
+The explicit minimal environment creates no agent. Its commands run only in
+the trusted outer workspace, so it is an opt-out for operators who need that
+smaller mechanism and accept the different execution boundary. A custom
+environment retains the reviewed Project lifecycle boundary described above.
 
 ## DIM Host Boundary
 

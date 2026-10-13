@@ -4,9 +4,14 @@
 
 Project examples are complete, copyable adoption shapes:
 
-- [`projects/single-repository/`](projects/single-repository/README.md) is the
-  default: one repository, no secrets or protected ref, resource limits, and
-  a Project-owned agent/private DinD pair, and an optional external URL.
+- [`projects/recommended-default/`](projects/recommended-default/README.md) is
+  the zero-`.dim` default: one repository, a DIM-managed unprivileged Sysbox
+  agent, explicit built-in commands, and the exact minimal opt-out.
+- [`projects/single-repository/`](projects/single-repository/README.md) is a
+  custom-lifecycle shape: one repository, no secrets or protected ref,
+  resource limits, a Project-owned agent/private DinD pair, and an optional
+  external URL. Projects that need no custom lifecycle should use DIM's
+  recommended environment instead.
 - [`projects/two-repository/`](projects/two-repository/README.md) is a minimal
   reusable root template paired with an ordinary application repository. It
   deliberately needs no nested daemon or secret runtime.

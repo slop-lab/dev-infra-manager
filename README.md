@@ -24,10 +24,12 @@ Project can combine:
   secrets.
 - Per-workspace CPU, memory, and process limits.
 
-Today, each reviewed Project defines its repositories, development container,
-tasks, and agent tool setup. A future direction is to let plugins provide
-general, Project-independent development tool setup and configuration. DIM
-does not ship that general plugin capability yet.
+By default, a Project needs no `.dim` lifecycle files. DIM supplies a
+host-side, unprivileged Sysbox agent with persistent home, checkout, and
+private Docker data. Projects can opt out with the exact minimal selector or
+retain the advanced reviewed lifecycle contract for custom services and task
+dispatch. DIM does not install or authenticate a coding-agent provider or run
+Project-specific tool setup automatically.
 
 DIM sits below interactive coding agents and autonomous orchestrators. OpenCode,
 Claude Code, or another agent can run in a DIM workspace. An orchestrator such
@@ -309,7 +311,7 @@ integrations. It does not expose a generic Git-provider extension point. See
 dim project create project \
   --bootstrap-git-url /path/to/project --bootstrap-git-ref main --apply-repos
 dim workspace create project work-1
-dim workspace exec work-1 -- bash
+dim workspace run work-1 shell
 ```
 
 The selected ref's `.dim/repos.yml` supplies the stable root and non-root
@@ -321,6 +323,68 @@ without a local clone using `dim repo apply project --yes`.
 
 The keys below `repositories` are Project-scoped aliases; URLs are passed to
 the host Git CLI and are never parsed to invent a name.
+
+With no custom lifecycle files, creation selects the recommended environment.
+It creates an unprivileged `sysbox-runc` agent and persistent named volumes for
+`/home/dim`, `/workspace`, and private Docker data. The agent receives no host
+or trusted outer Docker socket and no raw operator or product credential.
+`create` and `setup` attest that the agent is running and initialize its
+checkout before reporting the workspace ready.
+
+The creation-time CPU, memory, and PID values are one combined recommended
+budget. DIM assigns the floor of 25 percent to the trusted outer container and
+the exact remainder to the agent, with a minimum of 1 CPU, 1 GiB memory, and
+256 PIDs. Each container's swap limit equals its memory limit. Resource updates
+read back both limits before publishing state and roll back attempted changes
+on failure; an unprovable rollback is reported as uncertain.
+
+Recommended commands are explicit:
+
+```bash
+dim workspace run work-1 shell
+dim workspace run work-1 exec -- git status
+dim workspace run work-1 custom -- ./scripts/reviewed-helper
+dim workspace exec work-1 -- git status
+```
+
+`shell` accepts no arguments. The other `run` operations require a command,
+and all four forms execute in the recommended agent. No operation implies
+provider login, provider installation, or Project-specific tool setup.
+
+Creation seeds the selected protected-root commit into the recommended
+checkout once. Later lifecycle updates can refresh immutable setup bytes but
+never reset the retained checkout, its `HEAD`, index, user files, or local
+commits. DIM prints a notice and keeps agent commands available. Adopt reviewed
+product changes explicitly:
+
+```bash
+dim workspace update work-1
+dim workspace run work-1 exec -- git fetch origin
+dim workspace run work-1 exec -- git log --oneline HEAD..origin/main
+dim workspace run work-1 exec -- git rebase origin/main
+# Or merge origin/main after review.
+```
+
+Product root-code changes do not require a fresh workspace. Environment-mode
+changes still require preserving needed data, discard, and recreation.
+
+To create only the trusted outer workspace, commit
+`.dim/environment.yml` with exactly:
+
+```yaml
+schemaVersion: 1
+environment: minimal
+```
+
+Unknown fields and any combination with `.dim/setup.sh`,
+`.dim/entrypoint.sh`, `.dim/teardown.sh`, or `.dim/docker-compose.yml` are
+rejected. Minimal supports only `dim workspace exec WORKSPACE -- COMMAND`.
+Any of those lifecycle files without a selector chooses the advanced custom
+contract. Changing modes requires discarding and recreating the workspace so
+persistent data is never silently reinterpreted. First leave the recommended
+workspace intact or explicitly copy or back up needed home, checkout, and
+private-Docker data. Recommended `discard --keep-volume` rejects before any
+mutation; the legacy minimal/custom retention behavior is unchanged.
 
 This repository implements the same project contract on itself through
 `.dim/setup.sh` and `.dim/entrypoint.sh`.
@@ -471,9 +535,11 @@ only the launcher's default origin.
 For a complete, tested walkthrough that exposes a nested development
 container and a container inside it through host-configured external URL
 ingresses, see [examples/features/external-urls](examples/features/external-urls/README.md).
-For the smallest complete Project with one unprotected repository and no
-secrets, see
-[examples/projects/single-repository](examples/projects/single-repository/README.md).
+For a copyable zero-`.dim` journey, see
+[examples/projects/recommended-default](examples/projects/recommended-default/README.md).
+The [single-repository example](examples/projects/single-repository/README.md)
+instead demonstrates an advanced custom lifecycle with an unprotected
+repository and no secrets.
 
 See [glossary](specification/docs/README.md#glossary), [docs/repo-workspaces.md](specification/docs/repo-workspaces.md)
 for lifecycle, credential, and reconciliation details, and

@@ -33,10 +33,11 @@ Docker/Git terms aren't repeated here.
   outer services, which may themselves be private daemons. It is distinct from
   an agent container's private nested runtime.
 - **Agent container** — the untrusted coding environment associated with a
-  workspace. DIM core does not create or configure it: reviewed Project code
-  may define it as a service in the workspace's Project runtime, give it a
-  private nested runtime, and dispatch tasks through `.dim/entrypoint.sh`. It
-  receives neither the host nor Project runtime control socket.
+  workspace. In the recommended environment, DIM core creates a host-side
+  unprivileged Sysbox agent with persistent home, checkout, and private Docker
+  volumes. In a custom environment, reviewed Project code may instead define an
+  agent service and task dispatch. Neither form receives the host or trusted
+  Project runtime control socket.
 - **Project lifecycle code** — trusted code from the root repository, including
   `.dim` hooks and reviewed operational scripts, that configures the Project
   runtime. This is an authority boundary, not necessarily one long-running
@@ -98,7 +99,8 @@ The documentation is split by concern:
 - [Native ordinary CI control plane](ordinary-ci-pool.md): partial target design,
   role separation, recovery, and acceptance requirements.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
-- [Single-repository Project](../../examples/projects/single-repository/README.md): default no-secret shape with no protected ref, resource limits, and an optional external URL.
+- [Recommended default workspace](../../examples/projects/recommended-default/README.md): copyable zero-`.dim` creation, built-in commands, preservation, and minimal opt-out.
+- [Single-repository Project](../../examples/projects/single-repository/README.md): custom no-secret shape with no protected ref, resource limits, and an optional external URL.
 - [Multi-repository Project](../../examples/projects/multi-repository/README.md): Project-owned agent, host Git identity, independent repositories, and a reviewed secret service.
 - [Full development flow](../../examples/projects/full-development-flow/README.md): combined multi-repository, private-DinD, controller-proxy, profile, resource, secret, and backup/restore adoption shape.
 - [Example: External URLs](../../examples/features/external-urls/README.md): named ingress discovery and real root/dev/deep reverse-proxy routing.

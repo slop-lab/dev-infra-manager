@@ -1,11 +1,21 @@
 # Resource Isolation
 
-DIM applies CPU, memory, and PID limits to the trusted workspace. Project-owned
-services, including an optional development agent, share that aggregate cgroup
-boundary unless the Project's Compose definition adds stricter child limits.
-An operator may change this aggregate boundary after creation with
+DIM records one CPU, memory, and PID budget for each workspace. In recommended
+mode, DIM assigns the floor of 25 percent of every value to the trusted outer
+container and the exact remainder to the untrusted agent, so the two Docker
+limits sum to the recorded budget. The minimum combined budget is 1 CPU, 1 GiB
+memory, and 256 PIDs. Both containers set memory swap equal to memory, which
+adds no swap allowance. In minimal and custom modes, the recorded limits apply
+to the trusted outer workspace; custom Project services share that cgroup
+boundary unless Compose adds stricter child limits.
+
+An operator may change the recorded budget after creation with
 `dim workspace resources WORKSPACE` and any combination of `--cpus`, `--memory`, and
-`--pids`; omitted limits remain unchanged.
+`--pids`; omitted limits remain unchanged. A recommended update changes outer,
+then agent, reads back each exact Docker limit, and publishes state only after
+both succeed. Failure attempts to restore the previous agent, outer, and state
+values. If readback or rollback cannot be proved, DIM reports that resource
+state is uncertain instead of claiming success or a known effective budget.
 
 Reviewed Project lifecycle code may expose the built-in, agent-audience
 `GET /api/workspace/resources` route through an exact-route
@@ -36,9 +46,12 @@ The workspace backend is Sysbox. Docker's ordinary runc runtime remains the
 internal execution mechanism for trusted infrastructure and is not exposed as
 a workspace isolation choice.
 
-DIM does not currently impose a per-workspace disk quota. Project checkout
-data lives in workspace storage and nested-engine data lives in labeled Docker
-volumes. `discard --yes` removes them unless `--keep-volume` is selected.
+DIM does not currently impose a per-workspace disk quota. Recommended checkout,
+home, and private-Docker data live in three identity-bound named volumes.
+Ordinary full discard removes them. Recommended `discard --keep-volume` is
+rejected before mutation; leave the workspace intact or explicitly copy or
+back up needed data before full discard. Minimal and custom workspaces retain
+their existing outer-engine `--keep-volume` behavior.
 Operators should monitor host
 filesystem and Docker storage usage.
 

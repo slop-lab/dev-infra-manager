@@ -43,11 +43,46 @@ Device isolation is mandatory at the untrusted agent boundary and is verified
 after that Project-owned container exists, outside workspace lifecycle and
 setup operations.
 
-Agent containers are Project-owned workloads, not core lifecycle resources.
-Reviewed `.dim/setup.sh` code may build and start one through the nested Project
-engine, while `.dim/entrypoint.sh` maps `dim workspace run` tasks into it. DIM
-does not define an agent manifest, image schema, container name, or separate
-resource record.
+The recommended environment uses a DIM-managed host-side agent container with
+the workspace image and the unprivileged `sysbox-runc` runtime. The recorded
+CPU, memory, and PID values are one combined workspace budget: DIM assigns the
+integer floor of 25 percent to the trusted outer container and the exact
+remainder to the agent, so the two limits sum to the recorded values. The
+combined minimum is 1 CPU, 1 GiB memory, and 256 PIDs. CPU accepts at most nine
+decimal places. Both containers set memory swap equal to their memory limit,
+so neither receives extra swap allowance. DIM owns its collision-checked
+container, network, and three persistent named volumes for home, checkout, and
+private Docker data. The agent receives neither the host nor trusted outer
+Docker socket. A trusted relay provides only workspace-scoped Git access.
+Creation and setup reconcile the agent and initialize its checkout before the
+workspace becomes ready.
+
+`workspace resources` applies a recommended update to the outer container,
+then the agent, verifies exact Docker readback after each mutation, and only
+then publishes state. A failure restores the prior agent, outer, and persisted
+values where each was attempted. If any rollback or readback cannot be proved,
+the command reports that workspace resource state is uncertain rather than
+claiming the old or new budget.
+
+Projects select the recommended environment by omitting `.dim`, or by keeping
+`.dim` free of `setup.sh`, `entrypoint.sh`, `teardown.sh`,
+`docker-compose.yml`, and `environment.yml`. The exact opt-out selector is:
+
+```yaml
+schemaVersion: 1
+environment: minimal
+```
+
+The selector accepts no unknown fields and cannot coexist with any custom
+lifecycle file. Minimal workspaces create no agent and support only explicit
+trusted outer-workspace `exec` commands.
+
+Any of the four custom lifecycle files selects the custom environment when no
+selector exists. Reviewed `.dim/setup.sh` code may build and start a
+Project-owned agent through the nested Project engine, while
+`.dim/entrypoint.sh` maps `dim workspace run` tasks into it. This advanced
+custom contract remains Project-owned. DIM does not infer or add a custom
+agent manifest, image schema, container name, or separate resource record.
 
 Projects receive `DIM_WORKSPACE_BACKEND=sysbox` and
 `DIM_NESTED_ENGINE=docker`. Project-owned containers remain within the
