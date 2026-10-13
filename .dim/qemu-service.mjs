@@ -5,6 +5,7 @@ import path from "node:path";
 import { finalizeRun, markRunFatal, quiesceRunPreservingEvidence, requestRunFinalization } from "./qemu-run-finalization.mjs";
 import { parseInputs, readJson, sendJson } from "./qemu-service-http.mjs";
 import { closeServiceListenerPreservingSocket, initializeService, shutdownService, socketLeasePath } from "./qemu-service-startup.mjs";
+import { createInputHandoff } from "./qemu-input-handoff.mjs";
 import { snapshotInputs } from "./qemu-snapshot.mjs";
 
 const sourceRoot = await realpath(process.env.DIM_QEMU_SOURCE_ROOT ?? "/workspace");
@@ -15,6 +16,8 @@ const pidPath = path.join(serviceDirectory, "service.pid");
 const ownerPath = path.join(serviceDirectory, "service-owner.json");
 const leasePath = socketLeasePath(socketPath);
 const runsRoot = path.join(serviceDirectory, "runs");
+const invokingUid = numericIdentity("DIM_QEMU_INVOKING_UID", process.getuid());
+const invokingGid = numericIdentity("DIM_QEMU_INVOKING_GID", process.getgid());
 let activeRun;
 let latestRun;
 let serviceState = "starting";
@@ -104,7 +107,7 @@ function claimRun(request, response) {
     child: undefined, childClosed: undefined, closeResult: undefined,
     completion: undefined, finalizationRequested: false,
     listeners: new Set(), output: "", request, response, resolveFinalization,
-    cleanupOwner: undefined, preserveEvidence: false, snapshotRoot: undefined, work: undefined,
+    cleanupOwner: undefined, handoffRoot: undefined, preserveEvidence: false, snapshotRoot: undefined, work: undefined,
     state: { status: "running", startedAt: new Date().toISOString(), inputs: [], verbose: false, mode: "run" },
   };
   run.completion = (async () => finalizeRun(run, await finalizationRequested, { releaseRun }))();
@@ -129,7 +132,22 @@ async function prepareRun(run) {
   const inputsRoot = path.join(run.snapshotRoot, "inputs");
   await mkdir(inputsRoot, { mode: 0o700 });
   await chmod(inputsRoot, 0o700);
-  return snapshotInputs({ inputs: requestInputs, inputsRoot, sourceRoot, signal: run.abort.signal });
+  const snapshots = await snapshotInputs({ inputs: requestInputs, inputsRoot, sourceRoot, signal: run.abort.signal });
+  if (snapshots.length === 0) return snapshots;
+  run.handoffRoot = await mkdtemp(path.join(serviceDirectory, "handoff-"));
+  await chmod(run.handoffRoot, 0o700);
+  return createInputHandoff({
+    handoffRoot: run.handoffRoot, inputs: snapshots, snapshotRoot: run.snapshotRoot, signal: run.abort.signal,
+    uid: invokingUid, gid: invokingGid
+  });
+}
+
+function numericIdentity(name, fallback) {
+  const value = process.env[name] ?? String(fallback);
+  if (!/^(0|[1-9][0-9]*)$/.test(value) || !Number.isSafeInteger(Number(value))) {
+    throw new Error(`${name} must be a non-negative integer`);
+  }
+  return Number(value);
 }
 
 function start(run, inputs) {

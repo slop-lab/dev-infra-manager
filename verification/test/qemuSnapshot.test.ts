@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmod, lstat, mkdir, readFile, readlink, rename, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, readlink, rename, symlink, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -48,7 +48,10 @@ describe("QEMU service snapshots", () => {
     await writeFile(resolve(replacement, "link"), "not-a-symlink\n");
     await symlink(replacement, input, "dir");
     const content = await readFile(resolve(passed.path, "payload.txt"), "utf8");
-    const storageMode = (await lstat(resolve(passed.path, "../.."))).mode & 0o777;
+    const handoffRoot = resolve(passed.path, "..");
+    const handoffMode = (await lstat(handoffRoot)).mode & 0o777;
+    const canonicalRuns = await readdir(fixture.runsRoot);
+    const canonicalMode = (await lstat(resolve(fixture.runsRoot, canonicalRuns[0] ?? "missing"))).mode & 0o777;
     const link = await lstat(resolve(passed.path, "link"));
     const linkTarget = link.isSymbolicLink() ? await readlink(resolve(passed.path, "link")) : null;
     const cancelled = await http(fixture, { method: "DELETE", path: "/v1/run" });
@@ -56,12 +59,13 @@ describe("QEMU service snapshots", () => {
 
     // Then
     expect.soft(started.status).toBe(202);
-    expect.soft({ owned: passed.path.startsWith(`${fixture.runsRoot}/`), mode: storageMode })
-      .toEqual({ owned: true, mode: 0o700 });
+    expect.soft({ canonicalMode, handoffMode, staged: handoffRoot.startsWith(`${fixture.root}/handoff-`) })
+      .toEqual({ canonicalMode: 0o700, handoffMode: 0o500, staged: true });
     expect.soft(content).toBe("admitted\n");
     expect.soft({ symbolic: link.isSymbolicLink(), target: linkTarget })
       .toEqual({ symbolic: true, target: "payload.txt" });
     expect(cancelled.status).toBe(202);
+    await expect(lstat(handoffRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("uses no subprocess when rejecting an unsupported snapshot and releases the admission claim", async () => {
@@ -125,7 +129,7 @@ describe("QEMU service snapshots", () => {
     // Then
     expect.soft(started.status).toBe(202);
     expect.soft(copiedBytes).toBe("#!/bin/sh\nexit 0\n");
-    expect.soft(copiedMode).toBe(0o751);
+    expect.soft(copiedMode).toBe(0o500);
     expect(cancelled.status).toBe(202);
   });
 

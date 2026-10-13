@@ -196,7 +196,9 @@ qemu-system-x86_64 -enable-kvm -cpu host -m "$guest_memory_mb" -smp "$guest_cpus
 ssh_args=(-i "$workdir/id" -p 22222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=2)
 clone_repository() {
   ssh "${ssh_args[@]}" dim@127.0.0.1 "mkdir -p dim && tar -C dim -xzf -" <"$workdir/workbench.tar.gz"
-  ssh "${ssh_args[@]}" dim@127.0.0.1 "sudo mkdir -p /mnt && sudo tar -C /mnt -xzf -" <"$workdir/inputs.tar.gz"
+  ssh "${ssh_args[@]}" dim@127.0.0.1 \
+    "sudo install -d -o dim -g dim -m 0700 /mnt/dim-inputs && tar -C /mnt/dim-inputs --strip-components=1 --no-same-owner -xzf -" \
+    <"$workdir/inputs.tar.gz"
 }
 install_backend() {
   printf 'yes\n' | ssh "${ssh_args[@]}" dim@127.0.0.1 "cd dim/workbench && bash verification/scripts/install-host-ubuntu.bash '$backend'"

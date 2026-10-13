@@ -4,7 +4,8 @@ import { finalizeRun, markRunFatal } from "../../.dim/qemu-run-finalization.mjs"
 function runState() {
   return {
     abort: new AbortController(), cancelled: true, childClosed: undefined, closeResult: undefined,
-    listeners: new Set<{ end: () => void }>(), preserveEvidence: false, snapshotRoot: "/unused/run-snapshot",
+    handoffRoot: "/unused/run-handoff", listeners: new Set<{ end: () => void }>(),
+    preserveEvidence: false, snapshotRoot: "/unused/run-snapshot",
     state: { status: "running" }, work: undefined,
   };
 }
@@ -35,6 +36,7 @@ describe("QEMU run finalization cleanup ownership", () => {
     markRunFatal(run);
     cleanupRelease.resolve();
     await finalizing;
+    expect.soft(run.handoffRoot).toBeUndefined();
     expect.soft(run.snapshotRoot).toBeUndefined();
     expect(released, "fatal upgrade must retain the remaining run evidence").toBe(false);
   });
@@ -55,6 +57,7 @@ describe("QEMU run finalization cleanup ownership", () => {
     // Then
     expect.soft(removed).toBe(false);
     expect.soft(released).toBe(false);
+    expect.soft(run.handoffRoot).toBe("/unused/run-handoff");
     expect(run.snapshotRoot).toBe("/unused/run-snapshot");
   });
 });

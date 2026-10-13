@@ -1,9 +1,9 @@
-import { link, lstat, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer, type Server } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { socketLeasePath } from "../../.dim/qemu-service-artifacts.mjs";
-import { http, readEvents, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
+import { http, launchRecords, readEvents, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
 
 const foreignServers: Server[] = [];
 
@@ -32,14 +32,20 @@ describe("QEMU service fatal shutdown", () => {
   it("preserves a foreign public socket and owned evidence with a valid lease", async () => {
     // Given
     const fixture = await startService("hold");
-    await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
+    const input = resolve(fixture.sourceRoot, "fatal-input");
+    await mkdir(input);
+    await writeFile(resolve(input, "payload.txt"), "preserved handoff\n");
+    await http(fixture, { body: { inputs: [{ name: "fatal", path: input }], mode: "run" }, method: "POST", path: "/v1/run" });
     await readEvents(fixture, "ready\n");
+    const passed = (await launchRecords(fixture))[0]?.[0];
+    if (passed === undefined) throw new TypeError("launcher did not receive the fatal input handoff");
+    const handoffRoot = resolve(passed.path, "..");
     const ownerPath = resolve(fixture.root, "service-owner.json");
     const leasePath = socketLeasePath(fixture.socketPath);
     const runEntries = await readdir(fixture.runsRoot);
-    const [ownerBefore, leaseBefore, runsBefore, ownerContent] = await Promise.all([
+    const [ownerBefore, leaseBefore, runsBefore, handoffBefore, ownerContent] = await Promise.all([
       lstat(ownerPath, { bigint: true }), lstat(leasePath, { bigint: true }),
-      lstat(fixture.runsRoot, { bigint: true }), readFile(ownerPath, "utf8"),
+      lstat(fixture.runsRoot, { bigint: true }), lstat(handoffRoot, { bigint: true }), readFile(ownerPath, "utf8"),
     ]);
     await rm(fixture.socketPath);
     const foreignPath = resolve(fixture.root, "foreign-public.sock");
@@ -59,9 +65,9 @@ describe("QEMU service fatal shutdown", () => {
     const exited = await waitForExit(fixture, 5_000);
 
     // Then
-    const [ownerAfter, publicAfter, leaseAfter, runsAfter] = await Promise.all([
+    const [ownerAfter, publicAfter, leaseAfter, runsAfter, handoffAfter] = await Promise.all([
       lstat(ownerPath, { bigint: true }), lstat(fixture.socketPath, { bigint: true }),
-      lstat(leasePath, { bigint: true }), lstat(fixture.runsRoot, { bigint: true }),
+      lstat(leasePath, { bigint: true }), lstat(fixture.runsRoot, { bigint: true }), lstat(handoffRoot, { bigint: true }),
     ]);
     expect.soft(exited).toBe(true);
     expect.soft(fixture.process.exitCode).toBe(1);
@@ -69,6 +75,7 @@ describe("QEMU service fatal shutdown", () => {
     expect.soft(identity(ownerAfter)).toEqual(identity(ownerBefore));
     expect.soft(identity(leaseAfter)).toEqual(identity(leaseBefore));
     expect.soft(identity(runsAfter)).toEqual(identity(runsBefore));
+    expect.soft(identity(handoffAfter)).toEqual(identity(handoffBefore));
     expect.soft(await readFile(ownerPath, "utf8")).toBe(ownerContent);
     expect.soft(await readdir(fixture.runsRoot)).toEqual(runEntries);
     expect.soft(await receive(fixture.socketPath)).toBe("foreign public socket alive\n");

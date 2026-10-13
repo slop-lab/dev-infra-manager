@@ -30,6 +30,8 @@ export async function finalizeRun(run, reason, { releaseRun, removeSnapshot = rm
         completedAt: new Date().toISOString()
       };
     }
+    if (run.handoffRoot) await removeSnapshot(run.handoffRoot, { recursive: true, force: true });
+    run.handoffRoot = undefined;
     if (run.snapshotRoot) await removeSnapshot(run.snapshotRoot, { recursive: true, force: true });
     run.snapshotRoot = undefined;
     if (run.preserveEvidence) return;

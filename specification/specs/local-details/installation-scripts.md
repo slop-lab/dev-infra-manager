@@ -64,6 +64,9 @@ Sysbox, verifies its runtime, and deletes the VM
 overlay and SSH key on exit. A full source checkout retains its history; a
 shallow checkout is converted to a self-contained single-commit repository
 before bundling. Uncommitted and untracked files are intentionally excluded.
+The invoking operator remains unprivileged for the gate and client, but must
+have noninteractive `sudo -n` authority for the narrow root-owned QEMU service
+directory, trusted service process, exact-PID retirement, and directory cleanup.
 The check installs the source verification toolchain after the host installer
 and runs `just verify self-development`, covering the canonical
 Project's agent inside its private rootless DinD end to end. The QEMU

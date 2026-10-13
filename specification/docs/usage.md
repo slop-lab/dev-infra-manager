@@ -219,6 +219,15 @@ just verify environments-kvm --verbose
 bash verification/scripts/kvm-host-install-smoke.bash --verbose
 ```
 
+Run this gate as the normal invoking user. It performs a noninteractive
+`sudo -n` preflight and uses privilege only for the dedicated root-owned QEMU
+service lifecycle. The service and its module closure are staged as root-owned
+files before root execution; the reviewed gate and client run as the invoking
+user, not under sudo. For `--input NAME=PATH`, the root-only canonical snapshot
+is copied to an invoking-user-readable per-run handoff; guest extraction does
+not preserve the host UID. This does not grant the user access to the root-only
+service run directory.
+
 The canonical DIM Project additionally lets its agent request that gate through
 the protected root launcher:
 
