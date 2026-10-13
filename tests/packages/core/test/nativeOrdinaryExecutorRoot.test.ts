@@ -1,4 +1,4 @@
-import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -118,10 +118,15 @@ describe("native ordinary private work root", () => {
     const marker = (await readdir(path))[0];
     if (marker === undefined) throw new Error("private root marker is missing");
     const markerBytes = await readFile(join(path, marker));
-    await rm(path, { recursive: true });
-    await mkdir(join(dirname(path), "inode-reservation"), { mode: 0o700 });
+    const retainedPath = join(dirname(path), "retained-original");
+    await rename(path, retainedPath);
     await mkdir(path, { mode: 0o700 });
     await writeFile(join(path, marker), markerBytes, { mode: 0o600 });
+    const originalIdentity = await lstat(retainedPath, { bigint: true });
+    const replacementIdentity = await lstat(path, { bigint: true });
+    expect(originalIdentity.ino).not.toBe(replacementIdentity.ino);
+    expect({ device: originalIdentity.dev, inode: originalIdentity.ino })
+      .not.toEqual({ device: replacementIdentity.dev, inode: replacementIdentity.ino });
 
     // When
     const cleaned = await journal.privateRoot(identity).cleanup(execution().claim.claimId);
