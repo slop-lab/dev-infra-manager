@@ -57,7 +57,7 @@ cloud-image, and SSH tooling and adds the invoking non-root user to the `kvm`
 group; it does not install a runtime backend. It requires the exact
 confirmation `yes` and explains that the login session must be refreshed
 before the new group membership is active.
-`verification/scripts/kvm-host-install-smoke.bash [--verbose]` and
+`verification/scripts/kvm-host-install-smoke.bash [--preflight-only] [--verbose]` and
 `just verify environments-kvm [--verbose]` verify Sysbox in a clean VM. The check boots a checksum-verified Ubuntu cloud-image VM with
 `/dev/kvm`, clones the committed repository state from a Git bundle, installs
 Sysbox, verifies its runtime, and deletes the VM
@@ -65,8 +65,24 @@ overlay and SSH key on exit. A full source checkout retains its history; a
 shallow checkout is converted to a self-contained single-commit repository
 before bundling. Uncommitted and untracked files are intentionally excluded.
 The invoking operator remains unprivileged for the gate and client, but must
-have noninteractive `sudo -n` authority for the narrow root-owned QEMU service
+have cached noninteractive `sudo -n` authority for the narrow root-owned QEMU service
 directory, trusted service process, exact-PID retirement, and directory cleanup.
+The operator may prime normal sudo authorization with `sudo -v`; no permanent
+blanket `NOPASSWD` rule is required. Root service execution uses only the
+absolute `DIM_QEMU_NODE_EXECUTABLE`, defaulting to `/usr/bin/node`, after
+requiring a canonical non-symlink root-owned mode-`0755` Node.js 24 or 26 file
+and a root-owned, non-group/world-writable ancestor chain. It never selects a
+user-managed Node executable from `PATH`. `--preflight-only` aggregates all
+identity, trusted closure, Node, sudo, `setpriv`, readable/writable character
+`/dev/kvm`, and launcher dependency failures without creating service state.
+Dependency lookup uses the exact root service and gate `PATH=/usr/bin:/bin`,
+not the invoking shell's path. A full run keeps the cached authorization valid
+with bounded noninteractive `sudo -n -v` refreshes while the unprivileged
+client runs. Refresh failure terminates that run and enters bounded cleanup.
+Privileged retirement, exact-PID signaling, wrapper waits, and directory
+cleanup are bounded; the service directory is removed only after exact service
+shutdown is proved, and otherwise remains for operator recovery with a
+non-zero result.
 The check installs the source verification toolchain after the host installer
 and runs `just verify self-development`, covering the canonical
 Project's agent inside its private rootless DinD end to end. The QEMU

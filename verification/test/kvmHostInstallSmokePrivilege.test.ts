@@ -23,7 +23,13 @@ type Fixture = {
   readonly sudoRecord: string;
 };
 
-async function fixture(replaceDuringClient = false, mutateCheckoutBeforeServiceLaunch = false): Promise<Fixture> {
+type FixtureOptions = {
+  readonly clientMode?: "normal" | "hold" | "replace-directory" | "revoke-sudo";
+  readonly failSudoRefresh?: boolean;
+  readonly mutateCheckoutBeforeServiceLaunch?: boolean;
+};
+
+async function fixture(options: FixtureOptions = {}): Promise<Fixture> {
   const root = await mkdtemp(resolve(tmpdir(), "dim-kvm-host-smoke-test-"));
   roots.push(root);
   await chmod(root, 0o755);
@@ -32,11 +38,17 @@ async function fixture(replaceDuringClient = false, mutateCheckoutBeforeServiceL
   const projectDim = resolve(projectRoot, ".dim");
   const serviceDirectory = resolve(root, "service");
   const sudoRecord = resolve(root, "sudo.log");
+  const sudoRevoked = resolve(root, "sudo-revoked");
   const clientRecord = resolve(root, "client.log");
   const movedServiceDirectory = resolve(root, "service-owned");
   const smoke = resolve(root, "kvm-host-install-smoke.bash");
   const launcher = resolve(root, "launcher.bash");
   await mkdir(tools);
+  await writeFile(resolve(tools, "node"), "#!/usr/bin/env bash\nexit 99\n");
+  await chmod(resolve(tools, "node"), 0o700);
+  for (const command of ["qemu-system-x86_64", "qemu-img", "cloud-localds"] as const) {
+    await writeFile(resolve(tools, command), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
+  }
   await mkdir(projectDim, { recursive: true });
   await Promise.all([...stagedModules, "qemu-client.mjs"].map(async (module) => {
     await copyFile(resolve(workspaceRoot, ".dim", module), resolve(projectDim, module));
@@ -47,8 +59,12 @@ async function fixture(replaceDuringClient = false, mutateCheckoutBeforeServiceL
 printf '%q ' "$@" >>${JSON.stringify(sudoRecord)}
 printf '\n' >>${JSON.stringify(sudoRecord)}
 [[ "\${1:-}" != -n ]] || shift
+if [[ "\${1:-}" == -v ]]; then
+  ${options.failSudoRefresh ? "exit 1" : "exit 0"}
+fi
+[[ ! -e ${JSON.stringify(sudoRevoked)} ]] || exit 1
 for argument in "$@"; do
-  if [[ "$argument" == qemu-service && ${mutateCheckoutBeforeServiceLaunch ? "true" : "false"} == true ]]; then
+  if [[ "$argument" == qemu-service && ${options.mutateCheckoutBeforeServiceLaunch ? "true" : "false"} == true ]]; then
     printf 'throw new Error("mutable checkout module executed")\n' >${JSON.stringify(resolve(projectDim, "qemu-service-http.mjs"))}
   fi
 done
@@ -73,7 +89,7 @@ fi
 `);
   await chmod(launcher, 0o700);
   const client = resolve(root, "qemu-client.mjs");
-  if (replaceDuringClient) {
+  if (options.clientMode === "replace-directory") {
     await writeFile(client, `import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 const serviceDirectory = dirname(process.env.DIM_QEMU_VERIFICATION_SOCKET);
@@ -82,14 +98,27 @@ await mkdir(serviceDirectory, { mode: 0o755 });
 await writeFile(serviceDirectory + "/foreign", "preserve\\n");
 process.exitCode = 1;
 `);
+  } else if (options.clientMode === "revoke-sudo") {
+    await writeFile(client, `import { writeFile } from "node:fs/promises";
+await writeFile(${JSON.stringify(sudoRevoked)}, "revoked\\n");
+process.exitCode = 1;
+`);
+  } else if (options.clientMode === "hold") {
+    await writeFile(client, "await new Promise((resolve) => setTimeout(resolve, 10_000));\n");
   }
   const source = await readFile(smokePath, "utf8");
   await writeFile(smoke, source
     .replace(/^repository_root=.*$/m, `repository_root=${JSON.stringify(projectRoot)}`)
-    .replace(/^client=.*$/m, `client=${JSON.stringify(replaceDuringClient ? client : resolve(projectDim, "qemu-client.mjs"))}`)
+    .replace(/^source .*kvm-host-prerequisites.*$/m,
+      `source ${JSON.stringify(resolve(workspaceRoot, "verification/scripts/lib/kvm-host-prerequisites.bash"))}`)
+    .replace(/^client=.*$/m,
+      `client=${JSON.stringify(options.clientMode === undefined || options.clientMode === "normal" ? resolve(projectDim, "qemu-client.mjs") : client)}`)
     .replace(/^invoking_uid=.*$/m, "invoking_uid=1000")
     .replace(/^invoking_gid=.*$/m, "invoking_gid=1000")
     .replace(/^sudo_command=.*$/m, `sudo_command=${JSON.stringify(resolve(tools, "sudo"))}`)
+    .replace(/^runtime_path=.*$/m, `runtime_path=${JSON.stringify(`${tools}:/usr/bin:/bin`)}`)
+    .replace(/^kvm_device=.*$/m, "kvm_device=/dev/null")
+    .replace(/^sudo_keepalive_interval_seconds=.*$/m, "sudo_keepalive_interval_seconds=0.1")
     .replace(/^service_dir=.*$/m, `service_dir=${JSON.stringify(serviceDirectory)}`)
     .replace(/^source_root=.*$/m, `source_root=${JSON.stringify(root)}`));
   await chmod(smoke, 0o700);
@@ -104,6 +133,7 @@ function run(fixtureValue: Fixture, ...arguments_: readonly string[]): SpawnSync
       ...process.env,
       PATH: `${resolve(fixtureValue.root, "tools")}:${dirname(process.execPath)}:/usr/bin:/bin`,
       DIM_QEMU_TRUSTED_LAUNCHER: resolve(fixtureValue.root, "launcher.bash"),
+      DIM_QEMU_NODE_EXECUTABLE: process.execPath,
     },
     timeout: 20_000,
   });
@@ -147,7 +177,7 @@ describe("KVM host-install smoke privilege boundary", () => {
 
   it("executes the root service and owner only from the staged closure after checkout mutation", async () => {
     // Given
-    const fixtureValue = await fixture(false, true);
+    const fixtureValue = await fixture({ mutateCheckoutBeforeServiceLaunch: true });
 
     // When
     const result = run(fixtureValue);
@@ -195,7 +225,7 @@ describe("KVM host-install smoke privilege boundary", () => {
     expect.soft(sudoCalls).toContain("-n /usr/bin/true");
     expect.soft(sudoCalls).toContain("qemu-service-directory");
     expect.soft(sudoCalls).toContain("/usr/bin/mkdir");
-    expect.soft(sudoCalls).toContain("/usr/bin/env -i PATH=/usr/bin:/bin HOME=/root");
+    expect.soft(sudoCalls).toContain(`/usr/bin/env -i PATH=${fixtureValue.root}/tools:/usr/bin:/bin HOME=/root`);
     expect.soft(sudoCalls).toContain("qemu-service.mjs");
     expect.soft(sudoCalls).toContain("retire-exact");
     expect.soft(sudoCalls).toContain("qemu-service-directory-cleanup");
@@ -222,7 +252,7 @@ describe("KVM host-install smoke privilege boundary", () => {
     // Then
     expect(result.status).not.toBe(0);
     expect(await readFile(sentinel, "utf8")).toBe("preserve\n");
-    await expect(readFile(fixtureValue.sudoRecord, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(fixtureValue.sudoRecord, "utf8")).toBe("-n /usr/bin/true \n");
   });
 
   it("fails the noninteractive sudo preflight instead of prompting", async () => {
@@ -254,12 +284,12 @@ describe("KVM host-install smoke privilege boundary", () => {
     expect(result.status).not.toBe(0);
     expect((await lstat(fixtureValue.serviceDirectory)).isSymbolicLink()).toBe(true);
     expect(await readFile(resolve(target, "foreign"), "utf8")).toBe("preserve\n");
-    await expect(readFile(fixtureValue.sudoRecord, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(fixtureValue.sudoRecord, "utf8")).toBe("-n /usr/bin/true \n");
   });
 
   it("stops only the exact service PID and preserves a replacement directory during cleanup", async () => {
     // Given
-    const fixtureValue = await fixture(true);
+    const fixtureValue = await fixture({ clientMode: "replace-directory" });
 
     // When
     const result = run(fixtureValue);
@@ -271,6 +301,43 @@ describe("KVM host-install smoke privilege boundary", () => {
       || typeof ownerRecord.pid !== "string") throw new TypeError("fixture owner PID is invalid");
     expect(() => process.kill(Number(ownerRecord.pid), 0)).toThrowError(expect.objectContaining({ code: "ESRCH" }));
     expect(await readFile(resolve(fixtureValue.serviceDirectory, "foreign"), "utf8")).toBe("preserve\n");
+    expect((await lstat(fixtureValue.serviceDirectory)).isDirectory()).toBe(true);
+  }, 25_000);
+
+  it("fails closed when sudo authorization refresh expires during the client run", async () => {
+    // Given
+    const fixtureValue = await fixture({ clientMode: "hold", failSudoRefresh: true });
+
+    // When
+    const started = performance.now();
+    const result = run(fixtureValue);
+    const elapsedMilliseconds = performance.now() - started;
+
+    // Then
+    expect(result, `${result.stderr}\n${result.stdout}`).toMatchObject({ status: 1, signal: null });
+    expect(elapsedMilliseconds).toBeLessThan(5_000);
+    expect(result.stderr).toContain("sudo authorization refresh failed; stopping QEMU verification");
+    await expect(lstat(fixtureValue.serviceDirectory)).rejects.toMatchObject({ code: "ENOENT" });
+  }, 25_000);
+
+  it("returns without deleting a live service directory when cleanup sudo is revoked", async () => {
+    // Given
+    const fixtureValue = await fixture({ clientMode: "revoke-sudo" });
+
+    // When
+    const started = performance.now();
+    const result = run(fixtureValue);
+    const elapsedMilliseconds = performance.now() - started;
+
+    // Then
+    expect(result, `${result.stderr}\n${result.stdout}`).toMatchObject({ status: 1, signal: null });
+    expect(elapsedMilliseconds).toBeLessThan(10_000);
+    expect(result.stderr).toContain("leaving QEMU service directory intact because service shutdown was not proven");
+    const ownerRecord: unknown = JSON.parse(await readFile(resolve(fixtureValue.serviceDirectory, "service-owner.json"), "utf8"));
+    if (typeof ownerRecord !== "object" || ownerRecord === null || !("pid" in ownerRecord)
+      || typeof ownerRecord.pid !== "string") throw new TypeError("fixture owner PID is invalid");
+    expect(() => process.kill(Number(ownerRecord.pid), 0)).not.toThrow();
+    process.kill(Number(ownerRecord.pid), "SIGKILL");
     expect((await lstat(fixtureValue.serviceDirectory)).isDirectory()).toBe(true);
   }, 25_000);
 });

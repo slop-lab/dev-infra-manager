@@ -19,33 +19,26 @@ root_modules=(
   qemu-service.mjs
   qemu-snapshot.mjs
 )
-node="$(command -v node 2>/dev/null)" || { echo "Node.js is required for QEMU verification" >&2; exit 2; }
-node="$(/usr/bin/readlink -f -- "$node")"
+node="${DIM_QEMU_NODE_EXECUTABLE:-/usr/bin/node}"
+sudo_command=/usr/bin/sudo
+setpriv_command=/usr/bin/setpriv
+kvm_device=/dev/kvm
+runtime_path=/usr/bin:/bin
+sudo_keepalive_interval_seconds=30
+sudo_operation_timeout_seconds=15
+preflight_only=false
+if [[ "${1:-}" == --preflight-only ]]; then
+  preflight_only=true
+  shift
+fi
 invoking_uid="$(/usr/bin/id -u)"
 invoking_gid="$(/usr/bin/id -g)"
-IFS=: read -r invoking_user _ passwd_uid _ _ invoking_home _ < <(/usr/bin/getent passwd "$invoking_uid") || {
-  echo "invoking user $invoking_uid is not present in the passwd database" >&2
-  exit 2
-}
-[[ "$passwd_uid" == "$invoking_uid" && "$invoking_uid" != 0 ]] || {
-  echo "run QEMU host verification as a non-root invoking user" >&2
-  exit 2
-}
-
-if [[ ! -r "$launcher" ]]; then
-  echo "protected QEMU verification launcher is not readable: $launcher" >&2
-  echo "assemble the root repository at $repository_root/project or set DIM_QEMU_TRUSTED_LAUNCHER" >&2
-  exit 2
+source "$repository_root/verification/scripts/lib/kvm-host-prerequisites.bash"
+qemu_host_preflight || exit 2
+if [[ "$preflight_only" == true ]]; then
+  printf 'QEMU host prerequisite preflight passed\n'
+  exit 0
 fi
-for file in "$client" "${root_modules[@]/#/$repository_root/.dim/}"; do
-  test -r "$file" || { echo "protected QEMU verification component is not readable: $file" >&2; exit 2; }
-done
-if [[ ! -f "$node" || ! -x "$node" ]] ||
-  [[ "$(/usr/bin/stat -Lc '%u:%g:%a' -- "$node")" != 0:0:755 ]]; then
-  echo "QEMU service requires a root:root mode-0755 Node.js interpreter: $node" >&2
-  exit 2
-fi
-test -x /usr/bin/setpriv || { echo "util-linux setpriv is required for QEMU verification" >&2; exit 2; }
 
 service_dir="/run/dim-qemu-host-install-smoke-$(/usr/bin/id -u)-$$"
 service_socket="$service_dir/service.sock"
@@ -58,21 +51,40 @@ service_launch_start_ticks=""
 service_fingerprint=""
 service_dir_identity=""
 launcher_wrapper_source=""
+sudo_keepalive_pid=""
+client_pid=""
+
+process_is_live() {
+  local pid="$1" stat_text fields state
+  [[ "$pid" =~ ^[1-9][0-9]*$ && -r "/proc/$pid/stat" ]] || return 1
+  stat_text="$(<"/proc/$pid/stat")" || return 1
+  fields="${stat_text##*) }"
+  state="${fields%% *}"
+  [[ "$state" != Z && "$state" != X ]]
+}
+
+wait_for_child_exit() {
+  local pid="$1"
+  for _ in $(seq 1 100); do
+    if ! process_is_live "$pid"; then
+      wait "$pid" >/dev/null 2>&1 || true
+      return 0
+    fi
+    sleep 0.05
+  done
+  return 1
+}
+
+run_sudo_once() {
+  /usr/bin/timeout --signal=KILL --kill-after=1 "${sudo_operation_timeout_seconds}s" \
+    "$sudo_command" -n "$@"
+}
 
 if [[ -e "$service_dir" || -L "$service_dir" ]]; then
   echo "refusing pre-existing QEMU service path: $service_dir" >&2
   exit 1
 fi
-sudo_command=/usr/bin/sudo
-if [[ ! -x "$sudo_command" ]]; then
-  echo "sudo is required for the root-owned QEMU verification service" >&2
-  exit 2
-fi
-"$sudo_command" -n /usr/bin/true >/dev/null 2>&1 || {
-  echo "passwordless sudo is required for the root-owned QEMU verification service; sudo -n preflight failed" >&2
-  exit 2
-}
-"$sudo_command" -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root /bin/sh -eu -c '
+run_sudo_once /usr/bin/env -i "PATH=$runtime_path" HOME=/root /bin/sh -eu -c '
   test ! -e "$1" && test ! -L "$1"
   /usr/bin/mkdir -- "$1"
   /usr/bin/chown root:root -- "$1"
@@ -86,7 +98,7 @@ fi
 service_dir_identity="$(/usr/bin/stat -Lc '%d:%i' -- "$service_dir")"
 
 root_owner() {
-  "$sudo_command" -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
+  run_sudo_once /usr/bin/env -i "PATH=$runtime_path" HOME=/root \
     "$node" "$owner" "$@"
 }
 
@@ -108,25 +120,25 @@ launch_process_matches() {
 }
 
 terminate_exact_launch_process() {
-  if ! /bin/kill -0 "$service_launch_pid" 2>/dev/null; then return 0; fi
+  if ! process_is_live "$service_launch_pid"; then return 0; fi
   launch_process_matches || {
     echo "refusing to signal QEMU service PID $service_launch_pid after its process identity changed" >&2
     return 1
   }
-  "$sudo_command" -n /bin/kill -TERM -- "$service_launch_pid" || return 1
+  run_sudo_once /bin/kill -TERM -- "$service_launch_pid" || return 1
   for _ in $(seq 1 100); do
-    /bin/kill -0 "$service_launch_pid" 2>/dev/null || return 0
+    process_is_live "$service_launch_pid" || return 0
     sleep 0.05
   done
   launch_process_matches || {
     echo "refusing to force-stop QEMU service PID $service_launch_pid after its process identity changed" >&2
     return 1
   }
-  "$sudo_command" -n /bin/kill -KILL -- "$service_launch_pid"
+  run_sudo_once /bin/kill -KILL -- "$service_launch_pid"
 }
 
 remove_service_directory() {
-  "$sudo_command" -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root /bin/sh -eu -c '
+  run_sudo_once /usr/bin/env -i "PATH=$runtime_path" HOME=/root /bin/sh -eu -c '
     path="$1"
     expected="$2"
     test ! -L "$path" && test -d "$path"
@@ -144,23 +156,75 @@ remove_service_directory() {
   ' qemu-service-directory-cleanup "$service_dir" "$service_dir_identity"
 }
 
+sudo_keepalive() {
+  while /bin/sleep "$sudo_keepalive_interval_seconds"; do
+    if ! /usr/bin/timeout --signal=KILL --kill-after=1 5s "$sudo_command" -n -v; then
+      echo "sudo authorization refresh failed; stopping QEMU verification" >&2
+      return 1
+    fi
+  done
+}
+
+stop_sudo_keepalive() {
+  [[ -n "$sudo_keepalive_pid" ]] || return 0
+  if process_is_live "$sudo_keepalive_pid"; then
+    /bin/kill -TERM -- "$sudo_keepalive_pid" 2>/dev/null || true
+  fi
+  if ! wait_for_child_exit "$sudo_keepalive_pid"; then
+    /bin/kill -KILL -- "$sudo_keepalive_pid" 2>/dev/null || true
+    wait_for_child_exit "$sudo_keepalive_pid" || return 1
+  fi
+  sudo_keepalive_pid=""
+}
+
+run_client() {
+  local completed="" first_status=0
+  DIM_QEMU_VERIFICATION_SOCKET="$service_socket" "$node" "$client" run "$@" &
+  client_pid=$!
+  if wait -n -p completed "$client_pid" "$sudo_keepalive_pid"; then
+    first_status=0
+  else
+    first_status=$?
+  fi
+  if [[ "$completed" == "$sudo_keepalive_pid" ]]; then
+    if process_is_live "$client_pid"; then /bin/kill -TERM -- "$client_pid" 2>/dev/null || true; fi
+    if ! wait_for_child_exit "$client_pid"; then
+      /bin/kill -KILL -- "$client_pid" 2>/dev/null || true
+      wait_for_child_exit "$client_pid" || true
+    fi
+    client_pid=""
+    return 1
+  fi
+  client_pid=""
+  return "$first_status"
+}
+
 cleanup() {
-  local status=$? cleanup_status=0 current_identity=""
+  local status=$? cleanup_status=0 current_identity="" service_shutdown_proven=true
   trap - EXIT
   set +e
+  stop_sudo_keepalive || cleanup_status=1
   if [[ -n "$service_fingerprint" ]]; then
     root_owner retire-exact "$owner_path" "$service_socket" "$service_dir" 10000 "$service_fingerprint" || cleanup_status=1
   fi
-  if [[ -n "$service_launch_pid" ]] && /bin/kill -0 "$service_launch_pid" 2>/dev/null; then
+  if [[ -n "$service_launch_pid" ]] && process_is_live "$service_launch_pid"; then
     terminate_exact_launch_process || cleanup_status=1
   fi
-  if [[ -n "$service_wrapper_pid" ]]; then
-    wait "$service_wrapper_pid" >/dev/null 2>&1 || true
+  if [[ -n "$service_launch_pid" ]] && ! wait_for_child_exit "$service_launch_pid"; then
+    service_shutdown_proven=false
+    cleanup_status=1
+  fi
+  if [[ -n "$service_wrapper_pid" && "$service_wrapper_pid" != "$service_launch_pid" ]] &&
+    ! wait_for_child_exit "$service_wrapper_pid"; then
+    service_shutdown_proven=false
+    cleanup_status=1
   fi
   if [[ -n "$launcher_wrapper_source" ]]; then
     /usr/bin/rm -f -- "$launcher_wrapper_source" || cleanup_status=1
   fi
-  if [[ -e "$service_dir" || -L "$service_dir" ]]; then
+  if [[ "$service_shutdown_proven" != true && ( -e "$service_dir" || -L "$service_dir" ) ]]; then
+    echo "leaving QEMU service directory intact because service shutdown was not proven: $service_dir" >&2
+  elif [[ -e "$service_dir" || -L "$service_dir" ]]; then
     if [[ ! -L "$service_dir" && -d "$service_dir" ]]; then
       current_identity="$(/usr/bin/stat -Lc '%d:%i' -- "$service_dir" 2>/dev/null)"
     fi
@@ -177,24 +241,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$sudo_command" -n /usr/bin/install -d -o root -g root -m 0555 "$service_dir/modules"
+sudo_keepalive &
+sudo_keepalive_pid=$!
+
+run_sudo_once /usr/bin/install -d -o root -g root -m 0555 "$service_dir/modules"
 for module in "${root_modules[@]}"; do
-  "$sudo_command" -n /usr/bin/install -o root -g root -m 0444 \
+  run_sudo_once /usr/bin/install -o root -g root -m 0444 \
     "$repository_root/.dim/$module" "$service_dir/modules/$module"
 done
 service="$service_dir/modules/qemu-service.mjs"
 owner="$service_dir/modules/qemu-service-owner.mjs"
-"$sudo_command" -n /usr/bin/install -o root -g root -m 0555 "$launcher" "$service_dir/gate.bash"
+run_sudo_once /usr/bin/install -o root -g root -m 0555 "$launcher" "$service_dir/gate.bash"
 launcher_wrapper_source="$(/usr/bin/mktemp)"
-printf '#!/usr/bin/env bash\nexec /usr/bin/setpriv --reuid %q --regid %q --init-groups -- /usr/bin/env HOME=%q USER=%q LOGNAME=%q /bin/bash %q "$@"\n' \
+printf '#!/usr/bin/env bash\nexec %q --reuid %q --regid %q --init-groups -- /usr/bin/env HOME=%q USER=%q LOGNAME=%q /bin/bash %q "$@"\n' \
+  "$setpriv_command" \
   "$invoking_uid" "$invoking_gid" "$invoking_home" "$invoking_user" "$invoking_user" "$service_dir/gate.bash" \
   >"$launcher_wrapper_source"
-"$sudo_command" -n /usr/bin/install -o root -g root -m 0555 "$launcher_wrapper_source" "$service_dir/launcher.bash"
+run_sudo_once /usr/bin/install -o root -g root -m 0555 "$launcher_wrapper_source" "$service_dir/launcher.bash"
 /usr/bin/rm -f -- "$launcher_wrapper_source"
 launcher_wrapper_source=""
 source_root="$repository_root"
 image_cache="${DIM_KVM_IMAGE_CACHE:-$repository_root/.local/kvm}"
-"$sudo_command" -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
+"$sudo_command" -n /usr/bin/env -i "PATH=$runtime_path" HOME=/root \
   DIM_QEMU_SOURCE_ROOT="$source_root" DIM_QEMU_LAUNCHER="$service_dir/launcher.bash" \
   DIM_QEMU_INVOKING_UID="$invoking_uid" DIM_QEMU_INVOKING_GID="$invoking_gid" \
   DIM_KVM_IMAGE_CACHE="$image_cache" DIM_QEMU_SERVICE_SOCKET="$service_socket" \
@@ -214,7 +282,7 @@ for _ in $(seq 1 100); do
     launch_process_matches || { echo "QEMU service launch identity is invalid" >&2; exit 1; }
     break
   fi
-  /bin/kill -0 "$service_wrapper_pid" 2>/dev/null || { wait "$service_wrapper_pid" || true; break; }
+  process_is_live "$service_wrapper_pid" || { wait "$service_wrapper_pid" || true; break; }
   sleep 0.05
 done
 [[ -n "$service_launch_pid" ]] || {
@@ -240,7 +308,7 @@ for _ in $(seq 1 100); do
     service_fingerprint="$candidate"
     break
   fi
-  /bin/kill -0 "$service_launch_pid" 2>/dev/null || break
+  process_is_live "$service_launch_pid" || break
   sleep 0.1
 done
 [[ -n "$service_fingerprint" && -S "$service_socket" ]] || {
@@ -249,4 +317,4 @@ done
   exit 1
 }
 
-DIM_QEMU_VERIFICATION_SOCKET="$service_socket" node "$client" run "$@"
+run_client "$@"

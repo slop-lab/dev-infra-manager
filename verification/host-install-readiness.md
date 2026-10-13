@@ -46,6 +46,36 @@ review-policy provisioning described below.
 
 ## P0: install and use the current basic workspace on a capable host
 
+### Source and QEMU prerequisites are separate profiles
+
+Run these checks independently; a failure in one does not hide the other:
+
+```bash
+TMPDIR=/tmp bash verification/scripts/source-gate-preflight.bash
+DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
+  bash verification/scripts/kvm-host-install-smoke.bash --preflight-only
+```
+
+The complete source suite uses an integration fixture pinned to
+`/usr/bin/git` 2.43.0, Node.js 24/26, and pnpm 10.13.1. It also includes
+root-owned ownership fixtures. Run that suite in the reviewed pinned disposable
+test container or VM, not by invoking the whole source gate with sudo on a live
+host. A PATH Git shim does not satisfy the absolute fixture binary contract.
+The preflight aggregates toolchain, temporary-directory ancestry, ownership
+capability, and optional distribution-artifact errors. `just check-source`
+builds distribution-consuming test dependencies before testing; it does not
+weaken Git pins or repair the host. Use `just typecheck` for compiler-only
+feedback on an ordinary supported Node.js host.
+
+The QEMU gate instead runs as the normal host operator. Its preflight reports
+trusted-interpreter, non-root user, sudo authorization, setpriv, KVM access, and
+QEMU/dependency problems together without starting a service. Select a genuine
+reviewed Node.js 24/26 executable under a root-owned, non-writable directory
+tree with `DIM_QEMU_NODE_EXECUTABLE`; do not change ownership of a mise/nvm/home
+installation to bypass this boundary. Operator-run `sudo -v` may establish
+cached authorization for the later narrowly scoped `sudo -n` commands. A
+permanent blanket `NOPASSWD` rule is not required.
+
 1. **Prepare the host.** Use a disposable Linux host or retained VM with a
    systemd user manager, reachable Docker 29, registered `sysbox-runc`, working
    cgroup enforcement, and Docker Buildx. Review the host installer before
@@ -129,6 +159,29 @@ the exact images need provisioning, and `UNAVAILABLE` means the runtime or host
 Docker was absent. The aggregate exits nonzero unless both lanes pass. It does
 not repair or delete an existing Docker data root.
 
+The runc lane now explicitly uses the production
+`DIM_DOCKERD_FLAGS=--feature containerd-snapshotter=false` profile and a named
+volume at `/var/lib/dim/workspace-data`; expect classic `overlay2` there. The
+Sysbox lane keeps the agent's own daemon profile. The earlier both-lane PASS
+with `overlayfs`/containerd did not prove the production runc profile. Likewise,
+the corrected `container-inner-docker-smoke.bash` no longer places the initial
+nested Docker data root in the outer writable overlay layer or forces an
+unsupported `overlayfs` storage driver. A local backing-device contrast proved
+those paths differ; the capable host must still verify whether this corrects
+its earlier mount error.
+
+After the diagnostic, run the full standalone smoke without treating the
+diagnostic as a replacement:
+
+```bash
+DIM_CONTAINER_TEST_IMAGE='alpine@sha256:REPLACE_WITH_HOST_CACHED_DIGEST' \
+  bash verification/scripts/container-inner-docker-smoke.bash
+```
+
+This gate additionally checks network access, immutable-root replacement,
+cached inner-image execution, and data ownership persistence. Its success
+marker is emitted only after owned cleanup succeeds.
+
 The development agent's runc-only daemon currently reports a cgroup permission
 error at `nested-image-run`; the earlier capable host report describes an
 overlay-mount `invalid argument`. These are observations from different hosts,
@@ -165,9 +218,16 @@ These are not prerequisites for a basic workspace:
    cancellation failure, timeout failure, and owned cleanup; a QMP capability
    probe is not a completed CI job.
    The repository QEMU gate additionally needs a non-root invoking user,
-   passwordless `sudo -n` for the narrowly staged root service, a root-owned
-   mode-`0755` Node.js interpreter, and `/usr/bin/setpriv`. Run the gate as that
-   user, never as root. Test both a normal run and an actual `--input NAME=PATH`
+   cached `sudo -n` authorization for the narrowly staged root service, an
+   absolute canonical non-symlink root-owned mode-`0755` Node.js 24 or 26
+   interpreter under root-owned non-writable ancestors, and `/usr/bin/setpriv`.
+   Prime normal operator authorization with `sudo -v`; a permanent blanket
+   `NOPASSWD` rule is not required. Select a reviewed system/vendor Node
+   installation with `DIM_QEMU_NODE_EXECUTABLE`; never trust a mise, nvm, or
+   home-directory Node tree by changing its ownership. Run `--preflight-only`
+   first to report all host deficiencies without creating service state. Run
+   the gate as that user, never as root. Test both a normal run and an actual
+   `--input NAME=PATH`
    run, including guest reads as UID 1001; local staging/readability tests are
    not a substitute for the guest test.
 2. Provision global ordinary/QEMU service role files, units, immutable images,

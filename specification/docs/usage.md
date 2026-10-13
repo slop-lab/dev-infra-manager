@@ -214,9 +214,15 @@ checkout, run `just run-cli doctor` after installation.
 Test installation destructively inside a disposable KVM-backed Ubuntu VM, without installing a backend on the host:
 
 ```bash
-just verify environments-kvm       # Sysbox in one clean VM
-just verify environments-kvm --verbose
-bash verification/scripts/kvm-host-install-smoke.bash --verbose
+sudo -v
+DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
+  bash verification/scripts/kvm-host-install-smoke.bash --preflight-only
+DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
+  just verify environments-kvm       # Sysbox in one clean VM
+DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
+  just verify environments-kvm --verbose
+DIM_QEMU_NODE_EXECUTABLE=/usr/local/bin/node \
+  bash verification/scripts/kvm-host-install-smoke.bash --verbose
 ```
 
 Run this gate as the normal invoking user. It performs a noninteractive
@@ -227,6 +233,25 @@ user, not under sudo. For `--input NAME=PATH`, the root-only canonical snapshot
 is copied to an invoking-user-readable per-run handoff; guest extraction does
 not preserve the host UID. This does not grant the user access to the root-only
 service run directory.
+
+`DIM_QEMU_NODE_EXECUTABLE` must name an absolute, canonical, non-symlink Node.js
+24 or 26 executable that is root-owned mode `0755`, beneath only root-owned
+directories that are not group- or world-writable. Install Node through a
+reviewed system/vendor package or a reviewed root installation under
+`/usr/local`; do not `chown` a mise, nvm, home-directory, or other user-managed
+Node tree and treat it as trusted. The default is `/usr/bin/node`. Run `sudo -v`
+as shown to cache the operator's normal sudo authorization; the gate requires
+only that subsequent `sudo -n` calls succeed, not a blanket permanent
+`NOPASSWD` rule. `--preflight-only` reports every detected identity, Node trust,
+sudo, `setpriv`, KVM device, protected-closure, and QEMU-tool deficiency before
+exiting, and never creates the privileged service runtime. QEMU and guest-tool
+dependencies must resolve on the service's exact `PATH=/usr/bin:/bin`; a tool
+available only through the invoking shell's `PATH` is rejected. During a full
+run the gate refreshes cached authorization with bounded noninteractive
+`sudo -n -v` calls. A failed refresh stops the client and enters bounded
+cleanup. If exact service shutdown cannot be proved, cleanup reports failure
+and leaves the root-owned service directory intact rather than deleting files
+under a possibly live service.
 
 The canonical DIM Project additionally lets its agent request that gate through
 the protected root launcher:

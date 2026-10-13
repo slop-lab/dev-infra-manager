@@ -65,7 +65,7 @@ describe("DIM development forge policy", () => {
     expect(kvm).toContain("just verify full-development");
     expect(kvm).toContain('2>&1 | tee "$step_log"');
     expect(gate).toContain(".dim/qemu-service.mjs");
-    expect(gate).toContain('node "$client" run');
+    expect(gate).toContain('"$node" "$client" run');
     expect(kvm).toContain("pnpm run workspace:build");
     expect(kvm).toContain('guest_cpus="${DIM_KVM_SMOKE_CPUS:-4}"');
     expect(kvm).toContain('-smp "$guest_cpus"');
