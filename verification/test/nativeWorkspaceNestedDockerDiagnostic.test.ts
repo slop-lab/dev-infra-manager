@@ -28,6 +28,7 @@ describe("native workspace nested Docker diagnostic", () => {
     expect(result.stdout).toContain("lane=sysbox status=PASS");
     expect(result.stdout).toContain("aggregate=FAIL failed_lanes=runc");
     const calls = await readFile(fixture.callLog, "utf8");
+    expect(calls).toContain("DIM_DOCKERD_FLAGS=--feature containerd-snapshotter=false");
     expect(calls).toMatch(/exec --user dim a{64} docker run/);
     expect(calls).toMatch(/exec --user dim b{64} docker run/);
   });

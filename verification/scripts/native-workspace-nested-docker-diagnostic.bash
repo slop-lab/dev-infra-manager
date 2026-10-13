@@ -255,7 +255,7 @@ run_lane() (
     --mount "type=volume,source=$checkout,target=/workspace"
     --mount "type=volume,source=$data,target=$data_target")
   if [[ "$privileged" == true ]]; then
-    create_arguments+=(--privileged "$workspace_image" sleep infinity)
+    create_arguments+=(--privileged --env "DIM_DOCKERD_FLAGS=--feature containerd-snapshotter=false" "$workspace_image" sleep infinity)
   else
     create_arguments+=(--entrypoint /usr/local/bin/dim-agent-entrypoint "$workspace_image" sleep infinity)
   fi
