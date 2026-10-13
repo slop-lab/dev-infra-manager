@@ -811,7 +811,7 @@ input while it owns the workspace setup lock, and that a valid agent grant with
 an incomplete or oversized request body never acquires workspace authority or
 delays durable discard denial.
 
-For `PROJECT-HOOK-DEFAULTS-001`, every backend MUST test all three environment
+For `PROJECT-HOOK-DEFAULTS-001`, every backend MUST test both environment
 selections from immutable roots. Recommended coverage MUST create and attest the
 core-managed agent before readiness, preserve its three named volumes, route
 `run shell`, `run exec`, `run custom`, and `exec` into it, reject malformed
@@ -828,10 +828,9 @@ exact 25/75 combined-budget split, exact sum, 1 CPU/1 GiB/256 PID minimums, no
 extra swap, readback before state publication, complete rollback after each
 injected failure, and explicit uncertain-state failure when rollback cannot be
 proved. Recommended `discard --keep-volume` MUST reject before any phase,
-grant, route, hook, runtime, state, or volume mutation. Minimal coverage MUST
-accept only the exact two-field selector, reject unknown fields and
-selector/hook conflicts, create no agent, reject `run`, and route `exec` to the
-trusted outer workspace.
+grant, route, hook, runtime, state, or volume mutation. Coverage MUST reject
+`.dim/environment.yml` as an obsolete unsupported format, both alone and with
+custom lifecycle files.
 Custom coverage MUST test hook-present, Compose fallback, no-op setup,
 entrypoint-present and absent, teardown-present, and Compose/no-op teardown.
 Guest mutation, symlink escape, moved root, and missing lifecycle-file probe

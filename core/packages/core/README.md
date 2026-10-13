@@ -9,7 +9,7 @@ implements:
   coordinator adapter and isolated container executor;
 - persistent workspace create/start/restart/update/discard lifecycle;
 - recommended host-side Sysbox agents with persistent home, checkout, and
-  private Docker volumes, plus explicit minimal and custom environments;
+  private Docker volumes, plus reviewed custom environments;
 - a Sysbox workspace runtime plan with runc reserved for trusted infrastructure;
 - host-readiness checks;
 - plugin manifest loading and version validation.
@@ -74,19 +74,13 @@ usable host environment and surface `UserError` messages to users without
 discarding the underlying operation result.
 
 Workspace creation selects its environment from the immutable root. No `.dim`
-directory, or one without lifecycle files or `environment.yml`, selects the
-recommended agent. The exact selector below opts out:
-
-```yaml
-schemaVersion: 1
-environment: minimal
-```
-
-Unknown selector fields and custom lifecycle files combined with minimal are
-rejected. Any custom lifecycle file without the selector selects custom.
-Creation and setup reconcile the recommended agent before ready publication.
-Mode changes require discard and recreation; older records without an
-environment continue as custom without rewriting their data.
+directory, or one without lifecycle files, selects the recommended agent. Any
+custom lifecycle file selects custom. `.dim/environment.yml` is an obsolete,
+unsupported format and is rejected. Creation and setup reconcile the
+recommended agent before ready publication. Mode changes require discard and
+recreation. Older records without an environment continue as custom without
+rewriting their data; persisted minimal records are rejected unchanged with
+export and recreation guidance.
 
 Creation seeds the recommended checkout at the exact selected root once through
 recoverable owned staging. Later lifecycle root selection refreshes immutable

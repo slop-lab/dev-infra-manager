@@ -150,12 +150,16 @@ async function startWorkspaceLocked(
   setStage: SetWorkspaceLifecycleStage,
   setErrorStage: SetWorkspaceLifecycleErrorStage
 ): Promise<WorkspaceRecord> {
+  let record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
+  assertWorkspaceLifecycleActive(record);
+  if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+  await selectWorkspaceEnvironmentTransition(record, selectedRoot.rootSnapshotPath);
   setStage("workspace runtime reconciliation");
-  let record = await reconcileWorkspaceRuntimeState(
+  record = await reconcileWorkspaceRuntimeState(
     runner,
     state,
     options.stateRoot,
-    await readWorkspaceForOperation(state, workspaceName, options.giteaConnection)
+    record
   );
   assertWorkspaceLifecycleActive(record);
   if (record.phase !== "stopped") {
@@ -206,12 +210,16 @@ export async function restartWorkspace(
       setStage("workspace setup lock acquisition");
       const release = await state.acquireWorkspaceSetupLock(workspaceName);
       try {
+        const current = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
+        assertWorkspaceLifecycleActive(current);
+        if (selectedRoot.project.id !== current.projectId) throw new UserError(`project '${current.projectName}' identity changed`);
+        await selectWorkspaceEnvironmentTransition(current, selectedRoot.rootSnapshotPath);
         setStage("workspace runtime reconciliation");
         const record = await reconcileWorkspaceRuntimeState(
           runner,
           state,
           options.stateRoot,
-          await readWorkspaceForOperation(state, workspaceName, options.giteaConnection)
+          current
         );
         assertWorkspaceLifecycleActive(record);
         if (record.phase === "stopped") {

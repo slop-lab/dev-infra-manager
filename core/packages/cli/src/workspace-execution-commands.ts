@@ -3,7 +3,7 @@ import { adminStreamCall, interactive } from "./cli-support.js";
 
 export function registerWorkspaceExecutionCommands(program: Command, workspace: Command): void {
   program.command("exec")
-  .description("Execute in the recommended agent, or trusted outer workspace for explicit minimal/custom environments")
+  .description("Execute in the recommended agent, or trusted outer workspace for custom Project environments")
   .argument("<workspace>")
   .argument("<command...>")
   .allowUnknownOption(true)
@@ -31,7 +31,7 @@ program.command("run")
   });
 
 workspace.command("exec")
-  .description("Execute in the recommended agent, or trusted outer workspace for explicit minimal/custom environments")
+  .description("Execute in the recommended agent, or trusted outer workspace for custom Project environments")
   .argument("<workspace>")
   .argument("<command...>")
   .allowUnknownOption(true)

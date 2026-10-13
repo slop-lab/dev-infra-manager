@@ -51,13 +51,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   custom `.dim` lifecycle files. DIM now reconciles a host-side unprivileged
   Sysbox agent before readiness, with persistent home, checkout, and private
   Docker volumes, proposal-scoped Git, and no host or trusted-runtime socket or
-  raw credential. An exact schema-1 `environment: minimal` selector opts out to
-  trusted outer-workspace `exec`, while existing custom lifecycle hooks retain
-  the advanced Project-owned contract. Environment changes require explicit
-  discard and recreation after preserving needed data, and old records without
-  a selector remain custom. Recommended resources are one combined budget with
-  a deterministic 25-percent outer and exact-remainder agent split, aggregate
-  minimums of 1 CPU, 1 GiB, and 256 PIDs, no extra swap, exact runtime readback,
+  raw credential. Reviewed setup, entrypoint, Compose, or teardown files select
+  the advanced custom Project-owned contract; the obsolete
+  `.dim/environment.yml` format is rejected. Environment changes require
+  explicit discard and recreation after preserving needed data. Old records
+  without an environment remain custom, while persisted minimal records are
+  rejected unchanged with export and recreation guidance. Recommended resources
+  are one combined budget with a deterministic 25-percent outer and
+  exact-remainder agent split, aggregate minimums of 1 CPU, 1 GiB, and 256 PIDs,
+  no extra swap, exact runtime readback,
   and rollback before state publication. An unprovable rollback reports
   uncertain resource state. Initial checkout seeds the exact selected root once
   through recoverable owned staging. Later protected-root movement refreshes

@@ -135,10 +135,10 @@ outer-workspace runtime socket and no raw operator, native-Git, provider, or
 product credential. Its bounded Git path is the workspace relay and
 workspace-scoped proposal authority.
 
-The explicit minimal environment creates no agent. Its commands run only in
-the trusted outer workspace, so it is an opt-out for operators who need that
-smaller mechanism and accept the different execution boundary. A custom
-environment retains the reviewed Project lifecycle boundary described above.
+A custom environment retains the reviewed Project lifecycle boundary described
+above. Its reviewed setup and Compose behavior may define an agent topology
+that differs from the recommended DIM-managed agent. There is no supported
+outer-workspace-only preset.
 
 ## DIM Host Boundary
 

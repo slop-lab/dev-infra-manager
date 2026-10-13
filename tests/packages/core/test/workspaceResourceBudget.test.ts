@@ -43,12 +43,12 @@ describe("workspace resource budgets", () => {
     );
   });
 
-  it.each(["custom", "minimal"] as const)("leaves a %s workspace budget on the outer container", (environment) => {
+  it("leaves the actual custom workspace budget on the outer container", () => {
     // Given
     const recorded = { cpuCount: "0.5", memory: "128m", pidsLimit: "32" };
 
     // When
-    const allocated = allocateWorkspaceResourceBudget(environment, recorded);
+    const allocated = allocateWorkspaceResourceBudget("custom", recorded);
 
     // Then
     expect(allocated).toEqual({ outer: recorded });

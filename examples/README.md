@@ -6,7 +6,8 @@ Project examples are complete, copyable adoption shapes:
 
 - [`projects/recommended-default/`](projects/recommended-default/README.md) is
   the zero-`.dim` default: one repository, a DIM-managed unprivileged Sysbox
-  agent, explicit built-in commands, and the exact minimal opt-out.
+  agent, explicit built-in commands, and guidance for choosing a real custom
+  lifecycle.
 - [`projects/single-repository/`](projects/single-repository/README.md) is a
   custom-lifecycle shape: one repository, no secrets or protected ref,
   resource limits, a Project-owned agent/private DinD pair, and an optional

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,20 +35,21 @@ describe("workspace environment selection", () => {
     await expect(selectWorkspaceEnvironment(snapshot)).resolves.toBe("recommended");
   });
 
-  it("selects custom when a shipped lifecycle hook exists", async () => {
+  it.each(["setup.sh", "entrypoint.sh", "teardown.sh", "docker-compose.yml"])
+    ("selects actual custom behavior from .dim/%s", async (file) => {
     const snapshot = await root();
     await mkdir(join(snapshot, ".dim"));
-    await writeFile(join(snapshot, ".dim", "entrypoint.sh"), "#!/bin/sh\n");
+    await writeFile(join(snapshot, ".dim", file), file.endsWith(".yml") ? "services: {}\n" : "#!/bin/sh\n");
 
     await expect(selectWorkspaceEnvironment(snapshot)).resolves.toBe("custom");
   });
 
-  it("accepts only the exact minimal selector", async () => {
+  it("rejects the removed minimal preset instead of silently selecting a different runtime", async () => {
     const snapshot = await root();
     await mkdir(join(snapshot, ".dim"));
     await writeFile(join(snapshot, ".dim", "environment.yml"), "schemaVersion: 1\nenvironment: minimal\n");
 
-    await expect(selectWorkspaceEnvironment(snapshot)).resolves.toBe("minimal");
+    await expect(selectWorkspaceEnvironment(snapshot)).rejects.toThrow(/environment\.yml.*unsupported/i);
   });
 
   it.each([
@@ -56,7 +57,7 @@ describe("workspace environment selection", () => {
     "schemaVersion: 1\nenvironment: minimal\nextra: true\n",
     "schemaVersion: 2\nenvironment: minimal\n",
     "schemaVersion: 1\nenvironment: minimal\nenvironment: minimal\n"
-  ])("rejects unsafe selector YAML", async (source) => {
+  ])("rejects obsolete selector files regardless of their contents", async (source) => {
     const snapshot = await root();
     await mkdir(join(snapshot, ".dim"));
     await writeFile(join(snapshot, ".dim", "environment.yml"), source);
@@ -64,13 +65,13 @@ describe("workspace environment selection", () => {
     await expect(selectWorkspaceEnvironment(snapshot)).rejects.toThrow(/environment/i);
   });
 
-  it("rejects minimal selection alongside custom lifecycle files", async () => {
+  it("does not revive the obsolete selector when custom lifecycle files exist", async () => {
     const snapshot = await root();
     await mkdir(join(snapshot, ".dim"));
     await writeFile(join(snapshot, ".dim", "environment.yml"), "schemaVersion: 1\nenvironment: minimal\n");
     await writeFile(join(snapshot, ".dim", "setup.sh"), "#!/bin/sh\n");
 
-    await expect(selectWorkspaceEnvironment(snapshot)).rejects.toThrow(/minimal.*custom/i);
+    await expect(selectWorkspaceEnvironment(snapshot)).rejects.toThrow(/environment\.yml.*unsupported/i);
   });
 
   it("rejects symlinked environment selectors", async () => {
@@ -79,15 +80,27 @@ describe("workspace environment selection", () => {
     await writeFile(join(snapshot, "selector.yml"), "schemaVersion: 1\nenvironment: minimal\n");
     await symlink(join(snapshot, "selector.yml"), join(snapshot, ".dim", "environment.yml"));
 
-    await expect(selectWorkspaceEnvironment(snapshot)).rejects.toThrow(/symbolic link/i);
+    await expect(selectWorkspaceEnvironment(snapshot)).rejects.toThrow(/environment\.yml.*unsupported/i);
   });
 
-  it("rejects environment selectors larger than the bounded contract", async () => {
+  it("rejects obsolete selectors without parsing their payload", async () => {
     const snapshot = await root();
     await mkdir(join(snapshot, ".dim"));
     await writeFile(join(snapshot, ".dim", "environment.yml"), `schemaVersion: 1\nenvironment: minimal\n# ${"x".repeat(4_096)}\n`);
 
-    await expect(selectWorkspaceEnvironment(snapshot)).rejects.toThrow(/4096 bytes/i);
+    await expect(selectWorkspaceEnvironment(snapshot)).rejects.toThrow(/environment\.yml.*unsupported/i);
+  });
+
+  it("rejects persisted minimal state without rewriting user data", async () => {
+    const state = new LifecycleState(await root());
+    const record = workspaceRecord();
+    await state.claimWorkspace(record);
+    const serialized = JSON.stringify({ ...record, environment: "minimal" });
+    const file = state.workspacePath(record.name);
+    await writeFile(file, serialized);
+
+    await expect(state.readWorkspace(record.name)).rejects.toThrow(/obsolete minimal.*prior pinned release.*export.*discard.*recreate/i);
+    await expect(readFile(file, "utf8")).resolves.toBe(serialized);
   });
 
   it("rejects a mode change before reinterpreting persistent workspace data", async () => {
@@ -107,6 +120,15 @@ describe("workspace environment selection", () => {
     await expect(selectWorkspaceEnvironmentTransition({
       name: "work-1"
     }, snapshot)).resolves.toBeUndefined();
+  });
+
+  it("validates obsolete selectors even when the stored environment is undefined", async () => {
+    const snapshot = await root();
+    await mkdir(join(snapshot, ".dim"));
+    await writeFile(join(snapshot, ".dim", "environment.yml"), "schemaVersion: 1\nenvironment: minimal\n");
+
+    await expect(selectWorkspaceEnvironmentTransition({ name: "work-1" }, snapshot))
+      .rejects.toThrow(/unsupported/i);
   });
 
   it("rejects an ordinary root mode change before publishing new workspace state", async () => {

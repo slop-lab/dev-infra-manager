@@ -1348,8 +1348,8 @@ a lifecycle mutation has already entered its documented non-ready recovery
 phase; it does not revoke Project readiness or turn CI into a prerequisite.
 `resources` requires at least one flag. Omitted flags retain their current
 per-workspace values, and running and stopped containers are supported. For
-minimal and custom, it applies the complete effective limit set to the
-top-level container and persists state only after exact Docker readback. For
+custom, it applies the complete effective limit set to the top-level container
+and persists state only after exact Docker readback. For
 recommended, the recorded values are one combined budget with minimums of 1
 CPU, 1 GiB memory, and 256 PIDs. DIM assigns the floor of 25 percent of each to
 the trusted outer container and the exact remainder to the agent; both memory
@@ -1463,10 +1463,9 @@ Top-level `dim run` and
 exec`. Other workspace lifecycle commands exist only below `dim workspace`.
 
 In the recommended environment, `run` accepts only `shell`, `exec`, or
-`custom`, and `exec` also dispatches to the DIM-managed agent. Minimal rejects
-`run` and sends `exec` to the trusted outer workspace. Custom `run` requires
-and dispatches through immutable `.dim/entrypoint.sh` snapshot bytes; custom
-`exec` bypasses it. After a recommended checkout is initially seeded, a
+`custom`, and `exec` also dispatches to the DIM-managed agent. Custom `run`
+requires and dispatches through immutable `.dim/entrypoint.sh` snapshot bytes;
+custom `exec` bypasses it. After a recommended checkout is initially seeded, a
 lifecycle command that selects newer immutable root bytes MUST preserve its
 mutable checkout and complete without treating checkout divergence as a setup
 failure. It MUST print a notice directing the user to run `git fetch origin`
@@ -1474,8 +1473,8 @@ and explicitly review, rebase, or merge the desired source in the agent;
 normal recommended `run` and `exec` commands remain available. `discard`
 follows `WORKSPACE-DISCARD-VOLUMES-001` for Project
 teardown and removal of the top-level container, inner-engine volume, and
-workspace state. For minimal and custom, `--keep-volume` retains the labeled
-DIM-managed outer-engine volume; recreating the same workspace name validates
+workspace state. For custom, `--keep-volume` retains the labeled DIM-managed
+outer-engine volume; recreating the same workspace name validates
 and reuses it. Recommended rejects that option before mutation.
 For probes of `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, and
 `.dim/docker-compose.yml`, only exit code `1` means the file is absent. Any

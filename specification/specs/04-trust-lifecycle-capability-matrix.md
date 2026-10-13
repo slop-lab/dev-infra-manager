@@ -308,8 +308,8 @@ Recommended home, checkout, and private-Docker volumes are bound to the current
 workspace identity and cannot be retained through `--keep-volume`. An operator
 who needs those bytes MUST leave the workspace intact or explicitly copy or
 back them up before ordinary full discard. Changing a recommended workspace to
-minimal or custom, or changing another selected mode, still requires discard
-and fresh creation after that preservation step. The legacy custom
+custom, or custom to recommended, still requires discard and fresh creation
+after that preservation step. The custom
 `--keep-volume` contract remains unchanged.
 
 Discard MUST atomically publish the non-ready `discarding` phase and revoke
@@ -370,22 +370,19 @@ hostname permalink.
 
 **PROJECT-HOOK-DEFAULTS-001:** Hook presence, environment selection, and hook
 bytes are selected only from the immutable approved root. Mutable workspace or
-guest data MUST NOT add, replace, or redirect a lifecycle hook or selector.
-An exact `.dim/environment.yml` containing only `schemaVersion: 1` and
-`environment: minimal` selects the minimal environment and MUST be rejected if
-any custom lifecycle file is present. With no selector, any custom lifecycle
-file selects custom; no custom lifecycle file selects recommended. A backend
-MUST preserve these defaults:
+guest data MUST NOT add, replace, or redirect a lifecycle hook. Any custom
+lifecycle file selects custom; no custom lifecycle file selects recommended.
+The obsolete `.dim/environment.yml` format MUST be rejected and MUST NOT act as
+a selector. A backend MUST preserve these defaults:
 
 | Root contents | Setup behavior | Task behavior | Discard behavior |
 | --- | --- | --- | --- |
 | `.dim/setup.sh` present | Trusted lifecycle area executes those immutable bytes | Unchanged | Unchanged |
 | no setup hook, `.dim/docker-compose.yml` present | Trusted lifecycle area performs the documented Compose setup | Unchanged | Documented Compose teardown when no teardown hook exists |
 | recommended, with no custom lifecycle file | Reconcile the DIM-managed agent before readiness | `run shell`, `run exec`, and `run custom` dispatch in the agent; `exec` also dispatches there | Full discard removes agent volumes; `--keep-volume` rejects before mutation |
-| explicit minimal selector | No Project setup and no agent | Reject `run`; `exec` dispatches in the trusted outer workspace | No Project teardown |
 | custom, with neither setup hook nor Compose file | Successful no-op | Dispatch only through `.dim/entrypoint.sh`; reject `run` when absent, while `exec` bypasses it | Successful no-op when no teardown hook exists |
 | `.dim/entrypoint.sh` present | Unchanged | Dispatch through its immutable reviewed mapping | Unchanged |
-| no entrypoint hook | Unchanged | Recommended uses its built-in operations; minimal rejects `run`; custom rejects `run` | Unchanged |
+| no entrypoint hook | Unchanged | Recommended uses its built-in operations; custom rejects `run` | Unchanged |
 | `.dim/teardown.sh` present | Unchanged | Unchanged | Trusted lifecycle area executes it with the exact keep-volume value |
 
 Recommended setup seeds the mutable checkout from the exact selected root only

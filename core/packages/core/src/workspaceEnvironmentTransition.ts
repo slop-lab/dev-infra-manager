@@ -6,8 +6,8 @@ export async function selectWorkspaceEnvironmentTransition(
   record: Pick<WorkspaceRecord, "name" | "environment">,
   rootSnapshotPath: string
 ): Promise<WorkspaceEnvironment | undefined> {
-  if (record.environment === undefined) return undefined;
   const selected = await selectWorkspaceEnvironment(rootSnapshotPath);
+  if (record.environment === undefined) return undefined;
   if (selected !== record.environment) {
     throw new UserError(
       `workspace '${record.name}' environment changed from ${record.environment} to ${selected}; `

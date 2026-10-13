@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { restartWorkspace, updateWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { restartWorkspace, startWorkspace, updateWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 import { workspaceRootSnapshotPath } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
 import { claimTestGiteaService } from "./giteaServiceFixture.js";
 import { COMMIT, LifecycleRunner, projectFixture } from "./workspaceLifecycleSnapshotFixture.js";
@@ -19,6 +19,31 @@ afterEach(async () => {
 });
 
 describe("workspace environment transition preflight", () => {
+  it.each(["start", "restart"] as const)("rejects an obsolete selector before managed %s reconciles runtime", async (operation) => {
+    const root = await mkdtemp(join(tmpdir(), "dim-transition-preflight-"));
+    roots.push(root);
+    const state = new LifecycleState(root);
+    const record = managedRecord();
+    delete record.environment;
+    record.phase = "stopped";
+    const snapshot = workspaceRootSnapshotPath(root, record);
+    await mkdir(`${snapshot}/.dim`, { recursive: true });
+    await writeFile(`${snapshot}/.dim/environment.yml`, "schemaVersion: 1\nenvironment: minimal\n");
+    await state.claimProject(projectFixture());
+    await claimTestGiteaService(root, 3300);
+    await state.claimWorkspace(record);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+    const runner = new ManagedTransitionRunner();
+    runner.containerInspect = workspaceContainerInspect(record, { rootSnapshotPath: snapshot, running: false });
+
+    const invoke = operation === "start" ? startWorkspace : restartWorkspace;
+    await expect(invoke(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name))
+      .rejects.toThrow(/unsupported/i);
+    expect(runner.runCalls.some((call) => call[1] === "container" && call[2] === "inspect"
+      && call[3] === record.containerName)).toBe(false);
+    await expect(state.readWorkspace(record.name)).resolves.toEqual(record);
+  });
+
   it("rejects a managed restart mode change before stopping the workspace", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-transition-preflight-"));
     roots.push(root);
@@ -27,7 +52,6 @@ describe("workspace environment transition preflight", () => {
     const record = managedRecord();
     const snapshot = workspaceRootSnapshotPath(root, record);
     await mkdir(`${snapshot}/.dim`, { recursive: true });
-    await writeFile(`${snapshot}/.dim/environment.yml`, "schemaVersion: 1\nenvironment: minimal\n");
     await state.claimProject(project);
     await claimTestGiteaService(root, 3300);
     await state.claimWorkspace(record);
@@ -49,7 +73,6 @@ describe("workspace environment transition preflight", () => {
     const record = managedRecord();
     const snapshot = workspaceRootSnapshotPath(root, record);
     await mkdir(`${snapshot}/.dim`, { recursive: true });
-    await writeFile(`${snapshot}/.dim/environment.yml`, "schemaVersion: 1\nenvironment: minimal\n");
     await state.claimProject(project);
     await claimTestGiteaService(root, 3300);
     await state.claimWorkspace(record);

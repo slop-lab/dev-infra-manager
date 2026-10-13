@@ -65,20 +65,11 @@ the command reports that workspace resource state is uncertain rather than
 claiming the old or new budget.
 
 Projects select the recommended environment by omitting `.dim`, or by keeping
-`.dim` free of `setup.sh`, `entrypoint.sh`, `teardown.sh`,
-`docker-compose.yml`, and `environment.yml`. The exact opt-out selector is:
-
-```yaml
-schemaVersion: 1
-environment: minimal
-```
-
-The selector accepts no unknown fields and cannot coexist with any custom
-lifecycle file. Minimal workspaces create no agent and support only explicit
-trusted outer-workspace `exec` commands.
-
-Any of the four custom lifecycle files selects the custom environment when no
-selector exists. Reviewed `.dim/setup.sh` code may build and start a
+`.dim` free of `setup.sh`, `entrypoint.sh`, `teardown.sh`, and
+`docker-compose.yml`. Any of those four custom lifecycle files selects the
+custom environment. `.dim/environment.yml` is an obsolete, unsupported format
+and is rejected rather than interpreted as a selector. Reviewed
+`.dim/setup.sh` code may build and start a
 Project-owned agent through the nested Project engine, while
 `.dim/entrypoint.sh` maps `dim workspace run` tasks into it. This advanced
 custom contract remains Project-owned. DIM does not infer or add a custom

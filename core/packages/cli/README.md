@@ -15,8 +15,8 @@ A DIM **Project** is lightweight metadata:
 
 Each **workspace** mounts an immutable snapshot of the reviewed root repository.
 With no custom `.dim` lifecycle files, DIM creates the recommended unprivileged
-Sysbox agent with persistent home, checkout, and private Docker data. An exact
-minimal selector opts out. Projects that provide lifecycle files retain full
+Sysbox agent with persistent home, checkout, and private Docker data. Projects
+that provide lifecycle files retain full
 ownership of their mutable checkouts, nested containers, and task dispatch. A
 repository does not need to correspond one-to-one with a container. DIM
 therefore tracks one root ref instead of prescribing a multi-repository runtime
@@ -392,16 +392,17 @@ PIDs, and each swap limit equals memory. `workspace resources` reads back both
 updates before publishing state, rolls back all attempted changes after a
 failure, and reports an uncertain state if rollback cannot be proved.
 
-To opt out, commit an exact `.dim/environment.yml` containing only
-`schemaVersion: 1` and `environment: minimal`. Minimal creates no agent and
-supports only trusted outer-workspace `exec`. Any custom lifecycle file without
-that selector chooses the custom environment, where `run` requires
-`.dim/entrypoint.sh` and `exec` bypasses it. Unknown selector fields and a
-minimal selector combined with custom hooks are rejected.
+Any `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, or
+`.dim/docker-compose.yml` file chooses the custom environment, where `run`
+requires `.dim/entrypoint.sh` and `exec` bypasses it. Without those files, DIM
+uses recommended. `.dim/environment.yml` is an obsolete, unsupported format and
+is rejected.
 
 The selected environment is fixed for the workspace. A mode change requires
 discard and recreation. Older records without an environment remain custom and
-keep their existing data and hook behavior. Recommended creation seeds the
+keep their existing data and hook behavior. Persisted minimal records are
+obsolete and are rejected unchanged with guidance to export needed data through
+the prior pinned release, discard, and recreate. Recommended creation seeds the
 exact selected root into the empty checkout once. Recoverable owned staging
 ensures an interrupted clone, fetch, checkout, or publication does not adopt a
 partial repository and an identical setup can retry.
@@ -454,8 +455,8 @@ dim workspace discard feature-123 --yes
 - `discard` permanently removes the workspace and unpushed changes.
   Recommended `--keep-volume` rejects before any mutation because home,
   checkout, and private-Docker volumes are workspace-identity-bound. Leave the
-  workspace intact or copy needed data before full discard. Minimal, custom,
-  and historical custom workspaces retain the existing outer-engine
+  workspace intact or copy needed data before full discard. Custom and
+  historical custom workspaces retain the existing outer-engine
   `--keep-volume` behavior.
 
 If a controller command session for `create`, `setup`, `update`, `start`, or

@@ -5,8 +5,8 @@ mode, DIM assigns the floor of 25 percent of every value to the trusted outer
 container and the exact remainder to the untrusted agent, so the two Docker
 limits sum to the recorded budget. The minimum combined budget is 1 CPU, 1 GiB
 memory, and 256 PIDs. Both containers set memory swap equal to memory, which
-adds no swap allowance. In minimal and custom modes, the recorded limits apply
-to the trusted outer workspace; custom Project services share that cgroup
+adds no swap allowance. In custom mode, the recorded limits apply to the
+trusted outer workspace; custom Project services share that cgroup
 boundary unless Compose adds stricter child limits.
 
 An operator may change the recorded budget after creation with
@@ -50,8 +50,8 @@ DIM does not currently impose a per-workspace disk quota. Recommended checkout,
 home, and private-Docker data live in three identity-bound named volumes.
 Ordinary full discard removes them. Recommended `discard --keep-volume` is
 rejected before mutation; leave the workspace intact or explicitly copy or
-back up needed data before full discard. Minimal and custom workspaces retain
-their existing outer-engine `--keep-volume` behavior.
+back up needed data before full discard. Custom workspaces retain their
+existing outer-engine `--keep-volume` behavior.
 Operators should monitor host
 filesystem and Docker storage usage.
 

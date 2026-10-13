@@ -669,10 +669,12 @@ pins its exact commit, and atomically publishes the complete commit tree below
 the controller-owned content-addressed assets path. The implemented Gitea
 workspace record uses schema version `8` and records a fresh 256-bit workspace instance ID together
 with that root ref, commit, the canonical workspace-data path, and the selected
-`recommended`, `minimal`, or `custom` environment. Historical schema-8 records
-without `environment` are accepted only as custom and remain
-environment-undefined; their user data and hook behavior are not
-reinterpreted. The
+`recommended` or `custom` environment. Historical schema-8 records without
+`environment` are accepted only as custom and remain environment-undefined;
+their user data and hook behavior are not reinterpreted. Persisted records with
+`environment: "minimal"` are obsolete and MUST be rejected byte-for-byte with
+guidance to use the prior pinned release to export needed data, then discard and
+recreate. The
 protected-root path is derived from the state root,
 Project ID, and exact commit rather than persisted. The record contains no repository catalog or
 per-repository ref overrides. Schema `7`, older workspace schemas, and records containing
@@ -807,22 +809,13 @@ The root repository owns the optional:
 .dim/entrypoint.sh
 .dim/teardown.sh
 .dim/docker-compose.yml
-.dim/environment.yml
 .dim/repos.yml
 ```
 
-`environment.yml` is an exact selector, not a general manifest. It accepts
-only:
-
-```yaml
-schemaVersion: 1
-environment: minimal
-```
-
-Unknown fields are invalid. The selector cannot coexist with `setup.sh`,
-`entrypoint.sh`, `teardown.sh`, or `docker-compose.yml`. Without a selector,
-any of those four lifecycle files selects `custom`; their complete absence
-selects `recommended`. Creation stores the selection in workspace state.
+Any of the four lifecycle files selects `custom`; their complete absence
+selects `recommended`. `.dim/environment.yml` is an obsolete, unsupported
+format and MUST be rejected rather than treated as a selector or general
+manifest. Creation stores the selection in workspace state.
 Setup, start, restart, and update MUST reject a changed selection and preserve
 all state and data until the operator explicitly discards and recreates the
 workspace. Historical records without an environment field retain `custom`
@@ -970,8 +963,7 @@ that resource state is uncertain and MUST NOT claim either budget is effective.
 
 Recommended `run` accepts only `shell` with no arguments, or `exec` and
 `custom` followed by a command. All three and `workspace exec` run in the agent
-at `/workspace`. Minimal creates no agent, rejects `run`, and sends only
-`workspace exec` to the trusted outer workspace.
+at `/workspace`.
 
 In a custom environment, agent containers remain ordinary reviewed Project
 workloads. A Project may declare one directly in `.dim/docker-compose.yml` or
@@ -1680,8 +1672,8 @@ workspace-identity-bound and cannot be transferred by this flag. Operators MUST
 leave the workspace intact or explicitly copy or back up needed data before
 ordinary full discard and mode-changing recreation.
 
-For minimal, custom, and historical environment-undefined workspaces,
-`discard --yes` invokes the existing teardown path. When a custom
+For custom and historical environment-undefined workspaces, `discard --yes`
+invokes the existing teardown path. When a custom
 `.dim/teardown.sh` exists, DIM MUST invoke it with
 `DIM_WORKSPACE_DISCARD_KEEP_VOLUME=0`. With
 `--keep-volume`, DIM MUST pass `DIM_WORKSPACE_DISCARD_KEEP_VOLUME=1`. At `1`,

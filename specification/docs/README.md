@@ -99,7 +99,7 @@ The documentation is split by concern:
 - [Native ordinary CI control plane](ordinary-ci-pool.md): partial target design,
   role separation, recovery, and acceptance requirements.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
-- [Recommended default workspace](../../examples/projects/recommended-default/README.md): copyable zero-`.dim` creation, built-in commands, preservation, and minimal opt-out.
+- [Recommended default workspace](../../examples/projects/recommended-default/README.md): copyable zero-`.dim` creation, built-in commands, preservation, and the path to a real custom lifecycle.
 - [Single-repository Project](../../examples/projects/single-repository/README.md): custom no-secret shape with no protected ref, resource limits, and an optional external URL.
 - [Multi-repository Project](../../examples/projects/multi-repository/README.md): Project-owned agent, host Git identity, independent repositories, and a reviewed secret service.
 - [Full development flow](../../examples/projects/full-development-flow/README.md): combined multi-repository, private-DinD, controller-proxy, profile, resource, secret, and backup/restore adoption shape.

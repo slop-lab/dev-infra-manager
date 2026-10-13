@@ -82,6 +82,17 @@ describe("native workspace lifecycle", () => {
     await expect(context.state.readWorkspace(current.name)).resolves.toMatchObject({ phase: "ready", environment: "custom" });
   });
 
+  it.each(["start", "restart"] as const)("preflights a stopped native %s before runtime inspection", async (operation) => {
+    const context = await lifecycleFixture("stopped", false);
+    const current = { ...context.workspace, environment: "custom" as const };
+    await context.state.writeWorkspace(current);
+    const invoke = operation === "start" ? startWorkspace : restartWorkspace;
+
+    await expect(invoke(context.runner, context.options, current.name)).rejects.toThrow(/environment changed/);
+    expect(context.runner.calls).toEqual([]);
+    await expect(context.state.readWorkspace(current.name)).resolves.toEqual(current);
+  });
+
   it("rejects an environment change before inspecting or fencing a native update", async () => {
     const context = await lifecycleFixture("ready", true);
     const current = { ...context.workspace, environment: "custom" as const };

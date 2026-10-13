@@ -18,9 +18,8 @@ Repository registration is role-neutral.
 
 A **Project** is DIM metadata with one root repository and optional additional
 managed repositories. A root with no custom `.dim` lifecycle files uses DIM's
-recommended agent environment. An exact selector can opt into the minimal
-trusted workspace, while reviewed lifecycle files select the advanced custom
-environment.
+recommended agent environment, while reviewed lifecycle files select the
+advanced custom environment.
 
 A **workspace** is a named, persistent, isolated environment bound to one
 project. It owns its top-level runtime, inner-Docker state, selected profiles,
@@ -63,8 +62,7 @@ is first created:
 
 | Root contents | Environment | Result |
 | --- | --- | --- |
-| no `.dim`, or `.dim` without lifecycle files or `environment.yml` | recommended | DIM creates an unprivileged host-side Sysbox agent with persistent home, checkout, and private Docker volumes |
-| exact `.dim/environment.yml` shown below | minimal | DIM creates no agent; explicit `exec` commands run in the trusted outer workspace |
+| no `.dim`, or `.dim` without lifecycle files | recommended | DIM creates an unprivileged host-side Sysbox agent with persistent home, checkout, and private Docker volumes |
 | any of `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, or `.dim/docker-compose.yml` | custom | The reviewed Project owns setup, task dispatch, teardown, and any agent topology |
 
 Recommended is the normal choice for a repository that doesn't need custom
@@ -83,29 +81,26 @@ of CPU, memory, and PIDs to the trusted outer container and the exact remainder
 to the agent. The minimum combined budget is 1 CPU, 1 GiB memory, and 256 PIDs,
 and neither container receives swap beyond its memory limit.
 
-To opt out, commit exactly this file:
-
-```yaml
-schemaVersion: 1
-environment: minimal
-```
-
-The selector rejects unknown fields and cannot coexist with a custom lifecycle
-file. It is intentionally not a general environment manifest.
+Use custom only when the Project needs actual setup, task dispatch, Compose
+services, teardown, or a different agent topology. Add the corresponding
+reviewed lifecycle files rather than a preset marker. `.dim/environment.yml`
+is an obsolete, unsupported format and is rejected.
 
 The selected environment is stored in workspace state. Changing the root from
-recommended, minimal, or custom to another mode requires
+recommended to custom, or custom to recommended, requires
 `dim workspace discard WORKSPACE --yes` followed by a fresh create. DIM won't
 reinterpret persistent user data during setup, start, restart, or update.
 Records created before environment selection was stored remain custom, so
-their existing lifecycle behavior and user data don't change.
+their existing lifecycle behavior and user data don't change. Persisted minimal
+records are obsolete and rejected unchanged. Use the prior pinned release to
+export needed data before discarding and recreating the workspace.
 
 Before changing modes, preserve needed data and run an ordinary full discard.
 Recommended `discard --keep-volume` is not a preservation shortcut: DIM rejects
 it before changing phase, grants, routes, containers, records, or volumes. Keep
 the workspace intact or explicitly copy or back up its home, checkout, and
-private Docker data first. The existing minimal/custom `--keep-volume` contract
-is unchanged.
+private Docker data first. The existing custom `--keep-volume` contract is
+unchanged.
 
 ## Custom Project contract
 
@@ -117,8 +112,7 @@ project/
 │   ├── setup.sh             optional
 │   ├── entrypoint.sh        optional
 │   ├── teardown.sh          optional
-│   ├── docker-compose.yml   optional
-│   └── environment.yml      optional; exact minimal selector only
+│   └── docker-compose.yml   optional
 └── ...                      all other layout is project-defined
 ```
 
@@ -373,7 +367,7 @@ Creation:
 2. Reconciles the managed Git service and workspace runtime.
 3. Clones the project repository inside the workspace.
 4. Stores the selected runtime backend and profiles in workspace metadata.
-5. Selects recommended, minimal, or custom from the immutable root.
+5. Selects recommended or custom from the immutable root.
 6. Reconciles and initializes the recommended agent, or runs custom setup.
 7. Leaves failed setup resources and diagnostics available for retry.
 
@@ -568,8 +562,7 @@ PTY, applies the CLI's initial dimensions, and forwards later terminal resize
 events. Internal reconciliation and readiness probes are not part of the task
 output stream.
 
-Run a raw command in the trusted top-level workspace for minimal or custom
-environments:
+Run a raw command in the trusted top-level workspace for custom environments:
 
 ```bash
 dim exec example-dev -- bash
@@ -577,9 +570,9 @@ dim exec example-dev -- docker compose \
   --file .dim/docker-compose.yml ps
 ```
 
-`dim exec` is the short form of `dim workspace exec`. In minimal and custom
-environments it bypasses Project task dispatch and enters the trusted workspace
-container. In recommended environments it runs in the agent instead. Use
+`dim exec` is the short form of `dim workspace exec`. In custom environments it
+bypasses Project task dispatch and enters the trusted workspace container. In
+recommended environments it runs in the agent instead. Use
 custom-environment `exec` for recovery and Project lifecycle administration,
 not as the coding-agent task boundary.
 
@@ -622,8 +615,8 @@ dim workspace run example-dev exec -- git rebase origin/main
 Replace `main` with the Project's configured protected branch when it differs.
 
 A product root-code change does not require a fresh workspace. Only changing
-between recommended, minimal, and custom environments requires preserving
-needed data, discarding, and recreating the workspace.
+between recommended and custom environments requires preserving needed data,
+discarding, and recreating the workspace.
 
 Stop and resume the environment:
 
@@ -664,14 +657,14 @@ Inspect or discard:
 ```bash
 dim workspace show example-dev
 dim workspace discard example-dev --yes
-# Custom and minimal workspaces only:
+# Custom workspaces only:
 dim workspace discard custom-dev --keep-volume --yes
 ```
 
 Ordinary discard stops project services when possible, then removes the top-level
 runtime, project checkout, workspace journal, and the DIM-managed volume that
-stores the inner Docker engine. For minimal and custom workspaces,
-`--keep-volume` retains that outer engine volume for a later same-name creation
+stores the inner Docker engine. For custom workspaces, `--keep-volume` retains
+that outer engine volume for a later same-name creation
 and tells custom teardown to preserve Project-owned nested named data intended
 to survive it. Recommended `--keep-volume` rejects before mutation because its
 home, checkout, and private-Docker volumes are bound to the current workspace
@@ -688,7 +681,7 @@ Discard does not remove repositories from the managed Git service.
 | `restart` | select approved root; preserve recommended checkout | yes | no |
 | `setup` | reuse and reapply recorded immutable root | yes | no |
 | `update` | select approved root; preserve recommended checkout | yes | no |
-| `run` | no | no | recommended built-in operation or required custom entrypoint; rejected for minimal |
+| `run` | no | no | recommended built-in operation or required custom entrypoint |
 | `exec` | no | no | recommended agent, otherwise trusted outer workspace |
 | `stop` | no | no | no |
 | `discard` | no | teardown only | no |

@@ -53,14 +53,14 @@ export async function transitionNativeWorkspace(input: NativeTransitionInput): P
     const releaseSetup = await state.acquireWorkspaceSetupLock(input.initial.name);
     try {
       let current = await readCurrent(state, input);
+      const environment = await selectWorkspaceEnvironmentTransition(
+        current,
+        workspaceRootSnapshotPath(input.options.stateRoot, selected)
+      );
       if (input.operation === "update") {
         const nextProfiles = input.profiles === undefined
           ? current.profiles
           : validateWorkspaceProfiles(input.profiles);
-        const environment = await selectWorkspaceEnvironmentTransition(
-          current,
-          workspaceRootSnapshotPath(input.options.stateRoot, selected)
-        );
         input.setStage("workspace container readiness");
         const containerId = await assertContainerRunning(input.runner, input.options.stateRoot, current);
         await notifyRecommendedWorkspaceRelayPhase(input.runner, current, containerId, "setting-up");
@@ -98,10 +98,6 @@ export async function transitionNativeWorkspace(input: NativeTransitionInput): P
       if (input.operation === "start" && current.phase !== "stopped") {
         throw new UserError(`workspace '${current.name}' is not a stopped native workspace`);
       }
-      const environment = await selectWorkspaceEnvironmentTransition(
-        current,
-        workspaceRootSnapshotPath(input.options.stateRoot, selected)
-      );
       if (input.operation === "restart" && input.recovery !== true && current.phase !== "stopped") {
         input.setStage("workspace container readiness");
         await assertContainerRunning(input.runner, input.options.stateRoot, current);

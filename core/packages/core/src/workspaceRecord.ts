@@ -19,8 +19,11 @@ export function assertWorkspaceRecord(value: unknown, source: string): asserts v
   if (Object.hasOwn(value, "projectPath") || value.workspaceDataPath !== WORKSPACE_DATA_PATH) {
     throw new UserError(`workspace '${name}' has an invalid workspace data path; export needed data and recreate the workspace`);
   }
+  if (value.environment === "minimal") {
+    throw new UserError(`workspace '${name}' contains obsolete minimal environment state; use the prior pinned release to export needed data, discard the workspace, and recreate it`);
+  }
   if (value.environment !== undefined
-    && value.environment !== "recommended" && value.environment !== "minimal" && value.environment !== "custom") {
+    && value.environment !== "recommended" && value.environment !== "custom") {
     throw new UserError(`workspace '${name}' has an invalid environment selection`);
   }
   if (value.schemaVersion === 9) {

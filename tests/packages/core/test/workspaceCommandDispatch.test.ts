@@ -19,7 +19,7 @@ describe("workspace command dispatch", () => {
   it.each([
     { invoke: "run" as const, environment: "recommended" as const, expectedContainer: agentId },
     { invoke: "exec" as const, environment: "recommended" as const, expectedContainer: agentId },
-    { invoke: "exec" as const, environment: "minimal" as const, expectedContainer: "outer-id" }
+    { invoke: "exec" as const, environment: "custom" as const, expectedContainer: "outer-id" }
   ])("routes $invoke for $environment to $expectedContainer", async ({ invoke, environment, expectedContainer }) => {
     const root = await mkdtemp(join(tmpdir(), "dim-command-dispatch-"));
     roots.push(root);
@@ -65,7 +65,7 @@ function agentInspect(record: WorkspaceRecord): string {
   ])].join("|");
 }
 
-function fixture(environment: "recommended" | "minimal"): WorkspaceRecord {
+function fixture(environment: "recommended" | "custom"): WorkspaceRecord {
   return { schemaVersion: 8, workspaceId: "A".repeat(43), name: "work-1", projectId: "project-id", projectName: "project",
     rootRepositoryAlias: "root", rootRef: "refs/heads/main", rootCommit: "b".repeat(40),
     workspaceDataPath: "/var/lib/dim/workspace-data",

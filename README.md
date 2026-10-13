@@ -26,10 +26,10 @@ Project can combine:
 
 By default, a Project needs no `.dim` lifecycle files. DIM supplies a
 host-side, unprivileged Sysbox agent with persistent home, checkout, and
-private Docker data. Projects can opt out with the exact minimal selector or
-retain the advanced reviewed lifecycle contract for custom services and task
-dispatch. DIM does not install or authenticate a coding-agent provider or run
-Project-specific tool setup automatically.
+private Docker data. Projects that need a different agent topology, setup,
+task dispatch, Compose services, or teardown provide reviewed `.dim` lifecycle
+files and use the custom environment. DIM does not install or authenticate a
+coding-agent provider or run Project-specific tool setup automatically.
 
 DIM sits below interactive coding agents and autonomous orchestrators. OpenCode,
 Claude Code, or another agent can run in a DIM workspace. An orchestrator such
@@ -368,23 +368,20 @@ dim workspace run work-1 exec -- git rebase origin/main
 Product root-code changes do not require a fresh workspace. Environment-mode
 changes still require preserving needed data, discard, and recreation.
 
-To create only the trusted outer workspace, commit
-`.dim/environment.yml` with exactly:
+Any `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, or
+`.dim/docker-compose.yml` file selects the advanced custom contract. A root
+without those files selects recommended, even when `.dim` contains repository
+or CI configuration. `.dim/environment.yml` is an obsolete, unsupported format
+and is rejected rather than treated as a preset selector.
 
-```yaml
-schemaVersion: 1
-environment: minimal
-```
-
-Unknown fields and any combination with `.dim/setup.sh`,
-`.dim/entrypoint.sh`, `.dim/teardown.sh`, or `.dim/docker-compose.yml` are
-rejected. Minimal supports only `dim workspace exec WORKSPACE -- COMMAND`.
-Any of those lifecycle files without a selector chooses the advanced custom
-contract. Changing modes requires discarding and recreating the workspace so
-persistent data is never silently reinterpreted. First leave the recommended
-workspace intact or explicitly copy or back up needed home, checkout, and
-private-Docker data. Recommended `discard --keep-volume` rejects before any
-mutation; the legacy minimal/custom retention behavior is unchanged.
+Changing between recommended and custom requires discarding and recreating the
+workspace so persistent data is never silently reinterpreted. First leave the
+recommended workspace intact or explicitly copy or back up needed home,
+checkout, and private-Docker data. Recommended `discard --keep-volume` rejects
+before any mutation; custom retention behavior is unchanged. Historical
+environment-undefined records retain custom behavior. Persisted minimal records
+are obsolete and are rejected unchanged with guidance to export needed data
+through the prior pinned release, discard, and recreate.
 
 This repository implements the same project contract on itself through
 `.dim/setup.sh` and `.dim/entrypoint.sh`.
@@ -419,7 +416,7 @@ stream the same checksum-verified helper with the `codex` selection to install
 exactly `@openai/codex@0.156.1` and publish the same v1 launcher manifest. The
 helper does not log in, start Codex, or create or modify
 `$HOME/.codex/auth.json` or `$HOME/.codex/config.toml`. The paired examples
-repository documents the minimal selection at `use-cases/codex`; the existing
+repository documents the Codex selection at `use-cases/codex`; the existing
 generic SSH `ProxyCommand` is reused unchanged.
 
 To start an authenticated OpenCode Web server explicitly and request or reuse

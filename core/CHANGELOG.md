@@ -7,13 +7,14 @@
   unprivileged Sysbox agent to be running and its proposal-scoped checkout to be
   initialized before ready publication. Its home, checkout, and private Docker
   data use separately owned persistent volumes, with no host or trusted outer
-  runtime socket or raw credential. A strict schema-1 `environment: minimal`
-  selector opts out to trusted outer-workspace `exec`; custom lifecycle files
-  preserve the Project-owned hook contract. Mode changes fail until explicit
-  discard and recreation after data preservation, and old environment-less
-  records remain custom. Recorded resources are one combined budget split by
-  floor-quarter to outer and exact remainder to agent, with aggregate minimums
-  of 1 CPU, 1 GiB, and 256 PIDs, swap equal to memory, exact readback, and
+  runtime socket or raw credential. Reviewed setup, entrypoint, Compose, or
+  teardown files select the custom Project-owned hook contract; the obsolete
+  `.dim/environment.yml` format is rejected. Mode changes fail until explicit
+  discard and recreation after data preservation. Old environment-less records
+  remain custom, while persisted minimal records are rejected unchanged with
+  export and recreation guidance. Recorded resources are one combined budget
+  split by floor-quarter to outer and exact remainder to agent, with aggregate
+  minimums of 1 CPU, 1 GiB, and 256 PIDs, swap equal to memory, exact readback, and
   rollback before state publication. Rollback uncertainty is explicit. Initial
   checkout seeds the exact selected root once through recoverable owned staging.
   Later root selection refreshes immutable lifecycle bytes without changing

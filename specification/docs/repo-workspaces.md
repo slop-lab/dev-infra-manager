@@ -205,9 +205,8 @@ and publish atomically. Existing checkout paths are agent data and must not be
 silently rewritten.
 
 In the recommended environment, `dim run WORKSPACE shell`, `run ... exec`,
-`run ... custom`, and `dim exec` enter DIM's unprivileged Sysbox agent. Minimal
-rejects `run` and sends `exec` to the trusted outer workspace. In a custom
-environment, `run` requires the Project's reviewed entrypoint and `exec`
+`run ... custom`, and `dim exec` enter DIM's unprivileged Sysbox agent. In a
+custom environment, `run` requires the Project's reviewed entrypoint and `exec`
 bypasses it for trusted-workspace recovery or lifecycle administration. None of
 these commands installs or authenticates coding-agent tools automatically.
 

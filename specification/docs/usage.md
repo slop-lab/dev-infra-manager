@@ -72,12 +72,11 @@ exact remainder. The minimum is 1 CPU, 1 GiB, and 256 PIDs, with no swap beyond
 each container's memory limit. Updates require exact readback and rollback on
 failure; DIM reports uncertainty when rollback cannot be proved.
 
-An exact `.dim/environment.yml` containing only `schemaVersion: 1` and
-`environment: minimal` opts out of the agent. Minimal supports only `dim exec
-WORKSPACE -- COMMAND`, which runs in the trusted outer workspace. Any custom
-lifecycle file selects the custom Project contract instead. Custom Projects
-may start their own agent from `.dim/setup.sh` and route tasks through the
-required `.dim/entrypoint.sh`.
+Any custom lifecycle file selects the custom Project contract. Custom Projects
+may start their own agent from `.dim/setup.sh`, declare services in
+`.dim/docker-compose.yml`, route tasks through `.dim/entrypoint.sh`, and clean
+up through `.dim/teardown.sh`. `.dim/environment.yml` is an obsolete,
+unsupported format and is rejected.
 
 None of these paths installs a coding-agent provider, performs provider login,
 or runs Project-specific tool setup automatically.
@@ -100,13 +99,15 @@ dim workspace run WORKSPACE exec -- git rebase origin/main
 Replace `main` with the Project's configured protected branch when it differs.
 
 An updated product root does not require a fresh workspace. Environment-mode
-changes do: preserve needed data, discard, and recreate.
+changes between recommended and custom do: preserve needed data, discard, and
+recreate. Historical environment-undefined records retain custom behavior.
+Persisted minimal records are obsolete and rejected unchanged; use the prior
+pinned release to export needed data before discard and recreation.
 
 Recommended `discard --keep-volume` rejects before any mutation because its
 home, checkout, and private-Docker volumes are bound to the current workspace
 identity. Leave it intact or explicitly copy or back up needed data before a
-full discard or mode change. Minimal and custom keep-volume behavior is
-unchanged.
+full discard or mode change. Custom keep-volume behavior is unchanged.
 
 A Project may document an optional workspace-user bootstrap and map the
 generic `tool-setup` and `agent` tasks to it. Fetch its script and `.sha256`
@@ -414,13 +415,14 @@ For a combined, stateful adoption and recovery walkthrough, see
 
 `run` does not repeat setup. Environment reconciliation happens on `create`,
 `start`, `restart`, `setup`, and after a fast-forward-only `update`. A root with
-no lifecycle files selects the recommended agent, not custom no-op setup. The
-exact minimal selector opts out, and any custom lifecycle file retains the
-advanced Project-owned contract. Root Compose files are never auto-discovered.
+no lifecycle files selects the recommended agent, not custom no-op setup. Any
+custom lifecycle file selects the advanced Project-owned contract, while the
+obsolete `.dim/environment.yml` format is rejected. Root Compose files are
+never auto-discovered.
 Agent-tool installation, when a Project offers it, is a separate explicit
 workspace-user action through the Project task boundary.
 
-Copy the minimal `.dim` examples from
+Copy the `.dim` examples from
 [Project Workspaces](project-workspaces.md) for the hook contract, lifecycle,
 capability profiles, and multi-repository service pattern. See
 [Repository-backed Workspaces](repo-workspaces.md) for registration, Gitea,

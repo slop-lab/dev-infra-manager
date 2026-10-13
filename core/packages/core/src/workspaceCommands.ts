@@ -39,9 +39,6 @@ export async function runWorkspace(
     if (command.length === 0) throw new UserError("recommended workspace custom requires a command");
     return streamWorkspaceAgentCommand(runner, record, command, input.interactive);
   }
-  if (environment === "minimal") {
-    throw new UserError("minimal workspace environment supports only the explicit trusted workspace exec command");
-  }
   return runCustomWorkspace(runner, record, input.command, input.interactive);
 }
 

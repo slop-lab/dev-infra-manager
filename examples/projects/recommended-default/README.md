@@ -76,8 +76,8 @@ dim workspace run recommended-dev exec -- git rebase origin/main
 ```
 
 A product root-code change does not require a fresh workspace. Preserve,
-discard, and recreate only when changing between recommended, minimal, and
-custom environments.
+discard, and recreate only when changing between recommended and custom
+environments.
 
 ## Preserve or discard
 
@@ -99,24 +99,20 @@ volumes.
 dim workspace discard recommended-dev --yes
 ```
 
-## Minimal opt-out
+## Choose custom behavior when needed
 
-For a fresh workspace that should have only the trusted outer container,
-commit this exact `.dim/environment.yml`:
+Keep the zero-`.dim` recommended environment when the built-in agent and
+commands meet the Project's needs. Choose custom only for actual reviewed
+behavior, such as `.dim/setup.sh`, `.dim/entrypoint.sh`,
+`.dim/docker-compose.yml`, or `.dim/teardown.sh`. Those files let the Project
+own setup, task dispatch, services, agent topology, and cleanup. They don't have
+to use a shared DinD or agent format.
 
-```yaml
-schemaVersion: 1
-environment: minimal
-```
+The [single-repository](../single-repository/README.md) and
+[two-repository](../two-repository/README.md) examples show real custom
+lifecycle implementations. `.dim/environment.yml` is an obsolete, unsupported
+format and is rejected.
 
-Unknown fields and custom lifecycle files conflict with this selector. Minimal
-creates no agent, rejects `workspace run`, and supports explicit trusted
-outer-workspace commands only:
-
-```bash
-dim workspace exec WORKSPACE -- COMMAND
-```
-
-Changing an existing workspace between recommended, minimal, and custom is not
-an in-place operation. Preserve needed data, fully discard, and create a fresh
+Changing an existing workspace between recommended and custom is not an
+in-place operation. Preserve needed data, fully discard, and create a fresh
 workspace.
