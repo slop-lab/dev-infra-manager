@@ -34,6 +34,7 @@ class RecoveryRunner implements CommandRunner {
   readonly calls: string[][] = [];
   failCredentials = false;
   private created = false;
+  private createdRunning = false;
 
   constructor(private readonly mode: ContainerMode) {}
 
@@ -64,7 +65,11 @@ class RecoveryRunner implements CommandRunner {
     if (args[0] === "exec" && args.some((argument) => argument.includes("awk"))) {
       return result(command, args, "true\n");
     }
-    if (args[0] === "start" || args[0] === "restart" || args[0] === "exec") return result(command, args);
+    if (args[0] === "start") {
+      if (args[1] === "replacement-id") this.createdRunning = true;
+      return result(command, args);
+    }
+    if (args[0] === "restart" || args[0] === "exec") return result(command, args);
     return result(command, args, "", 1, "unexpected command");
   }
 
@@ -75,8 +80,9 @@ class RecoveryRunner implements CommandRunner {
     if (this.mode === "foreign") {
       return result(command, args, `${ownedGiteaContainerInspect("foreign-id", true, false)}\n`);
     }
-    const running = !this.created && this.mode !== "owned-stopped";
+    const running = this.created ? this.createdRunning : this.mode !== "owned-stopped";
     let inspected = ownedGiteaContainerInspect(this.created ? "replacement-id" : "owned-id", running);
+    if (this.created && !running) inspected = inspected.replace(TEST_GITEA_SERVICE.endpointAddress, "invalid IP");
     if (this.mode === "drift") inspected = inspected.replace("172.20.0.2", "172.20.0.99");
     if (this.mode === "wrong-image-id") inspected = inspected.replace(TEST_GITEA_SERVICE.imageId, `sha256:${"f".repeat(64)}`);
     if (this.mode === "wrong-network-id") inspected = inspected.replace(TEST_GITEA_SERVICE.networkId, "e".repeat(64));
@@ -97,7 +103,7 @@ afterEach(async () => {
 });
 
 describe("managed Gitea endpoint recovery", () => {
-  it("inspects a recreated owned container before starting it at the leased address", async () => {
+  it("starts a recreated container by immutable ID before inspecting its leased address", async () => {
     // Given
     const root = await stateRoot();
     await claimTestGiteaService(root);
@@ -122,8 +128,8 @@ describe("managed Gitea endpoint recovery", () => {
     const createdStart = runner.calls.findIndex(
       (call) => call[1] === "start" && call[2] === "replacement-id"
     );
-    expect(createdInspection).toBeGreaterThanOrEqual(0);
-    expect(createdStart).toBeGreaterThan(createdInspection);
+    expect(createdStart).toBeGreaterThanOrEqual(0);
+    expect(createdInspection).toBeGreaterThan(createdStart);
   });
 
   it("starts an owned stopped container only by immutable inspected ID", async () => {

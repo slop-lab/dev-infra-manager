@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix managed Gitea creation on Docker 29 by starting the newly created
+  immutable container ID before checking its assigned endpoint. Existing
+  container ownership, image, network, and volume checks remain fail-closed.
+
 - Select a recommended core-managed workspace environment when the immutable
   root has no custom lifecycle files. Setup now requires a host-side
   unprivileged Sysbox agent to be running and its proposal-scoped checkout to be

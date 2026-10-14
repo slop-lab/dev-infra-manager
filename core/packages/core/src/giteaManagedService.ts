@@ -154,6 +154,7 @@ async function reconcileManagedGiteaResources(
     assertCommand(created, "create Gitea container");
     const containerId = created.stdout.trim();
     if (containerId.length === 0) throw new UserError("Failed to create Gitea container: Docker returned no container ID");
+    assertCommand(await runner.run("docker", ["start", containerId]), "start created Gitea container");
     container = await inspectGiteaContainer(runner, record, containerId);
     if (container === undefined) throw new UserError("Failed to inspect the created Gitea container by immutable ID");
   }
