@@ -20,6 +20,9 @@ test("successful controller restart keeps the existing systemd command path", as
   const options = lifecycleOptionsForBackend("sysbox", {
     ...fixture.env,
     DIM_STATE_ROOT: path.join(fixture.root, "state"),
+    DIM_CONTROLLER_SOCKET: path.join(runtimeRoot, "workspace.sock"),
+    DIM_AGENT_CONTROLLER_SOCKET: path.join(runtimeRoot, "agent.sock"),
+    DIM_ADMIN_CONTROLLER_SOCKET: path.join(runtimeRoot, "admin.sock"),
     XDG_RUNTIME_DIR: runtimeRoot
   });
   const socketPaths = [
@@ -192,6 +195,7 @@ fi
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       XDG_CONFIG_HOME: configHome,
       XDG_RUNTIME_DIR: `/run/user/${process.getuid?.() ?? 0}`,
+      DIM_AGENT_CONTROLLER_SOCKET: undefined,
       DIM_CONFIG_PATH: path.join(configHome, "dim", "config.json"),
       DIM_TEST_COMMAND_LOG: commandLog,
       DIM_TEST_SYSTEMD_MODE: mode

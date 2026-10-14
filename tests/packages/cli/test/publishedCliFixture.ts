@@ -69,14 +69,16 @@ export async function runPublishedCli(
 
 const fixtureMode = process.argv[2];
 if (fixtureMode === "--build-fixture" || fixtureMode === "--run-fixture") {
-  const build = spawnSync("pnpm", ["run", "build"], {
-    cwd: packageDirectory,
-    encoding: "utf8",
-    env: process.env
-  });
-  if (build.status !== 0) {
-    process.stderr.write(build.stderr);
-    process.exit(build.status ?? 1);
+  if (fixtureMode === "--build-fixture") {
+    const packaged = spawnSync(process.execPath, ["scripts/build-publish-package.mjs"], {
+      cwd: packageDirectory,
+      encoding: "utf8",
+      env: process.env
+    });
+    if (packaged.status !== 0) {
+      process.stderr.write(packaged.stderr);
+      process.exit(packaged.status ?? 1);
+    }
   }
   if (fixtureMode === "--run-fixture") {
     const args: unknown = JSON.parse(process.argv[3] ?? "null");

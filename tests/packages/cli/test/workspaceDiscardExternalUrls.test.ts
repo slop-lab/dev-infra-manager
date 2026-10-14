@@ -25,6 +25,8 @@ test("discard cleanup skips only an absent workspace controller grant", async (c
   const configPath = path.join(root, "config.json");
   await writeFile(configPath, `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`);
   const original = {
+    adminSocket: process.env.DIM_ADMIN_CONTROLLER_SOCKET,
+    agentSocket: process.env.DIM_AGENT_CONTROLLER_SOCKET,
     config: process.env.DIM_CONFIG_PATH,
     socket: process.env.DIM_CONTROLLER_SOCKET,
     stateRoot: process.env.DIM_STATE_ROOT
@@ -34,6 +36,8 @@ test("discard cleanup skips only an absent workspace controller grant", async (c
   context.after(() => {
     restoreEnvironment("DIM_CONFIG_PATH", original.config);
     restoreEnvironment("DIM_CONTROLLER_SOCKET", original.socket);
+    restoreEnvironment("DIM_AGENT_CONTROLLER_SOCKET", original.agentSocket);
+    restoreEnvironment("DIM_ADMIN_CONTROLLER_SOCKET", original.adminSocket);
     restoreEnvironment("DIM_STATE_ROOT", original.stateRoot);
   });
 
@@ -112,7 +116,9 @@ test("discard cleanup skips only an absent workspace controller grant", async (c
 
   await context.test("CLI continues to the discard session when the grant is absent", async () => {
     await state.removeWorkspaceGrant(replacement);
-    delete process.env.DIM_CONTROLLER_SOCKET;
+    process.env.DIM_CONTROLLER_SOCKET = path.join(root, "runtime", "workspace.sock");
+    process.env.DIM_AGENT_CONTROLLER_SOCKET = path.join(root, "runtime", "agent.sock");
+    process.env.DIM_ADMIN_CONTROLLER_SOCKET = path.join(root, "runtime", "admin.sock");
     const options = lifecycleOptions();
     const operations: string[] = [];
     const healthHandler = (_request: IncomingMessage, response: ServerResponse) => response.writeHead(200).end();
