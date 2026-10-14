@@ -228,6 +228,8 @@ describe("KVM host-install smoke privilege boundary", () => {
     expect.soft(sudoCalls).toContain(`/usr/bin/env -i PATH=${fixtureValue.root}/tools:/usr/bin:/bin HOME=/root`);
     expect.soft(sudoCalls).toContain("qemu-service.mjs");
     expect.soft(sudoCalls).toContain(`/bin/cat -- ${fixtureValue.serviceDirectory}/launch.pid`);
+    expect.soft(sudoCalls).toContain("qemu-launch-identity");
+    expect.soft(sudoCalls).toContain(`/proc/$pid/exe`);
     expect.soft(sudoCalls).toContain("retire-exact");
     expect.soft(sudoCalls).toContain("qemu-service-directory-cleanup");
     expect(sudoCalls).not.toContain("qemu-client.mjs");

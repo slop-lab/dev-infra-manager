@@ -119,11 +119,23 @@ read_launch_pid() {
 launch_process_matches() {
   local pid="$service_launch_pid"
   [[ "$pid" =~ ^[1-9][0-9]*$ && -n "$service_launch_start_ticks" ]] || return 1
-  [[ -r "/proc/$pid/status" && -r "/proc/$pid/stat" && -e "/proc/$pid/cwd" && -e "/proc/$pid/exe" ]] || return 1
-  [[ "$(process_start_ticks "$pid")" == "$service_launch_start_ticks" ]] || return 1
-  [[ "$(/usr/bin/awk '$1 == "Uid:" { print $2; exit }' "/proc/$pid/status")" == 0 ]] || return 1
-  [[ "$(/usr/bin/stat -Lc '%d:%i' -- "/proc/$pid/cwd")" == "$service_dir_identity" ]] || return 1
-  [[ "$(/usr/bin/readlink -f -- "/proc/$pid/exe")" == "$(/usr/bin/readlink -f -- "$node")" ]] || return 1
+  run_sudo_once /usr/bin/env -i "PATH=$runtime_path" HOME=/root /bin/sh -eu -c '
+    pid="$1"
+    expected_start="$2"
+    expected_cwd="$3"
+    expected_executable="$4"
+    test -r "/proc/$pid/status" && test -r "/proc/$pid/stat"
+    test -e "/proc/$pid/cwd" && test -e "/proc/$pid/exe"
+    stat_text="$(/bin/cat -- "/proc/$pid/stat")"
+    fields="${stat_text##*) }"
+    set -- $fields
+    start="${20}"
+    test "$start" = "$expected_start"
+    test "$(/usr/bin/awk '\''$1 == "Uid:" { print $2; exit }'\'' "/proc/$pid/status")" = 0
+    test "$(/usr/bin/stat -Lc "%d:%i" -- "/proc/$pid/cwd")" = "$expected_cwd"
+    test "$(/usr/bin/readlink -f -- "/proc/$pid/exe")" = "$expected_executable"
+  ' qemu-launch-identity "$pid" "$service_launch_start_ticks" "$service_dir_identity" \
+    "$(/usr/bin/readlink -f -- "$node")"
 }
 
 terminate_exact_launch_process() {
