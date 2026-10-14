@@ -162,10 +162,9 @@ if [[ ! -f "$image" ]] || ! echo "$sum  $image" | sha256sum -c - >/dev/null 2>&1
 fi
 ssh-keygen -q -t ed25519 -N '' -f "$workdir/id"; key="$(cat "$workdir/id.pub")"
 printf 'instance-id: dim-kvm-smoke\nlocal-hostname: dim-kvm-smoke\n' > "$workdir/meta-data"
-printf '#cloud-config\nusers:\n  - name: dim\n    uid: 1001\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    shell: /bin/bash\n    ssh_authorized_keys:\n      - %s\n' "$key" > "$workdir/user-data"
+printf '#cloud-config\nusers:\n  - name: dim\n    uid: 1001\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    shell: /bin/bash\n    ssh_authorized_keys:\n      - %s\nwrite_files:\n  - path: /etc/environment\n    append: true\n    permissions: '\''0644'\''\n    content: |\n      PS1=\n' "$key" > "$workdir/user-data"
 if [[ -n "$registry_mirror" ]]; then
   cat >>"$workdir/user-data" <<EOF
-write_files:
   - path: /etc/docker/daemon.json
     permissions: '0644'
     content: |
