@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { installControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 import {
   deterministicRandom,
   exists,
+  installControlPlane,
   installFixture,
   immediateReadinessDeadline,
   ObservingReadiness,

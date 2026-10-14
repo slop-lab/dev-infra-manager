@@ -3,10 +3,10 @@ import type {
   ControlPlaneDockerCommand,
   ControlPlaneDockerCommandResult
 } from "../../../../core/packages/installer/src/controlPlaneDockerTypes.js";
-import { installControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 import {
   deterministicRandom,
+  installControlPlane,
   installFixture,
   writeChangedImages,
   writeChangedPorts

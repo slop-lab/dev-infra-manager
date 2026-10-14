@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { installControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import {
   ControlPlaneInstallError,
   controlPlaneFailureCode,
@@ -16,6 +15,7 @@ import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 import {
   deterministicRandom,
   exists,
+  installControlPlane,
   immediateReadinessDeadline,
   installFixture,
   ObservingReadiness,

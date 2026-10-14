@@ -2,7 +2,6 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
-import { installFirstControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import { ControlPlaneInstallError } from "../../../../core/packages/installer/src/controlPlaneInstallError.js";
 import { controlPlaneSecrets, nativeServiceConfig, writePrivate } from "./controlPlaneFixture.js";
 import { ProbeFailureRunner } from "./controlPlaneFailureRunner.js";
@@ -15,6 +14,7 @@ import {
   deterministicRandom,
   directoryDigest,
   exists,
+  installFirstControlPlane,
   installFixture,
   immediateReadinessDeadline,
   ObservingReadiness

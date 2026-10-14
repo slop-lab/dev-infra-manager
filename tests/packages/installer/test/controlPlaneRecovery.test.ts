@@ -2,8 +2,6 @@ import { chmod, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  installControlPlane,
-  installFirstControlPlane,
   rollForwardControlPlane
 } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
@@ -12,6 +10,8 @@ import {
   directoryDigest,
   exists,
   immediateReadinessDeadline,
+  installControlPlane,
+  installFirstControlPlane,
   installFixture,
   writeChangedImages,
   writeChangedPorts

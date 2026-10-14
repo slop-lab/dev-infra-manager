@@ -24,13 +24,13 @@ async function dispatch(commandArgs: string[]): Promise<number> {
     throw new Error(`DIM requires a Linux host; unsupported platform '${process.platform}'`);
   }
   const first = commandArgs[0];
-  if (first === "install-cp") {
-    console.error("dim: 'install-cp' is obsolete; use 'dim installer install control-plane --config FILE'");
-    return 2;
-  }
   if (first === "installer") {
     await installerCommand(commandArgs.slice(1));
     return 0;
+  }
+  if (first === "install-cp") {
+    console.error("dim: 'install-cp' is obsolete; use 'dim installer install control-plane --config FILE'");
+    return 2;
   }
 
   const cli = await configuredCli();

@@ -1,11 +1,11 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { installControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import { FirstInstallRunner, isolationRuntimeFaults } from "./controlPlaneInstallFixture.js";
 import {
   deterministicRandom,
   exists,
+  installControlPlane,
   installFixture,
   immediateReadinessDeadline,
   ObservingReadiness,

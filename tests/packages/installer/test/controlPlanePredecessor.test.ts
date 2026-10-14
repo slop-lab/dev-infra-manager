@@ -6,7 +6,12 @@ import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 import { deterministicRandom, exists, installFixture } from "./controlPlaneInstallTestSupport.js";
 
 describe("control-plane predecessor preflight", () => {
-  it("rejects an empty obsolete connection selector before config, installer state, or Docker", async () => {
+  it.each([
+    "DIM_GITEA_CONNECTION_FILE",
+    "DIM_GIT_SYNC_CONNECTION_FILE",
+    "DIM_QEMU_SCHEDULER_CONNECTION_FILE",
+    "DIM_ORDINARY_CI_POOL_CONNECTION_FILE"
+  ])("rejects an empty obsolete %s selector before config, installer state, or Docker", async (selector) => {
     // Given: the obsolete selector is present with an empty value and all later inputs are invalid.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
@@ -14,11 +19,11 @@ describe("control-plane predecessor preflight", () => {
     // When: installation begins.
     const action = installControlPlane({
       configPath: join(input.stateRoot, "missing-config.json"), stateRoot: input.stateRoot, runner,
-      environment: { DIM_ORDINARY_CI_POOL_CONNECTION_FILE: "" }
+      environment: { [selector]: "" }
     });
 
     // Then: predecessor selection wins without reading the path or touching later boundaries.
-    await expect(action).rejects.toThrow(/DIM_ORDINARY_CI_POOL_CONNECTION_FILE/);
+    await expect(action).rejects.toThrow(new RegExp(selector));
     expect(runner.calls).toEqual([]);
     expect(await exists(input.stateRoot)).toBe(false);
   });
@@ -36,28 +41,52 @@ describe("control-plane predecessor preflight", () => {
     });
 
     // Then: executor phase does not weaken the refusal and the record remains untouched.
-    await expect(action).rejects.toThrow(/Sysbox CI runner state/);
+    await expect(action).rejects.toThrow(/Project-scoped CI runner state/);
     expect(runner.calls).toEqual([]);
     expect(await exists(input.stateRoot)).toBe(false);
     expect(await readFile(predecessor.recordPath)).toEqual(predecessor.bytes);
   });
 
-  it("permits a valid schema-8 QEMU runner through normal installation and preserves its bytes", async () => {
-    // Given: canonical DIM lifecycle state contains only supported QEMU predecessor capacity.
+  it("rejects a schema-8 QEMU runner before installer state or Docker and preserves its bytes", async () => {
+    // Given: canonical DIM lifecycle state contains predecessor QEMU capacity.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
     const predecessor = await writeRunnerState(input.stateRoot, qemuRunner);
 
-    // When: the control-plane installer runs normally.
-    const installed = await installControlPlane({
+    // When: the control-plane installer starts.
+    const action = installControlPlane({
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom(),
       environment: { DIM_STATE_ROOT: predecessor.stateRoot }
     });
 
-    // Then: the idle bundle is installed and QEMU lifecycle state stays byte-identical.
-    expect(installed.record.schemaVersion).toBe(1);
-    expect(runner.calls.length).toBeGreaterThan(0);
+    // Then: no Project-scoped predecessor is adopted or mutated.
+    await expect(action).rejects.toThrow(/Project-scoped CI runner state/);
+    expect(runner.calls).toEqual([]);
+    expect(await exists(input.stateRoot)).toBe(false);
     expect(await readFile(predecessor.recordPath)).toEqual(predecessor.bytes);
+  });
+
+  it("rejects canonical managed-Gitea state before config, installer state, or Docker", async () => {
+    // Given: the predecessor managed-Gitea canonical path exists and later inputs are invalid.
+    const input = await installFixture();
+    const runner = new FirstInstallRunner();
+    const stateRoot = join(dirname(input.stateRoot), "lifecycle");
+    const recordPath = join(stateRoot, "services", "gitea.json");
+    const bytes = Buffer.from("{\"schemaVersion\":2}\n");
+    await mkdir(dirname(recordPath), { recursive: true, mode: 0o700 });
+    await writeFile(recordPath, bytes, { mode: 0o600 });
+
+    // When: installation begins.
+    const action = installControlPlane({
+      configPath: join(input.stateRoot, "missing-config.json"), stateRoot: input.stateRoot, runner,
+      environment: { DIM_STATE_ROOT: stateRoot }
+    });
+
+    // Then: the exact canonical record blocks the native cutover without mutation.
+    await expect(action).rejects.toThrow(/managed Gitea state/);
+    expect(runner.calls).toEqual([]);
+    expect(await exists(input.stateRoot)).toBe(false);
+    expect(await readFile(recordPath)).toEqual(bytes);
   });
 
   it.each([
@@ -107,7 +136,7 @@ describe("control-plane predecessor preflight", () => {
     expect(await exists(join(input.stateRoot, "install.lock"))).toBe(false);
   });
 
-  it("fails closed for a canonical runner record without private caller-only mode", async () => {
+  it("rejects a canonical runner record without changing its caller-only mode or bytes", async () => {
     // Given: a canonical QEMU record is readable but mode 0644 instead of mode 0600.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
@@ -121,8 +150,8 @@ describe("control-plane predecessor preflight", () => {
       environment: { DIM_STATE_ROOT: predecessor.stateRoot }
     });
 
-    // Then: unsafe ownership metadata fails closed without rewriting the record.
-    await expect(action).rejects.toThrow(/ownership|mode/i);
+    // Then: predecessor state fails closed without inspection-driven rewriting.
+    await expect(action).rejects.toThrow(/Project-scoped CI runner state/);
     expect(runner.calls).toEqual([]);
     expect(await readFile(predecessor.recordPath)).toEqual(before);
   });

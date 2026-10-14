@@ -306,25 +306,25 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     await expect(access(join(stateHome, "dim", "control-plane"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("rejects obsolete install-cp before configured CLI forwarding", async () => {
+  it("rejects the obsolete install-cp token before configured CLI proxy dispatch", async () => {
     // Given
-    const root = await tempDir("dim-control-plane-obsolete-");
+    const root = await tempDir("dim-cli-install-cp-configured-");
     const { env, configPath } = await baseEnv(root);
     const stub = join(root, "dim-stub.mjs");
     const echoFile = join(root, "echo.json");
     await writeStubCli(stub, { versionOutput: "5.5.5", echoFile });
     await mkdir(dirname(configPath), { recursive: true });
-    await writeFile(configPath, JSON.stringify({
-      schemaVersion: 1,
-      cli: { mode: "proxied", version: "5.5.5", executable: stub }
-    }));
+    await writeFile(
+      configPath,
+      JSON.stringify({ schemaVersion: 1, cli: { mode: "proxied", version: "5.5.5", executable: stub } })
+    );
 
     // When
     const result = await runCli(["install-cp"], tsxPath!, env, root);
 
     // Then
     expect(result.code).toBe(2);
-    expect(result.stderr).toContain("dim installer install control-plane --config FILE");
+    expect(result.stderr).toContain("installer install control-plane --config FILE");
     await expect(access(echoFile)).rejects.toMatchObject({ code: "ENOENT" });
   });
 

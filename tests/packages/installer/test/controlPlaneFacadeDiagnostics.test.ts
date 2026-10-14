@@ -7,9 +7,8 @@ import {
   ControlPlaneInstallError,
   formatControlPlaneInstallError
 } from "../../../../core/packages/installer/src/controlPlaneInstallError.js";
-import { installControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import { controlPlaneSecrets } from "./controlPlaneFixture.js";
-import { installFixture } from "./controlPlaneInstallTestSupport.js";
+import { installControlPlane, installFixture } from "./controlPlaneInstallTestSupport.js";
 
 afterEach(() => vi.unstubAllEnvs());
 
