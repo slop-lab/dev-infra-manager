@@ -11,7 +11,13 @@ import { createWorkspace } from "../../../../core/packages/core/src/workspaceCre
 
 const creation = vi.hoisted(() => ({
   nativeSnapshotRoot: "",
-  provision: vi.fn(async () => ({}))
+  provision: vi.fn(async () => ({})),
+  setup: vi.fn(async (
+    _runner: unknown,
+    _options: unknown,
+    _state: unknown,
+    record: WorkspaceRecord
+  ) => record)
 }));
 
 vi.mock("../../../../core/packages/core/src/nativeControlPlaneConnection.js", () => ({
@@ -47,22 +53,61 @@ vi.mock("../../../../core/packages/core/src/workspaceSetup.js", () => ({
     _state: unknown,
     record: WorkspaceRecord
   ) => record),
-  setupWorkspaceLocked: vi.fn(async (
-    _runner: unknown,
-    _options: unknown,
-    _state: unknown,
-    record: WorkspaceRecord
-  ) => record)
+  setupWorkspaceLocked: creation.setup
 }));
 
 const roots: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe("workspace creation resource admission", () => {
+  it("holds the Project and setup locks until native workspace setup settles", async () => {
+    // Given
+    const root = await nativeFixture();
+    const setupStarted = deferred();
+    const setupFinished = deferred();
+    const releaseProject = vi.fn(async () => undefined);
+    const releaseSetup = vi.fn(async () => undefined);
+    vi.spyOn(LifecycleState.prototype, "acquireProjectLock").mockResolvedValueOnce(releaseProject);
+    vi.spyOn(LifecycleState.prototype, "acquireWorkspaceSetupLock").mockResolvedValueOnce(releaseSetup);
+    creation.setup.mockImplementationOnce(async (
+      _runner: unknown,
+      _options: unknown,
+      _state: unknown,
+      record: WorkspaceRecord
+    ) => {
+      setupStarted.resolve();
+      await setupFinished.promise;
+      return record;
+    });
+    const options = {
+      ...lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }),
+      nativeControlPlaneConnection: { file: join(root, "native-control.json") }
+    };
+
+    // When
+    const creationPromise = createWorkspace(
+      recordingRunner([]),
+      options,
+      request("native-work", { cpuCount: "1", memory: "1g", pidsLimit: "256" }),
+      capabilityPlugins()
+    );
+    await setupStarted.promise;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    // Then
+    const releaseCountsBeforeSetupSettled = [releaseProject.mock.calls.length, releaseSetup.mock.calls.length];
+    setupFinished.resolve();
+    await expect(creationPromise).resolves.toMatchObject({ name: "native-work", phase: "creating" });
+    expect(releaseCountsBeforeSetupSettled).toEqual([0, 0]);
+    expect(releaseProject).toHaveBeenCalledTimes(1);
+    expect(releaseSetup).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects a recommended native budget before capability or workspace mutation and accepts a corrected retry", async () => {
     // Given
     const root = await nativeFixture();
@@ -133,6 +178,18 @@ function recordingRunner(calls: string[][]): StreamingCommandRunner {
     async runStreaming(command, args) {
       calls.push([command, ...args]);
       return 1;
+    }
+  };
+}
+
+function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolver: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => { resolver = resolve; });
+  return {
+    promise,
+    resolve() {
+      if (resolver === undefined) throw new TypeError("deferred resolver is unavailable");
+      resolver();
     }
   };
 }

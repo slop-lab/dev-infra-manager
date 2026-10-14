@@ -114,7 +114,7 @@ export async function createNativeWorkspace(input: NativeWorkspaceCreationInput)
         await state.claimWorkspace(record);
       }
       const reconciled = await reconcileNativeWorkspace(input.runner, input.options, state, record, () => undefined);
-      return setupWorkspaceLocked(input.runner, input.options, state, reconciled);
+      return await setupWorkspaceLocked(input.runner, input.options, state, reconciled);
     } finally {
       await releaseSetup();
     }
