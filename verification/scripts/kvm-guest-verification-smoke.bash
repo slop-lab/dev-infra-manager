@@ -53,8 +53,15 @@ native_contracts() {
 
 installed_services() {
   cd "$repo_root"
-  just verify native-idle-service-images
-  just verify control-plane-install-live
+  local detail_log="$DIM_VERIFICATION_LOG_ROOT/installed-services-detail.log" status
+  umask 077
+  if { just verify native-idle-service-images && just verify control-plane-install-live; } >"$detail_log" 2>&1; then
+    printf 'native installed services verified; details=%s\n' "$detail_log"
+  else
+    status=$?
+    tail -c 16384 -- "$detail_log" >&2
+    return "$status"
+  fi
 }
 
 ordinary_mechanics() {
