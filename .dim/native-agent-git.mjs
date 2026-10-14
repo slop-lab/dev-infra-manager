@@ -22,7 +22,8 @@ const gateway = endpoint.Gateway;
 if (!project || network.Name !== networkName || network.Driver !== "bridge" || network.Scope !== "local"
   || network.Labels["com.docker.compose.project"] !== project
   || network.Labels["com.docker.compose.network"] !== "default"
-  || !isIPv4(gateway) || !network.IPAM.Config.some((entry) => entry.Gateway === gateway)) {
+  || !isIPv4(gateway) || gateway === "0.0.0.0"
+  || !network.IPAM.Config.some((entry) => entry.Gateway === gateway)) {
   throw new Error("agent Git relay requires its own Compose-default bridge gateway");
 }
 const attestation = JSON.parse(execFileSync("node", [

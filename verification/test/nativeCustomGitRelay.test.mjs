@@ -9,7 +9,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function fixture(foreign = false) {
+async function fixture(foreign = false, gateway = "172.22.0.1") {
   const root = await mkdtemp(join(tmpdir(), "dim-custom-git-"));
   roots.push(root);
   const bin = join(root, "bin");
@@ -22,10 +22,10 @@ async function fixture(foreign = false) {
   const manifest = join(root, "manifest.json");
   await writeFile(manifest, JSON.stringify({ gitBaseUrl: "http://127.0.0.1:19418/v1/projects/demo/repositories" }));
   const container = { Config: { Labels: { "com.docker.compose.project": "dim-project" } },
-    NetworkSettings: { Networks: { "dim-project_default": { NetworkID: "network-id", Gateway: "172.22.0.1" } } } };
+    NetworkSettings: { Networks: { "dim-project_default": { NetworkID: "network-id", Gateway: gateway } } } };
   const network = { Name: "dim-project_default", Driver: "bridge", Scope: "local",
     Labels: { "com.docker.compose.project": foreign ? "another-project" : "dim-project",
-      "com.docker.compose.network": "default" }, IPAM: { Config: [{ Gateway: "172.22.0.1" }] } };
+      "com.docker.compose.network": "default" }, IPAM: { Config: [{ Gateway: gateway }] } };
   await writeFile(join(bin, "docker"), `#!${process.execPath}\nprocess.stdout.write(JSON.stringify([process.argv[2] === "container" ? ${JSON.stringify(container)} : ${JSON.stringify(network)}]));\n`, { mode: 0o755 });
   await writeFile(join(bin, "node"), `#!${process.execPath}\nimport {writeFileSync} from "node:fs";
 writeFileSync(process.env.RELAY_CAPTURE, JSON.stringify({mode:process.env.DIM_AGENT_GIT_RELAY_MODE,upstream:process.env.DIM_AGENT_GIT_UPSTREAM,path:process.env.DIM_AGENT_GIT_PATH,phase:process.env.DIM_AGENT_GIT_INITIAL_PHASE}));
@@ -54,5 +54,12 @@ it("rejects a foreign Compose bridge before starting the relay or changing origi
   expect(result.status).not.toBe(0);
   expect(execFileSync("git", ["-C", checkout, "remote", "get-url", "origin"], { encoding: "utf8" }).trim())
     .toBe("http://127.0.0.1:19418/original");
+  await expect(readFile(join(root, "relay.json"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("refuses a wildcard gateway rather than publishing workspace Git authority on every interface", async () => {
+  const { root, env } = await fixture(false, "0.0.0.0");
+  const result = spawnSync(process.execPath, [resolve("../.dim/native-agent-git.mjs"), "container-id"], { env, encoding: "utf8" });
+  expect(result.status).not.toBe(0);
   await expect(readFile(join(root, "relay.json"))).rejects.toMatchObject({ code: "ENOENT" });
 });
