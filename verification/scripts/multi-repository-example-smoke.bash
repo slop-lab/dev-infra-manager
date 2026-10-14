@@ -38,6 +38,7 @@ state_root="$work_dir/state"
 source_root="$work_dir/source"
 install_prefix="$work_dir/install"
 dim_bin="$install_prefix/bin/dim"
+controller_evidence="/tmp/dim-multi-repository-controller-$suffix.log"
 
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
@@ -63,22 +64,31 @@ workspace_compose() {
 }
 
 cleanup() {
-  local status=$?
-  local scratch_removable=true
+  local status=$? cleanup_status=0
   trap - EXIT
   set +e
+  if ((status != 0)) &&
+    ! dim_capture_example_controller_failure "$controller_evidence" "multi-repository controller"; then
+    cleanup_status=1
+  fi
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || status=1
+    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || cleanup_status=1
   fi
   if [[ -f "$state_root/projects/$project_name.json" ]] &&
     ! dim project purge "$project_name" --yes >/dev/null 2>&1; then
     echo "DIM Project cleanup failed; preserving $work_dir" >&2
-    scratch_removable=false
-    status=1
+    cleanup_status=1
   fi
-  dim_stop_local_npm_registry
-  if [[ "$scratch_removable" == true ]]; then
-    rm -rf "$work_dir"
+  dim_stop_local_npm_registry || cleanup_status=1
+  if ! dim_stop_example_controller; then
+    cleanup_status=1
+  fi
+  if ((cleanup_status == 0)); then
+    rm -rf "$work_dir" || cleanup_status=1
+  fi
+  if ((cleanup_status != 0)); then
+    printf 'multi-repository cleanup uncertain; preserving %s after body status %d\n' "$work_dir" "$status" >&2
+    exit 125
   fi
   exit "$status"
 }

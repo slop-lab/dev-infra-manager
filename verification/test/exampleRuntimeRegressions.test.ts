@@ -99,6 +99,7 @@ esac
       "dim-core",
       "plugin-dns-cloudflare",
       "plugin-external-urls",
+      "plugin-host-mirrors",
       "dim-cli",
       "dim-installer"
     ];

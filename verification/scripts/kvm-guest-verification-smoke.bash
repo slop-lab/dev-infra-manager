@@ -4,10 +4,18 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
 source "$script_dir/lib/verification-stage-runner.bash"
+source "$script_dir/lib/example-dim-install.bash"
 DIM_VERIFICATION_STAGE_ENTRYPOINT="$script_dir/kvm-guest-verification-smoke.bash"
 export DIM_VERIFICATION_STAGE_ENTRYPOINT
 
-DIM_VERIFICATION_LOG_ROOT="${DIM_KVM_GUEST_LOG_ROOT:-/tmp/dim-kvm-guest-logs/$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+if [[ -n "${DIM_VERIFICATION_INTERNAL_STAGE:-}" ]]; then
+  [[ -n "${DIM_VERIFICATION_LOG_ROOT:-}" && -d "$DIM_VERIFICATION_LOG_ROOT" ]] || {
+    printf 'internal verification stage requires an existing DIM_VERIFICATION_LOG_ROOT\n' >&2
+    exit 2
+  }
+else
+  DIM_VERIFICATION_LOG_ROOT="${DIM_KVM_GUEST_LOG_ROOT:-/tmp/dim-kvm-guest-logs/$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+fi
 export DIM_VERIFICATION_LOG_ROOT
 
 guest_ready() {
@@ -137,24 +145,33 @@ ci_runner_boundary() (
   local state_root="/tmp/dim-ci-runner-state-$suffix"
   local source_root="/tmp/dim-ci-source-$suffix"
   local project="ci-smoke-$suffix"
+  local controller_evidence="$DIM_VERIFICATION_LOG_ROOT/managed-ci-boundary-controller.log"
   local state_root_identity="" source_root_identity=""
   local runner_created=false project_created=false
+  source_dim() { "$DIM_EXAMPLE_DIM_BIN" "$@"; }
   cleanup_ci_runner() {
     local status=$? cleanup_status=0
     trap - EXIT
     set +e
     cd "$repo_root"
+    if ((status != 0)); then
+      dim_capture_example_controller_failure "$controller_evidence" "managed CI controller" || cleanup_status=1
+    fi
     if [[ "$runner_created" == true ]]; then
-      pnpm run --silent cli -- ci runner delete "$project" primary --yes >/dev/null 2>&1 || cleanup_status=1
+      source_dim ci runner delete "$project" primary --yes >/dev/null 2>&1 || cleanup_status=1
     fi
     if [[ "$project_created" == true ]]; then
-      pnpm run --silent cli -- project purge "$project" --yes >/dev/null 2>&1 || cleanup_status=1
+      source_dim project purge "$project" --yes >/dev/null 2>&1 || cleanup_status=1
     fi
+    if ! dim_stop_example_controller; then
+      cleanup_status=1
+    fi
+    [[ -n "$source_root_identity" && -n "$state_root_identity" ]] || cleanup_status=1
     if [[ -n "$source_root_identity" ]]; then
       if [[ ! -e "$source_root" && ! -L "$source_root" ]]; then
         :
       elif [[ ! -L "$source_root" && "$(stat -Lc '%d:%i' "$source_root" 2>/dev/null)" == "$source_root_identity" ]]; then
-        sudo rm -rf "$source_root" || cleanup_status=1
+        :
       else
         cleanup_status=1
       fi
@@ -163,10 +180,13 @@ ci_runner_boundary() (
       if [[ ! -e "$state_root" && ! -L "$state_root" ]]; then
         :
       elif [[ ! -L "$state_root" && "$(stat -Lc '%d:%i' "$state_root" 2>/dev/null)" == "$state_root_identity" ]]; then
-        sudo rm -rf "$state_root" || cleanup_status=1
+        :
       else
         cleanup_status=1
       fi
+    fi
+    if ((cleanup_status == 0)); then
+      sudo rm -rf "$source_root" "$state_root" || cleanup_status=1
     fi
     if ((cleanup_status != 0)); then
       printf 'CI boundary cleanup uncertain after body status %d\n' "$status" >&2
@@ -177,6 +197,7 @@ ci_runner_boundary() (
   trap cleanup_ci_runner EXIT
   export DIM_STATE_ROOT="$state_root"
   export DIM_CONFIG_PATH="$state_root/config.json"
+  export DIM_PLUGIN_HOME="$state_root/plugins"
   export DIM_CI_RUNNER_CPUS=1.5
   export DIM_CI_RUNNER_MEMORY=1g
   export DIM_CI_RUNNER_PIDS=1024
@@ -186,18 +207,31 @@ ci_runner_boundary() (
   state_root_identity="$(stat -Lc '%d:%i' "$state_root")"
   mkdir "$source_root"
   source_root_identity="$(stat -Lc '%d:%i' "$source_root")"
+  mkdir -p "$DIM_PLUGIN_HOME/node_modules/@slop-lab"
+  ln -s "$repo_root/plugin-host-mirrors" \
+    "$DIM_PLUGIN_HOME/node_modules/@slop-lab/dim-plugin-host-mirrors"
+  printf '%s\n' '{"schemaVersion":1,"plugins":["@slop-lab/dim-plugin-host-mirrors"]}' \
+    >"$DIM_PLUGIN_HOME/plugins.json"
   printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"sysbox"}' >"$DIM_CONFIG_PATH"
   git config --file "$GIT_CONFIG_GLOBAL" user.name Smoke
   git config --file "$GIT_CONFIG_GLOBAL" user.email smoke@dim.invalid
   cd "$repo_root"
+  pnpm --filter @slop-lab/dim-core run build >/dev/null
+  pnpm --filter @slop-lab/dim-cli run build >/dev/null
+  pnpm --filter @slop-lab/dim-plugin-host-mirrors run build >/dev/null
+  printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$repo_root/core/packages/cli/dist/cli.js" \
+    >"$state_root/dim-source"
+  chmod 0700 "$state_root/dim-source"
+  export DIM_EXAMPLE_DIM_BIN="$state_root/dim-source"
+  dim_prepare_example_controller_runtime
   bash examples/features/ci-runner/create-repository.bash "$source_root/repository" >/dev/null
-  pnpm run --silent cli -- project create "$project" \
+  source_dim project create "$project" \
     --repos "$source_root/repository/root/.dim/repos.yml" --yes >/dev/null
   project_created=true
-  pnpm run --silent cli -- ci runner create "$project" primary sysbox >/dev/null
+  source_dim ci runner create "$project" primary sysbox >/dev/null
   runner_created=true
   local container status
-  container="$(pnpm run --silent cli -- ci runner status "$project" primary --json | jq -r .executor.containerName)"
+  container="$(source_dim ci runner status "$project" primary --json | jq -r .executor.containerName)"
   test "$(sudo docker inspect --format "{{.HostConfig.Runtime}}" "$container")" = sysbox-runc
   test "$(sudo docker inspect --format "{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}" "$container")" \
     = "1500000000|1073741824|1024"

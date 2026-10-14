@@ -22,6 +22,8 @@ source_app="$source_repositories/app"
 state_root="$work_dir/state"
 install_prefix="$work_dir/install"
 dim_bin="$install_prefix/bin/dim"
+evidence_root="${DIM_CI_RUNNER_EXAMPLE_EVIDENCE_DIR:-${DIM_VERIFICATION_LOG_ROOT:-/tmp}}"
+controller_evidence="$evidence_root/ci-runner-example-controller-$suffix.log"
 gitea_port="${DIM_GITEA_PORT:-3300}"
 organization="dim-$project_name"
 
@@ -29,6 +31,7 @@ export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
 export DIM_DATA_HOME="$work_dir/data"
 export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
+mkdir -p "$evidence_root"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "CI Runner Example"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "ci-runner-example@dim.invalid"
 workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-sysbox}"
@@ -70,17 +73,33 @@ gitea_api() {
 }
 
 cleanup() {
+  local status=$? cleanup_status=0
+  trap - EXIT
+  set +e
+  if ((status != 0)); then
+    dim_capture_example_controller_failure "$controller_evidence" "CI runner example controller" || cleanup_status=1
+  fi
   if [[ -f "$state_root/ci-runners/$project_name/$runner_name.json" ]]; then
-    dim ci runner delete "$project_name" "$runner_name" --yes >/dev/null 2>&1 || true
+    dim ci runner delete "$project_name" "$runner_name" --yes >/dev/null 2>&1 || cleanup_status=1
   fi
   if [[ -f "$state_root/projects/$project_name.json" ]]; then
-    dim project purge "$project_name" --yes >/dev/null 2>&1 || true
+    dim project purge "$project_name" --yes >/dev/null 2>&1 || cleanup_status=1
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
-    gitea_api DELETE "/orgs/$organization" >/dev/null 2>&1 || true
+    gitea_api DELETE "/orgs/$organization" >/dev/null 2>&1 || cleanup_status=1
   fi
-  dim_stop_local_npm_registry
-  rm -rf "$work_dir"
+  dim_stop_local_npm_registry || cleanup_status=1
+  if ! dim_stop_example_controller; then
+    cleanup_status=1
+  fi
+  if ((cleanup_status == 0)); then
+    rm -rf "$work_dir" || cleanup_status=1
+  fi
+  if ((cleanup_status != 0)); then
+    printf 'CI runner example cleanup uncertain after body status %d\n' "$status" >&2
+    exit 125
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 

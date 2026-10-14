@@ -16,6 +16,7 @@ state_root="$work_dir/state"
 source_root="$work_dir/source"
 install_prefix="$work_dir/install"
 dim_bin="$install_prefix/bin/dim"
+controller_evidence="/tmp/dim-two-repository-controller-$suffix.log"
 
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
@@ -37,24 +38,39 @@ bash "$script_dir/configure-user-backend.bash" "$workspace_backend"
 dim() { "$dim_bin" "$@"; }
 
 cleanup() {
+  local status=$? cleanup_status=0
+  trap - EXIT
+  set +e
+  if ((status != 0)); then
+    dim_capture_example_controller_failure "$controller_evidence" "two-repository controller" || cleanup_status=1
+  fi
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || cleanup_status=1
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
-    credentials="$(docker exec dim-gitea cat /data/dim/credentials.json 2>/dev/null || true)"
-    if [[ -n "$credentials" ]]; then
-      admin_username="$(printf '%s' "$credentials" | jq -r .adminUsername)"
-      admin_password="$(printf '%s' "$credentials" | jq -r .adminPassword)"
+    if ! credentials="$(docker exec dim-gitea cat /data/dim/credentials.json 2>/dev/null)"; then
+      cleanup_status=1
+    elif [[ -n "$credentials" ]]; then
+      admin_username="$(printf '%s' "$credentials" | jq -er .adminUsername)" || cleanup_status=1
+      admin_password="$(printf '%s' "$credentials" | jq -er .adminPassword)" || cleanup_status=1
       curl --fail --silent --show-error \
         --user "$admin_username:$admin_password" \
         --request DELETE \
         "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" \
-        >/dev/null 2>&1 || true
+        >/dev/null 2>&1 || cleanup_status=1
     fi
   fi
-  dim_stop_local_npm_registry
-  rm -rf "$work_dir"
+  dim_stop_local_npm_registry || cleanup_status=1
+  dim_stop_example_controller || cleanup_status=1
+  if ((cleanup_status == 0)); then
+    rm -rf "$work_dir" || cleanup_status=1
+  fi
+  if ((cleanup_status != 0)); then
+    printf 'two-repository controller cleanup uncertain; preserving %s\n' "$work_dir" >&2
+    exit 125
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 
