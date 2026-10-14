@@ -42,10 +42,10 @@ The system must prevent that agent from:
 - Agent containers inside workspace roots are untrusted.
 - Nested containers created by agents are untrusted.
 - Secret-bearing containers are trusted only when built and deployed from reviewed source.
-- Raw product/runtime secrets must never be injected into agent
-  containers. A constrained infrastructure capability such as the internal
-  Gitea writer credential may be injected when its server-side permissions
-  cannot modify protected refs or secret-bearing runtime state.
+- Raw product/runtime secrets and native service role credentials must never
+  be injected into agent containers. Agents use a credential-free workspace
+  Git relay whose host broker grants only that workspace's proposal namespace;
+  neither endpoint permits protected-ref or secret-bearing runtime mutation.
 - Secret-bearing runtime deployment must use the configured approved Git ref.
 - Protected Git refs must reject ordinary direct pushes, force pushes,
   deletion, and every other unreviewed direct update through managed Git
@@ -53,7 +53,7 @@ The system must prevent that agent from:
   `TRUST-PROMOTION-001` and
   `TRUST-PROMOTION-CAS-001` may atomically update the expected old object ID to
   the exact reviewed candidate.
-- Managed pull request promotion through that checked compare-and-swap
+- Immutable native review promotion through that checked compare-and-swap
   operation is the only normal path that updates protected refs.
 - Runtime backend selection and storage backend selection must be independent.
 - `directory` storage does not enforce `diskBytes` and must be treated as a compatibility backend.

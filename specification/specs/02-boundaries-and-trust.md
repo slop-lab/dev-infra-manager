@@ -145,7 +145,8 @@ outer-workspace-only preset.
 Host-side DIM:
 
 - Creates, reconciles, and discards workspace containers.
-- Manages Project-scoped repositories and protection through managed Gitea.
+- Manages one protected root repository per Project through native Git,
+  workspace-scoped proposal authority, and checked promotion.
 - Installs and checks runtime support through scripts and doctor checks.
 - Runs the DIM host controller and grants each workspace only its scoped,
   authenticated interfaces.
@@ -182,7 +183,7 @@ from a green CI status.
 
 For a Project that combines trusted lifecycle and agent-changeable sources in
 one repository, every ordinary update to its selected root ref MUST enter
-through a reviewed pull request. The workspace writer and ordinary repository
+through an immutable native review. The workspace writer and ordinary repository
 owners MUST NOT directly push that ref, including changes outside `.dim`.
 Project-defined code-owner rules MAY request additional review for sensitive
 paths, but path matching alone does not prove the dependency closure of trusted
@@ -191,12 +192,12 @@ verification and the human reviewer must inspect its result against the
 complete selected commit tree before trusting the ref. DIM does not infer a
 safe subtree from filenames.
 
-The host-side operation MUST use a distinct managed maintainer credential.
-That credential MUST NOT be returned by the workspace controller or injected
-into a workspace, agent, nested container, or CI runner. Protected-ref push
-policy MAY allow the maintainer identity but MUST continue to reject the
-workspace writer identity. The maintainer capability is provider-neutral even
-when the current adapter realizes it as a managed Gitea user.
+The host-side operation MUST use a distinct native promotion role, separate
+from workspace writers, human reviewers, and CI issuers/reporters. Its
+credential MUST NOT be returned by the workspace controller or injected into
+a workspace, agent, nested container, or CI runner. No role gains a direct Git
+push exception for the protected ref: the service performs only the checked
+compare-and-swap after verifying the complete current review and evidence.
 
 ## Backend Boundary
 
