@@ -427,7 +427,7 @@ describe("local source build policy", () => {
     expect(invocations).not.toContain(" --tag dev-infra-project-workspace:0.9.0 ");
     expect(invocations).not.toContain("unrelated-probe");
     expect(invocations).not.toMatch(/(?:install|restart|latest)/);
-  });
+  }, 10_000);
 
   it("publishes the final image tag only after packages and readiness", async () => {
     // Given

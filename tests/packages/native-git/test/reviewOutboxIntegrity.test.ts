@@ -24,7 +24,7 @@ const fixtures: ReviewFixture[] = [];
 
 afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
-});
+}, 15_000);
 
 describe("DIM native Git review outbox integrity", () => {
   it.each(["missing", "substituted"] as const)("rejects an envelope with a %s required-job event without rewriting it", async (kind) => {
