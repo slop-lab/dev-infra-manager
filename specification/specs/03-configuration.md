@@ -42,7 +42,9 @@ host identity, named capacities, immutable digest-pinned runner/job images,
 and fixed resource limits. Candidate content may select only a reviewed job
 name, script blob, and runtime-fixed argv.
 
-The ordinary host requires registered `sysbox-runc`. The QEMU host requires a
+The ordinary host requires registered `sysbox-runc` and the enabled exact-
+version host mirror provider; startup reconciles the DIM-owned pull-through
+cache and control network before advertising capacity. The QEMU host requires a
 functional character `/dev/kvm`; missing KVM is unavailable and cannot select
 TCG or ordinary execution. No CI config contains a Project registrar,
 reviewer, promoter, Actions token, provider webhook, or reusable guest

@@ -305,7 +305,9 @@
   request-start monotonic deadline, and submits terminal evidence only after
   ownership-checked root and container cleanup. The installed CLI now exposes
   a direct host-only service command that requires registered `sysbox-runc`,
-  runs one loop per fixed capacity, and drains all loops on termination. Hosts
+  loads the installed exact host mirror provider, and reconciles the owned
+  pull-through cache and control network before capacity locks. It runs one
+  loop per fixed capacity and drains all loops on termination. Hosts
   remain globally configured and require no Project-local registration or
   admission command. The installed CLI also wraps the trusted native root
   bootstrap API: it pins one reviewed local branch commit, loads the owner-only

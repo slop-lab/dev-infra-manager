@@ -63,7 +63,9 @@ and private Docker volumes. Reviewed `.dim/setup.sh`, `.dim/entrypoint.sh`,
 The installed bundle starts empty and idle. Native review events create
 candidate-controlled eligibility; they do not advertise host capacity or
 approve promotion. The ordinary host consumes fixed digest-pinned images and
-bounds from an operator file and refuses to claim without `sysbox-runc`.
+bounds from an operator file, requires `sysbox-runc` and one exact host mirror
+provider, and reconciles the DIM-owned pull-through cache and control network
+before it locks capacity.
 
 Native QEMU is separately deployed. The scheduler and trusted runner images
 are explicit build artifacts. A host verifies `/dev/kvm`, the trusted launcher,

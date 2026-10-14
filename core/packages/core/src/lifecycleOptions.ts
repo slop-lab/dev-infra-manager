@@ -23,6 +23,11 @@ export function lifecycleOptionsForBackend(
     env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE,
     "DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE"
   );
+  if (env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE !== undefined && nativeConnectionFile === undefined) {
+    throw new UserError(
+      "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE requires DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE"
+    );
+  }
   const obsolete = ["DIM_GITEA_CONNECTION_FILE", "DIM_GIT_SYNC_CONNECTION_FILE",
     "DIM_QEMU_SCHEDULER_CONNECTION_FILE", "DIM_ORDINARY_CI_POOL_CONNECTION_FILE"]
     .find((name) => env[name] !== undefined);

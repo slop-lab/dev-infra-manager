@@ -4,6 +4,10 @@ import {
   buildNativeQemuRunnerImage,
   queryNativeQemuEvent,
   ProcessRunner,
+  lifecycleOptions,
+  loadInstalledPlugins,
+  resolveHostMirrorProvider,
+  resolvePluginHome,
   runNativeRootCiHost,
   runNativeQemuHost,
   configuredNativeQemuSchedulerServer,
@@ -79,8 +83,15 @@ export function registerCiCommands(program: Command): void {
       const stop = () => abort.abort();
       process.once("SIGINT", stop);
       process.once("SIGTERM", stop);
-      try { await runNativeRootCiHost(config, abort.signal); }
+      const loaded = await loadInstalledPlugins(await resolvePluginHome());
+      try {
+        const options = lifecycleOptions();
+        const hostMirrorProvider = resolveHostMirrorProvider(loaded.registered.host);
+        const runtimeOptions = hostMirrorProvider === undefined ? options : { ...options, hostMirrorProvider };
+        await runNativeRootCiHost(config, abort.signal, runtimeOptions);
+      }
       finally {
+        await loaded.registered.dispose();
         process.off("SIGINT", stop);
         process.off("SIGTERM", stop);
       }

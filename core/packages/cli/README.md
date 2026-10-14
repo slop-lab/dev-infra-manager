@@ -45,7 +45,9 @@ dim ci native-qemu event status EVENT_ID /absolute/operator/qemu-scheduler.json
 
 These long-running commands consume fixed operator configuration. Candidate
 bytes cannot choose credentials, images, bounds, mounts, networks, or fallback
-executors. QEMU execution requires KVM; there is no TCG or ordinary fallback.
+executors. The ordinary host loads the enabled exact-version host mirror plugin
+and reconciles DIM-owned cache and control-network resources before it locks
+capacity. QEMU execution requires KVM; there is no TCG or ordinary fallback.
 
 ## Projects and workspaces
 

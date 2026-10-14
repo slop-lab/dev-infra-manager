@@ -54,7 +54,9 @@ dim ci native-qemu scheduler run /absolute/operator/qemu-scheduler.json
 dim ci native-qemu host run qemu-a /absolute/operator/qemu-host.json
 ```
 
-The ordinary host requires `sysbox-runc`. The QEMU host requires a real,
+The ordinary host requires `sysbox-runc` and the enabled exact-version host
+mirror plugin installed above; it reconciles the owned pull-through cache and
+control network before serving capacity. The QEMU host requires a real,
 accessible `/dev/kvm`; TCG is never accepted as KVM evidence.
 
 ## Create a native Project

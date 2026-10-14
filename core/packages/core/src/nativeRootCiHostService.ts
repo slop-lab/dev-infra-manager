@@ -7,15 +7,19 @@ import {
   serveNativeRootCiHostCapacity
 } from "./nativeRootCiHostWorker.js";
 import { ProcessRunner } from "./runner.js";
+import { ensureRegistryCache } from "./registryCache.js";
+import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
 
 export async function runNativeRootCiHost(
   configPath: string,
   signal: AbortSignal,
+  options: LifecycleOptions,
   runner: StreamingCommandRunner = new ProcessRunner()
 ): Promise<void> {
   const config = await loadNativeRootCiHostConfig(configPath);
   await requireSysboxRuntime(runner, signal);
+  await ensureRegistryCache(runner, options);
   const capacityInputs = config.capacities.map((capacity) => ({ capacity,
     client: createNativeRootCiHostClient({ hostId: config.hostId, capacity, generationId: config.generationId,
       ordinaryCi: { endpoint: config.ordinaryCi.endpoint, serviceId: config.ordinaryCi.serviceId,
