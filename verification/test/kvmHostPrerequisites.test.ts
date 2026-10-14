@@ -9,7 +9,7 @@ const smokeSource = resolve(workspaceRoot, "verification/scripts/kvm-host-instal
 const prerequisites = resolve(workspaceRoot, "verification/scripts/lib/kvm-host-prerequisites.bash");
 const roots: string[] = [];
 const modules = [
-  "qemu-input-handoff.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
+  "qemu-event-followers.mjs", "qemu-input-handoff.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
   "qemu-service-artifacts.mjs", "qemu-service-filesystem.mjs", "qemu-service-http.mjs", "qemu-service-owner.mjs",
   "qemu-service-startup.mjs", "qemu-service.mjs", "qemu-snapshot.mjs",
 ] as const;

@@ -112,8 +112,16 @@ Project's agent inside its private rootless DinD end to end. The QEMU
 verification user has the explicit UID 1001; the gate proves that the daemon
 adopts that non-default UID and maps its inner UID-0 agent onto it.
 The base cloud image is cached under `.local/kvm`. Default output names each
-stage and emits only the final 30 lines of a failing stage; `--verbose`
+stage and emits only the final 120 lines of a failing stage; `--verbose`
 streams full guest, build, and workload logs.
+Guest cloud-init supplies an empty `PS1` before noninteractive SSH shells read
+Ubuntu's global bashrc; strict shell checks remain enabled. The event service
+limits all open followers, including completed-run replay, to 16 and retains
+a bounded retained-output ring with at most 8 MiB queued per backpressured follower.
+Normal backpressure drains in order before stream completion; an overflowing
+slow follower is disconnected without delaying run cleanup. The client reports
+truncated responses as failures rather than leaving an unsettled await. A
+completed guest failure produces client exit status 1 after its logs finish.
 
 ## Ubuntu Bootstrap
 

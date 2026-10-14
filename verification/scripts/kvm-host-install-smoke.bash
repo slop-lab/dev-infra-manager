@@ -7,6 +7,7 @@ service="$repository_root/.dim/qemu-service.mjs"
 owner="$repository_root/.dim/qemu-service-owner.mjs"
 client="$repository_root/.dim/qemu-client.mjs"
 root_modules=(
+  qemu-event-followers.mjs
   qemu-input-handoff.mjs
   qemu-owner-record.mjs
   qemu-process-group.mjs

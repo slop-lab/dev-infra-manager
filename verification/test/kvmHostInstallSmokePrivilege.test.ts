@@ -8,7 +8,7 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 const smokePath = resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash");
 const roots: string[] = [];
 const stagedModules = [
-  "qemu-input-handoff.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
+  "qemu-event-followers.mjs", "qemu-input-handoff.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
   "qemu-service-artifacts.mjs", "qemu-service-filesystem.mjs", "qemu-service-http.mjs", "qemu-service-owner.mjs",
   "qemu-service-startup.mjs", "qemu-service.mjs", "qemu-snapshot.mjs",
 ] as const;
@@ -65,7 +65,7 @@ fi
 [[ ! -e ${JSON.stringify(sudoRevoked)} ]] || exit 1
 for argument in "$@"; do
   if [[ "$argument" == qemu-service && ${options.mutateCheckoutBeforeServiceLaunch ? "true" : "false"} == true ]]; then
-    printf 'throw new Error("mutable checkout module executed")\n' >${JSON.stringify(resolve(projectDim, "qemu-service-http.mjs"))}
+    printf 'throw new Error("mutable checkout module executed")\n' >${JSON.stringify(resolve(projectDim, "qemu-event-followers.mjs"))}
   fi
 done
 exec "$@"

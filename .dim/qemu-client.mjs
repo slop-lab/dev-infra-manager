@@ -1,40 +1,47 @@
 import http from "node:http";
 
 const socketPath = process.env.DIM_QEMU_VERIFICATION_SOCKET ?? "/run/dim/qemu-verification/service.sock";
-const [command = "run", ...arguments_] = process.argv.slice(2);
-const inputs = [];
-let verbose = false;
-for (let index = 0; index < arguments_.length; index += 1) {
-  if (arguments_[index] === "") continue;
-  if (arguments_[index] === "--verbose") {
-    verbose = true;
-    continue;
-  }
-  if (arguments_[index] !== "--input" || !arguments_[index + 1]?.includes("=")) usage();
-  const [name, ...pathParts] = arguments_[++index].split("=");
-  inputs.push({ name, path: pathParts.join("=") });
-}
+await main().catch((error) => {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 1;
+});
 
-if (command === "run" || command === "start" || command === "probe") {
-  if (command === "probe" && (inputs.length > 0 || verbose)) usage();
-  const mode = command === "probe" ? "probe" : "run";
-  const response = await request("POST", "/v1/run", Buffer.from(JSON.stringify({ inputs, verbose, mode })));
-  if (response.status !== 202) fail(response);
-  if (command !== "start") {
-    const events = await stream("/v1/events");
-    const status = await request("GET", "/v1/status");
-    if (events !== 0 || status.status !== 200 || JSON.parse(status.body).status !== "success") process.exitCode = 1;
+async function main() {
+  const [command = "run", ...arguments_] = process.argv.slice(2);
+  const inputs = [];
+  let verbose = false;
+  for (let index = 0; index < arguments_.length; index += 1) {
+    if (arguments_[index] === "") continue;
+    if (arguments_[index] === "--verbose") {
+      verbose = true;
+      continue;
+    }
+    if (arguments_[index] !== "--input" || !arguments_[index + 1]?.includes("=")) usage();
+    const [name, ...pathParts] = arguments_[++index].split("=");
+    inputs.push({ name, path: pathParts.join("=") });
   }
-} else if (command === "status") {
-  const response = await request("GET", "/v1/status");
-  if (response.status !== 200) fail(response);
-  process.stdout.write(response.body);
-} else if (command === "follow") {
-  process.exitCode = await stream("/v1/events");
-} else if (command === "cancel") {
-  const response = await request("DELETE", "/v1/run");
-  if (response.status !== 202) fail(response);
-} else usage();
+
+  if (command === "run" || command === "start" || command === "probe") {
+    if (command === "probe" && (inputs.length > 0 || verbose)) usage();
+    const mode = command === "probe" ? "probe" : "run";
+    const response = await request("POST", "/v1/run", Buffer.from(JSON.stringify({ inputs, verbose, mode })));
+    if (response.status !== 202) fail(response);
+    if (command !== "start") {
+      const events = await stream("/v1/events");
+      const status = await request("GET", "/v1/status");
+      if (events !== 0 || status.status !== 200 || JSON.parse(status.body).status !== "success") process.exitCode = 1;
+    }
+  } else if (command === "status") {
+    const response = await request("GET", "/v1/status");
+    if (response.status !== 200) fail(response);
+    process.stdout.write(response.body);
+  } else if (command === "follow") {
+    process.exitCode = await stream("/v1/events");
+  } else if (command === "cancel") {
+    const response = await request("DELETE", "/v1/run");
+    if (response.status !== 202) fail(response);
+  } else usage();
+}
 
 function request(method, path, body = Buffer.alloc(0)) {
   return new Promise((resolve, reject) => {
@@ -44,6 +51,11 @@ function request(method, path, body = Buffer.alloc(0)) {
       const chunks = [];
       response.on("data", (chunk) => chunks.push(chunk));
       response.on("end", () => resolve({ status: response.statusCode ?? 500, body: Buffer.concat(chunks).toString("utf8") }));
+      response.on("aborted", () => reject(new Error("QEMU response ended before completion")));
+      response.on("error", () => reject(new Error("QEMU response ended before completion")));
+      response.on("close", () => {
+        if (!response.complete) reject(new Error("QEMU response ended before completion"));
+      });
     });
     request.on("error", reject);
     if (body.length) request.write(body);
@@ -58,10 +70,20 @@ function stream(path) {
         const chunks = [];
         response.on("data", (chunk) => chunks.push(chunk));
         response.on("end", () => reject(new Error(Buffer.concat(chunks).toString("utf8").trim())));
+        response.on("aborted", () => reject(new Error("QEMU event stream ended before completion")));
+        response.on("error", () => reject(new Error("QEMU event stream ended before completion")));
+        response.on("close", () => {
+          if (!response.complete) reject(new Error("QEMU event stream ended before completion"));
+        });
         return;
       }
       response.pipe(process.stdout);
       response.on("end", () => resolve(0));
+      response.on("aborted", () => reject(new Error("QEMU event stream ended before completion")));
+      response.on("error", () => reject(new Error("QEMU event stream ended before completion")));
+      response.on("close", () => {
+        if (!response.complete) reject(new Error("QEMU event stream ended before completion"));
+      });
     });
     request.on("error", reject);
     request.end();

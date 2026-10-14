@@ -3,7 +3,7 @@ import { request, type ClientRequest, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { http, readEvents, startService, waitForExit } from "./qemuServiceTestSupport.js";
+import { http, readEvents, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
 import { socketLeasePath } from "../../.dim/qemu-service-artifacts.mjs";
 
 const followers: ClientRequest[] = [];
@@ -99,21 +99,85 @@ describe("QEMU service resource bounds", () => {
     expect(replacement.statusCode).toBe(200);
   });
 
-  it("destroys a follower immediately when replay write reports backpressure", async () => {
-    const fixture = await startService("hold", { forceResponseBackpressure: true });
+  it("caps paused completed replays globally across runs until an actual close", async () => {
+    // Given
+    const fixture = await startService("exit", { launcherOutputBytes: 8 * 1024 * 1024 });
+    await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
+    await waitForObservation(async () => {
+      const result = await http(fixture, { method: "GET", path: "/v1/status" });
+      const state: unknown = JSON.parse(result.body);
+      return typeof state === "object" && state !== null && "status" in state && state.status !== "running" ? true : undefined;
+    });
+    const admitted = await Promise.all(Array.from({ length: 16 }, async () => {
+      const follower = await openFollower(fixture.socketPath);
+      follower.pause();
+      return follower;
+    }));
+    await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
+
+    // When
+    const rejected = await openFollower(fixture.socketPath);
+    admitted[0]?.destroy();
+    const replacement = await waitForObservation(async () => {
+      const follower = await openFollower(fixture.socketPath);
+      if (follower.statusCode === 200) return follower;
+      follower.destroy();
+      return undefined;
+    });
+
+    // Then
+    expect.soft(admitted.filter((response) => response.statusCode === 200)).toHaveLength(16);
+    expect.soft(rejected.statusCode).toBe(503);
+    expect(replacement.statusCode).toBe(200);
+  });
+
+  it("flushes a follower when replay write reports ordinary backpressure", async () => {
+    const outputBytes = 4_096;
+    const fixture = await startService("exit", {
+      forceResponseBackpressure: true,
+      launcherOutputBytes: outputBytes,
+      releaseResponseBackpressure: true,
+      waitForLauncherOutputRelease: true,
+    });
     const started = await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
     expect(started, started.body).toMatchObject({ status: 202 });
-    await launcherPid(fixture.launcherPidFile);
 
-    const closed = await openFollower(fixture.socketPath).then(
-      (follower) => new Promise<boolean>((resolveClose) => {
-        follower.once("close", () => resolveClose(true));
-        setTimeout(() => resolveClose(false), 500);
-      }),
-      (error: NodeJS.ErrnoException) => error.code === "ECONNRESET",
-    );
+    const follower = await openFollower(fixture.socketPath);
+    const chunks: Buffer[] = [];
+    follower.on("data", (chunk: Buffer) => chunks.push(chunk));
+    const ended = new Promise<void>((resolveEnd, rejectEnd) => {
+      follower.once("end", resolveEnd);
+      follower.once("error", rejectEnd);
+    });
+    await writeFile(fixture.launcherOutputReleaseFile, "release\n");
+    await ended;
 
-    expect(closed).toBe(true);
+    expect(Buffer.concat(chunks).toString("utf8")).toBe(`ready\n${"x".repeat(outputBytes)}`);
+  });
+
+  it("disconnects a persistently slow follower at the bounded queue without blocking the run", async () => {
+    const fixture = await startService("exit", {
+      forceResponseBackpressure: true,
+      launcherOutputBytes: 10 * 1024 * 1024,
+      waitForLauncherOutputRelease: true,
+    });
+    const started = await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
+    expect(started, started.body).toMatchObject({ status: 202 });
+    const follower = await openFollower(fixture.socketPath);
+    follower.pause();
+    const closed = new Promise<void>((resolveClose) => follower.once("close", resolveClose));
+
+    await writeFile(fixture.launcherOutputReleaseFile, "release\n");
+    const status = await waitForObservation(async () => {
+      const result = await http(fixture, { method: "GET", path: "/v1/status" });
+      const state: unknown = JSON.parse(result.body);
+      if (typeof state !== "object" || state === null || !("status" in state) || state.status === "running") return undefined;
+      return state.status;
+    });
+    await closed;
+
+    expect.soft(status).toBe("success");
+    expect(fixture.stderr()).toContain("QEMU event follower disconnected: pending output exceeded 8388608 bytes");
   });
 
   it("escalates a TERM-ignoring launcher group on cancel before cleanup", async () => {

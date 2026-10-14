@@ -15,6 +15,7 @@ const fixtureRoots: string[] = [];
 
 export type ServiceFixture = { readonly descendantPidFile: string; readonly launcherPidFile: string; readonly launcherStopFile: string;
   readonly groupSignalRecordFile: string; readonly process: ChildProcessByStdio<null, Readable, Readable>; readonly recordFile: string;
+  readonly launcherOutputReleaseFile: string;
   readonly root: string; readonly runtimeServerErrorRecordFile: string; readonly runtimeServerErrorTriggerFile: string;
   readonly runsRoot: string; readonly serverCloseRecordFile: string; readonly snapshotRemovalReleaseFile: string; readonly snapshotRemovalStartedFile: string; readonly socketPath: string;
   readonly sourceRoot: string; readonly spawnRecordFile: string; readonly stderr: () => string };
@@ -24,8 +25,9 @@ export type RequestSpec = { readonly body?: unknown; readonly method: string; re
 export type LauncherInput = { readonly name: string; readonly path: string };
 export type SpawnRecord = { readonly arguments: readonly string[]; readonly command: string; readonly cwd: string; readonly sourceRoot: string };
 export type IncompleteRun = { readonly abort: () => void; readonly continued: Promise<void>; readonly finish: () => void; readonly response: Promise<HttpResult> };
-export type ServiceOptions = { readonly blockSnapshotRemoval?: boolean; readonly forceResponseBackpressure?: boolean;
+export type ServiceOptions = { readonly blockSnapshotRemoval?: boolean; readonly forceResponseBackpressure?: boolean; readonly releaseResponseBackpressure?: boolean;
   readonly ignoreLauncherTerm?: boolean; readonly leaderExits?: boolean;
+  readonly launcherExitCode?: number; readonly launcherOutputBytes?: number; readonly waitForLauncherOutputRelease?: boolean;
   readonly missingLauncherShell?: boolean; readonly rejectReaddir?: boolean;
   readonly rejectSnapshotRemoval?: boolean; readonly residualProcessGroup?: boolean;
   readonly serviceCwd?: string; readonly serviceDirectoryCwd?: boolean };
@@ -74,20 +76,14 @@ export async function spawnRecords(fixture: ServiceFixture): Promise<readonly Sp
 export async function startService(mode: "exit" | "hold", options: ServiceOptions = {}): Promise<ServiceFixture> {
   const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-service-test-")); await chmod(root, 0o755);
   fixtureRoots.push(root);
-  const sourceRoot = resolve(root, "source");
-  const recordFile = resolve(root, "launches.jsonl");
-  const spawnRecordFile = resolve(root, "spawns.jsonl");
-  const snapshotRemovalTriggerFile = resolve(root, "reject-snapshot-removal.trigger");
+  const sourceRoot = resolve(root, "source"), recordFile = resolve(root, "launches.jsonl");
+  const spawnRecordFile = resolve(root, "spawns.jsonl"), snapshotRemovalTriggerFile = resolve(root, "reject-snapshot-removal.trigger");
   const snapshotRemovalRecordFile = resolve(root, "rejected-snapshot-removal.record");
-  const snapshotRemovalReleaseFile = resolve(root, "snapshot-removal.release");
-  const snapshotRemovalStartedFile = resolve(root, "snapshot-removal.started");
-  const runtimeServerErrorTriggerFile = resolve(root, "runtime-server-error.trigger");
-  const runtimeServerErrorRecordFile = resolve(root, "runtime-server-error.record");
-  const serverCloseRecordFile = resolve(root, "server-close.record");
-  const groupSignalRecordFile = resolve(root, "group-signals.record");
-  const socketPath = resolve(root, "service.sock");
-  const launcherPidFile = resolve(root, "launcher.pid");
-  const launcherStopFile = resolve(root, "launcher.stopped");
+  const snapshotRemovalReleaseFile = resolve(root, "snapshot-removal.release"), snapshotRemovalStartedFile = resolve(root, "snapshot-removal.started");
+  const runtimeServerErrorTriggerFile = resolve(root, "runtime-server-error.trigger"), runtimeServerErrorRecordFile = resolve(root, "runtime-server-error.record");
+  const serverCloseRecordFile = resolve(root, "server-close.record"), groupSignalRecordFile = resolve(root, "group-signals.record");
+  const socketPath = resolve(root, "service.sock"), launcherPidFile = resolve(root, "launcher.pid");
+  const launcherStopFile = resolve(root, "launcher.stopped"), launcherOutputReleaseFile = resolve(root, "launcher-output.release");
   const descendantPidFile = resolve(root, "descendant.pid");
   const launcher = resolve(root, "launcher.bash");
   const preload = resolve(root, "record-spawns.mjs");
@@ -109,9 +105,12 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
       DIM_TEST_LAUNCHER_MODE: mode,
       DIM_TEST_LAUNCHER_PID: launcherPidFile,
       DIM_TEST_LAUNCHER_STOPPED: launcherStopFile,
+      DIM_TEST_LAUNCHER_EXIT_CODE: String(options.launcherExitCode ?? 0),
+      DIM_TEST_LAUNCHER_OUTPUT_BYTES: String(options.launcherOutputBytes ?? 0),
+      DIM_TEST_LAUNCHER_OUTPUT_RELEASE: options.waitForLauncherOutputRelease === true ? launcherOutputReleaseFile : "",
       DIM_TEST_DESCENDANT_PID: descendantPidFile,
       DIM_TEST_LAUNCH_RECORD: recordFile,
-      DIM_TEST_FORCE_BACKPRESSURE: options.forceResponseBackpressure === true ? "1" : "0",
+      DIM_TEST_FORCE_BACKPRESSURE: options.forceResponseBackpressure === true ? "1" : "0", DIM_TEST_RELEASE_BACKPRESSURE: options.releaseResponseBackpressure === true ? "1" : "0",
       DIM_TEST_GROUP_SIGNAL_RECORD: groupSignalRecordFile,
       DIM_TEST_IGNORE_TERM: options.ignoreLauncherTerm === true ? "1" : "0",
       DIM_TEST_LEADER_EXITS: options.leaderExits === true ? "1" : "0",
@@ -132,7 +131,7 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   });
   child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
   const fixture = {
-    descendantPidFile, groupSignalRecordFile, launcherPidFile, launcherStopFile, process: child, recordFile, root,
+    descendantPidFile, groupSignalRecordFile, launcherOutputReleaseFile, launcherPidFile, launcherStopFile, process: child, recordFile, root,
     runtimeServerErrorRecordFile, runtimeServerErrorTriggerFile, runsRoot: resolve(root, "runs"),
     serverCloseRecordFile, snapshotRemovalReleaseFile, snapshotRemovalStartedFile, socketPath, sourceRoot, spawnRecordFile,
     stderr: () => Buffer.concat(stderr).toString("utf8")

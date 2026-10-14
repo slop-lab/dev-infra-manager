@@ -128,6 +128,7 @@ if (process.env.DIM_TEST_FORCE_BACKPRESSURE === "1") {
   const originalWrite = http.ServerResponse.prototype.write;
   http.ServerResponse.prototype.write = function forcedBackpressure(...args) {
     originalWrite.apply(this, args);
+    if (process.env.DIM_TEST_RELEASE_BACKPRESSURE === "1") setImmediate(() => this.emit("drain"));
     return false;
   };
 }
@@ -141,12 +142,18 @@ set -euo pipefail
 printf '%s\n' "$$" >"$DIM_TEST_LAUNCHER_PID"
 printf '%s\n' "$DIM_QEMU_INPUT_SNAPSHOTS_JSON" >>"$DIM_TEST_LAUNCH_RECORD"
 printf 'ready\n'
+if [[ -n "$DIM_TEST_LAUNCHER_OUTPUT_RELEASE" ]]; then
+  while [[ ! -e "$DIM_TEST_LAUNCHER_OUTPUT_RELEASE" ]]; do sleep 0.01; done
+fi
+if (( DIM_TEST_LAUNCHER_OUTPUT_BYTES > 0 )); then
+  head -c "$DIM_TEST_LAUNCHER_OUTPUT_BYTES" /dev/zero | tr '\\0' x
+fi
 if [[ "$DIM_TEST_LEADER_EXITS" == 1 ]]; then
   bash -c 'trap "" HUP; exec sleep 86400' &
   printf '%s\n' "$!" >"$DIM_TEST_DESCENDANT_PID"
   exit 0
 fi
-[[ "$DIM_TEST_LAUNCHER_MODE" != exit ]] || exit 0
+[[ "$DIM_TEST_LAUNCHER_MODE" != exit ]] || exit "$DIM_TEST_LAUNCHER_EXIT_CODE"
 if [[ "$DIM_TEST_IGNORE_TERM" == 1 ]]; then
   trap '' TERM INT
   bash -c 'trap "" TERM INT; exec sleep 86400' &

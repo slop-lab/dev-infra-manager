@@ -6,6 +6,7 @@ import { finalizeRun, markRunFatal, quiesceRunPreservingEvidence, requestRunFina
 import { parseInputs, readJson, sendJson } from "./qemu-service-http.mjs";
 import { closeServiceListenerPreservingSocket, initializeService, shutdownService, socketLeasePath } from "./qemu-service-startup.mjs";
 import { createInputHandoff } from "./qemu-input-handoff.mjs";
+import { createEventFollower } from "./qemu-event-followers.mjs";
 import { snapshotInputs } from "./qemu-snapshot.mjs";
 
 const sourceRoot = await realpath(process.env.DIM_QEMU_SOURCE_ROOT ?? "/workspace");
@@ -25,6 +26,7 @@ let shutdownPromise;
 let fatalShutdownPromise;
 let ownerIdentity;
 let socketIdentity;
+const eventFollowers = new Set();
 
 const server = http.createServer((request, response) => {
   void handle(request, response).catch((error) => {
@@ -49,12 +51,21 @@ async function handle(request, response) {
   if (request.method === "GET" && url.pathname === "/v1/events") {
     const run = latestRun;
     if (!run) return response.end();
-    if (activeRun === run && run.listeners.size >= 16) return sendJson(response, 503, { error: "too many event followers" });
+    if (eventFollowers.size >= 16) return sendJson(response, 503, { error: "too many event followers" });
     response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
-    if (run.output && !response.write(run.output)) return response.destroy();
-    if (activeRun !== run) return response.end();
-    run.listeners.add(response);
-    response.on("close", () => run.listeners.delete(response));
+    const follower = createEventFollower(response, () => {
+      process.stderr.write("QEMU event follower disconnected: pending output exceeded 8388608 bytes\n");
+    });
+    eventFollowers.add(follower);
+    const releaseFollower = () => {
+      eventFollowers.delete(follower);
+      run.listeners.delete(follower);
+    };
+    response.once("close", releaseFollower);
+    response.once("error", releaseFollower);
+    if (run.output) follower.write(run.output);
+    if (activeRun !== run) return follower.end();
+    run.listeners.add(follower);
     return;
   }
   if (request.method === "POST" && url.pathname === "/v1/run") {
@@ -166,10 +177,7 @@ function start(run, inputs) {
     run.output += String(chunk);
     if (run.output.length > 8 * 1024 * 1024) run.output = run.output.slice(-8 * 1024 * 1024);
     for (const listener of run.listeners) {
-      if (!listener.write(chunk)) {
-        run.listeners.delete(listener);
-        listener.destroy();
-      }
+      listener.write(chunk);
     }
   };
   child.stdout.on("data", append);
