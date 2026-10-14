@@ -2,11 +2,11 @@
 
 ## Status and scope
 
-The recommended environment is implemented and locally verified, but its
-complete installed Sysbox workspace journey is **not yet accepted on a capable
-host**. The current development container has only runc Docker runtimes and no
-access to the retained host-side VM lab. Do not substitute runc for the agent's
-Sysbox isolation gate.
+The root-only native environment has passed its basic workspace journey and
+ordinary/nested-KVM mechanics inside a disposable KVM VM reached through the
+protected verification service. This is **not independent-host or human release
+acceptance**. The development agent itself still has only runc and no direct
+`/dev/kvm`; do not substitute those local capabilities for the observed VM run.
 
 There are only two environment contracts:
 
@@ -26,6 +26,27 @@ review-policy provisioning described below.
 
 ## Evidence already available
 
+- On 2026-10-14, source candidate `5c79444b` passed the pinned isolated source
+  gate: type checks, all package builds, 2,080 unit/integration tests (one
+  ownership-test skip), 155 CLI tests, and 447 verification tests. The subsequent
+  bounded-output change has two additional passing focused regressions.
+- Runtime candidate `23a08fa9` passed all nine native guest stages, including
+  installed-service install/update/rollback/recovery, ordinary Sysbox execution,
+  a real recommended workspace with proposal-only Git and retained checkout
+  across stop/start/restart/update, and nested QEMU with KVM acceleration.
+  Guest KVM access used a transient non-root supplementary group after checking
+  the disposable guest identity. That helper issues no device-permission or
+  persistent group-membership changes.
+- The deployed outer root launcher still returned failure after those nine
+  passes because its older, separately staged continuation invokes the removed
+  `--repos` option. The current source launcher no longer contains that legacy
+  continuation. An operator must review and redeploy the current privileged
+  launcher closure before claiming a successful end-to-end service status.
+  Do not reintroduce obsolete CLI input or replace privileged staged files from
+  the agent to conceal this distinction. The agent retained the run output at
+  `.local/verification/qemu-native-cutover-compact-run.log`.
+- The entries below describe earlier candidates, not substitutes for that
+  native-only run or for independent release acceptance.
 - This removal passed workspace type checks/builds, 214 workspace/native-lifecycle
   regression tests, and a post-fix driver exercising recommended selection, actual custom hooks,
   and obsolete-selector rejection.
