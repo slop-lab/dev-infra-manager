@@ -54,21 +54,21 @@ run_fixture_stage() {
   fi
 }
 
-stage_source() { run_fixture_stage source; }
-stage_backend() { run_fixture_stage backend; }
-stage_native() { run_fixture_stage native; }
-stage_stateful() { run_fixture_stage stateful; }
-stage_self() { run_fixture_stage self; }
-stage_trusted() { run_fixture_stage trusted; }
-stage_ci() { run_fixture_stage ci; }
+stage_foundation() { run_fixture_stage foundation; }
+stage_capability() { run_fixture_stage capability; }
+stage_independent() { run_fixture_stage independent; }
+stage_dependent_a() { run_fixture_stage dependent-a; }
+stage_dependent_b() { run_fixture_stage dependent-b; }
+stage_dependent_c() { run_fixture_stage dependent-c; }
+stage_dependent_d() { run_fixture_stage dependent-d; }
 
-verification_stage_register source stage_source ""
-verification_stage_register backend stage_backend "source"
-verification_stage_register native stage_native "source"
-verification_stage_register stateful stage_stateful "source backend"
-verification_stage_register self stage_self "source backend"
-verification_stage_register trusted stage_trusted "source backend"
-verification_stage_register ci stage_ci "source backend"
+verification_stage_register foundation stage_foundation ""
+verification_stage_register capability stage_capability "foundation"
+verification_stage_register independent stage_independent "foundation"
+verification_stage_register dependent-a stage_dependent_a "foundation capability"
+verification_stage_register dependent-b stage_dependent_b "foundation capability"
+verification_stage_register dependent-c stage_dependent_c "foundation capability"
+verification_stage_register dependent-d stage_dependent_d "foundation capability"
 if [[ -n "${DIM_VERIFICATION_INTERNAL_STAGE:-}" ]]; then
   verification_stage_run_internal "$DIM_VERIFICATION_INTERNAL_STAGE"
   exit

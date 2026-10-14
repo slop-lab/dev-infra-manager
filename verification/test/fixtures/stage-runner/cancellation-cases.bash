@@ -3,7 +3,7 @@ cancel_execution="$work_dir/cancel.execution"
 cancel_processes="$work_dir/cancel.processes"
 cancel_logs="$work_dir/cancel.logs"
 : >"$cancel_execution"
-DIM_VERIFICATION_BLOCKING_STAGE=backend \
+DIM_VERIFICATION_BLOCKING_STAGE=capability \
   DIM_VERIFICATION_EXECUTION_LOG="$cancel_execution" \
   DIM_VERIFICATION_PROCESS_LOG="$cancel_processes" \
   DIM_VERIFICATION_LOG_ROOT="$cancel_logs" \
@@ -26,9 +26,9 @@ for _ in $(seq 1 100); do
 done
 test ! -e "/proc/$cancel_child"
 test ! -e "/proc/$cancel_descendant"
-test "$(tr '\n' ' ' <"$cancel_execution")" = "source backend "
-grep -Fqx 'BLOCKED native reason=unsafe-cleanup stage=backend' "$cancel_output"
-grep -Fqx 'BLOCKED ci reason=unsafe-cleanup stage=backend' "$cancel_output"
+test "$(tr '\n' ' ' <"$cancel_execution")" = "foundation capability "
+grep -Fqx 'BLOCKED independent reason=unsafe-cleanup stage=capability' "$cancel_output"
+grep -Fqx 'BLOCKED dependent-d reason=unsafe-cleanup stage=capability' "$cancel_output"
 grep -Fq 'verification-stage-summary passed=1 failed=1 blocked=5' "$cancel_output"
 
 launch_bin="$work_dir/launch-bin"
@@ -71,5 +71,5 @@ if ((launch_status != 125)); then cat "$launch_output" >&2; fi
 test "$launch_status" -eq 125
 test ! -e "/proc/$launch_pid"
 test ! -s "$launch_execution"
-grep -Fqx 'BLOCKED backend reason=unsafe-cleanup stage=source' "$launch_output"
+grep -Fqx 'BLOCKED capability reason=unsafe-cleanup stage=foundation' "$launch_output"
 grep -Fq 'verification-stage-summary passed=0 failed=1 blocked=6' "$launch_output"

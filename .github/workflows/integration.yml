@@ -1,0 +1,49 @@
+name: Native integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Native integration lane
+        type: choice
+        options: [ordinary, qemu-kvm]
+        default: ordinary
+
+permissions:
+  contents: read
+
+jobs:
+  ordinary:
+    if: ${{ inputs.lane == 'ordinary' }}
+    runs-on: dim-native-ordinary
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - run: pnpm install --frozen-lockfile
+      - run: just verify native-idle-service-images
+      - run: just verify control-plane-install-live
+      - run: just verify native-ordinary-executor-live
+  qemu-kvm:
+    if: ${{ inputs.lane == 'qemu-kvm' }}
+    runs-on: dim-native-qemu
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - run: pnpm install --frozen-lockfile
+      - name: Require real KVM
+        run: test -c /dev/kvm -a -r /dev/kvm -a -w /dev/kvm
+      - run: just verify native-qemu-guest-mechanics-kvm

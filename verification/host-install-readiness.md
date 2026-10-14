@@ -107,34 +107,27 @@ installation to bypass this boundary. Operator-run `sudo -v` may establish
 cached authorization for the later narrowly scoped `sudo -n` commands. A
 permanent blanket `NOPASSWD` rule is not required.
 
-The default KVM gate records each post-setup verification stage as `PASS`,
-`FAIL`, or `BLOCKED`, followed by an aggregate summary and evidence-log path.
-After the guest, repository, toolchain, backend, and smoke-image prerequisites
-pass, the common full-development contract, trusted KVM/Sysbox isolation,
-managed CI boundary, and non-root CI workflow run serially as independent
-siblings. An ordinary failure in one does not suppress the others, but the gate
-still exits nonzero. Signal cancellation or uncertain cleanup stops scheduling,
-blocks every remaining stage with the reason, and returns the fatal status
-(`125` for cleanup uncertainty). Cancellation allows up to 90 seconds for owned
-controller shutdown before forced termination; forced termination is also
-reported as cleanup uncertainty. Nested aggregators use their own stage plan
-and preserve the parent-owned evidence directory during internal reentry.
-Within `full-development`, native idle images, control-plane installation,
-workspace tool setup, the stateful journey, and self-development use the same
-rule: only a failed declared prerequisite blocks a stage. Exercise the runner's
-fault-injection contract without KVM or Docker with:
+The native full-development gate records each stage as `PASS`, `FAIL`, or
+`BLOCKED`, followed by an aggregate summary and private evidence-log path:
+
+```bash
+just verify full-development
+```
+
+Source, Docker, Sysbox, and real-KVM prerequisites are separate. Native
+contracts, installed idle services, ordinary Sysbox mechanics, and QEMU KVM
+mechanics are independent siblings after only their declared prerequisites.
+An ordinary or contract failure therefore does not suppress the real-KVM
+mechanics stage, but the aggregate still exits nonzero. Missing hardware is
+unavailable, never a pass. Signal cancellation or uncertain cleanup stops
+scheduling, blocks every remaining stage with the reason, and returns the
+fatal status (`125` for cleanup uncertainty). Nested aggregators preserve the
+parent-owned evidence directory during internal reentry. Exercise the runner's
+generic fault-injection contract without KVM or Docker with:
 
 ```bash
 just verify verification-stage-runner
 ```
-
-The `20261014T152129Z` host run at `ffdcd380` passed `guest-ready` and
-`trusted-kvm-sysbox`, and attempted both CI siblings after `common-full`
-failed. It did not pass the complete gate. The subsequent fixes consume the
-nested stage selector before dispatch, enable the exact host-mirror plugin in
-CI environments, and use compact owned controller sockets. Startup failures
-now emit bounded, redacted diagnostics and retain private evidence; uncertain
-cleanup preserves recovery state. These fixes still require a new host run.
 
 1. **Prepare the host.** Use a disposable Linux host or retained VM with a
    systemd user manager, reachable Docker 29, registered `sysbox-runc`, working
@@ -297,12 +290,11 @@ These are not prerequisites for a basic workspace:
 3. Run both the native dual-kind smoke and empty/ordinary/QEMU/dual policy
    matrix using [the native host runbook](native-cutover-host.md). Keep the
    interactive exact-commit human approval and checked promotion step intact.
-4. Complete the still-unimplemented full-gate phases: failure/stale/wrong-kind
-   and replay denials, process/host crash and reboot recovery, guest-authority
-   inspection, and effective traffic inspection. Neither `SMOKE-PASSED` nor
-   `MATRIX-PASSED` satisfies `VERIFICATION-NATIVE-CUTOVER-001`.
-5. Legacy Gitea paths still exist. Remove/reconcile them and finish the full
-   native acceptance contract before claiming complete core Gitea removal.
+4. Complete the independent full-gate phases: failure/stale/wrong-kind and
+   replay denials, process/host crash and reboot recovery, guest-authority
+   inspection, effective traffic inspection, interactive human approval, and
+   checked promotion. Neither `SMOKE-PASSED` nor `MATRIX-PASSED` satisfies
+   `VERIFICATION-NATIVE-CUTOVER-001`.
 
 ## Separate release/publication work
 

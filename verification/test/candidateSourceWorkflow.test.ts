@@ -25,7 +25,7 @@ type Workflow = {
 };
 
 async function readWorkflow(name: string): Promise<{ readonly source: string; readonly workflow: Workflow }> {
-  const source = await readFile(resolve(workspaceRoot, `.gitea/workflows/${name}.yml`), "utf8");
+  const source = await readFile(resolve(workspaceRoot, `.github/workflows/${name}.yml`), "utf8");
   return { source, workflow: parse(source) as Workflow };
 }
 
@@ -63,80 +63,26 @@ describe("candidate source workflows", () => {
 
     // When / Then
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expectExactCheckout(sourceJob, "${{ gitea.sha }}");
-    expectEvidenceArtifact(sourceJob, "${{ gitea.sha }}");
+    expectExactCheckout(sourceJob, "${{ github.sha }}");
+    expectEvidenceArtifact(sourceJob, "${{ github.sha }}");
     expect(sourceJob.steps).toEqual(expect.arrayContaining([
       expect.objectContaining({ run: expect.stringContaining("just verify package-packs") }),
     ]));
-    expect(source).not.toMatch(/\.monorepo-candidate|monorepo-candidate|sources\.tsv|overlay/);
+    expect(source).not.toMatch(/\.monorepo-candidate|monorepo-candidate|sources\.tsv|overlay|gitea/i);
   });
 
-  it("binds every release job to the dispatched full commit and rejects a missing evidence artifact", async () => {
-    // Given
-    const { source, workflow } = await readWorkflow("release-gate");
-    const jobs = Object.values(workflow.jobs);
-
-    // When / Then
-    expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(jobs).toHaveLength(2);
-    for (const job of jobs) {
-      expectExactCheckout(job, "${{ inputs.candidate_sha }}");
-      expectEvidenceArtifact(job, "${{ inputs.candidate_sha }}");
-      expect(job.steps).toEqual(expect.arrayContaining([
-        expect.objectContaining({
-          env: expect.objectContaining({ DIM_DISPATCH_SHA: "${{ gitea.sha }}" }),
-          run: expect.stringContaining('test "$DIM_EXPECTED_CANDIDATE_SHA" = "$DIM_DISPATCH_SHA"'),
-        }),
-      ]));
-    }
-    expect(workflow.jobs["container-integration"]?.steps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ run: expect.stringContaining("just verify package-packs") }),
-    ]));
-    expect(source).not.toMatch(/\.monorepo-candidate|monorepo-candidate|sources\.tsv|overlay/);
-  });
-
-  it("binds hosted backend gates to one exact root commit without split checkouts", async () => {
-    // Given
-    const { source, workflow } = await readWorkflow("host-backends");
-    const hostJob = workflow.jobs.verify;
-    assert(hostJob !== undefined);
-
-    // When / Then
-    expect(workflow.permissions).toEqual({ contents: "read" });
-    expectExactCheckout(hostJob, "${{ inputs.candidate_sha }}");
-    expectEvidenceArtifact(hostJob, "${{ inputs.candidate_sha }}");
-    expect(source.match(/actions\/checkout@/g)).toHaveLength(1);
-    expect(source).not.toMatch(/repository:|path:\s+snapshot|candidate-ref|candidate-repository|development-ref|root-ref|verification-ref/);
-    for (const gate of [
-      "source",
-      "container",
-      "integration",
-      "kvm",
-      "kvm-control",
-      "cache-routing-sysbox",
-      "cache-routing-kvm",
-      "qemu-ci-image-layers-kvm",
-    ]) {
-      expect(source).toContain(`inputs.gate == '${gate}'`);
-    }
-  });
-
-  it("dispatches scheduled and manual hosted gates from the immutable event commit", async () => {
+  it("dispatches only native ordinary and real-KVM integration lanes", async () => {
     // Given
     const { source, workflow } = await readWorkflow("integration");
 
     // When / Then
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(Object.keys(workflow.jobs).sort()).toEqual([
-      "cache-routing-kvm",
-      "container",
-      "kvm",
-      "qemu-ci-image-layers-kvm",
-    ]);
-    expect(source).toContain("schedule:");
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["ordinary", "qemu-kvm"]);
     expect(source).toContain("workflow_dispatch:");
-    expect(source.match(/candidate_sha: \$\{\{ gitea\.sha \}\}/g)).toHaveLength(4);
-    expect(source).not.toMatch(/candidate-ref|candidate-repository|repository:|refs\/heads\/|\|\|\s*'main'/);
+    expect(source.match(/ref: \$\{\{ github\.sha \}\}/g)).toHaveLength(2);
+    expect(source).toContain("just verify native-ordinary-executor-live");
+    expect(source).toContain("just verify native-qemu-guest-mechanics-kvm");
+    expect(source).not.toMatch(/gitea|ordinary-ci-pool|shared-qemu|ci runner/i);
   });
 
   it("has no obsolete candidate assembly entry point in the tracked source layout", async () => {

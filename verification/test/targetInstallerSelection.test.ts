@@ -117,7 +117,9 @@ describe("target installer selection", () => {
 
     // Then
     expect(installation.status).toBe(1);
-    expect(installation.stderr).toMatch(/workspace.*schema 5.*pinned DIM version.*export.*recreate/is);
+    expect(installation.stderr).toMatch(
+      /workspace state.*work-1\.json.*unsupported predecessor state.*prior pinned release.*export.*recreate.*no state was changed/is
+    );
     expect(installation.stderr).not.toContain("do-not-print");
     expect(invocations).toMatch(/^mise exec -- npm install --prefix .*dim-target-installer\./m);
     expect(invocations).toMatch(/^mise exec -- .*dim-target-installer\..*\/dim installer install core /m);
@@ -130,7 +132,7 @@ describe("target installer selection", () => {
       .some((entry) => entry.startsWith("dim-target-installer."))).toBe(false);
   }, 120_000);
 
-  it("migrates strict host schema 1 only after local plugin activation", async () => {
+  it("rejects strict predecessor host state before local plugin activation", async () => {
     // Given
     const fixture = await createFixture();
     const hostPath = resolve(fixture.root, "state/host.json");
@@ -151,12 +153,15 @@ describe("target installer selection", () => {
     const invocations = await readFile(fixture.log, "utf8");
 
     // Then
-    expect(installation.status, installation.stderr).toBe(0);
-    expect(installation.stderr).toContain("will be migrated with a permanent backup at controller startup");
-    expect(JSON.parse(await readFile(hostPath, "utf8"))).toMatchObject({ schemaVersion: 2, phase: "stopped" });
-    expect(await readFile(`${hostPath}.schema-1.bak`, "utf8")).toBe(hostBytes);
+    expect(installation.status).toBe(1);
+    expect(installation.stderr).toMatch(
+      /host lifecycle state.*host\.json.*unsupported predecessor state.*prior pinned release.*complete recovery.*no state was changed/is
+    );
+    expect(await readFile(hostPath, "utf8")).toBe(hostBytes);
+    await expect(readFile(`${hostPath}.schema-1.bak`, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     expect(await bundleBytes(fixture.bundle)).toEqual(bundleBefore);
-    expect(invocations.match(/^state$/gm)).toHaveLength(2);
+    expect(invocations.match(/^state$/gm)).toHaveLength(1);
+    expect(invocations).not.toContain("installer enable-plugin");
     expect(invocations).not.toContain("mise exec -- dim");
     expect(invocations).not.toContain("npm install --global");
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });

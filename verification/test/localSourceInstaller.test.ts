@@ -155,11 +155,13 @@ describe("local source installation", () => {
     ]);
 
     // When
-  const installation = run(facade, ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], environment);
+    const installation = run(facade, ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], environment);
 
     // Then
     expect(installation.status).toBe(1);
-    expect(installation.stderr).toMatch(/workspace.*work-1\.json.*schema 5.*pinned DIM version.*export.*recreate/is);
+    expect(installation.stderr).toMatch(
+      /workspace state.*work-1\.json.*unsupported predecessor state.*prior pinned release.*export.*recreate.*no state was changed/is
+    );
     expect(installation.stderr).not.toContain("do-not-print");
     expect(await Promise.all([
       readFile(facade),

@@ -6,10 +6,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, test } from "vitest";
-import { parseNativeOrdinaryBundleConfig } from "../../core/packages/core/src/nativeOrdinaryBundleConfig.ts";
-import { parseNativeQemuConnection } from "../../core/packages/core/src/nativeQemuConnection.ts";
-import { parseNativeQemuSchedulerConfig } from "../../core/packages/core/src/nativeQemuSchedulerConfig.ts";
-import { parseNativeRootCiHostConfig } from "../../core/packages/core/src/nativeRootCiHostConfig.ts";
 
 const exec = promisify(execFile);
 const verificationRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -17,7 +13,6 @@ const script = join(verificationRoot, "scripts", "native-cutover-clean-host.bash
 const runLibrary = join(verificationRoot, "scripts", "lib", "native-cutover-clean-host-run.bash");
 const evidenceLibrary = join(verificationRoot, "scripts", "lib", "native-cutover-clean-host-evidence.bash");
 const example = join(verificationRoot, "native-cutover-clean-host.conf.example");
-const runbook = join(verificationRoot, "native-cutover-host.md");
 const temporaryRoots = [];
 
 afterEach(async () => {
@@ -122,32 +117,6 @@ test("publishes only a bounded atomic smoke result", async () => {
   assert.match(source, /notVerified:/);
   assert.match(source, /cutover_deferred_phase_manifest/);
   assert.match(source, /mv -- "\$smoke_result_temporary" "\$evidence\/SMOKE-PASSED"/);
-});
-
-test("runbook host fixtures satisfy the current strict production parsers", async () => {
-  // Given
-  const source = await readFile(runbook, "utf8");
-  const ordinaryService = documentedJson(source, "ordinary-service");
-  const ordinary = documentedJson(source, "ordinary-host");
-  const qemuHost = documentedJson(source, "qemu-host");
-  const qemuScheduler = documentedJson(source, "qemu-scheduler");
-
-  // When
-  const parsedOrdinaryService = parseNativeOrdinaryBundleConfig(ordinaryService);
-  const parsedOrdinary = parseNativeRootCiHostConfig(ordinary);
-  const parsedQemuHost = parseNativeQemuConnection(qemuHost, "qemu-a");
-  const parsedQemuScheduler = parseNativeQemuSchedulerConfig(qemuScheduler);
-
-  // Then
-  assert.equal(parsedOrdinaryService.schemaVersion, 5);
-  assert.equal(parsedOrdinaryService.database, "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3");
-  assert.deepEqual(Object.keys(parsedOrdinary.nativeGit), ["transport", "endpoint", "serviceId"]);
-  assert.deepEqual(Object.keys(parsedQemuHost.nativeGit), ["transport", "endpoint", "serviceId"]);
-  assert.deepEqual(Object.keys(parsedQemuScheduler.nativeGit), [
-    "endpoint", "serviceId", "identity", "attemptIssuer", "candidateReader", "resultReporter"
-  ]);
-  assert.throws(() => parseNativeOrdinaryBundleConfig({ ...ordinaryService, admissionLeaseMilliseconds: 1 }));
-  assert.throws(() => parseNativeQemuSchedulerConfig({ ...qemuScheduler, listen: { host: "127.0.0.1", port: 9090 } }));
 });
 
 test("starts every global CI service without Project admission and arms cleanup first", async () => {
@@ -274,13 +243,4 @@ async function execFailure(file, args) {
     throw error;
   }
   throw new Error("command unexpectedly succeeded");
-}
-
-function documentedJson(source, name) {
-  const marker = `<!-- native-cutover-smoke-fixture:${name} -->`;
-  const start = source.indexOf(marker);
-  assert.notEqual(start, -1, `missing ${name} fixture marker`);
-  const fenced = source.slice(start + marker.length).match(/\s*```json\n([\s\S]*?)\n```/);
-  assert.notEqual(fenced, null, `missing ${name} JSON fixture`);
-  return JSON.parse(fenced[1]);
 }

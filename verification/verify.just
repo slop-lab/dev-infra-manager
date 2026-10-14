@@ -8,18 +8,12 @@ environments-kvm verbose="":
 agent-control-kvm verbose="":
     cd .. && bash verification/scripts/qemu-agent-control-smoke.bash "{{verbose}}"
 
-# Clean hosted/local gate. Missing x86-64, Docker, or writable KVM is unavailable (exit 2).
-qemu-ci-image-layers-kvm:
-    @[[ "$(uname -m)" == x86_64 ]] || { echo "qemu-ci-image-layers-kvm requires x86-64" >&2; exit 2; }
-    @docker info >/dev/null 2>&1 || { echo "qemu-ci-image-layers-kvm requires a reachable Docker daemon" >&2; exit 2; }
-    @[[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || { echo "qemu-ci-image-layers-kvm requires an accessible character /dev/kvm" >&2; exit 2; }
-    cd .. && DIM_QEMU_CI_KVM_SMOKE=1 pnpm --dir tests exec vitest run packages/core/test/qemuCiRunnerKvm.test.ts
-
-# Verification-only real guest mechanics under TCG; this is not production KVM acceptance.
-native-qemu-guest-mechanics-tcg:
-    @[[ "$(uname -m)" == x86_64 ]] || { echo "native-qemu-guest-mechanics-tcg requires x86-64" >&2; exit 2; }
-    @docker info >/dev/null 2>&1 || { echo "native-qemu-guest-mechanics-tcg requires a reachable Docker daemon" >&2; exit 2; }
-    cd .. && bash verification/scripts/native-qemu-guest-mechanics-tcg-smoke.bash
+# Real KVM guest mechanics on the current host. This is not independent-host or human release acceptance.
+native-qemu-guest-mechanics-kvm:
+    @[[ "$(uname -m)" == x86_64 ]] || { echo "native-qemu-guest-mechanics-kvm requires x86-64" >&2; exit 2; }
+    @docker info >/dev/null 2>&1 || { echo "native-qemu-guest-mechanics-kvm requires a reachable Docker daemon" >&2; exit 2; }
+    @[[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || { echo "native-qemu-guest-mechanics-kvm requires an accessible character /dev/kvm" >&2; exit 2; }
+    cd .. && bash verification/scripts/native-qemu-guest-mechanics-kvm-smoke.bash
 
 # Real native ordinary executor Docker integration; nested execution requires explicit digest-pinned Sysbox fixture images.
 native-ordinary-executor-live:
@@ -31,17 +25,23 @@ native-ordinary-executor-live:
     @docker image inspect "$DIM_TEST_NATIVE_JOB_IMAGE" >/dev/null 2>&1 || { echo "native-ordinary-executor-live requires the job fixture image locally" >&2; exit 2; }
     cd .. && pnpm --dir verification exec vitest run --config live/vitest.config.ts live/nativeOrdinaryExecutorLive.test.ts
 
-# Run the backend-independent end-to-end contract after a backend is installed.
+# Build private digest-pinned fixtures and run one real Sysbox job on the current host.
+native-ordinary-guest-mechanics:
+    cd .. && bash verification/scripts/native-ordinary-guest-mechanics-smoke.bash
+
+# Build an isolated fixture and exercise a real native Project, persistent Sysbox workspace, and proposal-only Git authority.
+native-basic-lifecycle:
+    @docker info >/dev/null 2>&1 || { echo "native-basic-lifecycle requires a reachable Docker daemon" >&2; exit 2; }
+    @docker info 2>/dev/null | grep -Eq '^ Runtimes:.*sysbox-runc' || { echo "native-basic-lifecycle requires sysbox-runc" >&2; exit 2; }
+    cd .. && bash verification/scripts/native-basic-lifecycle-live.bash
+
+# Shipped full-development entrypoint for independent native contracts, services, Sysbox, and real-KVM stages.
 full-development:
-    cd .. && bash verification/scripts/full-development-smoke.bash
+    cd .. && bash verification/scripts/kvm-guest-verification-smoke.bash
 
 # Exercise dependency-aware verification aggregation without Docker or KVM.
 verification-stage-runner:
     cd .. && bash verification/scripts/verification-stage-runner-test.bash
-
-# Real external-Gitea workflows on two logical host identities in one Sysbox-capable guest.
-ordinary-ci-pool-live:
-    cd .. && bash verification/scripts/ordinary-ci-pool-live-smoke.bash
 
 # Build packages and verify plugin installation through the published package shape.
 plugin-install:
@@ -51,28 +51,6 @@ plugin-install:
 # Prove raw TCP reachability across a disposable Headscale tailnet without host Tailscale state.
 headscale-tailnet-tcp:
     cd .. && bash verification/scripts/headscale-tailnet-tcp-smoke.bash
-
-# Prove two isolated local controllers can share one operator-managed external Gitea Project.
-external-gitea-shared-control:
-    just build-packages
-    cd .. && bash verification/scripts/external-gitea-shared-control-smoke.bash
-
-# Verify reviewed-ref authorization against a disposable digest-pinned Gitea instance.
-gitea-repository-policy:
-    cd .. && bash verification/scripts/gitea-repository-policy-smoke.bash
-
-# Build shipped scheduler bytes and run two generated shared workers with fake one-job processes.
-packaged-shared-qemu-scheduler:
-    just build-packages
-    cd .. && bash verification/scripts/packaged-shared-qemu-scheduler-smoke.bash
-
-# Real two-logical-host shared scheduler job completion; requires x86-64, Docker, writable KVM, network, and >=4 GiB RAM.
-real-shared-qemu-jobs-kvm:
-    @[[ "$(uname -m)" == x86_64 ]] || { echo "real-shared-qemu-jobs-kvm requires x86-64" >&2; exit 2; }
-    @docker info >/dev/null 2>&1 || { echo "real-shared-qemu-jobs-kvm requires a reachable Docker daemon" >&2; exit 2; }
-    @[[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || { echo "real-shared-qemu-jobs-kvm requires an accessible character /dev/kvm" >&2; exit 2; }
-    just build-packages
-    cd .. && bash verification/scripts/real-shared-qemu-jobs-smoke.bash
 
 # Verify pinned workspace-user setup plus generic development-service exposure.
 workspace-user-setup:
@@ -119,14 +97,6 @@ cache-routing-docker:
     cd .. && bash verification/scripts/registry-cache-routing-smoke.bash --docker-only
     cd .. && bash verification/scripts/registry-cache-routing-nested-smoke.bash --docker-only
 
-# Clean hosted/local gate. Missing host-installed sysbox-runc is an unavailable capability (exit 2).
-cache-routing-sysbox:
-    cd .. && bash verification/scripts/registry-cache-routing-managed-smoke.bash --sysbox
-
-# Clean hosted/local gate. Missing x86-64 KVM, QEMU, cloud-init, SSH, or socat is unavailable (exit 2).
-cache-routing-kvm:
-    cd .. && bash verification/scripts/registry-cache-routing-managed-smoke.bash --kvm
-
 # Build the managed Sysbox runner image and prove Project tools, including Node.js, are absent.
 sysbox-ci-runner-image:
     cd .. && bash verification/scripts/sysbox-ci-runner-image-smoke.bash
@@ -158,7 +128,6 @@ pull-request-skill:
 # Backend-independent container integration; requires cgroup-capable Docker for its nested runtime.
 container phases="":
     just verify workspace-runtime
-    cd .. && DIM_SELF_PHASES="${DIM_SELF_PHASES:-{{phases}}}" bash verification/scripts/container-self-project-smoke.bash
 
 # DIM-owned workspace runtime integration supported inside the Sysbox-isolated managed CI runner.
 workspace-runtime:
@@ -168,25 +137,11 @@ workspace-runtime:
     just build-workspace-image
     just build-local-workspace-image
     cd .. && bash verification/scripts/container-inner-docker-smoke.bash
-    cd .. && bash verification/scripts/container-lifecycle-smoke.bash
     cd .. && bash verification/scripts/container-packed-project-smoke.bash
-    cd .. && bash verification/scripts/shared-upstream-example-smoke.bash
 
 # Requires Docker and network access; exercises `mise use --raw --global npm:@slop-lab/dim-installer` in a disposable container.
 mise-install-smoke:
     cd .. && bash verification/scripts/mise-install-smoke.bash
-
-# Verify examples on the current host or in a separate disposable backend VM per example.
-example backend="current-installed" dirty_repo="auto" example="all":
-    cd .. && bash verification/scripts/verify-example.bash --backend "{{backend}}" --dirty-repo "{{dirty_repo}}" --example "{{example}}"
-
-# Verify this repository's .dim contract with Docker and managed Gitea.
-self-development phases="":
-    docker info >/dev/null
-    docker compose version >/dev/null
-    just build-packages
-    just build-workspace-image
-    cd .. && DIM_SELF_PHASES="${DIM_SELF_PHASES:-{{phases}}}" bash verification/scripts/container-self-project-smoke.bash
 
 # Run generated workspace isolation checks without Docker or workspace creation.
 isolation:

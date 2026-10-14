@@ -357,9 +357,6 @@ describe("local source build policy", () => {
     const imageConsumers = await Promise.all([
       "container-sysbox-isolation-smoke.bash",
       "container-inner-docker-smoke.bash",
-      "single-repository-example-smoke.bash",
-      "two-repository-example-smoke.bash",
-      "multi-repository-example-smoke.bash",
       "external-url-example-smoke.bash"
     ].map((script) => readFile(resolve(workspaceRoot, "verification/scripts", script), "utf8")));
 

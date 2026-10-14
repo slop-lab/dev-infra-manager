@@ -17,15 +17,16 @@ const fullDevelopmentAgentLauncher = resolve(fullDevelopmentDim, "agent-dind/age
 const fullDevelopmentDindEntrypoint = resolve(fullDevelopmentDim, "agent-dind/entrypoint.sh");
 
 describe("canonical non-root SSH practical authority", () => {
-  it("passes the bounded Git identity, credential, safe-directory, and no-prompt configuration", async () => {
+  it("passes bounded Git directories and no-prompt configuration without runtime credentials", async () => {
     const agent = await readFile(projectAgent, "utf8");
 
-    expect(agent).toContain("--env GIT_CONFIG_COUNT=3");
-    expect(agent).toContain("--env GIT_CONFIG_KEY_0=credential.helper");
+    expect(agent).toContain("--env GIT_CONFIG_COUNT=2");
+    expect(agent).toContain("--env GIT_CONFIG_KEY_0=safe.directory");
+    expect(agent).toContain("--env GIT_CONFIG_VALUE_0=/workspace");
     expect(agent).toContain("--env GIT_CONFIG_KEY_1=safe.directory");
-    expect(agent).toContain("--env GIT_CONFIG_VALUE_1=/workspace");
-    expect(agent).toContain("--env GIT_CONFIG_KEY_2=safe.directory");
-    expect(agent).toContain("--env 'GIT_CONFIG_VALUE_2=/workspace/*'");
+    expect(agent).toContain("--env 'GIT_CONFIG_VALUE_1=/workspace/*'");
+    expect(agent).not.toContain("credential.helper");
+    expect(agent).not.toMatch(/DIM_GIT_(?:USERNAME|TOKEN)/);
     expect(agent).toContain("--env GIT_TERMINAL_PROMPT=0");
     expect(agent).not.toContain("--env GIT_CONFIG_VALUE_1=*");
   });
@@ -35,8 +36,7 @@ describe("canonical non-root SSH practical authority", () => {
 
     for (const variable of [
       "DOCKER_HOST",
-      "DIM_GIT_USERNAME",
-      "DIM_GIT_TOKEN",
+      "DIM_GIT_BASE_URL",
       "GIT_AUTHOR_NAME",
       "GIT_AUTHOR_EMAIL",
       "GIT_COMMITTER_NAME",
@@ -80,9 +80,12 @@ describe("canonical non-root SSH practical authority", () => {
   });
 
   it("serializes setup-producing and discard lifecycle entry points", async () => {
-    const sources = await Promise.all(["workspaceCreation.ts", "workspaceSetup.ts", "workspaceDiscard.ts"]
+    const [creation, ...lockedSources] = await Promise.all([
+      "workspaceCreation.ts", "nativeWorkspaceCreation.ts", "workspaceSetup.ts", "workspaceDiscard.ts"
+    ]
       .map((name) => readFile(resolve(workspaceRoot, "core/packages/core/src", name), "utf8")));
-    for (const source of sources) expect(source).toContain("acquireWorkspaceSetupLock");
+    expect(creation).toContain("createNativeWorkspace");
+    for (const source of lockedSources) expect(source).toContain("acquireWorkspaceSetupLock");
   });
 });
 

@@ -6,7 +6,7 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 const runtimeRoot = resolve(workspaceRoot, ".dim");
 const agentRoot = resolve(workspaceRoot, "agent");
 
-describe("self-Project agent temporary volume policy", () => {
+describe("repository development-agent temporary volume policy", () => {
   it("gives OpenCode a dedicated persistent TMPDIR", async () => {
     const [launcher, dockerfile, entrypoint, dindEntrypoint, compose, setup] = await Promise.all([
       readFile(resolve(runtimeRoot, "agent-dind/agent.sh"), "utf8"),

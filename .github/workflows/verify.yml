@@ -1,0 +1,44 @@
+name: Verify native candidate
+
+on:
+  pull_request:
+  push:
+    branches: [main, candidate/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Record exact candidate source
+        env:
+          DIM_EXPECTED_CANDIDATE_SHA: ${{ github.sha }}
+        run: node verification/scripts/candidate-source-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" /tmp/dim-candidate-source-evidence.json
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.10.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: just check-source-native
+      - run: just verify package-packs
+      - name: Upload exact-tree evidence
+        if: always()
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        with:
+          name: native-candidate-source-${{ github.sha }}
+          path: /tmp/dim-candidate-source-evidence.json
+          if-no-files-found: error
+          retention-days: 30
