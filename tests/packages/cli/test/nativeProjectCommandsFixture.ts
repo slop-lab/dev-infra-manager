@@ -14,6 +14,10 @@ import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git
 import { configuredNativeGitBundleServer,
   type NativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
 import { bundleSecrets, idleNativeConfig } from "../../native-git/test/bundleConfigFixture.js";
+import { prepareNativeProjectFixtureRootForRemoval } from "./nativeProjectFixtureCleanup.js";
+import type { NativeFixture, NativeFixtureOptions } from "./nativeProjectCommandsFixtureTypes.js";
+
+export type { NativeFixture } from "./nativeProjectCommandsFixtureTypes.js";
 
 const runFile = promisify(execFile);
 const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
@@ -31,32 +35,15 @@ const policy = compileNativeRootBootstrapPolicy({ rootAlias: "root", protectedRe
   review: { requiredReviewerIds: ["owner"], pathReviewerRules: [],
     requiredJobs: [] } });
 
-export type NativeFixture = {
-  readonly stateRoot: string;
-  readonly serviceRoot: string;
-  readonly sourceRepository: string;
-  readonly registrarPath: string;
-  readonly importerPath: string;
-  readonly controlPath: string;
-  readonly commit: string;
-  readonly tree: string;
-  readonly environment: NodeJS.ProcessEnv;
-  readonly advanceLeaseClock: (milliseconds: number) => void;
-  readonly leaseClock: () => number;
-  readonly readinessRequests: () => number;
-  readonly restartNativeGit: () => Promise<void>;
-  readonly rolloverNativeGit: (publishConnection?: boolean) => Promise<void>;
-  readonly publishCurrentGeneration: () => Promise<void>;
-  readonly importGenerationId: string;
-  readonly currentGenerationId: string;
-};
-
 export async function cleanupNativeProjectFixtures(): Promise<void> {
   await Promise.all(services.splice(0).map((service) => service.close()));
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map(async (root) => {
+    await prepareNativeProjectFixtureRootForRemoval(root);
+    await rm(root, { recursive: true, force: true });
+  }));
 }
 
-export async function nativeFixture(options: { readonly seedImportedDraft?: boolean } = {}): Promise<NativeFixture> {
+export async function nativeFixture(options: NativeFixtureOptions = {}): Promise<NativeFixture> {
   const root = await mkdtemp("/tmp/dim-native-cli-");
   roots.push(root);
   const serviceRoot = join(root, "service");
@@ -67,10 +54,13 @@ export async function nativeFixture(options: { readonly seedImportedDraft?: bool
   await runFile("mkdir", ["-m", "700", configDirectory]);
   await writeFile(join(configDirectory, "config.json"),
     `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`, { mode: 0o600 });
-  let leaseNow = Date.now();
+  const frozenLeaseNow = Date.now();
+  const workspaceWriteLeaseClock = options.workspaceWriteLeaseClock ?? (() => frozenLeaseNow);
+  let leaseClockOffset = 0;
+  const leaseClock = (): number => workspaceWriteLeaseClock() + leaseClockOffset;
   let readinessRequests = 0;
   const countReadinessRequest = (): void => { readinessRequests += 1; };
-  let service = await startNativeGit(serviceRoot, () => leaseNow, countReadinessRequest,
+  let service = await startNativeGit(serviceRoot, leaseClock, countReadinessRequest,
     generationId, activationToken);
   const bundle = await createRootBundle(root);
   const bundlePath = join(root, "root.bundle");
@@ -107,8 +97,8 @@ export async function nativeFixture(options: { readonly seedImportedDraft?: bool
   environment.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE = importerPath;
   return { stateRoot, serviceRoot, sourceRepository: bundle.source, registrarPath, importerPath, controlPath,
     commit: bundle.commit, tree: bundle.tree, environment,
-    advanceLeaseClock(milliseconds) { leaseNow += milliseconds; },
-    leaseClock() { return leaseNow; },
+    advanceLeaseClock(milliseconds) { leaseClockOffset += milliseconds; },
+    leaseClock,
     readinessRequests() { return readinessRequests; },
     importGenerationId: generationId,
     currentGenerationId: nextGenerationId,
@@ -118,7 +108,7 @@ export async function nativeFixture(options: { readonly seedImportedDraft?: bool
       const index = services.indexOf(service);
       if (index >= 0) services.splice(index, 1);
       await service.close();
-      service = await startNativeGit(serviceRoot, () => leaseNow, countReadinessRequest,
+      service = await startNativeGit(serviceRoot, leaseClock, countReadinessRequest,
         generationId, activationToken, address.port);
     },
     async rolloverNativeGit(publishConnection = true) {
@@ -127,7 +117,7 @@ export async function nativeFixture(options: { readonly seedImportedDraft?: bool
       const index = services.indexOf(service);
       if (index >= 0) services.splice(index, 1);
       await service.close();
-      service = await startNativeGit(serviceRoot, () => leaseNow, countReadinessRequest,
+      service = await startNativeGit(serviceRoot, leaseClock, countReadinessRequest,
         nextGenerationId, nextActivationToken, address.port);
       if (publishConnection) {
         await writeFile(controlPath,
