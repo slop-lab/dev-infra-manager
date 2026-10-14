@@ -107,6 +107,24 @@ installation to bypass this boundary. Operator-run `sudo -v` may establish
 cached authorization for the later narrowly scoped `sudo -n` commands. A
 permanent blanket `NOPASSWD` rule is not required.
 
+The default KVM gate records each post-setup verification stage as `PASS`,
+`FAIL`, or `BLOCKED`, followed by an aggregate summary and evidence-log path.
+After the guest, repository, toolchain, backend, and smoke-image prerequisites
+pass, the common full-development contract, trusted KVM/Sysbox isolation,
+managed CI boundary, and non-root CI workflow run serially as independent
+siblings. An ordinary failure in one does not suppress the others, but the gate
+still exits nonzero. Signal cancellation or uncertain cleanup stops scheduling,
+blocks every remaining stage with the reason, and returns the fatal status
+(`125` for cleanup uncertainty).
+Within `full-development`, native idle images, control-plane installation,
+workspace tool setup, the stateful journey, and self-development use the same
+rule: only a failed declared prerequisite blocks a stage. Exercise the runner's
+fault-injection contract without KVM or Docker with:
+
+```bash
+just verify verification-stage-runner
+```
+
 1. **Prepare the host.** Use a disposable Linux host or retained VM with a
    systemd user manager, reachable Docker 29, registered `sysbox-runc`, working
    cgroup enforcement, and Docker Buildx. Review the host installer before

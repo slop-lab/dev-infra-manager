@@ -59,10 +59,13 @@ describe("DIM development forge policy", () => {
   it("runs the full-development contract in the Sysbox QEMU lane", async () => {
     const gate = await readFile(resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash"), "utf8");
     const kvm = await readFile(resolve(workspaceRoot, ".dim/qemu-verify.bash"), "utf8");
+    const guest = await readFile(resolve(workspaceRoot, "verification/scripts/kvm-guest-verification-smoke.bash"), "utf8");
+    const fullDevelopment = await readFile(resolve(workspaceRoot, "verification/scripts/full-development-smoke.bash"), "utf8");
     const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
     const workflow = await readFile(resolve(workspaceRoot, ".gitea/workflows/host-backends.yml"), "utf8");
     expect(kvm).toContain('backend="sysbox"');
-    expect(kvm).toContain("just verify full-development");
+    expect(kvm).toContain("verification/scripts/kvm-guest-verification-smoke.bash");
+    expect(guest).toContain("just verify full-development");
     expect(kvm).toContain('2>&1 | tee "$step_log"');
     expect(gate).toContain(".dim/qemu-service.mjs");
     expect(gate).toContain('"$node" "$client" run');
@@ -74,10 +77,11 @@ describe("DIM development forge policy", () => {
     expect(kvm.indexOf("pnpm run workspace:build")).toBeLessThan(
       kvm.indexOf('run_step "install $backend backend"')
     );
-    expect(recipes).toContain("DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox");
-    expect(recipes).toContain("DIM_SELF_WORKSPACE_BACKEND=sysbox");
-    expect(recipes).toContain("just verify native-idle-service-images");
-    expect(recipes).toContain("just verify control-plane-install-live");
+    expect(recipes).toContain("verification/scripts/full-development-smoke.bash");
+    expect(fullDevelopment).toContain("DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox");
+    expect(fullDevelopment).toContain("DIM_SELF_WORKSPACE_BACKEND=sysbox");
+    expect(fullDevelopment).toContain("just verify native-idle-service-images");
+    expect(fullDevelopment).toContain("just verify control-plane-install-live");
     expect(recipes).not.toContain("just verify ordinary-ci-pool-live");
     expect(workflow.match(/with-ci-registry-cache\.bash --qemu-relay/g)).toHaveLength(2);
     const verificationSteps: readonly {

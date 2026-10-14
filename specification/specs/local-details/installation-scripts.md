@@ -74,11 +74,12 @@ root-owned mode-`0755` executable at
 target without removing, overwriting, or changing ownership of it.
 `verification/scripts/kvm-host-install-smoke.bash [--preflight-only] [--verbose]` and
 `just verify environments-kvm [--verbose]` verify Sysbox in a clean VM. The check boots a checksum-verified Ubuntu cloud-image VM with
-`/dev/kvm`, clones the committed repository state from a Git bundle, installs
-Sysbox, verifies its runtime, and deletes the VM
-overlay and SSH key on exit. A full source checkout retains its history; a
-shallow checkout is converted to a self-contained single-commit repository
-before bundling. Uncommitted and untracked files are intentionally excluded.
+`/dev/kvm`, archives one resolved committed source tree into a single-commit
+workbench snapshot, installs Sysbox, verifies its runtime, and deletes the VM
+overlay and SSH key on exit. The snapshot records the original source commit
+in its commit message and preserves tracked source even when ignore rules
+match it. Uncommitted, ignored-untracked, and other untracked files are excluded.
+New verification helpers must therefore be committed before a host run.
 The invoking operator remains unprivileged for the gate and client, but must
 have cached noninteractive `sudo -n` authority for the narrow root-owned QEMU service
 directory, trusted service process, exact-PID retirement, and directory cleanup.
@@ -107,8 +108,14 @@ sets
 `just verify environments-kvm`. No blanket `NOPASSWD` policy, `/dev/kvm` mode
 change, or silent group re-exec is part of the installer.
 The check installs the source verification toolchain after the host installer
-and runs `just verify self-development`, covering the canonical
-Project's agent inside its private rootless DinD end to end. The QEMU
+and runs dependency-aware full-development and independent KVM/CI stages,
+including `just verify self-development` for the canonical Project's agent
+inside its private rootless DinD. Stages run serially: an ordinary failure
+does not prevent independent later checks, but failed prerequisites produce
+`BLOCKED` results. The final aggregate remains nonzero for any failure or
+blocked stage. Cancellation stops the active process group and prevents later
+stages; uncertain cleanup produces exit 125 and blocks every remaining stage.
+Per-stage logs and `PASS`/`FAIL`/`BLOCKED` summaries identify each outcome. The QEMU
 verification user has the explicit UID 1001; the gate proves that the daemon
 adopts that non-default UID and maps its inner UID-0 agent onto it.
 The base cloud image is cached under `.local/kvm`. Default output names each

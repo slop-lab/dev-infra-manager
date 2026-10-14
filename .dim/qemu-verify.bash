@@ -112,14 +112,16 @@ run_step() {
 }
 workbench_snapshot="$workdir/workbench"
 snapshot_repository() {
-  local source="$1" destination="$2"
+  local source="$1" destination="$2" source_commit archived_commit
+  source_commit="$(/usr/bin/git --no-replace-objects -C "$source" rev-parse --verify 'HEAD^{commit}')"
   mkdir -p "$destination"
-  tar -C "$(dirname "$source")" --exclude=.git --exclude=.local --exclude=node_modules \
-    -cf - -- "$(basename "$source")" | tar --strip-components=1 -x -C "$destination"
-  git -C "$destination" init --initial-branch=main >/dev/null
-  git -C "$destination" add -A
-  git -C "$destination" -c user.name="DIM Snapshot" -c user.email="snapshot@dim.invalid" \
-    commit -m "snapshot $(basename "$source")" >/dev/null
+  /usr/bin/git --no-replace-objects -C "$source" archive "$source_commit" | tar -x -C "$destination"
+  archived_commit="$(/usr/bin/git --no-replace-objects -C "$source" rev-parse --verify 'HEAD^{commit}')"
+  test "$archived_commit" = "$source_commit"
+  /usr/bin/git -C "$destination" init --initial-branch=main >/dev/null
+  /usr/bin/git -C "$destination" add --force -A
+  /usr/bin/git -C "$destination" -c user.name="DIM Snapshot" -c user.email="snapshot@dim.invalid" \
+    commit -m "snapshot $(basename "$source") at $source_commit" >/dev/null
 }
 inputs_root="$workdir/dim-inputs"
 if [[ "$cache_routing" == false ]]; then
@@ -237,6 +239,8 @@ if [[ "$cache_routing" == true ]]; then
     exit 1
   '
   echo "cache-routing[cold-pull]: $cache_routing_ref"
+  run_step "cache-routing verify client image is absent" ssh "${ssh_args[@]}" dim@127.0.0.1 \
+    "if sudo docker image inspect '$cache_routing_ref' >/dev/null 2>&1; then echo 'cache-routing refuses to remove a pre-existing client image' >&2; exit 1; fi"
   run_step "cache-routing cold pull" ssh "${ssh_args[@]}" dim@127.0.0.1 \
     "sudo docker pull '$cache_routing_ref' >/dev/null"
   run_step "cache-routing remove client image" ssh "${ssh_args[@]}" dim@127.0.0.1 \
@@ -339,105 +343,7 @@ if [[ "$agent_control" == true ]]; then
     "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_TEST_REGISTRY_MIRROR_ADDRESS=10.0.2.2 DIM_SELF_EXPECT_AGENT_UID=1001 DIM_SELF_VERIFY_AGENT=1 DIM_SELF_STOP_AFTER_QEMU_PROBE=1 JUST_UNSTABLE=1 just verify self-development"
   exit 0
 fi
-run_step "verify common full-development contract" \
+run_step "run independent guest verification stages" \
   ssh "${ssh_args[@]}" dim@127.0.0.1 \
-    "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_TEST_REGISTRY_MIRROR_ADDRESS=10.0.2.2 JUST_UNSTABLE=1 just verify full-development"
-  if [[ "${DIM_KVM_SKIP_TRUSTED_WORKSPACE:-0}" != 1 ]]; then
-    run_step "verify trusted KVM workspace and Sysbox isolation probe" \
-      ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' bash -s" <<'EOF'
-      set -e
-      trusted=dim-kvm-trusted
-      agent=dim-kvm-agent
-      cleanup() {
-        sudo docker rm -f "$trusted" "$agent" >/dev/null 2>&1 || true
-      }
-      trap cleanup EXIT
-      cd dim/workbench
-      pnpm --filter @slop-lab/dim-controller-proxy run build
-      sudo docker build --quiet -t dev-infra-project-workspace:latest -f core/images/project-workspace/Dockerfile . >/dev/null
-      sudo docker run -d --name "$trusted" --runtime=runc --privileged --device=/dev/kvm \
-        dev-infra-project-workspace:latest sleep infinity >/dev/null
-      for _ in $(seq 1 60); do
-        sudo docker exec "$trusted" docker info >/dev/null 2>&1 && break
-        sleep 1
-      done
-      sudo docker exec "$trusted" test -r /dev/kvm
-      sudo docker exec "$trusted" test -w /dev/kvm
-      ! sudo docker exec "$trusted" docker info --format "{{json .Runtimes}}" | grep -q sysbox-runc
-      sudo docker exec -u root "$trusted" apk add --no-cache qemu-system-x86_64 >/dev/null
-      status=0
-      sudo docker exec -u root "$trusted" timeout 2 qemu-system-x86_64 \
-        -machine q35,accel=kvm -cpu host -m 128 -smp 1 -nodefaults -nographic -S || status=$?
-      test "$status" -eq 124
-      dind_mirror_flags=()
-      if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
-        dind_mirror_flags=(
-          --add-host host.docker.internal:host-gateway
-          docker:29.1.3-dind
-          --registry-mirror "$DIM_DOCKER_REGISTRY_MIRROR"
-          --insecure-registry "${DIM_DOCKER_REGISTRY_MIRROR#http://}"
-        )
-      else
-        dind_mirror_flags=(docker:29.1.3-dind)
-      fi
-      sudo docker run -d --name "$agent" --runtime=sysbox-runc "${dind_mirror_flags[@]}" >/dev/null
-      for _ in $(seq 1 60); do
-        sudo docker exec "$agent" docker info >/dev/null 2>&1 && break
-        sleep 1
-      done
-      if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
-        sudo docker exec "$agent" docker info --format '{{json .RegistryConfig.Mirrors}}' |
-          grep -Fq "$DIM_DOCKER_REGISTRY_MIRROR"
-      fi
-      sudo docker image save dim-backend-smoke:local |
-        sudo docker exec -i "$agent" docker image load >/dev/null
-      sudo docker exec "$agent" docker run --rm dim-backend-smoke:local true
-      test "$(sudo docker inspect -f "{{.HostConfig.Privileged}}" "$agent")" = false
-EOF
-  fi
-  run_step "verify managed CI runner cgroup boundary" \
-    ssh "${ssh_args[@]}" dim@127.0.0.1 '
-      set -e
-      export DIM_STATE_ROOT=/tmp/dim-ci-runner-state
-      export DIM_CONFIG_PATH="$DIM_STATE_ROOT/config.json"
-      export DIM_CI_RUNNER_CPUS=1.5
-      export DIM_CI_RUNNER_MEMORY=1g
-      export DIM_CI_RUNNER_PIDS=1024
-      project=ci-smoke
-      source=/tmp/dim-ci-source
-      cleanup() {
-        cd ~/dim/workbench
-        pnpm run --silent cli -- ci runner delete "$project" primary --yes >/dev/null 2>&1 || true
-        pnpm run --silent cli -- project purge "$project" --yes >/dev/null 2>&1 || true
-        sudo docker rm -f dim-ci-ci-smoke-primary >/dev/null 2>&1 || true
-        sudo rm -rf "$DIM_STATE_ROOT" "$source"
-      }
-      trap cleanup EXIT
-      mkdir -p "$DIM_STATE_ROOT" "$source"
-      printf "%s\n" "{\"schemaVersion\":1,\"workspaceBackend\":\"sysbox\"}" >"$DIM_CONFIG_PATH"
-      git config --global user.name Smoke
-      git config --global user.email smoke@dim.invalid
-      cd ~/dim/workbench
-      bash examples/features/ci-runner/create-repository.bash "$source/repository" >/dev/null
-      cd ~/dim/workbench
-      pnpm run --silent cli -- project create "$project" \
-        --repos "$source/repository/root/.dim/repos.yml" --yes >/dev/null
-      pnpm run --silent cli -- ci runner create "$project" primary sysbox >/dev/null
-      container="$(pnpm run --silent cli -- ci runner status "$project" primary --json | jq -r .executor.containerName)"
-      test "$(sudo docker inspect --format "{{.HostConfig.Runtime}}" "$container")" = sysbox-runc
-      test "$(sudo docker inspect --format "{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}" "$container")" \
-        = "1500000000|1073741824|1024"
-      test "$(sudo docker inspect --format "{{.HostConfig.Privileged}}" "$container")" = false
-      ! sudo docker inspect --format "{{json .Mounts}}" "$container" | grep -q /var/run/docker.sock
-      for _ in $(seq 1 60); do
-        status="$(sudo docker inspect --format "{{.State.Status}}" "$container")"
-        [[ "$status" != running ]] || break
-        sleep 1
-      done
-      test "$status" = running
-    '
-  run_step "verify non-root repository CI workflow" \
-    ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim/workbench && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 bash verification/scripts/ci-runner-example-smoke.bash"
+    "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_KVM_SKIP_TRUSTED_WORKSPACE='${DIM_KVM_SKIP_TRUSTED_WORKSPACE:-0}' bash verification/scripts/kvm-guest-verification-smoke.bash"
 echo "kvm-host-install-smoke-ok: $backend"
