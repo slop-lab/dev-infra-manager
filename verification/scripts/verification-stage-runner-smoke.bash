@@ -11,6 +11,10 @@ export DIM_VERIFICATION_LOG_ROOT
 
 run_fixture_stage() {
   local stage="$1"
+  if [[ -n "${DIM_VERIFICATION_INTERNAL_STAGE+x}" ]]; then
+    printf 'leaked internal verification stage: %s\n' "$DIM_VERIFICATION_INTERNAL_STAGE" >&2
+    return 97
+  fi
   printf '%s\n' "$stage" >>"${DIM_VERIFICATION_EXECUTION_LOG:?}"
   case ",${DIM_VERIFICATION_CLEANUP_FAILURES:-}," in
     *,"$stage",*)
@@ -21,6 +25,7 @@ run_fixture_stage() {
         exit 125
       }
       trap fixture_cleanup_uncertain EXIT
+      trap 'exit 143' TERM
       ;;
   esac
   case ",${DIM_VERIFICATION_FAILURES:-}," in
@@ -29,6 +34,15 @@ run_fixture_stage() {
   case ",${DIM_VERIFICATION_EVIDENCE_FAILURES:-}," in
     *,"$stage",*) rm -f "$DIM_VERIFICATION_LOG_ROOT/$stage.log"; mkdir "$DIM_VERIFICATION_LOG_ROOT/$stage.log" ;;
   esac
+  if [[ "${DIM_VERIFICATION_SIGNAL_EXIT_STAGE:-}" == "$stage" ]]; then
+    kill -TERM "$BASHPID"
+    wait
+  fi
+  if [[ "${DIM_VERIFICATION_CLEANUP_BLOCKING_STAGE:-}" == "$stage" ]]; then
+    /usr/bin/sleep 300 &
+    printf '%s\n' "$BASHPID" >"${DIM_VERIFICATION_PROCESS_LOG:?}"
+    wait
+  fi
   if [[ "${DIM_VERIFICATION_BLOCKING_STAGE:-}" == "$stage" ]]; then
     /usr/bin/bash -c '
       trap "" INT TERM HUP

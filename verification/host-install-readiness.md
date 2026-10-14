@@ -115,7 +115,10 @@ managed CI boundary, and non-root CI workflow run serially as independent
 siblings. An ordinary failure in one does not suppress the others, but the gate
 still exits nonzero. Signal cancellation or uncertain cleanup stops scheduling,
 blocks every remaining stage with the reason, and returns the fatal status
-(`125` for cleanup uncertainty).
+(`125` for cleanup uncertainty). Cancellation allows up to 90 seconds for owned
+controller shutdown before forced termination; forced termination is also
+reported as cleanup uncertainty. Nested aggregators use their own stage plan
+and preserve the parent-owned evidence directory during internal reentry.
 Within `full-development`, native idle images, control-plane installation,
 workspace tool setup, the stateful journey, and self-development use the same
 rule: only a failed declared prerequisite blocks a stage. Exercise the runner's
@@ -124,6 +127,14 @@ fault-injection contract without KVM or Docker with:
 ```bash
 just verify verification-stage-runner
 ```
+
+The `20261014T152129Z` host run at `ffdcd380` passed `guest-ready` and
+`trusted-kvm-sysbox`, and attempted both CI siblings after `common-full`
+failed. It did not pass the complete gate. The subsequent fixes consume the
+nested stage selector before dispatch, enable the exact host-mirror plugin in
+CI environments, and use compact owned controller sockets. Startup failures
+now emit bounded, redacted diagnostics and retain private evidence; uncertain
+cleanup preserves recovery state. These fixes still require a new host run.
 
 1. **Prepare the host.** Use a disposable Linux host or retained VM with a
    systemd user manager, reachable Docker 29, registered `sysbox-runc`, working

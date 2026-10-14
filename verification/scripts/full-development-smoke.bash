@@ -7,7 +7,14 @@ source "$script_dir/lib/verification-stage-runner.bash"
 DIM_VERIFICATION_STAGE_ENTRYPOINT="$script_dir/full-development-smoke.bash"
 export DIM_VERIFICATION_STAGE_ENTRYPOINT
 
-DIM_VERIFICATION_LOG_ROOT="${DIM_FULL_DEVELOPMENT_LOG_ROOT:-/tmp/dim-full-development-logs/$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+if [[ -n "${DIM_VERIFICATION_INTERNAL_STAGE:-}" ]]; then
+  [[ -n "${DIM_VERIFICATION_LOG_ROOT:-}" && -d "$DIM_VERIFICATION_LOG_ROOT" ]] || {
+    printf 'internal verification stage requires an existing DIM_VERIFICATION_LOG_ROOT\n' >&2
+    exit 2
+  }
+else
+  DIM_VERIFICATION_LOG_ROOT="${DIM_FULL_DEVELOPMENT_LOG_ROOT:-/tmp/dim-full-development-logs/$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+fi
 export DIM_VERIFICATION_LOG_ROOT
 
 source_tools_ready() {

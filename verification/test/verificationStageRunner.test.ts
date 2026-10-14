@@ -12,5 +12,5 @@ describe("verification stage runner", () => {
     // Then
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("verification-stage-runner-test-ok");
-  });
+  }, 15_000);
 });
