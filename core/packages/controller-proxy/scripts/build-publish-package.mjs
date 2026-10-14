@@ -1,8 +1,9 @@
-import { cp, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
 import { publishPackageVersion } from "../../../scripts/publish-package-version.mjs";
 
 const sourcePath = new URL("../package.json", import.meta.url);
+const distPath = new URL("../dist/", import.meta.url);
 const outputPath = new URL("../dist/package.json", import.meta.url);
 const developmentServiceCliPath = new URL("../dist/development-service-cli.js", import.meta.url);
 const source = JSON.parse(await readFile(sourcePath, "utf8"));
@@ -59,3 +60,18 @@ await mkdir(new URL("../dist/runtime-dependencies", import.meta.url), { recursiv
 await cp(new URL("../../contracts/external-url/dist", import.meta.url), runtimeDependency, { recursive: true });
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
+await normalizePublicDist(distPath, new Set(Object.values(output.bin).map((file) => new URL(file, distPath).href)));
+
+async function normalizePublicDist(directory, executableFiles) {
+  await chmod(directory, 0o755);
+  const entries = await readdir(directory, { withFileTypes: true });
+  await Promise.all(entries.map(async (entry) => {
+    const artifact = new URL(entry.name, directory);
+    if (entry.isDirectory()) {
+      await normalizePublicDist(new URL(`${entry.name}/`, directory), executableFiles);
+      return;
+    }
+    if (!entry.isFile()) throw new Error(`public package artifact must be a regular file: ${artifact.pathname}`);
+    await chmod(artifact, executableFiles.has(artifact.href) ? 0o755 : 0o644);
+  }));
+}
