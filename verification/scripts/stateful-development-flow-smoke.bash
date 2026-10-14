@@ -116,9 +116,14 @@ cleanup_ordinary_org() {
 return_status() { return "$1"; }
 
 cleanup_with_ordinary_org() {
-  local status=$?
-  cleanup_ordinary_org || status=1
+  local status=$? cleanup_status=0
+  cleanup_ordinary_org || cleanup_status=1
   set +e
+  if ((cleanup_status != 0)); then
+    printf 'ordinary organization cleanup uncertain after body status %d\n' "$status" >&2
+    return_status 125
+    cleanup
+  fi
   return_status "$status"
   cleanup
 }
@@ -238,10 +243,13 @@ case "$ordinary_org_status" in
 esac
 
 echo "[full-development-flow] create a profiled, resource-bounded workspace"
-if ! dim workspace create "$project_name" "$workspace_name" \
+if dim workspace create "$project_name" "$workspace_name" \
   --profile documentation --cpus 2 --memory 3g --pids 768; then
+  :
+else
+  setup_status=$?
   diagnose_workspace_setup
-  exit 1
+  exit "$setup_status"
 fi
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 container_name="$(jq -er .containerName <<<"$workspace_json")"
@@ -431,9 +439,12 @@ dim workspace run "$workspace_name" bash -- -lc \
   'printf "persistent-home\n" >"$HOME/journey-home"'
 dim workspace exec "$workspace_name" -- sh -c \
   'cd "$DIM_WORKSPACE_DATA/project"; printf "# dirty journey probe\n" >>ops/secret-service.sh; printf "untracked\n" >journey-untracked'
-if ! dim workspace restart "$workspace_name" >/dev/null; then
+if dim workspace restart "$workspace_name" >/dev/null; then
+  :
+else
+  setup_status=$?
   diagnose_workspace_setup
-  exit 1
+  exit "$setup_status"
 fi
 dim workspace exec "$workspace_name" -- sh -c \
   'cd "$DIM_WORKSPACE_DATA/project"; grep -q "dirty journey probe" ops/secret-service.sh; test -f journey-untracked'
@@ -446,9 +457,12 @@ printf 'reviewed-v2\n' >"$review/reviewed-version.txt"
 git -C "$review" add reviewed-version.txt
 git -C "$review" commit -m "review development environment update" >/dev/null
 dim x git -C "$review" push origin main >/dev/null
-if ! dim workspace restart "$workspace_name" >/dev/null; then
+if dim workspace restart "$workspace_name" >/dev/null; then
+  :
+else
+  setup_status=$?
   diagnose_workspace_setup
-  exit 1
+  exit "$setup_status"
 fi
 test "$(dim workspace exec "$workspace_name" -- sh -c 'cat "$DIM_PROJECT_ROOT/reviewed-version.txt"')" = reviewed-v2
 test "$(dim workspace exec "$workspace_name" -- sh -c 'cat "$DIM_WORKSPACE_DATA/project/reviewed-version.txt"')" = reviewed-v1

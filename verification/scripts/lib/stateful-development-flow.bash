@@ -145,13 +145,24 @@ start_controller() {
 }
 
 diagnose_workspace_setup() {
-  local failed_workspace failed_container failed_project_path
+  local failed_workspace failed_container_name failed_container failed_workspace_data
+  local failed_project_manifest failed_profiles failed_ids failed_uid failed_gid failed_project_path failed_action
   local -a failed_compose
-  failed_workspace="$(dim workspace show "$workspace_name" --json)"
-  failed_container="$(jq -r .containerName <<<"$failed_workspace")"
+  failed_workspace="$(dim workspace show "$workspace_name" --json)" || return 0
+  failed_container_name="$(jq -er .containerName <<<"$failed_workspace")" || return 0
+  failed_workspace_data="$(jq -er .workspaceDataPath <<<"$failed_workspace")" || return 0
+  failed_project_manifest="$(jq -er .projectManifestPath <<<"$failed_workspace")" || return 0
+  failed_profiles="$(jq -er '.profiles | join(",")' <<<"$failed_workspace")" || return 0
+  failed_container="$(docker container inspect --format '{{.Id}}' "$failed_container_name" 2>/dev/null)" || return 0
+  [[ "$failed_container" =~ ^[0-9a-f]{64}$ ]] || return 0
   failed_project_path=/run/dim/project-root
   failed_compose=(--file .dim/docker-compose.yml)
   docker start "$failed_container" >/dev/null 2>&1 || true
+  failed_ids="$(docker exec --user dim "$failed_container" \
+    stat -c '%u:%g' "$failed_workspace_data/project" 2>/dev/null)" || return 0
+  [[ "$failed_ids" =~ ^([0-9]+):([0-9]+)$ ]] || return 0
+  failed_uid="${BASH_REMATCH[1]}"
+  failed_gid="${BASH_REMATCH[2]}"
   if docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
     test -f .dim/ci-registry-mirror.override.yml; then
     failed_compose+=(--file .dim/ci-registry-mirror.override.yml)
@@ -160,26 +171,44 @@ diagnose_workspace_setup() {
     sh -c 'cat /tmp/dim-agent-controller/agent.log 2>/dev/null || true' >&2 || true
   docker exec --user dim "$failed_container" \
     sh -c 'cat /tmp/dim-stateful-setup.log 2>/dev/null || true' >&2 || true
-  docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
-    docker compose --project-name "dim-project" \
-    "${failed_compose[@]}" ps >&2 || true
-  docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
-    docker compose --project-name "dim-project" \
-    "${failed_compose[@]}" logs >&2 || true
+  for failed_action in ps logs; do
+    docker exec --user dim --workdir "$failed_project_path" \
+      --env "DIM_WORKSPACE_UID=$failed_uid" --env "DIM_WORKSPACE_GID=$failed_gid" \
+      --env "DIM_WORKSPACE_DATA=$failed_workspace_data" --env "DIM_PROJECT_ROOT=$failed_project_path" \
+      --env "DIM_PROJECT_MANIFEST=$failed_project_manifest" --env "COMPOSE_PROFILES=$failed_profiles" \
+      "$failed_container" sh -eu -c '
+        export GIT_AUTHOR_NAME="$DIM_GIT_USER_NAME" GIT_AUTHOR_EMAIL="$DIM_GIT_USER_EMAIL"
+        export GIT_COMMITTER_NAME="$DIM_GIT_USER_NAME" GIT_COMMITTER_EMAIL="$DIM_GIT_USER_EMAIL"
+        DIM_DEVELOPMENT_GATEWAY_PORT="$(dim-development-service gateway-port)"
+        export DIM_DEVELOPMENT_GATEWAY_PORT
+        exec docker compose --project-name dim-project "$@"
+      ' sh "${failed_compose[@]}" "$failed_action" >&2 || true
+  done
+  return 0
 }
 
 cleanup() {
-  local status=$?
+  local status=$? cleanup_status=0
   trap - EXIT
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || status=1
+    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || cleanup_status=1
   fi
   if [[ -f "$state_root/projects/$project_name.json" ]]; then
-    dim project purge "$project_name" --yes >/dev/null 2>&1 || status=1
+    dim project purge "$project_name" --yes >/dev/null 2>&1 || cleanup_status=1
   fi
-  stop_controller
-  find "$controller_runtime_dir" -depth -delete 2>/dev/null || true
-  find "$state_root/assets/project-roots" -type d -exec chmod u+w -- {} + 2>/dev/null || true
-  find "$work_dir" -depth -delete 2>/dev/null || true
+  stop_controller || cleanup_status=1
+  if [[ -d "$controller_runtime_dir" ]]; then
+    find "$controller_runtime_dir" -depth -delete 2>/dev/null || cleanup_status=1
+  fi
+  if [[ -d "$state_root/assets/project-roots" ]]; then
+    find "$state_root/assets/project-roots" -type d -exec chmod u+w -- {} + 2>/dev/null || cleanup_status=1
+  fi
+  if [[ -d "$work_dir" ]]; then
+    find "$work_dir" -depth -delete 2>/dev/null || cleanup_status=1
+  fi
+  if ((cleanup_status != 0)); then
+    printf 'stateful development cleanup uncertain after body status %d\n' "$status" >&2
+    exit 125
+  fi
   exit "$status"
 }
