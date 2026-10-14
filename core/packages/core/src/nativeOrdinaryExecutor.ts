@@ -117,7 +117,9 @@ export async function executeNativeHostClaim(
     const launched = await dependencies.runner.run("docker", nativeContainerArgs(execution.claim, {
       workspace, script, launcher, daemonConfig
     }), { signal });
-    if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) throw new NativeHostLaunchError();
+    if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) {
+      throw new NativeHostLaunchError(launched.stderr.trim().slice(0, 4_096));
+    }
     const runController = new AbortController();
     const runSignal = AbortSignal.any([signal, runController.signal, AbortSignal.timeout(toMilliseconds(execution.claim.descriptor.bounds.wallClockSeconds))]);
     const output = new NativeOutputCollector(toNumber(execution.claim.descriptor.bounds.outputBytes, "output"), () => runController.abort());

@@ -5,7 +5,9 @@ export class NativeHostCleanupError extends Error {
 
 export class NativeHostLaunchError extends Error {
   readonly name = "NativeHostLaunchError";
-  constructor() { super("native ordinary Sysbox container did not start"); }
+  constructor(readonly dockerError: string) {
+    super(`native ordinary Sysbox container did not start${dockerError === "" ? "" : `: ${dockerError}`}`);
+  }
 }
 
 export class NativeHostLeaseError extends Error {

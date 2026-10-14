@@ -47,7 +47,11 @@ describe("native ordinary host claim executor", () => {
 
     // When / Then
     await expect(executeNativeHostClaim({ ...dependencies(runner), reportResult: report }, execution()))
-      .rejects.toBeInstanceOf(NativeHostLaunchError);
+      .rejects.toMatchObject({
+        name: "NativeHostLaunchError",
+        message: "native ordinary Sysbox container did not start: failed",
+        dockerError: "failed"
+      } satisfies Partial<NativeHostLaunchError>);
     expect(runner.calls.some((call) => call.args.slice(0, 3).join(" ") === "container rm --force")).toBe(true);
     expect(report).not.toHaveBeenCalled();
   });
