@@ -4,6 +4,7 @@ set -euo pipefail
 root="${1:?source root is required}"
 
 exec tar --create --file - --directory "$root" \
+  --mode='go-w' \
   --exclude='.git' --exclude='*/.git' \
   --exclude='node_modules' --exclude='*/node_modules' \
   --exclude='dist' --exclude='*/dist' \

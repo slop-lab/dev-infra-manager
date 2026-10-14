@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -37,6 +37,33 @@ describe("source gate container behavior", () => {
       for (const sentinel of sentinels) expect(listing.stdout).not.toContain(sentinel);
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("removes host group and other write bits without removing reviewed executable bits", async () => {
+    // Given
+    const root = await mkdtemp(resolve(tmpdir(), "dim-source-modes-"));
+    const extracted = await mkdtemp(resolve(tmpdir(), "dim-source-modes-extracted-"));
+    try {
+      await writeFile(resolve(root, "executable.bash"), "#!/usr/bin/env bash\n");
+      await writeFile(resolve(root, "regular.txt"), "reviewed\n");
+      await chmod(resolve(root, "executable.bash"), 0o775);
+      await chmod(resolve(root, "regular.txt"), 0o664);
+
+      // When
+      const archive = spawnSync("bash", [archivePath, root]);
+      const extraction = spawnSync("tar", ["--extract", "--file", "-", "--directory", extracted], {
+        input: archive.stdout,
+        encoding: "utf8"
+      });
+
+      // Then
+      expect(archive.status, archive.stderr.toString()).toBe(0);
+      expect(extraction.status, extraction.stderr).toBe(0);
+      expect((await stat(resolve(extracted, "executable.bash"))).mode & 0o777).toBe(0o755);
+      expect((await stat(resolve(extracted, "regular.txt"))).mode & 0o777).toBe(0o644);
+    } finally {
+      await Promise.all([root, extracted].map((path) => rm(path, { recursive: true, force: true })));
     }
   });
 
