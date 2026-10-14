@@ -176,6 +176,8 @@ if [ "$DIM_TEST_IMAGE_STATUS" = build ]; then
   test -f controller-proxy/package.json
   test -f controller-proxy/cli.js
   test -f controller-proxy/development-service-cli.js
+  test -f controller-proxy/runtime-dependencies/dim-contracts-external-url/package.json
+  test -f controller-proxy/runtime-dependencies/dim-contracts-external-url/index.js
   grep -q 'COPY controller-proxy /usr/local/lib/dim/controller-proxy' Dockerfile
   grep -q 'dim-controller-proxy native-git' entrypoint.bash
   exit 0

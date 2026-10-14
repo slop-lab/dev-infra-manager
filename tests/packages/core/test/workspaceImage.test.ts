@@ -51,7 +51,9 @@ class BuildRunner implements CommandRunner {
         "controller-proxy/cli.js",
         "controller-proxy/development-service-cli.js",
         "controller-proxy/workspace-resources-cli.js",
-        "controller-proxy/nproc-cli.js"
+        "controller-proxy/nproc-cli.js",
+        "controller-proxy/runtime-dependencies/dim-contracts-external-url/package.json",
+        "controller-proxy/runtime-dependencies/dim-contracts-external-url/index.js"
       ];
       for (const relativePath of expectedFiles) {
         await access(path.join(options.cwd, relativePath));
@@ -185,7 +187,7 @@ describe("workspace image build", () => {
       ],
       cwd: expect.stringContaining("dim-workspace-image-")
     }]);
-    expect(runner.contextFiles).toHaveLength(10);
+    expect(runner.contextFiles).toHaveLength(12);
   });
 
   it("uses an explicitly tagged workspace image override", async () => {

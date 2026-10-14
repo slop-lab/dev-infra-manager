@@ -1,9 +1,10 @@
-import { copyFile, readFile, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
 import { publishPackageVersion } from "../../../scripts/publish-package-version.mjs";
 
 const sourcePath = new URL("../package.json", import.meta.url);
 const outputPath = new URL("../dist/package.json", import.meta.url);
+const developmentServiceCliPath = new URL("../dist/development-service-cli.js", import.meta.url);
 const source = JSON.parse(await readFile(sourcePath, "utf8"));
 if (source.private !== true) throw new Error("The source package.json must remain private");
 
@@ -41,5 +42,20 @@ output.bin = {
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
+const developmentServiceCli = await readFile(developmentServiceCliPath, "utf8");
+const externalImport = 'from "@slop-lab/dim-contracts-external-url";';
+if (developmentServiceCli.split(externalImport).length !== 2) {
+  throw new Error("development service CLI must contain exactly one external URL contract import");
+}
+await writeFile(
+  developmentServiceCliPath,
+  developmentServiceCli.replace(
+    externalImport,
+    'from "./runtime-dependencies/dim-contracts-external-url/index.js";'
+  )
+);
+const runtimeDependency = new URL("../dist/runtime-dependencies/dim-contracts-external-url", import.meta.url);
+await mkdir(new URL("../dist/runtime-dependencies", import.meta.url), { recursive: true });
+await cp(new URL("../../contracts/external-url/dist", import.meta.url), runtimeDependency, { recursive: true });
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));

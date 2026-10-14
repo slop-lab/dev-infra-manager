@@ -14,7 +14,9 @@ npm install --save-exact '@slop-lab/dim-controller-proxy@0.9.0'
 The package is ESM-only, requires Node.js 24 or 26, includes TypeScript
 declarations, and installs the `dim-controller-proxy` and
 `dim-development-service`, `dim-workspace-resources`, and `dim-nproc`
-executables.
+executables. Its published package carries the exact-version runtime contract
+used by those helpers, so copying the package directory into a workspace image
+does not require a separate install at container startup.
 
 ## Agent preset
 
