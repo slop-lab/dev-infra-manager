@@ -103,6 +103,7 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
         }
         if (this.failEveryReadiness || this.failReadinessEvent === event) {
           this.failReadinessEvent = undefined;
+          await new Promise<void>((resolve) => setTimeout(resolve, command.timeoutMilliseconds));
           if (this.readinessStateRoot !== undefined) {
             const generations = await readdir(`${this.readinessStateRoot}/generations`);
             this.readinessGenerationDigestAtFailure = await directoryDigest(

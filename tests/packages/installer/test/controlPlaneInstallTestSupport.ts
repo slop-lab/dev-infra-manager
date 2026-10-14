@@ -45,9 +45,9 @@ export function deterministicRandom(): (size: number) => Buffer {
 }
 
 export const immediateReadinessDeadline = {
-  timeoutMilliseconds: 1,
-  retryIntervalMilliseconds: 1,
-  execTimeoutMilliseconds: 1
+  timeoutMilliseconds: 250,
+  retryIntervalMilliseconds: 250,
+  execTimeoutMilliseconds: 250
 } as const;
 
 export async function writeChangedImages(configPath: string): Promise<void> {

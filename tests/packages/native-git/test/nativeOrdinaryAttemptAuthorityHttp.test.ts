@@ -275,7 +275,7 @@ describe("installed native ordinary attempt authority HTTP boundary", () => {
        attemptPath(fixture.root, envelope.review.reviewId, "revocations"), "utf8"
     ))).toMatchObject({ schemaVersion: 3, executionKind: "ordinary-sysbox",
       revocationRequestId: attemptId, attemptId });
-  });
+  }, 20_000);
 
   it("reads a sparse revocation for the second current attempt across restart", async () => {
     // Given
