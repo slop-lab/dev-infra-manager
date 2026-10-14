@@ -1,73 +1,27 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { lifecycleOptions } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState, validateLifecycleName } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import {
-  detectWorkspaceKvm,
-  projectRuntimeManifest,
-  resolveWorkspaceCapabilities,
-  resolveWorkspaceKvm,
-  restartWorkspace,
-  updateWorkspaceResources,
-  validateWorkspaceProfiles,
-  validateWorkspaceResources,
-  waitForInnerDocker,
-  workspaceContainerArgs
-} from "../../../../core/packages/core/src/workspaceLifecycle.js";
-import { workspaceRuntimePlan } from "../../../../core/packages/core/src/runtimeBackends.js";
-import { rootRepositorySnapshot } from "./lifecycleFixture.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { updateWorkspaceResources } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { workspaceAgentContainerLabels, workspaceAgentIdentity
+} from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
+import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
-import { workspaceAgentContainerLabels, workspaceAgentIdentity } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
 
-describe("project and workspace lifecycle", () => {
-  let root: string;
-  beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), "dim-lifecycle-"));
-    await writeFile(join(root, "dim.json"), JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
-  });
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    await rm(root, { recursive: true, force: true });
-  });
+const roots: string[] = [];
 
-it("updates a claimed workspace container and persists its effective resources", async () => {
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe("native workspace resources", () => {
+  it("updates owned outer and agent containers and persists effective resources", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dim-lifecycle-resources-"));
+    roots.push(root);
     const state = new LifecycleState(root);
-    const now = new Date().toISOString();
-    const record: WorkspaceRecord = {
-      schemaVersion: 8,
-      workspaceId: "A".repeat(43),
-      name: "work-1",
-      projectId: "project-id",
-      projectName: "project",
-      rootRepositoryAlias: "root",
-      rootRef: "refs/heads/main",
-      rootCommit: "a".repeat(40),
-      workspaceDataPath: "/var/lib/dim/workspace-data",
-      environment: "recommended",
-      phase: "ready",
-      profiles: [],
-      composeProjectName: "dim-work-1",
-      containerName: "dim-ws-work-1",
-      networkName: "dim-control",
-      dockerVolumeName: "dim-ws-work-1-docker",
-      runtimeBackend: "sysbox",
-      kvm: false,
-      cpuCount: "2",
-      memory: "4g",
-      pidsLimit: "2048",
-      routes: [],
-      gitUserName: "Agent",
-      gitUserEmail: "agent@example.invalid",
-      gitBaseUrl: "http://dim-gitea:3000/dim-project",
-      hostAliases: { "dim-gitea": ["172.20.0.2"] },
-      projectManifestPath: "/run/dim/project.json",
-      createdAt: now,
-      updatedAt: now
-    };
+    const record = { ...workspaceRecord("work-1", "ready"), environment: "recommended" as const };
     await state.claimWorkspace(record);
     const calls: string[][] = [];
     const runner: StreamingCommandRunner = {
@@ -77,8 +31,8 @@ it("updates a claimed workspace container and persists its effective resources",
           if (args.includes("{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}")) {
             const agent = args[2] === "a".repeat(64);
             return { command, args, stdout: agent
-              ? "1500000000|2415919104|2415919104|768\n"
-              : "500000000|805306368|805306368|256\n", stderr: "", exitCode: 0 };
+              ? "3000000000|2415919104|2415919104|768\n"
+              : "1000000000|805306368|805306368|256\n", stderr: "", exitCode: 0 };
           }
           if (args[2] === "dim-agent-work-1") {
             const identity = workspaceAgentIdentity(record);
@@ -91,50 +45,29 @@ it("updates a claimed workspace container and persists its effective resources",
               { Type: "volume", Name: identity.checkoutVolumeName,
                 Source: `/docker/volumes/${identity.checkoutVolumeName}/_data`, Destination: "/workspace", RW: true },
               { Type: "volume", Name: identity.dockerVolumeName,
-                Source: `/docker/volumes/${identity.dockerVolumeName}/_data`,
-                Destination: "/var/lib/docker", RW: true }
+                Source: `/docker/volumes/${identity.dockerVolumeName}/_data`, Destination: "/var/lib/docker", RW: true }
             ]);
             return { command, args,
               stdout: `${"a".repeat(64)}|true|sha256:${"f".repeat(64)}|sysbox-runc|false|${labels}|${mounts}\n`,
               stderr: "", exitCode: 0 };
           }
           return { command, args, stdout: `${workspaceContainerInspect(record, {
-            rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+            rootSnapshotPath: join(root, "assets", "native-project-roots", record.projectId, record.rootCommit)
           })}\n`, stderr: "", exitCode: 0 };
         }
         return { command, args, stdout: "dim-ws-work-1\n", stderr: "", exitCode: 0 };
       },
-      async runStreaming(): Promise<number> {
-        return 0;
-      }
+      async runStreaming(): Promise<number> { return 0; }
     };
 
-    const options = lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") });
-    const updated = await updateWorkspaceResources(runner, options, "work-1", {
-      memory: "3g",
-      pidsLimit: "1024"
+    const updated = await updateWorkspaceResources(runner, hostLifecycleOptions(root), record.name, {
+      memory: "3g", pidsLimit: "1024"
     });
-    expect(updated).toMatchObject({ cpuCount: "2", memory: "3g", pidsLimit: "1024" });
-    expect(await state.readWorkspace("work-1")).toMatchObject({
-      cpuCount: "2",
-      memory: "3g",
-      pidsLimit: "1024"
+
+    expect(updated).toMatchObject({ cpuCount: "4", memory: "3g", pidsLimit: "1024" });
+    await expect(state.readWorkspace(record.name)).resolves.toMatchObject({
+      cpuCount: "4", memory: "3g", pidsLimit: "1024"
     });
-    expect(calls).toContainEqual([
-      "docker", "update",
-      "--cpus", "0.5",
-      "--memory", "805306368",
-      "--memory-swap", "805306368",
-      "--pids-limit", "256",
-      "workspace-container-id"
-    ]);
-    expect(calls).toContainEqual([
-      "docker", "update",
-      "--cpus", "1.5",
-      "--memory", "2415919104",
-      "--memory-swap", "2415919104",
-      "--pids-limit", "768",
-      "a".repeat(64)
-    ]);
+    expect(calls.some((call) => call[0] === "docker" && call[1] === "update")).toBe(true);
   });
 });

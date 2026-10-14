@@ -78,7 +78,6 @@ export function installerFacadeHelpText(program: Command): (context: AddHelpText
   const rootText = `
 Typical flow:
   dim project create PROJECT
-  dim repo add PROJECT ROOT SOURCE_URL --root --ref main
   dim workspace create PROJECT WORKSPACE
   dim workspace exec WORKSPACE -- bash
 

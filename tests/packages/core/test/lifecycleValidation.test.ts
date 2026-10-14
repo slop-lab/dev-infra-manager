@@ -41,12 +41,9 @@ it("validates names and container-only option overrides", () => {
     const options = lifecycleOptions({
       DIM_STATE_ROOT: root,
       DIM_CONFIG_PATH: join(root, "dim.json"),
-      DIM_GITEA_PORT: "4300",
       DIM_WORKSPACE_MEMORY: "2g"
     });
-    expect(options.giteaPort).toBe(4300);
     expect(options.memory).toBe("2g");
-    expect(options.giteaImage).toBe("gitea/gitea:1.27.0");
     expect(options.defaultWorkspaceBackend).toBe("sysbox");
     expect(validateWorkspaceProfiles(["development", "secrets"])).toEqual(["development", "secrets"]);
     expect(() => validateWorkspaceProfiles(["development", "development"])).toThrow(/duplicated/);

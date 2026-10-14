@@ -1,5 +1,5 @@
 import { UserError } from "./errors.js";
-import { assertSchemaVersion, assertSysboxWorkspace } from "./lifecycleRecord.js";
+import { assertSysboxWorkspace } from "./lifecycleRecord.js";
 import type { WorkspaceRecord } from "./lifecycleTypes.js";
 
 const WORKSPACE_DATA_PATH = "/var/lib/dim/workspace-data";
@@ -7,7 +7,11 @@ const WORKSPACE_DATA_PATH = "/var/lib/dim/workspace-data";
 export function assertWorkspaceRecord(value: unknown, source: string): asserts value is WorkspaceRecord {
   if (!isRecord(value)) throw new UserError(`workspace state at '${source}' must be an object`);
   const name = typeof value.name === "string" ? value.name : source;
-  if (value.schemaVersion !== 8 && value.schemaVersion !== 9) assertSchemaVersion(value, "workspace", name, 8);
+  if (value.schemaVersion !== 9) {
+    throw new UserError(
+      `workspace '${name}' uses unsupported predecessor state; use the prior pinned release to export needed data, then recreate the workspace`
+    );
+  }
   validateWorkspaceId(value.workspaceId, `workspace '${name}'`);
   assertSysboxWorkspace(value, name);
   if (Object.hasOwn(value, "rootSnapshotPath")) {
@@ -26,16 +30,10 @@ export function assertWorkspaceRecord(value: unknown, source: string): asserts v
     && value.environment !== "recommended" && value.environment !== "custom") {
     throw new UserError(`workspace '${name}' has an invalid environment selection`);
   }
-  if (value.schemaVersion === 9) {
-    if (Object.hasOwn(value, "gitBaseUrl")) {
-      throw new UserError(`workspace '${name}' mixes native and provider Git state`);
-    }
-    assertNativeSource(value.source, name);
-    return;
+  if (Object.hasOwn(value, "gitBaseUrl")) {
+    throw new UserError(`workspace '${name}' mixes native and provider Git state`);
   }
-  if (Object.hasOwn(value, "source") || typeof value.gitBaseUrl !== "string") {
-    throw new UserError(`workspace '${name}' has invalid Gitea source state`);
-  }
+  assertNativeSource(value.source, name);
 }
 
 export function validateWorkspaceId(value: unknown, source: string): asserts value is string {

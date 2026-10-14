@@ -10,6 +10,7 @@ import { updateWorkspaceResources } from "../../../../core/packages/core/src/wor
 import { workspaceAgentContainerLabels, workspaceAgentIdentity } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
 import type { WorkspaceResourceLimits } from "../../../../core/packages/core/src/workspaceResourceBudget.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 const outerId = "workspace-container-id";
 const agentId = "a".repeat(64);
@@ -88,7 +89,7 @@ class ResourceRunner implements StreamingCommandRunner {
       if (args[2] === this.record.containerName) {
         return result(command, args, workspaceContainerInspect(this.record, {
           id: outerId,
-          rootSnapshotPath: join(this.root, "assets", "project-roots", this.record.projectId, this.record.rootCommit)
+          rootSnapshotPath: join(this.root, "assets", "native-project-roots", this.record.projectId, this.record.rootCommit)
         }));
       }
       if (args[2] === workspaceAgentIdentity(this.record).containerName) {
@@ -133,24 +134,17 @@ async function fixture(roots: string[]): Promise<{
   const root = await mkdtemp(join(tmpdir(), "dim-resource-failure-"));
   roots.push(root);
   await writeFile(join(root, "dim.json"), JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
-  const now = new Date().toISOString();
-  const record: WorkspaceRecord = {
-    schemaVersion: 8, workspaceId: "A".repeat(43), name: "work-1", projectId: "project-id", projectName: "project",
-    rootRepositoryAlias: "root", rootRef: "refs/heads/main", rootCommit: "a".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data", environment: "recommended", phase: "ready", profiles: [],
-    composeProjectName: "dim-work-1", containerName: "dim-ws-work-1", networkName: "dim-control",
-    dockerVolumeName: "dim-ws-work-1-docker", runtimeBackend: "sysbox", kvm: false, cpuCount: "2", memory: "4g",
-    pidsLimit: "2048", routes: [], gitUserName: "Agent", gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/dim-project", hostAliases: {}, projectManifestPath: "/run/dim/project.json",
-    createdAt: now, updatedAt: now
-  };
+  const record: WorkspaceRecord = nativeWorkspaceFixture({
+    environment: "recommended", gitUserName: "Agent", gitUserEmail: "agent@example.invalid"
+  });
   const state = new LifecycleState(root);
   await state.claimWorkspace(record);
   return {
     root,
     record,
     state,
-    options: lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") })
+    options: lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json"),
+      DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: join(root, "native.json") })
   };
 }
 

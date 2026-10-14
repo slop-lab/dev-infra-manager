@@ -8,9 +8,11 @@ import { configuredDimAdminController } from "../../../../core/packages/core/src
 import { withHostRuntimeAdmission } from "../../../../core/packages/core/src/hostAdminAdmission.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import { registerPlugins, type RegisteredDimPlugins } from "../../../../core/packages/core/src/plugin.js";
-import { protectedRootSnapshotPath } from "../../../../core/packages/core/src/protectedRootSnapshot.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { WORKSPACE_RUNTIME_CONFIG_VERSION } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
+import {
+  WORKSPACE_RUNTIME_CONFIG_VERSION,
+  workspaceRootSnapshotPath
+} from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
 import { workspaceContainerLabels } from "../../../../core/packages/core/src/workspaceResourceOwnership.js";
 import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 
@@ -52,7 +54,7 @@ class RuntimeRunner implements StreamingCommandRunner {
     const labels = workspaceContainerLabels(record).map((label) => label.slice(label.indexOf("=") + 1));
     const mounts = JSON.stringify([{
       Type: "bind",
-      Source: protectedRootSnapshotPath(this.stateRoot, record.projectId, record.rootCommit),
+      Source: workspaceRootSnapshotPath(this.stateRoot, record),
       Destination: "/run/dim/project-root",
       RW: false
     }]);
@@ -134,8 +136,6 @@ describe("admin runtime admission", () => {
       schemaVersion: 2,
       phase: "stopped",
       resumeWorkspaces: [],
-      restartCiRunners: [],
-      resumeManagedContainers: [],
       updatedAt: "now"
     });
     let dispatched = false;

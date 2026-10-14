@@ -8,6 +8,7 @@ import { createDimController, registerPlugins, UserError } from "@slop-lab/dim-c
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
+import { nativeWorkspaceFixture } from "../../../packages/core/test/nativeLifecycleFixture.js";
 
 describe("workspace instance route authority", () => {
   const cleanup: Array<() => Promise<void>> = [];
@@ -109,36 +110,7 @@ function createRoute(endpoint: string, grant: string): Promise<Response> {
 }
 
 function workspaceRecord(workspaceId: string): WorkspaceRecord {
-  return {
-    schemaVersion: 8,
-    workspaceId,
-    name: "work",
-    projectId: "project",
-    projectName: "project",
-    rootRepositoryAlias: "root",
-    rootRef: "refs/heads/main",
-    rootCommit: "a".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data",
-    phase: "ready",
-    profiles: [],
-    composeProjectName: "dim-work",
-    containerName: "dim-ws-work",
-    networkName: "dim-control",
-    dockerVolumeName: "dim-ws-work-docker",
-    runtimeBackend: "sysbox",
-    kvm: false,
-    cpuCount: "2",
-    memory: "4g",
-    pidsLimit: "2048",
-    routes: [],
-    gitUserName: "Agent",
-    gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/project",
-    hostAliases: {},
-    projectManifestPath: "/run/dim/project.json",
-    createdAt: "2026-10-01T00:00:00.000Z",
-    updatedAt: "2026-10-01T00:00:00.000Z"
-  };
+  return nativeWorkspaceFixture({ workspaceId });
 }
 
 async function availablePort(): Promise<number> {

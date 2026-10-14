@@ -305,8 +305,9 @@ describe("native Project admission-pending store", () => {
       gitNamespace: "dim-acme", giteaOrganizationId: 41, phase: "ready", repositories: [],
       createdAt: "now", updatedAt: "now" })}\n`);
     await writeFile(projectPath, giteaBytes, { mode: 0o600 });
-    expect(await new LifecycleState(collision.root).readProject("acme"))
-      .toMatchObject({ schemaVersion: 4, phase: "ready" });
+    await expect(new LifecycleState(collision.root).readProject("acme"))
+      .rejects.toThrow("use the prior pinned release to export needed data");
+    expect(await readFile(projectPath)).toEqual(giteaBytes);
 
     // When / Then
     await expect(new NativeProjectPendingStore(wrongService.root)

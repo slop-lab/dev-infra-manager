@@ -1,26 +1,8 @@
-import { randomBytes } from "node:crypto";
-import { MissingRecordError, UserError } from "./errors.js";
-import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
-import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
+import { requireNativeControlPlaneConnection } from "./lifecycleOptions.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
-import type { RegisteredDimPlugins } from "./plugin.js";
-import { assertProjectRepositoriesReady } from "./protectedRootResolution.js";
-import { resolveProtectedRootSnapshot } from "./protectedRootSnapshot.js";
-import type { StreamingCommandRunner } from "./types.js";
-import { runWorkspaceLifecycle, runWorkspaceLifecycleStage } from "./workspaceLifecycleError.js";
-import { reconcileProject, setupWorkspaceLocked } from "./workspaceSetup.js";
-import { assertSelectedProjectUnchanged } from "./workspaceState.js";
-import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
-import {
-  resolveWorkspaceCapabilities,
-  readWorkspaceForOperation,
-  resolveWorkspaceKvm,
-  validateWorkspaceProfiles,
-  validateWorkspaceResources
-} from "./workspaceValidation.js";
 import { createNativeWorkspace } from "./nativeWorkspaceCreation.js";
-import { selectWorkspaceEnvironment } from "./workspaceEnvironment.js";
-import { allocateWorkspaceResourceBudget } from "./workspaceResourceBudget.js";
+import type { RegisteredDimPlugins } from "./plugin.js";
+import type { StreamingCommandRunner } from "./types.js";
 
 export async function createWorkspace(
   runner: StreamingCommandRunner,
@@ -39,151 +21,10 @@ export async function createWorkspace(
     gitUserName?: string;
     gitUserEmail?: string;
   },
-  plugins: Pick<RegisteredDimPlugins, "workspaceCapabilityProviders"> = { workspaceCapabilityProviders: new Map() }
-): Promise<WorkspaceRecord> {
-  if (options.nativeControlPlaneConnection !== undefined) {
-    return createNativeWorkspace({ runner, options, request: input, plugins });
+  plugins: Pick<RegisteredDimPlugins, "workspaceCapabilityProviders"> = {
+    workspaceCapabilityProviders: new Map()
   }
-  return runWorkspaceLifecycle("create", async (setStage, setErrorStage) => {
-    const project = validateLifecycleName(input.project, "project");
-    const name = validateLifecycleName(input.name, "workspace");
-    const profiles = validateWorkspaceProfiles(input.profiles);
-    const resources = {
-      cpuCount: input.cpuCount ?? options.cpuCount,
-      memory: input.memory ?? options.memory,
-      pidsLimit: input.pidsLimit ?? options.pidsLimit
-    };
-    validateWorkspaceResources(resources);
-    const state = new LifecycleState(options.stateRoot);
-    setStage("workspace state loading");
-    try {
-      await readWorkspaceForOperation(state, name, options.giteaConnection);
-    } catch (error) {
-      if (!(error instanceof MissingRecordError)) throw error;
-    }
-    setStage("project readiness validation");
-    assertProjectRepositoriesReady(await state.readProject(project));
-    setStage("managed Git reconciliation");
-    const externalCredentials = options.giteaConnection.kind === "external"
-      ? await ensureGitea(runner, options)
-      : undefined;
-    setStage("protected root selection");
-    const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: project });
-    setStage("Project lock acquisition");
-    const releaseProject = await state.acquireProjectLock(project);
-    try {
-      setStage("workspace setup lock acquisition");
-      const release = await state.acquireWorkspaceSetupLock(name);
-      try {
-        setStage("protected root validation");
-        await assertSelectedProjectUnchanged(state, selectedRoot);
-        const projectRecord = selectedRoot.project;
-        let existing: WorkspaceRecord | undefined;
-        try {
-          setStage("workspace state loading");
-          existing = await readWorkspaceForOperation(state, name, options.giteaConnection);
-          assertWorkspaceLifecycleActive(existing);
-        } catch (error) {
-          if (!(error instanceof MissingRecordError)) throw error;
-        }
-        const environment = existing === undefined
-          ? await selectWorkspaceEnvironment(selectedRoot.rootSnapshotPath)
-          : existing.environment ?? "custom";
-        allocateWorkspaceResourceBudget(environment, resources);
-        const workspaceId = existing?.workspaceId ?? randomBytes(32).toString("base64url");
-        setStage("workspace capability resolution");
-        const capabilities = await resolveWorkspaceCapabilities(
-          {
-            required: input.requiredCapabilities ?? [],
-            recommended: input.recommendedCapabilities ?? []
-          },
-          {
-            workspaceId,
-            projectId: projectRecord.id,
-            projectName: projectRecord.name,
-            workspaceName: name,
-            runtimeBackend: input.runtimeBackend
-          },
-          plugins.workspaceCapabilityProviders
-        );
-        const repo = selectedRoot.repository;
-        const now = new Date().toISOString();
-        const gitUserName = input.gitUserName ?? process.env.DIM_GIT_USER_NAME ?? `dim/${name}`;
-        const gitUserEmail = input.gitUserEmail ?? process.env.DIM_GIT_USER_EMAIL ?? `${name}@dim.invalid`;
-        let record: WorkspaceRecord;
-        if (existing !== undefined) {
-          record = existing;
-          if (record.projectId !== projectRecord.id) {
-            throw new UserError(`workspace '${name}' is already bound to project '${record.projectName}'`);
-          }
-          if (record.profiles.join("\0") !== profiles.join("\0")) {
-            throw new UserError(`workspace '${name}' already exists with different profiles; use dim workspace update`);
-          }
-          if (JSON.stringify(record.capabilities ?? []) !== JSON.stringify(capabilities)) {
-            throw new UserError(`workspace '${name}' already exists with different capability requests`);
-          }
-          if (record.runtimeBackend !== input.runtimeBackend) {
-            throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
-          }
-          if (input.kvm !== undefined && record.kvm !== input.kvm) {
-            throw new UserError(`workspace '${name}' already exists with KVM ${record.kvm ? "enabled" : "disabled"}`);
-          }
-          if (
-            record.cpuCount !== (input.cpuCount ?? options.cpuCount)
-            || record.memory !== (input.memory ?? options.memory)
-            || record.pidsLimit !== (input.pidsLimit ?? options.pidsLimit)
-          ) {
-            throw new UserError(`workspace '${name}' already exists with different resource limits`);
-          }
-        } else {
-          setStage("runtime capability resolution");
-          const kvm = await resolveWorkspaceKvm(input.runtimeBackend, input.kvm);
-          setStage("managed Git address discovery");
-          const credentials = externalCredentials ?? await ensureGitea(runner, options);
-          const gitBaseUrl = `${await giteaNestedBaseUrl(runner, credentials)}/${projectRecord.gitNamespace}`;
-          record = {
-            schemaVersion: 8,
-            workspaceId,
-            name,
-            projectId: projectRecord.id,
-            projectName: projectRecord.name,
-            rootRepositoryAlias: repo.alias,
-            rootRef: selectedRoot.rootRef,
-            rootCommit: selectedRoot.rootCommit,
-            workspaceDataPath: "/var/lib/dim/workspace-data",
-            environment,
-            phase: "creating",
-            profiles,
-            capabilities,
-            composeProjectName: `dim-${name}`,
-            containerName: `dim-ws-${name}`,
-            networkName: GITEA_NETWORK,
-            dockerVolumeName: `dim-ws-${name}-docker`,
-            runtimeBackend: input.runtimeBackend,
-            kvm,
-            ...resources,
-            routes: [],
-            gitUserName,
-            gitUserEmail,
-            gitBaseUrl,
-            hostAliases: {},
-            projectManifestPath: "/run/dim/project.json",
-            createdAt: now,
-            updatedAt: now
-          };
-          setStage("workspace state claim");
-          await state.claimWorkspace(record);
-        }
-        setStage("workspace reconciliation");
-        const reconciled = await reconcileProject(runner, options, state, record, projectRecord, repo, setStage);
-        return await setupWorkspaceLocked(
-          runner, options, state, reconciled, false, false, setStage, setErrorStage
-        );
-      } finally {
-        await runWorkspaceLifecycleStage("create", "workspace setup lock release", release);
-      }
-    } finally {
-      await runWorkspaceLifecycleStage("create", "Project lock release", releaseProject);
-    }
-  });
+): Promise<WorkspaceRecord> {
+  requireNativeControlPlaneConnection(options);
+  return createNativeWorkspace({ runner, options, request: input, plugins });
 }

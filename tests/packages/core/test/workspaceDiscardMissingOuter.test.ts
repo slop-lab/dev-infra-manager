@@ -8,6 +8,7 @@ import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecyc
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { workspaceAgentIdentity, workspaceAgentNetworkLabels } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
 import { discardWorkspace } from "../../../../core/packages/core/src/workspaceDiscard.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 const roots: string[] = [];
 
@@ -38,7 +39,8 @@ it("converges recommended discard when the outer container is already absent", a
     async runStreaming(): Promise<number> { return 0; }
   };
 
-  await discardWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
+    await discardWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root,
+      DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: join(root, "native.json") }), record.name);
 
   await expect(state.readWorkspace(record.name)).rejects.toThrow(/not found/);
   expect(calls).not.toContainEqual([
@@ -48,14 +50,9 @@ it("converges recommended discard when the outer container is already absent", a
 });
 
 function fixture(): WorkspaceRecord {
-  return { schemaVersion: 8, workspaceId: "A".repeat(43), name: "work-1", projectId: "project-id",
-    projectName: "project", rootRepositoryAlias: "root", rootRef: "refs/heads/main", rootCommit: "b".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data", environment: "recommended", phase: "ready", profiles: [],
-    composeProjectName: "dim-work-1", containerName: "dim-ws-work-1", networkName: "dim-control",
-    dockerVolumeName: "dim-ws-work-1-docker", runtimeBackend: "sysbox", kvm: false, cpuCount: "2",
-    memory: "4g", pidsLimit: "2048", routes: [], gitUserName: "Agent", gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/dim-project", hostAliases: {}, projectManifestPath: "/run/dim/project.json",
-    createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+  return nativeWorkspaceFixture({ rootCommit: "b".repeat(40), environment: "recommended", gitUserName: "Agent",
+    gitUserEmail: "agent@example.invalid", createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z" });
 }
 
 function result(command: string, args: string[], stdout = ""): CommandResult {

@@ -13,7 +13,6 @@ import {
 } from "../../../../core/packages/core/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
-import { claimTestGiteaService } from "./giteaServiceFixture.js";
 import { hostLifecycleOptions, registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 
@@ -177,33 +176,6 @@ describe("registry cache", () => {
     expect(args).not.toContain("--add-host=registry-1.docker.io:127.0.0.1");
     expect(args).not.toContain("--add-host=auth.docker.io:127.0.0.1");
     expect(providerImage).toMatch(/@sha256:[0-9a-f]{64}$/);
-  });
-
-  it("rejects a foreign shared control network in managed-Gitea mode without mutation", async () => {
-    // Given
-    await claimTestGiteaService(stateRoot);
-    const runner: StreamingCommandRunner = {
-      async run(command, args) {
-        const stdout = args[0] === "network" && args[1] === "inspect"
-          ? args.some((argument) => argument.includes("dim.service-id"))
-            ? "true|foreign|foreign-service|network|foreign-resource\n"
-            : "true\n"
-          : args[0] === "volume" && args[1] === "inspect"
-            ? `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`
-            : registryCacheInspect(REGISTRY_CACHE_IMAGE);
-        return { command, args, stdout, stderr: "", exitCode: 0 };
-      },
-      async runStreaming() { return 0; }
-    };
-
-    // When
-    const reconciliation = ensureRegistryCache(runner, {
-      ...hostLifecycleOptions(stateRoot),
-      hostMirrorProvider: { dockerImage: REGISTRY_CACHE_IMAGE, aptImage: REGISTRY_CACHE_IMAGE }
-    });
-
-    // Then
-    await expect(reconciliation).rejects.toThrow(/not managed by dim/);
   });
 
   it("does not replace a same-name cache with only the generic managed label", async () => {

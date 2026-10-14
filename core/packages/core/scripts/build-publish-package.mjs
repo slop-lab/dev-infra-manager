@@ -45,11 +45,6 @@ await cp(
   { recursive: true }
 );
 await cp(
-  new URL("../src/shared-qemu-scheduler-assets", import.meta.url),
-  new URL("../dist/shared-qemu-scheduler-assets", import.meta.url),
-  { recursive: true }
-);
-await cp(
   new URL("../src/native-qemu-scheduler-assets", import.meta.url),
   new URL("../dist/native-qemu-scheduler-assets", import.meta.url),
   { recursive: true }

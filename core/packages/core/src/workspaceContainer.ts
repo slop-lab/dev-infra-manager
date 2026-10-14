@@ -69,9 +69,7 @@ export async function reconcileContainer(
   const state = new LifecycleState(options.stateRoot);
   const controllerGrant = await state.ensureWorkspaceGrant(record.name);
   const agentGrant = await state.ensureAgentGrant(record.name);
-  const effectiveGit = record.schemaVersion === 9
-    ? { ...git, brokerToken: await state.ensureNativeGitGrant(record.name) }
-    : git;
+  const effectiveGit = { ...git, brokerToken: await state.ensureNativeGitGrant(record.name) };
   let container = await inspectWorkspaceContainer(runner, record);
   if (container === undefined) {
     const created = await runner.run("docker", workspaceContainerArgs(
@@ -192,8 +190,8 @@ export function workspaceContainerArgs(
   if (environment === "recommended") {
     const gitBase = workspaceGitBaseUrl(record);
     const gitPath = new URL(`${gitBase.endsWith("/") ? gitBase : `${gitBase}/`}${record.rootRepositoryAlias}.git`).pathname;
-    args.push("--env", `DIM_AGENT_GIT_RELAY_MODE=${record.schemaVersion === 9 ? "native" : "managed"}`);
-    args.push("--env", `DIM_AGENT_GIT_UPSTREAM=${record.schemaVersion === 9 ? "http://127.0.0.1:19418" : record.gitBaseUrl}`);
+    args.push("--env", "DIM_AGENT_GIT_RELAY_MODE=native");
+    args.push("--env", "DIM_AGENT_GIT_UPSTREAM=http://127.0.0.1:19418");
     args.push("--env", `DIM_AGENT_GIT_PATH=${gitPath}`);
   }
   for (const capability of plan.capabilities) args.push("--cap-add", capability);

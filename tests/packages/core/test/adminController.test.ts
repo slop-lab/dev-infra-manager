@@ -87,12 +87,19 @@ describe("DIM admin controller", () => {
     });
     expect(rejected.status).toBe(400);
     expect(await rejected.json()).toEqual({ error: "operation 'plugin.unreviewed' is not streamable" });
+    for (const operation of ["project.remove", "project.purge", "repo.delete", "service.ensure", "git.setup"]) {
+      const obsolete = await fetch(`${base}/v1/call/${operation}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "acme", project: "acme", alias: "root" })
+      });
+      expect(obsolete.status).toBe(400);
+      expect(await obsolete.json()).toEqual({ error: `unknown admin operation '${operation}'` });
+    }
     await new LifecycleState(stateRoot).writeHostLifecycle({
       schemaVersion: 2,
       phase: "stopped",
       resumeWorkspaces: ["work"],
-      restartCiRunners: [],
-      resumeManagedContainers: [],
       updatedAt: new Date().toISOString()
     });
     expect(await (await fetch(`${base}/healthz`)).json()).toMatchObject({

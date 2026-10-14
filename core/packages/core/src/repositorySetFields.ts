@@ -1,5 +1,5 @@
 import { UserError } from "./errors.js";
-import { validateLifecycleName } from "./lifecycleState.js";
+import { validateLifecycleName } from "./lifecycleRecord.js";
 import type { RepositorySetUpstream } from "./repositorySetTypes.js";
 
 export function object(value: unknown, label: string): Record<string, unknown> {

@@ -6,7 +6,7 @@ import { selectWorkspaceEnvironment } from "../../../../core/packages/core/src/w
 import { selectWorkspaceEnvironmentTransition } from "../../../../core/packages/core/src/workspaceEnvironmentTransition.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { recordSelectedRoot } from "../../../../core/packages/core/src/workspacePublication.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 describe("workspace environment selection", () => {
   const roots: string[] = [];
@@ -131,34 +131,9 @@ describe("workspace environment selection", () => {
       .rejects.toThrow(/unsupported/i);
   });
 
-  it("rejects an ordinary root mode change before publishing new workspace state", async () => {
-    const stateRoot = await root();
-    const snapshot = await root();
-    await mkdir(join(snapshot, ".dim"));
-    await writeFile(join(snapshot, ".dim", "entrypoint.sh"), "#!/bin/sh\n");
-    const state = new LifecycleState(stateRoot);
-    const record = workspaceRecord();
-    await state.claimWorkspace(record);
-
-    await expect(recordSelectedRoot(state, record, {
-      rootRef: "refs/heads/main",
-      rootCommit: "b".repeat(40),
-      rootSnapshotPath: snapshot
-    })).rejects.toThrow(/changed from recommended to custom/i);
-    await expect(state.readWorkspace(record.name)).resolves.toEqual(record);
-  });
 });
 
 function workspaceRecord(): WorkspaceRecord {
-  return {
-    schemaVersion: 8, workspaceId: "A".repeat(43), name: "work-1", projectId: "project-id",
-    projectName: "project", rootRepositoryAlias: "root", rootRef: "refs/heads/main",
-    rootCommit: "a".repeat(40), workspaceDataPath: "/var/lib/dim/workspace-data",
-    environment: "recommended", phase: "ready", profiles: [], composeProjectName: "dim-work-1",
-    containerName: "dim-ws-work-1", networkName: "dim-control", dockerVolumeName: "dim-ws-work-1-docker",
-    runtimeBackend: "sysbox", kvm: false, cpuCount: "2", memory: "4g", pidsLimit: "2048",
-    routes: [], gitUserName: "Agent", gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/dim-project", hostAliases: {},
-    projectManifestPath: "/run/dim/project.json", createdAt: "now", updatedAt: "now"
-  };
+  return nativeWorkspaceFixture({ gitUserName: "Agent", gitUserEmail: "agent@example.invalid",
+    createdAt: "now", updatedAt: "now" });
 }

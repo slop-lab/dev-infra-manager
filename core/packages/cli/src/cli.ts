@@ -9,7 +9,6 @@ import { registerExternalUrlCommands } from "./external-url-commands.js";
 import { registerHostIntegrationCommands } from "./host-integration-commands.js";
 import { packageVersion } from "./package-version.js";
 import { registerProjectCommands } from "./project-commands.js";
-import { registerRepositoryCommands } from "./repository-commands.js";
 import { registerWorkspaceCommands } from "./workspace-commands.js";
 import { registerWorkspaceExecutionCommands } from "./workspace-execution-commands.js";
 import { registerWorkspaceLifecycleCommands } from "./workspace-lifecycle-commands.js";
@@ -25,7 +24,6 @@ program
   .addHelpText("afterAll", installerFacadeHelpText(program));
 
 registerProjectCommands(program);
-registerRepositoryCommands(program);
 registerCiCommands(program);
 const workspace = registerWorkspaceCommands(program);
 registerWorkspaceExecutionCommands(program, workspace);

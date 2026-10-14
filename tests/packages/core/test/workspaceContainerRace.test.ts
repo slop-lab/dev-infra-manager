@@ -151,8 +151,8 @@ describe("workspace container reconciliation ownership races", () => {
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-container-race-"));
-    record = workspaceFixture(root, projectFixture());
-    await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
+    record = workspaceFixture(projectFixture());
+    await mkdir(join(root, "assets", "native-project-roots", record.projectId, record.rootCommit), { recursive: true });
     await new LifecycleState(root).claimWorkspace(record);
   });
 
@@ -232,7 +232,7 @@ describe("workspace container reconciliation ownership races", () => {
     expect(runner.calls).toContainEqual(["docker", "container", "rm", "--force", "old-root-id"]);
     expect(runner.current(record.containerName)).toMatchObject({
       id: "created-id",
-      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+      rootSnapshotPath: join(root, "assets", "native-project-roots", record.projectId, record.rootCommit)
     });
   });
 
@@ -268,7 +268,7 @@ function container(
     labels: input.foreign ? foreignLabels(labels) : labels,
     running: input.running,
     runtimeConfig: input.runtimeConfig ?? "9",
-    rootSnapshotPath: input.rootSnapshotPath ?? join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+    rootSnapshotPath: input.rootSnapshotPath ?? join(root, "assets", "native-project-roots", record.projectId, record.rootCommit)
   };
 }
 

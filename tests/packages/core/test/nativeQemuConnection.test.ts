@@ -100,11 +100,11 @@ describe("native QEMU host connection preflight", () => {
     await expect(loadNativeQemuConnection(oversized, "host-a")).rejects.toThrow(NativeQemuConnectionError);
   });
 
-  it("cannot enable native QEMU or fall back to Gitea after a valid file is parsed", async () => {
+  it("rejects the obsolete Gitea selector before native QEMU fallback after a valid file is parsed", async () => {
     const path = await connectionFile();
     expect(await loadNativeQemuConnection(path, "host-a")).toEqual(valid);
     expect(() => lifecycleOptionsForBackend("sysbox", { HOME: "/home/dim",
       DIM_NATIVE_QEMU_CONNECTION_FILE: path, DIM_GITEA_CONNECTION_FILE: "/not-used" }))
-      .toThrow(/native QEMU adapter is unavailable; refusing fallback/);
+      .toThrow(/DIM_GITEA_CONNECTION_FILE is not supported by the native-only lifecycle/);
   });
 });

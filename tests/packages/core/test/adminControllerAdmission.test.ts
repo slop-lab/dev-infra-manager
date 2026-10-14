@@ -12,16 +12,10 @@ import {
   HostRuntimeTransitions,
   type HostRuntimeSupervisor
 } from "../../../../core/packages/core/src/hostRuntimeTransitions.js";
-import { OrdinaryCiPoolSupervisor } from "../../../../core/packages/core/src/ordinaryCiPoolSupervisor.js";
 import type { RegisteredDimPlugins } from "../../../../core/packages/core/src/plugin.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin, registerPlugins } from "../../../../core/packages/core/src/plugin.js";
 import { registerHostMirrorProvider } from "../../../../core/packages/core/src/hostMirrorProvider.js";
-import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import {
-  claimTestGiteaService,
-  ownedGiteaContainerInspect,
-  ownedGiteaResourceInspect
-} from "./giteaServiceFixture.js";
+import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { hostLifecycleOptions, hostRecord, TEST_HOST_MIRROR_PROVIDER } from "./hostLifecycleFixture.js";
 
 vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOriginal) => ({
@@ -96,34 +90,15 @@ class AdminRunner implements StreamingCommandRunner {
 
   constructor(private readonly blockSnapshot = false) {}
 
-  async run(command: string, args: string[], options: RunOptions = {}): Promise<CommandResult> {
+  async run(command: string, args: string[]): Promise<CommandResult> {
     this.calls.push([command, ...args]);
-    if (options.signal !== undefined && !options.signal.aborted) {
-      await new Promise<void>((resolve) => options.signal?.addEventListener("abort", () => resolve(), { once: true }));
-    }
     if (args[0] === "container" && args[1] === "ls") {
       this.snapshotReached.open();
       if (this.blockSnapshot) await this.allowSnapshot.wait;
       return result(command, args);
     }
     if (args[0] === "container" && args[1] === "inspect") {
-      if (args[2] === "dim-gitea") {
-        return result(command, args, `${ownedGiteaContainerInspect("gitea-container-id", true)}\n`);
-      }
       return { ...result(command, args), stderr: `Error: No such container: ${args[2]}`, exitCode: 1 };
-    }
-    if ((args[0] === "network" || args[0] === "volume") && args[1] === "inspect") {
-      return result(command, args, `${ownedGiteaResourceInspect(args[0])}\n`);
-    }
-    if (args[0] === "exec" && args.some((argument) => argument.includes("/data/dim/credentials.json"))) {
-      return result(command, args, JSON.stringify({
-        adminUsername: "admin", adminPassword: "admin-secret",
-        writerUsername: "writer", writerPassword: "writer-secret",
-        maintainerUsername: "maintainer", maintainerPassword: "maintainer-secret"
-      }));
-    }
-    if (args[0] === "exec" && args.some((argument) => argument.includes("awk"))) {
-      return result(command, args, "true\n");
     }
     return result(command, args, "ok\n");
   }
@@ -187,27 +162,24 @@ describe("admin host admission", () => {
   it("rereads host state after queued plugin admission and rejects without dispatch", async () => {
     // Given
     const root = await stateRoot();
+    const state = new LifecycleState(root);
     const lock = new DeterministicLock();
     vi.spyOn(LifecycleState.prototype, "acquireHostLifecycleLock").mockImplementation(() => lock.acquire());
-    const handlerEntered = new Barrier();
     let handlerCalls = 0;
     const plugins = await testPlugin(async () => {
       handlerCalls += 1;
-      handlerEntered.open();
       return { body: { ok: true } };
     });
-    const runner = new AdminRunner(true);
-    const base = await startServer(root, plugins, runner);
+    const base = await startServer(root, plugins, new AdminRunner());
+    const release = await lock.acquire();
 
     // When
-    const shutdown = fetch(`${base}/v1/call/host.shutdown`, { method: "POST", body: "{}" });
-    await runner.snapshotReached.wait;
     const response = fetch(`${base}/v1/test`, { method: "POST" });
-    await Promise.race([lock.waitForAttempt(2), handlerEntered.wait]);
-    runner.allowSnapshot.open();
+    await lock.waitForAttempt(2);
+    await state.writeHostLifecycle(hostRecord("stopped"));
+    await release();
 
     // Then
-    expect((await shutdown).status).toBe(200);
     expect((await response).status).toBe(503);
     expect(handlerCalls).toBe(0);
   });
@@ -259,11 +231,6 @@ describe("admin host admission", () => {
       acquisitions += 1;
       return async () => undefined;
     });
-    const fetchImplementation = globalThis.fetch;
-    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
-      String(input).startsWith("http://gitea:3000/")
-        ? Promise.resolve(new Response(null, { status: 200 }))
-        : fetchImplementation(input, init));
     const plugins = await registerPlugin({
       name: "test.host-mirrors",
       apiVersion: DIM_PLUGIN_API_VERSION,
@@ -297,11 +264,6 @@ describe("admin host admission", () => {
       },
       async resume() { events.push("resume"); }
     };
-    const fetchImplementation = globalThis.fetch;
-    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
-      String(input).startsWith("http://gitea:3000/")
-        ? Promise.resolve(new Response(null, { status: 200 }))
-        : fetchImplementation(input, init));
     const plugins = await registerPlugin({
       name: "test.host-mirrors",
       apiVersion: DIM_PLUGIN_API_VERSION,
@@ -324,46 +286,6 @@ describe("admin host admission", () => {
     expect(stopped.status).toBe(200);
     expect(started.status).toBe(200);
     expect(events).toEqual(["quiesce", "resume"]);
-  });
-
-  it("does not start capacity after teardown fences an accepted host start", async () => {
-    // Given
-    const root = await stateRoot();
-    const startEntered = new Barrier();
-    const allowStart = new Barrier();
-    vi.spyOn(LifecycleState.prototype, "acquireHostLifecycleLock").mockImplementation(async () => {
-      startEntered.open();
-      await allowStart.wait;
-      return async () => undefined;
-    });
-    const fetchImplementation = globalThis.fetch;
-    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
-      String(input).startsWith("http://gitea:3000/")
-        ? Promise.resolve(new Response(null, { status: 200 }))
-        : fetchImplementation(input, init));
-    const plugins = await registerPlugin({
-      name: "test.host-mirrors",
-      apiVersion: DIM_PLUGIN_API_VERSION,
-      register(host) { registerHostMirrorProvider(host, TEST_HOST_MIRROR_PROVIDER); }
-    });
-    pluginSets.push(plugins);
-    const capacityStarts: string[] = [];
-    const supervisor = new OrdinaryCiPoolSupervisor(["primary"], async (capacity) => {
-      capacityStarts.push(capacity);
-    });
-    const hostTransitions = new HostRuntimeTransitions(supervisor);
-    const base = await startServer(root, plugins, new AdminRunner(), hostTransitions);
-
-    // When
-    const starting = fetch(`${base}/v1/call/host.start`, { method: "POST", body: "{}" });
-    await startEntered.wait;
-    const disposal = hostTransitions.dispose();
-    allowStart.open();
-
-    // Then
-    await expect(disposal).resolves.toBeUndefined();
-    expect((await starting).status).toBe(400);
-    expect(capacityStarts).toEqual([]);
   });
 
   async function stateRoot(): Promise<string> {
@@ -390,7 +312,6 @@ describe("admin host admission", () => {
     runner: StreamingCommandRunner,
     hostTransitions?: HostRuntimeTransitions
   ): Promise<string> {
-    await claimTestGiteaService(root);
     const server = configuredDimAdminController(hostLifecycleOptions(root), plugins, runner, hostTransitions);
     servers.push(server);
     server.listen(0, "127.0.0.1");

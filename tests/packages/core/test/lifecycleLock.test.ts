@@ -300,10 +300,9 @@ describe("lifecycle lock ownership", () => {
   });
 
   it("bounds independent same-process acquisition and preserves lifecycle lock identities", async () => {
-    // Given: the required Project, runner, hook, setup, and reconciliation lock identities are acquired in order.
+    // Given: the required Project, hook, setup, and reconciliation lock identities are acquired in order.
     const state = new LifecycleState(root);
     const releaseProject = await state.acquireProjectLock("project");
-    const releaseRunner = await state.acquireCiRunnerLock("project");
     const releaseHook = await state.acquireQemuProjectHookPublicationLock("project-id");
     const releaseSetup = await state.acquireWorkspaceSetupLock("work-1");
     const releaseWorkspace = await state.acquireWorkspaceLock("work-1");
@@ -321,7 +320,6 @@ describe("lifecycle lock ownership", () => {
     await releaseWorkspace();
     await releaseSetup();
     await releaseHook();
-    await releaseRunner();
     await releaseProject();
   });
 });

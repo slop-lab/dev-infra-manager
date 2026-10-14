@@ -16,6 +16,7 @@ test("root help identifies the canonical source repository", () => {
   const help = run(["--help"]);
   assert.equal(help.status, 0);
   assert.match(help.stdout, new RegExp(sourceRepositoryUrl.replaceAll("/", "\\/")));
+  assert.doesNotMatch(help.stdout, /dim repo/);
 });
 
 test("install-cp is not implemented by the DIM CLI", () => {
@@ -50,7 +51,7 @@ test("CLI uses controller sessions and presents sanitized controller errors", as
     "ci-commands"
   );
   const support = await readCliSource("controller-session");
-  for (const operation of ["workspace.exec", "workspace.run", "ci.runner.logs"]) {
+  for (const operation of ["workspace.exec", "workspace.run"]) {
     assert.match(source, new RegExp(`adminStreamCall[^\\n]*[\\s\\S]{0,160}${operation.replace(".", "\\.")}`));
   }
   for (const operation of [
@@ -101,98 +102,48 @@ test("DNS provider add passes extra arguments to the selected plugin driver", ()
   assert.match(missingName.stderr, /required option '--name <name>' not specified/);
 });
 
-test("repository sync commands expose safe reviewed contracts", () => {
-  const fetchHelp = run(["repo", "fetch", "--help"]);
-  assert.equal(fetchHelp.status, 0);
-  assert.match(fetchHelp.stdout, /--prune/);
-  assert.doesNotMatch(fetchHelp.stdout, /--force/);
-
-  const publishHelp = run(["repo", "publish", "--help"]);
-  assert.equal(publishHelp.status, 0);
-  assert.match(publishHelp.stdout, /<project> \[alias\]/);
-
-  const addHelp = run(["repo", "add", "--help"]);
-  assert.equal(addHelp.status, 0);
-  assert.match(addHelp.stdout, /--mirror/);
-
-  const invalid = run(["repo", "push", "project", "root", "main"]);
-  assert.notEqual(invalid.status, 0);
-  assert.match(invalid.stderr, /unknown command 'push'/);
+test("repository namespace is unavailable after the native-only cutover", () => {
+  for (const args of [
+    ["repo", "list", "project"],
+    ["x", "git", "status"],
+    ["git", "setup"],
+    ["admin", "service", "ensure"]
+  ]) {
+    const result = run(args);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /unknown command/);
+  }
 });
 
-test("project create exposes root bootstrap and explicit repository-set choices", () => {
+test("project commands expose only native bootstrap, create, list, and show", () => {
+  const projectHelp = run(["project", "--help"]);
+  assert.equal(projectHelp.status, 0);
+  for (const command of ["bootstrap-native-root", "create", "list", "show"]) {
+    assert.match(projectHelp.stdout, new RegExp(command));
+  }
+  assert.doesNotMatch(projectHelp.stdout, /\bremove\b|\bpurge\b/);
+
   const help = run(["project", "create", "--help"]);
   assert.equal(help.status, 0);
-  for (const option of ["--root <alias>", "--bootstrap-git-url <git-url>", "--bootstrap-git-ref <git-ref>", "--apply-repos", "--no-apply-repos"]) {
-    assert.match(help.stdout, new RegExp(option.replace(/[<>]/g, "\\$&")));
-  }
+  assert.match(help.stdout, /--json/);
+  assert.doesNotMatch(help.stdout, /--repos|--root|--bootstrap-git-url|--protect|--mirror|--apply-repos/);
 
-  const rootOnlyPolicy = run([
-    "project", "create", "example", "--bootstrap-git-url", "https://example.com/root.git", "--protect", "main"
-  ]);
-  assert.notEqual(rootOnlyPolicy.status, 0);
-  assert.match(rootOnlyPolicy.stderr, /--protect and --mirror require --root/);
-
-  const conflictingApply = run([
-    "project", "create", "example", "--root", "root", "--apply-repos", "--no-apply-repos"
-  ]);
-  assert.notEqual(conflictingApply.status, 0);
-  assert.match(conflictingApply.stderr, /--apply-repos and --no-apply-repos cannot be used together/);
-
-  const conflictingSources = run([
-    "project", "create", "example", "--repos", "repos.yml", "--root", "root"
-  ]);
-  assert.notEqual(conflictingSources.status, 0);
-  assert.match(conflictingSources.stderr, /--repos cannot be combined/);
-
+  const missingNativeSelection = run(["project", "list"]);
+  assert.equal(missingNativeSelection.status, 2);
+  assert.match(missingNativeSelection.stderr, /DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE is required/);
 });
 
-test("CI runner commands expose lifecycle and configurable defaults", () => {
-  const help = run(["ci", "runner", "--help"]);
+test("CI exposes only native execution families", () => {
+  const help = run(["ci", "--help"]);
   assert.equal(help.status, 0);
-  for (const command of ["create", "status", "logs", "start", "restart", "stop", "delete", "defaults"]) {
-    assert.match(help.stdout, new RegExp(command));
+  assert.match(help.stdout, /native-root/);
+  assert.match(help.stdout, /native-qemu/);
+  assert.doesNotMatch(help.stdout, /ordinary-pool|runner|scheduler/);
+  for (const command of ["runner", "ordinary-pool", "scheduler"]) {
+    const result = run(["ci", command]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, new RegExp(`unknown command '${command}'`));
   }
-
-  const create = run(["ci", "runner", "create", "--help"]);
-  assert.equal(create.status, 0);
-  assert.match(create.stdout, /--cpus <count>/);
-  assert.match(create.stdout, /--memory <size>/);
-  assert.match(create.stdout, /--pids <count>/);
-  assert.doesNotMatch(create.stdout, /--processes/);
-  assert.doesNotMatch(create.stdout, /--pids-limit/);
-  assert.match(create.stdout, /<project> <runner> <executor>/);
-
-  const invalidExecutor = run(["ci", "runner", "create", "example", "primary", "other"]);
-  assert.notEqual(invalidExecutor.status, 0);
-  assert.match(invalidExecutor.stderr, /must be 'sysbox' or 'qemu'/);
-
-  const qemuProcesses = run(["ci", "runner", "create", "example", "release", "qemu", "--pids", "512"]);
-  assert.notEqual(qemuProcesses.status, 0);
-  assert.match(qemuProcesses.stderr, /--pids applies only to the sysbox executor/);
-
-  const defaults = run(["ci", "runner", "defaults", "set", "--help"]);
-  assert.equal(defaults.status, 0);
-  assert.match(defaults.stdout, /--cpus <count>/);
-
-  const missingDefaults = run(["ci", "runner", "defaults", "set"]);
-  assert.notEqual(missingDefaults.status, 0);
-  assert.match(missingDefaults.stderr, /required option/);
-});
-
-test("ordinary CI pool commands separate control-plane service and host capacity", () => {
-  const help = run(["ci", "ordinary-pool", "--help"]);
-  assert.equal(help.status, 0);
-  assert.match(help.stdout, /project[\s\S]*service|service[\s\S]*project/);
-  assert.doesNotMatch(help.stdout, /worker/);
-  for (const [args, expected] of [[["project", "reconcile"], /<project>[\s\S]*<registrar-config>/], [["service", "run"], /<config>/]] as const) {
-    const result = run(["ci", "ordinary-pool", ...args, "--help"]);
-    assert.equal(result.status, 0);
-    assert.match(result.stdout, expected);
-  }
-  const separateWorker = run(["ci", "ordinary-pool", "worker", "serve", "primary"]);
-  assert.notEqual(separateWorker.status, 0);
-  assert.match(separateWorker.stderr, /unknown command 'worker'/);
 });
 
 test("native root CI exposes host execution without manual Project admission", () => {
@@ -208,6 +159,14 @@ test("native root CI exposes host execution without manual Project admission", (
   assert.doesNotMatch(help.stdout, /project/);
   assert.equal(host.status, 0);
   assert.match(host.stdout, /<config>/);
+});
+
+test("native QEMU exposes scheduler, runner image, host, and event operations", () => {
+  const help = run(["ci", "native-qemu", "--help"]);
+  assert.equal(help.status, 0);
+  for (const command of ["scheduler", "runner", "host", "event"]) {
+    assert.match(help.stdout, new RegExp(command));
+  }
 });
 
 test("host lifecycle commands expose volume-preserving maintenance", () => {
@@ -265,9 +224,6 @@ test("workspace creation exposes explicit KVM policy", () => {
 
 test("destructive commands require --yes only in non-interactive use", () => {
   for (const args of [
-    ["project", "purge", "example"],
-    ["repo", "delete", "example", "root"],
-    ["ci", "runner", "delete", "example", "primary"],
     ["workspace", "discard", "work-1"]
   ]) {
     const result = run(args);

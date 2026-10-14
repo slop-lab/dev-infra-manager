@@ -9,8 +9,6 @@ const VALID_HOST_RECORD = {
   schemaVersion: 2,
   phase: "stopped",
   resumeWorkspaces: ["workspace"],
-  restartCiRunners: [{ project: "example", name: "capacity" }],
-  resumeManagedContainers: ["managed-service"],
   updatedAt: "now",
   error: "interrupted"
 } as const;
@@ -19,8 +17,6 @@ const HISTORICAL_SCHEMA_1_RECORD = {
   schemaVersion: 1,
   phase: "stopped",
   resumeWorkspaces: ["workspace"],
-  resumeCiRunners: [{ project: "example", name: "capacity" }],
-  resumeManagedContainers: ["managed-service"],
   updatedAt: "now"
 } as const;
 
@@ -30,16 +26,6 @@ const MALFORMED_HOST_RECORDS = [
   ["missing workspace array", "resumeWorkspaces", undefined],
   ["non-array workspaces", "resumeWorkspaces", "workspace"],
   ["non-string workspace member", "resumeWorkspaces", [7]],
-  ["missing CI runner array", "restartCiRunners", undefined],
-  ["non-array CI runners", "restartCiRunners", { project: "example", name: "capacity" }],
-  ["non-object CI runner target", "restartCiRunners", ["example/capacity"]],
-  ["CI runner target missing project", "restartCiRunners", [{ name: "capacity" }]],
-  ["CI runner target missing name", "restartCiRunners", [{ project: "example" }]],
-  ["CI runner target with non-string project", "restartCiRunners", [{ project: 7, name: "capacity" }]],
-  ["CI runner target with non-string name", "restartCiRunners", [{ project: "example", name: false }]],
-  ["missing managed-container array", "resumeManagedContainers", undefined],
-  ["non-array managed containers", "resumeManagedContainers", "managed-service"],
-  ["non-string managed-container member", "resumeManagedContainers", [false]],
   ["missing update timestamp", "updatedAt", undefined],
   ["non-string update timestamp", "updatedAt", 7],
   ["non-string error", "error", { message: "interrupted" }]
@@ -53,10 +39,6 @@ const MALFORMED_RAW_HOST_STATES = [
   ["string schema version", { ...VALID_HOST_RECORD, schemaVersion: "2" }],
   ["unsupported schema version", { ...VALID_HOST_RECORD, schemaVersion: 3 }],
   ["unknown top-level field", { ...VALID_HOST_RECORD, futureState: true }],
-  ["unknown CI runner target field", {
-    ...VALID_HOST_RECORD,
-    restartCiRunners: [{ project: "example", name: "capacity", futureState: true }]
-  }]
 ] as const;
 
 describe("host lifecycle state validation", () => {
@@ -110,7 +92,7 @@ describe("host lifecycle state validation", () => {
     await expect(readFile(state.hostLifecyclePath(), "utf8")).resolves.toBe(rawState);
   });
 
-  it("directs exact historical schema 1 state through controller startup migration without mutating it", async () => {
+  it("rejects exact historical schema 1 state with export guidance without mutating it", async () => {
     // Given
     const rawState = `${JSON.stringify(HISTORICAL_SCHEMA_1_RECORD, null, 4)}\n`;
     await writeFile(state.hostLifecyclePath(), rawState);
@@ -119,7 +101,7 @@ describe("host lifecycle state validation", () => {
     const read = state.readHostLifecycle();
 
     // Then
-    await expect(read).rejects.toThrow(/schema 1.*controller startup migration/);
+    await expect(read).rejects.toThrow(/unsupported predecessor state.*prior pinned release.*complete recovery/is);
     await expect(readFile(state.hostLifecyclePath(), "utf8")).resolves.toBe(rawState);
   });
 
@@ -134,7 +116,7 @@ describe("host lifecycle state validation", () => {
     const read = state.readHostLifecycle();
 
     // Then
-    await expect(read).rejects.toThrow("unknown field 'not found'");
+    await expect(read).rejects.toThrow(/predecessor recovery targets.*prior pinned release/is);
   });
 
   it("types only an absent lifecycle record as missing while preserving its message", async () => {

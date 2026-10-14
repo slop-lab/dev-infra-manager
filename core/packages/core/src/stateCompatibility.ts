@@ -2,9 +2,8 @@ import { constants } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { assertCiRunnerRecord } from "./ciRunnerRecord.js";
 import { UserError } from "./errors.js";
-import { preflightHostLifecycleState } from "./hostStateMigration.js";
+import { parseHostLifecycleRecord } from "./hostLifecycleRecord.js";
 import { parseProjectRecord } from "./projectRecord.js";
 import { assertWorkspaceRecord } from "./workspaceRecord.js";
 
@@ -13,7 +12,7 @@ export type StateCompatibilityResult = {
   readonly warnings: readonly string[];
 };
 
-type StateFamily = "Project" | "workspace" | "CI runner";
+type StateFamily = "Project" | "workspace";
 
 export async function preflightStateCompatibility(
   env: NodeJS.ProcessEnv = process.env
@@ -23,26 +22,20 @@ export async function preflightStateCompatibility(
   );
   if (!await inspectDirectory(stateRoot, "DIM state root", true)) return { stateRoot, warnings: [] };
 
-  const hostResult = await inspectHost(stateRoot);
+  await inspectHost(stateRoot);
   await inspectFlatFamily(stateRoot, "projects", "Project", (value) => {
     parseProjectRecord(value);
   });
   await inspectFlatFamily(stateRoot, "workspaces", "workspace", assertWorkspaceRecord);
-  await inspectCiRunners(stateRoot);
-
-  return {
-    stateRoot,
-    warnings: hostResult.kind === "unchanged"
-      ? []
-      : ["Host lifecycle schema 1 is compatible and will be migrated with a permanent backup at controller startup."]
-  };
+  return { stateRoot, warnings: [] };
 }
 
-async function inspectHost(stateRoot: string): Promise<{ readonly kind: "unchanged" | "migrated" | "recovered" }> {
+async function inspectHost(stateRoot: string): Promise<void> {
   const target = path.join(stateRoot, "host.json");
   try {
-    return await preflightHostLifecycleState(target);
+    parseHostLifecycleRecord(await readJsonFile(target, "host lifecycle state"));
   } catch (error) {
+    if (errorCode(error) === "ENOENT") return;
     throw compatibilityError("host lifecycle", target, error);
   }
 }
@@ -62,29 +55,6 @@ async function inspectFlatFamily(
       parse(await readJsonFile(target, `${family} state`), target);
     } catch (error) {
       throw compatibilityError(family, target, error);
-    }
-  }
-}
-
-async function inspectCiRunners(stateRoot: string): Promise<void> {
-  const directory = path.join(stateRoot, "ci-runners");
-  if (!await inspectDirectory(directory, "CI runner state directory", true)) return;
-  for (const project of await readdir(directory)) {
-    const projectDirectory = path.join(directory, project);
-    try {
-      await inspectDirectory(projectDirectory, `CI runner Project directory '${project}'`, false);
-    } catch (error) {
-      throw compatibilityError("CI runner", projectDirectory, error);
-    }
-    for (const entry of await readdir(projectDirectory)) {
-      if (!entry.endsWith(".json")) continue;
-      const target = path.join(projectDirectory, entry);
-      try {
-        const value = await readJsonFile(target, "CI runner state");
-        assertCiRunnerRecord(value, target);
-      } catch (error) {
-        throw compatibilityError("CI runner", target, error);
-      }
     }
   }
 }

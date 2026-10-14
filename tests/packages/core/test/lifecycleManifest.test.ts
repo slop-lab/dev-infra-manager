@@ -34,38 +34,12 @@ describe("project and workspace lifecycle", () => {
 
 it("publishes only the immutable root contract and generic runtime data", async () => {
     const now = new Date().toISOString();
-    const repository = (alias: string, phase: "ready" | "error") => ({
-      alias,
-      providerRepoId: `dim-project/${alias}`,
-      owner: "dim-project",
-      hostUrl: `http://127.0.0.1:3300/dim-project/${alias}.git`,
-      workspaceUrl: `http://dim-gitea:3000/dim-project/${alias}.git`,
-      phase,
-      connections: [],
-      protectedPatterns: [],
-      protectionPhase: "applied" as const,
-      createdAt: now,
-      updatedAt: now
-    });
-    const project = {
-    schemaVersion: 4 as const,
-      id: "project-id",
-      name: "project",
-    gitNamespace: "dim-project",
-    giteaOrganizationId: 41,
-      phase: "ready" as const,
-      rootRepositoryAlias: "root",
-      rootRef: "refs/heads/main",
-      repositories: [repository("source", "ready"), repository("root", "ready")],
-      createdAt: now,
-      updatedAt: now
-    };
     const workspace = {
-    schemaVersion: 8 as const,
-    workspaceId: "A".repeat(43),
+      schemaVersion: 9 as const,
+      workspaceId: "A".repeat(43),
       name: "work",
-      projectId: project.id,
-      projectName: project.name,
+      projectId: "project-id",
+      projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
@@ -84,9 +58,22 @@ it("publishes only the immutable root contract and generic runtime data", async 
       routes: [],
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
-      gitBaseUrl: "http://dim-gitea:3000/dim-project",
       hostAliases: {},
       projectManifestPath: "/run/dim/project.json",
+      source: {
+        kind: "native" as const,
+        serviceId: "native-main" as const,
+        snapshot: {
+          projectId: "project-id",
+          repositoryId: "root" as const,
+          protectedRef: "refs/heads/main",
+          commit: "a".repeat(40),
+          tree: "b".repeat(40)
+        },
+        policyRevision: "c".repeat(64),
+        requiredReviewRevision: "d".repeat(64),
+        requiredJobSetRevision: "e".repeat(64)
+      },
       createdAt: now,
       updatedAt: now
     };

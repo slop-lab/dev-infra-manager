@@ -1,19 +1,15 @@
-import * as ciRunner from "./ciRunner.js";
 import { ensureAptCache } from "./aptCache.js";
 import { runDoctor } from "./doctor.js";
 import { UserError } from "./errors.js";
-import { ensureGitea } from "./gitea.js";
 import { HostNotReadyError, withHostAdminAdmission, withHostRuntimeAdmission } from "./hostAdminAdmission.js";
 import { hostLifecycleStatus, shutdownHost, startHost } from "./hostLifecycle.js";
 import { requireHostMirrorProvider, resolveHostMirrorProvider } from "./hostMirrorProvider.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
-import * as projectRegistry from "./projectRegistry.js";
-import { assertRepositorySetUrlsArePortable, parseRepositorySetYaml, validateRepositoryRefNamespace, validateRepositorySet } from "./repositorySet.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { ensureRegistryCache } from "./registryCache.js";
 import * as workspaceLifecycle from "./workspaceLifecycle.js";
-import { booleanValue, ciExecutor, ciResources, stringArray, stringValue, workspaceRuntimeBackend } from "./adminInput.js";
+import { booleanValue, stringArray, stringValue, workspaceRuntimeBackend } from "./adminInput.js";
 
 type BuiltinContext = {
   readonly input: Record<string, unknown>;
@@ -47,7 +43,7 @@ export async function adminBuiltinCall(operation: string, context: BuiltinContex
   }
 }
 
-const RUNTIME_OPERATIONS = new Set(["ci.runner.logs", "workspace.exec", "workspace.run"]);
+const RUNTIME_OPERATIONS = new Set(["workspace.exec", "workspace.run"]);
 
 async function dispatchBuiltin(operation: string, context: BuiltinContext): Promise<unknown> {
   const { input, runner, plugins } = context;
@@ -62,116 +58,6 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
   }
   const text = (name: string) => stringValue(input[name], name);
   switch (operation) {
-    case "project.create": return projectRegistry.createProject(runner, lifecycle, text("name"));
-    case "project.list": return projectRegistry.listProjects(lifecycle);
-    case "project.show": return projectRegistry.showProject(lifecycle, text("name"));
-    case "project.remove": await projectRegistry.removeProject(lifecycle, text("name")); return {};
-    case "project.purge": await projectRegistry.purgeProject(runner, lifecycle, text("name")); return {};
-    case "repo.plan":
-      return projectRegistry.planProjectRepositorySet(
-        lifecycle,
-        text("project"),
-        validateRepositorySet(input.repositorySet),
-        input.createProject === true,
-        input.rebindOrigin === undefined ? {} : { rebindOrigin: text("rebindOrigin") }
-      );
-    case "repo.rebind-origin":
-      return projectRegistry.rebindProjectRootOrigin(runner, lifecycle, {
-        project: text("project"),
-        alias: text("alias"),
-        expectedOldOriginDigest: text("expectedOldOriginDigest"),
-        expectedOriginTip: text("expectedOriginTip"),
-        approved: input.approved === true,
-        repositorySet: validateRepositorySet(input.repositorySet)
-      });
-    case "repo.prepare": {
-      const alias = text("alias");
-      const repositorySet = validateRepositorySet({
-        schemaVersion: 1,
-        upstreams: {},
-        repositories: {
-          [alias]: {
-            root: input.root === true,
-            fallback: false,
-            protectedPatterns: stringArray(input.protectedPatterns),
-            forcePushBlockedPatterns: stringArray(input.forcePushBlockedPatterns),
-            importBranches: {},
-            publishBranches: input.publishBranches ?? {},
-            ...(input.source === undefined ? {} : { url: text("source") }),
-            ...(input.ref === undefined ? {} : { ref: text("ref") })
-          }
-        }
-      });
-      const entry = repositorySet.repositories[alias];
-      if (entry === undefined) throw new UserError(`repository alias '${alias}' is missing`);
-      return projectRegistry.prepareProjectRepositoryTransfer(runner, lifecycle, {
-        project: text("project"),
-        alias,
-        root: entry.root,
-        protectedPatterns: entry.protectedPatterns,
-        forcePushBlockedPatterns: entry.forcePushBlockedPatterns,
-        ...(entry.url === undefined ? {} : { source: entry.url }),
-        ...(input.refNamespace === undefined
-          ? {}
-          : { refNamespace: validateRepositoryRefNamespace(input.refNamespace, "refNamespace") }),
-        publishBranches: entry.publishBranches,
-        ...(entry.ref === undefined ? {} : { ref: entry.ref })
-      });
-    }
-    case "repo.complete":
-      return projectRegistry.completeProjectRepositoryTransfer(
-        runner,
-        lifecycle,
-        text("project"),
-        text("alias"),
-        text("transferId"),
-        {
-          success: input.success === true,
-          ...(input.error === undefined ? {} : { error: text("error") })
-        }
-      );
-    case "repo.sync-prepare":
-      return projectRegistry.prepareProjectRepositorySync(runner, lifecycle, text("project"), text("alias"));
-    case "repo.root-set": {
-      const yaml = await projectRegistry.readProjectRootRepositorySetYaml(runner, lifecycle, text("project"));
-      if (yaml === undefined) return { found: false };
-      const repositorySet = parseRepositorySetYaml(yaml, ".dim/repos.yml");
-      assertRepositorySetUrlsArePortable(repositorySet, ".dim/repos.yml");
-      return { found: true, repositorySet };
-    }
-    case "repo.list": return projectRegistry.listProjectRepositories(lifecycle, text("project"));
-    case "repo.show": return projectRegistry.showProjectRepository(lifecycle, text("project"), text("alias"));
-    case "repo.delete":
-      await projectRegistry.deleteProjectRepository(runner, lifecycle, text("project"), text("alias"));
-      return {};
-    case "repo.protect":
-      return projectRegistry.applyProjectRepositoryProtection(runner, lifecycle, text("project"), text("alias"));
-    case "repo.url":
-      return {
-        url: input.workspace === true
-          ? await projectRegistry.projectRepositoryWorkspaceUrl(lifecycle, text("project"), text("alias"))
-          : await projectRegistry.projectRepositoryHostUrl(lifecycle, text("project"), text("alias"))
-      };
-    case "ci.runner.create":
-      return ciRunner.createCiRunner(runner, lifecycle, {
-        project: text("project"),
-        name: text("name"),
-        executor: ciExecutor(input.executor),
-        ...(input.resources === undefined ? {} : { resources: ciResources(input.resources) })
-      });
-    case "ci.runner.list": return ciRunner.listCiRunners(lifecycle);
-    case "ci.runner.show": return ciRunner.showCiRunner(lifecycle, text("project"), text("name"));
-    case "ci.runner.logs": {
-      const record = await ciRunner.showCiRunner(lifecycle, text("project"), text("name"));
-      const container = record.executor.kind === "sysbox"
-        ? record.executor.containerName
-        : record.executor.supervisorName;
-      return { exitCode: await runner.runStreaming("docker", ["logs", "--follow", container]) };
-    }
-    case "ci.runner.start": return ciRunner.startCiRunner(runner, lifecycle, { project: text("project"), name: text("name") });
-    case "ci.runner.restart": return ciRunner.restartCiRunner(runner, lifecycle, { project: text("project"), name: text("name") });
-    case "ci.runner.stop": return ciRunner.stopCiRunner(runner, lifecycle, text("project"), text("name"));
-    case "ci.runner.delete": await ciRunner.deleteCiRunner(runner, lifecycle, text("project"), text("name")); return {};
     case "workspace.create":
       if (input.repositoryRefs !== undefined) {
         throw new UserError("workspace repository ref overrides are obsolete; define non-root ref policy in reviewed Project code");
@@ -233,24 +119,6 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
       );
       return {};
     case "doctor": return runDoctor(runner, lifecycle.defaultWorkspaceBackend, lifecycle);
-    case "service.ensure": return ensureGitea(runner, lifecycle);
-    case "git.credentials": return projectRegistry.prepareHostGitCredential(runner, lifecycle);
-    case "git.setup": {
-      const { baseUrl } = await projectRegistry.prepareHostGitCredential(runner, lifecycle);
-      const helper = await runner.run("git", [
-        "config", "--global", "--replace-all",
-        `credential.${baseUrl}.helper`,
-        "!dim git credential-helper"
-      ]);
-      if (helper.exitCode !== 0) throw new UserError(`failed to configure Git credential helper: ${helper.stderr.trim()}`);
-      const usePath = await runner.run("git", [
-        "config", "--global", "--replace-all",
-        `credential.${baseUrl}.useHttpPath`,
-        "true"
-      ]);
-      if (usePath.exitCode !== 0) throw new UserError(`failed to configure Git credential path matching: ${usePath.stderr.trim()}`);
-      return { baseUrl };
-    }
     case "plugin.list":
       return {
         plugins: plugins.plugins.filter((name) => !name.startsWith("builtin.")),
@@ -262,15 +130,12 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
 }
 
 const MIRROR_REQUIRED_OPERATIONS = new Set([
-  "ci.runner.create", "ci.runner.start", "ci.runner.restart",
   "workspace.create", "workspace.setup", "workspace.update", "workspace.start", "workspace.restart"
 ]);
 
 export const STREAMABLE_OPERATIONS = new Set([
-  "project.create", "project.purge", "repo.protect", "ci.runner.create", "ci.runner.logs",
-  "ci.runner.start", "ci.runner.restart", "ci.runner.stop", "ci.runner.delete",
   "workspace.create", "workspace.setup", "workspace.update",
   "workspace.resources", "workspace.start", "workspace.restart", "workspace.stop",
-  "workspace.discard", "workspace.exec", "workspace.run", "service.ensure",
+  "workspace.discard", "workspace.exec", "workspace.run",
   "host.shutdown", "host.start", "doctor"
 ]);

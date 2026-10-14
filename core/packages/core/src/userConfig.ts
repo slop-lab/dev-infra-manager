@@ -3,30 +3,11 @@ import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import { UserError } from "./errors.js";
-import type { CiRunnerResources, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
+import type { WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 
 interface DimUserConfig {
   schemaVersion: 1;
   workspaceBackend?: WorkspaceRuntimeBackendKind;
-  ciRunnerDefaults?: CiRunnerResources;
-}
-
-export function configuredCiRunnerDefaults(env: NodeJS.ProcessEnv = process.env): CiRunnerResources | undefined {
-  const value = readUserConfig(env);
-  if (value === undefined || value.ciRunnerDefaults === undefined) return undefined;
-  return validateCiRunnerResources(value.ciRunnerDefaults, "ciRunnerDefaults");
-}
-
-export async function setConfiguredCiRunnerDefaults(
-  resources: CiRunnerResources | undefined,
-  env: NodeJS.ProcessEnv = process.env
-): Promise<string> {
-  const target = dimUserConfigPath(env);
-  const value = await readMutableUserConfig(target);
-  if (resources === undefined) delete value.ciRunnerDefaults;
-  else value.ciRunnerDefaults = validateCiRunnerResources(resources, "ciRunnerDefaults");
-  await writeUserConfig(target, value);
-  return target;
 }
 
 export function dimUserConfigPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -102,22 +83,6 @@ async function writeUserConfig(target: string, value: Record<string, unknown>): 
     await rm(temporary, { force: true });
     throw error;
   }
-}
-
-function validateCiRunnerResources(value: unknown, label: string): CiRunnerResources {
-  if (!isRecord(value)) throw new UserError(`invalid ${label} in DIM user config`);
-  const cpus = nonEmpty(value.cpus, `${label}.cpus`);
-  const memory = nonEmpty(value.memory, `${label}.memory`);
-  const pidsLimit = nonEmpty(value.pidsLimit, `${label}.pidsLimit`);
-  if (!/^[0-9]+(?:\.[0-9]+)?$/.test(cpus) || Number(cpus) <= 0) throw new UserError(`invalid ${label}.cpus`);
-  if (!/^[1-9][0-9]*(?:[kmgt]i?b?|[KMGT]i?B?)?$/.test(memory)) throw new UserError(`invalid ${label}.memory`);
-  if (!/^[1-9][0-9]*$/.test(pidsLimit)) throw new UserError(`invalid ${label}.pidsLimit`);
-  return { cpus, memory, pidsLimit };
-}
-
-function nonEmpty(value: unknown, label: string): string {
-  if (typeof value !== "string" || value.length === 0) throw new UserError(`invalid ${label}`);
-  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

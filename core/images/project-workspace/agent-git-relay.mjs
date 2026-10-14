@@ -75,7 +75,6 @@ async function relay(config, ownerId, request, response) {
     if (value !== undefined) headers[name] = value;
   }
   if (length > 0) headers["content-length"] = String(length);
-  if (config.authorization) headers.authorization = config.authorization;
   const send = target.protocol === "https:" ? https.request : http.request;
   const upstream = send(target, { method: request.method, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
     (incoming) => {
@@ -115,19 +114,16 @@ function relayConfig() {
   const path = process.env.DIM_AGENT_GIT_PATH;
   const host = process.env.DIM_AGENT_GIT_LISTEN_HOST;
   const port = Number(process.env.DIM_AGENT_GIT_LISTEN_PORT ?? "19419");
-  const username = process.env.DIM_GIT_USERNAME;
-  const token = process.env.DIM_GIT_TOKEN;
-  if ((mode !== "native" && mode !== "managed") || !upstream || !path || !host || !path.startsWith("/")
-    || path.endsWith("/") || !Number.isSafeInteger(port) || port < 1 || port > 65_535
-    || (mode === "managed" && (!username || !token))) throw new RelayError("invalid agent Git relay configuration");
+  if (mode !== "native" || !upstream || !path || !host || !path.startsWith("/")
+    || path.endsWith("/") || !Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+    throw new RelayError("invalid agent Git relay configuration");
+  }
   const origin = new URL(upstream);
   if ((origin.protocol !== "http:" && origin.protocol !== "https:") || origin.username || origin.password
     || origin.search || origin.hash) throw new RelayError("invalid agent Git relay upstream");
-  const authorization = mode === "managed"
-    ? `Basic ${Buffer.from(`${username}:${token}`).toString("base64")}` : undefined;
-  const hash = createHash("sha256").update(JSON.stringify({ mode, origin: origin.origin, path, host, port,
-    authorization })).digest("hex");
-  return { origin, path, host, port, authorization, hash };
+  const hash = createHash("sha256").update(JSON.stringify({ mode, origin: origin.origin, path, host, port }))
+    .digest("hex");
+  return { origin, path, host, port, hash };
 }
 
 function gitRoute(allowedPath, request) {

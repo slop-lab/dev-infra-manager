@@ -11,8 +11,9 @@ import {
   initializeControllerRoutes
 } from "../../../../core/packages/core/src/controller.js";
 import { UserError } from "../../../../core/packages/core/src/errors.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { LifecycleOptions, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
 import { workspaceRecord } from "./hostLifecycleFixture.js";
 
@@ -195,11 +196,9 @@ it("resolves registered host inputs with authenticated workspace context", async
     });
 
     // When
-    await initializeControllerRoutes({
-      stateRoot: root,
-      defaultWorkspaceBackend: "sysbox",
-      giteaConnection: { kind: "managed" }
-    } as LifecycleOptions, plugin, {
+    await initializeControllerRoutes(lifecycleOptionsForBackend("sysbox", {
+      DIM_STATE_ROOT: root
+    }), plugin, {
       run: async (command, args) => ({ command, args, stdout: "", stderr: "", exitCode: 0 }),
       runStreaming: async () => 0
     });

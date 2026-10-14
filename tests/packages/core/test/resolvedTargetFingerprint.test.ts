@@ -2,37 +2,19 @@ import { describe, expect, it } from "vitest";
 import { resolveWorkspaceTarget } from "../../../../core/packages/core/src/controller.js";
 import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
-const workspace = {
-  schemaVersion: 8,
-  workspaceId: "A".repeat(43),
+const workspace = nativeWorkspaceFixture({
   name: "work",
   projectId: "project",
-  projectName: "project",
-  rootRepositoryAlias: "root",
-  rootRef: "refs/heads/main",
-  rootCommit: "a".repeat(40),
-  workspaceDataPath: "/var/lib/dim/workspace-data",
-  phase: "ready",
-  profiles: [],
   composeProjectName: "dim-work",
   containerName: "dim-ws-work",
-  networkName: "dim-control",
   dockerVolumeName: "dim-ws-work-docker",
-  runtimeBackend: "sysbox",
-  kvm: false,
-  cpuCount: "2",
-  memory: "4g",
-  pidsLimit: "2048",
-  routes: [],
   gitUserName: "Agent",
   gitUserEmail: "agent@example.invalid",
-  gitBaseUrl: "http://dim-gitea:3000/project",
-  hostAliases: {},
-  projectManifestPath: "/run/dim/project.json",
   createdAt: "2026-09-23T00:00:00.000Z",
   updatedAt: "2026-09-23T00:00:00.000Z"
-} satisfies WorkspaceRecord;
+}) satisfies WorkspaceRecord;
 
 describe("resolved workspace target identity", () => {
   it("fingerprints the nested leaf generation when the relay endpoint is stable", async () => {

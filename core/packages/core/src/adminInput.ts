@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { UserError } from "./errors.js";
-import type { CiRunnerExecutorKind, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
+import type { WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 
 export function requiredString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.length === 0) throw new UserError(`${name} must be a string`);
@@ -66,30 +66,7 @@ export function booleanValue(value: unknown): boolean {
   return value;
 }
 
-export function ciExecutor(value: unknown): CiRunnerExecutorKind {
-  if (value !== "sysbox" && value !== "qemu") throw new UserError("CI executor must be 'sysbox' or 'qemu'");
-  return value;
-}
-
 export function workspaceRuntimeBackend(value: unknown): WorkspaceRuntimeBackendKind {
   if (value !== "sysbox") throw new UserError("workspace runtime backend must be 'sysbox'");
   return value;
-}
-
-export function ciResources(value: unknown): { cpus?: string; memory?: string; pidsLimit?: string } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new UserError("resources must be an object");
-  }
-  const input = Object.fromEntries(Object.entries(value));
-  const result: { cpus?: string; memory?: string; pidsLimit?: string } = {};
-  for (const key of ["cpus", "memory", "pidsLimit"] as const) {
-    const field = input[key];
-    if (field !== undefined) {
-      if (typeof field !== "string" || field.length === 0) {
-        throw new UserError(`resources.${key} must be a string`);
-      }
-      result[key] = field;
-    }
-  }
-  return result;
 }

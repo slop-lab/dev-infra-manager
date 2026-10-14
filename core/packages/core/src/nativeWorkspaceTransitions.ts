@@ -70,7 +70,7 @@ export async function transitionNativeWorkspace(input: NativeTransitionInput): P
         const reconciled = await reconcileNativeWorkspace(
           input.runner, input.options, state, current, input.setStage
         );
-        return setupWorkspaceLocked(input.runner, input.options, state, reconciled,
+        return await setupWorkspaceLocked(input.runner, input.options, state, reconciled,
           !isDeepStrictEqual(input.initial.profiles, nextProfiles), false,
           input.setStage, input.setErrorStage);
       }
@@ -111,7 +111,7 @@ export async function transitionNativeWorkspace(input: NativeTransitionInput): P
       const reconciled = await reconcileNativeWorkspace(
         input.runner, input.options, state, current, input.setStage
       );
-      return setupWorkspaceLocked(input.runner, input.options, state, reconciled,
+      return await setupWorkspaceLocked(input.runner, input.options, state, reconciled,
         false, true, input.setStage, input.setErrorStage);
     } finally {
       await runWorkspaceLifecycleStage(input.operation, "workspace setup lock release", releaseSetup);
@@ -130,9 +130,7 @@ async function readCurrent(
   input: NativeTransitionInput
 ): Promise<NativeWorkspaceRecord> {
   input.setStage("workspace state loading");
-  const current = requireNative(await readWorkspaceForOperation(
-    state, input.initial.name, input.options.giteaConnection
-  ));
+  const current = requireNative(await readWorkspaceForOperation(state, input.initial.name));
   assertWorkspaceLifecycleActive(current);
   if (current.workspaceId !== input.initial.workspaceId || current.projectId !== input.initial.projectId
     || !isDeepStrictEqual(current.source, input.initial.source)) {
@@ -142,7 +140,6 @@ async function readCurrent(
 }
 
 function requireNative(record: WorkspaceRecord): NativeWorkspaceRecord {
-  if (record.schemaVersion !== 9) throw new UserError("native workspace identity changed");
   return record;
 }
 

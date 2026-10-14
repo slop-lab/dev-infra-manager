@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import * as nativeControlPlaneConnection from "../../../../core/packages/core/src/nativeControlPlaneConnection.js";
+import * as nativeProjectReadinessClient from "../../../../core/packages/core/src/nativeProjectReadinessClient.js";
+import * as nativeProjectRootSelection from "../../../../core/packages/core/src/nativeProjectRootSelection.js";
+import * as nativeWorkspaceSelection from "../../../../core/packages/core/src/nativeWorkspaceSelection.js";
 import type {
   ProjectRecord,
   WorkspaceRecord
@@ -21,8 +25,9 @@ import {
 } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 import { withWorkspaceLifecycleProgress } from "../../../../core/packages/core/src/workspaceLifecycleError.js";
 
-import { claimTestGiteaService } from "./giteaServiceFixture.js";
-import { options, projectFixture, repositorySnapshot, workspaceFixture } from "./workspaceUpdateLockFixture.js";
+import {
+  captureFailure, options, projectFixture, seedSelectedRootSnapshot, selectedWorkspaceFixture, workspaceFixture
+} from "./workspaceUpdateLockFixture.js";
 import { COMMIT, LockInterleaving, MOVED_HEAD_COMMIT, MOVED_SOURCE_COMMIT, UpdateRunner } from "./workspaceUpdateLockRunner.js";
 
 describe("workspace update setup lock", () => {
@@ -36,15 +41,35 @@ describe("workspace update setup lock", () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-update-lock-"));
     state = new LifecycleState(root);
     project = projectFixture();
-    workspace = workspaceFixture(root, project);
+    workspace = workspaceFixture(project);
     runner = new UpdateRunner();
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     await state.claimProject(project);
-    await claimTestGiteaService(root, 3300);
     await mkdir(runner.containerRootSnapshotPath, { recursive: true });
-    await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
+    await mkdir(join(root, "assets", "native-project-roots", project.projectId, COMMIT), { recursive: true });
+    await seedSelectedRootSnapshot(root, project);
     await state.claimWorkspace(workspace);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+    vi.spyOn(nativeWorkspaceSelection, "selectCurrentNativeWorkspaceRoot")
+      .mockImplementation(async (_options, record) => selectedWorkspaceFixture(record));
+    vi.spyOn(nativeControlPlaneConnection, "loadNativeControlPlaneConnection").mockResolvedValue({
+      schemaVersion: 1,
+      hostId: project.ownerHostId,
+      nativeGit: {
+        transport: "loopback-http", endpoint: "http://127.0.0.1:9080", serviceId: "native-main",
+        generationId: project.importReceipt.generationId,
+        workspaceWriteIssuer: { username: project.ownerHostId, password: Buffer.alloc(32, 1).toString("base64url") },
+        rootReadIssuer: { username: "root-read-a", password: Buffer.alloc(32, 2).toString("base64url") }
+      }
+    });
+    vi.spyOn(nativeProjectReadinessClient, "proveNativeProjectReadiness").mockResolvedValue({
+      schemaVersion: 1, serviceId: "native-main", ownerHostId: project.ownerHostId,
+      projectId: project.projectId, repositoryId: "root", generationId: project.importReceipt.generationId,
+      protectedRef: project.protectedRef, commit: project.rootCommit, tree: project.rootTree,
+      policyRevision: project.reviewPolicy.policyRevision,
+      requiredReviewRevision: project.reviewPolicy.requiredReviewRevision,
+      requiredJobSetRevision: project.reviewPolicy.requiredJobSetRevision
+    });
+    vi.spyOn(nativeProjectRootSelection, "materializeNativeProjectReadinessRoot").mockResolvedValue(undefined);
   });
 
   afterEach(async () => {
@@ -56,25 +81,25 @@ describe("workspace update setup lock", () => {
 it("keeps a post-fast-forward manifest failure non-ready and blocks run", async () => {
     // Given
     runner = new UpdateRunner(1);
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
 
     // When
-    const updating = updateWorkspace(runner, options(root), workspace.name);
+    const failure = captureFailure(updateWorkspace(runner, options(root), workspace.name));
 
     // Then
-    await expect(updating).rejects.toThrow(
-      /workspace update at protected root publication: failed to write project runtime manifest: injected manifest failure/
-    );
+    await expect(failure).resolves.toMatchObject({
+      message: "workspace update at workspace reconciliation: workspace reconciliation: failed to write project runtime manifest: injected manifest failure"
+    });
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
-      phase: "setup-error",
+      phase: "error",
       rootCommit: COMMIT,
-      error: "failed to write project runtime manifest: injected manifest failure"
+      error: "workspace reconciliation: failed to write project runtime manifest: injected manifest failure"
     });
     await expect(runWorkspace(runner, options(root), {
       name: workspace.name,
       command: ["codex"],
       interactive: false
-    })).rejects.toThrow(/not ready \(phase: setup-error\)/);
+    })).rejects.toThrow(/not ready \(phase: error\)/);
     expect(runner.streamingCalls).toHaveLength(0);
   });
 
@@ -86,28 +111,31 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
       : run(command, args);
 
     // When
-    const updating = updateWorkspace(runner, options(root), workspace.name);
+    const failure = captureFailure(updateWorkspace(runner, options(root), workspace.name));
 
     // Then
-    await expect(updating).rejects.toThrow(
-      "workspace update at workspace reconciliation: workspace reconciliation at host-input helper installation: failed to install host input helper: injected permission failure"
-    );
-    await expect(updating).rejects.not.toThrow(/writer-secret|admin-secret|maintainer-secret/);
+    await expect(failure).resolves.toMatchObject({
+      message: "workspace update at workspace reconciliation: workspace reconciliation: failed to install host input helper: injected permission failure"
+    });
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
       phase: "error",
-      error: "workspace reconciliation at host-input helper installation: failed to install host input helper: injected permission failure"
+      error: "workspace reconciliation: failed to install host input helper: injected permission failure"
     });
   });
 
   it("publishes relay error when recommended managed reconciliation fails", async () => {
     const recommended = { ...workspace, environment: "recommended" as const };
     await state.writeWorkspace(recommended);
+    await rm(join(root, "assets", "native-project-roots", project.projectId, COMMIT, ".dim"),
+      { recursive: true, force: true });
     const run = runner.run.bind(runner);
     runner.run = async (command, args) => args.some((argument) => argument.startsWith("DIM_HOST_INPUT_HELPER_B64="))
       ? { command, args, stdout: "", stderr: "injected permission failure", exitCode: 1 }
       : run(command, args);
 
-    await expect(updateWorkspace(runner, options(root), recommended.name)).rejects.toThrow(/host-input helper installation/);
+    await expect(updateWorkspace(runner, options(root), recommended.name)).rejects.toThrow(
+      /failed to install host input helper/
+    );
 
     await expect(state.readWorkspace(recommended.name)).resolves.toMatchObject({ phase: "error" });
     expect(runner.runCalls.filter((call) => call.at(-2) === "phase").map((call) => call.at(-1)))
@@ -120,7 +148,7 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
 
     // Then
     await expect(updating).rejects.toMatchObject({
-      message: "workspace update at profile validation: workspace profile 'bad,profile' must match [a-z0-9][a-z0-9_.-]{0,63}",
+      message: "workspace update at workspace state loading: workspace profile 'bad,profile' must match [a-z0-9][a-z0-9_.-]{0,63}",
       cause: expect.objectContaining({
         message: "workspace profile 'bad,profile' must match [a-z0-9][a-z0-9_.-]{0,63}"
       })
@@ -133,7 +161,7 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
     await state.removeWorkspace(workspace.name);
     runner = new UpdateRunner(1);
     runner.containerExists = false;
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", project.id, COMMIT);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", project.projectId, COMMIT);
 
     // When
     const creation = createWorkspace(runner, options(root), {
@@ -146,7 +174,7 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
 
     // Then
     await expect(creation).rejects.toMatchObject({
-      message: "workspace create at Project manifest publication: failed to write project runtime manifest: injected manifest failure",
+      message: "workspace reconciliation: failed to write project runtime manifest: injected manifest failure",
       cause: expect.objectContaining({
         message: "failed to write project runtime manifest: injected manifest failure"
       })
@@ -199,12 +227,12 @@ it("persists setup-error when the final ready write fails after manifest publica
     });
 
     // When
-    const updating = updateWorkspace(runner, options(root), workspace.name);
+    const failure = captureFailure(updateWorkspace(runner, options(root), workspace.name));
 
     // Then
-    await expect(updating).rejects.toThrow(
-      "workspace update at ready-state publication: injected ready write failure"
-    );
+    await expect(failure).resolves.toMatchObject({
+      message: "workspace update at ready-state publication: injected ready write failure"
+    });
     expect(runner.manifestPublicationAttempts).toBe(1);
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
       phase: "setup-error",
@@ -222,7 +250,7 @@ it("persists setup-error when the final ready write fails after manifest publica
 it("recovers a failed manifest publication through a later update", async () => {
     // Given
     runner = new UpdateRunner(1);
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     await expect(updateWorkspace(runner, options(root), workspace.name)).rejects.toThrow(
       /failed to write project runtime manifest/
     );
@@ -242,7 +270,7 @@ it("recovers a failed manifest publication through a later update", async () => 
   it("does not publish ready between selected-root publication and failed Project setup", async () => {
     // Given
     runner = new UpdateRunner(0, 17);
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     const persistedPhases: WorkspaceRecord["phase"][] = [];
     const writeWorkspace = LifecycleState.prototype.writeWorkspace;
     vi.spyOn(LifecycleState.prototype, "writeWorkspace").mockImplementation(async function (
@@ -254,10 +282,10 @@ it("recovers a failed manifest publication through a later update", async () => 
     });
 
     // When
-    const updating = updateWorkspace(runner, options(root), workspace.name);
+    const failure = captureFailure(updateWorkspace(runner, options(root), workspace.name));
 
     // Then
-    await expect(updating).rejects.toMatchObject({
+    await expect(failure).resolves.toMatchObject({
       message: "workspace update at Project setup: project setup exited with 17",
       cause: expect.objectContaining({ message: "project setup exited with 17" })
     });
@@ -281,17 +309,19 @@ it("recovers a failed manifest publication through a later update", async () => 
   it("does not report Project setup re-entry while publishing its failure", async () => {
     // Given
     runner = new UpdateRunner(0, 17);
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     const stages: string[] = [];
 
     // When
-    const updating = withWorkspaceLifecycleProgress(
+    const failure = captureFailure(withWorkspaceLifecycleProgress(
       (_operation, stage) => stages.push(stage),
       () => updateWorkspace(runner, options(root), workspace.name)
-    );
+    ));
 
     // Then
-    await expect(updating).rejects.toThrow("workspace update at Project setup: project setup exited with 17");
+    await expect(failure).resolves.toMatchObject({
+      message: "workspace update at Project setup: project setup exited with 17"
+    });
     const setupStart = stages.lastIndexOf("setup-state publication");
     expect(stages.slice(setupStart)).toEqual([
       "setup-state publication",
@@ -304,7 +334,7 @@ it("recovers a failed manifest publication through a later update", async () => 
 
   it("replaces the owned outer container before setup when the approved root changes", async () => {
     // Given
-    const selectedRootPath = join(root, "assets", "project-roots", project.id, COMMIT);
+    const selectedRootPath = join(root, "assets", "native-project-roots", project.projectId, COMMIT);
 
     // When
     const updated = await updateWorkspace(runner, options(root), workspace.name);
@@ -319,7 +349,7 @@ it("recovers a failed manifest publication through a later update", async () => 
 
   it("keeps the owned outer container when the approved root is unchanged", async () => {
     // Given
-    const selectedRootPath = join(root, "assets", "project-roots", project.id, COMMIT);
+    const selectedRootPath = join(root, "assets", "native-project-roots", project.projectId, COMMIT);
     workspace = { ...workspace, rootCommit: COMMIT };
     await state.writeWorkspace(workspace);
     runner.containerRootSnapshotPath = selectedRootPath;

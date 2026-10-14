@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { shutdownHost } from "../../../../core/packages/core/src/hostLifecycle.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { claimTestGiteaService } from "./giteaServiceFixture.js";
 import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
@@ -21,7 +20,6 @@ describe("host shutdown with interrupted discard", () => {
     root = await mkdtemp(join(tmpdir(), "dim-host-discarding-"));
     const record = workspaceRecord("discarding", "discarding");
     const state = new LifecycleState(root);
-    await claimTestGiteaService(root);
     await state.claimWorkspace(record);
     const runner = new DiscardingWorkspaceRunner(record);
 

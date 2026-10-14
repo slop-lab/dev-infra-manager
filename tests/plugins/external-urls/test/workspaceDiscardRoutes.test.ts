@@ -9,6 +9,7 @@ import { LifecycleState } from "../../../../core/packages/core/src/lifecycleStat
 import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { hostLifecycleOptions } from "../../../packages/core/test/hostLifecycleFixture.js";
+import { nativeWorkspaceFixture } from "../../../packages/core/test/nativeLifecycleFixture.js";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
 
 describe("authoritative workspace discard", () => {
@@ -70,7 +71,8 @@ describe("authoritative workspace discard", () => {
     expect(await exchange(listenPort, "before-discard")).toBe("before-discard");
 
     // When: the authoritative admin API discards the workspace directly.
-    const lifecycle = hostLifecycleOptions(stateRoot);
+    const lifecycle = { ...hostLifecycleOptions(stateRoot),
+      nativeControlPlaneConnection: { file: path.join(stateRoot, "native.json") } };
     const admin = configuredDimAdminController(lifecycle, plugins, new MissingResourceRunner(record));
     await listen(admin);
     cleanup.push(() => close(admin));
@@ -109,36 +111,7 @@ class MissingResourceRunner implements StreamingCommandRunner {
 }
 
 function workspaceRecord(): WorkspaceRecord {
-  return {
-    schemaVersion: 8,
-    workspaceId: "A".repeat(43),
-    name: "work",
-    projectId: "project",
-    projectName: "project",
-    rootRepositoryAlias: "root",
-    rootRef: "refs/heads/main",
-    rootCommit: "a".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data",
-    phase: "ready",
-    profiles: [],
-    composeProjectName: "dim-work",
-    containerName: "dim-ws-work",
-    networkName: "dim-control",
-    dockerVolumeName: "dim-ws-work-docker",
-    runtimeBackend: "sysbox",
-    kvm: false,
-    cpuCount: "2",
-    memory: "4g",
-    pidsLimit: "2048",
-    routes: [],
-    gitUserName: "Agent",
-    gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/project",
-    hostAliases: {},
-    projectManifestPath: "/run/dim/project.json",
-    createdAt: "2026-09-23T00:00:00.000Z",
-    updatedAt: "2026-09-23T00:00:00.000Z"
-  };
+  return nativeWorkspaceFixture();
 }
 
 async function availablePort(): Promise<number> {

@@ -139,7 +139,7 @@ test("native project create rejects changed importer authority and changed recei
   });
 });
 
-test("native selectors and Gitea collisions fail closed before predecessor dispatch", async () => {
+test("native selectors and legacy state collisions fail closed before mutation", async () => {
   // Given
   const fixture = await nativeFixture();
   const projectDirectory = join(fixture.stateRoot, "projects");
@@ -164,25 +164,26 @@ test("native selectors and Gitea collisions fail closed before predecessor dispa
   const emptyImporter = await runCli(["project", "create", "acme", "--json"], {
     ...fixture.environment, DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE: ""
   });
+  const predecessorSelector = await runCli(["project", "list", "--json"], {
+    ...fixture.environment, DIM_GITEA_CONNECTION_FILE: join(fixture.stateRoot, "legacy-gitea.json")
+  });
   const repository = await runCli(["repo", "list", "acme"], fixture.environment);
-  const ordinaryService = await runCli(["ci", "ordinary-pool", "service", "run",
-    join(fixture.stateRoot, "missing-predecessor-service.json")], fixture.environment);
 
   // Then
-  for (const [label, result] of Object.entries({
-    collided, optionBearing, empty, emptyImporter, repository, ordinaryService
-  })) {
+  for (const [label, result] of Object.entries({ collided, empty, emptyImporter, predecessorSelector })) {
     assert.equal(result.status, 2, `${label}: ${result.stderr}`);
   }
+  assert.equal(optionBearing.status, 1, optionBearing.stderr);
+  assert.match(optionBearing.stderr, /unknown option '--repos'/);
+  assert.equal(repository.status, 1, repository.stderr);
   assert.equal(await readFile(projectPath, "utf8"), collision);
   assert.deepEqual(await readFile(databasePath), databaseBefore);
   assert.equal(await remoteHead(fixture), remoteBefore);
   await assert.rejects(stat(join(fixture.stateRoot, "services", "gitea.json")), { code: "ENOENT" });
-  assert.match(optionBearing.stderr, /only plain 'dim project create PROJECT'/);
   assert.match(empty.stderr, /native control-plane connection file selector must not be empty/);
   assert.match(emptyImporter.stderr, /DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE is required/);
-  assert.match(repository.stderr, /refusing Gitea fallback/);
-  assert.match(ordinaryService.stderr, /refusing Gitea fallback/);
+  assert.match(predecessorSelector.stderr, /DIM_GITEA_CONNECTION_FILE is unsupported by the native-only DIM CLI/);
+  assert.match(repository.stderr, /unknown command 'repo'/);
 });
 
 test("native list rejects a foreign host selector without rewriting pending state", async () => {
@@ -208,7 +209,7 @@ test("native list rejects a foreign host selector without rewriting pending stat
   assert.deepEqual(await readFile(projectPath), before);
 });
 
-test("native project remove and purge refuse predecessor dispatch", async () => {
+test("obsolete project remove and purge tokens are unknown without state mutation", async () => {
   // Given
   const fixture = await nativeFixture();
   assert.equal((await runCli(["project", "create", "acme"], fixture.environment)).status, 0);
@@ -221,8 +222,8 @@ test("native project remove and purge refuse predecessor dispatch", async () => 
 
   // Then
   for (const result of [removed, purged]) {
-    assert.equal(result.status, 2, result.stderr);
-    assert.match(result.stderr, /native Project (remove|purge) is unavailable; refusing Gitea fallback/);
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /unknown command '(remove|purge)'/);
   }
   assert.deepEqual(await readFile(projectPath), before);
   await assert.rejects(stat(join(fixture.stateRoot, "services", "gitea.json")), { code: "ENOENT" });

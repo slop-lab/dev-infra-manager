@@ -51,7 +51,7 @@ describe("workspace mutation ownership", () => {
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-mutation-"));
-    record = workspaceFixture(root, projectFixture());
+    record = workspaceFixture(projectFixture());
     await new LifecycleState(root).claimWorkspace(record);
   });
 

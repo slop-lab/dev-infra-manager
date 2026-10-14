@@ -1,31 +1,10 @@
-import { UserError } from "./errors.js";
+import { requireNativeControlPlaneConnection } from "./lifecycleOptions.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
-import { resolveProtectedRootSnapshot } from "./protectedRootSnapshot.js";
-import type { StreamingCommandRunner } from "./types.js";
-import {
-  runWorkspaceLifecycle,
-  runWorkspaceLifecycleStage,
-  type SetWorkspaceLifecycleErrorStage,
-  type SetWorkspaceLifecycleStage
-} from "./workspaceLifecycleError.js";
-import { assertContainerRunning } from "./workspaceContainer.js";
-import {
-  applySelectedRoot,
-  recordSelectedRoot,
-} from "./workspacePublication.js";
-import type { ProtectedRootSnapshot } from "./protectedRootSnapshot.js";
-import { reconcileProjectContainer, setupWorkspaceLocked } from "./workspaceSetup.js";
-import {
-  assertSelectedProjectUnchanged,
-  reconcileWorkspaceRuntimeState,
-  stopWorkspaceLocked
-} from "./workspaceState.js";
-import { readWorkspaceForOperation, validateWorkspaceProfiles } from "./workspaceValidation.js";
-import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 import { transitionNativeWorkspace } from "./nativeWorkspaceTransitions.js";
-import { selectWorkspaceEnvironmentTransition } from "./workspaceEnvironmentTransition.js";
-import { notifyRecommendedWorkspaceRelayPhase } from "./workspaceAgentLifecycle.js";
+import type { StreamingCommandRunner } from "./types.js";
+import { runWorkspaceLifecycle } from "./workspaceLifecycleError.js";
+import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 
 export async function updateWorkspace(
   runner: StreamingCommandRunner,
@@ -33,75 +12,8 @@ export async function updateWorkspace(
   name: string,
   profiles?: string[]
 ): Promise<WorkspaceRecord> {
-  return runWorkspaceLifecycle("update", async (setStage, setErrorStage) => {
-    const workspaceName = validateLifecycleName(name, "workspace");
-    const state = new LifecycleState(options.stateRoot);
-    setStage("workspace state loading");
-    const initialRecord = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
-    assertWorkspaceLifecycleActive(initialRecord);
-    if (initialRecord.schemaVersion === 9) {
-      return transitionNativeWorkspace({ operation: "update", runner, options, initial: initialRecord,
-        ...(profiles === undefined ? {} : { profiles }), setStage, setErrorStage });
-    }
-    setStage("protected root selection");
-    const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
-    setStage("Project lock acquisition");
-    const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
-    try {
-      setStage("protected root validation");
-      await assertSelectedProjectUnchanged(state, selectedRoot);
-      setStage("workspace setup lock acquisition");
-      const release = await state.acquireWorkspaceSetupLock(workspaceName);
-      try {
-        setStage("workspace state loading");
-        let record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
-        assertWorkspaceLifecycleActive(record);
-        if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-        const oldProfiles = record.profiles;
-        setStage("profile validation");
-        const nextProfiles = profiles === undefined ? oldProfiles : validateWorkspaceProfiles(profiles);
-        await selectWorkspaceEnvironmentTransition(record, selectedRoot.rootSnapshotPath);
-        setStage("workspace container readiness");
-        let containerId = await assertContainerRunning(runner, options.stateRoot, record);
-        if (record.rootCommit !== selectedRoot.rootCommit) {
-          await notifyRecommendedWorkspaceRelayPhase(runner, record, containerId, "setting-up");
-          setStage("selected root recording");
-          record = await recordSelectedRoot(state, record, selectedRoot);
-          setStage("workspace reconciliation");
-          const reconciled = await reconcileProjectContainer({
-            runner,
-            options,
-            state,
-            record,
-            project: selectedRoot.project,
-            repo: selectedRoot.repository,
-            setStage
-          });
-          record = reconciled.record;
-          containerId = reconciled.containerId;
-        }
-        setStage("protected root publication");
-        record = await applySelectedRoot({ runner, state, record, target: selectedRoot, containerId });
-        record = { ...record, profiles: nextProfiles, updatedAt: new Date().toISOString() };
-        setStage("workspace state publication");
-        await state.writeWorkspace(record);
-        return await setupWorkspaceLocked(
-          runner,
-          options,
-          state,
-          record,
-          oldProfiles.join("\0") !== nextProfiles.join("\0"),
-          false,
-          setStage,
-          setErrorStage
-        );
-      } finally {
-        await runWorkspaceLifecycleStage("update", "workspace setup lock release", release);
-      }
-    } finally {
-      await runWorkspaceLifecycleStage("update", "Project lock release", releaseProject);
-    }
-  });
+  requireNativeControlPlaneConnection(options);
+  return transition("update", runner, options, name, profiles);
 }
 
 export async function startWorkspace(
@@ -109,80 +21,8 @@ export async function startWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<WorkspaceRecord> {
-  return runWorkspaceLifecycle("start", async (setStage, setErrorStage) => {
-    const workspaceName = validateLifecycleName(name, "workspace");
-    const state = new LifecycleState(options.stateRoot);
-    setStage("workspace state loading");
-    const record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
-    assertWorkspaceLifecycleActive(record);
-    if (record.schemaVersion === 9) {
-      return transitionNativeWorkspace({ operation: "start", runner, options, initial: record,
-        setStage, setErrorStage });
-    }
-    setStage("protected root selection");
-    const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: record.projectName });
-    setStage("Project lock acquisition");
-    const releaseProject = await state.acquireProjectLock(record.projectName);
-    try {
-      setStage("protected root validation");
-      await assertSelectedProjectUnchanged(state, selectedRoot);
-      setStage("workspace setup lock acquisition");
-      const release = await state.acquireWorkspaceSetupLock(workspaceName);
-      try {
-        return await startWorkspaceLocked(
-          runner, options, state, workspaceName, selectedRoot, setStage, setErrorStage
-        );
-      } finally {
-        await runWorkspaceLifecycleStage("start", "workspace setup lock release", release);
-      }
-    } finally {
-      await runWorkspaceLifecycleStage("start", "Project lock release", releaseProject);
-    }
-  });
-}
-
-async function startWorkspaceLocked(
-  runner: StreamingCommandRunner,
-  options: LifecycleOptions,
-  state: LifecycleState,
-  workspaceName: string,
-  selectedRoot: ProtectedRootSnapshot,
-  setStage: SetWorkspaceLifecycleStage,
-  setErrorStage: SetWorkspaceLifecycleErrorStage
-): Promise<WorkspaceRecord> {
-  let record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
-  assertWorkspaceLifecycleActive(record);
-  if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-  await selectWorkspaceEnvironmentTransition(record, selectedRoot.rootSnapshotPath);
-  setStage("workspace runtime reconciliation");
-  record = await reconcileWorkspaceRuntimeState(
-    runner,
-    state,
-    options.stateRoot,
-    record
-  );
-  assertWorkspaceLifecycleActive(record);
-  if (record.phase !== "stopped") {
-    throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
-  }
-  if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-  setStage("selected root recording");
-  record = await recordSelectedRoot(state, record, selectedRoot);
-  setStage("workspace reconciliation");
-  const reconciled = await reconcileProjectContainer({
-    runner,
-    options,
-    state,
-    record,
-    project: selectedRoot.project,
-    repo: selectedRoot.repository,
-    setStage
-  });
-  setStage("protected root publication");
-  const updated = await applySelectedRoot({
-    runner, state, record: reconciled.record, target: selectedRoot, containerId: reconciled.containerId
-  });
-  return setupWorkspaceLocked(runner, options, state, updated, false, true, setStage, setErrorStage);
+  requireNativeControlPlaneConnection(options);
+  return transition("start", runner, options, name);
 }
 
 export async function restartWorkspace(
@@ -190,57 +30,30 @@ export async function restartWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<WorkspaceRecord> {
-  return runWorkspaceLifecycle("restart", async (setStage, setErrorStage) => {
-    const workspaceName = validateLifecycleName(name, "workspace");
+  requireNativeControlPlaneConnection(options);
+  return transition("restart", runner, options, name);
+}
+
+function transition(
+  operation: "start" | "update" | "restart",
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  name: string,
+  profiles?: string[]
+): Promise<WorkspaceRecord> {
+  return runWorkspaceLifecycle(operation, async (setStage, setErrorStage) => {
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
-    const initialRecord = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
-    assertWorkspaceLifecycleActive(initialRecord);
-    if (initialRecord.schemaVersion === 9) {
-      return transitionNativeWorkspace({ operation: "restart", runner, options, initial: initialRecord,
-        setStage, setErrorStage });
-    }
-    setStage("protected root selection");
-    const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
-    setStage("Project lock acquisition");
-    const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
-    try {
-      setStage("protected root validation");
-      await assertSelectedProjectUnchanged(state, selectedRoot);
-      setStage("workspace setup lock acquisition");
-      const release = await state.acquireWorkspaceSetupLock(workspaceName);
-      try {
-        const current = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
-        assertWorkspaceLifecycleActive(current);
-        if (selectedRoot.project.id !== current.projectId) throw new UserError(`project '${current.projectName}' identity changed`);
-        await selectWorkspaceEnvironmentTransition(current, selectedRoot.rootSnapshotPath);
-        setStage("workspace runtime reconciliation");
-        const record = await reconcileWorkspaceRuntimeState(
-          runner,
-          state,
-          options.stateRoot,
-          current
-        );
-        assertWorkspaceLifecycleActive(record);
-        if (record.phase === "stopped") {
-          return await startWorkspaceLocked(
-            runner, options, state, workspaceName, selectedRoot, setStage, setErrorStage
-          );
-        }
-        if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-        await selectWorkspaceEnvironmentTransition(record, selectedRoot.rootSnapshotPath);
-        setStage("workspace container readiness");
-        const containerId = await assertContainerRunning(runner, options.stateRoot, record);
-        setStage("workspace stop");
-        await stopWorkspaceLocked(runner, state, record);
-        return await startWorkspaceLocked(
-          runner, options, state, workspaceName, selectedRoot, setStage, setErrorStage
-        );
-      } finally {
-        await runWorkspaceLifecycleStage("restart", "workspace setup lock release", release);
-      }
-    } finally {
-      await runWorkspaceLifecycleStage("restart", "Project lock release", releaseProject);
-    }
+    const initial = await state.readWorkspace(validateLifecycleName(name, "workspace"));
+    assertWorkspaceLifecycleActive(initial);
+    return transitionNativeWorkspace({
+      operation,
+      runner,
+      options,
+      initial,
+      ...(profiles === undefined ? {} : { profiles }),
+      setStage,
+      setErrorStage
+    });
   });
 }

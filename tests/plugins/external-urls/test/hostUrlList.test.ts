@@ -14,6 +14,7 @@ import {
   type WorkspaceRecord
 } from "@slop-lab/dim-core";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
+import { nativeWorkspaceFixture } from "../../../packages/core/test/nativeLifecycleFixture.js";
 
 const workspaces = [
   { id: "A".repeat(43), name: "work-a", projectId: "project-a-id", projectName: "alpha" },
@@ -156,36 +157,15 @@ it("rejects a host route inventory above its fixed response bound", async () => 
 });
 
 function workspaceRecord(workspace: ControllerWorkspace): WorkspaceRecord {
-  return {
-    schemaVersion: 8,
+  return nativeWorkspaceFixture({
     workspaceId: workspace.id,
     name: workspace.name,
     projectId: workspace.projectId,
     projectName: workspace.projectName,
-    rootRepositoryAlias: "root",
-    rootRef: "refs/heads/main",
-    rootCommit: "a".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data",
-    phase: "ready",
-    profiles: [],
     composeProjectName: `dim-${workspace.name}`,
     containerName: `dim-ws-${workspace.name}`,
-    networkName: "dim-gitea",
-    dockerVolumeName: `dim-ws-${workspace.name}-docker`,
-    runtimeBackend: "sysbox",
-    kvm: false,
-    cpuCount: "4",
-    memory: "8g",
-    pidsLimit: "2048",
-    routes: [],
-    gitUserName: "DIM Test",
-    gitUserEmail: "dim@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/dim-example",
-    hostAliases: {},
-    projectManifestPath: "/run/dim/project.json",
-    createdAt: "now",
-    updatedAt: "now"
-  };
+    dockerVolumeName: `dim-ws-${workspace.name}-docker`
+  });
 }
 
 async function availablePort(): Promise<number> {

@@ -2,46 +2,29 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { lifecycleOptionsForBackend as coreLifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { discardWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
-const WORKSPACE = {
-  schemaVersion: 8,
-  workspaceId: "A".repeat(43),
-  name: "work-1",
-  projectId: "project-id",
-  projectName: "project",
-  rootRepositoryAlias: "root",
-  rootRef: "refs/heads/main",
-  rootCommit: "a".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data",
-  phase: "ready",
+const WORKSPACE = nativeWorkspaceFixture({
   profiles: ["development"],
-  composeProjectName: "dim-work-1",
-  containerName: "dim-ws-work-1",
-  networkName: "dim-control",
-  dockerVolumeName: "dim-ws-work-1-docker",
-  runtimeBackend: "sysbox",
-  kvm: false,
-  cpuCount: "2",
-  memory: "4g",
-  pidsLimit: "2048",
-  routes: [],
   gitUserName: "Agent",
   gitUserEmail: "agent@example.invalid",
-  gitBaseUrl: "http://dim-gitea:3000/dim-project",
-  hostAliases: { "dim-gitea": ["172.20.0.2"] },
-  projectManifestPath: "/run/dim/project.json",
   createdAt: "2026-09-12T00:00:00.000Z",
   updatedAt: "2026-09-12T00:00:00.000Z"
-} satisfies WorkspaceRecord;
+}) satisfies WorkspaceRecord;
 
 const CONTAINER_ID = "c".repeat(64);
 let rootSnapshotPath = "";
+
+function lifecycleOptionsForBackend(backend: "sysbox", env: NodeJS.ProcessEnv = {}) {
+  return coreLifecycleOptionsForBackend(backend, { ...env,
+    DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: join(env.DIM_STATE_ROOT ?? tmpdir(), "native.json") });
+}
 
 class DiscardRunner implements StreamingCommandRunner {
   readonly runCalls: string[][] = [];
@@ -96,7 +79,7 @@ describe("workspace discard teardown intent", () => {
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-discard-"));
-    rootSnapshotPath = join(root, "assets", "project-roots", "project-id", WORKSPACE.rootCommit);
+    rootSnapshotPath = join(root, "assets", "native-project-roots", "project-id", WORKSPACE.rootCommit);
     await mkdir(join(rootSnapshotPath, ".dim"), { recursive: true });
     await writeFile(join(rootSnapshotPath, ".dim", "teardown.sh"), "#!/bin/sh\n");
     await new LifecycleState(root).claimWorkspace(WORKSPACE);

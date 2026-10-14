@@ -13,6 +13,7 @@ import {
 import { vi } from "vitest";
 import { createExternalUrlsPlugin } from "../../../../../plugin-external-urls/src/index.js";
 import type { ExternalUrlRoutePolicyConfig } from "../../../../../plugin-external-urls/src/routePolicy.js";
+import { nativeWorkspaceFixture } from "../../../../packages/core/test/nativeLifecycleFixture.js";
 
 export const workspace = { id: "A".repeat(43), name: "work", projectId: "project-id", projectName: "project" };
 export const foreign = { id: "B".repeat(43), name: "foreign", projectId: "project-id", projectName: "project" };
@@ -211,15 +212,9 @@ export function serverPort(server: http.Server): number {
 }
 
 export function workspaceRecord(value: ControllerWorkspace): WorkspaceRecord {
-  return {
-    schemaVersion: 8, workspaceId: value.id, name: value.name, projectId: value.projectId,
-    projectName: value.projectName, rootRepositoryAlias: "root", rootRef: "refs/heads/main",
-    rootCommit: "a".repeat(40), workspaceDataPath: "/var/lib/dim/workspace-data", phase: "ready", profiles: [],
+  return nativeWorkspaceFixture({
+    workspaceId: value.id, name: value.name, projectId: value.projectId, projectName: value.projectName,
     composeProjectName: `dim-${value.name}`, containerName: `dim-ws-${value.name}`, networkName: "dim-control",
-    dockerVolumeName: `dim-ws-${value.name}-docker`, runtimeBackend: "sysbox", kvm: false,
-    cpuCount: "2", memory: "4g", pidsLimit: "2048", routes: [], gitUserName: "Agent",
-    gitUserEmail: "agent@example.invalid", gitBaseUrl: "http://git/project", hostAliases: {},
-    projectManifestPath: "/run/dim/project.json", createdAt: "2026-10-02T00:00:00.000Z",
-    updatedAt: "2026-10-02T00:00:00.000Z"
-  };
+    dockerVolumeName: `dim-ws-${value.name}-docker`
+  });
 }

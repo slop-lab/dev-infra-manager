@@ -1,9 +1,8 @@
 import { type Command } from "commander";
 import { UserError } from "@slop-lab/dim-core";
 import {
-  adminCall, adminStreamCall, controllerRequest, print, readStdin, runner, type JsonFlags
+  adminCall, adminStreamCall, controllerRequest, print, type JsonFlags
 } from "./cli-support.js";
-import { gitCredentialArguments, matchesGitCredentialScope } from "./gitCredentialScope.js";
 
 export function registerHostIntegrationCommands(program: Command): void {
   const host = program.command("host").description("Manage DIM host runtime lifecycle");
@@ -41,68 +40,9 @@ hostInput.command("get")
     process.stdout.write(`${result.value}\n`);
   });
 
-const admin = program.command("admin", { hidden: true }).description("Low-level service administration");
-const service = admin.command("service");
-service.command("ensure").description("Reconcile the managed Gitea service").action(async () => {
-  await adminCall("service.ensure");
-  console.log("Managed Gitea is ready");
-});
-service.command("credentials")
-  .description("Print managed Gitea credentials")
-  .requiredOption("--show-secrets")
-  .option("--json", "print machine-readable JSON")
-  .action(async (flags: JsonFlags) => print(await adminCall("service.ensure"), flags));
-
-const x = program.command("x").description("Run a command with DIM-provided integration settings");
-x.command("git")
-  .description("Run Git with the configured host-maintainer credential")
-  .argument("<args...>")
-  .allowUnknownOption(true)
-  .action(async (args: string[]) => {
-    process.exitCode = await runner.runStreaming("git", gitCredentialArguments(args), {
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0"
-      }
-    });
-  });
-
-const gitIntegration = program.command("git").description("Configure Git access to DIM Project repositories");
-gitIntegration.command("setup")
-  .description("Install DIM's URL-scoped Git credential helper in global Git config")
-  .action(async () => {
-    const { baseUrl } = await adminCall<{ baseUrl: string }>("git.setup");
-    console.log(`Configured DIM credentials for ${baseUrl}`);
-  });
-
-gitIntegration.command("credential-helper", { hidden: true })
-  .description("Serve credentials using the Git credential-helper protocol")
-  .argument("[operation]", "get, store, or erase", "get")
-  .action(async (operation: string) => {
-    const input = await readStdin();
-    if (operation !== "get") return;
-    const fields = Object.fromEntries(input
-      .split(/\r?\n/)
-      .filter((line) => line.includes("="))
-      .map((line) => {
-        const separator = line.indexOf("=");
-        return [line.slice(0, separator), line.slice(separator + 1)];
-      }));
-    const credentials = await adminCall<{ username: string; password: string; baseUrl: string }>("git.credentials");
-    if (!matchesGitCredentialScope(fields, credentials.baseUrl)) return;
-    console.log(`username=${credentials.username}`);
-    console.log(`password=${credentials.password}`);
-  });
-
 program.command("help")
   .description("Show help")
-  .option("--all", "include administrative commands")
-  .action((flags: { all?: boolean }) => {
-    if (flags.all) admin.showHelpAfterError();
+  .action(() => {
     program.outputHelp();
-    if (flags.all) {
-      console.log("\nAdministrative commands:");
-      admin.outputHelp();
-    }
   });
 }

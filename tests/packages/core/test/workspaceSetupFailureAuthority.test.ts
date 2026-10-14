@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import * as nativeWorkspaceSelection from "../../../../core/packages/core/src/nativeWorkspaceSelection.js";
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { updateWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 
-import { claimTestGiteaService } from "./giteaServiceFixture.js";
-import { options, projectFixture, workspaceFixture } from "./workspaceUpdateLockFixture.js";
+import {
+  captureFailure, options, projectFixture, seedSelectedRootSnapshot, selectedWorkspaceFixture, workspaceFixture
+} from "./workspaceUpdateLockFixture.js";
 import { COMMIT, UpdateRunner } from "./workspaceUpdateLockRunner.js";
 
 describe("workspace setup failure authority", () => {
@@ -21,15 +23,16 @@ describe("workspace setup failure authority", () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-setup-failure-"));
     state = new LifecycleState(root);
     project = projectFixture();
-    workspace = workspaceFixture(root, project);
+    workspace = workspaceFixture(project);
     runner = new UpdateRunner();
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     await state.claimProject(project);
-    await claimTestGiteaService(root, 3300);
     await mkdir(runner.containerRootSnapshotPath, { recursive: true });
-    await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
+    await mkdir(join(root, "assets", "native-project-roots", project.projectId, COMMIT), { recursive: true });
+    await seedSelectedRootSnapshot(root, project);
     await state.claimWorkspace(workspace);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+    vi.spyOn(nativeWorkspaceSelection, "selectCurrentNativeWorkspaceRoot")
+      .mockImplementation(async (_options, record) => selectedWorkspaceFixture(record));
   });
 
   afterEach(async () => {
@@ -56,10 +59,10 @@ describe("workspace setup failure authority", () => {
     });
 
     // When
-    const updating = updateWorkspace(runner, options(root), workspace.name);
+    const failure = captureFailure(updateWorkspace(runner, options(root), workspace.name));
 
     // Then
-    await expect(updating).rejects.toMatchObject({
+    await expect(failure).resolves.toMatchObject({
       message: "workspace update at ready-state publication: injected ready write failure",
       cause: expect.objectContaining({
         message: "injected ready write failure",
@@ -74,7 +77,7 @@ describe("workspace setup failure authority", () => {
   it("keeps the Project setup failure authoritative when setup-error publication fails", async () => {
     // Given
     runner = new UpdateRunner(0, 17);
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     const writeWorkspace = LifecycleState.prototype.writeWorkspace;
     vi.spyOn(LifecycleState.prototype, "writeWorkspace").mockImplementation(async function (
       this: LifecycleState,
@@ -85,10 +88,10 @@ describe("workspace setup failure authority", () => {
     });
 
     // When
-    const updating = updateWorkspace(runner, options(root), workspace.name);
+    const failure = captureFailure(updateWorkspace(runner, options(root), workspace.name));
 
     // Then
-    await expect(updating).rejects.toMatchObject({
+    await expect(failure).resolves.toMatchObject({
       message: "workspace update at Project setup: project setup exited with 17",
       cause: expect.objectContaining({
         message: "project setup exited with 17",

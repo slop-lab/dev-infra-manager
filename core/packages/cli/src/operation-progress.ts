@@ -7,29 +7,7 @@ type ProgressProfile = {
 
 const directProfiles = {
   "image.workspace.build": profile("build context preparation", ["Docker image build"]),
-  "image.git-sync.build": profile("build context preparation", ["Docker image build"]),
-  "image.qemu-scheduler.build": profile("build context preparation", ["Docker image build"]),
-  "repo.import": {
-    initial: status("repository preparation", ["source fetch", "managed Git push", "import finalization"]),
-    stages: {
-      "source fetch": ["managed Git push", "import finalization"],
-      "ref materialization": ["managed Git push", "import finalization"],
-      "managed Git push": ["import finalization"],
-      "import finalization": []
-    }
-  },
-  "repo.fetch": profile("repository preparation", ["synchronization"], {
-    "credential lookup": ["synchronization"], synchronization: []
-  }),
-  "repo.publish": profile("repository preparation", ["synchronization"], {
-    "credential lookup": ["synchronization"], synchronization: []
-  }),
-  "repo.apply": profile("repository set apply", [], { "repository set apply": [] }),
-  "project.create": profile("Project creation", [], {
-    "manifest discovery": ["Project creation"],
-    "root repository import": [],
-    "repository set apply": []
-  })
+  "image.qemu-scheduler.build": profile("build context preparation", ["Docker image build"])
 } as const satisfies Readonly<Record<string, ProgressProfile>>;
 
 export function initialOperationProgress(operation: string): WorkspaceProgressStatus | undefined {

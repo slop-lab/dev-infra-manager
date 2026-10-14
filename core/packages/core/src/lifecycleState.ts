@@ -1,14 +1,10 @@
-import { mkdir, open, readdir, rm, rmdir } from "node:fs/promises";
+import { mkdir, open, rm } from "node:fs/promises";
 import path from "node:path";
 import { MissingRecordError, UserError } from "./errors.js";
-import { assertCiRunnerRecord } from "./ciRunnerRecord.js";
 import { parseHostLifecycleRecord } from "./hostLifecycleRecord.js";
-import { parseGiteaServiceRecord } from "./giteaServiceRecord.js";
 import { acquireLifecycleLock, type LifecycleLockOptions } from "./lifecycleLock.js";
 import { atomicWrite, listRecords, readJson, validateLifecycleName } from "./lifecycleRecord.js";
 import type {
-  CiRunnerRecord,
-  GiteaServiceRecord,
   HostLifecycleRecord,
   ProjectRecord,
   WorkspaceRecord
@@ -78,10 +74,6 @@ export class LifecycleState {
     await this.grants.remove(record, "native-git");
   }
 
-  giteaServicePath(): string {
-    return path.join(this.root, "services", "gitea.json");
-  }
-
   hostLifecyclePath(): string {
     return path.join(this.root, "host.json");
   }
@@ -126,92 +118,9 @@ export class LifecycleState {
 
   async acquireRegistryCacheLock(): Promise<() => Promise<void>> { return acquireLifecycleLock({ root: this.root, name: "registry-cache", description: "registry cache reconciliation", options: this.lockOptions }); }
 
-  async acquireGiteaServiceLock(): Promise<() => Promise<void>> { return acquireLifecycleLock({ root: this.root, name: "gitea-service", description: "Gitea service reconciliation", options: this.lockOptions }); }
-
-  ciRunnerPath(project: string, name: string): string {
-    return path.join(
-      this.root,
-      "ci-runners",
-      validateLifecycleName(project, "project"),
-      `${validateLifecycleName(name, "CI runner")}.json`
-    );
-  }
-
-  async readCiRunner(project: string, name: string): Promise<CiRunnerRecord> {
-    const record = await readJson<CiRunnerRecord>(
-      this.ciRunnerPath(project, name),
-      `CI runner '${project}/${name}' not found`
-    );
-    assertCiRunnerRecord(record, `${project}/${name}`);
-    return record;
-  }
-
-  async writeCiRunner(record: CiRunnerRecord): Promise<void> {
-    await atomicWrite(this.ciRunnerPath(record.projectName, record.name), record);
-  }
-
-  async removeCiRunner(project: string, name: string): Promise<void> {
-    const target = this.ciRunnerPath(project, name);
-    await rm(target, { force: true });
-    try { await rmdir(path.dirname(target)); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOTEMPTY"
-        && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  }
-
-  async listCiRunners(): Promise<CiRunnerRecord[]> {
-    const directory = path.join(this.root, "ci-runners");
-    let projects;
-    try { projects = await readdir(directory, { withFileTypes: true }); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
-    }
-    const records: CiRunnerRecord[] = [];
-    for (const project of projects) {
-      if (!project.isDirectory()) {
-        throw new UserError("legacy CI runner state is unsupported; disable old runners before upgrading");
-      }
-      records.push(...await listRecords<CiRunnerRecord>(
-        path.join(directory, project.name),
-        "CI runner",
-        8
-      ));
-    }
-    return records.sort((left, right) =>
-      left.projectName.localeCompare(right.projectName) || left.name.localeCompare(right.name));
-  }
-
-  async acquireCiRunnerLock(project: string): Promise<() => Promise<void>> {
-    project = validateLifecycleName(project, "project");
-    return acquireLifecycleLock({ root: this.root, name: `ci-runner-${project}`, description: `CI runners for project '${project}' reconciliation`, options: this.lockOptions });
-  }
-
   async acquireQemuProjectHookPublicationLock(projectId: string): Promise<() => Promise<void>> {
     if (!/^[A-Za-z0-9-]+$/.test(projectId)) throw new UserError(`project ID '${projectId}' is invalid`);
     return acquireLifecycleLock({ root: this.root, name: `qemu-project-hook-${projectId}`, description: `QEMU Project hook '${projectId}' publication`, options: this.lockOptions });
-  }
-
-  async claimGiteaService(record: GiteaServiceRecord): Promise<void> {
-    const target = this.giteaServicePath();
-    await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
-    try {
-      const handle = await open(target, "wx", 0o600);
-      await handle.writeFile(`${JSON.stringify(record, null, 2)}\n`, "utf8");
-      await handle.close();
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-        throw new UserError("Gitea service state already exists");
-      }
-      throw error;
-    }
-  }
-
-  async readGiteaService(): Promise<GiteaServiceRecord> {
-    return parseGiteaServiceRecord(await readJson<unknown>(this.giteaServicePath(), "Gitea service state not found"));
-  }
-
-  async writeGiteaService(record: GiteaServiceRecord): Promise<void> {
-    await atomicWrite(this.giteaServicePath(), record);
   }
 
   async claimWorkspace(record: WorkspaceRecord): Promise<void> {
@@ -258,11 +167,11 @@ export class LifecycleState {
     return acquireLifecycleLock({ root: this.root, name: `workspace-${validateLifecycleName(name, "workspace")}-authority`, description: `workspace '${name}' authority`, options: this.lockOptions });
   }
 
-  async listWorkspaces(expectedSchemaVersion: 8 | 9 = 8): Promise<WorkspaceRecord[]> {
+  async listWorkspaces(): Promise<WorkspaceRecord[]> {
     const records = await listRecords<WorkspaceRecord>(
       path.join(this.root, "workspaces"),
       "workspace",
-      expectedSchemaVersion
+      9
     );
     for (const record of records) {
       assertWorkspaceRecord(record, this.workspacePath(record.name));
@@ -294,7 +203,7 @@ export class LifecycleState {
   }
 
   async listProjects(): Promise<ProjectRecord[]> {
-    return (await listRecords<ProjectRecord>(path.join(this.root, "projects"), "project", 4))
+    return (await listRecords<ProjectRecord>(path.join(this.root, "projects"), "project", 6))
       .map((record) => parseProjectRecord(record));
   }
 

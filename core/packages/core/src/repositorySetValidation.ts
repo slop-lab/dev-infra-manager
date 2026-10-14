@@ -1,5 +1,5 @@
 import { UserError } from "./errors.js";
-import { validateLifecycleName } from "./lifecycleState.js";
+import { validateLifecycleName } from "./lifecycleRecord.js";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
 import {
   boolean,

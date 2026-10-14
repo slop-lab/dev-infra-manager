@@ -1,7 +1,7 @@
 import { UserError } from "./errors.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
-import type { ProtectedRootSnapshot } from "./protectedRootSnapshot.js";
+import { requireNativeControlPlaneConnection } from "./lifecycleOptions.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { assertContainerRunning } from "./workspaceContainer.js";
 import { workspaceRootSnapshotPath, type WorkspaceResourceInput } from "./workspaceLifecycleTypes.js";
@@ -15,16 +15,6 @@ import { notifyRecommendedWorkspaceRelayPhase, stopWorkspaceAgent } from "./work
 import { applyWorkspaceResourceUpdate } from "./workspaceAgentResources.js";
 import { inspectWorkspaceAgentContainer } from "./workspaceAgentInspection.js";
 import { publishWorkspacePhase } from "./workspacePhasePublication.js";
-
-export async function assertSelectedProjectUnchanged(
-  state: LifecycleState,
-  selectedRoot: ProtectedRootSnapshot
-): Promise<void> {
-  const current = await state.readProject(selectedRoot.project.name);
-  if (JSON.stringify(current) !== JSON.stringify(selectedRoot.project)) {
-    throw new UserError(`project '${current.name}' changed while its protected root snapshot was selected; retry`);
-  }
-}
 
 export async function runnableWorkspace(
   runner: StreamingCommandRunner,
@@ -96,7 +86,7 @@ export async function showWorkspace(
       runner,
       state,
       options.stateRoot,
-      await readWorkspaceForOperation(state, workspaceName, options.giteaConnection)
+      await readWorkspaceForOperation(state, workspaceName)
     );
   } finally {
     await release();
@@ -108,7 +98,7 @@ export async function listWorkspaces(
   options: LifecycleOptions
 ): Promise<WorkspaceRecord[]> {
   const state = new LifecycleState(options.stateRoot);
-  const records = await state.listWorkspaces(options.nativeControlPlaneConnection === undefined ? 8 : 9);
+  const records = await state.listWorkspaces();
   const reconciled: WorkspaceRecord[] = [];
   for (const record of records) {
     const release = await state.acquireWorkspaceSetupLock(record.name);
@@ -117,7 +107,7 @@ export async function listWorkspaces(
         runner,
         state,
         options.stateRoot,
-        await readWorkspaceForOperation(state, record.name, options.giteaConnection)
+        await readWorkspaceForOperation(state, record.name)
       ));
     } finally {
       await release();
@@ -132,6 +122,7 @@ export async function updateWorkspaceResources(
   name: string,
   input: WorkspaceResourceInput
 ): Promise<WorkspaceRecord> {
+  requireNativeControlPlaneConnection(options);
   const workspaceName = validateLifecycleName(name, "workspace");
   if (input.cpuCount === undefined && input.memory === undefined && input.pidsLimit === undefined) {
     throw new UserError("provide at least one workspace resource limit");
@@ -139,7 +130,7 @@ export async function updateWorkspaceResources(
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    const record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
+    const record = await readWorkspaceForOperation(state, workspaceName);
     assertWorkspaceLifecycleActive(record);
     const resources = {
       cpuCount: input.cpuCount ?? record.cpuCount,
@@ -175,6 +166,7 @@ export async function stopWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<void> {
+  requireNativeControlPlaneConnection(options);
   const state = new LifecycleState(options.stateRoot);
   const workspaceName = validateLifecycleName(name, "workspace");
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
@@ -182,7 +174,7 @@ export async function stopWorkspace(
     await stopWorkspaceLocked(
       runner,
       state,
-      await readWorkspaceForOperation(state, workspaceName, options.giteaConnection)
+      await readWorkspaceForOperation(state, workspaceName)
     );
   } finally {
     await release();
@@ -198,7 +190,7 @@ export async function stopWorkspaceForHostShutdown(
   const workspaceName = validateLifecycleName(name, "workspace");
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    const record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
+    const record = await readWorkspaceForOperation(state, workspaceName);
     if (record.phase !== "discarding") {
       await stopWorkspaceLocked(runner, state, record);
       return;

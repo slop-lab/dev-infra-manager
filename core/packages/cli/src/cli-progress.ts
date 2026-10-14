@@ -9,22 +9,10 @@ export const streamProgressOperations = [
   "workspace.restart",
   "workspace.stop",
   "workspace.discard",
-  "ci.runner.create",
-  "ci.runner.start",
-  "ci.runner.restart",
-  "ci.runner.stop",
-  "ci.runner.delete",
-  "ci.runner.logs",
   "host.start",
   "host.shutdown",
   "image.workspace.build",
-  "image.git-sync.build",
-  "image.qemu-scheduler.build",
-  "repo.import",
-  "repo.fetch",
-  "repo.publish",
-  "repo.apply",
-  "project.create"
+  "image.qemu-scheduler.build"
 ] as const;
 
 type StreamProgressOperation = (typeof streamProgressOperations)[number];
@@ -38,22 +26,10 @@ const streamProgressLabels = {
   "workspace.restart": "Restarting workspace",
   "workspace.stop": "Stopping workspace",
   "workspace.discard": "Discarding workspace",
-  "ci.runner.create": "Creating CI runner",
-  "ci.runner.start": "Starting CI runner",
-  "ci.runner.restart": "Restarting CI runner",
-  "ci.runner.stop": "Stopping CI runner",
-  "ci.runner.delete": "Deleting CI runner",
-  "ci.runner.logs": "Following CI runner logs",
   "host.start": "Starting host runtimes",
   "host.shutdown": "Stopping host runtimes",
   "image.workspace.build": "Building workspace image",
-  "image.git-sync.build": "Building Git sync image",
-  "image.qemu-scheduler.build": "Building QEMU scheduler image",
-  "repo.import": "Importing repository",
-  "repo.fetch": "Fetching repository",
-  "repo.publish": "Publishing repository",
-  "repo.apply": "Applying repository set",
-  "project.create": "Creating Project"
+  "image.qemu-scheduler.build": "Building QEMU scheduler image"
 } satisfies Record<StreamProgressOperation, string>;
 
 const spinnerFrames = ["-", "\\", "|", "/"] as const;

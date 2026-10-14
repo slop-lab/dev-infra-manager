@@ -68,8 +68,12 @@ it("rejects schema 7 workspace state without modifying it", async () => {
     });
     await writeFile(target, original);
 
-    await expect(state.readWorkspace("obsolete")).rejects.toThrow(/schema 7.*expected 8.*export.*recreate/i);
-    await expect(state.listWorkspaces()).rejects.toThrow(/schema 7.*expected 8.*export.*recreate/i);
+    await expect(state.readWorkspace("obsolete")).rejects.toThrow(
+      /unsupported predecessor state.*prior pinned release.*export.*recreate/i
+    );
+    await expect(state.listWorkspaces()).rejects.toThrow(
+      /schema 7.*expected 9.*export.*recreate/i
+    );
     await expect(readFile(target, "utf8")).resolves.toBe(original);
   });
 });

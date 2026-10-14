@@ -129,32 +129,23 @@ test("top-level and nested exec/run calls retain raw stream options and SIGINT c
   assert.match(support, /process\.once\("SIGINT", cancel\)/);
 });
 
-test("explicit repository apply uses the repo.apply local operation", async () => {
-  const source = await readCliSource("repository-commands");
-
-  assert.match(
-    source,
-    /repo\.command\("apply"\)[\s\S]*withLocalProgress\("repo\.apply",[\s\S]*applyRepositorySet\([\s\S]*operation/
-  );
-});
-
 test("local operation SIGINT aborts work and removes its signal listener", async () => {
   const listeners = process.listeners("SIGINT");
-  const operation = withLocalProgress("repo.fetch", async ({ signal }) => new Promise<never>((_resolve, reject) => {
+  const operation = withLocalProgress("image.workspace.build", async ({ signal }) => new Promise<never>((_resolve, reject) => {
     signal.addEventListener("abort", () => reject(signal.reason), { once: true });
   }));
   const signalHandler = process.listeners("SIGINT").find((listener) => !listeners.includes(listener));
 
   assert.ok(signalHandler);
   signalHandler("SIGINT");
-  await assert.rejects(operation, /repo\.fetch cancelled/);
+  await assert.rejects(operation, /image\.workspace\.build cancelled/);
   assert.deepEqual(process.listeners("SIGINT"), listeners);
 });
 
 test("local operation handles repeated SIGINT until cleanup completes", async () => {
   const listeners = process.listeners("SIGINT");
   let finish: (() => void) | undefined;
-  const operation = withLocalProgress("repo.fetch", async ({ signal }) => {
+  const operation = withLocalProgress("image.workspace.build", async ({ signal }) => {
     await new Promise<void>((resolve) => {
       signal.addEventListener("abort", () => resolve(), { once: true });
     });
@@ -178,9 +169,9 @@ test("local operation handles repeated SIGINT until cleanup completes", async ()
 
 test("local operation failures remove their signal listener unchanged", async () => {
   const listeners = process.listeners("SIGINT");
-  const failure = new Error("repository failed unchanged");
+  const failure = new Error("image build failed unchanged");
 
-  await assert.rejects(withLocalProgress("repo.publish", async () => { throw failure; }), failure);
+  await assert.rejects(withLocalProgress("image.workspace.build", async () => { throw failure; }), failure);
   assert.deepEqual(process.listeners("SIGINT"), listeners);
 });
 

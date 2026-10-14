@@ -44,20 +44,20 @@ export type NativeProjectView = {
 
 export async function selectNativeProject(
   environment: NodeJS.ProcessEnv = process.env
-): Promise<NativeProjectSelection | undefined> {
+): Promise<NativeProjectSelection> {
+  const unsupported = predecessorSelectors.find((name) => environment[name] !== undefined);
+  if (unsupported !== undefined) {
+    throw new UserError(`${unsupported} is unsupported by the native-only DIM CLI`);
+  }
   const selected = environment.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE;
   if (selected === undefined) {
     if (environment.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE !== undefined) {
       throw new UserError("native root importer connection requires native control-plane selection");
     }
-    return undefined;
+    throw new UserError("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE is required for native Project commands");
   }
   if (selected.length === 0) {
     throw new UserError("native control-plane connection file selector must not be empty");
-  }
-  const conflicting = predecessorSelectors.find((name) => environment[name] !== undefined);
-  if (conflicting !== undefined) {
-    throw new UserError(`${conflicting} cannot be combined with native control-plane selection`);
   }
   const connection = await loadNativeControlPlaneConnection(path.resolve(selected));
   const stateRoot = path.resolve(environment.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim"));

@@ -66,7 +66,7 @@ export async function createNativeWorkspace(input: NativeWorkspaceCreationInput)
     try {
       let existing: WorkspaceRecord | undefined;
       try {
-        existing = await readWorkspaceForOperation(state, name, input.options.giteaConnection);
+        existing = await readWorkspaceForOperation(state, name);
         assertWorkspaceLifecycleActive(existing);
       } catch (error) {
         if (!(error instanceof MissingRecordError)) throw error;
@@ -85,7 +85,7 @@ export async function createNativeWorkspace(input: NativeWorkspaceCreationInput)
         runtimeBackend: input.request.runtimeBackend }, input.plugins.workspaceCapabilityProviders);
       let record: WorkspaceRecord;
       if (existing !== undefined) {
-        if (existing.schemaVersion !== 9 || existing.projectId !== project.projectId) {
+        if (existing.projectId !== project.projectId) {
           throw new UserError(`workspace '${name}' is already bound to another Project source`);
         }
         record = existing;

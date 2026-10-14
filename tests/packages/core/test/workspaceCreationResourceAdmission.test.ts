@@ -4,29 +4,14 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { RegisteredWorkspaceCapabilityProvider } from "../../../../core/packages/core/src/plugin.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { createWorkspace } from "../../../../core/packages/core/src/workspaceCreation.js";
-import { projectFixture, options as managedOptions } from "./workspaceUpdateLockFixture.js";
 
 const creation = vi.hoisted(() => ({
-  managedSnapshotRoot: "",
-  managedProject: undefined as ProjectRecord | undefined,
   nativeSnapshotRoot: "",
   provision: vi.fn(async () => ({}))
-}));
-
-vi.mock("../../../../core/packages/core/src/gitea.js", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../../../core/packages/core/src/gitea.js")>(),
-  ensureGitea: vi.fn(async () => ({ kind: "managed", adminUsername: "admin", adminPassword: "admin",
-    writerUsername: "writer", writerPassword: "writer", maintainerUsername: "maintainer", maintainerPassword: "maintainer" })),
-  giteaNestedBaseUrl: vi.fn(async () => "http://dim-gitea:3000")
-}));
-
-vi.mock("../../../../core/packages/core/src/protectedRootSnapshot.js", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../../../core/packages/core/src/protectedRootSnapshot.js")>(),
-  resolveProtectedRootSnapshot: vi.fn(async () => managedSelection(creation.managedSnapshotRoot))
 }));
 
 vi.mock("../../../../core/packages/core/src/nativeControlPlaneConnection.js", () => ({
@@ -78,35 +63,6 @@ afterEach(async () => {
 });
 
 describe("workspace creation resource admission", () => {
-  it.each([
-    ["below minimum", { cpuCount: "0.5", memory: "512m", pidsLimit: "128" }],
-    ["excess CPU precision", { cpuCount: "1.0000000001", memory: "1g", pidsLimit: "256" }]
-  ] as const)("rejects recommended managed resources %s before mutation and accepts a corrected retry", async (_case, invalid) => {
-    // Given
-    const root = await managedFixture();
-    const state = new LifecycleState(root);
-    const calls: string[][] = [];
-    const plugins = capabilityPlugins();
-
-    // When / Then
-    await expect(createWorkspace(recordingRunner(calls), managedOptions(root), request("managed-work", invalid), plugins))
-      .rejects.toThrow(/recommended workspace|decimal places/);
-    await expect(state.readWorkspace("managed-work")).rejects.toThrow(/not found/);
-    for (const audience of ["workspace", "agent", "native-git"]) {
-      await expect(readdir(join(root, `${audience}-grants`))).rejects.toMatchObject({ code: "ENOENT" });
-    }
-    expect(creation.provision).not.toHaveBeenCalled();
-    expect(calls).toEqual([]);
-
-    const corrected = await createWorkspace(recordingRunner(calls), managedOptions(root), request("managed-work", {
-      cpuCount: "1", memory: "1g", pidsLimit: "256"
-    }), plugins);
-    expect(corrected).toMatchObject({ name: "managed-work", environment: "recommended" });
-    await expect(state.readWorkspace("managed-work")).resolves.toMatchObject({ cpuCount: "1", memory: "1g", pidsLimit: "256" });
-    expect(creation.provision).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual([]);
-  });
-
   it("rejects a recommended native budget before capability or workspace mutation and accepts a corrected retry", async () => {
     // Given
     const root = await nativeFixture();
@@ -150,31 +106,11 @@ function capabilityPlugins(): { readonly workspaceCapabilityProviders: ReadonlyM
   ]) };
 }
 
-async function managedFixture(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "dim-managed-resource-admission-"));
-  roots.push(root);
-  creation.managedSnapshotRoot = join(root, "assets", "project-roots", "project-id", "a".repeat(40));
-  await mkdir(creation.managedSnapshotRoot, { recursive: true });
-  const state = new LifecycleState(root);
-  await state.claimProject(projectFixture());
-  creation.managedProject = await state.readProject("project");
-  return root;
-}
-
 async function nativeFixture(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "dim-native-resource-admission-"));
   roots.push(root);
   creation.nativeSnapshotRoot = join(root, "assets", "native-project-roots", "native-project-id", "b".repeat(40));
   return root;
-}
-
-function managedSelection(rootSnapshotPath: string) {
-  const project = creation.managedProject;
-  if (project === undefined) throw new Error("managed fixture project is missing");
-  const repository = project.repositories[0];
-  if (repository === undefined) throw new Error("managed fixture root repository is missing");
-  return { project, repository, rootRequestedRef: "refs/heads/main", rootRef: "refs/heads/main",
-    rootCommit: "a".repeat(40), rootSnapshotPath };
 }
 
 function nativeProject() {

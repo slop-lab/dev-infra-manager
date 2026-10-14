@@ -1,7 +1,7 @@
 import { UserError } from "./errors.js";
 import { requireHostMirrorProvider } from "./hostMirrorProvider.js";
 import { LifecycleState } from "./lifecycleState.js";
-import type { GiteaServiceRecord, LifecycleOptions } from "./lifecycleTypes.js";
+import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
 import {
   createHostMirrorOwnership,
@@ -56,24 +56,15 @@ export async function ensureRegistryCache(
     image = requireHostMirrorProvider(input.hostMirrorProvider).dockerImage;
   }
   const state = new LifecycleState(stateRoot);
-  const managed = typeof input === "string" || input.giteaConnection.kind === "external"
-    ? undefined
-    : await acquireManagedNetworkLease(state);
-  try {
-    const release = await state.acquireRegistryCacheLock();
+  const release = await state.acquireRegistryCacheLock();
     try {
       const ownership = await ensureHostMirrorOwnership(state);
       await ensureManagedResource(runner, {
         type: "network",
         name: CONTROL_NETWORK,
-        inspectArgs: managed === undefined
-          ? ["network", "inspect", CONTROL_NETWORK, "--format", ownershipFormat(".Labels")]
-          : ["network", "inspect", CONTROL_NETWORK, "--format", "{{.Id}}|{{index .Labels \"dim.managed\"}}|{{index .Labels \"dim.owner\"}}|{{index .Labels \"dim.service-id\"}}|{{index .Labels \"dim.resource\"}}|{{index .Labels \"dim.resource-id\"}}"],
+        inspectArgs: ["network", "inspect", CONTROL_NETWORK, "--format", ownershipFormat(".Labels")],
         createArgs: ["network", "create", ...hostMirrorLabels("control-network", ownership).flatMap((label) => ["--label", label]), CONTROL_NETWORK],
-        ...(managed === undefined ? { expectedInspection: hostMirrorInspection("control-network", ownership) } : {
-          expectedInspection: `${managed.networkId}|true|dim|${managed.serviceId}|network|${managed.networkOwnershipId}`,
-          createMissing: false
-        })
+        expectedInspection: hostMirrorInspection("control-network", ownership)
       });
       await ensureManagedResource(runner, {
         type: "volume",
@@ -118,35 +109,8 @@ export async function ensureRegistryCache(
         throw new UserError(`failed to inspect Docker container '${REGISTRY_CACHE_CONTAINER}': ${inspect.stderr.trim()}`);
       }
       await startRegistryCache(runner, image, ownership);
-    } finally {
-      await release();
-    }
   } finally {
-    await managed?.release();
-  }
-}
-
-type ManagedNetworkLease = Pick<GiteaServiceRecord, "serviceId" | "networkOwnershipId"> & {
-  readonly networkId: string;
-  readonly release: () => Promise<void>;
-};
-
-async function acquireManagedNetworkLease(state: LifecycleState): Promise<ManagedNetworkLease> {
-  const release = await state.acquireGiteaServiceLock();
-  try {
-    const record = await state.readGiteaService();
-    if (!record.resourcesEstablished || record.networkId === undefined) {
-      throw new UserError("Managed Gitea control-network lease is not established");
-    }
-    return {
-      serviceId: record.serviceId,
-      networkOwnershipId: record.networkOwnershipId,
-      networkId: record.networkId,
-      release
-    };
-  } catch (error) {
     await release();
-    throw error;
   }
 }
 

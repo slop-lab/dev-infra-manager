@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { lifecycleOptionsForBackend as coreLifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
@@ -13,7 +13,13 @@ import { discardWorkspace } from "../../../../core/packages/core/src/workspaceDi
 import { workspaceRootSnapshotPath } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
 import { reconcileWorkspaceRuntimeState } from "../../../../core/packages/core/src/workspaceState.js";
 import { setupWorkspaceLocked } from "../../../../core/packages/core/src/workspaceSetup.js";
+
+function lifecycleOptionsForBackend(backend: "sysbox", env: NodeJS.ProcessEnv = {}) {
+  return coreLifecycleOptionsForBackend(backend, { ...env,
+    DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: join(env.DIM_STATE_ROOT ?? tmpdir(), "native.json") });
+}
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 const agentId = "a".repeat(64);
 const imageId = `sha256:${"f".repeat(64)}`;
@@ -244,12 +250,7 @@ function agentInspect(record: WorkspaceRecord): string {
 }
 
 function fixture(): WorkspaceRecord {
-  return { schemaVersion: 8, workspaceId: "A".repeat(43), name: "work-1", projectId: "project-id",
-    projectName: "project", rootRepositoryAlias: "root", rootRef: "refs/heads/main", rootCommit: "b".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data", environment: "recommended", phase: "ready", profiles: [],
-    composeProjectName: "dim-work-1", containerName: "dim-ws-work-1", networkName: "dim-control",
-    dockerVolumeName: "dim-ws-work-1-docker", runtimeBackend: "sysbox", kvm: false, cpuCount: "2",
-    memory: "4g", pidsLimit: "2048", routes: [], gitUserName: "Agent", gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/dim-project", hostAliases: {}, projectManifestPath: "/run/dim/project.json",
-    createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+  return nativeWorkspaceFixture({ rootCommit: "b".repeat(40), environment: "recommended", gitUserName: "Agent",
+    gitUserEmail: "agent@example.invalid", createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z" });
 }

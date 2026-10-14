@@ -63,11 +63,11 @@ describe("recommended workspace Git relay transport", () => {
     expect(upstreamRequests[0]).toEqual({
       url: "/project/root.git/info/refs?service=git-upload-pack",
       headers: expect.objectContaining({
-        authorization: `Basic ${Buffer.from("writer:secret").toString("base64")}`,
         "git-protocol": "version=2",
         host: `localhost:${new URL(tls.origin).port}`
       })
     });
+    expect(upstreamRequests[0]?.headers.authorization).toBeUndefined();
     expect(upstreamRequests[0]?.headers.cookie).toBeUndefined();
     expect(upstreamRequests[0]?.headers.forwarded).toBeUndefined();
     expect(upstreamRequests[0]?.headers["x-forwarded-for"]).toBeUndefined();
@@ -130,6 +130,22 @@ describe("recommended workspace Git relay transport", () => {
     await expect(request(relayPort, "/project/root.git/info/refs?service=git-receive-pack", "GET"))
       .resolves.toMatchObject({ status: 409 });
   });
+
+  it("rejects the obsolete managed relay mode", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dim-agent-relay-"));
+    roots.push(root);
+    const relayPort = await reservePort();
+    const environment = {
+      ...relayEnvironment(root, relayPort, "http://127.0.0.1:19418", {}),
+      DIM_AGENT_GIT_RELAY_MODE: "managed",
+      DIM_GIT_USERNAME: "writer",
+      DIM_GIT_TOKEN: "secret"
+    };
+
+    await expect(run(process.execPath, [script, "serve"], { env: environment })).rejects.toMatchObject({
+      stderr: expect.stringContaining("invalid agent Git relay configuration")
+    });
+  });
 });
 
 function relayEnvironment(root: string, port: number, upstream: string,
@@ -137,14 +153,12 @@ function relayEnvironment(root: string, port: number, upstream: string,
   return {
     ...process.env,
     ...extra,
-    DIM_AGENT_GIT_RELAY_MODE: "managed",
+    DIM_AGENT_GIT_RELAY_MODE: "native",
     DIM_AGENT_GIT_UPSTREAM: upstream,
     DIM_AGENT_GIT_PATH: "/project/root.git",
     DIM_AGENT_GIT_LISTEN_HOST: "127.0.0.1",
     DIM_AGENT_GIT_LISTEN_PORT: String(port),
-    DIM_AGENT_GIT_STATE_DIR: root,
-    DIM_GIT_USERNAME: "writer",
-    DIM_GIT_TOKEN: "secret"
+    DIM_AGENT_GIT_STATE_DIR: root
   };
 }
 

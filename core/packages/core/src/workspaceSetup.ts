@@ -1,15 +1,13 @@
 import { UserError } from "./errors.js";
-import { ensureGitea, giteaNestedBaseUrl } from "./gitea.js";
+import { requireNativeControlPlaneConnection } from "./lifecycleOptions.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type {
   LifecycleOptions,
-  ProjectRecord,
   WorkspaceRecord
 } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { writeProjectManifest } from "./workspaceRepositorySnapshot.js";
 import { assertContainerRunning, reconcileContainer } from "./workspaceContainer.js";
-import { workspaceGitEnvironment, workspaceRootSnapshotPath } from "./workspaceLifecycleTypes.js";
 import {
   combineWorkspaceLifecycleFailures,
   runWorkspaceLifecycle,
@@ -17,22 +15,11 @@ import {
   type SetWorkspaceLifecycleErrorStage, type SetWorkspaceLifecycleStage
 } from "./workspaceLifecycleError.js";
 import { assertRootSnapshot, installHostInputHelper, runProjectSetup } from "./workspaceProjectCommands.js";
-import { applySelectedRoot } from "./workspacePublication.js";
 import { inspectWorkspaceContainer } from "./workspaceResourceOwnership.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 import { readWorkspaceForOperation } from "./workspaceValidation.js";
 import { notifyRecommendedWorkspaceRelayPhase, reconcileWorkspaceAgent } from "./workspaceAgentLifecycle.js";
 import { publishWorkspacePhase } from "./workspacePhasePublication.js";
-
-type ReconcileProjectContainerInput = {
-  readonly runner: StreamingCommandRunner;
-  readonly options: LifecycleOptions;
-  readonly state: LifecycleState;
-  readonly record: WorkspaceRecord;
-  readonly project: ProjectRecord;
-  readonly repo: ProjectRecord["repositories"][number];
-  readonly setStage: SetWorkspaceLifecycleStage;
-};
 
 export async function setupWorkspace(
   runner: StreamingCommandRunner,
@@ -40,11 +27,12 @@ export async function setupWorkspace(
   name: string,
   profilesChanged = false
 ): Promise<WorkspaceRecord> {
+  requireNativeControlPlaneConnection(options);
   return runWorkspaceLifecycle("setup", async (setStage, setErrorStage) => {
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
-    const initialRecord = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
+    const initialRecord = await readWorkspaceForOperation(state, workspaceName);
     assertWorkspaceLifecycleActive(initialRecord);
     setStage("Project lock acquisition");
     const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
@@ -53,52 +41,25 @@ export async function setupWorkspace(
       const release = await state.acquireWorkspaceSetupLock(workspaceName);
       try {
         setStage("workspace state loading");
-        let record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
+        let record = await readWorkspaceForOperation(state, workspaceName);
         assertWorkspaceLifecycleActive(record);
         if (record.projectName !== initialRecord.projectName || record.projectId !== initialRecord.projectId) {
           throw new UserError(`project '${record.projectName}' identity changed`);
         }
         setStage("protected root validation");
         await assertRootSnapshot(options.stateRoot, record);
-        if (record.schemaVersion === 9) {
-          const container = await inspectWorkspaceContainer(runner, record);
-          const settingUp = { ...record, phase: "setting-up" as const, updatedAt: new Date().toISOString() };
-          delete settingUp.error;
-          await publishWorkspacePhase({
-            runner,
-            state,
-            record: settingUp,
-            ...(container?.running ? { containerId: container.id } : {}),
-            notifyRelay: record.phase === "ready" && container?.running === true
-          });
-          record = settingUp;
-          record = await reconcileNativeWorkspace(runner, options, state, record, setStage);
-          return setupWorkspaceLocked(runner, options, state, record, profilesChanged, false, setStage, setErrorStage);
-        }
-        if (record.phase === "setting-up" || record.phase === "setup-error" || record.phase === "error") {
-          setStage("Project state loading");
-          const project = await state.readProject(record.projectName);
-          if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-          const repo = project.repositories.find((candidate) => candidate.alias === record.rootRepositoryAlias);
-          if (repo === undefined) throw new UserError(`project '${project.name}' root repository is missing`);
-          setStage("workspace reconciliation");
-          const reconciled = await reconcileProjectContainer({ runner, options, state, record, project, repo, setStage });
-          record = reconciled.record;
-          const containerId = reconciled.containerId;
-          setStage("protected root publication");
-          record = await applySelectedRoot({
-            runner,
-            state,
-            record,
-            containerId,
-            target: {
-              rootRef: record.rootRef,
-              rootCommit: record.rootCommit,
-              rootSnapshotPath: workspaceRootSnapshotPath(options.stateRoot, record)
-            }
-          });
-        }
-        return await setupWorkspaceLocked(runner, options, state, record, profilesChanged, false, setStage, setErrorStage);
+        const container = await inspectWorkspaceContainer(runner, record);
+        const settingUp = { ...record, phase: "setting-up" as const, updatedAt: new Date().toISOString() };
+        delete settingUp.error;
+        await publishWorkspacePhase({
+          runner,
+          state,
+          record: settingUp,
+          ...(container?.running ? { containerId: container.id } : {}),
+          notifyRelay: record.phase === "ready" && container?.running === true
+        });
+        record = await reconcileNativeWorkspace(runner, options, state, settingUp, setStage);
+        return setupWorkspaceLocked(runner, options, state, record, profilesChanged, false, setStage, setErrorStage);
       } finally {
         await runWorkspaceLifecycleStage("setup", "workspace setup lock release", release);
       }
@@ -265,115 +226,6 @@ export async function setupWorkspaceLocked(
   return record;
 }
 
-export async function reconcileProject(
-  runner: StreamingCommandRunner,
-  options: LifecycleOptions,
-  state: LifecycleState,
-  initialRecord: WorkspaceRecord,
-  project: ProjectRecord,
-  repo: ProjectRecord["repositories"][number],
-  setStage: SetWorkspaceLifecycleStage
-): Promise<WorkspaceRecord> {
-  const reconciled = await reconcileProjectContainer({
-    runner, options, state, record: initialRecord, project, repo, setStage
-  });
-  let record = reconciled.record;
-  try {
-    setStage("Project manifest publication");
-    await writeProjectManifest(runner, { ...record, containerName: reconciled.containerId });
-    record = { ...record, updatedAt: new Date().toISOString() };
-    setStage("workspace state publication");
-    await state.writeWorkspace(record);
-    return record;
-  } catch (error) {
-    record = {
-      ...record,
-      phase: "error",
-      error: error instanceof Error ? error.message : String(error),
-      updatedAt: new Date().toISOString()
-    };
-    try {
-      await publishWorkspacePhase({
-        runner,
-        state,
-        record,
-        containerId: reconciled.containerId,
-        notifyRelay: true
-      });
-    } catch (publicationError) {
-      throw combineWorkspaceLifecycleFailures(error, publicationError);
-    }
-    throw error;
-  }
-}
-
-export async function reconcileProjectContainer(
-  input: ReconcileProjectContainerInput
-): Promise<{ readonly record: WorkspaceRecord; readonly containerId: string }> {
-  if (input.record.schemaVersion === 9) {
-    throw new UserError("native workspace reconciliation is not initialized");
-  }
-  const release = await input.state.acquireWorkspaceLock(input.record.name);
-  let record = await readWorkspaceForOperation(input.state, input.record.name, input.options.giteaConnection);
-  let relayContainerId: string | undefined;
-  if (record.schemaVersion !== 8) throw new UserError("native workspace reconciliation is not initialized");
-  let stage = "container inspection";
-  try {
-    const inspected = await inspectWorkspaceContainer(input.runner, record);
-    if (inspected?.running) relayContainerId = inspected.id;
-    stage = "managed Git reconciliation";
-    const credentials = await ensureGitea(input.runner, input.options);
-    stage = "managed Git address discovery";
-    const gitBaseUrl = `${await giteaNestedBaseUrl(input.runner, credentials)}/${input.project.gitNamespace}`;
-    record = {
-      ...record,
-      projectName: input.project.name,
-      rootRepositoryAlias: input.repo.alias,
-      gitBaseUrl,
-      hostAliases: credentials.kind === "managed"
-        ? { "dim-gitea": [new URL(gitBaseUrl).hostname] }
-        : {}
-    };
-    stage = "workspace metadata publication";
-    await input.state.writeWorkspace(record);
-    stage = "workspace container reconciliation";
-    const containerId = await reconcileContainer(
-      input.runner,
-      input.options,
-      record,
-      workspaceGitEnvironment(record, credentials)
-    );
-    relayContainerId = containerId;
-    stage = "host-input helper installation";
-    await installHostInputHelper(input.runner, { ...record, containerName: containerId });
-    return { record, containerId };
-  } catch (error) {
-    const detail = `workspace reconciliation at ${stage}: ${error instanceof Error ? error.message : String(error)}`;
-    record = {
-      ...record,
-      phase: "error",
-      error: detail,
-      updatedAt: new Date().toISOString()
-    };
-    try {
-      await publishWorkspacePhase({
-        runner: input.runner,
-        state: input.state,
-        record,
-        ...(relayContainerId === undefined ? {} : { containerId: relayContainerId }),
-        notifyRelay: relayContainerId !== undefined
-      });
-    } catch (publicationError) {
-      throw combineWorkspaceLifecycleFailures(error, publicationError);
-    }
-    throw new UserError(detail, { cause: error });
-  } finally {
-    input.setStage("workspace reconciliation lock release");
-    await release();
-    input.setStage("workspace reconciliation");
-  }
-}
-
 export async function reconcileNativeWorkspace(
   runner: StreamingCommandRunner,
   options: LifecycleOptions,
@@ -381,12 +233,11 @@ export async function reconcileNativeWorkspace(
   initialRecord: WorkspaceRecord,
   setStage: SetWorkspaceLifecycleStage
 ): Promise<WorkspaceRecord> {
-  if (initialRecord.schemaVersion !== 9) throw new UserError("native workspace record is required");
   const release = await state.acquireWorkspaceLock(initialRecord.name);
-  let record = await readWorkspaceForOperation(state, initialRecord.name, options.giteaConnection);
+  let record = await readWorkspaceForOperation(state, initialRecord.name);
   let relayContainerId: string | undefined;
   try {
-    if (record.schemaVersion !== 9 || record.workspaceId !== initialRecord.workspaceId) {
+    if (record.workspaceId !== initialRecord.workspaceId) {
       throw new UserError("native workspace identity changed");
     }
     const inspected = await inspectWorkspaceContainer(runner, record);

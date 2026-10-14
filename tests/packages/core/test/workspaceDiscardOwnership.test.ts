@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { lifecycleOptionsForBackend as coreLifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
@@ -11,8 +11,14 @@ import {
   workspaceContainerLabels,
   workspaceVolumeLabels
 } from "../../../../core/packages/core/src/workspaceResourceOwnership.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 const CONTAINER_ID = "a".repeat(64);
+
+function lifecycleOptionsForBackend(backend: "sysbox", env: NodeJS.ProcessEnv = {}) {
+  return coreLifecycleOptionsForBackend(backend, { ...env,
+    DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: join(env.DIM_STATE_ROOT ?? tmpdir(), "native.json") });
+}
 const IDENTITY = {
   name: "work-1",
   workspaceId: "A".repeat(43),
@@ -98,7 +104,7 @@ describe("workspace discard ownership", () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-discard-ownership-"));
     workspace = workspaceRecord();
-    const snapshot = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    const snapshot = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     await mkdir(join(snapshot, ".dim"), { recursive: true });
     await writeFile(join(snapshot, ".dim", "teardown.sh"), "#!/bin/sh\n");
     await new LifecycleState(root).claimWorkspace(workspace);
@@ -117,7 +123,7 @@ describe("workspace discard ownership", () => {
     ["wrong-backend", containerInspection([CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 6), "runc", ...CONTAINER_LABELS.slice(7), "7"])]
   ])("leaves a %s same-name container untouched", async (_kind, containerInspect) => {
     // Given
-    const runner = new OwnershipRunner(join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit), { containerInspect });
+    const runner = new OwnershipRunner(join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit), { containerInspect });
     const state = new LifecycleState(root);
 
     // When / Then
@@ -135,7 +141,7 @@ describe("workspace discard ownership", () => {
     ["mismatched", ["dim-ws-work-1-docker", ...VOLUME_LABELS.slice(0, 2), "other", ...VOLUME_LABELS.slice(3)].join("|")]
   ])("preflights a %s same-name volume before teardown and leaves every resource untouched", async (_kind, volumeInspect) => {
     // Given
-    const runner = new OwnershipRunner(join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit), { volumeInspect });
+    const runner = new OwnershipRunner(join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit), { volumeInspect });
     const state = new LifecycleState(root);
 
     // When / Then
@@ -149,7 +155,7 @@ describe("workspace discard ownership", () => {
 
   it("validates a retained volume before Project teardown", async () => {
     // Given
-    const runner = new OwnershipRunner(join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit), {
+    const runner = new OwnershipRunner(join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit), {
       volumeInspect: [workspace.dockerVolumeName, ...VOLUME_LABELS.slice(0, 2), "other", ...VOLUME_LABELS.slice(3)].join("|")
     });
 
@@ -166,7 +172,7 @@ describe("workspace discard ownership", () => {
 
   it("runs teardown and removal against the inspected container ID", async () => {
     // Given
-    const runner = new OwnershipRunner(join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit));
+    const runner = new OwnershipRunner(join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit));
 
     // When
     await discardWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), workspace.name);
@@ -193,7 +199,7 @@ describe("workspace discard ownership", () => {
 
   it("completes cleanup when owned resources disappear after inspection", async () => {
     // Given
-    const runner = new OwnershipRunner(join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit), {
+    const runner = new OwnershipRunner(join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit), {
       containerRemoveError: `Error response from daemon: No such container: ${CONTAINER_ID}`,
       volumeRemoveError: `Error response from daemon: No such volume: ${workspace.dockerVolumeName}`
     });
@@ -210,7 +216,7 @@ describe("workspace discard ownership", () => {
     // Given
     const owned = [workspace.dockerVolumeName, ...VOLUME_LABELS].join("|");
     const foreign = [workspace.dockerVolumeName, ...VOLUME_LABELS.slice(0, 1), "foreign", ...VOLUME_LABELS.slice(2)].join("|");
-    const runner = new OwnershipRunner(join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit), { volumeInspects: [owned, foreign] });
+    const runner = new OwnershipRunner(join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit), { volumeInspects: [owned, foreign] });
     const state = new LifecycleState(root);
 
     // When / Then
@@ -224,7 +230,7 @@ describe("workspace discard ownership", () => {
 
   it("treats exactly absent resources as a safe discard retry", async () => {
     // Given
-    const runner = new OwnershipRunner(join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit), {
+    const runner = new OwnershipRunner(join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit), {
       containerInspectError: `Error response from daemon: No such container: ${workspace.containerName}`,
       volumeInspectError: `Error: No such volume: ${workspace.dockerVolumeName}`
     });
@@ -242,36 +248,14 @@ describe("workspace discard ownership", () => {
 
 function workspaceRecord(): WorkspaceRecord {
   const timestamp = "2026-09-12T00:00:00.000Z";
-  return {
-    schemaVersion: 8,
-    workspaceId: "A".repeat(43),
-    name: "work-1",
-    projectId: "project-id",
-    projectName: "project",
-    rootRepositoryAlias: "root",
-    rootRef: "refs/heads/main",
+  return nativeWorkspaceFixture({
     rootCommit: "b".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data",
-    phase: "ready",
     profiles: ["development"],
-    composeProjectName: "dim-work-1",
-    containerName: "dim-ws-work-1",
-    networkName: "dim-control",
-    dockerVolumeName: "dim-ws-work-1-docker",
-    runtimeBackend: "sysbox",
-    kvm: false,
-    cpuCount: "2",
-    memory: "4g",
-    pidsLimit: "2048",
-    routes: [],
     gitUserName: "Agent",
     gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/dim-project",
-    hostAliases: { "dim-gitea": ["172.20.0.2"] },
-    projectManifestPath: "/run/dim/project.json",
     createdAt: timestamp,
     updatedAt: timestamp
-  };
+  });
 }
 
 function labelValue(label: string): string {

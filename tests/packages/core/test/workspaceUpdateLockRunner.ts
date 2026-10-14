@@ -1,7 +1,6 @@
 import { vi } from "vitest";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { ownedGiteaContainerInspect, ownedGiteaResourceInspect } from "./giteaServiceFixture.js";
 import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
 import { registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
@@ -28,15 +27,6 @@ export const MOVED_SOURCE_COMMIT = "d".repeat(40);
 export const HEAD_COMMIT = "e".repeat(40);
 
 export const MOVED_HEAD_COMMIT = "f".repeat(40);
-
-export const CREDENTIALS = JSON.stringify({
-  adminUsername: "admin",
-  adminPassword: "admin-secret",
-  writerUsername: "writer",
-  writerPassword: "writer-secret",
-  maintainerUsername: "maintainer",
-  maintainerPassword: "maintainer-secret"
-});
 
 export class Barrier {
   readonly wait: Promise<void>;
@@ -81,21 +71,14 @@ export class UpdateRunner implements StreamingCommandRunner {
       return result(command, args, `${COMMIT}\trefs/heads/main\n`);
     }
     if (args[0] === "network" && args[1] === "inspect") {
-      const stdout = args.some((argument) => argument.includes("dim.service-id"))
-        ? ownedGiteaResourceInspect("network")
-      : hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP);
+      const stdout = hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP);
       return result(command, args, `${stdout}\n`);
     }
     if (args[0] === "volume" && args[1] === "inspect") {
       const stdout = args[2] === WORKSPACE_IDENTITY.dockerVolumeName
         ? `${workspaceVolumeInspect(WORKSPACE_IDENTITY)}\n`
-        : args[2] === "dim-gitea-data"
-          ? `${ownedGiteaResourceInspect("volume")}\n`
-      : `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`;
+        : `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`;
       return result(command, args, stdout);
-    }
-    if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
-      return result(command, args, `${ownedGiteaContainerInspect("gitea-container-id", true)}\n`);
     }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
       return result(command, args, registryCacheInspect("registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33"));
@@ -103,13 +86,6 @@ export class UpdateRunner implements StreamingCommandRunner {
     if (args[0] === "container" && args[1] === "inspect" && args.at(-1)?.includes("HostConfig.NanoCpus")) {
       return result(command, args,
         `${Number(this.resources.cpuCount) * 1_000_000_000}|${this.resources.memory}|${this.resources.memory}|${this.resources.pidsLimit}\n`);
-    }
-    if (args[0] === "exec" && args[1] === "gitea-container-id"
-      && args.some((argument) => argument.includes("/data/dim/credentials.json"))) {
-      return result(command, args, CREDENTIALS);
-    }
-    if (args[0] === "exec" && args[3] === "gitea-container-id" && args[4] === "sh") {
-      return result(command, args, "true\n");
     }
     if (args.some((argument) => argument.includes(".Config.Labels"))) {
       if (!this.containerExists) {

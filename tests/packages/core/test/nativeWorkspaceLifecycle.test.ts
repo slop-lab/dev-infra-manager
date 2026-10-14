@@ -72,6 +72,55 @@ describe("native workspace lifecycle", () => {
     expect(context.runner.calls.some((call) => call.includes("dim-gitea"))).toBe(false);
   });
 
+  it.each(["update", "restart"] as const)(
+    "holds the Project lock outside the setup lock while running native %s setup",
+    async (operation) => {
+    const context = await lifecycleFixture("ready", true);
+    const runner = new BlockingSetupRunner(context.workspace,
+      workspaceRootSnapshotPath(context.fixture.stateRoot, context.workspace), true);
+    const events: string[] = [];
+    const acquireProjectLock = LifecycleState.prototype.acquireProjectLock;
+    const acquireSetupLock = LifecycleState.prototype.acquireWorkspaceSetupLock;
+    vi.spyOn(LifecycleState.prototype, "acquireProjectLock").mockImplementation(async function (
+      this: LifecycleState,
+      name
+    ) {
+      events.push(`project:${name}:acquire`);
+      const release = await acquireProjectLock.call(this, name);
+      return async () => { events.push(`project:${name}:release`); await release(); };
+    });
+    vi.spyOn(LifecycleState.prototype, "acquireWorkspaceSetupLock").mockImplementation(async function (
+      this: LifecycleState,
+      name
+    ) {
+      events.push(`setup:${name}:acquire`);
+      const release = await acquireSetupLock.call(this, name);
+      return async () => { events.push(`setup:${name}:release`); await release(); };
+    });
+
+    const transition = operation === "update"
+      ? updateWorkspace(runner, context.options, context.workspace.name, ["review"])
+      : restartWorkspace(runner, context.options, context.workspace.name);
+    await runner.setupStarted;
+    try {
+      expect(events).toEqual([
+        `project:${context.workspace.projectName}:acquire`,
+        `setup:${context.workspace.name}:acquire`
+      ]);
+    } finally {
+      runner.finishSetup();
+      await transition;
+    }
+
+    expect(events).toEqual([
+      `project:${context.workspace.projectName}:acquire`,
+      `setup:${context.workspace.name}:acquire`,
+      `setup:${context.workspace.name}:release`,
+      `project:${context.workspace.projectName}:release`
+    ]);
+    }
+  );
+
   it("rejects an environment change before stopping a native workspace", async () => {
     const context = await lifecycleFixture("ready", true);
     const current = { ...context.workspace, environment: "custom" as const };
@@ -147,8 +196,7 @@ describe("native workspace lifecycle", () => {
     const restored = await startHost(context.runner, context.options);
 
     // Then
-    expect(stopped).toMatchObject({ phase: "stopped", resumeWorkspaces: ["work-1"],
-      restartCiRunners: [], resumeManagedContainers: [] });
+    expect(stopped).toMatchObject({ phase: "stopped", resumeWorkspaces: ["work-1"] });
     expect(restored).toMatchObject({ phase: "ready", resumeWorkspaces: [] });
     expect(context.fixture.readinessRequests()).toBe(before + 1);
     expect(context.runner.events).toEqual(["stop", "start"]);
@@ -179,8 +227,6 @@ describe("native workspace lifecycle", () => {
       schemaVersion: 2,
       phase: "stopped",
       resumeWorkspaces: [context.workspace.name],
-      restartCiRunners: [],
-      resumeManagedContainers: [],
       updatedAt: new Date(0).toISOString()
     });
     const before = context.fixture.readinessRequests();
@@ -196,6 +242,26 @@ describe("native workspace lifecycle", () => {
       phase: "ready"
     });
     expect(context.runner.calls.some((call) => call.includes("dim-gitea"))).toBe(false);
+  });
+
+  it("restores a resumed ready workspace whose runtime is stopped", async () => {
+    const context = await lifecycleFixture("ready", false);
+    await context.state.writeHostLifecycle({
+      schemaVersion: 2,
+      phase: "stopped",
+      resumeWorkspaces: [context.workspace.name],
+      updatedAt: new Date(0).toISOString()
+    });
+
+    await expect(startHost(context.runner, context.options)).resolves.toMatchObject({
+      phase: "ready",
+      resumeWorkspaces: []
+    });
+
+    expect(context.runner.events).toContain("start");
+    await expect(context.state.readWorkspace(context.workspace.name)).resolves.toMatchObject({
+      phase: "ready"
+    });
   });
 });
 
@@ -299,6 +365,38 @@ class NativeLifecycleRunner implements StreamingCommandRunner {
 
   async runStreaming(): Promise<number> {
     return 0;
+  }
+}
+
+class BlockingSetupRunner extends NativeLifecycleRunner {
+  readonly setupStarted: Promise<void>;
+  private readonly markSetupStarted: () => void;
+  private readonly setupFinished: Promise<void>;
+  private readonly markSetupFinished: () => void;
+
+  constructor(workspace: NativeWorkspaceRecord, mountedRoot: string, running: boolean) {
+    super(workspace, mountedRoot, running);
+    let markSetupStarted: () => void = () => undefined;
+    let markSetupFinished: () => void = () => undefined;
+    this.setupStarted = new Promise((resolve) => { markSetupStarted = resolve; });
+    this.setupFinished = new Promise((resolve) => { markSetupFinished = resolve; });
+    this.markSetupStarted = markSetupStarted;
+    this.markSetupFinished = markSetupFinished;
+  }
+
+  override async runStreaming(): Promise<number> {
+    this.markSetupStarted();
+    await this.setupFinished;
+    return 0;
+  }
+
+  override async run(command: string, args: string[]): Promise<CommandResult> {
+    if (args.at(-2) === "-f" && args.at(-1) === ".dim/setup.sh") return result(command, args);
+    return super.run(command, args);
+  }
+
+  finishSetup(): void {
+    this.markSetupFinished();
   }
 }
 

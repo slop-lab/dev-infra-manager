@@ -12,6 +12,7 @@ import {
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 describe("DIM controller", () => {
   const servers: ReturnType<typeof createDimController>[] = [];
@@ -42,37 +43,15 @@ it("exposes only routes explicitly assigned to an audience", () => {
   it("isolates agent grants and discovery from the workspace controller", async () => {
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-agent-controller-"));
     const state = new LifecycleState(stateRoot);
-    const now = new Date().toISOString();
-    const record: WorkspaceRecord = {
-      schemaVersion: 8,
-      workspaceId: "A".repeat(43),
+    const record = nativeWorkspaceFixture({
       name: "work",
       projectId: "pid",
       projectName: "project",
-      rootRepositoryAlias: "root",
-      rootRef: "refs/heads/main",
-      rootCommit: "a".repeat(40),
-      workspaceDataPath: "/var/lib/dim/workspace-data",
-      phase: "ready",
-      profiles: [],
       composeProjectName: "dim-work",
       containerName: "dim-ws-work",
-      networkName: "dim-control",
-      dockerVolumeName: "dim-ws-work-docker",
-      runtimeBackend: "sysbox",
-      kvm: false,
-      cpuCount: "2",
-      memory: "4g",
-      pidsLimit: "2048",
-      routes: [],
       gitUserName: "Agent",
-      gitUserEmail: "agent@example.invalid",
-      gitBaseUrl: "http://dim-gitea:3000/dim-project",
-      hostAliases: {},
-      projectManifestPath: "/run/dim/project.json",
-      createdAt: now,
-      updatedAt: now
-    };
+      gitUserEmail: "agent@example.invalid"
+    });
     await state.claimWorkspace(record);
     const workspaceGrant = await state.ensureWorkspaceGrant(record.name);
     const agentGrant = await state.ensureAgentGrant(record.name);
@@ -130,36 +109,19 @@ it("exposes only routes explicitly assigned to an audience", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-agent-resources-"));
     const state = new LifecycleState(stateRoot);
-    const now = new Date().toISOString();
-    const workspace = (name: string, workspaceId: string, cpuCount: string): WorkspaceRecord => ({
-      schemaVersion: 8,
+    const workspace = (name: string, workspaceId: string, cpuCount: string): WorkspaceRecord => nativeWorkspaceFixture({
       workspaceId,
       name,
       projectId: `project-${name}`,
       projectName: `project-${name}`,
-      rootRepositoryAlias: "root",
-      rootRef: "refs/heads/main",
-      rootCommit: "a".repeat(40),
-      workspaceDataPath: "/var/lib/dim/workspace-data",
-      phase: "ready",
-      profiles: [],
       composeProjectName: `dim-${name}`,
       containerName: `dim-ws-${name}`,
-      networkName: "dim-control",
       dockerVolumeName: `dim-ws-${name}-docker`,
-      runtimeBackend: "sysbox",
-      kvm: false,
       cpuCount,
       memory: name === "a" ? "5g" : "9g",
       pidsLimit: name === "a" ? "500" : "900",
-      routes: [],
       gitUserName: "Agent",
-      gitUserEmail: "agent@example.invalid",
-      gitBaseUrl: `http://dim-gitea:3000/dim-${name}`,
-      hostAliases: {},
-      projectManifestPath: "/run/dim/project.json",
-      createdAt: now,
-      updatedAt: now
+      gitUserEmail: "agent@example.invalid"
     });
     await state.claimWorkspace(workspace("a", "A".repeat(43), "2.5"));
     await state.claimWorkspace(workspace("b", "B".repeat(43), "6"));

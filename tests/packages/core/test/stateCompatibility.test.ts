@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { preflightStateCompatibility } from "../../../../core/packages/core/src/stateCompatibility.js";
-import { HOST_PROJECT, HOST_QEMU_RUNNER, workspaceRecord } from "./hostLifecycleFixture.js";
+import { workspaceRecord } from "./hostLifecycleFixture.js";
 
 const roots: string[] = [];
 
@@ -43,13 +43,9 @@ describe("installation state compatibility preflight", () => {
       schemaVersion: 2,
       phase: "ready",
       resumeWorkspaces: [],
-      restartCiRunners: [],
-      resumeManagedContainers: [],
       updatedAt: "now"
     });
-    await writeJson(join(stateRoot, "projects", "example.json"), HOST_PROJECT);
     await writeJson(join(stateRoot, "workspaces", "work-1.json"), workspaceRecord("work-1", "ready"));
-    await writeJson(join(stateRoot, "ci-runners", "example", "capacity.json"), HOST_QEMU_RUNNER);
     await writeJson(join(stateRoot, "plugins", "future-plugin", "private.json"), { schemaVersion: 999 });
 
     // When
@@ -59,7 +55,7 @@ describe("installation state compatibility preflight", () => {
     expect(result).toEqual({ stateRoot, warnings: [] });
   });
 
-  it("accepts the exact historical host record without changing its bytes", async () => {
+  it("rejects the exact historical host record without changing its bytes", async () => {
     // Given
     const stateRoot = await temporaryRoot();
     const target = join(stateRoot, "host.json");
@@ -74,10 +70,10 @@ describe("installation state compatibility preflight", () => {
     await writeFile(target, bytes);
 
     // When
-    const result = await preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
+    const result = preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
 
     // Then
-    expect(result.warnings).toHaveLength(1);
+    await expect(result).rejects.toThrow(/host lifecycle.*prior pinned release.*export.*recreate/is);
     expect(await readFile(target, "utf8")).toBe(bytes);
     expect(await readdir(stateRoot)).toEqual(["host.json"]);
   });
@@ -94,7 +90,7 @@ describe("installation state compatibility preflight", () => {
     const preflight = preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
 
     // Then
-    await expect(preflight).rejects.toThrow(/workspace.*work-1\.json.*schema 7.*expected 8.*pinned DIM version.*export.*recreate/is);
+    await expect(preflight).rejects.toThrow(/workspace.*work-1\.json.*prior pinned release.*export.*recreate/is);
     expect(await readFile(target)).toEqual(before);
     expect(await readdir(stateRoot)).toEqual(["workspaces"]);
   });

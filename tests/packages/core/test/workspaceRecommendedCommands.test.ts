@@ -15,6 +15,7 @@ import {
   workspaceAgentVolumeLabels
 } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 const imageId = `sha256:${"f".repeat(64)}`;
 const agentId = "a".repeat(64);
@@ -31,7 +32,7 @@ describe("recommended workspace commands", () => {
     const root = await mkdtemp(join(tmpdir(), "dim-recommended-command-"));
     roots.push(root);
     const record = fixture();
-    const snapshot = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    const snapshot = join(root, "assets", "native-project-roots", record.projectId, record.rootCommit);
     await mkdir(snapshot, { recursive: true });
     await new LifecycleState(root).claimWorkspace(record);
     const runner = new RecommendedRunner(record, snapshot);
@@ -54,7 +55,7 @@ describe("recommended workspace commands", () => {
     const root = await mkdtemp(join(tmpdir(), "dim-recommended-command-"));
     roots.push(root);
     const record = fixture();
-    const snapshot = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    const snapshot = join(root, "assets", "native-project-roots", record.projectId, record.rootCommit);
     await mkdir(snapshot, { recursive: true });
     await new LifecycleState(root).claimWorkspace(record);
     const runner = new RecommendedRunner(record, snapshot);
@@ -74,7 +75,7 @@ describe("recommended workspace commands", () => {
     const root = await mkdtemp(join(tmpdir(), "dim-recommended-setup-"));
     roots.push(root);
     const record = { ...fixture(), phase: "creating" as const };
-    const snapshot = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    const snapshot = join(root, "assets", "native-project-roots", record.projectId, record.rootCommit);
     await mkdir(snapshot, { recursive: true });
     const state = new LifecycleState(root);
     await state.claimWorkspace(record);
@@ -100,7 +101,7 @@ describe("recommended workspace commands", () => {
     const root = await mkdtemp(join(tmpdir(), "dim-recommended-setup-"));
     roots.push(root);
     const record = { ...fixture(), phase: "setting-up" as const };
-    const snapshot = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    const snapshot = join(root, "assets", "native-project-roots", record.projectId, record.rootCommit);
     await mkdir(snapshot, { recursive: true });
     const state = new LifecycleState(root);
     await state.claimWorkspace(record);
@@ -120,7 +121,7 @@ describe("recommended workspace commands", () => {
 
   it("revokes a ready relay before a failed setting-up publication", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-recommended-setup-publication-")); roots.push(root);
-    const record = fixture(); const snapshot = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    const record = fixture(); const snapshot = join(root, "assets", "native-project-roots", record.projectId, record.rootCommit);
     await mkdir(snapshot, { recursive: true });
     const state = new LifecycleState(root);
     await state.claimWorkspace(record);
@@ -141,7 +142,7 @@ describe("recommended workspace commands", () => {
     const root = await mkdtemp(join(tmpdir(), "dim-recommended-command-"));
     roots.push(root);
     const record = fixture();
-    const snapshot = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    const snapshot = join(root, "assets", "native-project-roots", record.projectId, record.rootCommit);
     await mkdir(snapshot, { recursive: true });
     const state = new LifecycleState(root);
     await state.claimWorkspace(record);
@@ -239,17 +240,8 @@ class RecommendedRunner implements StreamingCommandRunner {
 }
 
 function fixture(): WorkspaceRecord {
-  return {
-    schemaVersion: 8, workspaceId: "A".repeat(43), name: "work-1", projectId: "project-id",
-    projectName: "project", rootRepositoryAlias: "root", rootRef: "refs/heads/main",
-    rootCommit: "a".repeat(40), workspaceDataPath: "/var/lib/dim/workspace-data",
-    environment: "recommended", phase: "ready", profiles: [], composeProjectName: "dim-work-1",
-    containerName: "dim-ws-work-1", networkName: "dim-control", dockerVolumeName: "dim-ws-work-1-docker",
-    runtimeBackend: "sysbox", kvm: false, cpuCount: "2", memory: "4g", pidsLimit: "2048",
-    routes: [], gitUserName: "Agent", gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/dim-project", hostAliases: {},
-    projectManifestPath: "/run/dim/project.json", createdAt: "now", updatedAt: "now"
-  };
+  return nativeWorkspaceFixture({ environment: "recommended", gitUserName: "Agent", gitUserEmail: "agent@example.invalid",
+    createdAt: "now", updatedAt: "now" });
 }
 
 function jsonLabels(labels: readonly string[]): string {

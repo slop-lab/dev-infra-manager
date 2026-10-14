@@ -4,8 +4,8 @@ import path from "node:path";
 import { type Command } from "commander";
 import {
   ADMIN_CONTROLLER_STOP_EVENT, configuredDimAdminController, configuredDimAgentController, configuredDimController,
-  configuredOrdinaryCiPoolSupervisor, initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
-  hostLifecycleStatus, HostRuntimeTransitions, migrateHostLifecycleState, reconcileReadyHostManagedGit, requireHostMirrorProvider, resolveHostMirrorProvider,
+  initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
+  hostLifecycleStatus, HostRuntimeTransitions, resolveHostMirrorProvider,
   resolvePluginHome, loadNativeControlPlaneConnection, UserError
 } from "@slop-lab/dim-core";
 import {
@@ -78,7 +78,6 @@ controller.command("serve")
     let server: ReturnType<typeof configuredDimController> | undefined;
     let adminServer: ReturnType<typeof configuredDimAdminController> | undefined;
     let agentServer: ReturnType<typeof configuredDimAgentController> | undefined;
-    let hostRuntime: Awaited<ReturnType<typeof configuredOrdinaryCiPoolSupervisor>> | undefined;
     let hostTransitions: HostRuntimeTransitions | undefined;
     let shutdownReached = false;
     try {
@@ -92,43 +91,17 @@ controller.command("serve")
         async () => await loadInstalledPlugins(await resolvePluginHome())
       );
       loaded = loadedPlugins;
-      const native = options.nativeControlPlaneConnection !== undefined;
       const hostMirrorProvider = resolveHostMirrorProvider(loadedPlugins.registered.host);
-      if (!native) requireHostMirrorProvider(hostMirrorProvider);
       const runtimeOptions = hostMirrorProvider === undefined ? options : { ...options, hostMirrorProvider };
-      if (native) {
-        await controllerStartupStage(
-          "validating native workspace state",
-          async () => { await new LifecycleState(options.stateRoot).listWorkspaces(9); }
-        );
-      } else {
-        const migration = await controllerStartupStage(
-          "migrating host lifecycle state",
-          async () => await migrateHostLifecycleState(new LifecycleState(options.stateRoot))
-        );
-        if (migration.kind === "migrated") {
-          console.log("Migrated host lifecycle state schema 1 to 2");
-        } else if (migration.kind === "recovered") {
-          console.log("Recovered host lifecycle state schema 2 from the schema 1 backup");
-        }
-        await controllerStartupStage("reconciling managed Git service", async () => {
-          await reconcileReadyHostManagedGit(runner, options);
-        });
-      }
+      await controllerStartupStage(
+        "validating native workspace state",
+        async () => { await new LifecycleState(options.stateRoot).listWorkspaces(); }
+      );
       await controllerStartupStage(
         "initializing plugin routes",
         async () => await initializeControllerRoutes(runtimeOptions, loadedPlugins.registered)
       );
-      if (!native) {
-        hostRuntime = await controllerStartupStage(
-          "configuring ordinary CI capacity",
-          async () => await configuredOrdinaryCiPoolSupervisor(runner, runtimeOptions, (capacity, error, delay) => {
-            const detail = error instanceof Error ? error.message : String(error);
-            console.error(`ordinary CI capacity '${capacity}' failed; retrying in ${delay}ms: ${detail}`);
-          })
-        );
-      }
-      hostTransitions = new HostRuntimeTransitions(hostRuntime);
+      hostTransitions = new HostRuntimeTransitions();
       server = configuredDimController(runtimeOptions, loaded.registered);
       adminServer = configuredDimAdminController(runtimeOptions, loaded.registered, runner, hostTransitions);
       agentServer = configuredDimAgentController(runtimeOptions, loaded.registered);
@@ -161,9 +134,6 @@ controller.command("serve")
         server.listen(port, flags.host);
         await listening;
         console.log(`DIM controller listening on http://${flags.host}:${flags.port}`);
-      }
-      if ((await hostLifecycleStatus(runtimeOptions)).phase === "ready") {
-        await controllerStartupStage("starting ordinary CI capacity", async () => await hostRuntime?.resume());
       }
       await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM"), stopRequested]);
       shutdownReached = true;

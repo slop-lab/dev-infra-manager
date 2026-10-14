@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import { UserError } from "./errors.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import { configuredWorkspaceBackend } from "./userConfig.js";
-import { SYSBOX_CI_RUNNER_IMAGE } from "./sysboxCiRunnerAssets.js";
 
 export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): LifecycleOptions {
   const defaultWorkspaceBackend = configuredWorkspaceBackend(env);
@@ -24,22 +23,11 @@ export function lifecycleOptionsForBackend(
     env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE,
     "DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE"
   );
-  const importerConnectionFile = selectedAbsoluteFile(
-    env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE,
-    "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE"
-  );
-  if (importerConnectionFile !== undefined && nativeConnectionFile === undefined) {
-    throw new UserError(
-      "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE requires native control-plane selection"
-    );
-  }
-  if (nativeConnectionFile !== undefined) {
-    const conflicting = ["DIM_GITEA_CONNECTION_FILE", "DIM_GIT_SYNC_CONNECTION_FILE",
-      "DIM_QEMU_SCHEDULER_CONNECTION_FILE", "DIM_ORDINARY_CI_POOL_CONNECTION_FILE"]
-      .find((name) => env[name] !== undefined);
-    if (conflicting !== undefined) {
-      throw new UserError(`${conflicting} cannot be combined with native control-plane selection`);
-    }
+  const obsolete = ["DIM_GITEA_CONNECTION_FILE", "DIM_GIT_SYNC_CONNECTION_FILE",
+    "DIM_QEMU_SCHEDULER_CONNECTION_FILE", "DIM_ORDINARY_CI_POOL_CONNECTION_FILE"]
+    .find((name) => env[name] !== undefined);
+  if (obsolete !== undefined) {
+    throw new UserError(`${obsolete} is not supported by the native-only lifecycle`);
   }
   if (env.DIM_NATIVE_QEMU_CONNECTION_FILE !== undefined) {
     throw new UserError("native QEMU adapter is unavailable; refusing fallback");
@@ -61,26 +49,6 @@ export function lifecycleOptionsForBackend(
     ...(nativeConnectionFile === undefined
       ? {}
       : { nativeControlPlaneConnection: { file: nativeConnectionFile } }),
-    giteaConnection: nativeConnectionFile !== undefined
-      ? { kind: "disabled" }
-      : env.DIM_GITEA_CONNECTION_FILE === undefined
-      ? { kind: "managed" }
-      : { kind: "external", file: path.resolve(env.DIM_GITEA_CONNECTION_FILE) },
-    ...(env.DIM_GIT_SYNC_CONNECTION_FILE === undefined
-      ? {}
-      : { gitSyncConnection: { file: path.resolve(env.DIM_GIT_SYNC_CONNECTION_FILE) } }),
-    ...(env.DIM_QEMU_SCHEDULER_CONNECTION_FILE === undefined
-      ? {}
-      : { qemuSchedulerConnection: { file: path.resolve(env.DIM_QEMU_SCHEDULER_CONNECTION_FILE) } }),
-    ...(env.DIM_ORDINARY_CI_POOL_CONNECTION_FILE === undefined
-      ? {}
-      : { ordinaryCiPoolConnection: { file: path.resolve(env.DIM_ORDINARY_CI_POOL_CONNECTION_FILE) } }),
-    giteaImage: env.DIM_GITEA_IMAGE ?? "gitea/gitea:1.27.0",
-    giteaHost: env.DIM_GITEA_HOST ?? dockerHostName(env.DOCKER_HOST) ?? "127.0.0.1",
-    giteaPort: positiveInteger(env.DIM_GITEA_PORT ?? "3300", "DIM_GITEA_PORT"),
-    giteaAdminUsername: env.DIM_GITEA_ADMIN_USERNAME ?? "dim-admin",
-    gitUsername: env.DIM_GIT_USERNAME ?? "dim-workspace",
-    gitMaintainerUsername: env.DIM_GIT_MAINTAINER_USERNAME ?? "dim-host",
     defaultWorkspaceBackend,
     ...(env.DIM_WORKSPACE_IMAGE === undefined ? {} : { workspaceImage: env.DIM_WORKSPACE_IMAGE }),
     ...(env.DIM_WORKSPACE_RUNTIME === undefined ? {} : { workspaceRuntime: env.DIM_WORKSPACE_RUNTIME }),
@@ -89,12 +57,6 @@ export function lifecycleOptionsForBackend(
     memory: env.DIM_WORKSPACE_MEMORY ?? "4g",
     pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
     controllerRuntimeDirectory: controllerDirectory,
-    ciRunnerImage: env.DIM_CI_RUNNER_IMAGE
-      ?? SYSBOX_CI_RUNNER_IMAGE,
-    ciRunnerRuntime: env.DIM_CI_RUNNER_RUNTIME ?? "sysbox-runc",
-    ciRunnerDefaultCpus: env.DIM_CI_RUNNER_CPUS ?? "4",
-    ciRunnerDefaultMemory: env.DIM_CI_RUNNER_MEMORY ?? "8g",
-    ciRunnerDefaultPidsLimit: env.DIM_CI_RUNNER_PIDS ?? "2048",
     controllerSocketPath: env.DIM_CONTROLLER_SOCKET
       ?? path.join(controllerDirectory, "workspace", "controller.sock"),
     agentControllerSocketPath: env.DIM_AGENT_CONTROLLER_SOCKET
@@ -104,25 +66,23 @@ export function lifecycleOptionsForBackend(
   };
 }
 
+export function requireNativeControlPlaneConnection(
+  options: LifecycleOptions
+): { readonly file: string } {
+  if (options.nativeControlPlaneConnection === undefined) {
+    throw new UserError(
+      "native control plane is not configured; install the native control plane before modifying Projects or workspaces"
+    );
+  }
+  return options.nativeControlPlaneConnection;
+}
+
 function selectedAbsoluteFile(value: string | undefined, name: string): string | undefined {
   if (value === undefined) return undefined;
   if (value.length === 0 || !path.isAbsolute(value)) {
     throw new UserError(`${name} must name an absolute connection file`);
   }
   return value;
-}
-
-function dockerHostName(value: string | undefined): string | undefined {
-  if (!value?.startsWith("tcp://")) return undefined;
-  return new URL(value).hostname;
-}
-
-function positiveInteger(value: string, name: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > 65535) {
-    throw new UserError(`${name} must be an integer between 1 and 65535`);
-  }
-  return parsed;
 }
 
 function booleanValue(value: string | undefined): boolean {

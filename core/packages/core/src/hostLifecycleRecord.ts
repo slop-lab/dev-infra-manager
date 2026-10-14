@@ -2,139 +2,46 @@ import { UserError } from "./errors.js";
 import { validateLifecycleName } from "./lifecycleRecord.js";
 import type { HostLifecycleRecord } from "./lifecycleTypes.js";
 
-const REQUIRED_FIELDS = [
-  "schemaVersion",
-  "phase",
-  "resumeWorkspaces",
-  "restartCiRunners",
-  "resumeManagedContainers",
-  "updatedAt"
-] as const;
-
-const OPTIONAL_FIELDS = ["error"] as const;
-const SCHEMA_1_REQUIRED_FIELDS = [
-  "schemaVersion",
-  "phase",
-  "resumeWorkspaces",
-  "resumeCiRunners",
-  "resumeManagedContainers",
-  "updatedAt"
-] as const;
-const RUNNER_TARGET_FIELDS = ["project", "name"] as const;
-const NO_OPTIONAL_FIELDS: readonly string[] = [];
-
-export function convertHostLifecycleSchema1(value: unknown): HostLifecycleRecord {
-  const record = object(value, "host lifecycle state");
-  exactFields(record, SCHEMA_1_REQUIRED_FIELDS, OPTIONAL_FIELDS);
-  if (record.schemaVersion !== 1) {
-    throw new UserError(
-      `host lifecycle 'host' uses unsupported state schema ${String(record.schemaVersion)}; expected 1 for migration`
-    );
-  }
-  const converted = {
-    schemaVersion: 2,
-    phase: hostPhase(record.phase),
-    resumeWorkspaces: lifecycleNames(record.resumeWorkspaces, "workspace", "resumeWorkspaces"),
-    restartCiRunners: runnerTargets(record.resumeCiRunners, "resumeCiRunners"),
-    resumeManagedContainers: lifecycleNames(
-      record.resumeManagedContainers,
-      "managed container",
-      "resumeManagedContainers"
-    ),
-    updatedAt: text(record.updatedAt, "updatedAt")
-  } satisfies HostLifecycleRecord;
-  if (record.error === undefined) return converted;
-  return { ...converted, error: text(record.error, "error") };
-}
-
 export function parseHostLifecycleRecord(value: unknown): HostLifecycleRecord {
-  const record = object(value, "host lifecycle state");
-  if (record.schemaVersion === 1) {
-    throw new UserError("host lifecycle 'host' uses state schema 1; controller startup migration is required");
-  }
-  if (record.schemaVersion !== 2) {
+  if (!isRecord(value)) throw new UserError("host lifecycle state must be an object");
+  if (value.schemaVersion !== 2) {
     throw new UserError(
-      `host lifecycle 'host' uses unsupported state schema ${String(record.schemaVersion)}; expected 2`
+      "host lifecycle state uses unsupported predecessor state; use the prior pinned release to complete recovery before upgrading"
     );
   }
-  exactFields(record, REQUIRED_FIELDS, OPTIONAL_FIELDS);
-
-  const parsed = {
+  const allowed = new Set(["schemaVersion", "phase", "resumeWorkspaces", "updatedAt", "error"]);
+  const unknown = Object.keys(value).find((field) => !allowed.has(field));
+  if (unknown !== undefined) {
+    throw new UserError(
+      "host lifecycle state contains predecessor recovery targets; use the prior pinned release to complete recovery before upgrading"
+    );
+  }
+  const phase = hostPhase(value.phase);
+  if (!Array.isArray(value.resumeWorkspaces)) throw invalid("resumeWorkspaces");
+  const resumeWorkspaces = value.resumeWorkspaces.map((entry, index) => {
+    if (typeof entry !== "string") throw invalid(`resumeWorkspaces[${index}]`);
+    return validateLifecycleName(entry, "workspace");
+  });
+  if (typeof value.updatedAt !== "string" || value.updatedAt.length === 0) throw invalid("updatedAt");
+  const record: HostLifecycleRecord = {
     schemaVersion: 2,
-    phase: hostPhase(record.phase),
-    resumeWorkspaces: lifecycleNames(record.resumeWorkspaces, "workspace", "resumeWorkspaces"),
-    restartCiRunners: runnerTargets(record.restartCiRunners, "restartCiRunners"),
-    resumeManagedContainers: lifecycleNames(
-      record.resumeManagedContainers,
-      "managed container",
-      "resumeManagedContainers"
-    ),
-    updatedAt: text(record.updatedAt, "updatedAt")
-  } satisfies HostLifecycleRecord;
-
-  if (record.error === undefined) return parsed;
-  return { ...parsed, error: text(record.error, "error") };
+    phase,
+    resumeWorkspaces,
+    updatedAt: value.updatedAt
+  };
+  if (value.error === undefined) return record;
+  if (typeof value.error !== "string" || value.error.length === 0) throw invalid("error");
+  return { ...record, error: value.error };
 }
 
 function hostPhase(value: unknown): HostLifecycleRecord["phase"] {
-  switch (value) {
-    case "ready":
-    case "stopping":
-    case "stopped":
-    case "starting":
-    case "error":
-      return value;
-    default:
-      throw invalid("phase");
-  }
-}
-
-function lifecycleNames(value: unknown, kind: string, field: string): string[] {
-  if (!Array.isArray(value)) throw invalid(field);
-  return value.map((entry, index) => {
-    if (typeof entry !== "string") throw invalid(`${field}[${index}]`);
-    return validateLifecycleName(entry, kind);
-  });
-}
-
-function runnerTargets(value: unknown, field: string): HostLifecycleRecord["restartCiRunners"] {
-  if (!Array.isArray(value)) throw invalid(field);
-  return value.map((entry, index) => {
-    const label = `${field}[${index}]`;
-    const target = object(entry, label);
-    exactFields(target, RUNNER_TARGET_FIELDS, NO_OPTIONAL_FIELDS);
-    if (typeof target.project !== "string") throw invalid(`${label}.project`);
-    if (typeof target.name !== "string") throw invalid(`${label}.name`);
-    return {
-      project: validateLifecycleName(target.project, "project"),
-      name: validateLifecycleName(target.name, "CI runner")
-    };
-  });
-}
-
-function object(value: unknown, label: string): Readonly<Record<string, unknown>> {
-  if (!isRecord(value)) throw invalid(label);
-  return value;
-}
-
-function exactFields(
-  value: Readonly<Record<string, unknown>>,
-  required: readonly string[],
-  optional: readonly string[]
-): void {
-  const unknown = Object.keys(value).find((field) => !required.includes(field) && !optional.includes(field));
-  if (unknown !== undefined) throw new UserError(`host lifecycle state contains unknown field '${unknown}'`);
-  const missing = required.find((field) => value[field] === undefined);
-  if (missing !== undefined) throw new UserError(`host lifecycle state.${missing} is required`);
+  if (value === "ready" || value === "stopping" || value === "stopped"
+    || value === "starting" || value === "error") return value;
+  throw invalid("phase");
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function text(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.length === 0) throw invalid(field);
-  return value;
 }
 
 function invalid(field: string): UserError {

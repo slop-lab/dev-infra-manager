@@ -179,10 +179,8 @@ test("every lifecycle and CI progress operation has one stable label", () => {
   assert.deepEqual(streamProgressOperations, [
     "workspace.create", "workspace.resources", "workspace.setup", "workspace.update",
     "workspace.start", "workspace.restart", "workspace.stop", "workspace.discard",
-    "ci.runner.create", "ci.runner.start", "ci.runner.restart", "ci.runner.stop", "ci.runner.delete",
-    "ci.runner.logs", "host.start", "host.shutdown", "image.workspace.build",
-    "image.git-sync.build", "image.qemu-scheduler.build", "repo.import", "repo.fetch",
-    "repo.publish", "repo.apply", "project.create"
+    "host.start", "host.shutdown", "image.workspace.build",
+    "image.qemu-scheduler.build"
   ]);
   for (const operation of streamProgressOperations) assert.equal(typeof streamProgressLabel(operation), "string");
   assert.equal(streamProgressLabel("workspace.align"), undefined);
@@ -190,35 +188,15 @@ test("every lifecycle and CI progress operation has one stable label", () => {
   assert.equal(streamProgressLabel("workspace.run"), undefined);
 });
 
-test("direct operations show only truthful remaining milestones", () => {
-  const scheduler = new TestScheduler();
-  const stream = new MemoryStream(true);
-  const progress = createAdminStreamProgress("repo.import", {}, { scheduler, stream, ...timing });
-
-  scheduler.advance(1_000);
-  assert.match(stream.chunks.at(-1) ?? "", /Current: repository preparation/);
-  assert.match(stream.chunks.at(-1) ?? "", /Remaining: source fetch, managed Git push, import finalization/);
-
-  progress.update("source fetch");
-  scheduler.advance(1_000);
-  assert.match(stream.chunks.at(-1) ?? "", /Current: source fetch/);
-  assert.match(stream.chunks.at(-1) ?? "", /Remaining: managed Git push, import finalization/);
-
-  progress.update("ref materialization");
-  scheduler.advance(1_000);
-  assert.match(stream.chunks.at(-1) ?? "", /Current: ref materialization/);
-  assert.doesNotMatch(stream.chunks.at(-1) ?? "", /source fetch/);
-});
-
 test("unknown direct stages cannot disclose controller or credential text", () => {
   const scheduler = new TestScheduler();
   const stream = new MemoryStream(true);
-  const progress = createAdminStreamProgress("repo.fetch", {}, { scheduler, stream, ...timing });
+  const progress = createAdminStreamProgress("image.workspace.build", {}, { scheduler, stream, ...timing });
 
   progress.update("Bearer secret-token");
   scheduler.advance(1_000);
 
-  assert.match(stream.chunks.join(""), /Current: repository preparation/);
+  assert.match(stream.chunks.join(""), /Current: build context preparation/);
   assert.doesNotMatch(stream.chunks.join(""), /secret-token/);
 });
 
@@ -226,7 +204,7 @@ test("TTY progress never contaminates JSON stdout", () => {
   const scheduler = new TestScheduler();
   const stderr = new MemoryStream(true);
   const stdout = new MemoryStream(false);
-  const progress = createAdminStreamProgress("ci.runner.create", {}, { scheduler, stream: stderr, ...timing });
+  const progress = createAdminStreamProgress("image.workspace.build", {}, { scheduler, stream: stderr, ...timing });
   scheduler.advance(1_000);
   progress.stop();
   stdout.write(`${JSON.stringify({ status: "ready" })}\n`);

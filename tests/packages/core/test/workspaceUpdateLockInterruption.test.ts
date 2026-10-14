@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import * as nativeWorkspaceSelection from "../../../../core/packages/core/src/nativeWorkspaceSelection.js";
 import type {
   ProjectRecord,
   WorkspaceRecord
@@ -19,8 +20,9 @@ import {
   updateWorkspaceResources
 } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 
-import { claimTestGiteaService } from "./giteaServiceFixture.js";
-import { options, projectFixture, workspaceFixture } from "./workspaceUpdateLockFixture.js";
+import {
+  options, projectFixture, seedSelectedRootSnapshot, selectedWorkspaceFixture, workspaceFixture
+} from "./workspaceUpdateLockFixture.js";
 import { COMMIT, LockInterleaving, MOVED_HEAD_COMMIT, MOVED_SOURCE_COMMIT, UpdateRunner } from "./workspaceUpdateLockRunner.js";
 
 describe("workspace update setup lock", () => {
@@ -34,15 +36,16 @@ describe("workspace update setup lock", () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-update-lock-"));
     state = new LifecycleState(root);
     project = projectFixture();
-    workspace = workspaceFixture(root, project);
+    workspace = workspaceFixture(project);
     runner = new UpdateRunner();
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     await state.claimProject(project);
-    await claimTestGiteaService(root, 3300);
     await mkdir(runner.containerRootSnapshotPath, { recursive: true });
-    await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
+    await mkdir(join(root, "assets", "native-project-roots", project.projectId, COMMIT), { recursive: true });
+    await seedSelectedRootSnapshot(root, project);
     await state.claimWorkspace(workspace);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+    vi.spyOn(nativeWorkspaceSelection, "selectCurrentNativeWorkspaceRoot")
+      .mockImplementation(async (_options, record) => selectedWorkspaceFixture(record));
   });
 
   afterEach(async () => {
@@ -53,7 +56,7 @@ describe("workspace update setup lock", () => {
 
 it("replays the recorded root and manifest before direct setup recovery from setting-up", async () => {
     // Given
-    const targetSnapshotPath = join(root, "assets", "project-roots", project.id, COMMIT);
+    const targetSnapshotPath = join(root, "assets", "native-project-roots", project.projectId, COMMIT);
     const interrupted = {
       ...workspace,
       phase: "setting-up",
@@ -102,7 +105,6 @@ it("recovers an interruption after snapshot persistence without resolving moved 
     runner.headCommit = MOVED_HEAD_COMMIT;
     runner.runCalls.length = 0;
     vi.restoreAllMocks();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
 
     // When
     await setupWorkspace(runner, options(root), workspace.name);
@@ -116,7 +118,7 @@ it("recovers an interruption after snapshot persistence without resolving moved 
 it("recovers a manifest failure through direct setup from the recorded root", async () => {
     // Given
     runner = new UpdateRunner(1, 0);
-    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    runner.containerRootSnapshotPath = join(root, "assets", "native-project-roots", workspace.projectId, workspace.rootCommit);
     await expect(updateWorkspace(runner, options(root), workspace.name)).rejects.toThrow(
       /failed to write project runtime manifest/
     );

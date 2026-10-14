@@ -9,6 +9,7 @@ import { workspaceAgentContainerLabels, workspaceAgentIdentity } from "../../../
 import { workspaceRootSnapshotPath } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
 import { reconcileWorkspaceRuntimeState } from "../../../../core/packages/core/src/workspaceState.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
+import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 const roots: string[] = [];
 const outerId = "c".repeat(64);
@@ -49,14 +50,9 @@ it("heals a ready relay fence only after outer and agent ownership validate", as
 });
 
 function fixture(): WorkspaceRecord {
-  return { schemaVersion: 8, workspaceId: "A".repeat(43), name: "work-1", projectId: "project-id",
-    projectName: "project", rootRepositoryAlias: "root", rootRef: "refs/heads/main", rootCommit: "b".repeat(40),
-    workspaceDataPath: "/var/lib/dim/workspace-data", environment: "recommended", phase: "ready", profiles: [],
-    composeProjectName: "dim-work-1", containerName: "dim-ws-work-1", networkName: "dim-control",
-    dockerVolumeName: "dim-ws-work-1-docker", runtimeBackend: "sysbox", kvm: false, cpuCount: "2",
-    memory: "4g", pidsLimit: "2048", routes: [], gitUserName: "Agent", gitUserEmail: "agent@example.invalid",
-    gitBaseUrl: "http://dim-gitea:3000/dim-project", hostAliases: {}, projectManifestPath: "/run/dim/project.json",
-    createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+  return nativeWorkspaceFixture({ rootCommit: "b".repeat(40), environment: "recommended", gitUserName: "Agent",
+    gitUserEmail: "agent@example.invalid", createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z" });
 }
 
 function agentInspect(record: WorkspaceRecord): string {

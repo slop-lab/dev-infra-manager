@@ -1,5 +1,6 @@
 import { UserError } from "./errors.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
+import { requireNativeControlPlaneConnection } from "./lifecycleOptions.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { WorkspaceDiscardHook } from "./plugin.js";
 import type { StreamingCommandRunner } from "./types.js";
@@ -22,6 +23,7 @@ export async function discardWorkspace(
   keepVolume = false,
   hooks: readonly WorkspaceDiscardHook[] = []
 ): Promise<void> {
+  requireNativeControlPlaneConnection(options);
   const workspaceName = validateLifecycleName(name, "workspace");
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
@@ -29,7 +31,7 @@ export async function discardWorkspace(
     const releaseAuthority = await state.acquireWorkspaceAuthorityLock(workspaceName);
     let record: WorkspaceRecord;
     try {
-      record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
+      record = await readWorkspaceForOperation(state, workspaceName);
       if (keepVolume && record.environment === "recommended") {
         throw new UserError(
           `recommended workspace '${record.name}' does not support --keep-volume because its private home, checkout, and Docker volumes are identity-bound; preserve data by leaving the workspace intact or copying it before discard`

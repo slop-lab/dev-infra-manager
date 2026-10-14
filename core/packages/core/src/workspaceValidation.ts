@@ -1,9 +1,7 @@
 import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
-import { GITEA_NETWORK } from "./gitea.js";
 import type { LifecycleState } from "./lifecycleState.js";
 import type {
-  GiteaConnectionConfiguration,
   WorkspaceCapabilityRecord,
   WorkspaceRecord
 } from "./lifecycleTypes.js";
@@ -37,25 +35,11 @@ export function validateWorkspaceProfiles(values: string[]): string[] {
   return [...seen];
 }
 
-export function assertWorkspaceNetworkContract(
-  record: WorkspaceRecord,
-  connection: GiteaConnectionConfiguration
-): void {
-  if (connection.kind === "external" && record.networkName !== GITEA_NETWORK) {
-    throw new UserError(
-      `workspace '${record.name}' uses obsolete external-Git bridge '${record.networkName}'; discard and recreate it`
-    );
-  }
-}
-
 export async function readWorkspaceForOperation(
   state: LifecycleState,
-  name: string,
-  connection: GiteaConnectionConfiguration
+  name: string
 ): Promise<WorkspaceRecord> {
-  const record = await state.readWorkspace(name);
-  assertWorkspaceNetworkContract(record, connection);
-  return record;
+  return state.readWorkspace(name);
 }
 
 export async function resolveWorkspaceCapabilities(
