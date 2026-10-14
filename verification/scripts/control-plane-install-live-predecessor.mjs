@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, chown, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, chown, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { assertDenialEvidence, captureDenialEvidence } from "./control-plane-install-live-evidence.mjs";
 import { runFacade } from "./control-plane-install-live-support.mjs";
@@ -17,30 +17,33 @@ export async function runPredecessorPreflight(context) {
   await writePrivate(recordPath, record("sysbox"));
   await runDenial(context, "schema8-sysbox", recordPath, /Project-scoped CI runner state/);
   await writePrivate(recordPath, Buffer.from("{not-json\n"));
-  await runDenial(context, "malformed-runner", recordPath, /not valid JSON/);
+  await runDenial(context, "malformed-runner", recordPath, /Project-scoped CI runner state/);
   await writePrivate(recordPath, record("qemu", 7));
-  await runDenial(context, "unsupported-runner", recordPath, /malformed, unsupported/);
+  await runDenial(context, "unsupported-runner", recordPath, /Project-scoped CI runner state/);
 
   const external = join(context.lifecycleStateRoot, "external-runner.json");
   await writePrivate(external, record("qemu"));
   await rm(recordPath);
   await symlink(external, recordPath);
-  await runDenial(context, "symlinked-runner", external, /symbolic link/);
+  await runDenial(context, "symlinked-runner", external, /canonical CI runner record.*symbolic link/);
   await rm(recordPath);
   await rm(external);
 
   await writePrivate(recordPath, record("qemu"));
   await chown(recordPath, 65534, 65534);
   try {
-    await runDenial(context, "foreign-owned-runner", recordPath, /invalid ownership/);
+    await runDenial(context, "foreign-owned-runner", recordPath, /Project-scoped CI runner state/);
   } finally {
     await chown(recordPath, process.getuid(), process.getgid());
   }
 
   await writePrivate(recordPath, record("qemu"));
   const qemuBytes = await readFile(recordPath);
-  console.log(`predecessor-preflight qemu-record=${recordPath} bytes=${qemuBytes.length} preserved=pending`);
-  return { recordPath, qemuBytes };
+  await runDenial(context, "schema8-qemu", recordPath, /Project-scoped CI runner state/);
+  const archivedFixture = join(context.lifecycleStateRoot, "retired-qemu-fixture.json");
+  await rename(recordPath, archivedFixture);
+  console.log(`predecessor-preflight qemu-record=${archivedFixture} bytes=${qemuBytes.length} preserved=pending`);
+  return { recordPath: archivedFixture, qemuBytes };
 }
 
 export async function assertQemuPredecessorPreserved(input) {

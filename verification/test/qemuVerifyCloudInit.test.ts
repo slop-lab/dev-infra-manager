@@ -36,4 +36,5 @@ describe("QEMU verification guest shell environment", () => {
     expect(configuredPs1).toBe("");
     expect(result.status, result.stderr).toBe(0);
   });
+
 });

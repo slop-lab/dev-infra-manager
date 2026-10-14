@@ -8,6 +8,7 @@ import { test } from "vitest";
 const verificationRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const smokePath = join(verificationRoot, "scripts", "native-qemu-guest-mechanics-kvm-smoke.bash");
 const aggregatePath = join(verificationRoot, "scripts", "kvm-guest-verification-smoke.bash");
+const delegatePath = join(verificationRoot, "scripts", "kvm-guest-group-delegate.bash");
 const recipesPath = join(verificationRoot, "verify.just");
 const productionLauncherPath = join(
   verificationRoot,
@@ -22,18 +23,33 @@ const productionLauncherPath = join(
 
 test("runs real KVM guest mechanics without claiming independent acceptance", async () => {
   // Given
-  const [smoke, aggregate, recipes, productionLauncher] = await Promise.all([
+  const [smoke, aggregate, delegate, recipes, productionLauncher] = await Promise.all([
     readFile(smokePath, "utf8"),
     readFile(aggregatePath, "utf8"),
+    readFile(delegatePath, "utf8"),
     readFile(recipesPath, "utf8"),
     readFile(productionLauncherPath, "utf8")
   ]);
 
   // When
   const syntax = spawnSync("bash", ["-n", smokePath]);
+  const delegateSyntax = spawnSync("bash", ["-n", delegatePath]);
+  const hostRefusal = spawnSync("bash", [delegatePath, "preflight"], {
+    cwd: verificationRoot,
+    encoding: "utf8"
+  });
+  const arbitraryRefusal = spawnSync("bash", [delegatePath, "/bin/sh"], {
+    cwd: verificationRoot,
+    encoding: "utf8"
+  });
 
   // Then
   assert.equal(syntax.status, 0);
+  assert.equal(delegateSyntax.status, 0);
+  assert.equal(hostRefusal.status, 2);
+  assert.match(hostRefusal.stderr, /disposable QEMU verification guest/);
+  assert.equal(arbitraryRefusal.status, 2);
+  assert.match(arbitraryRefusal.stderr, /disposable QEMU verification guest/);
   assert.match(smoke, /q35,accel=kvm/);
   assert.match(smoke, /same-host-native-mechanics-not-independent-acceptance/);
   assert.match(smoke, /docker export/);
@@ -53,13 +69,27 @@ test("runs real KVM guest mechanics without claiming independent acceptance", as
   assert.match(recipes, /full-development:[\s\S]*kvm-guest-verification-smoke\.bash/);
   assert.match(aggregate, /verification_stage_register qemu-kvm-mechanics qemu_mechanics "docker-ready kvm-ready"/);
   assert.doesNotMatch(aggregate, /verification_stage_register qemu-kvm-mechanics[^\n]*(?:sysbox|ordinary|native-contracts|installed-services)/);
-  assert.match(aggregate, /stat -Lc 'kind=%F mode=%a uid=%u gid=%g' -- \/dev\/kvm/);
-  assert.match(aggregate, /id -u/);
-  assert.match(aggregate, /id -g/);
-  assert.match(aggregate, /id -Gn/);
-  assert.match(aggregate, /\/proc\/cpuinfo/);
-  assert.match(aggregate, /vmx\|svm/);
-  assert.match(aggregate, /kvm-ready diagnostic/);
+  assert.match(delegate, /stat -Lc 'kind=%F mode=%a uid=%u gid=%g' -- \/dev\/kvm/);
+  assert.match(delegate, /id -u/);
+  assert.match(delegate, /id -g/);
+  assert.match(delegate, /id -Gn/);
+  assert.match(delegate, /\/proc\/cpuinfo/);
+  assert.match(delegate, /vmx\|svm/);
+  assert.match(delegate, /kvm-ready diagnostic/);
+  assert.match(aggregate, /kvm-guest-group-delegate\.bash" preflight/);
+  assert.match(aggregate, /kvm-guest-group-delegate\.bash" run/);
+  assert.match(delegate, /\/var\/lib\/cloud\/data\/instance-id/);
+  assert.match(delegate, /dim-kvm-smoke/);
+  assert.match(delegate, /\/sys\/class\/dmi\/id\/sys_vendor/);
+  assert.match(delegate, /\/home\/dim\/dim\/workbench/);
+  assert.match(delegate, /\[\[ "\$\(id -u\)" == 1001 \]\]/);
+  assert.match(delegate, /\/usr\/bin\/sudo -n \/usr\/bin\/setpriv/);
+  assert.match(delegate, /--reuid=.*--regid=.*--groups=.*--no-new-privs/s);
+  assert.match(delegate, /HOME=\/home\/dim/);
+  assert.match(delegate, /preflight\) kvm_preflight/);
+  assert.match(delegate, /run\) qemu_mechanics/);
+  assert.doesNotMatch(delegate, /\b(?:chmod|chown|usermod|udev)\b/);
+  assert.doesNotMatch(delegate, /exec[^\n]*"\$@"/);
   assert.match(smoke, /"acceleration":"kvm"/);
   assert.doesNotMatch(smoke, /accel=tcg|"acceleration":"tcg"/);
   assert.match(productionLauncher, /q35,accel=kvm/);

@@ -19,7 +19,7 @@ test("packages the real native basic lifecycle as bounded same-host mechanics", 
     readFile(recipesPath, "utf8")
   ]);
 
-  assert.match(live, /nativeFixture\(\)/);
+  assert.match(live, /nativeFixture\(\{ workspaceWriteLeaseClock: Date\.now \}\)/);
   assert.match(live, /hostMirrorProvider/);
   assert.match(live, /registerPlugins\(\[hostMirrorPlugin\]\)/);
   assert.match(live, /ensureRegistryCache/);
@@ -35,6 +35,8 @@ test("packages the real native basic lifecycle as bounded same-host mechanics", 
   assert.match(live, /updateWorkspace/);
   assert.match(live, /refs\/heads\/proposals\/\$\{workspace\.workspaceId\}/);
   assert.match(live, /refs\/heads\/main/);
+  assert.match(live, /if \(pushed\.exitCode !== 0\) throw nativeLifecycleCommandFailure/);
+  assert.ok(live.indexOf("if (pushed.exitCode !== 0)") < live.indexOf("const candidate = pushed.stdout"));
   assert.match(live, /discardWorkspace/);
   assert.match(live, /writeCleanupUncertaintySentinel/);
   assert.ok(live.indexOf("await writeCleanupUncertaintySentinel()")

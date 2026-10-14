@@ -1,4 +1,26 @@
 const maximumDiagnosticLength = 1_024;
+const maximumCommandOutputLength = 384;
+
+type LifecycleCommandResult = {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+class NativeLifecycleCommandError extends Error {
+  readonly name = "NativeLifecycleCommandError";
+}
+
+export function nativeLifecycleCommandFailure(
+  action: string,
+  result: LifecycleCommandResult
+): NativeLifecycleCommandError {
+  const stdout = sanitized(result.stdout).slice(0, maximumCommandOutputLength);
+  const stderr = sanitized(result.stderr).slice(0, maximumCommandOutputLength);
+  return new NativeLifecycleCommandError(
+    `${action} failed with exit code ${result.exitCode}; stdout=${stdout}; stderr=${stderr}`
+  );
+}
 
 export function nativeLifecycleFailure(
   primary: unknown,
@@ -16,7 +38,11 @@ export function nativeLifecycleFailure(
 
 function diagnosticSummary(failure: unknown): string {
   if (!(failure instanceof Error)) return "unknown failure";
-  return `${failure.name}: ${failure.message}`
+  return `${failure.name}: ${sanitized(failure.message)}`;
+}
+
+function sanitized(value: string): string {
+  return value
     .replace(/:\/\/[^/@\s]+@/gu, "://[redacted]@")
     .replace(/[A-Za-z0-9_-]{32,}/gu, "[redacted]");
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { nativeLifecycleFailure } from "../live/nativeBasicLifecycleDiagnostics.js";
+import {
+  nativeLifecycleCommandFailure,
+  nativeLifecycleFailure
+} from "../live/nativeBasicLifecycleDiagnostics.js";
 
 describe("native basic lifecycle diagnostics", () => {
   it("preserves primary and cleanup failures with bounded redacted output", () => {
@@ -29,5 +32,24 @@ describe("native basic lifecycle diagnostics", () => {
     expect(failure.cause).toBe(cleanup);
     expect(failure.errors).toEqual([cleanup]);
     expect(failure.message).toBe("native lifecycle cleanup is uncertain; cleanup=Error: image removal failed");
+  });
+
+  it("bounds and redacts failed lifecycle command output", () => {
+    const secret = "s".repeat(43);
+
+    const failure = nativeLifecycleCommandFailure("candidate proposal push", {
+      exitCode: 128,
+      stdout: `candidate-output token=${secret}${"x".repeat(2_000)}`,
+      stderr: `fatal: https://operator:password@native.invalid/root authorization=Bearer ${secret}`
+    });
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.name).toBe("NativeLifecycleCommandError");
+    expect(failure.message).toContain("candidate proposal push failed with exit code 128");
+    expect(failure.message).toContain("stdout=candidate-output token=[redacted]");
+    expect(failure.message).toContain("stderr=fatal: https://[redacted]@native.invalid/root");
+    expect(failure.message).not.toContain(secret);
+    expect(failure.message).not.toContain("operator:password");
+    expect(failure.message.length).toBeLessThanOrEqual(1_024);
   });
 });

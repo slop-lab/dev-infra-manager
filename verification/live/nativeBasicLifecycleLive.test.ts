@@ -27,7 +27,10 @@ import {
   nativeFixture
 } from "../../tests/packages/cli/test/nativeProjectCommandsFixture.js";
 import { hostMirrorProvider, plugin as hostMirrorPlugin } from "../../plugin-host-mirrors/src/index.js";
-import { nativeLifecycleFailure } from "./nativeBasicLifecycleDiagnostics.js";
+import {
+  nativeLifecycleCommandFailure,
+  nativeLifecycleFailure
+} from "./nativeBasicLifecycleDiagnostics.js";
 
 const runner = new ProcessRunner();
 
@@ -41,7 +44,7 @@ describe("native basic lifecycle live mechanics", () => {
 
     const runId = `${process.pid}-${Date.now()}`;
     const image = `dim-native-basic-lifecycle:${runId}`;
-    const fixture = await nativeFixture();
+    const fixture = await nativeFixture({ workspaceWriteLeaseClock: Date.now });
     const options = { ...lifecycleOptionsForBackend("sysbox", {
       ...fixture.environment,
       DIM_WORKSPACE_IMAGE: image
@@ -89,7 +92,7 @@ describe("native basic lifecycle live mechanics", () => {
         "exec", "--user", "dim", "--workdir", "/workspace", agent,
         "bash", "-lc", candidateScript, "bash", proposal, fixture.commit
       ], { signal: AbortSignal.timeout(30_000) });
-      expect(pushed.exitCode).toBe(0);
+      if (pushed.exitCode !== 0) throw nativeLifecycleCommandFailure("candidate proposal push", pushed);
       const candidate = pushed.stdout.trim().split("\n").at(-1);
       expect(candidate).toMatch(/^[0-9a-f]{40}$/);
       if (candidate === undefined) throw new TypeError("candidate commit was not reported");

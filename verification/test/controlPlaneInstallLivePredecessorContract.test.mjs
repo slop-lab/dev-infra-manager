@@ -8,6 +8,21 @@ const source = await readFile(
 );
 
 test("expects the native-only structural predecessor diagnostic", () => {
-  assert.match(source, /Project-scoped CI runner state/);
+  for (const name of [
+    "schema8-sysbox",
+    "malformed-runner",
+    "unsupported-runner",
+    "foreign-owned-runner",
+    "schema8-qemu"
+  ]) {
+    assert.match(source, new RegExp(`runDenial\\(context, "${name}", recordPath, /Project-scoped CI runner state/`));
+  }
+  assert.match(source,
+    /runDenial\(context, "symlinked-runner", external, \/canonical CI runner record\.\*symbolic link\//);
+  assert.match(source, /writeFile\(path, bytes, \{ mode: 0o600 \}\)/);
+  assert.match(source, /chmod\(path, 0o600\)/);
+  assert.match(source, /rename\(recordPath, archivedFixture\)/);
+  assert.match(source, /return \{ recordPath: archivedFixture, qemuBytes \}/);
+  assert.match(source, /assert\.deepEqual\(await readFile\(input\.recordPath\), input\.qemuBytes\)/);
   assert.doesNotMatch(source, /Sysbox CI runner state/);
 });
