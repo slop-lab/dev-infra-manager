@@ -66,6 +66,10 @@ approve promotion. The ordinary host consumes fixed digest-pinned images and
 bounds from an operator file, requires `sysbox-runc` and one exact host mirror
 provider, and reconciles the DIM-owned pull-through cache and control network
 before it locks capacity.
+The trusted ordinary runner uses `/bin/sh`, Docker's daemon entrypoint, the
+Docker client, and `timeout`; it does not require Bash in the runner image.
+Candidate job images still require `/bin/bash` and execute only the fixed
+`/bin/bash --noprofile --norc /run/dim/job/script` command.
 
 Native QEMU is separately deployed. The scheduler and trusted runner images
 are explicit build artifacts. A host verifies `/dev/kvm`, the trusted launcher,

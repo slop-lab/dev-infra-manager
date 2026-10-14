@@ -28,7 +28,7 @@ describe("native ordinary host claim executor", () => {
     expect(launch?.args).toEqual(expect.arrayContaining([
       "--runtime", "sysbox-runc", "--cpus", "2", "--memory", "536870912", "--pids-limit", "128",
       "--mount", expect.stringContaining("target=/run/dim/job/script,readonly"),
-      "--entrypoint", "/bin/bash", runnerImage, "--noprofile", "--norc", "/run/dim/runner"
+      "--entrypoint", "/bin/sh", runnerImage, "/run/dim/runner"
     ]));
     expect(launch?.args.join(" ")).not.toMatch(/token|password|credential|docker\.sock|\/dev\/kvm/);
     expect(nativeRunnerScript()).toContain("--entrypoint /bin/bash \"$DIM_JOB_IMAGE\" --noprofile --norc /run/dim/job/script");

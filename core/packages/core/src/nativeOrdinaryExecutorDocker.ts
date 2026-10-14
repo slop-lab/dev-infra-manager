@@ -35,8 +35,7 @@ export function nativeContainerArgs(claim: NativeHostClaim, paths: NativeDockerP
     "--env", `DIM_JOB_CPUS=${claim.descriptor.bounds.cpu}`,
     "--env", `DIM_JOB_MEMORY=${claim.descriptor.bounds.memoryBytes}`,
     "--env", `DIM_JOB_PIDS=${claim.descriptor.bounds.pids}`,
-    "--entrypoint", "/bin/bash", claim.descriptor.runnerBaseImage,
-    "--noprofile", "--norc", "/run/dim/runner"
+    "--entrypoint", "/bin/sh", claim.descriptor.runnerBaseImage, "/run/dim/runner"
   ];
 }
 
@@ -54,20 +53,23 @@ export async function cleanupNativeContainer(runner: StreamingCommandRunner, cla
 }
 
 export function nativeRunnerScript(): string {
-  return `#!/bin/bash
-set -euo pipefail
+  return String.raw`#!/bin/sh
+set -eu
 export DOCKER_HOST=unix:///run/dim/docker.sock
 dockerd-entrypoint.sh --host="$DOCKER_HOST" >/dev/null 2>&1 &
 daemon_pid=$!
 trap 'kill "$daemon_pid" 2>/dev/null || true' EXIT
 ready=false
-for attempt in {1..60}; do
+attempt=0
+while [ "$attempt" -lt 60 ]; do
   if timeout 2 docker info >/dev/null 2>&1; then ready=true; break; fi
+  attempt=$((attempt + 1))
   sleep 1
 done
-if [[ "$ready" != true ]]; then exit 1; fi
+if [ "$ready" != true ]; then exit 1; fi
 docker image pull "$DIM_JOB_IMAGE" >/dev/null
-docker image inspect "$DIM_JOB_IMAGE" --format '{{json .RepoDigests}}' | grep -Fq "\"$DIM_JOB_IMAGE\""
+job_digests="$(docker image inspect "$DIM_JOB_IMAGE" --format '{{json .RepoDigests}}')"
+printf '%s\n' "$job_digests" | grep -Fq -- "\"$DIM_JOB_IMAGE\""
 docker run --rm --network none --cpus "$DIM_JOB_CPUS" --memory "$DIM_JOB_MEMORY" --pids-limit "$DIM_JOB_PIDS" \
   --workdir /workspace --mount type=bind,source=/workspace,target=/workspace \
   --mount type=bind,source=/run/dim/job/script,target=/run/dim/job/script,readonly \
