@@ -40,8 +40,7 @@ case "${1:?private agent action is required}" in
       --env OPENCODE_WEB_URL_SOCKET=/run/dim/development-url/opencode.sock \
       --mount type=bind,src=/run/dim/development-url,dst=/run/dim/development-url,readonly \
       --mount type=bind,src=/usr/local/lib/dim/controller-proxy,dst=/usr/local/lib/dim/controller-proxy,readonly \
-      --env "DIM_GIT_USERNAME=$DIM_GIT_USERNAME" \
-      --env "DIM_GIT_TOKEN=$DIM_GIT_TOKEN" \
+      --env "DIM_GIT_BASE_URL=${DIM_GIT_BASE_URL:?}" \
       --env "GIT_AUTHOR_NAME=$GIT_AUTHOR_NAME" \
       --env "GIT_AUTHOR_EMAIL=$GIT_AUTHOR_EMAIL" \
       --env "GIT_COMMITTER_NAME=$GIT_COMMITTER_NAME" \
@@ -49,13 +48,11 @@ case "${1:?private agent action is required}" in
       --env GIT_TERMINAL_PROMPT=0 \
       --user 0:0 \
       --tmpfs /run/dim-agent:rw,noexec,nosuid,nodev,mode=0750,uid=0,gid=1000 \
-      --env GIT_CONFIG_COUNT=3 \
-      --env GIT_CONFIG_KEY_0=credential.helper \
-      --env 'GIT_CONFIG_VALUE_0=!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f' \
+      --env GIT_CONFIG_COUNT=2 \
+      --env GIT_CONFIG_KEY_0=safe.directory \
+      --env GIT_CONFIG_VALUE_0=/workspace \
       --env GIT_CONFIG_KEY_1=safe.directory \
-      --env GIT_CONFIG_VALUE_1=/workspace \
-      --env GIT_CONFIG_KEY_2=safe.directory \
-      --env 'GIT_CONFIG_VALUE_2=/workspace/*' \
+      --env 'GIT_CONFIG_VALUE_1=/workspace/*' \
       --mount type=bind,src=/workspace,dst=/workspace \
       --mount type=bind,src=/mnt/agent-home,dst=/home/dim-agent \
       --mount type=bind,src=/mnt/agent-tmp,dst=/mnt/opencode-tmp \
@@ -73,6 +70,8 @@ case "${1:?private agent action is required}" in
     docker "$@" >/dev/null
     test "$(docker exec "$agent_name" id -u)" = 0
     test "$(docker exec "$agent_name" stat -c %u /workspace)" = 0
+    test "$(docker exec "$agent_name" git -C /workspace remote get-url origin)" = "$DIM_GIT_BASE_URL/root.git"
+    docker exec "$agent_name" git -C /workspace ls-remote origin >/dev/null
     docker exec \
       --env CI=1 \
       --workdir /workspace "$agent_name" \

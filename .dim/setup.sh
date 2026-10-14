@@ -246,7 +246,9 @@ sh .dim/agent-tmp-volume.sh prepare "$agent_dind_id"
 compose up --detach --wait agent-dind
 verify_idmap_helpers agent-dind
 echo "[setup] configure agent and install dependencies" >&2
-compose exec --no-TTY --user root agent-dind dim-agent-dind setup
+agent_git_base_url="$(node .dim/native-agent-git.mjs "$agent_dind_id")"
+compose exec --no-TTY --user root --env "DIM_GIT_BASE_URL=$agent_git_base_url" \
+  agent-dind dim-agent-dind setup
 case ",${COMPOSE_PROFILES:-}," in
   *,secure,*)
     echo "[setup] build and start secure runtime" >&2
