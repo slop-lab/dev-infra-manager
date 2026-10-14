@@ -34,6 +34,16 @@ sysbox_ready() {
 }
 
 kvm_ready() {
+  local device="absent"
+  local cpu_virtualization="absent"
+  if [[ -e /dev/kvm ]]; then
+    device="$(stat -Lc 'kind=%F mode=%a uid=%u gid=%g' -- /dev/kvm 2>&1)" || device="stat-unavailable"
+  fi
+  if grep -Eq '(^|[[:space:]])(vmx|svm)([[:space:]]|$)' /proc/cpuinfo; then
+    cpu_virtualization="present"
+  fi
+  printf 'kvm-ready diagnostic device=%s identity=uid:%s gid:%s groups:%s cpu-vmx-or-svm=%s\n' \
+    "$device" "$(id -u)" "$(id -g)" "$(id -Gn)" "$cpu_virtualization" >&2
   [[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || {
     printf 'native guest verification requires accessible KVM; hardware absence is unavailable\n' >&2
     return 2

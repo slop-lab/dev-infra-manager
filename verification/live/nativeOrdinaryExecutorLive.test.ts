@@ -8,6 +8,9 @@ import {
 } from "../../core/packages/core/src/nativeOrdinaryExecutor.js";
 import { nativeDescriptorDigest } from "../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
 import { ProcessRunner } from "../../core/packages/core/src/runner.js";
+import { ensureRegistryCache } from "../../core/packages/core/src/registryCache.js";
+import { lifecycleOptionsForBackend } from "../../core/packages/core/src/lifecycleOptions.js";
+import { hostMirrorProvider } from "../../plugin-host-mirrors/src/index.js";
 import { execution } from "../../tests/packages/core/test/nativeOrdinaryExecutorFixture.js";
 
 const runner = new ProcessRunner();
@@ -32,6 +35,9 @@ describe("native ordinary executor live Docker driver", () => {
     expect(hasImages).toBe(true);
     if (runnerImage === undefined || jobImage === undefined) throw new TypeError("digest fixture images are missing");
     const input = execution();
+    await ensureRegistryCache(runner, { ...lifecycleOptionsForBackend("sysbox", {
+      DIM_STATE_ROOT: process.env.DIM_STATE_ROOT
+    }), hostMirrorProvider });
     const config = Buffer.from("schemaVersion: 3\nordinary:\n  jobs:\n    source:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n");
     const script = Buffer.from("printf 'native-live-output\\n'\n");
     const descriptor = {

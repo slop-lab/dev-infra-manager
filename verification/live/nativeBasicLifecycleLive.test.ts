@@ -3,12 +3,14 @@ import type { Server } from "node:http";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { configuredDimAgentController, configuredDimController } from "../../core/packages/core/src/controller.js";
+import { ensureAptCache } from "../../core/packages/core/src/aptCache.js";
 import { lifecycleOptionsForBackend } from "../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../core/packages/core/src/lifecycleState.js";
 import { loadNativeControlPlaneConnection } from "../../core/packages/core/src/nativeControlPlaneConnection.js";
 import { createNodeNativeGitRootImporterClient } from "../../core/packages/core/src/nativeGitRootImporterClient.js";
 import { NativeProjectPendingStore } from "../../core/packages/core/src/nativeProjectPendingStore.js";
 import { registerPlugins } from "../../core/packages/core/src/plugin.js";
+import { ensureRegistryCache } from "../../core/packages/core/src/registryCache.js";
 import { ProcessRunner } from "../../core/packages/core/src/runner.js";
 import { workspaceAgentIdentity } from "../../core/packages/core/src/workspaceAgentRuntime.js";
 import { buildWorkspaceImage } from "../../core/packages/core/src/workspaceImage.js";
@@ -24,6 +26,8 @@ import {
   cleanupNativeProjectFixtures,
   nativeFixture
 } from "../../tests/packages/cli/test/nativeProjectCommandsFixture.js";
+import { hostMirrorProvider, plugin as hostMirrorPlugin } from "../../plugin-host-mirrors/src/index.js";
+import { nativeLifecycleFailure } from "./nativeBasicLifecycleDiagnostics.js";
 
 const runner = new ProcessRunner();
 
@@ -38,11 +42,11 @@ describe("native basic lifecycle live mechanics", () => {
     const runId = `${process.pid}-${Date.now()}`;
     const image = `dim-native-basic-lifecycle:${runId}`;
     const fixture = await nativeFixture();
-    const options = lifecycleOptionsForBackend("sysbox", {
+    const options = { ...lifecycleOptionsForBackend("sysbox", {
       ...fixture.environment,
       DIM_WORKSPACE_IMAGE: image
-    });
-    const plugins = await registerPlugins([]);
+    }), hostMirrorProvider };
+    const plugins = await registerPlugins([hostMirrorPlugin]);
     const controllers = [
       configuredDimController(options, plugins, runner),
       configuredDimAgentController(options, plugins, runner)
@@ -50,7 +54,9 @@ describe("native basic lifecycle live mechanics", () => {
     const workspaceName = `native-basic-${runId}`;
     let imageBuilt = false;
 
+    let primaryFailure: unknown;
     try {
+      await projectControllerScopeHostMirror(fixture.stateRoot);
       await buildWorkspaceImage(runner, { ...fixture.environment, DIM_WORKSPACE_IMAGE: image }, {
         signal: AbortSignal.timeout(300_000)
       });
@@ -102,41 +108,44 @@ describe("native basic lifecycle live mechanics", () => {
         phase: "ready",
         source: { kind: "native" }
       });
-    } finally {
-      const failures: unknown[] = [];
-      if (await exists(join(fixture.stateRoot, "workspaces", `${workspaceName}.json`))) {
-        try {
-          await discardWorkspace(runner, options, workspaceName);
-        } catch (error) {
-          failures.push(error);
-        }
-      }
-      for (const server of controllers.toReversed()) {
-        try {
-          await close(server);
-        } catch (error) {
-          failures.push(error);
-        }
-      }
+    } catch (error) {
+      primaryFailure = error;
+    }
+
+    const failures: unknown[] = [];
+    if (await exists(join(fixture.stateRoot, "workspaces", `${workspaceName}.json`))) {
       try {
-        await plugins.dispose();
+        await discardWorkspace(runner, options, workspaceName);
       } catch (error) {
         failures.push(error);
-      }
-      try {
-        await cleanupNativeProjectFixtures();
-      } catch (error) {
-        failures.push(error);
-      }
-      if (imageBuilt) {
-        const removed = await runner.run("docker", ["image", "rm", image]);
-        if (removed.exitCode !== 0) failures.push(new TypeError(`workspace image cleanup failed: ${removed.stderr}`));
-      }
-      if (failures.length > 0) {
-        await writeCleanupUncertaintySentinel();
-        throw new AggregateError(failures, "native lifecycle cleanup is uncertain");
       }
     }
+    for (const server of controllers.toReversed()) {
+      try {
+        await close(server);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    try {
+      await plugins.dispose();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await cleanupNativeProjectFixtures();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (imageBuilt) {
+      const removed = await runner.run("docker", ["image", "rm", image]);
+      if (removed.exitCode !== 0) failures.push(new TypeError(`workspace image cleanup failed: ${removed.stderr}`));
+    }
+    if (failures.length > 0) {
+      await writeCleanupUncertaintySentinel();
+      throw nativeLifecycleFailure(primaryFailure, failures);
+    }
+    if (primaryFailure !== undefined) throw primaryFailure;
   }, 420_000);
 });
 
@@ -200,4 +209,15 @@ async function writeCleanupUncertaintySentinel(): Promise<void> {
   const path = process.env.DIM_NATIVE_BASIC_LIFECYCLE_CLEANUP_SENTINEL;
   if (path === undefined) return;
   await writeFile(path, "cleanup uncertain\n", { encoding: "utf8", flag: "wx", mode: 0o600 });
+}
+
+async function projectControllerScopeHostMirror(stateRoot: string): Promise<void> {
+  const hostOptions = { ...lifecycleOptionsForBackend("sysbox", {
+    DIM_STATE_ROOT: process.env.DIM_STATE_ROOT
+  }), hostMirrorProvider };
+  await ensureRegistryCache(runner, hostOptions);
+  await ensureAptCache(runner, hostOptions);
+  const ownership = await new LifecycleState(hostOptions.stateRoot).readHostMirrorOwnership();
+  if (ownership === undefined) throw new TypeError("host mirror ownership was not recorded");
+  await new LifecycleState(stateRoot).writeHostMirrorOwnership(ownership);
 }

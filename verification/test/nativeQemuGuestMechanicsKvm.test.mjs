@@ -53,6 +53,13 @@ test("runs real KVM guest mechanics without claiming independent acceptance", as
   assert.match(recipes, /full-development:[\s\S]*kvm-guest-verification-smoke\.bash/);
   assert.match(aggregate, /verification_stage_register qemu-kvm-mechanics qemu_mechanics "docker-ready kvm-ready"/);
   assert.doesNotMatch(aggregate, /verification_stage_register qemu-kvm-mechanics[^\n]*(?:sysbox|ordinary|native-contracts|installed-services)/);
+  assert.match(aggregate, /stat -Lc 'kind=%F mode=%a uid=%u gid=%g' -- \/dev\/kvm/);
+  assert.match(aggregate, /id -u/);
+  assert.match(aggregate, /id -g/);
+  assert.match(aggregate, /id -Gn/);
+  assert.match(aggregate, /\/proc\/cpuinfo/);
+  assert.match(aggregate, /vmx\|svm/);
+  assert.match(aggregate, /kvm-ready diagnostic/);
   assert.match(smoke, /"acceleration":"kvm"/);
   assert.doesNotMatch(smoke, /accel=tcg|"acceleration":"tcg"/);
   assert.match(productionLauncher, /q35,accel=kvm/);

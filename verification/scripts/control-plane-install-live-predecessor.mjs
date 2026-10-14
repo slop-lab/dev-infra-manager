@@ -15,7 +15,7 @@ export async function runPredecessorPreflight(context) {
     environment: { ...context.facadeInput.environment, DIM_ORDINARY_CI_POOL_CONNECTION_FILE: "" }
   });
   await writePrivate(recordPath, record("sysbox"));
-  await runDenial(context, "schema8-sysbox", recordPath, /Sysbox CI runner state/);
+  await runDenial(context, "schema8-sysbox", recordPath, /Project-scoped CI runner state/);
   await writePrivate(recordPath, Buffer.from("{not-json\n"));
   await runDenial(context, "malformed-runner", recordPath, /not valid JSON/);
   await writePrivate(recordPath, record("qemu", 7));

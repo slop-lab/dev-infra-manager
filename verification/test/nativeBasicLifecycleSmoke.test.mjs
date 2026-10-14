@@ -20,6 +20,12 @@ test("packages the real native basic lifecycle as bounded same-host mechanics", 
   ]);
 
   assert.match(live, /nativeFixture\(\)/);
+  assert.match(live, /hostMirrorProvider/);
+  assert.match(live, /registerPlugins\(\[hostMirrorPlugin\]\)/);
+  assert.match(live, /ensureRegistryCache/);
+  assert.match(live, /ensureAptCache/);
+  assert.match(live, /readHostMirrorOwnership/);
+  assert.match(live, /writeHostMirrorOwnership/);
   assert.match(live, /buildWorkspaceImage/);
   assert.match(live, /configuredDimController/);
   assert.match(live, /createWorkspace/);
@@ -32,7 +38,7 @@ test("packages the real native basic lifecycle as bounded same-host mechanics", 
   assert.match(live, /discardWorkspace/);
   assert.match(live, /writeCleanupUncertaintySentinel/);
   assert.ok(live.indexOf("await writeCleanupUncertaintySentinel()")
-    < live.indexOf("throw new AggregateError(failures"));
+    < live.indexOf("throw nativeLifecycleFailure(primaryFailure, failures)"));
   assert.doesNotMatch(live, /operator review approve|operator review promote|ACCEPTED/);
   assert.match(driver, /DIM_NATIVE_BASIC_LIFECYCLE_CLEANUP_SENTINEL/);
   assert.match(driver, /status=125/);
