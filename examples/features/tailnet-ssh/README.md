@@ -1,5 +1,8 @@
 # Example: Tailnet SSH
 
+> **Archived predecessor example.** Retained for historical source comparison;
+> it is not a current native-only adoption path.
+
 This opt-in feature exposes an SSH server in the Project runtime through one
 raw TCP listener on the DIM host's existing Tailscale address:
 

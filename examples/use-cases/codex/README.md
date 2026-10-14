@@ -1,5 +1,8 @@
 # Codex in a Project-owned agent workspace
 
+> **Archived predecessor example.** This is not a current native-only operator
+> journey; use [`native-basic-root`](../../projects/native-basic-root/README.md).
+
 This use case selects Codex for the existing
 [`full-development-flow`](../../projects/full-development-flow/README.md)
 Project. It changes only the reviewed user-tool selection. The generic agent

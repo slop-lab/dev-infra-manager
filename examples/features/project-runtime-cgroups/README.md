@@ -1,5 +1,8 @@
 # Project runtime cgroups
 
+> **Archived predecessor example.** Retained for historical source comparison;
+> it is not a current native-only adoption path.
+
 DIM publishes the nested Project engine's cgroup boundary in
 `/run/dim/project.json` and installs `dim-project-cgroup` in the standard
 workspace image. Reviewed Project setup can require that boundary and create a

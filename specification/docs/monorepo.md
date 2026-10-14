@@ -1,5 +1,9 @@
 # Root Monorepo
 
+> **Historical development document.** Provider and self-Project sections
+> below describe the predecessor workflow, not a supported runtime journey.
+> Use [Architecture](architecture.md) for the current native-only boundary.
+
 ## Integrated Layout
 
 DIM is developed, tested, reviewed, and released from one tracked root

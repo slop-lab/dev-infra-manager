@@ -1,5 +1,10 @@
 # Project Repositories
 
+> **Historical predecessor document.** Repository catalogs, managed Gitea, and
+> `dim repo` commands are not part of the native-only product. This file is
+> retained only for prior-release export and design comparison. Use
+> [Native Project and workspace lifecycle](project-workspaces.md).
+
 DIM models a development project as a managed Git namespace plus
 project-scoped repository aliases. The built-in service creates a reserved
 Gitea organization named `dim-<project>`. The Project root is its single issue

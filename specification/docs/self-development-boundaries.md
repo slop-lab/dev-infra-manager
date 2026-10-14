@@ -1,5 +1,8 @@
 # DIM Self-development Boundaries
 
+> **Historical development document.** The self-Project/provider workflow
+> below is retained for design comparison and is not a current operator path.
+
 DIM's own Project demonstrates the same separation expected of
 security-sensitive users. Agents may read and propose changes to the complete
 root monorepo, while reviewed refs and narrow capabilities control what may

@@ -2,10 +2,6 @@
 
 ## Unreleased
 
-- Fix managed Gitea creation on Docker 29 by starting the newly created
-  immutable container ID before checking its assigned endpoint. Existing
-  container ownership, image, network, and volume checks remain fail-closed.
-
 - Select a recommended core-managed workspace environment when the immutable
   root has no custom lifecycle files. Setup now requires a host-side
   unprivileged Sysbox agent to be running and its proposal-scoped checkout to be
@@ -35,8 +31,8 @@
 - Add strict native QEMU scheduler configuration and SQLite capacity fencing,
   dedicated native-Git QEMU authority state/routes, a packaged scheduler image,
   an owned KVM host execution path, and a separate durable QEMU review outbox
-  with explicit Project admission and operator status discovery, without
-  ordinary or Gitea substitution. Host startup now reserves an explicit QEMU
+  with automatic native-root eligibility and operator status discovery,
+  without ordinary or provider substitution. Host startup now reserves an explicit QEMU
   supervisor memory allowance above guest RAM, requires bounded QMP KVM
   readiness with explicit normal shutdown rather than accepting cancellation,
   verifies Docker image mounts and
@@ -203,11 +199,12 @@
   Stale or missing proof cannot make the Project runnable.
   External source-origin attestation remains a separate prerequisite.
   Obsolete format-5 and format-6 state is rejected unchanged. Empty role lists
-  retain idle behavior only for empty Project state. Project readiness, review integration and native
-  CI admission remain unavailable. A separate owner-only QEMU host connection
-  parser validates the proposed globally pinned capacities but cannot admit
-  QEMU work or select native lifecycle; QEMU execution and the core lifecycle
-  adapter remain unavailable.
+  retain idle behavior only for empty Project state. Native Project readiness
+  publishes strict schema-6 state after fresh service and protected-root proof.
+  Automatic ordinary and QEMU eligibility is derived from authoritative native
+  review events; global hosts consume fixed operator-owned capacities. The
+  owner-only QEMU connection validates pinned capacity, and real KVM execution
+  remains separate from lifecycle readiness.
   The query nonce is correlation and offline-replay
   protection rather than server authentication; the target currently assumes
   authenticated peers on its fixed private Compose network. The native Git
@@ -374,9 +371,8 @@
   and symbolic-link changes; apply path-owner rules only to add whole-tree
   human reviewers; and record or revoke approval bound to exact refs, heads,
   commits, trees, policies, and identities. Ref, tree, policy, or identity drift
-  makes approval stale across restart. It is not yet selected by Project
-  lifecycle code and exposes no issue tracker; existing managed and external
-  Gitea behavior remains unchanged. Its installed native successor adds
+  makes approval stale across restart. It exposes no issue tracker. The
+  installed native service adds
   kind-bound exact-evidence CI and host-only compare-and-swap promotion. Storage
   ownership now uses a validated file-backed
   SQLite exclusive transaction on the shared repository volume, preventing
@@ -414,60 +410,11 @@
   authority, controller endpoint, protocol, or approval selector. Raw TCP
   routes remain address-and-port URLs without DNS permalinks.
 
-- Let trusted hosts share ordinary Sysbox CI capacity across explicitly
-  enrolled DIM Projects on one external Gitea control plane. Each host
-  verifies the Project and organization identity before one-job registration,
-  fences a named capacity with a renewable claim, safely reaps an expired
-  worker, and uses one digest-pinned job image and the managed registry cache.
-  Pool configuration and organization webhooks remain operator-owned; QEMU
-  integration capacity and Project-specific hooks remain separate.
-
-- Allow a reviewed maintenance-window repository apply to rebind only an
-  existing ready Project root's external origin with an explicit root alias,
-  exact full lowercase expected tip, and non-interactive approval. The locked
-  transition requires unchanged root and protection policy, verifies the new
-  HTTPS origin twice, requires the old managed protected-root tip to be an
-  ancestor, and changes no managed ref, omitted alias, or workspace state;
-  ordinary origin mismatches remain conflicts.
-
-- Require an Owner-approved pull request for every ordinary update to a
-  reviewed Project root branch. Only the host-side maintainer retains direct
-  publication authority; repository Owners and administrators cannot use the
-  routine direct-push or merge-override paths. CODEOWNERS routes additional
-  review for lifecycle and policy files without treating filenames alone as
-  proof of the trusted execution inputs.
-
-- Run repository fetch and selective non-force publication through an
-  explicitly configured narrow service on the physical Git host. The service
-  resolves Project and repository aliases from a private registry, reuses the
-  actual Gitea bare repository and a credential-free persistent upstream
-  remote, stages fetched objects only in a hidden namespace, and sends visible
-  updates through Gitea's receive path. It rejects unregistered repositories
-  and disallowed transports, keeps credentials request-scoped, serializes each
-  repository, and fails closed instead of restoring temporary clones when the
-  capability is absent.
-
 - Build the QEMU CI supervisor image successfully under restrictive caller
   umasks by applying each generated build asset's intended mode explicitly.
   The snapshot TLS CA remains readable by APT's sandboxed user while the build
   context and private assets retain their restricted modes; TLS, signature,
   artifact, and package pins remain unchanged.
-
-- Allow hosts to use one explicitly configured external Gitea service while
-  retaining the existing local managed-Gitea default and one DIM controller on
-  every host. A private connection file separates API, host, workspace, and
-  runner endpoints, supplies existing scoped credentials, and binds shared
-  Project and organization identities. The connection declares a stable host
-  identity and HTTPS, loopback-HTTP, or isolated-HTTP transport policy; DIM
-  validates a distinct non-admin workspace writer, permits the host maintainer
-  to reuse the administrator credentials, and validates unique Project
-  bindings. It rejects API redirects, scopes host credentials to the configured
-  URL, and host-scopes shared Sysbox runner registrations. DIM validates health
-  and authentication before mutation but does not provision, stop, reconfigure,
-  or inject aliases for the operator-owned service. Explicit host-admin
-  repository deletion and Project purge remain available and affect every host
-  attached to those shared remote resources; repository permissions and branch
-  protection remain enforced through the existing APIs.
 
 - Replace DIM-owned mutable repository reconciliation with a schema-8
   workspace contract that mounts reviewed root bytes read-only and gives
@@ -508,29 +455,6 @@
   runner, or host state refuses with export-and-recreate guidance. Local source
   entrypoints stage and execute this exact target facade rather than relying on
   an older standalone or mise-managed facade to enforce a newer contract.
-
-- Discover matching Gitea Actions jobs that were already queued when QEMU CI
-  capacity is created, started, or restarted. DIM installs the webhook first,
-  performs one bounded host-side backlog reconciliation through the existing
-  authenticated shared scheduler, and publishes capacity ready only after the
-  replay succeeds, without exposing coordinator credentials to the supervisor
-  or guest.
-
-- Bound the shared QEMU scheduler to 32 concurrent request handlers and a
-  ten-second total request lifetime, including slowly delivered headers and
-  bodies. Saturated requests receive a bounded service-unavailable response,
-  failed handler-thread startup releases its capacity, and the packaged image
-  now includes every scheduler storage module required at startup. Per-Project
-  persistent state now rejects new entries after 10,000 nonterminal jobs or
-  100,000 claim receipts without evicting live fences, and unsuccessful shared
-  supervisors use bounded shutdown-interruptible backoff after release. Runner
-  admission also rejects scheduler mode, Project, or host identity changes
-  before mutation and requires the scheduler host ID to match external Gitea.
-
-- Keep the Docker CLI required by the pinned upstream Sysbox runner image's
-  daemon readiness gate so persistent runners start instead of waiting
-  indefinitely, while Project jobs remain disposable containers without the
-  host Docker socket or runner host mode.
 
 - Diagnose whether the current user's systemd manager persists after logout
   and whether AppArmor's unprivileged-user-namespace restriction has the

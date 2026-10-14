@@ -1,5 +1,8 @@
 # Full development flow
 
+> **Archived predecessor example.** Its provider-era registration journey is
+> not current. Use [`native-basic-root`](../native-basic-root/README.md).
+
 This reference Project combines the DIM features that normally belong in one
 long-lived development environment:
 

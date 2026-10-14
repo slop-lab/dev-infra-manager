@@ -73,22 +73,13 @@ provides `/usr/bin/git` 2.43.0, Node.js 24 or 26, pnpm 10.13.1, a trusted
 temporary directory, and disposable root-ownership fixture capability. It
 preserves the direct gate used by pinned CI environments.
 
-The `Expensive integration` workflow has dedicated clean hosted
-`cache-routing-kvm` and `qemu-ci-image-layers-kvm` lanes. The direct local
-`cache-routing-sysbox` recipe is capability-gated and is not a hosted QEMU
-lane. The hosted KVM lanes target QEMU through the integration label or
-`dim-qemu`; the local Sysbox recipe verifies Sysbox directly. Their matching
-local recipes are `just verify cache-routing-sysbox`, `just verify
-cache-routing-kvm`, and `just verify qemu-ci-image-layers-kvm`. A missing
-Sysbox or KVM host capability is not a pass: these recipes stop with exit
-status 2 and identify a missing local Sysbox, Docker, or KVM prerequisite
-before starting an expensive journey.
-
-Before installing or restarting a host with a reviewed repository set,
-dispatch `QEMU release gate` at the exact development ref. Its `root-ref` input
-selects the root candidate to combine with it. The `dim-qemu` runner boots a
-clean runc guest and exercises the stateful development flow plus the canonical
-self-Project; a green source-only PR check is not a substitute for this gate.
+The `Expensive integration` workflow has dedicated native ordinary Sysbox and
+native QEMU KVM mechanics lanes. Their matching local recipes are `just verify
+native-ordinary-guest-mechanics` and `just verify
+native-qemu-guest-mechanics-kvm`. Missing Sysbox or KVM host capability is not
+a pass: these recipes stop with exit status 2 and identify the unavailable
+prerequisite before starting an expensive journey. Same-host mechanics do not
+replace clean independent-host release acceptance or human review.
 
 `local-ci-matrix.bash` requires mise, Docker with Compose v2, and the same host
 capabilities as the container integration tests. It installs the locked
@@ -108,11 +99,12 @@ bash verification/scripts/install-kvm-verify-deps-ubuntu.bash
 The full setup, verification-gate, and installer-testing walkthrough — host
 backend installers, KVM-based installer/backend smoke tests, the
 `just verify container` integration suite, the direct host-backend smoke scripts,
-and the installer/example smoke tests — is [docs/usage.md](specification/docs/usage.md).
+and the installer/example smoke tests — is the
+[verification contract](specification/specs/12-verification.md).
 
 ## Repository layout
 
-[docs/monorepo.md](specification/docs/monorepo.md) covers workspace boundaries and
+[docs/architecture.md](specification/docs/architecture.md) covers workspace boundaries and
 dependency direction. In short: `core/packages/core` has no CLI dependency,
 `core/packages/cli` is a thin executable adapter over it, and
 `core/packages/installer` is the separate installer facade — see
@@ -134,8 +126,9 @@ bash verification/scripts/bootstrap-ubuntu.bash
 
 Installs Node.js/pnpm/`just` (via mise when available), Sysbox, project
 dependencies, then runs `just check-source`, `just verify plugin-install`,
-`just build-workspace-image`, and `just run-cli doctor`. See
-[docs/usage.md](specification/docs/usage.md#setup) for what each step does.
+`just build-workspace-image`, and `just run-cli doctor`. See the
+[configuration guide](specification/docs/configuration.md) for the current
+native host boundary.
 
 ## Preparing local DIM changes
 

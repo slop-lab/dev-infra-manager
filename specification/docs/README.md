@@ -1,116 +1,26 @@
-# dev-infra-manager Documentation
+# Documentation
 
-`dev-infra-manager` gives coding agents persistent Linux workspaces for quick,
-reproducible development with installed tools, services, and nested containers.
-It pairs that convenience with separate verification and reviewed promotion
-into protected or secret-bearing state.
+Start with:
+
+1. [Overview](overview.md)
+2. [Configuration](configuration.md)
+3. [Native Project and workspace lifecycle](project-workspaces.md)
+4. [Global native CI](ci-runners.md)
+5. [Adoption and cutover](adoption.md)
+6. [Architecture](architecture.md)
+
+The normative contracts are indexed in [`../specs/README.md`](../specs/README.md).
+
+DIM's runtime is native-only. Forge-specific contribution helpers are outside
+the product boundary. Documents not linked above describe predecessor designs
+or development history and are not active operator journeys.
 
 ## Glossary
 
-Terms below are used with a specific meaning in DIM's own docs; generic
-Docker/Git terms aren't repeated here.
-
-- **Project** — DIM metadata: a name, a managed Git namespace, one required
-  root repository, and any number of additional repositories. A Project
-  outlives any single workspace and may have several named workspaces
-  created against it over time — it's the larger-scoped unit; a workspace
-  is scoped to one Project, never the reverse.
-- **Root repository** — the one required repository per Project. Its
-  optional `.dim` directory defines the workspace's environment and
-  lifecycle hooks; DIM publishes its reviewed bytes as the immutable workspace
-  lifecycle contract.
-- **Workspace** — a named, persistent DIM resource bound to exactly one
-  Project. Its record and top-level container survive stop/start until the
-  workspace is explicitly discarded.
-- **Workspace container** — the workspace's isolated top-level container. It
-  mounts the immutable root contract, persistent Project-owned data, and the
-  **Project runtime**. Older text
-  may call this the “workspace root” or “project-root container”; use
-  “workspace container” when the distinction from the root repository
-  matters.
-- **Project runtime** — the nested Docker runtime owned by trusted
-  Project lifecycle code in the workspace container. It runs the Project's
-  outer services, which may themselves be private daemons. It is distinct from
-  an agent container's private nested runtime.
-- **Agent container** — the untrusted coding environment associated with a
-  workspace. In the recommended environment, DIM core creates a host-side
-  unprivileged Sysbox agent with persistent home, checkout, and private Docker
-  volumes. In a custom environment, reviewed Project code may instead define an
-  agent service and task dispatch. Neither form receives the host or trusted
-  Project runtime control socket.
-- **Project lifecycle code** — trusted code from the root repository, including
-  `.dim` hooks and reviewed operational scripts, that configures the Project
-  runtime. This is an authority boundary, not necessarily one long-running
-  “controller” process.
-- **DIM host controller** — the authenticated, plugin-extensible HTTP service
-  managed by host-side DIM (the CLI also exposes `dim controller serve`). Its
-  Unix socket and workspace-scoped grant let trusted Project lifecycle code
-  request narrow host capabilities. It does not deploy Project containers.
-- **Secret-bearing container** — a workload separate from the agent container
-  and its private runtime. It may be a direct child of the Project runtime or,
-  in richer Projects, a child of a separate secure daemon. Trusted Project
-  lifecycle code builds and deploys it from a human-reviewed ref. It may
-  receive raw secrets; the agent container receives neither those secrets nor
-  its runtime control socket.
-- **Native ordinary CI capacity** — an explicitly started named, host-owned
-  share of Sysbox execution. Trusted native Project registration makes the
-  Project automatically eligible, and the ordinary scheduler leases capacity
-  for one candidate-declared job at a
-  time; each claim creates an ephemeral runner and disposable job container
-  without the host Docker socket or DIM workspace credentials. It is not a
-  persistent Project runner or image. Workspace proposal pushes queue all valid
-  jobs without a per-Project CI admission or human script approval. Its
-  schema-3 command and script come
-  from the exact candidate tree while the job base image is operator-owned;
-  success is candidate-controlled
-  self-test evidence rather than independent verification. Protected policy may
-  require it, but product maintainers still review changed requirements,
-  implementation, tests, and results, and human approval and checked promotion
-  remain separate. The predecessor Gitea Project-scoped runner profile remains
-  a distinct path.
-- **QEMU integration capacity** — a current Gitea-only optional Project-scoped trusted supervisor
-  that boots a fresh VM for an integration job. Its scheduler, hook, cache, and
-  `/dev/kvm` boundary remain separate from ordinary CI.
-- **Promotion** — the reviewed transition from an agent-authored proposal to a
-  protected ref or trusted operation. DIM review-gates this transition, not
-  ordinary mutation inside an agent workspace.
-
-The documentation is split by concern:
-
-- [Overview](overview.md): project goal, scope, and threat model.
-- [Adopting DIM Safely](adoption.md): mandatory human review, version pinning, and branch policy for consuming projects.
-- [Architecture](architecture.md): core runtime boundaries and Git/review flow.
-- [Monorepo Structure](monorepo.md): workspace layout, dependency direction, and optional hosting provider boundaries.
-- [DIM Development Repository](development-repositories.md): the canonical root
-  repository, DIM-managed internal review, and separate GitHub publication.
-- [DIM Self-development Boundaries](self-development-boundaries.md): source,
-  test, verification, lifecycle, and publication boundaries within the root
-  monorepo.
-- [Resource Isolation](resource-isolation.md): resource limits and runtime isolation.
-- [Usage](usage.md): local setup, commands, and operational workflow.
-- [Configuration](configuration.md): configuration file reference.
-- [Runtime Backend](runtime-backends.md): Sysbox agent isolation and trusted runc infrastructure.
-- [Runtime Images](runtime-images.md): workspace-root runtime images and their nested workloads.
-- [External workspace URLs](external-urls.md): controller discovery, named ingresses, exact-target application proxies, nested targets, and Caddy/Cloudflare HTTPS.
-- [Repository-backed Workspaces](repo-workspaces.md): managed Git registration, persistent workspaces, reconciliation, and Git environment.
-- [Managed CI Runners](ci-runners.md): internal Gitea review CI,
-  candidate-controlled native ordinary CI, resource defaults, and runner
-  lifecycle.
-- [Native ordinary CI control plane](ordinary-ci-pool.md): partial target design,
-  role separation, recovery, and acceptance requirements.
-- [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
-- [Recommended default workspace](../../examples/projects/recommended-default/README.md): copyable zero-`.dim` creation, built-in commands, preservation, and the path to a real custom lifecycle.
-- [Single-repository Project](../../examples/projects/single-repository/README.md): custom no-secret shape with no protected ref, resource limits, and an optional external URL.
-- [Multi-repository Project](../../examples/projects/multi-repository/README.md): Project-owned agent, host Git identity, independent repositories, and a reviewed secret service.
-- [Full development flow](../../examples/projects/full-development-flow/README.md): combined multi-repository, private-DinD, controller-proxy, profile, resource, secret, and backup/restore adoption shape.
-- [Example: External URLs](../../examples/features/external-urls/README.md): named ingress discovery and real root/dev/deep reverse-proxy routing.
-- [Advanced example: External URL route policy](../../examples/features/external-url-route-policy/README.md): a checked-in Unix-socket policy webhook.
-- [Plugins](plugins.md): explicit plugin loading, named extensions, and
-  constrained host-input providers.
-- [Releasing](releasing.md): release prerequisites, verification, package order, and post-publish checks.
-- [Status](status.md): current progress and known future work.
-
-Implementation-oriented normative specifications live in [../specs/README.md](../specs/README.md).
-
-Building or contributing to DIM itself, rather than using it, is
-[CONTRIBUTING.md](../../CONTRIBUTING.md).
+- **Project**: one native identity rooted in one protected reviewed Git ref.
+- **Workspace**: persistent agent execution with a protected-root snapshot and
+  workspace-scoped proposal authority.
+- **Ordinary job**: candidate-controlled bounded Sysbox execution.
+- **QEMU job**: candidate-controlled bounded real-KVM guest execution.
+- **Ready**: native Project/workspace prerequisites are live; CI is not implied.
+- **Promotion**: human-approved checked compare-and-swap of the protected ref.

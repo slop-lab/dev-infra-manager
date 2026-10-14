@@ -1,5 +1,8 @@
 # Recommended Default Workspace
 
+> **Archived predecessor example.** Retained for historical source comparison;
+> it is not a current native-only adoption path.
+
 This is the smallest DIM workspace environment. The repository has no `.dim`
 directory, so DIM selects the recommended host-side unprivileged Sysbox agent.
 DIM persists the agent's home, checkout, and private Docker data in three named

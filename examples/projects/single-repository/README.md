@@ -1,5 +1,8 @@
 # Single-Repository Project
 
+> **Archived predecessor example.** Its provider-era commands are not current.
+> Use [`native-basic-root`](../native-basic-root/README.md).
+
 This is a custom-lifecycle DIM Project shape: one application repository, no
 `.dim/repos.yml`, no secret-bearing service, and no mandatory human review of
 agent changes. It demonstrates persistent workspace state, explicit resource

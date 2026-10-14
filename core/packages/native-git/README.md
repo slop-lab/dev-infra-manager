@@ -415,8 +415,8 @@ is still valid.
 
 `@slop-lab/dim-core` selects this package for explicitly configured native
 Project readiness, protected-root reads, and workspace proposal transport.
-Existing managed and external Gitea lifecycle behavior remains unchanged. This
-package's installed native Git image uses strict format-8 state and a strict
+Provider-backed lifecycle is not part of the current product and has no
+fallback through this package. The installed native Git image uses strict format-8 state and a strict
 schema-7 operator config with distinct host-bound Project registrars, root
 importers, root read issuers, workspace write issuers, and global human
 reviewer credentials. Each human reviewer has a unique reviewer ID and

@@ -1,761 +1,117 @@
 # @slop-lab/dim-cli
 
-`dim` creates persistent, isolated development workspaces around a
-review-controlled Git repository. It is intended for AI-assisted development
-where agent changes must be pushed and reviewed before they reach protected
-branches or secret-bearing environments.
-
-## How DIM models a project
-
-A DIM **Project** is lightweight metadata:
-
-- a name and a dedicated `dim-<project>` namespace in DIM's managed Gitea;
-- one required **root repository** and an optional branch ref;
-- any additional repositories that belong to the Project.
-
-Each **workspace** mounts an immutable snapshot of the reviewed root repository.
-With no custom `.dim` lifecycle files, DIM creates the recommended unprivileged
-Sysbox agent with persistent home, checkout, and private Docker data. Projects
-that provide lifecycle files retain full
-ownership of their mutable checkouts, nested containers, and task dispatch. A
-repository does not need to correspond one-to-one with a container. DIM
-therefore tracks one root ref instead of prescribing a multi-repository runtime
-layout. When no root ref is configured, DIM resolves the repository's symbolic
-`HEAD`; workspace creation fails if the repository has no `HEAD`.
-
-A running workspace is never changed automatically when the Project changes.
-`dim workspace start`, `dim workspace restart`, and `dim workspace update`
-select reviewed root bytes and run setup. Project code decides how to reconcile
-its persistent mutable data.
+`dim` manages persistent Linux development workspaces around one reviewed,
+native Git root. The current product is root-only and native-only: it does not
+embed Gitea, expose repository CRUD, remove Projects, or create Project-scoped
+CI runners.
 
 ## Requirements
 
-- A Linux host with a systemd user manager. macOS, Windows, and Docker Desktop
-  hosts are not supported.
-- Node.js 24 or 26.
-- Git and a working Docker CLI/daemon. DIM always uses Docker to manage the
-  outer workspace container, regardless of the selected backend.
-- The Sysbox workspace backend and its registered `sysbox-runc` Docker runtime.
-- Docker Buildx, used by the explicit workspace-image build command.
+- Linux with a systemd user manager
+- Node.js 24 or 26
+- Git, Docker with Compose v2 and Buildx, and `sysbox-runc`
+- real, accessible `/dev/kvm` for optional native QEMU capacity
 
-The installed CLI contains the trusted image build assets. After installing a
-host backend, build the exact image selected by this CLI release without a
-source checkout:
+Pin the CLI to the same reviewed version as the installer and plugins. The
+recommended installation is through `@slop-lab/dim-installer`:
 
 ```bash
-dim workspace image build
-dim workspace image status
-```
-
-The build uses the invoking user's UID and GID and defaults to
-`dev-infra-project-workspace:<installed DIM package version>`. An explicit
-tagged `DIM_WORKSPACE_IMAGE` is the only override. Image IDs, digest-pinned
-references, untagged references, and `latest` are not valid build destinations.
-The command requires Docker Buildx but does not start or contact the DIM
-controller. Workspace creation never builds an image implicitly.
-
-The repository also contains host-backend installers. Read
-the [setup guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/usage.md)
-before using the CLI on a new host. Docker's ordinary runc runtime remains an
-internal dependency for trusted infrastructure; it is not a selectable
-workspace isolation boundary.
-
-## Installation
-
-Install an exact, reviewed version globally:
-
-```bash
-npm install --global "@slop-lab/dim-cli@0.9.0"
-```
-
-Or use the user-local installer:
-
-```bash
-npx '@slop-lab/dim-installer@0.9.0' installer install core \
+mise use --raw --global 'npm:@slop-lab/dim-installer@0.9.0'
+dim installer install core \
   --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-See the [installer README](https://www.npmjs.com/package/@slop-lab/dim-installer)
-for mise-based and direct-`PATH` alternatives.
-
-Do not track `latest`. DIM controls container runtimes and executes code from
-Project repositories, so follow the mandatory
-[adoption and trust requirements](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/adoption.md).
-
-Check the host before creating a workspace:
-
-```bash
 dim doctor
 ```
 
-Control-plane installation belongs exclusively to the installer facade as
-`dim installer install control-plane --config FILE`; this CLI does not
-implement or alias it. The facade rejects obsolete `dim install-cp` input
-before forwarding. The installed native Git and ordinary-CI services remain
-empty and idle until native review events establish automatic eligibility and
-an operator starts host capacity. They do not infer eligibility or capacity
-from workspace state.
+## Native control plane
 
-The host CLI can admit a bootstrapped native Project and run its Sysbox
-workspaces without Gitea. Set
-`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` to an owner-only mode-`0600` native
-host connection file. Plain `project create` also needs the distinct
-`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE` for the same service endpoint and
-owning host. Pending creation currently requires `loopback-http`; HTTPS
-selection rejects until the importer supports a reviewed TLS trust model.
-The host connection records the current serving generation plus distinct
-root-read and workspace-write issuer credentials. DIM reloads it under the
-Project lock for readiness and workspace lifecycle operations, while retaining
-the original import receipt generation unchanged.
-Create the initial schema-2 draft from one already-local reviewed repository.
-This command does not fetch or accept a tag. By default it reads policy from
-the selected commit's `.dim/repos.yml`:
+Install the empty native Git and ordinary-CI service bundle from one absolute,
+owner-only configuration file:
 
 ```bash
-dim project bootstrap-native-root acme \
-  --project-id project-a \
-  --source-repository /absolute/path/to/reviewed-acme \
+dim installer install control-plane --config /absolute/operator/install.json
+```
+
+The installer does not create Projects, approvals, execution capacity, or a
+reviewer UI. Start global ordinary and QEMU capacity separately:
+
+```bash
+dim ci native-root host run /absolute/operator/ordinary-host.json
+dim ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.9.0
+dim ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.9.0
+dim ci native-qemu scheduler run /absolute/operator/qemu-scheduler.json
+dim ci native-qemu host run qemu-a /absolute/operator/qemu-host.json
+dim ci native-qemu event status EVENT_ID /absolute/operator/qemu-scheduler.json
+```
+
+These long-running commands consume fixed operator configuration. Candidate
+bytes cannot choose credentials, images, bounds, mounts, networks, or fallback
+executors. QEMU execution requires KVM; there is no TCG or ordinary fallback.
+
+## Projects and workspaces
+
+Bootstrap one exact branch from an already-local reviewed repository through
+separate registrar and importer roles:
+
+```bash
+dim project bootstrap-native-root demo \
+  --project-id demo-root \
+  --source-repository "$PWD/project-root" \
   --source-ref refs/heads/main \
-  --registrar-connection /absolute/operator/project-registrar.json \
-  --importer-connection /absolute/operator/root-importer.json \
-  --git-executable /usr/bin/git --json
-```
+  --registrar-connection /absolute/operator/registrar.json \
+  --importer-connection /absolute/operator/importer.json \
+  --json
 
-The two connection files must be distinct caller-owned, single-link mode-0600
-files for the same native Git endpoint, owner host, and serving generation.
-Bootstrap retains the exact bundle and policy below the private DIM state root,
-imports the protected root, and prints a credential-free `root-imported` view.
-Exact replay converges. It does not create runnable Project state.
-
-For a manifest-free repository, create an absolute private JSON file with no
-unknown fields:
-
-```json
-{
-  "schemaVersion": 1,
-  "rootAlias": "root",
-  "review": {
-    "requiredReviewerIds": ["owner"],
-    "requiredJobs": []
-  }
-}
-```
-
-Then add `--review-policy /absolute/operator/review-policy.json`. The file must
-be a caller-owned, single-link, non-symlink regular file that is not group or
-world writable. This policy is required for manifest-free bootstrap. There is
-no auto-approval fallback, and the file must contain no model or provider
-secret.
-
-After bootstrap has published that draft:
-
-```bash
-dim project create acme --json
+export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/absolute/operator/control-plane.json
+export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
+dim project create demo --json
 dim project list --json
-dim project show acme --json
-dim workspace create acme feature-123
-dim workspace run feature-123 shell
-dim workspace run feature-123 exec -- git status
+dim project show demo --json
 ```
 
-Create first publishes `admission-pending`, obtains a fresh service readiness
-proof, materializes the immutable protected root, and atomically publishes a
-schema-6 `ready` Project with `runnable: true`. Native workspace creation stores
-schema-9 state and starts a loopback smart-HTTP proxy in the workspace. The
-proxy receives only a workspace-scoped controller grant; the host obtains a
-fresh 30-second native Git lease for each request. Clone and fetch are allowed,
-while pushes can only create or fast-forward
-`refs/heads/proposals/<workspace-id>/...`. Protected refs, tags, deletion,
-foreign workspace namespaces, and non-fast-forward updates are rejected.
-
-Native repository administration, Project remove/purge, and protected
-promotion remain unavailable without Gitea fallback. Native ordinary CI uses
-separate owner-only configuration and direct host commands:
+`project create` publishes readiness only after fresh native service proof and
+protected-root materialization. It neither runs CI nor creates approval.
 
 ```bash
-dim ci native-root host run /absolute/path/host.json
+dim workspace image build
+dim workspace image status --json
+dim workspace create demo work-1
+dim workspace list --json
+dim workspace show work-1 --json
+dim workspace run work-1 shell
+dim workspace run work-1 exec -- git status
+dim workspace exec work-1 -- git log -1 --oneline
+dim workspace resources work-1 --cpus 4 --memory 8g --pids 4096
+dim workspace stop work-1
+dim workspace start work-1
+dim workspace restart work-1
+dim workspace update work-1
+dim workspace setup work-1
+dim workspace discard work-1 --yes
 ```
 
-Host execution first requires the registered Docker `sysbox-runc` runtime,
-then runs one persistent worker per
-configured capacity and drains owned work on `SIGINT` or `SIGTERM`. Neither
-command uses workspace or Gitea authority. Do not mount any native connection
-file or host/issuer credential in an agent, workspace, or job container.
-Run these foreground commands under an operator-owned service manager for
-durability; the native cutover host guide contains exact user-systemd units.
+Each workspace receives one immutable protected-root snapshot and a brokered
+native Git endpoint. Its writer may create or fast-forward only its own
+proposal namespace. Protected writes, deletes, force pushes, tags, foreign
+workspace namespaces, and foreign Projects are rejected before mutation.
 
-Native QEMU is a separate optional service and host worker, not a third member
-of the installed native Git/ordinary Compose bundle. Build and deploy its
-scheduler image, then run each fixed KVM host from its private connection:
+## Host lifecycle
 
 ```bash
-dim ci native-qemu scheduler image build registry.example/dim-native-qemu:0.9.0
-dim ci native-qemu scheduler run /absolute/path/native-qemu-scheduler.json
-dim ci native-qemu host run node-a /absolute/path/node-a-qemu.json
-dim ci native-qemu event status EVENT_ID /absolute/path/native-qemu-scheduler.json
+dim host status --json
+dim host shutdown
+dim host start
 ```
 
-The scheduler config is a mode-`0600` schema-1 JSON file. It fixes
-`serviceId: "qemu-main"`, listener, absolute SQLite path, admission and
-60-second-or-longer claim leases, distinct native-Git identity/attempt/result
-credentials, distinct event/registrar/query credentials, and unique hosts.
-Each host has one canonical 32-byte base64url token and named capacities with
-digest-pinned runner/job images plus positive CPU, memory, PID, timeout, and
-output bounds. The host file is `CONFIG-NATIVE-QEMU-001`; candidate bytes cannot
-select those values.
-
-Native Git stores QEMU demand in a dedicated durable outbox after review
-creation. It discovers only an independently admitted Project, sends the exact
-kind-labelled event through the scheduler's event-intake credential, and
-retries identical bytes after uncertain delivery. Scheduler event identity is
-idempotent, so retry cannot create a second execution. This path does not use
-the ordinary-CI webhook, proof protocol, or delivery marker namespace.
-
-The trusted runner image must provide `/usr/local/bin/dim-native-qemu-run` and
-boot the candidate job in a disposable KVM guest. The host passes `/dev/kvm`
-only to that trusted supervisor container, uses `--network none`, and mounts
-only the exact descriptor and candidate script read-only. The guest receives no
-scheduler, native-Git, reviewer, promotion, Docker-host, or DIM host credential.
-Before attestation or claiming, the host runs both its fixed
-`qemu-system-x86_64 -enable-kvm` probe and the same probe inside every
-digest-pinned runner image after requiring the trusted launcher. During a job
-it renews the claim every five seconds, bounds combined stdout/stderr capture,
-and aborts on renewal loss. A mode-`0600` journal per capacity records active
-ownership and the exact cleanup-gated terminal result; restart cleans only the
-claim-labelled container and private root, then recovers the claim or retries
-the unchanged result. There is no TCG or ordinary fallback.
-
-DIM automatically runs one managed controller process with separate local
-Unix sockets: a mode-`0600` host-admin API and a workspace-scoped API. Normal
-state commands are admin API clients. Workspace, CI runner, and host lifecycle
-operations, CI logs, `exec`, and `run` use host-admin controller command
-sessions. Sessions preserve ordered stdout and stderr streams plus FIFO input
-and EOF. They allocate a PTY only when `exec` or `run` is attached to an
-interactive terminal. Controller bootstrap and local Git process adapters stay
-local. Neither the admin socket nor host credentials are mounted into
-workspaces.
-
-Managed shutdown is available only through the owner-only host-admin Unix
-socket. The controller acknowledges the request and then terminates itself,
-then immediately stops accepting on every listener. Existing HTTP requests get
-a bounded grace period before the controller closes all remaining connections,
-including clients that never finished sending headers. Active command sessions
-are cancelled when the admin listener closes, plugin disposal is bounded, and
-the controller removes its own PID file. The CLI does not signal a PID read from
-the filesystem, and this shutdown endpoint is not available on a TCP listener
-or either workspace-facing socket.
-
-After claiming the managed controller PID, startup loads plugins and resolves
-exactly one host-mirror provider before performing the one supported pre-stable
-state migration or any managed-service reconciliation. Before opening
-listeners, a strict host-only `host.json` schema 1 record becomes schema 2 by renaming
-`resumeCiRunners` to `restartCiRunners`. The original bytes remain permanently
-in mode-`0600` `host.json.schema-1.bak`. Startup reports only a completed
-migration or backup recovery; an unsafe, malformed, or conflicting artifact is
-reported as a host-lifecycle-migration startup-stage failure. All other state
-schemas remain rejection-only.
-
-## First Project
-
-Create a Project from a repository whose `.dim/repos.yml` declares its stable
-root alias and policy:
-
-```bash
-dim project create acme \
-  --bootstrap-git-url /path/to/acme \
-  --bootstrap-git-ref main --apply-repos
-```
-
-`repo add` runs source clone through the invoking host Git CLI, so existing
-credential helpers, SSH configuration, and SSH agent work for any Git URL.
-The manifest alias is explicit and scoped to the Project.
-If the source is temporarily unavailable, fix host connectivity or
-credentials and repeat the same `project create` command; DIM resumes only a
-failed root import with the same manifest-derived root alias and origin.
-
-```bash
-dim repo add acme root https://example.com/acme.git --root --ref main
-```
-
-For a manifest-free repository, provide the root alias and policy explicitly:
-
-```bash
-dim project create acme \
-  --root root --bootstrap-git-url https://example.com/acme.git \
-  --bootstrap-git-ref main --protect main
-```
-
-With manifest bootstrap, DIM automatically applies additional repositories
-that all use the bootstrap origin. A manifest containing another origin still
-requires interactive confirmation or `--apply-repos`; `--no-apply-repos`
-always skips explicitly.
-
-Managed-root manifests are read without a checkout, so use network/scp-style
-Git URLs or absolute paths in tracked `.dim/repos.yml`; relative filesystem
-paths are rejected. A local file passed with `--repos` or `repo apply --file`
-is never copied into or written over the tracked root manifest.
-
-Declining or using `--no-apply-repos` does not require another clone. Run
-`dim repo plan acme` and `dim repo apply acme --yes` to read the file from the
-managed root. `project create --repos FILE` is reserved for a standalone local
-bootstrap manifest.
-
-An existing root origin remains a conflict during ordinary apply. To replace
-only that recorded URL during a reviewed maintenance window, first quiesce
-Project writers and stop its workspaces and CI runners. Review the candidate
-manifest, verify the new HTTPS origin's protected branch tip independently,
-and then supply the exact full lowercase commit ID:
-
-```bash
-dim repo apply acme --file candidate/.dim/repos.yml \
-  --rebind-origin root \
-  --expect-origin-tip 0123456789abcdef0123456789abcdef01234567 \
-  --yes
-```
-
-All three rebind options are required together. DIM accepts only an existing,
-ready, protection-applied Project root whose alias, concrete root ref, ref
-mapping, publish mapping, and protection policy exactly match the reviewed
-manifest. The new URL must be credential-free HTTPS, must still advertise the
-expected commit when the locked update completes, and the current managed root
-tip must be an ancestor of that commit. DIM also rejects the update if the
-managed tip or recorded old URL changes during verification.
-
-This operation changes no managed Git ref, branch protection, repository
-identity, omitted repository record, or workspace record. In particular,
-aliases omitted from the candidate manifest are reported as `preserve` and
-remain registered. Existing workspaces remain pinned to their previous root
-snapshot; for a conversion
-where they need not remain restartable, discard and recreate them after
-inspecting `dim repo show acme root` and a fresh `dim repo plan acme --file
-candidate/.dim/repos.yml`. Do not restart old workspaces as part of the
-conversion.
-
-## External workspace URLs
-
-The optional external URL system plugin exposes named ingresses. Configure a
-local ingress and operate it from the host without project-specific curl
-tasks:
-
-```bash
-dim external-url ingress add http --name local-http \
-  --description "Local development URL" \
-  --scheme http \
-  --domain dev.test --public-port 8080 \
-  --listen-host 0.0.0.0 --listen-port auto
-
-dim external-url discover
-dim external-url request --ingress local-http --container dev --port 3000
-dim external-url list
-```
-
-Discovery, requests, revocation, and listing inside a workspace use its
-controller socket and grant. On the host, `dim external-url list` uses the
-host-admin socket to show every current workspace's routes with Project and
-workspace names; `--workspace work-1` retains a single-workspace listing.
-The host-wide inventory is capped at 1,000 routes and is unavailable through a
-workspace or agent grant.
-
-Cloudflare DNS and Caddy HTTPS setup are documented in the
-[External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md).
-
-Create and enter a persistent workspace:
-
-```bash
-dim workspace create acme feature-123 --profile development
-dim workspace create acme feature-123 --recommend-capability writable-cgroup
-dim workspace run feature-123 shell
-```
-
-For the recommended environment, use its explicit command operations:
-
-```bash
-dim workspace run feature-123 exec -- just test
-dim workspace run feature-123 custom -- ./scripts/reviewed-helper
-dim workspace exec feature-123 -- git status
-```
-
-The controller command session forwards task stdin even when redirected or
-piped, so Project-defined streaming tasks can use contracts such as `dim
-workspace run feature-123 restore <backup.tar.gz`. Input bytes and EOF remain
-ordered, and a TTY is allocated only for an interactive terminal.
-
-`shell` accepts no arguments. `exec` and `custom` require a command. These
-commands run in the recommended agent and don't install or authenticate an
-agent provider.
-
-The `--cpus`, `--memory`, and `--pids` values are one combined recommended
-budget. DIM assigns the floor of 25 percent to the trusted outer container and
-the exact remainder to the agent. The minimum is 1 CPU, 1 GiB memory, and 256
-PIDs, and each swap limit equals memory. `workspace resources` reads back both
-updates before publishing state, rolls back all attempted changes after a
-failure, and reports an uncertain state if rollback cannot be proved.
-
-Any `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, or
-`.dim/docker-compose.yml` file chooses the custom environment, where `run`
-requires `.dim/entrypoint.sh` and `exec` bypasses it. Without those files, DIM
-uses recommended. `.dim/environment.yml` is an obsolete, unsupported format and
-is rejected.
-
-The selected environment is fixed for the workspace. A mode change requires
-discard and recreation. Older records without an environment remain custom and
-keep their existing data and hook behavior. Persisted minimal records are
-obsolete and are rejected unchanged with guidance to export needed data through
-the prior pinned release, discard, and recreate. Recommended creation seeds the
-exact selected root into the empty checkout once. Recoverable owned staging
-ensures an interrupted clone, fetch, checkout, or publication does not adopt a
-partial repository and an identical setup can retry.
-
-Later lifecycle selection may advance immutable setup bytes, but it never
-resets the retained checkout. Its `HEAD`, index, dirty, staged, untracked,
-ignored, and locally committed content stays unchanged; setup succeeds, prints
-a manual-adoption notice, and leaves normal agent commands usable. Fetch and
-review product changes explicitly in the agent:
-
-```bash
-dim workspace update feature-123
-dim workspace run feature-123 exec -- git fetch origin
-dim workspace run feature-123 exec -- git log --oneline --decorate HEAD..origin/main
-dim workspace run feature-123 exec -- git rebase origin/main
-# Or merge origin/main after review.
-```
-
-Product root-code changes do not require workspace recreation. Only an
-environment-mode change requires preserving data, discarding, and recreating.
-
-## Everyday lifecycle
-
-```bash
-dim workspace list
-dim workspace show feature-123
-dim workspace resources feature-123 --cpus 4 --memory 8g --pids 4096
-dim workspace stop feature-123
-dim workspace start feature-123
-dim workspace restart feature-123 review-456
-dim workspace update feature-123
-dim workspace setup feature-123
-dim workspace discard feature-123 --yes
-```
-
-- `stop` preserves the checkout and nested container-engine storage.
-- `resources` changes any supplied live or stopped workspace limits and keeps
-  omitted limits unchanged.
-- `start` refreshes immutable lifecycle selection and runs setup without
-  changing a recommended mutable checkout.
-- `restart` applies reviewed immutable root lifecycle changes to one or more
-  workspaces without adopting product source in a recommended checkout.
-  Multiple names are processed in command-line order; a failure stops before
-  later names while keeping earlier restarts complete.
-- `update` reuses the running outer container when the selected root is
-  unchanged. A changed root replaces that container before setup and may
-  interrupt outer processes and nested runtimes while preserving named
-  persistent data.
-- `setup` retries setup without changing the root ref.
-- `discard` permanently removes the workspace and unpushed changes.
-  Recommended `--keep-volume` rejects before any mutation because home,
-  checkout, and private-Docker volumes are workspace-identity-bound. Leave the
-  workspace intact or copy needed data before full discard. Custom and
-  historical custom workspaces retain the existing outer-engine
-  `--keep-volume` behavior.
-
-If a controller command session for `create`, `setup`, `update`, `start`, or
-`restart` fails, the CLI preserves the failure context and recommends running
-`dim doctor` to check host readiness. `dim doctor` is diagnostic only; it does
-not repair workspace lifecycle state or retry the failed command.
-
-On a TTY, a workspace lifecycle command that is silent for five seconds shows
-the exact current lifecycle stage and the guaranteed major work still to run.
-Conditional stages appear only after the controller enters them. Any command
-output clears the transient status first. Redirected output, JSON stdout, and
-interactive `exec` or `run` streams never receive progress or terminal-control
-bytes.
-
-DIM selects protected lifecycle roots only by fast-forward. That selection does
-not overwrite recommended workspace checkout history; source adoption is the
-agent user's explicit Git operation.
-
-## Multiple repositories
-
-Register additional repositories under stable aliases:
-
-```bash
-dim repo add acme product
-dim repo add acme secrets-code https://example.com/secrets-code.git
-dim repo list acme
-```
-
-The root lifecycle receives a Project-specific base URL such as
-`http://dim-gitea:3000/dim-acme` in `DIM_GIT_BASE_URL`, plus a small runtime
-manifest at `DIM_PROJECT_MANIFEST`. The manifest identifies the immutable root,
-persistent workspace-data path, and generic runtime capabilities. Project code
-owns repository aliases, refs, checkout paths, and services. DIM neither
-exports a variable per repository nor assumes a repository-to-container mapping. Projects can independently map
-different upstream repository names without making their normal configuration
-depend on DIM.
-
-### Synchronizing an external repository
-
-For a repository registered with an external URL, fetch remote branches into
-managed Gitea under `upstream/*` and import tags:
-
-```bash
-dim repo fetch acme product
-dim repo fetch acme product --prune
-```
-
-This preserves DIM-only branches. Configure reviewed publish mappings in
-`.dim/repos.yml`, then publish one repository or every configured repository:
-
-```bash
-dim repo publish acme product
-dim repo publish acme
-```
-
-HTTP authentication is resolved from the invoking host's Git credential helper
-and forwarded only for the request. SSH authentication and local paths belong
-to the configured service account on the Git host. Publishing is non-forced.
-
-Deploy the narrow service beside Gitea repository storage before using these
-commands:
-
-```bash
-dim repo sync-service image build registry.example/dim-git-sync:0.9.0
-export DIM_GIT_SYNC_CONNECTION_FILE="$HOME/.config/dim/git-sync.json"
-```
-
-The service keeps a credential-free `dim-upstream` remote in the actual bare
-repository and resolves aliases through its private registry. It is an
-optional explicit capability: commands fail closed when it is absent, with no
-temporary-clone fallback. The shared Git-host synchronization example contains
-complete service and host files.
-
-Use independent `import` and `publish` mappings when a managed repository's
-branch name differs from its external archive branch:
-
-```yaml
-repositories:
-  core:
-    url: https://github.com/example/archive.git
-    import: {main: dev/core}
-    publish: {main: main}
-```
-
-The import creates only managed `main` from external `dev/core`; it does not
-copy unrelated archive branches or tags. The publish destination is
-connection-relative `main`, which maps back to external `dev/core`, and
-separately authorizes that reverse update.
-
-To keep DIM repositories separate while synchronizing them with one external
-Git repository, declare a shared upstream in `.dim/repos.yml`:
-
-```yaml
-schemaVersion: 1
-upstreams:
-  product:
-    url: https://github.com/example/product.git
-repositories:
-  root: {upstream: product, fallback: true, root: true, ref: main}
-  api: {upstream: product, refPrefix: api/}
-```
-
-Managed `api` ref `refs/heads/main` maps to external
-`refs/heads/api/main`; root refs that do not match `api/` keep their names.
-Branches and tags use the same mapping, and commit IDs are preserved. Prefixes
-must end in `/` and cannot overlap. A shared upstream has at most one explicit
-fallback; without one, unmatched refs are ignored. Repositories using `url`
-continue to synchronize with separate external repositories.
-
-Delete an unused non-root repository with:
-
-```bash
-dim repo delete acme obsolete --yes
-```
-
-## Project CI runners
-
-Each named Project-scoped runner can serve every repository in the Project's
-managed Git organization. Enable multiple runners, including multiple runners
-of the same executor kind, when the Project needs parallel capacity:
-
-```bash
-dim ci runner create acme primary sysbox
-dim ci runner create acme release qemu
-dim ci runner status acme primary
-dim ci runner logs acme primary
-dim ci runner logs acme release
-```
-
-Ordinary jobs use a Sysbox container and nested Docker daemon outside
-development workspaces, with independent cgroup limits. Built-in defaults are
-4 CPUs, 8 GiB memory, and 2,048 PIDs. Change the user-level fallback or
-override one runner:
-
-```bash
-dim ci runner defaults set --cpus 2 --memory 4g --pids 1024
-dim ci runner create acme primary sysbox --cpus 6 --memory 12g --pids 4096
-dim ci runner create acme release qemu --cpus 6 --memory 12g
-```
-
-QEMU maps CPU and memory overrides to guest vCPUs and RAM. `--pids`
-applies only to Sysbox runners.
-
-The shipped Gitea predecessor supports an operator-managed **ordinary Sysbox
-pool**. It is not the unimplemented native control-plane target. Enroll only
-explicit DIM Projects and named host capacities with one external Gitea service,
-and stop conflicting Project-scoped Sysbox runners before enabling it. The
-service reads a private, mode-`0600` schema-2 config containing its identity,
-listener, durable SQLite path, digest-pinned shared job image, webhook origin,
-registrar token, admission lease, and host capacities with distinct tokens:
-
-```bash
-dim ci ordinary-pool service run /path/to/private-service.json
-export DIM_GITEA_CONNECTION_FILE=/path/to/private-external-gitea.json
-export DIM_ORDINARY_CI_POOL_CONNECTION_FILE=/path/to/private-host-pool.json
-dim ci ordinary-pool project reconcile acme /path/to/private-registrar.json
-dim controller restart
-```
-
-The private host connection schema 3 declares a unique, non-empty `capacities`
-array. The managed host controller supervises one worker per declared capacity;
-there is no separate worker command, so the managed controller is the sole host
-executor for ordinary CI capacity. Each host's private
-connection must have the same host ID as its external Gitea connection; the
-external Gitea connection's Project bindings supply each exact organization ID.
-Run `project reconcile` from a trusted host for each Project before its
-admission lease expires and after protected policy changes. It admits the
-reviewed snapshot, installs or updates and deduplicates the organization
-`workflow_job` webhook, then enumerates and replays the current queued-job
-backlog into that admission. If webhook reconciliation or backlog replay fails,
-it revokes the admission and reports failure. The service never registers an
-instance-wide runner, and QEMU integration runners retain their independent
-Project-specific hook and cache boundaries.
-
-QEMU scheduling remains host-local unless
-`DIM_QEMU_SCHEDULER_CONNECTION_FILE` selects an operator-managed shared
-scheduler. To share queued demand across hosts using external Gitea, build the
-standalone image from this exact CLI release and deploy it with a durable
-volume and a service-user-owned mode-`0600` config:
-
-```bash
-dim ci scheduler image build registry.example/dim-qemu-scheduler:0.9.0
-```
-
-Each DIM host uses a distinct stable host ID that must equal that host's
-external Gitea connection `hostId`. All hosts attached to one Project use the
-same Project API bearer token; the host ID is concurrency identity, not
-authorization or a separate credential. The central service has a distinct
-Gitea webhook token and no Gitea administrator credential. Use HTTPS, loopback
-HTTP, or an explicitly isolated HTTP network. See the shared QEMU scheduler
-example in the DIM examples repository for complete service and host files.
-
-Configure a 60-second-or-longer lease and explicitly allow the Project's QEMU
-integration labels in the service config. DIM renews every five seconds with
-two-second requests; the service retains expired ownership for a 20-second
-cleanup grace and holds outstanding queued claims across restart. This bounds
-normal failover but cannot fence a paused, partitioned, or compromised host at
-the infrastructure layer.
-
-The service admits at most 10,000 queued or running jobs and 100,000 claim
-request receipts per Project. New demand or claims receive HTTP `503` at
-saturation; existing jobs, claims, and live fences are not evicted. Restored
-terminal webhook delivery frees nonterminal capacity. Released claim receipts
-expire after seven days, while a receipt that still protects a live claim is
-retained until that claim is gone. Unsuccessful supervisors release only after
-termination and reaping, then retry with shutdown-interruptible exponential
-backoff capped at 30 seconds.
-
-On nested-KVM-capable hosts, enabling `qemu` starts a small trusted webhook
-supervisor that boots a fresh ephemeral VM only for a queued `dim-qemu` job.
-Workflow code sees only nested KVM inside that VM. Use `list`, `start`,
-`restart`, `stop`, and `delete --yes` with the Project and runner name. The lifecycle boundary
-is provider-neutral; managed Gitea is the current coordinator.
-
-`logs` follows the container log through a controller command session until
-interrupted. `stop` preserves the runner registration and local data; `delete
---yes` removes both.
-
-## Managed Git credentials
-
-`dim x git` is a one-shot wrapper around the ordinary Git CLI. It adds a
-temporary credential helper for DIM's managed Gitea and forwards every
-remaining argument unchanged:
-
-```bash
-dim x git clone "$(dim repo url acme product)"
-dim x git -C product push origin HEAD
-```
-
-Plain `git` remains available for external URLs and locally configured
-credentials. To make ordinary host-side Git commands use DIM credentials
-without the wrapper, install a URL-scoped credential helper:
-
-```bash
-dim git setup
-git clone "$(dim repo url acme product)"
-```
-
-The helper is scoped to DIM's managed HTTP endpoint and enables path-aware
-matching. That lets a future gateway select credentials from the requested
-Project path without changing each repository's Git configuration.
-
-## Project cleanup
-
-```bash
-dim project remove acme
-dim project purge acme --yes
-```
-
-`remove` deletes only DIM's Project metadata and preserves managed Git data.
-`purge` deletes the unused Project's managed repositories and Gitea
-organization as well. Both reject Projects still referenced by workspaces.
-With external Gitea, `remove` remains the local detach operation. Host-admin
-`purge` and `repo delete` requests delete the shared remote resources after the
-ordinary checks. Other hosts' independent local records are not removed, but
-their access to the deleted repository or Project is intentionally broken.
-
-## CLI discovery and automation
-
-```bash
-dim --help
-dim project --help
-dim repo --help
-dim workspace image build --help
-dim help --all
-dim project show --json acme
-```
-
-Normal list commands use compact tables. Record-producing subcommands expose
-their own `--json` option; commands where JSON has no useful meaning do not.
-URL commands deliberately emit a bare URL.
-
-State is stored under `~/.local/state/dim` by default. The most useful
-overrides are:
-
-- `DIM_STATE_ROOT`
-- `DIM_GITEA_PORT` (default `3300`)
-- `DIM_GITEA_CONNECTION_FILE` (explicit external Gitea connection and shared
-  Project bindings)
-- `DIM_GIT_SYNC_CONNECTION_FILE` (explicit physical-Git-host sync service)
-- installed `workspaceBackend` from the DIM user configuration
-- `DIM_WORKSPACE_IMAGE`
-- `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
-
-The resource environment variables are defaults. Set persistent limits for an
-individual workspace at creation time or change them later:
-
-```bash
-dim workspace create acme feature-123 --cpus 4 --memory 8g --pids 4096
-dim workspace resources feature-123 --memory 12g
-```
-
-DIM is pre-stable and rejects incompatible state between `0.x` releases except
-for the explicitly documented host lifecycle schema 1-to-2 migration. Push all
-important work before upgrading and review the release notes.
-
-For the complete lifecycle and `.dim` hook contracts, see
-[Repository-backed Workspaces](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/repo-workspaces.md)
-and
-[Project Workspaces](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/project-workspaces.md).
-Source and issues are in the
-[project repository](https://github.com/slop-lab/dev-infra-manager).
+`shutdown` preserves managed volumes and leaves the controller available.
+`start` restores only the runtimes selected by the durable host lifecycle
+record. There are no `host stop` or `host restart` commands.
+
+## State compatibility
+
+DIM is pre-stable. Current Project schema 6 and workspace schema 9 are strict.
+Predecessor provider, repository, runner, and workspace state is rejected and
+never adopted, migrated, renamed, or deleted. Use the pinned prior release to
+export needed data, then create fresh native state.
+
+See the repository's native [CLI contract](../../../specification/specs/10-cli-contract.md)
+and [workspace guide](../../../specification/docs/project-workspaces.md).

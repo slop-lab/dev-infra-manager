@@ -1,5 +1,8 @@
 # Feature example: task that requires a TTY
 
+> **Archived predecessor example.** Retained for historical source comparison;
+> it is not a current native-only adoption path.
+
 Some interactive development tools must refuse to start unless both standard
 input and standard output are terminals. This example provides a deliberately
 small program with that contract:

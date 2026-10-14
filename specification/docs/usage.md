@@ -1,5 +1,10 @@
 # Usage
 
+> **Historical predecessor guide.** Commands and provider journeys below are
+> retained for prior-release export only. Use [Overview](overview.md),
+> [Configuration](configuration.md), and
+> [Native Project and workspace lifecycle](project-workspaces.md).
+
 ## Requirements
 
 The development toolchain uses:

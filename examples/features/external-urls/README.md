@@ -1,5 +1,8 @@
 # Example: External URLs
 
+> **Archived predecessor example.** Retained for historical source comparison;
+> it is not exercised by the native-only verification recipes.
+
 This Project exposes services from two nested levels without publishing a
 Docker port on the host:
 

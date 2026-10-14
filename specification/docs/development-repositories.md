@@ -1,5 +1,9 @@
 # DIM Development Repository
 
+> **Historical development model.** Provider-hosted internal review and the
+> self-Project terminology below are not current DIM runtime contracts. The
+> current product contract is indexed in [Documentation](README.md).
+
 DIM has one canonical root repository. Its commit and tree identify the complete
 source candidate, including production packages, plugins, centralized tests,
 verification, examples, specifications, workflows, and the reviewed `.dim`

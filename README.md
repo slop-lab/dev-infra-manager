@@ -1,545 +1,136 @@
 # dev-infra-manager
 
-**Persistent workspaces. Fast iteration. Reviewed promotion.**
+DIM provides persistent, isolated Linux workspaces backed by one native Git
+control plane. A Project has one reviewed root repository, one protected root
+ref, workspace-scoped proposal authority, optional global ordinary Sysbox and
+native QEMU capacity, human review, and checked compare-and-swap promotion.
 
-`dev-infra-manager` (DIM) gives coding agents persistent, Project-scoped Linux
-workspaces where they can keep their checkout and installed tools, run
-services and nested Docker workloads, and resume work without rebuilding the
-development environment for every session.
+DIM does not embed or manage a forge, issue tracker, or Actions service. It
+does not expose repository CRUD, Project removal/purge, or Project-scoped
+runner APIs. Forge-specific tooling used to contribute to this repository is
+development tooling, not a DIM runtime dependency.
 
-The same infrastructure keeps verification reproducible and promotion
-review-gated. Agents can iterate freely inside their workspaces without direct
-control of the host container runtime or access to raw Project secrets. Each
-Project can combine:
-
-- Workspaces that persist across agent turns and retries and are removed only
-  through an explicit discard lifecycle.
-- Docker-capable workspaces backed by selectable isolation runtimes, without
-  exposing the host container daemon directly to the agent.
-- Managed Git and CI as the promotion boundary between mutable workspaces and
-  protected Project state.
-- A reviewed Project contract that defines a complete multi-repository
-  workspace and its lifecycle.
-- Separation between agent-controlled code and operations that receive
-  secrets.
-- Per-workspace CPU, memory, and process limits.
-
-By default, a Project needs no `.dim` lifecycle files. DIM supplies a
-host-side, unprivileged Sysbox agent with persistent home, checkout, and
-private Docker data. Projects that need a different agent topology, setup,
-task dispatch, Compose services, or teardown provide reviewed `.dim` lifecycle
-files and use the custom environment. DIM does not install or authenticate a
-coding-agent provider or run Project-specific tool setup automatically.
-
-DIM sits below interactive coding agents and autonomous orchestrators. OpenCode,
-Claude Code, or another agent can run in a DIM workspace. An orchestrator such
-as OpenAI Symphony can map a task to a persistent DIM workspace while DIM owns
-the workspace, repository, verification, and trust boundaries.
-
-DIM does not decide what work an agent should do, replace an issue tracker, or
-prescribe an agent workflow. It controls where work runs, what infrastructure
-it can reach, and which reviewed path can promote its output.
-
-## The trust path
-
-A typical DIM Project separates mutable development from trusted promotion:
+## Trust path
 
 ```text
-agent workspace
-  persistent across turns and retries
-  no raw project/runtime secrets
-        |
-        | commit and push
-        v
-project-scoped Git branch
-        |
-        | isolated verification in a separate checkout
-        v
-CI result and review evidence
-        |
-        | explicit review gate
-        v
-protected ref or trusted Project runtime
-        |
-        | scoped secret-bearing operation
-        v
-artifact, signing, publishing, or deployment
+reviewed root -> native Project -> persistent workspace -> proposal ref
+       -> candidate-controlled ordinary/QEMU evidence -> human approval
+       -> checked protected-ref compare-and-swap
 ```
 
-DIM's canonical public source is this integrated root monorepo on GitHub. A
-self-development Project's managed Git service and runner may provide internal
-review and CI, but neither managed implementation is part of the long-term
-Project contract.
+Project and workspace readiness do not depend on CI availability. Ordinary and
+QEMU jobs are optional quality evidence selected by the protected root policy.
+Their success proves only that candidate-selected tests ran under the recorded
+operator bounds. It is not independent verification and cannot replace human
+approval or the final compare-and-swap.
 
-Workspaces persist. Verification runs separately in disposable job containers.
-Secret-bearing Project services must be built and deployed from reviewed refs.
+## Install
 
-Separation of execution is not automatically independence of evidence. The
-native ordinary-CI path derives eligibility automatically from authenticated
-native review events and uses a separately running host capacity service; its candidate tree can
-select its job config, script, and digest-pinned image. Its success is therefore
-candidate-controlled self-test evidence, even though it runs in a separate
-bounded Sysbox job. Protected policy may require that result, but a human must
-still approve the exact complete tree and the host must still perform checked
-compare-and-swap promotion. Projects needing independent CI require a separate
-lane whose command definition the candidate cannot change.
-
-That evidence classification does not make test review optional. DIM narrows
-infrastructure security review to changes that can expose secrets, alter
-protected refs, reach host/runtime privileges, or elevate trusted capabilities.
-Product maintainers separately review changed requirements, implementation,
-test definitions, and relevant results for correctness and regressions. Green
-CI means the selected checks ran successfully in their recorded environment;
-it does not prove complete coverage or blanket product correctness.
-
-## Typical uses
-
-### Interactive coding-agent workspaces
-
-Keep a workspace across multiple agent sessions, run nested Docker workloads
-inside it, and explicitly discard it when the work is finished.
-
-### Orchestrated autonomous implementation
-
-Let an external control plane own task selection, scheduling, retries, and
-agent sessions while DIM owns workspace isolation, repository state, CI
-verification, and promotion gates. DIM does not yet ship a Symphony-specific
-adapter or stable orchestrator API.
-
-### Agent-authored changes with separate CI
-
-Allow an agent to modify arbitrary code in its workspace while repeating
-checks in a separate runner checkout and disposable job container that has no
-host Docker socket or DIM workspace credentials.
-
-### Reviewed secret-bearing operations
-
-Keep signing, publication, deployment, and other privileged work outside the
-agent container. Current Projects implement this with reviewed lifecycle code
-and separate services; DIM does not claim that container separation alone is a
-strong boundary inside a privileged workspace.
-
-### Multi-repository projects
-
-Use a reviewed root Project contract to provide stable repository aliases,
-lifecycle hooks, protected refs, and coordinated workspaces for changes that
-span multiple repositories.
-
-## Security and release status
-
-> [!WARNING]
-> DIM has no stable release and is part of the host trust boundary. Adoption
-> requires human review of the exact DIM revision, the Project contract, and
-> every input that can influence a secret-bearing runtime. Pin exact versions
-> and immutable source revisions.
-
-Pre-stable `0.x` releases may change CLI, API, configuration, state, backend,
-and plugin contracts without compatibility shims or implicit migration.
-
-DIM supports Linux hosts only. macOS and Windows are not supported host
-platforms, including through Docker Desktop.
-
-Licensed under the [MIT License](LICENSE). Release history is recorded in the
-[changelog](CHANGELOG.md).
-
-Before using DIM in another project, read the mandatory [adoption and trust
-requirements](specification/docs/adoption.md). They require full human review of DIM, the
-project repository, and every secret-bearing environment, plus immutable
-version pinning.
-
-This page covers using DIM. Building or contributing to DIM itself —
-running its own test/verification suite, publishing packages, testing host
-installers — is [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Set up a host runtime backend
-
-The host-installer scripts are development-source assets, so installing a
-backend from this repository still requires a reviewed checkout. The published
-`dim` CLI now ships the trusted workspace-image build inputs and does not need
-this checkout when building the image:
-
-```bash
-git clone --no-checkout <this-repository>
-cd dev-infra-manager
-git checkout --detach <reviewed-tag-or-full-commit>
-bash verification/scripts/install-host-ubuntu.bash sysbox
-```
-
-After installing the exact reviewed CLI version below, build its matching image
-from any directory:
-
-```bash
-dim workspace image build
-dim workspace image status
-```
-
-The build tags the trusted image as
-`dev-infra-project-workspace:<release version>`, matching the default selected
-by the same DIM package release. Set `DIM_WORKSPACE_IMAGE` only when an explicit
-different image reference is required.
-
-`dim workspace image build` is the installed release-image path. It uses the
-current UID and GID and the trusted assets shipped with the CLI's exact core and
-controller-proxy versions. An explicitly tagged `DIM_WORKSPACE_IMAGE` may
-replace the default destination; IDs, digests, untagged destinations, and
-`latest` are rejected. Contributors use `just prepare-local` to build a matched
-package/image candidate from one reviewed root commit. The separate `just
-build-local-workspace-image` recipe is an image-only convenience for the current
-worktree; see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-Run `just` as your normal user, including when it is managed by mise. The
-installer invokes `sudo` only for host changes, and adds the invoking user to
-the `docker` group; log out and back in or run `newgrp docker` once after the
-first installation.
-
-> [!WARNING]
-> Access to the host Docker daemon, including membership in the `docker` group,
-> is effectively root-level host access. Use a dedicated DIM host or service
-> identity if that trust assumption is not acceptable. Agent containers must
-> never receive the host Docker socket.
-
-The installer shows every package and host-level change before doing anything
-and proceeds only after you enter `yes`. It is a development convenience, not
-production hardening guidance. In particular, review its path-scoped AppArmor
-exceptions for Sysbox FUSE mounts and rootless DinD's
-`/usr/local/bin/rootlesskit` user namespace before using it outside a
-development host.
-
-Install the supported workspace backend:
-
-```bash
-bash verification/scripts/install-host-ubuntu.bash sysbox
-```
-
-See [docs/runtime-backends.md](specification/docs/runtime-backends.md) for the
-trusted-runc and untrusted-Sysbox boundary, and [CONTRIBUTING.md](CONTRIBUTING.md) for testing the installer in a
-disposable KVM guest instead of your own host.
-
-## Install the `dim` CLI
-
-Pin an exact, reviewed version — never `latest`:
+DIM is pre-stable and part of the host trust boundary. Pin and review one exact
+release or complete source commit.
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.9.0'
 dim installer install core \
   --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
-```
-
-The mise-installed facade provisions Node.js 24 on demand when no supported
-Node.js is on `PATH`; Node.js does not need to be added to the global mise
-configuration. The first `dim` invocation may therefore download Node.js.
-
-or, without mise:
-
-```bash
-npx '@slop-lab/dim-installer@0.9.0'
-npx '@slop-lab/dim-installer@0.9.0' installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
-npx '@slop-lab/dim-installer@0.9.0' installer install plugin '@example/dim-plugin@1.2.3'
-```
-
-`@slop-lab/dim-installer` is a thin facade: it owns the `installer` namespace,
-rejects the one obsolete `install-cp` token, and proxies every other command to
-a separately installed `@slop-lab/dim-cli`. Bare `dim` opens an interactive
-installer only until a CLI is configured; after that it behaves like `dim
---help`, and `dim installer` is what reopens the prompt. Installation
-choices persist under `${XDG_CONFIG_HOME:-~/.config}/dim/config.json`. See
-the [installer README](https://www.npmjs.com/package/@slop-lab/dim-installer)
-for the full command reference.
-
-The pre-stable installer facade can install or update the native Git and
-ordinary-CI service bundle from an operator-owned absolute config path:
-
-```bash
-dim installer install control-plane --config /absolute/path/install.json
-```
-
-The bundle starts without a runnable Project. Its strict ordinary format-12
-state automatically reconciles imported-root eligibility from current ordinary review events,
-reserve and activate generation-bound host claims, accept schema-2 cleaned host
-results carrying schema-3 terminal evidence, and retry its durable result outbox
-until native Git returns an exact acknowledgement. Native Git keeps the
-corresponding strict schema-3 attempt and status evidence in format-8 state.
-These routes use separate proof, attempt-issuer, result-reporter, webhook,
-query, and host credentials. Capacity is released only after acknowledged
-delivery or cleanup-gated terminal denial.
-
-This is still an additive, fail-closed checkpoint. Native Git automatically
-delivers candidate-job events to explicitly configured host capacity, while the
-controller does not start that host service. Native ordinary and QEMU execution
-remain separately deployed host services. A distinct host-promoter credential
-can request protected promotion only after the proposal push has automatically
-published its exact candidate envelope, exact-tree human approval is complete,
-and every ordinary or QEMU terminal result selected by the Project quality
-policy is successful. Promotion records a durable intent, performs a checked Git
-compare-and-swap, and reconciles either crash window before serving the folded
-current head. The policy may select neither kind, one kind, or both. No
-clean-host Sysbox/KVM acceptance has been claimed. CI deployment and results
-are not Project readiness prerequisites.
-The obsolete `dim install-cp` token
-is owned and rejected by the facade with exit code 2 and is never forwarded to
-the separately installed DIM CLI.
-
-The installer also rejects the obsolete ordinary-pool connection selector and
-canonical Project-scoped Sysbox runner records before reading its config or
-using Docker. Existing schema-8 QEMU runner records are left untouched. Old
-ordinary-pool services could use arbitrary private config and database paths,
-so the new installer neither scans the host for them nor adopts their data;
-operators must stop those external services with the pinned predecessor
-release before installing the native bundle.
-
-Check the installed backend before creating a workspace:
-
-```bash
 dim doctor
 ```
 
-If the CLI was installed without configuring a host backend, configure one
-through the same diagnostic path:
+Install the native Git and ordinary-CI service bundle from one caller-owned,
+absolute, mode-`0600` configuration:
 
 ```bash
-dim doctor configure-backend
+dim installer install control-plane --config /absolute/operator/install.json
 ```
 
-DIM uses an explicitly enabled, versioned plugin loader for concrete
-integrations. It does not expose a generic Git-provider extension point. See
-[docs/plugins.md](specification/docs/plugins.md).
-
-## Create a Project
+Native ordinary and QEMU execution are separately deployed global host
+services. They are not created per Project:
 
 ```bash
-dim project create project \
-  --bootstrap-git-url /path/to/project --bootstrap-git-ref main --apply-repos
-dim workspace create project work-1
-dim workspace run work-1 shell
+dim ci native-root host run /absolute/operator/ordinary-host.json
+dim ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.9.0
+dim ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.9.0
+dim ci native-qemu scheduler run /absolute/operator/qemu-scheduler.json
+dim ci native-qemu host run qemu-a /absolute/operator/qemu-host.json
 ```
 
-The selected ref's `.dim/repos.yml` supplies the stable root and non-root
-repository aliases. `--apply-repos` applies the complete reviewed set without
-requiring a separate local manifest.
+The ordinary host requires `sysbox-runc`. The QEMU host requires a real,
+accessible `/dev/kvm`; TCG is never accepted as KVM evidence.
 
-If an interactive prompt is declined, apply the managed root file later
-without a local clone using `dim repo apply project --yes`.
+## Create a native Project
 
-The keys below `repositories` are Project-scoped aliases; URLs are passed to
-the host Git CLI and are never parsed to invent a name.
-
-With no custom lifecycle files, creation selects the recommended environment.
-It creates an unprivileged `sysbox-runc` agent and persistent named volumes for
-`/home/dim`, `/workspace`, and private Docker data. The agent receives no host
-or trusted outer Docker socket and no raw operator or product credential.
-`create` and `setup` attest that the agent is running and initialize its
-checkout before reporting the workspace ready.
-
-The creation-time CPU, memory, and PID values are one combined recommended
-budget. DIM assigns the floor of 25 percent to the trusted outer container and
-the exact remainder to the agent, with a minimum of 1 CPU, 1 GiB memory, and
-256 PIDs. Each container's swap limit equals its memory limit. Resource updates
-read back both limits before publishing state and roll back attempted changes
-on failure; an unprovable rollback is reported as uncertain.
-
-Recommended commands are explicit:
+Bootstrap only from an already-local reviewed repository and one full branch
+ref. Registrar and importer roles are distinct private files.
 
 ```bash
+dim project bootstrap-native-root demo \
+  --project-id demo-root \
+  --source-repository "$PWD/project-root" \
+  --source-ref refs/heads/main \
+  --registrar-connection /absolute/operator/registrar.json \
+  --importer-connection /absolute/operator/importer.json \
+  --json
+
+export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/absolute/operator/control-plane.json
+export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
+dim project create demo --json
+dim project list --json
+dim project show demo --json
+```
+
+`create` publishes `ready` only after live native proof, protected-root
+snapshot validation, proposal-only writer authority, and local workspace
+runtime prerequisites. It never starts CI or creates approval.
+
+## Use a workspace
+
+```bash
+dim workspace create demo work-1
+dim workspace show work-1 --json
 dim workspace run work-1 shell
 dim workspace run work-1 exec -- git status
-dim workspace run work-1 custom -- ./scripts/reviewed-helper
-dim workspace exec work-1 -- git status
-```
-
-`shell` accepts no arguments. The other `run` operations require a command,
-and all four forms execute in the recommended agent. No operation implies
-provider login, provider installation, or Project-specific tool setup.
-
-Creation seeds the selected protected-root commit into the recommended
-checkout once. Later lifecycle updates can refresh immutable setup bytes but
-never reset the retained checkout, its `HEAD`, index, user files, or local
-commits. DIM prints a notice and keeps agent commands available. Adopt reviewed
-product changes explicitly:
-
-```bash
+dim workspace exec work-1 -- git log -1 --oneline
+dim workspace stop work-1
+dim workspace start work-1
+dim workspace restart work-1
 dim workspace update work-1
-dim workspace run work-1 exec -- git fetch origin
-dim workspace run work-1 exec -- git log --oneline HEAD..origin/main
-dim workspace run work-1 exec -- git rebase origin/main
-# Or merge origin/main after review.
+dim workspace discard work-1 --yes
 ```
 
-Product root-code changes do not require a fresh workspace. Environment-mode
-changes still require preserving needed data, discard, and recreation.
+The workspace receives a protected-root snapshot and a brokered Git endpoint.
+Its writer can create or fast-forward only its own proposal namespace. Direct
+protected writes, deletes, force pushes, tags, foreign workspace namespaces,
+and foreign Projects are denied.
 
-Any `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, or
-`.dim/docker-compose.yml` file selects the advanced custom contract. A root
-without those files selects recommended, even when `.dim` contains repository
-or CI configuration. `.dim/environment.yml` is an obsolete, unsupported format
-and is rejected rather than treated as a preset selector.
+## Existing installations
 
-Changing between recommended and custom requires discarding and recreating the
-workspace so persistent data is never silently reinterpreted. First leave the
-recommended workspace intact or explicitly copy or back up needed home,
-checkout, and private-Docker data. Recommended `discard --keep-volume` rejects
-before any mutation; custom retention behavior is unchanged. Historical
-environment-undefined records retain custom behavior. Persisted minimal records
-are obsolete and are rejected unchanged with guidance to export needed data
-through the prior pinned release, discard, and recreate.
+DIM does not migrate, reinterpret, adopt, delete, or rename predecessor
+Project, repository, runner, container, volume, or remote state. Before
+installing this native-only product, use the pinned prior release to stop its
+services and export required user data. Validate the export outside DIM state,
+then create fresh native state and restore only declared user data.
 
-This repository implements the same project contract on itself through
-`.dim/setup.sh` and `.dim/entrypoint.sh`.
+Do not delete existing forge containers, volumes, remotes, or credentials as a
+side effect of native installation. Their explicit operator disposal is a
+separate action after export and validation.
 
-### Set up the Project-configured agent tool
-
-The development agent image provides Node.js and npm but does not bake in a
-coding agent. From a local checkout of this repository, install the reviewed
-OpenCode and Oh My OpenAgent versions into the persistent workspace user's
-home:
+## Verification
 
 ```bash
-dim workspace run dim-dev tool-setup \
-  && dim workspace run dim-dev agent
+just check-source-native
+just verify native-idle-service-images
+just verify control-plane-install-live
+just verify native-basic-lifecycle
+just verify native-ordinary-guest-mechanics
+just verify native-qemu-guest-mechanics-kvm
 ```
 
-The generic task names belong to this reviewed Project, not DIM core. The
-self-Project maps `tool-setup` to its local OpenCode utility and maps `agent`
-to the pinned executable through a contract-versioned launcher manifest below
-canonical `$HOME`. Launch rejects a missing manifest, unsupported contract,
-unknown launcher, or mismatched tool, version, or executable path. Setup is
-safe to rerun. Existing homes are not upgraded automatically: rerun
-`tool-setup` explicitly after adopting a reviewed Project change that selects
-new tool bytes or versions. It installs under `$HOME/.local`, pins the OMO plugin
-coordinate, disables supported automatic updates, enables Team Mode, and
-preserves unrelated OpenCode and OMO user configuration. It does not start
-OpenCode or perform provider authentication, and lifecycle setup never invokes
-it.
+The last two commands prove same-host execution mechanics. They do not satisfy
+independent-host or human release acceptance. The disposable KVM guest
+aggregate is `verification/scripts/kvm-guest-verification-smoke.bash`; it emits
+per-phase `PASS`, `FAIL`, or `BLOCKED` records and reserves exit `125` for
+uncertain cleanup. Missing hardware is unavailable, never a pass.
 
-OpenCode remains the default helper behavior. A reviewed Project may instead
-stream the same checksum-verified helper with the `codex` selection to install
-exactly `@openai/codex@0.156.1` and publish the same v1 launcher manifest. The
-helper does not log in, start Codex, or create or modify
-`$HOME/.codex/auth.json` or `$HOME/.codex/config.toml`. The paired examples
-repository documents the Codex selection at `use-cases/codex`; the existing
-generic SSH `ProxyCommand` is reused unchanged.
-
-To start an authenticated OpenCode Web server explicitly and request or reuse
-its workspace-scoped external URL, run the separate launcher after setup:
-
-```bash
-dim workspace run dim-dev bash -- /workspace/scripts/opencode-web.bash
-```
-
-If a Web UI hosted at another origin will connect to the returned DIM URL,
-pass that UI's origin as an additional exact CORS origin:
-
-```bash
-dim workspace run dim-dev bash -- -c \
-  'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash /workspace/scripts/opencode-web.bash' \
-  bash '["https://remote-web.example"]'
-```
-
-The command prints the URL, username, and restricted credential-file path; it
-does not print the password. The credential, PID identity, and mode-0600 log persist under
-`${XDG_STATE_HOME:-$HOME/.local/state}/opencode-web`; rerunning reuses the owned
-healthy process and matching URL. It never kills an unrecorded OpenCode
-process. OpenCode binds only to `127.0.0.1` on `OPENCODE_WEB_PORT` (default
-`4096`). The launcher asks the generic `dim-development-service` helper to
-expose the stable `opencode-web` service name and consumes only
-`OPENCODE_WEB_URL_SOCKET`; it uses no container path, gateway target port, raw
-controller grant, or host secret. Reviewed Project setup binds that service
-name to an exact collision-resistant workspace label ending in
-`-<16-hex-workspace-hash>--opencode` and the
-fixed development gateway target. The proxy rejects other service names and
-caller-supplied subdomains. The default `https-ts`
-ingress must already be allowed by the trusted bound proxy. `OPENCODE_WEB_INGRESS` selects another
-allowed HTTPS ingress, but cannot widen that proxy policy. The launcher requires
-the installed helper and GNU `timeout`; it bounds the complete helper process
-tree and cleans up only a newly started OpenCode process when exposure fails.
-Retrieve the generated username and password explicitly from the first and
-second lines of the reported mode-`0600` file, for example with
-`dim workspace run dim-dev bash -- -lc 'cat "$HOME/.local/state/opencode-web/credentials"'`.
-The launcher always passes `https://localhost:4096` to OpenCode and treats
-`OPENCODE_WEB_CORS_ORIGINS` as a JSON array of additional origins, defaulting
-to `[]`. Each value
-must be an exact HTTP or HTTPS origin, with no wildcard, credentials, path,
-query, or fragment. It normalizes, deduplicates, and sorts the list, and rejects
-invalid input before creating launcher state. OpenCode 1.18.31 does not treat
-`*` as a wildcard origin, so the launcher rejects it rather than suggesting
-false broad access. OpenCode may also merge origins from its own configuration
-or built-in behavior, so this setting describes the origins supplied by the
-launcher rather than a universal deny list.
-
-The allowed origin is the source origin of the browser UI making the request,
-such as `https://remote-web.example`, not the destination DIM external URL.
-CORS headers produced by OpenCode travel through the external URL route.
-Cross-origin requests still require the reported Basic Auth credential, and
-the browser client must send it in the `Authorization` header. Repeating the
-launcher with the same port and canonical CORS list reuses its healthy owned
-process. Changing either restarts only that owned process while retaining the
-credential, external URL, and shared gateway. Allow only trusted client UI
-origins.
-
-The development-service gateway
-listens on its agent-container interfaces at the fixed port reported by
-`gateway-port`, then forwards each exact external authority only to the
-selected `127.0.0.1:OPENCODE_WEB_PORT` application. The trusted nested route,
-when needed, maps that queried gateway port to the same port (`G:G`); changing
-the OpenCode application port requires no `.dim` or container-port change.
-The independent generic `DIM_EXTERNAL_URL_*` capability remains available to
-callers that need to choose arbitrary targets; the OpenCode launcher does not
-consume it.
-
-For a workspace that does not have the development checkout, download both
-files on the host from one reviewed, full 40-character development commit.
-Set `DIM_DEVELOPMENT_COMMIT` to that commit in the environment; never
-substitute a moving branch or tag:
-
-Optionally set `OPENCODE_WEB_CORS_ORIGINS='["https://remote-web.example"]'` on
-the host before this block to pass additional client UI origins. Unset keeps
-only the launcher's default origin.
-
-```bash
-# DIM_REMOTE_BOOTSTRAP_BEGIN
-(
-  set -euo pipefail
-  FULL_DEVELOPMENT_COMMIT="${DIM_DEVELOPMENT_COMMIT:?set DIM_DEVELOPMENT_COMMIT to a reviewed full 40-character commit}"
-  [[ "$FULL_DEVELOPMENT_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
-    printf 'FULL_DEVELOPMENT_COMMIT must be exactly 40 lowercase hex characters\n' >&2
-    exit 2
-  }
-  setup_dir="$(mktemp -d)"
-  trap 'rm -rf -- "$setup_dir"' EXIT
-  base="https://raw.githubusercontent.com/slop-lab/dev-infra-manager/${FULL_DEVELOPMENT_COMMIT}/scripts"
-  curl --fail --silent --show-error --location \
-    --output "$setup_dir/workspace-user-setup.bash" \
-    "$base/workspace-user-setup.bash"
-  curl --fail --silent --show-error --location \
-    --output "$setup_dir/workspace-user-setup.bash.sha256" \
-    "$base/workspace-user-setup.bash.sha256"
-  curl --fail --silent --show-error --location \
-    --output "$setup_dir/opencode-web.bash" \
-    "$base/opencode-web.bash"
-  curl --fail --silent --show-error --location \
-    --output "$setup_dir/opencode-web.bash.sha256" \
-    "$base/opencode-web.bash.sha256"
-  (cd -- "$setup_dir" && sha256sum --check \
-    workspace-user-setup.bash.sha256 opencode-web.bash.sha256)
-  dim workspace run dim-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"
-  dim workspace run dim-dev bash -- -c \
-    'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' \
-    bash "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <"$setup_dir/opencode-web.bash"
-)
-# DIM_REMOTE_BOOTSTRAP_END
-```
-
-For a complete, tested walkthrough that exposes a nested development
-container and a container inside it through host-configured external URL
-ingresses, see [examples/features/external-urls](examples/features/external-urls/README.md).
-For a copyable zero-`.dim` journey, see
-[examples/projects/recommended-default](examples/projects/recommended-default/README.md).
-The [single-repository example](examples/projects/single-repository/README.md)
-instead demonstrates an advanced custom lifecycle with an unprotected
-repository and no secrets.
-
-See [glossary](specification/docs/README.md#glossary), [docs/repo-workspaces.md](specification/docs/repo-workspaces.md)
-for lifecycle, credential, and reconciliation details, and
-[docs/project-workspaces.md](specification/docs/project-workspaces.md) for the
-project-facing `.dim` contract and CLI lifecycle. [docs/README.md](specification/docs/README.md)
-is the full documentation index.
+See [the documentation index](specification/docs/README.md), the
+[CLI contract](specification/specs/10-cli-contract.md), and the
+[verification contract](specification/specs/12-verification.md).

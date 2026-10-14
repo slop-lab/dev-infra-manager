@@ -1,5 +1,10 @@
 # Native ordinary CI control plane
 
+> **Historical predecessor design.** Manual ordinary-pool registration and its
+> Gitea fixtures are removed. Current ordinary capacity is global and obtains
+> eligibility automatically from native review events. Use
+> [Global native CI](ci-runners.md).
+
 This is the partially implemented target and operator design for the ordinary
 CI scheduler/webhook service installed with native Git. Core includes the
 bounded native authority, standalone webhook intake, receipt-bound host claim

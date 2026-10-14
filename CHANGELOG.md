@@ -7,12 +7,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Replace the provider-backed multi-repository product with one root-only
+  native DIM lifecycle. Projects now bootstrap and publish exactly one reviewed
+  native root; schema-6 Project and schema-9 workspace state are strict;
+  workspaces receive proposal-only Git authority; human approval and current
+  candidate-controlled ordinary/QEMU evidence feed checked protected-ref
+  compare-and-swap promotion. Repository CRUD/synchronization, Project
+  remove/purge, Project-scoped runners, ordinary-pool/shared-QEMU commands,
+  managed Gitea runtime, and provider fallback are removed. Existing provider
+  containers, volumes, remotes, credentials, and state are never adopted,
+  migrated, renamed, or deleted: operators must use the pinned prior release to
+  export data and then create fresh native state.
+
 - Add the independently deployable Gitea-free native QEMU scheduler and trusted
   host worker surface, with fixed operator capacity, QEMU-specific native-Git
   attempts/statuses, KVM-only execution, cleanup-gated evidence, and a hardened
-  non-root guest job boundary. Add a separately labelled Docker-hosted TCG lane
-  for real guest-mechanics verification without treating it as KVM acceptance
-  or a production fallback.
+  non-root guest job boundary. Real guest-mechanics verification requires an
+  accessible `/dev/kvm`; missing hardware is unavailable and there is no TCG or
+  ordinary fallback. Same-host mechanics remain distinct from independent-host
+  and human release acceptance.
 
 - Implement the installed native ordinary-CI host and automatic central
   eligibility surfaces. A private host file starts one journaled worker per
@@ -39,7 +52,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   strict combined schema-4 candidate definition and defines no compatibility
   parser or automatic source or state migration.
 
-- Pin the self-Project CI job image with the complete source-verification
+- Pin the root Project CI job image with the complete source-verification
   toolchain, including GNU sed for pnpm's generated shims, findutils, jq,
   grep, awk, util-linux and tini. Runner admission probes the declared tools;
   adopting the reviewed root commit requires reconciling existing runners
@@ -129,11 +142,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   separate. The same root tree now owns production packages under `core/` and
   `plugin-*/`, centralized tests under `tests/`, host and cross-component gates
   under `verification/`, normative contracts under `specification/`, and one
-  reviewed `.dim` self-Project contract. Package-specific changelogs and design
-  records live with their production package or group. DIM-managed Gitea keeps
-  internal review and automatic CI authority, while publication of that exact
-  commit and tree to canonical GitHub remains a separate trusted maintainer
-  action.
+  reviewed root `.dim` lifecycle contract. Package-specific changelogs and
+  design records live with their production package or group. Native Git keeps
+  internal review, candidate evidence, and protected promotion authority,
+  while publication of that exact commit and tree to canonical GitHub remains
+  a separate trusted maintainer action.
   The published installer now owns the nested `installer` namespace and the
   explicit obsolete `install-cp` rejection:
   `installer install core|plugin` replaces the old top-level install verbs,
@@ -153,13 +166,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   installer facade now installs and transactionally updates the empty, idle
   native Git/ordinary-CI bundle through `installer install control-plane
   --config FILE`; it rejects obsolete `install-cp` before CLI forwarding. The
-  Native Project create now converges its schema-5 crash/retry stage to a
+  Native Project create now converges its pending crash/retry stage to a
   schema-6 ready record without waiting for CI. Schema-9 native Sysbox
   workspaces use fresh fast-forward protected-root proofs across lifecycle
   transitions and proposal-only Git through a workspace-local broker, without
-  Gitea fallback or host credentials in the container. Installed native CI
-  capacity, Sysbox job execution, protected promotion, and reviewer UI remain
-  unavailable.
+  provider fallback or host credentials in the container. Installed ordinary
+  CI and separately deployed native QEMU provide global fixed host capacity;
+  immutable human review plus current required evidence authorizes only the
+  checked native protected-ref promotion path. A reviewer UI remains separate.
   Published CLI installations can now explicitly run `dim workspace image
   build` from any directory. The core package ships the complete trusted build
   context and references the exact-version controller-proxy package, so the
@@ -284,7 +298,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   independently selected plugin boundaries for DIM self-development.
 - Limited automatic disposable-QEMU release gates to non-draft managed-host
   pull requests targeting `main`, kept routine development gates on
-  `development`, and pinned the self Project's protected branches and
+  `development`, and pinned the root Project's protected branches and
   `main`-to-canonical-`development` publish mapping in reviewed policy.
 - Replaced arbitrary external `repo push` refspecs with reviewed repository-set
   branch mappings and `repo publish PROJECT [ALIAS]`; omitting the alias
@@ -325,7 +339,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Made managed-controller PID ownership publication atomic so concurrent
   readers cannot mistake a newly created empty PID file for stale ownership.
 - Kept the full-development-flow example's private rootless DinD ownership
-  repair aligned with the canonical self Project so its persistent volume
+  repair aligned with the canonical root development Project so its persistent volume
   remains writable after the outer workspace runtime is replaced.
 - Made the stateful full-development-flow gate build its local CLI and package
   artifacts before invoking the CLI from a clean KVM checkout.
@@ -356,17 +370,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserved the systemd controller runtime directory across an atomic service
   restart, keeping its directory bind mount live in existing workspaces when
   the controller replaces its Unix sockets.
-- Replaced the QEMU runner's one-webhook/one-VM launcher with a persistent
-  single-capacity demand scheduler. Queued jobs now survive supervisor
-  failures and restarts, and remain scheduled until Gitea reports that they
-  started or completed instead of being stranded when an ephemeral runner
-  consumes a different task. Each update fsyncs the durable scheduler file and
-  its containing directory before HTTP `202`; load or write failures reject
-  acknowledgement rather than losing demand.
-- Removed an empty per-Project CI runner state directory with the directory
-  API, preventing a successful final runner deletion from ending in `EISDIR`
-  and an admin-controller 500 response.
-
 ### Added
 
 - Added Project-owned, key-only SSH access to development agents through a
@@ -382,51 +385,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   access policy or credentials to DIM core.
 - Added an interactive, recommended KVM-access confirmation to `dim workspace
   create`, plus explicit `--kvm` and `--no-kvm` policies for automation.
-- Added a full-development-flow reference Project with key-only, non-root SSH
-  sessions that match ordinary agent authority while retaining bounded Git,
-  private Docker, and constrained controller access. Its QEMU verification
-  service serializes runs and snapshots agent-visible inputs before launch.
-  The stateful release journey covers reviewed root-monorepo updates,
-  restart safety, controller replacement, setup recovery,
-  backup/discard/recreate/restore, and cleanup without putting
-  verification-only hooks in the checked-in example.
-- Added a separate host-only managed Git maintainer capability for `dim x git`
-  and `dim git setup`. Existing managed credentials and protected-branch rules
-  are reconciled so trusted host Git may push protected refs without granting
-  that authority to workspace writers or exposing a provider-specific payload
-  through the CLI contract.
-- Added a host-scoped, credential-free CNCF Distribution pull-through cache
-  for Docker Hub layers used by managed CI. Managed workspace and Sysbox
-  daemons connect directly through the stable control-network alias, nested
-  agent DinD uses a workspace-local relay, and QEMU guests use a launcher-local
-  relay. Cold, warm, cache-replacement, and outage evidence proves each route
-  without publishing the cache or attaching it to workspace networks.
-- Added layered Packer caching for disposable QEMU CI runners. A host-scoped,
-  immutable common Packer base is reused across Projects, while protected
-  Project hooks produce isolated Project-specific thin layers keyed by the full
-  hook digest. Every job uses a fresh disposable overlay, and deleting a
-  Project's final capacity removes its Project cache while retaining the host
-  common cache.
-- Allowed multiple named QEMU CI capacities per Project behind the existing
-  `dim-qemu` workflow capability. Supervisors now atomically dispatch shared
-  demand with renewable claims, so provider webhook fan-out cannot duplicate a
-  VM and tracked workflows do not depend on capacity names or Gitea topology.
-- Added Project-owned streaming `backup` and `restore` tasks to the canonical
-  self-Project and runnable Project examples, archiving only the agent home
-  without adding backup-format knowledge to DIM core. The tasks stop the agent
-  for a consistent snapshot and use a networkless temporary container with
-  only the home volume mounted read-only for backup or read-write for restore.
-- Added independently named Project CI runners, allowing multiple Sysbox
-  instances with separate lifecycle, state, resources, logs, and coordinator
-  registrations.
-- Added a disposable QEMU managed runner for nested-KVM-capable hosts. A
-  trusted supervisor owns host KVM access while each untrusted job runs in a
-  fresh ephemeral VM. After guest readiness the supervisor registers
-  ephemerally, validates and transfers only temporary `.runner` state, unsets
-  the reusable token for guest transports and QEMU, runs `daemon --once` under
-  a timeout, and removes per-job overlay, SSH, registration, and run state.
-  Also added a forge-neutral pull-request skill with
-  scripted GitHub/Gitea detection and Gitea PR/CI operations.
 - Added the KVM backend-installer release gate to non-draft pull requests on
   the active managed development host.
 - Added a driver-aware Project runtime cgroup manifest contract, a standard
@@ -441,51 +399,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Renamed ambiguous root Just recipes to describe their actual scope:
   `install-dependencies`, `build-packages`, `check-source`, `run-cli`,
   `install-local`, and `build-workspace-image`.
-- Replaced named CI runner `enable`/`disable` with explicit
-  `create`/`start`/`restart`/`stop`/`delete` lifecycle commands.
-
-### Removed
-
-- Removed the canonical self-Project's delegated tool cgroups. Codex now runs
-  directly in the unprivileged agent service under the workspace-wide resource
-  boundary.
-
 ### Fixed
 
-- Reconciled QEMU coordinator webhooks by their exact target URL instead of
-  Gitea's provider-type `name`, removing stale duplicates and their rejected
-  authorization headers when a managed runner is restarted or deleted.
 - Made `workspace align --reset --yes` discard dirty root-checkout changes and
   non-ignored untracked setup output, restoring the documented CLI-only
   recovery path after Project setup fails.
 - Let the systemd-managed controller use the full startup readiness window,
   avoiding false `dim controller restart` failures while ingress services are
   still becoming ready.
-- Made the pull-request skill's bundled Gitea publication, CI waiting, and job
-  log workflows self-contained, and documented that DIM-managed issue numbers
-  belong in development PR bodies, not PR titles or commit subjects that may
-  enter canonical public history.
-
-- Corrected managed Gitea webhook allowlist reconciliation to use Gitea
-  1.27's environment-to-INI editing contract instead of unsupported
-  `config edit-ini` section/key flags.
-
-- Made the container self-Project smoke reuse a locked, recoverable identity
-  and purge its repositories and organization through the DIM lifecycle,
-  preventing failed cleanup from accumulating `dim-dim-self-*` organizations.
-- Reconciled Gitea's webhook allowlist to the exact enabled QEMU supervisor
-  hostnames so queued `dim-qemu` jobs can reach their on-demand runner without
-  permitting arbitrary private-network webhook targets.
-
-- Split managed CI lifecycle operations by `sysbox` and `qemu` executor, and
-  boot disposable QEMU guests only for queued `dim-qemu` jobs instead of
-  retaining a 12 GiB waiting guest while idle.
-
-- Recreated canonical self-Project containers during setup and restored the
-  rootless-DinD UID/GID helper setuid fallback on every sidecar start, fixing
-  workspace restart while preserving named home and daemon-data volumes.
-  Setup now rebuilds the sidecar image explicitly so existing broken
-  workspaces can adopt the repair in place.
 - Let the single-repository example smoke place its state and controller
   sockets under a shared work root, so sibling DinD daemons resolve bind
   sources at the same absolute paths.

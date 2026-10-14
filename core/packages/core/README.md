@@ -1,541 +1,101 @@
 # @slop-lab/dim-core
 
-Core TypeScript APIs behind the `dim` command-line interface. This package
-implements:
+`@slop-lab/dim-core` implements DIM's native Project, workspace, host, and CI
+boundaries. Most users should install `@slop-lab/dim-cli`; this package is for
+the CLI, trusted services, plugins, and contributors.
 
-- Project and project-scoped repository state;
-- managed Gitea reconciliation and clone URLs;
-- provider-neutral Project CI runner lifecycle with an initial managed-Gitea
-  coordinator adapter and isolated container executor;
-- persistent workspace create/start/restart/update/discard lifecycle;
-- recommended host-side Sysbox agents with persistent home, checkout, and
-  private Docker volumes, plus reviewed custom environments;
-- a Sysbox workspace runtime plan with runc reserved for trusted infrastructure;
-- host-readiness checks;
-- plugin manifest loading and version validation.
+## Scope
 
-Most users should install
-[`@slop-lab/dim-cli`](https://www.npmjs.com/package/@slop-lab/dim-cli)
-instead. The core package is for embedding DIM lifecycle operations in
-TypeScript tools or contributing to DIM itself.
+The package provides:
+
+- native root bootstrap, import proof, readiness, review, and checked
+  protected-ref promotion primitives;
+- strict schema-6 root-only Project and schema-9 native workspace state;
+- persistent Sysbox workspace create, setup, start, stop, restart, update,
+  resource, and discard operations;
+- workspace-scoped proposal Git authority and short-lived read/write leases;
+- installed native Git and ordinary-CI service contracts;
+- global bounded ordinary Sysbox host execution;
+- global native QEMU scheduler, trusted runner image, KVM host execution, and
+  terminal evidence contracts;
+- host lifecycle, diagnostics, plugin loading, and image-build helpers.
+
+DIM core does not manage Gitea, repository catalogs, Project deletion,
+Project-scoped runners, an ordinary pool, or a shared predecessor QEMU
+scheduler. Historical state for those products is rejection/export-only.
 
 ## Installation
 
-Pin the same reviewed release used by the CLI:
+Pin exactly the version used by the CLI:
 
 ```bash
-npm install --save-exact "@slop-lab/dim-core@0.9.0"
+npm install --save-exact '@slop-lab/dim-core@0.9.0'
 ```
 
-The package is ESM-only, supports Node.js 24 and 26, and includes TypeScript
-declarations. It supports Linux hosts only.
+The package is ESM-only, supports Node.js 24 and 26, and runs on Linux. Runtime
+lifecycle operations require Git, Docker, procfs, and util-linux `flock`.
+Workspaces require `sysbox-runc`; native QEMU execution additionally requires
+real accessible KVM.
 
-Lifecycle operations require a mounted Linux procfs and the util-linux
-`flock` executable. DIM combines the kernel guard with a versioned owner
-record so process death releases exclusion while PID reuse remains detectable.
+## Native lifecycle
 
-## Basic use
+Native lifecycle selection uses the absolute, owner-only mode-`0600` file named
+by `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`. Project publication also uses a
+distinct importer connection selected by
+`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE`. Role credentials are distinct and
+never enter Project code, workspace containers, candidate jobs, logs, command
+arguments, or persisted workspace state.
 
-```ts
-import {
-  ProcessRunner,
-  createProject,
-  importProjectRepository,
-  createWorkspace,
-  lifecycleOptions
-} from "@slop-lab/dim-core";
+Root bootstrap accepts only an already-local reviewed repository and one full
+branch ref. It retains an immutable bundle and policy before service mutation,
+then proves the imported commit, tree, policy, and generation. Project
+readiness separately revalidates live service identity and materializes the
+protected root before publishing strict schema-6 state.
 
-const runner = new ProcessRunner();
-const options = lifecycleOptions(process.env);
+Workspace creation accepts only a ready native Project. It stores strict
+schema-9 state with a fixed `root` repository snapshot and proposal-only writer
+authority. Recommended workspaces use Sysbox and persistent home, checkout,
+and private Docker volumes. Reviewed `.dim/setup.sh`, `.dim/entrypoint.sh`,
+`.dim/teardown.sh`, or `.dim/docker-compose.yml` selects a custom environment.
 
-await createProject(runner, options, "acme");
-await importProjectRepository(runner, options, {
-  project: "acme",
-  alias: "root",
-  source: "/path/to/acme",
-  root: true,
-  ref: "main",
-  protectedPatterns: ["main", "development"]
-});
-await createWorkspace(runner, options, {
-  project: "acme",
-  name: "feature-123",
-  runtimeBackend: "sysbox",
-  profiles: [],
-  cpuCount: "4",
-  memory: "8g",
-  pidsLimit: "4096"
-});
-```
+## CI boundaries
 
-Lifecycle methods reconcile Docker containers, volumes, networks, and a local
-managed Gitea service. They are not pure data helpers. Callers must provide a
-usable host environment and surface `UserError` messages to users without
-discarding the underlying operation result.
+The installed bundle starts empty and idle. Native review events create
+candidate-controlled eligibility; they do not advertise host capacity or
+approve promotion. The ordinary host consumes fixed digest-pinned images and
+bounds from an operator file and refuses to claim without `sysbox-runc`.
 
-Workspace creation selects its environment from the immutable root. No `.dim`
-directory, or one without lifecycle files, selects the recommended agent. Any
-custom lifecycle file selects custom. `.dim/environment.yml` is an obsolete,
-unsupported format and is rejected. Creation and setup reconcile the
-recommended agent before ready publication. Mode changes require discard and
-recreation. Older records without an environment continue as custom without
-rewriting their data; persisted minimal records are rejected unchanged with
-export and recreation guidance.
+Native QEMU is separately deployed. The scheduler and trusted runner images
+are explicit build artifacts. A host verifies `/dev/kvm`, the trusted launcher,
+Docker image-mount support, and the pinned job image before attestation or
+claim. The guest receives only verified candidate bytes and bounded writable
+workspace state. It receives no scheduler, native Git, reviewer, promotion,
+Docker-host, or DIM host credential. There is no TCG or ordinary fallback.
 
-Creation seeds the recommended checkout at the exact selected root once through
-recoverable owned staging. Later lifecycle root selection refreshes immutable
-setup bytes only: the retained checkout's `HEAD`, index, user files, and local
-commits remain unchanged, and checkout divergence does not fail setup or block
-normal agent commands. The lifecycle notice directs users to fetch `origin`
-and explicitly review, rebase, or merge product changes in the agent. Product
-root changes do not require workspace recreation; environment-mode changes do.
+Candidate-selected ordinary or QEMU success is evidence, not approval.
+Protected promotion requires the exact immutable review, required human
+approvals, current policy/job revisions, both required evidence classes, and a
+checked compare-and-swap from the expected protected head.
 
-Recommended resource values are one combined budget. DIM assigns the floor of
-25 percent of CPU, memory, and PIDs to the trusted outer container and the
-exact remainder to the agent, with aggregate minimums of 1 CPU, 1 GiB, and 256
-PIDs. Both swap limits equal memory. Updates verify each runtime readback before
-state publication and restore attempted changes on failure; failed rollback is
-reported as uncertain. Recommended `discard --keep-volume` rejects before any
-mutation because its three persistent volumes are workspace-identity-bound.
+## Configuration and state
 
-`importProjectRepository` is a low-level mirror import and copies every source
-ref. Applications that want the CLI's branches-and-tags-only default should
-use the prepare/transfer/complete API and perform that explicit Git transfer
-with host credentials.
-
-## Configuration
-
-`lifecycleOptions()` reads the same environment used by the CLI:
-
-Native lifecycle selection uses the owner-only mode-`0600` file named by
-`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`. Its strict schema-1 `nativeGit`
-object binds the current serving `generationId` and distinct
-`workspaceWriteIssuer` and `rootReadIssuer` credentials. Readiness and
-proposal-write lease issuance use the workspace-write issuer; protected-root
-snapshot materialization uses only the root-read issuer. Project create and
-workspace lifecycle reload this connection while holding the Project lock, so
-a serving-generation rollover does not rewrite the immutable original import
-receipt. The native readiness, issuer, lease, and smart-HTTP clients use
-system-verified TLS for `https` origins, do not follow redirects, and retain
-bracketed IPv6 support for explicit loopback HTTP origins.
-
-Native Git root import begins as a host-only bootstrap boundary. After a
-separate registrar prepares the empty root, trusted
-host code may call `createNodeNativeGitRootImporterClient(connectionFile)` from
-this package with a different, owner-only mode-`0600` JSON file:
-
-```json
-{
-  "schemaVersion": 1,
-  "endpoint": "http://127.0.0.1:9080",
-  "serviceId": "native-main",
-  "role": "operator-root-importer",
-  "hostId": "builder-a",
-  "generationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "credential": {
-    "username": "root-importer-a",
-    "password": "replace-with-canonical-base64url-32-byte-secret"
-  }
-}
-```
-
-The file must be a single-link, non-symlink regular file owned by the DIM
-host user. The endpoint is an exact loopback HTTP origin; the importer
-credential must be distinct from the registrar and ordinary-CI credentials.
-The importer intentionally does not inherit the control connection's remote
-HTTPS support.
-`importRoot` takes a trusted policy, expected commit, protected ref, local
-Git bundle path, and `AbortSignal`. It attests the exact importer role, host,
-service, and generation immediately before uploading the bounded bundle and
-again before requesting finalization. It checks the durable and final receipt
-against the request and transferred bundle. No reader or writer is issued and
-existing Gitea lifecycle selection remains unchanged.
-
-After root import, trusted host code may separately call
-`createNodeNativeGitRootReadIssuerClient(connectionFile)` with an owner-only
-mode-`0600` connection whose role is `operator-root-read-issuer`. The client
-requests only a 30-second credential for one named Project's fixed `root`
-repository and accepts only an exact non-cacheable `201` response bound to the
-configured service and generation. The returned username and password are for
-upload-pack only; the issuer credential itself cannot use Git, and neither
-credential creates Project ready state. Callers must pass Git credentials
-through a private prompt or environment boundary, never command arguments,
-logs, Git configuration, errors, or persisted state.
-
-For a retained native bootstrap draft, trusted host code should instead call
-`issueNativeProjectDraftRootReadLease({ stateRoot, name,
-importerConnectionFile, issuerConnectionFile, signal })`. This operation loads
-both owner-only role files, requires one endpoint, owner host, and generation
-with distinct credentials, and accepts only an exact `root-imported` draft
-whose immutable receipt matches a fresh importer-authenticated live proof. It
-makes the current importer/issuer generation authenticate that proof and lease,
-while the unchanged draft and nested import receipt retain the generation that
-performed the original import. Pending drafts cannot roll to another generation.
-It mints the Project/root-scoped lease only after that proof and rereads the full
-draft before returning, so changed host state withholds the result. It returns
-only the ephemeral upload-pack lease: neither role credential nor the lease is
-persisted, placed in arguments, or made available to a workspace. The draft
-remains non-runnable and no Gitea or native Project-ready state is created.
-
-Trusted host code may call
-`materializeNativeProjectDraftRootSnapshot({ stateRoot, name,
-importerConnectionFile, issuerConnectionFile, gitExecutable, temporaryRoot,
-signal })` to turn that imported draft into a private, commit-addressed host
-snapshot under `assets/native-project-roots/<projectId>/<rootCommit>`. The
-operation holds the Project lifecycle lock, repeats the live imported-root
-proof, and reuses a recursively validated read-only snapshot without minting a
-lease. Otherwise it uses the short-lived lease only through environment-backed
-Git askpass, fetches and hash-checks the exact commit, tree, and blobs in
-disposable private Git storage, and publishes a fully read-only staged tree.
-Regular and executable files retain their Git modes. Relative symbolic links
-are accepted only after their target blobs are hash-checked and only when they
-resolve inside the complete snapshot; absolute, dangling, escaping, and
-reserved lifecycle-path links, gitlinks, unsafe cache nodes, and oversized
-objects fail without adopting or replacing a target. The return value contains
-only Project/root identity, the protected ref, commit/tree IDs, and the host
-snapshot path. It contains no credential and does not itself publish a
-runtime-ready Project descriptor. `NativeProjectPendingStore.ready` separately
-requires a fresh readiness proof before publishing schema-6 Project state.
-
-`parseNativeRootBootstrapManifestYaml(yaml, selectedRef)` is a separate,
-mutation-free reader for the native-only `nativeReview` extension of a reviewed
-`.dim/repos.yml`. `compileNativeRootBootstrapPolicy({rootAlias, protectedRef,
-review})` accepts the same review fields for explicit manifest-free bootstrap.
-Both derive sorted reviewer and required-job lists, bind `ordinary-sysbox` or
-`qemu` job kinds plus the `candidate-controlled` evidence class into the
-versioned imported-root policy, use v2 policy/job revision domains while
-retaining the v1 reviewer domain, and produce the exact native Git import
-policy. The existing Gitea repository-set parser
-rejects this extension. Neither policy function reads Git or creates a Project.
-`prepareNativeRootBootstrapGit` accepts an already-local, trusted host Git
-repository and an owner-only mode-`0700` scratch directory. It resolves one
-concrete branch to an exact commit, reads the native manifest from that same
-commit (or accepts explicit manifest-free policy), and stages a mode-`0600`,
-self-contained, one-ref bundle in private storage. The caller must invoke the
-returned `cleanup()` in a `finally` block after importing. The planner does not
-fetch an origin, attest the selected source URL, call a DIM service, create
-Project state, or grant CI/transport authority. The host-only
-`bootstrapNativeProjectRoot` API loads separate mode-`0600` registrar and
-importer files, checks the same endpoint, host, and generation, then attests
-both roles. It pins the local source, retains the exact bundle and immutable
-policy in a private, non-runnable schema-`2` draft **before** service mutation,
-prepares the root, imports it, and durably binds the final receipt. An exact
-retry after uncertain finalization converges without another protected-ref
-write. Before storing a final receipt or returning an imported draft, the host
-requires a no-store, importer-authenticated read-only proof of the current
-activation, owner, bundle, sole protected ref, commit, tree, and object graph.
-The strict schema-`3` proof binds its outer serving generation to the current
-connection, compares its nested schema-`1` import receipt byte-for-byte with
-the original draft receipt, and parses a separate sequence, ref, commit, tree,
-and policy-bound current head. Sequence zero must equal the original import;
-the service refuses later heads until immutable review, approval, and both CI
-evidence classes can be independently verified. The host draft and
-nested receipt are never rewritten. An imported draft may replay through a newer serving
-generation only when every other claimed intent field is unchanged; the draft
-is never rewritten. A moved ref, missing owner
-marker, or replaced repository path leaves the draft unchanged and non-runnable.
-A completed schema-1 draft from the earlier import implementation remains
-byte-preserved proof/read data only; pending schema-1 drafts cannot resume or
-roll generations, and neither form supplies authoritative kind-labelled jobs.
-This bootstrap operation does not attest the external source origin, select
-native Git for `lifecycleOptions()`, issue a Git reader/writer, admit ordinary
-or QEMU CI, or by itself publish a runnable Project. The separate native
-readiness and workspace lifecycle perform those runtime checks.
-
-`loadNativeQemuConnection(file, expectedHostId)` is a separate host-only
-preflight API for the QEMU scheduler. It checks a single-link, owner-only
-mode-`0600` file, exact service/host/generation identity, an absolute Git
-executable, a loopback native-Git service identity, a scheduler host token, and
-globally pinned runner/job images and resource bounds. Each
-capacity separates descriptor `memoryBytes` from a strictly larger
-`supervisorMemoryBytes` Docker limit so QEMU has operator-sized overhead. Parsing
-does not connect to either service, advertise capacity, boot a VM, or provide
-KVM acceptance. Setting `DIM_NATIVE_QEMU_CONNECTION_FILE` still makes
-`lifecycleOptions()` refuse native selection before any Gitea fallback.
-
-The package also exports `configuredNativeQemuSchedulerServer`,
-`runNativeQemuHost`, and `buildNativeQemuSchedulerImage`. The scheduler keeps
-its own SQLite demand, capacity-fence, exact claim, attempt, and result state;
-uses only QEMU-specific native-Git proof/issuer/reporter routes; and derives a
-host from its Basic credential. The host performs a functional KVM-only probe,
-runs one worker per configured capacity, and additionally requires the trusted
-launcher and a functional KVM probe inside each digest-pinned supervisor image
-before attestation. That preflight also verifies Docker `type=image` support and
-the pinned job image's Bash and required mount directories. It does not require
-Sysbox. Every capacity is kernel-locked before any capacity attests or claims,
-with all earlier locks released if startup cannot acquire the complete set.
-Active execution renews its lease every five seconds and
-uses a short-lived Project/root upload-pack lease to verify the exact candidate
-commit, tree, config, and script before launch. The guest receives the verified
-tree as a disposable writable `/workspace` and the descriptor/script as a
-separate read-only `/run/dim/job` mount, then runs the fixed Bash argv. No Git
-credential enters the supervisor container or guest. Execution captures only
-the configured combined stdout/stderr bound. A private
-mode-`0600` journal persists active ownership and exact pending terminal
-evidence across restart. Replay cleans the exact claim-labelled container and
-private input root before recovering or retrying the unchanged result. Missing
-KVM is an unavailable prerequisite, never a successful or ordinary result.
-
-The exported `createNativeRootCiProofClient` is a separate strict consumer for
-the installed schema-7 native Git bundle's read-only proof namespace. Its
-configuration pins one endpoint, `native-main` service identity, serving
-generation, and `ordinaryCi.identity` credential. Before reading proof it
-attests the exact `native-root-ci-proof-reader` role and ordered policy/event
-scope. It accepts only bounded non-cacheable exact JSON, verifies every policy
-field, sorted unique jobs/reviewers/rules, v2 policy and job revisions, the v1
-reviewer revision, SHA-256 policy bytes, current-root object format and import
-nonce, and the deterministic schema-3 event digest and selector bindings.
-There are no redirects or retries. `404` and `409` are rejected/stale tuples;
-authentication, protocol, malformed proof, timeout, cancellation, and transport
-failures are unavailable without exposing credentials. This client is not the
-standalone `nativeGitAdmissionSource` and creates no Project, admission,
-attempt, result, scheduler, runtime, promotion, or ready state.
-
-The installed ordinary service consumes that client for native-root policy
-eligibility, proof-bound review-event intake, and ordinary-only host claims and
-results. Its strict format-12 database adds event receipts, demand, service
-epochs, claims, immutable cleaned host results, and a durable report outbox to
-bundle activation and internally managed eligibility. Earlier formats are
-rejected unchanged. Event intake reconciles current imported-root policy from
-native Git and binds the
-complete kind-labelled canonical policy, import nonce and protected ref to the
-installer generation and global `nativeCapacityConfigDigest`; current head
-sequence/commit/tree advance monotonically without changing the admission
-generation. Policy, import, installer-generation, capacity, expiry, or
-replacement changes create a new UUID generation and cannot revive an older
-row. Restart preserves rows but requires activation again. Every freshness
-check is internal to event intake. A configured host can
-attest its exact `native-host` identity and atomically reserve the oldest
-eligible queued demand for one configured capacity. The ordinary service uses
-separate native proof, attempt-issuer, result-reporter, query, webhook, and host
-credentials. It derives a descriptor, issues and proves the exact current
-native attempt, then activates the claim with `issuanceRequestId` equal to
-`claimId`. Renewals remain bound to that claim, capacity, generation, and
-service epoch.
-
-The webhook credential's installed endpoint is exact
-`POST /v1/native-root-ci-events`. A strict schema-1 wrapper binds the startup
-generation to one canonical schema-3
-ordinary-Sysbox event. A new receipt requires a fresh native proof of the exact
-event, complete policy/import identity, services, generation, current root, and
-capacity digest. The service repeats those checks in the insertion transaction.
-An exact replay may skip proof only while that admission remains active and
-unexpired. One new receipt atomically creates one queued demand, but no claim,
-attempt, result, dispatch, approval, execution, or current-liveness authority.
-Both remain durable across restart. Revocation, expiry, root movement,
-generation or capacity rotation supersedes queued or active work; replay cannot
-revive it. Receipts remain permanent and capped globally at 100,000. Exact
-`POST /v1/host-claim-activations`, `/v1/host-claim-renewals`,
-`/v1/host-recoveries`, and `/v1/host-results` routes enforce the current claim
-and generation. A schema-2 host result must carry `resourceId` equal to
-`claimId`, a schema-3 `ordinary-sysbox` terminal event, and proof that cleanup
-is complete. Intake atomically records the immutable result and report outbox.
-The reporter retries the same bytes and releases capacity only after exact
-native acknowledgement, or after a terminal denial with cleanup already
-proved. The query-only current-result and current-terminal proof routes expose
-evidence only while the admission and root remain current; terminal proof also
-requires a delivered acknowledgement.
-
-The exported host capacity worker journals claims, results, and recovery across
-response loss and restart, reads the exact candidate tree through a scoped
-native Git credential, runs one bounded digest-pinned Sysbox job, and checks
-container and private-root cleanup before reporting. `runNativeRootCiHost`
-loads one owner-only host file, refuses to claim unless Docker registers
-`sysbox-runc`, runs one worker per fixed capacity, and drains them under one
-abort signal. Eligibility is automatic; no Project registrar command or
-credential is installed. The controller does not start host capacity.
-Schema-6 native Project readiness and schema-9
-Sysbox workspaces remain independent, and native QEMU execution and protected
-promotion remain fail-closed.
+The relevant host boundaries include:
 
 - `DIM_STATE_ROOT`
-- `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the
-  default host-local managed service
-- `DIM_GITEA_CONNECTION_FILE` for an operator-managed external Gitea service
-- `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` for a private, host-bound connection
-  to the optional ordinary Sysbox CI pool
-- `DIM_GIT_SYNC_CONNECTION_FILE` for the separately deployed Git-host sync service
-- `DIM_GIT_USERNAME`
-- the installed `workspaceBackend`, `DIM_WORKSPACE_IMAGE`, and
-  `DIM_WORKSPACE_RUNTIME`
+- `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`
+- `DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE`
+- installed workspace backend and `DIM_WORKSPACE_IMAGE`
 - `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
-- `DIM_CI_RUNNER_IMAGE`, `DIM_CI_RUNNER_RUNTIME`, `DIM_CI_RUNNER_CPUS`,
-  `DIM_CI_RUNNER_MEMORY`, and `DIM_CI_RUNNER_PIDS`
 
-`DIM_CI_RUNNER_IMAGE` accepts exactly one of these forms:
+Project schema 6 and workspace schema 9 are current and strict. Provider-backed
+Project records, old workspace schemas, repository catalogs, runner records,
+and obsolete selectors are rejected unchanged with export/recreation guidance.
+Core never adopts, migrates, deletes, or renames predecessor resources.
 
-- the built-in cache-tag sentinel `dev-infra-manager-ci-runner:act-runner-minimal-v2`,
-  which DIM builds locally;
-- a complete local Docker image ID such as `sha256:<64 lowercase hexadecimal characters>`;
-- a tagless registry reference pinned as `name@sha256:<64 lowercase hexadecimal characters>`.
+Package imports do not start daemons or mutate host state. Consumers must call
+explicit lifecycle/service entrypoints, surface typed errors, and preserve
+cleanup uncertainty rather than reporting success.
 
-DIM pulls a configured registry reference and resolves it through Docker to the
-actual local image ID. Runner probes, state, and launches use only that resolved
-ID. Other tags and mutable image references are rejected before trusted image
-execution.
-
-Without `DIM_WORKSPACE_IMAGE`, the workspace image is
-`dev-infra-project-workspace:<installed DIM package version>`. Release installs
-therefore select the release tag, while aggregate-identity local packages
-select their full local version tag. `DIM_WORKSPACE_IMAGE` remains an explicit
-override.
-
-`buildWorkspaceImage` stages the image Dockerfile, entrypoint, relay, and
-cgroup helpers shipped in this package together with the exact-version
-`@slop-lab/dim-controller-proxy` dependency and its packaged runtime closure,
-then runs Docker Buildx with the current user's UID and GID. It accepts only an
-explicit mutable tag as a build destination: image IDs, digest references,
-untagged references, and `latest` are rejected. The operation is local to
-Docker and does not require or start a DIM controller.
-
-The resource environment variables provide defaults. `createWorkspace`
-accepts persistent per-workspace overrides. A Project root ref may be omitted;
-workspace creation then resolves the root repository's symbolic `HEAD` and
-fails if no `HEAD` exists.
-
-The default state root is `~/.local/state/dim`; the default managed Gitea port
-is `3300`. Managed Gitea state uses strict schema `2` to record service and
-resource ownership identities, immutable image and network IDs,
-resource-establishment state, and the leased endpoint address. Schema-less and
-schema-1 service state is rejected unchanged because it lacks that evidence.
-Stop DIM and use the prior pinned release to export or otherwise preserve
-needed repository data. Remove only independently verified resources; retain
-any unverifiable data volume or other resource, and don't recreate the service
-under a conflicting name. DIM rejects other incompatible pre-stable state
-except for the single
-lossless host lifecycle transition from schema 1 to schema 2. At controller
-startup, DIM resolves the required host-mirror provider before
-`migrateHostLifecycleState` runs under the host lifecycle lock and before any
-managed service reconciliation or listeners. Migration renames only `resumeCiRunners` to `restartCiRunners`, and
-retains the original bytes permanently in mode-`0600`
-`host.json.schema-1.bak`. Normal lifecycle reads remain schema-2-only. A
-malformed record, extra field, conflicting backup, symlink, or non-regular
-canonical, backup, or recognized temporary artifact fails closed without
-changing canonical state. No Project, workspace, runner, plugin, installer, or
-other state is migrated. Workspace schema 8 adds a fresh 256-bit instance ID
-that binds grants and plugin authority independently of the display name.
-Schema-7 workspace records are rejected unchanged; use the prior pinned DIM
-version to export needed Project/user data, then discard and recreate the
-workspace. Retained data does not retain grants, routes, or approvals.
-
-When `DIM_GITEA_CONNECTION_FILE` is set, the mode-`0600`, DIM-user-owned JSON
-file is the complete external connection boundary:
-
-```json
-{
-  "schemaVersion": 1,
-  "transport": "https",
-  "hostId": "builder-a",
-  "apiBaseUrl": "https://gitea-control.example/api/v1",
-  "hostBaseUrl": "https://git.example",
-  "workspaceBaseUrl": "https://git.workspace.example",
-  "runnerBaseUrl": "https://git.runner.example",
-  "credentials": {
-    "adminUsername": "dim-operator",
-    "adminPassword": "replace-with-secret",
-    "writerUsername": "dim-workspace",
-    "writerPassword": "replace-with-secret",
-    "maintainerUsername": "dim-host",
-    "maintainerPassword": "replace-with-secret"
-  },
-  "projects": {
-    "acme": {
-      "id": "shared-project-id",
-      "gitNamespace": "dim-acme",
-      "giteaOrganizationId": 42
-    }
-  }
-}
-```
-
-The API, host-clone, workspace-clone, and runner endpoints are independent
-because those clients may use different routes to the same service. DIM
-requires HTTPS unless every endpoint is loopback HTTP or the operator selects
-`isolated-http` for an isolated network. It rejects redirects and bounds API
-requests to the configured API base. The administrator must report admin
-status; the writer must be a distinct non-admin identity. The maintainer may
-reuse the administrator credentials, while a distinct maintainer must report
-non-admin status. DIM does not create or stop the external service, create
-credentials, change its organization-creation policy, or rewrite its webhook
-allowlist. Host-admin repository deletion and Project purge do delete external
-resources after the ordinary checks, affecting every host attached to the
-shared Project even though their local records remain. Use `project remove` to
-detach only local state. The operator must provision the users, organization,
-permissions, and branch policy first. Each external Project requires a unique
-explicit shared ID, namespace, and Gitea organization ID; this lets multiple
-hosts attach to the same Project without adopting an unrelated same-name
-organization. The stable host ID scopes and persists Sysbox provider
-registrations across hosts.
-
-Repository fetch and publish do not run in the DIM controller or a temporary
-clone. Build the version-pinned service image with
-`dim repo sync-service image build IMAGE`, deploy it beside Gitea repository
-storage, and point `DIM_GIT_SYNC_CONNECTION_FILE` at a private connection file.
-The service has a separate private alias registry and transport allowlist; it
-receives no arbitrary command or caller-selected filesystem path. Absence of
-the connection file makes synchronization fail closed. Initial `repo add`
-imports remain local host Git operations.
-
-Every Project-scoped managed CI runner requires `.dim/ci/runner.yml` in the protected Project
-root. Its strict schema declares ordinary and integration labels,
-digest-pinned disposable job images, required executables, and the integration
-workload's `nested-docker` capability. DIM records the exact source ref, commit,
-and configuration digest, probes both workloads before registration, and never
-runs Project workflow commands in the runner host container.
-
-The optional ordinary pool is a separate, operator-managed service for
-reviewed DIM Projects using external Gitea. A trusted host reconciler derives
-leased admissions from each Project's exact protected root snapshot, validates
-the live external Gitea organization binding, and configures the organization
-webhook. The service uses one common digest-pinned disposable job image,
-stores admissions, demand, and renewable claims in SQLite, and owns stable
-per-Project webhook secrets without receiving Gitea credentials. Worker and
-registrar connections are separate mode-`0600` files. Remote hosts may claim a
-Project without a local Project record only when their external Gitea binding,
-expected service identity, and expected common image match the claim. The pool
-retains a random admission generation only for an active identical-policy
-refresh; revocation, expiry, or policy rotation creates a fresh generation so
-preserved old demand cannot reactivate. It does not register an instance-wide
-runner or replace the Project-scoped QEMU path.
-
-For QEMU CI capacity, a Project may provide `.dim/ci/qemu-cache.bash`. DIM
-requires applied root protection, resolves the configured root or symbolic
-`HEAD` once to a concrete protected branch and commit, and stages the exact
-hook blob from that immutable commit. An absent hook stages a deterministic
-no-op executable instead of an empty sentinel. The resolved source ref,
-commit, kind, and executable digest define the Project image identity and are
-stored in runner state. DIM executes the staged bytes as root inside the Packer
-guest, passing `/var/lib/dim-kvm-cache` as the only argument. The hook does not
-run on the host and receives no host runtime socket or coordinator credential.
-Reconcile the QEMU capacity after changing it.
-
-The shared QEMU common base pins one dated, signed Ubuntu 24.04 cloud image and
-one timestamped Ubuntu snapshot. Its identity includes exact artifact URLs and
-digests, signer-keyring provenance, APT source and requested package/version
-specifications, downloaded executable inputs, generated scripts, and Packer
-templates. Ubuntu guarantees snapshot history for at least two years rather
-than forever; preserve those source artifacts in a reviewed internal immutable
-cache when rebuilds must remain possible beyond that period.
-
-## API scope
-
-The package exports its core modules from the root entry point, including
-lifecycle records and low-level managed-Gitea helpers. APIs are versioned with
-DIM but are not promised to remain source-compatible across minor `0.x`
-releases. Prefer high-level functions from `projectRegistry`,
-`workspaceLifecycle`, and `ciRunner` over direct state or Gitea mutation.
-
-The plugin loader validates explicitly installed plugins and gives each
-controller an instance-scoped plugin route registry. `GET /api` discovers
-those authenticated routes. Core does not define product-specific external
-URL routes or a generic repository-provider extension point.
-
-DIM executes Project-controlled lifecycle scripts and manages container
-runtimes. Consumers must follow the mandatory
-[adoption and trust requirements](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/adoption.md),
-including full human review and exact version pinning.
-
-See the
-[architecture](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/architecture.md),
-[lifecycle documentation](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/repo-workspaces.md),
-and [source repository](https://github.com/slop-lab/dev-infra-manager).
+See the normative [configuration](../../../specification/specs/03-configuration.md),
+[lifecycle](../../../specification/specs/13-repo-workspace-lifecycle.md), and
+[verification](../../../specification/specs/12-verification.md) contracts.

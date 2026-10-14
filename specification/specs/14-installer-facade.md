@@ -555,6 +555,14 @@ dependency additionally require the full packaged Sysbox/KVM journey in
 `VERIFICATION-NATIVE-CUTOVER-001`; that broader deployment gate does not make
 CI a Project readiness prerequisite.
 
+Historical provider-backed Project and workspace records remain rejection-only
+state during native-only cutover. The installer and native lifecycle MUST NOT
+auto-migrate, reinterpret, adopt, rename, or clean those records or their
+resources. Operators use the pinned predecessor release to stop predecessor
+services and export required data, validate that export outside DIM state, then
+create fresh native Project and workspace identities. Disposal of predecessor
+state is a separate explicit operator action after export validation.
+
 **INSTALLER-NATIVE-PROJECT-CI-001 (accepted target, not implemented):** The
 later adapter MUST separate trusted native Project registration from candidate
 job selection. Every Project whose separate quality policy selects CI is
@@ -873,22 +881,24 @@ staging input, constructing a Docker runner, invoking Docker, or mutating
 installer state, the command MUST perform a bounded predecessor-state preflight
 over these explicit DIM-owned selectors:
 
-1. Presence of `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, including an empty
-   value, is rejected because it explicitly selects the obsolete host
-   ordinary-pool integration. The referenced path MUST NOT be opened or
-   modified.
-2. The command scans only canonical Project-scoped CI-runner records at
+1. Presence of `DIM_GITEA_CONNECTION_FILE`, `DIM_GIT_SYNC_CONNECTION_FILE`,
+   `DIM_QEMU_SCHEDULER_CONNECTION_FILE`, or
+   `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, including an empty value, is
+   rejected because it explicitly selects removed predecessor infrastructure.
+   Referenced paths MUST NOT be opened or modified.
+2. Presence of canonical managed Gitea state at
+   `${DIM_STATE_ROOT:-$HOME/.local/state/dim}/services/gitea.json` is rejected
+   unchanged. Its contents MUST NOT be opened, parsed, classified, migrated, or
+   cleaned.
+3. The command scans only canonical Project-scoped CI-runner records at
    `${DIM_STATE_ROOT:-$HOME/.local/state/dim}/ci-runners/<project>/<name>.json`.
-   Existing runner directories MUST be caller-owned mode `0700`. Each JSON
-   record is opened read-only with `O_NOFOLLOW`, is bounded to 64 KiB, and MUST
-   be a caller-owned mode-`0600`, single-link regular file. A schema-8 record
-   whose executor kind is `sysbox` is rejected unchanged in every phase,
-   including `stopped`. A fully classifiable schema-8 `qemu` record does not
-   block installation and remains byte-for-byte unchanged. A malformed,
-   symbolically linked, foreign-owned, wrong-mode, unsupported-schema,
-   unknown-executor, or otherwise unclassifiable canonical runner record fails
-   closed unchanged.
-3. First installation requires all fixed `dim-control-plane` Docker resources
+   Existing runner directories MUST be caller-owned mode `0700`. Every
+   canonical JSON runner entry is rejected unchanged solely because the path is
+   present, regardless of executor kind or lifecycle phase. Record contents
+   MUST NOT be opened, parsed, or classified. A symbolic link, non-regular
+   entry, invalid canonical name, unsafe runner directory, or inspection error
+   also fails closed without changing predecessor bytes.
+4. First installation requires all fixed `dim-control-plane` Docker resources
    to be absent and MUST NOT adopt a pre-existing
    `dim-control-plane-ordinary-ci-data` volume. An update requires a valid
    schema-1 installed record and complete exact-owned resources. The image-local

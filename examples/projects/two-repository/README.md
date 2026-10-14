@@ -1,5 +1,8 @@
 # Two-Repository Project
 
+> **Archived predecessor example.** The current product has exactly one
+> reviewed root. Use [`native-basic-root`](../native-basic-root/README.md).
+
 This is a small DIM template for an ordinary application that benefits from a
 persistent Linux sandbox without needing the extra boundaries demonstrated by
 the multi-repository example. It uses exactly two repository aliases:

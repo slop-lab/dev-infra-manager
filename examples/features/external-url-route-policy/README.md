@@ -1,5 +1,8 @@
 # External URL Route Policy
 
+> **Archived predecessor example.** Retained for historical source comparison;
+> it is not a current native-only adoption path.
+
 This advanced example replaces the default `WORKSPACE--` subdomain policy
 with a trusted Unix-socket webhook. The basic External URL example remains
 focused on ordinary workspace-qualified URLs.
