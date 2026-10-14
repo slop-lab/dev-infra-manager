@@ -109,6 +109,12 @@ process_start_ticks() {
   /usr/bin/awk '{ print $20 }' <<<"$fields"
 }
 
+read_launch_pid() {
+  [[ ! -L "$launch_pid_path" && -f "$launch_pid_path" ]] || return 1
+  [[ "$(/usr/bin/stat -Lc '%u:%g:%a:%h' -- "$launch_pid_path")" == 0:0:600:1 ]] || return 1
+  run_sudo_once /bin/cat -- "$launch_pid_path"
+}
+
 launch_process_matches() {
   local pid="$service_launch_pid"
   [[ "$pid" =~ ^[1-9][0-9]*$ && -n "$service_launch_start_ticks" ]] || return 1
@@ -275,8 +281,8 @@ image_cache="${DIM_KVM_IMAGE_CACHE:-$repository_root/.local/kvm}"
 service_wrapper_pid=$!
 
 for _ in $(seq 1 100); do
-  if [[ -r "$launch_pid_path" ]]; then
-    service_launch_pid="$(<"$launch_pid_path")"
+  if [[ -e "$launch_pid_path" || -L "$launch_pid_path" ]]; then
+    service_launch_pid="$(read_launch_pid)" || { echo "QEMU service launch PID file is unsafe or unreadable" >&2; exit 1; }
     [[ "$service_launch_pid" =~ ^[1-9][0-9]*$ ]] || { echo "invalid QEMU service launch PID" >&2; exit 1; }
     service_launch_start_ticks="$(process_start_ticks "$service_launch_pid")"
     launch_process_matches || { echo "QEMU service launch identity is invalid" >&2; exit 1; }
