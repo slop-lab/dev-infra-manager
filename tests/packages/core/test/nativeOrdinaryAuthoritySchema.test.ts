@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { parseNativeDescriptor } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
 import { configuredNativeOrdinaryAuthorityServer } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
 import { openNativeOrdinaryDatabase } from "../../../../core/packages/core/src/nativeOrdinaryAuthoritySchema.js";
+import { execution } from "./nativeOrdinaryExecutorFixture.js";
 
 const roots: string[] = [];
 
@@ -13,6 +15,18 @@ afterEach(async () => {
 });
 
 describe("native ordinary authority schema manifest", () => {
+  it("accepts the public digest-pinned mechanics fixture images", () => {
+    // Given
+    const runnerBaseImage = "docker@sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c9995f190ef6f3f5";
+    const jobImage = "node@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df";
+
+    // When
+    const descriptor = parseNativeDescriptor({ ...execution().claim.descriptor, runnerBaseImage, jobImage });
+
+    // Then
+    expect(descriptor).toMatchObject({ runnerBaseImage, jobImage });
+  });
+
   it("rejects an operator job image with a port in a repository path component", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-native-invalid-image-"));
     roots.push(root);

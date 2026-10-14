@@ -12,7 +12,7 @@ docker info --format '{{json .Runtimes}}' | grep -q '"sysbox-runc"' || {
 }
 
 runner_digest="docker@sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c9995f190ef6f3f5"
-job_digest="node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df"
+job_digest="node@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df"
 
 cd "$root_dir"
 DIM_TEST_NATIVE_RUNNER_IMAGE="$runner_digest" DIM_TEST_NATIVE_JOB_IMAGE="$job_digest" \
