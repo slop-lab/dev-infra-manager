@@ -94,8 +94,7 @@ verification_stage_register installed-services installed_services "source-ready 
 verification_stage_register ordinary-sysbox-mechanics ordinary_mechanics "docker-ready sysbox-ready"
 verification_stage_register native-basic-lifecycle native_basic_lifecycle "source-ready docker-ready sysbox-ready"
 verification_stage_register qemu-kvm-mechanics qemu_mechanics "docker-ready kvm-ready"
-if [[ -e /mnt/dim-inputs/bootstrap-source/root.bundle \
-  || -e /mnt/dim-inputs/bootstrap-source/manifest.json ]]; then
+if [[ -d /mnt/dim-inputs/bootstrap-source || -L /mnt/dim-inputs/bootstrap-source ]]; then
   verification_stage_register fresh-ubuntu-bootstrap fresh_ubuntu_bootstrap "source-ready kvm-ready"
 fi
 if [[ -n "${DIM_VERIFICATION_INTERNAL_STAGE:-}" ]]; then

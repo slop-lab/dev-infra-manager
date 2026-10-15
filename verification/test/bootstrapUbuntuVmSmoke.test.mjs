@@ -64,8 +64,8 @@ test("keeps legacy aggregate behavior and adds only the fixed input-gated stage"
 
   assert.equal(hostRefusal.status, 2);
   assert.match(hostRefusal.stderr, /disposable QEMU verification guest/);
-  assert.match(aggregate, /\/mnt\/dim-inputs\/bootstrap-source\/root\.bundle/);
-  assert.match(aggregate, /\/mnt\/dim-inputs\/bootstrap-source\/manifest\.json/);
+  assert.match(aggregate, /\[\[ -d \/mnt\/dim-inputs\/bootstrap-source \|\| -L \/mnt\/dim-inputs\/bootstrap-source \]\]/);
+  assert.doesNotMatch(aggregate, /\[\[ -e \/mnt\/dim-inputs\/bootstrap-source\/root\.bundle/);
   assert.match(aggregate, /verification_stage_register fresh-ubuntu-bootstrap/);
   assert.match(aggregate, /kvm-guest-group-delegate\.bash" bootstrap/);
   assert.match(delegate, /preflight\|run\|bootstrap/);
