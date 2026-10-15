@@ -7,9 +7,11 @@ source "$script_dir/lib/runtime-backends.bash"
 
 backend="${1:-}"
 if ! dim_is_runtime_backend "$backend"; then
-  echo "usage: $0 <$(dim_runtime_backend_choices)>" >&2
+  echo "usage: $0 <$(dim_runtime_backend_choices)> [ubuntu|docker-ce]" >&2
   exit 2
 fi
+docker_source="${2:-ubuntu}"
+case "$docker_source" in ubuntu|docker-ce) ;; *) echo "Docker source must be ubuntu or docker-ce" >&2; exit 2 ;; esac
 install_user="${SUDO_USER:-$(id -un)}"
 [[ "$install_user" != root ]] || install_user=""
 
@@ -32,8 +34,16 @@ Ubuntu host backend installer (${backend})
 This script is a development convenience, not production hardening guidance.
 Review and adapt every change before using it on a production host.
 
-It will:
+EOF
+  if [[ "$docker_source" == docker-ce ]]; then
+    echo "  - install exact signed Docker CE 29.1.4, containerd.io, Buildx, and Compose plugin packages"
+    echo "  - require Docker's containerd image store without replacing daemon configuration"
+  else
+    cat <<'EOF'
   - install common APT packages: apparmor, curl, docker.io, docker-buildx, docker-compose-v2, jq
+EOF
+  fi
+  cat <<'EOF'
   - when required by Ubuntu, allow /usr/local/bin/rootlesskit to create its user namespace
   - install and configure the Sysbox backend
 EOF
@@ -45,7 +55,11 @@ EOF
 Backend installation may change Docker, systemd, AppArmor, FUSE, and user-group configuration.
 Type yes to continue; any other input cancels installation.
 EOF
-  read -r -p "> " confirmation
+  if [[ "${DIM_HOST_INSTALL_ASSUME_YES:-0}" == 1 ]]; then
+    confirmation=yes
+  else
+    read -r -p "> " confirmation
+  fi
   if [[ "$confirmation" != yes ]]; then
     echo "Installation cancelled."
     exit 1
@@ -53,8 +67,14 @@ EOF
 }
 
 install_common_packages() {
-  sudo apt-get update
-  sudo apt-get install -y apparmor curl docker.io docker-buildx docker-compose-v2 jq
+  if [[ "$docker_source" == docker-ce ]]; then
+    sudo /usr/bin/bash "$script_dir/lib/install-docker-ce-ubuntu.bash"
+    sudo apt-get update
+    sudo apt-get install -y apparmor curl jq
+  else
+    sudo apt-get update
+    sudo apt-get install -y apparmor curl docker.io docker-buildx docker-compose-v2 jq
+  fi
 }
 
 install_sysbox() {
