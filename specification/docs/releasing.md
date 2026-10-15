@@ -39,6 +39,33 @@ repository remains a separate trusted-maintainer action. GitHub contribution
 workflows are not a DIM runtime provider and receive no native Git, reviewer,
 promotion, installer, registry, or host credential.
 
+## Internal development preparation
+
+A pre-stable internal-development target may reconcile source package versions,
+exact DIM dependency and peer pins, the package-manager lockfile, source version
+constants, current examples, and owned changelogs before the tree becomes a
+clean release candidate. Regenerate the lockfile with the pinned package
+manager; do not hand-edit it. The matched source package set may then be used by
+the reviewed local source workflow and the pre-stable operations gate.
+
+Fresh Ubuntu 24.04 amd64 trials may use the
+[role bootstrap](../../verification/bootstrap-ubuntu-vm.md) from that clean
+reviewed commit. The bootstrap does not provision private service roles or
+replace the subsequent operator-owned two-node operations gate. Record a new
+bootstrap execution against the candidate; older VM results do not prove new
+installer code or a newly versioned artifact set.
+
+The current internal target's preparation evidence and remaining operator steps
+are recorded in [`verification/release-0.10.0.md`](../../verification/release-0.10.0.md).
+
+This preparation does not publish packages or images, create a tag or release,
+deploy services, or establish public availability. Native multi-host operations
+evidence remains candidate-controlled and does not satisfy independent-host,
+human, or full public release acceptance. Any later public candidate must use
+one clean exact commit and separately complete every applicable verification,
+acceptance, provenance, publication, and post-publication step below before
+those claims are made.
+
 ## Required verification
 
 Run source and package verification from the exact candidate:
