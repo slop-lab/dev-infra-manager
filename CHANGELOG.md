@@ -25,7 +25,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   non-root guest job boundary. Real guest-mechanics verification requires an
   accessible `/dev/kvm`; missing hardware is unavailable and there is no TCG or
   ordinary fallback. Same-host mechanics remain distinct from independent-host
-  and human release acceptance.
+  and human release acceptance. An operator-prepared two-node operations profile
+  now checks real ordinary Sysbox and QEMU KVM jobs before and after idle service
+  process restarts, protected-ref stability, configured claim cleanup, and
+  workspace cleanup. Its `OPS-PASSED` evidence excludes human approval,
+  promotion, host reboot, crash recovery, failure/stale/replay matrices, traffic
+  and guest authority inspection, administrative independence, and full stable
+  release acceptance.
 
 - Implement the installed native ordinary-CI host and automatic central
   eligibility surfaces. A private host file starts one journaled worker per
