@@ -26,7 +26,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker info >/dev/null
-[[ "$(docker version --format '{{.Server.Version}}')" == "29.1.3" ]]
+"$repo_root/verification/scripts/lib/check-installation-docker-version.bash" "$(docker version --format '{{.Server.Version}}')"
 cd -- "$repo_root"
 
 pnpm --dir "$repo_root/core/packages/core" run build >/dev/null

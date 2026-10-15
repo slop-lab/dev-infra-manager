@@ -215,7 +215,7 @@ cleanup() {
 trap cleanup EXIT
 
 assert_fixed_absent
-[[ "$(docker version --format '{{.Server.Version}}')" == 29.1.3 ]]
+"$repo_root/verification/scripts/lib/check-installation-docker-version.bash" "$(docker version --format '{{.Server.Version}}')"
 docker compose version >/dev/null
 daemon_socket_uri="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
 [[ "$daemon_socket_uri" =~ ^unix://(/.+)$ ]] || {
