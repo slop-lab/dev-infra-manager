@@ -78,6 +78,13 @@ qemu_mechanics() {
   /usr/bin/bash "$script_dir/kvm-guest-group-delegate.bash" run
 }
 
+fresh_ubuntu_bootstrap() {
+  /usr/bin/bash "$script_dir/kvm-guest-group-delegate.bash" preflight
+  sudo -n apt-get update
+  sudo -n apt-get install -y cloud-image-utils qemu-system-x86 qemu-utils
+  /usr/bin/bash "$script_dir/kvm-guest-group-delegate.bash" bootstrap
+}
+
 verification_stage_register source-ready source_ready ""
 verification_stage_register docker-ready docker_ready ""
 verification_stage_register sysbox-ready sysbox_ready "docker-ready"
@@ -87,6 +94,10 @@ verification_stage_register installed-services installed_services "source-ready 
 verification_stage_register ordinary-sysbox-mechanics ordinary_mechanics "docker-ready sysbox-ready"
 verification_stage_register native-basic-lifecycle native_basic_lifecycle "source-ready docker-ready sysbox-ready"
 verification_stage_register qemu-kvm-mechanics qemu_mechanics "docker-ready kvm-ready"
+if [[ -e /mnt/dim-inputs/bootstrap-source/root.bundle \
+  || -e /mnt/dim-inputs/bootstrap-source/manifest.json ]]; then
+  verification_stage_register fresh-ubuntu-bootstrap fresh_ubuntu_bootstrap "source-ready kvm-ready"
+fi
 if [[ -n "${DIM_VERIFICATION_INTERNAL_STAGE:-}" ]]; then
   verification_stage_run_internal "$DIM_VERIFICATION_INTERNAL_STAGE"
   exit
