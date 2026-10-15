@@ -4,7 +4,7 @@
 > states and do not define the current product. Current contracts are indexed in
 > [Documentation](README.md) and [Specifications](../specs/README.md).
 
-The development branch targets DIM 0.9.0. DIM has no stable release yet;
+The development branch targets DIM 0.10.0. DIM has no stable release yet;
 pre-stable state, configuration, CLI, and extension contracts may change
 without backward-compatibility shims or implicit migration.
 
