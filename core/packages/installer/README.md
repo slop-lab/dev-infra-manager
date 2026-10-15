@@ -8,16 +8,16 @@ forwarded unchanged to the installed CLI.
 DIM supports Linux hosts only. Pin and review one exact release:
 
 ```bash
-mise use --raw --global 'npm:@slop-lab/dim-installer@0.9.0'
+mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
 dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
 ```
 
 The equivalent one-shot form is:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+npx '@slop-lab/dim-installer@0.10.0' installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
 ```
 
 ## Commands
