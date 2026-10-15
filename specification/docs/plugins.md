@@ -43,7 +43,7 @@ version as DIM:
 
 ```bash
 dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
 ```
 
 The reviewed plugin source selects one digest-pinned Docker Hub cache image and
@@ -135,7 +135,7 @@ routes use `registerAdminRoute` and cannot be exposed by this field.
 Install and explicitly enable a plugin package with:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' installer install plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.10.0' installer install plugin '@example/dim-plugin@1.2.3'
 dim plugin list
 ```
 
