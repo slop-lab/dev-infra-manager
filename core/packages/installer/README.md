@@ -52,6 +52,12 @@ exact version; ranges and `latest` are not accepted.
 
 ## Native control plane
 
+The native Git schema-7 source may include its optional `qemuCi` dependency
+for a separately deployed native QEMU scheduler. The installer validates its
+service identity and HTTP(S) origin, includes all six role credentials in
+cross-role collision checks and diagnostic secret redaction, and leaves
+scheduler deployment to the operator.
+
 ```bash
 dim installer install control-plane --config /absolute/operator/install.json
 ```

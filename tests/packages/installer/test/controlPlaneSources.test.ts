@@ -30,6 +30,44 @@ async function fixture() {
 }
 
 describe("control-plane private source staging", () => {
+  it("includes optional QEMU roles in secret redaction and cross-role collision checks", async () => {
+    const input = await fixture();
+    const roles = ["query", "eventIntake", "identity", "attemptIssuer", "candidateReader", "resultReporter"];
+    const qemuCi = { endpoint: "http://192.0.2.1:8082", serviceId: "qemu-main",
+      ...Object.fromEntries(roles.map((role, index) => [role, {
+        username: `qemu-${role}`, password: Buffer.alloc(32, 80 + index).toString("base64url")
+      }])) };
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), qemuCi })}\n`);
+    const sources = await readControlPlaneSources(input.parsed);
+    const qemuSecret = Buffer.alloc(32, 80).toString("base64url");
+    expect(sources.credentialValues).toContain(qemuSecret);
+    expect(sources.roleValues).toContain("qemu-query");
+    expect(() => completeControlPlaneSourcePreflight(sources, {
+      nativeGit: Buffer.from(`${qemuSecret}\n`),
+      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+    })).toThrow(/distinct/);
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), qemuCi: {
+      ...qemuCi, query: { username: "qemu-query", password: controlPlaneSecrets.query }
+    } })}\n`);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/distinct/);
+  });
+
+  it.each([
+    { endpoint: "file:///tmp/qemu", serviceId: "qemu-main" },
+    { endpoint: "http://127.0.0.1:8082", serviceId: "ordinary-main" },
+    { endpoint: "http://user:secret@127.0.0.1:8082", serviceId: "qemu-main" }
+  ])("rejects invalid optional QEMU wiring", async (qemuCi) => {
+    const input = await fixture();
+    const roles = ["query", "eventIntake", "identity", "attemptIssuer", "candidateReader", "resultReporter"];
+    const credentials = Object.fromEntries(roles.map((role, index) => [role, {
+      username: `qemu-${role}`, password: Buffer.alloc(32, 80 + index).toString("base64url")
+    }]));
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), qemuCi: {
+      ...credentials, ...qemuCi
+    } })}\n`);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/QEMU/);
+  });
+
   it("reads four stable private sources and records their exact digests", async () => {
     const input = await fixture();
     const sources = await readControlPlaneSources(input.parsed);

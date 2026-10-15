@@ -32,7 +32,9 @@
   dedicated native-Git QEMU authority state/routes, a packaged scheduler image,
   an owned KVM host execution path, and a separate durable QEMU review outbox
   with automatic native-root eligibility and operator status discovery,
-  without ordinary or provider substitution. Host startup now reserves an explicit QEMU
+  without ordinary or provider substitution. Control-plane installation accepts
+  the optional native scheduler dependency and includes its role credentials in
+  collision checks and diagnostic redaction. Host startup now reserves an explicit QEMU
   supervisor memory allowance above guest RAM, requires bounded QMP KVM
   readiness with explicit normal shutdown rather than accepting cancellation,
   verifies Docker image mounts and

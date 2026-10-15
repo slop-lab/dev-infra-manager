@@ -34,7 +34,7 @@ systemd 사용자 서비스는 운영자가 먼저 준비해야 한다.
 두 노드 모두 다음 조건을 만족해야 한다.
 
 - 검토한 같은 전체 커밋의 깨끗한 checkout
-- Docker 29, Compose v2, Buildx와 `type=image` 출력 지원
+- Docker 29, Compose v2, Buildx와 `type=image` 출력 지원(QEMU 노드는 29.1.4 이상)
 - 등록된 `sysbox-runc`와 설치한 정확한 버전의 host mirror plugin
 - `/usr/bin/git` 2.43.0, Node.js 24 또는 26, pnpm 10.13.1
 - systemd 사용자 관리자와 로그인 세션 밖에서도 서비스를 유지할 user lingering
@@ -45,6 +45,10 @@ systemd 사용자 서비스는 운영자가 먼저 준비해야 한다.
 workspace를 만들고, 노드 B는 ordinary job을 실행한다. 노드 A에는 추가로 읽고 쓸
 수 있으며 실제로 동작하는 `/dev/kvm`이 필요하다. 두 노드는 다른 작업과 용량을
 공유하면 안 된다.
+
+Docker 29.1.3의 image-mount 경로 길이 결함은 digest-pinned job image도 거부한다.
+QEMU 노드에는 [29.1.4에서 수정된 버전](https://docs.docker.com/engine/release-notes/29/#2914)을
+사용한다. 임시 tag로 digest 검증을 우회하거나 Docker data root를 지우지 않는다.
 
 이 프로필은 운영체제 패키지를 설치하지 않는다. TLS나 비공개 JSON 자격 증명을
 생성하지 않고 systemd unit도 만들지 않는다. 필요한 unit은 아래 예처럼 운영자가
@@ -148,6 +152,8 @@ preflight에서 거부한다.
 Description=DIM native ordinary host
 
 [Service]
+KillMode=mixed
+TimeoutStopSec=90s
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/dim-operator/.local/share/dim/runtime/current/node_modules/.bin/dim ci native-root host run /srv/dim-operator/ordinary-host.json
 Restart=on-failure
@@ -179,6 +185,8 @@ Description=DIM native QEMU host
 After=dim-native-qemu-scheduler.service
 
 [Service]
+KillMode=mixed
+TimeoutStopSec=90s
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/dim-operator/.local/share/dim/runtime/current/node_modules/.bin/dim ci native-qemu host run qemu-a /srv/dim-operator/qemu-host.json
 Restart=on-failure
@@ -187,10 +195,21 @@ Restart=on-failure
 WantedBy=default.target
 ```
 
+두 host worker unit은 `KillMode=mixed`를 사용한다. 정상 stop에서는 주 프로세스만
+TERM을 받아 실행 취소·정리·capacity lock 해제를 마치고 자식 lock holder를 종료한다.
+기본 `control-group`은 lock holder도 즉시 종료해 정상 stop을 실패로 바꿀 수 있다.
+90초 안에 종료하지 못하면 systemd가 남은 control group 전체를 강제 종료한다.
+
 각 노드에서 관리자가 운영자 계정에 `loginctl enable-linger dim-operator`를 적용하고,
 그 계정의 정상 로그인 세션에서 `systemctl --user`가 동작하는지 확인한다. root의
 user manager나 임의로 만든 `XDG_RUNTIME_DIR`를 대신 쓰지 않는다. unit을 배치한
 뒤에는 노드별로 다음 명령을 실행한다. 오류를 숨기지 않는다.
+
+Docker/KVM 그룹을 추가하기 전에 이미 실행 중이던 user manager는 새 SSH 로그인 후에도
+이전 보조 그룹을 유지할 수 있다. 일회용 VM을 재부팅해 갱신하거나, 진행 중인 작업이
+없는지 확인한 관리자가 `systemctl restart user@$(id -u dim-operator).service`로 갱신한다.
+`systemd-run --user --wait --pipe id`의 그룹과 같은 방식으로 실행한 `docker info`를
+확인한 뒤 게이트를 시작한다.
 
 노드 B:
 

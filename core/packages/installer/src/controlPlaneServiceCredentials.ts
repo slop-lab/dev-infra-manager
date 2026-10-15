@@ -17,7 +17,8 @@ export function serviceCredentialValues(
   const native = exactRecord(nativeValue, [
     "schemaVersion", "serviceId", "host", "port", "storageRoot", "gitExecutable", "gitVersion",
     "repositories", "identities", "projectRegistrars", "projectRootImporters", "projectRootReadIssuers",
-    "workspaceWriteIssuers", "humanReviewers", "hostPromoters", "ordinaryCi"
+    "workspaceWriteIssuers", "humanReviewers", "hostPromoters", "ordinaryCi",
+    ...(nativeValue !== null && typeof nativeValue === "object" && Object.hasOwn(nativeValue, "qemuCi") ? ["qemuCi"] : [])
   ], "native Git service config");
   if (native.schemaVersion !== 7 || native.serviceId !== "native-main" || native.host !== "0.0.0.0"
     || native.port !== 8080 || native.storageRoot !== "/var/lib/dim-native-git"
@@ -42,6 +43,7 @@ export function serviceCredentialValues(
   ], "native Git ordinary CI config");
   const nativeRoles = ["query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook"] as const;
   const nativeCredentials = nativeRoles.map((role) => credential(nativeOrdinary[role], `native Git ${role}`));
+  const qemuCredentials = native.qemuCi === undefined ? [] : qemuCredentialValues(native.qemuCi);
   const ordinary = exactRecord(ordinaryValue, [
     "schemaVersion", "serviceId", "database", "eligibilityLeaseMilliseconds", "claimLeaseMilliseconds",
     "nativeGit", "credentials", "hosts"
@@ -81,12 +83,14 @@ export function serviceCredentialValues(
   }
   const credentialValues = [
     ...nativeCredentials.map((entry) => entry.password),
+    ...qemuCredentials.map((entry) => entry.password),
     ...hosts.map((entry) => entry.hostToken),
     ...hostBoundCredentials.map((entry) => entry.password),
     ...humanReviewers.map((entry) => entry.password)
   ];
   const roleValues = [
     ...nativeCredentials.flatMap((entry) => [entry.username, entry.password]),
+    ...qemuCredentials.flatMap((entry) => [entry.username, entry.password]),
     ...hosts.map((entry) => entry.hostToken),
     ...projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
     ...projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
@@ -101,6 +105,23 @@ export function serviceCredentialValues(
 
 type HostCredential = Credential & { readonly hostId: string };
 type ReviewerCredential = Credential & { readonly reviewerId: string };
+
+function qemuCredentialValues(value: unknown): readonly Credential[] {
+  const roles = ["query", "eventIntake", "identity", "attemptIssuer", "candidateReader", "resultReporter"] as const;
+  const input = exactRecord(value, ["endpoint", "serviceId", ...roles], "native Git QEMU CI config");
+  if (input.serviceId !== "qemu-main" || typeof input.endpoint !== "string") {
+    throw new ControlPlaneSourceError("native Git QEMU CI service identity is invalid");
+  }
+  let endpoint: URL;
+  try { endpoint = new URL(input.endpoint); }
+  catch { throw new ControlPlaneSourceError("native Git QEMU CI endpoint is invalid"); }
+  if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.origin !== input.endpoint
+    || endpoint.username !== "" || endpoint.password !== "") {
+    throw new ControlPlaneSourceError("native Git QEMU CI endpoint must be an HTTP(S) origin");
+  }
+  return roles.map((role) => credential(exactRecord(input[role], ["username", "password"],
+    `native Git QEMU ${role}`), `native Git QEMU ${role}`));
+}
 
 function reviewerCredentials(value: unknown): readonly ReviewerCredential[] {
   if (!Array.isArray(value)) throw new ControlPlaneSourceError("native Git human reviewers must be an array");

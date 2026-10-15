@@ -16,6 +16,10 @@ REMOTE
 ops_install_control_plane() {
   ops_ssh "${OPS_CONFIG[CONTROL_SSH]}" dim installer install control-plane --config \
     "${OPS_CONFIG[CONTROL_INSTALL_CONFIG]}"
+  ops_ssh "${OPS_CONFIG[CONTROL_SSH]}" env \
+    "DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=${OPS_CONFIG[CONTROL_PLANE_CONNECTION]}" \
+    "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=${OPS_CONFIG[IMPORTER_CONNECTION]}" \
+    dim controller restart
 }
 
 ops_create_project_workspace() {
@@ -63,6 +67,7 @@ for (let attempt = 0; attempt < 30; attempt++) {
   } catch {}
   await delay(1000);
 }
+console.error("native-multi-host-operations: QEMU scheduler did not become ready within 30 attempts; inspect its user-unit journal");
 process.exit(2);
 NODE
 }
@@ -129,17 +134,24 @@ ops_execute_attempt() {
 
 ops_execute() {
   local before after first second
+  printf '%s\n' 'operations: install prepared packages on both nodes' >&2
   ops_install_candidate
+  printf '%s\n' 'operations: install control plane and restart native controller' >&2
   ops_install_control_plane
+  printf '%s\n' 'operations: bootstrap Project and create ready workspace' >&2
   ops_create_project_workspace
+  printf '%s\n' 'operations: start scheduler, QEMU host, and ordinary host' >&2
   ops_start_services
   before="$(ops_read_protected_ref)" || return
   [[ "$before" == "${OPS_CONFIG[PROJECT_COMMIT]}" ]] || ops_die 'protected ref differs before operations'
+  printf '%s\n' 'operations: first proposal and ordinary/QEMU terminal evidence' >&2
   first="$(ops_execute_attempt 1)" || return
   after="$(ops_read_protected_ref)" || return
   [[ "$after" == "$before" ]] || ops_die 'protected ref changed after first CI run'
   ops_wait_idle
+  printf '%s\n' 'operations: restart idle workers and scheduler' >&2
   ops_restart_services
+  printf '%s\n' 'operations: second proposal and ordinary/QEMU terminal evidence' >&2
   second="$(ops_execute_attempt 2)" || return
   after="$(ops_read_protected_ref)" || return
   [[ "$after" == "$before" ]] || ops_die 'protected ref changed after second CI run'

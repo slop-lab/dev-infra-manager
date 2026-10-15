@@ -74,6 +74,12 @@ test("accepts host/root/tree-bound untruncated dual terminal evidence and reject
 
   const failure = await runEvidenceFailure(invocation, repository, { ...environment, ORDINARY_HOST_ID: "wrong-host" });
   assert.notEqual(failure.code, 0);
+  qemuEvent.schemaVersion = 3;
+  await writeFile(join(qemuRoot, "state.json"), JSON.stringify({ schemaVersion: 1,
+    attempts: [{ reviewId, attemptId: "qemu-attempt", descriptor: { jobName: "integration" } }],
+    statuses: [{ schemaVersion: 1, attemptId: "qemu-attempt", result: "success", event: qemuEvent }] }));
+  const wrongSchema = await runEvidenceFailure(invocation, repository, environment);
+  assert.notEqual(wrongSchema.code, 0);
 });
 
 function envelopeRecord(proposalRef) {
@@ -88,7 +94,7 @@ function envelopeRecord(proposalRef) {
 }
 
 function terminal(kind, jobName, hostId, digest, attemptId) {
-  return { schemaVersion: 3, eventId: `${kind}-event`, payload: { executionKind: kind, reviewId, attemptId,
+  return { schemaVersion: kind === "qemu" ? 1 : 3, eventId: `${kind}-event`, payload: { executionKind: kind, reviewId, attemptId,
     hostId, result: "success", completion: { kind: "exited", exitCode: 0 },
     stdout: { sha256: digest, truncated: false }, stderr: { truncated: false },
     descriptor: { jobName, candidateCommit, candidateTree, expectedProtectedHead: rootCommit } } };

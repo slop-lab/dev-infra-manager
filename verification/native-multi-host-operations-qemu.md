@@ -108,7 +108,8 @@ user networking과 `hostfwd` 설명도 참고한다.
 ## 4. 같은 커밋 준비 후 게이트 실행
 
 두 VM 모두 Sysbox, 정확한 host mirror plugin, Node/pnpm/Git, systemd 사용자 관리자와
-링거링이 필요하다. A에는 추가로 실제 nested KVM과 Docker `type=image` 지원이 필요하다.
+링거링이 필요하다. A에는 추가로 실제 nested KVM과 Docker 29.1.4 이상의 `type=image`
+지원이 필요하다. 29.1.3에서는 digest-pinned image mount가 경로 길이 결함으로 실패한다.
 [운영 문서](native-multi-host-operations.md)에 따라 같은 검토된 소스·패키지,
 비공개 역할 JSON과 inactive unit을 배치한다.
 

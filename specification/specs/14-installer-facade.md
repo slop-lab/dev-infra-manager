@@ -619,6 +619,15 @@ with native selection, is not an ordinary-job fallback, and does not satisfy
 the native ordinary-CI prerequisite. Absence of QEMU capacity is reported as
 unavailable, never as successful ordinary CI.
 
+The installer accepts the native Git schema-7 optional `qemuCi` dependency for
+a separately deployed native scheduler. Its strict fields are `endpoint`,
+`serviceId: "qemu-main"`, `query`, `eventIntake`, `identity`, `attemptIssuer`,
+`candidateReader`, and `resultReporter`. The endpoint is an HTTP(S) origin
+without user information. Every role is a strict `{username, password}`
+credential and participates in the same cross-role distinctness, activation
+token collision checks, and diagnostic secret redaction as ordinary roles.
+This does not add a scheduler to the control-plane Compose bundle.
+
 **INSTALLER-NATIVE-QEMU-EVIDENCE-001 (accepted target, not implemented):**
 Once a separate authenticated native QEMU scheduler and host-capacity adapter
 have passed their own acceptance gate, a native Project MAY require named QEMU

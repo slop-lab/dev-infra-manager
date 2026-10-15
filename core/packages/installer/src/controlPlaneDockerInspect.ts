@@ -93,7 +93,7 @@ export async function inspectControlPlaneServiceContainer(
 
 async function assertCompose(runner: ControlPlaneDockerRunner): Promise<void> {
   const result = await runInspect(runner, ["compose", "version", "--short"]);
-  const match = /^v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\n?$/.exec(result.stdout);
+  const match = /^v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.+~_-]+)?\n?$/.exec(result.stdout);
   const major = match?.[1];
   if (result.exitCode !== 0 || result.stderr !== "" || major === undefined || Number(major) < 2) {
     conflict("Docker Compose v2 or newer is required");

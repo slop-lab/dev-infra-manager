@@ -43,6 +43,10 @@ test("full entrypoint runs two real proposal/evidence paths around restart and p
   assert.match(nodes.controlQemu.preparedImageId, /^sha256:[0-9a-f]{64}$/);
   assert.match(nodes.ordinary.preparedImageId, /^sha256:[0-9a-f]{64}$/);
   const calls = (await readFile(fixture.log, "utf8")).trim().split("\n").map(JSON.parse);
+  const install = calls.findIndex(({ command }) => command.includes("installer") && command.includes("control-plane"));
+  const restart = calls.findIndex(({ command }) => command.includes("controller") && command.includes("restart"));
+  const bootstrap = calls.findIndex(({ payload }) => payload.includes("bootstrap-native-root"));
+  assert.ok(install >= 0 && restart > install && bootstrap > restart);
   assert.equal(calls.filter(({ payload }) => payload.includes('proposal="refs/heads/proposals')).length, 2);
   assert.equal(calls.filter(({ command }) => command[0] === "docker" && command[1] === "exec"
     && command.includes("--interactive")).length, 4);

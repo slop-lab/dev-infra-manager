@@ -29,7 +29,7 @@ qemu-system-x86_64 \
   -machine q35,accel=kvm -cpu host -smp "$cpus" -m "${memory_mib}M" \
   -nodefaults -no-reboot -display none -serial stdio \
   -kernel /opt/dim/vmlinuz -initrd /opt/dim/initramfs.gz \
-  -append "console=ttyS0 panic=-1 dim.pids=$pids" \
+  -append "console=ttyS0 quiet loglevel=0 panic=-1 dim.pids=$pids" \
   -device virtio-rng-pci \
   -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
   -fsdev local,id=jobroot,path=/run/dim/guest-root,security_model=none,readonly=on \

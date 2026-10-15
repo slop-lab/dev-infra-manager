@@ -31,6 +31,7 @@ mount -t 9p -o trans=virtio,ro job /guest/run/dim/job
 mount -t 9p -o trans=virtio workspace /guest/workspace
 chown -R 1000:1000 /guest/workspace
 mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /guest/tmp
+stty -F /dev/console -onlcr
 set +e
 /guest-exec /guest /workspace 1000 1000 /bin/bash --noprofile --norc /run/dim/job/script
 status=$?

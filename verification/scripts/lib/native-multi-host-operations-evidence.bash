@@ -58,7 +58,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 const [repository, reviewId, candidateCommit, candidateTree, expectedRoot, ordinaryJob, qemuJob,
   ordinaryHost, qemuHost, ordinaryDigest, qemuDigest] = process.argv.slice(2);
-const valid = (event, kind, job, host, digest) => event?.schemaVersion === 3
+const valid = (event, kind, job, host, digest) => event?.schemaVersion === (kind === "qemu" ? 1 : 3)
   && event.payload?.executionKind === kind && event.payload?.reviewId === reviewId
   && event.payload?.hostId === host && event.payload?.result === "success"
   && event.payload?.completion?.kind === "exited" && event.payload?.completion?.exitCode === 0

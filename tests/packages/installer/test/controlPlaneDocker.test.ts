@@ -25,6 +25,22 @@ import {
 } from "./controlPlaneDockerFixture.js";
 
 describe("control-plane Docker preflight", () => {
+  it.each(["2.40.3+ds1-0ubuntu1~24.04.1\n", "v2.40.3\n"])("accepts Compose version %s", async (version) => {
+    const delegate = new AbsentRunner();
+    const runner = { async run(command: Parameters<typeof delegate.run>[0]) {
+      if (command.args.join(" ") === "compose version --short") {
+        return { exitCode: 0, stdout: version, stderr: "" };
+      }
+      return delegate.run(command);
+    } };
+    await expect(preflightControlPlaneDocker(runner, { config, snapshots })).resolves.toEqual({ kind: "absent" });
+  });
+
+  it.each(["1.29.2\n", "2.40.3\nforeign\n", "2.40.3+\n"])("rejects invalid or obsolete Compose version %s", async (version) => {
+    const runner = { async run() { return { exitCode: 0, stdout: version, stderr: "" }; } };
+    await expect(preflightControlPlaneDocker(runner, { config, snapshots })).rejects.toThrow(/Compose v2/);
+  });
+
   it("rejects missing Compose v2 before inspecting or mutating resources", async () => {
     // Given
     const calls: string[][] = [];

@@ -37,6 +37,11 @@ if (payload.includes('kind="$1"')) {
 if (payload.includes("projects=")) process.exit(0);
 if (payload.includes("just install-local")) process.exit(0);
 if (contains("installer") && contains("control-plane")) process.exit(0);
+if (command.includes("controller") && command.includes("restart")) {
+  if (!command.includes("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/etc/dim/control.json")
+    || !command.includes("DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/etc/dim/importer.json")) process.exit(96);
+  process.exit(0);
+}
 
 if (payload.includes("bootstrap-native-root")) {
   writeFileSync(join(process.env.OPS_FAKE_STATE, "workspace.json"), JSON.stringify({
@@ -133,7 +138,7 @@ function createAttempt(attempt) {
 }
 
 function terminal(kind, jobName, hostId, marker, attemptId, reviewId, candidateCommit, candidateTree) {
-  return { schemaVersion: 3, eventId: `${kind}-${attemptId}`, payload: { executionKind: kind, reviewId, attemptId,
+  return { schemaVersion: kind === "qemu" ? 1 : 3, eventId: `${kind}-${attemptId}`, payload: { executionKind: kind, reviewId, attemptId,
     hostId, result: "success", completion: { kind: "exited", exitCode: 0 }, stdout: { sha256: markerDigest(marker), truncated: false },
     stderr: { truncated: false }, descriptor: { jobName, candidateCommit, candidateTree, expectedProtectedHead: repeat("f", 40) } } };
 }

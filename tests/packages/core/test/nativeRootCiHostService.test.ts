@@ -1,6 +1,8 @@
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
 import { runNativeRootCiHost } from "../../../../core/packages/core/src/nativeRootCiHostService.js";
 import { NativeRootCiHostJournal } from "../../../../core/packages/core/src/nativeRootCiHostJournal.js";
@@ -12,6 +14,37 @@ const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
 
 describe("native root CI installed host service", () => {
+  it("hands acquired capacity guards to workers and releases them after attestation failure", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dim-native-root-host-start-"));
+    roots.push(root);
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests += 1;
+      response.writeHead(401, { "content-type": "application/json" });
+      response.end('{}');
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new TypeError("missing test address");
+    const value = config(root) as { ordinaryCi: { endpoint: string } };
+    value.ordinaryCi.endpoint = `http://127.0.0.1:${address.port}`;
+    const configPath = join(root, "host.json");
+    await writeFile(configPath, JSON.stringify(value), { mode: 0o600 });
+    try {
+      await expect(runNativeRootCiHost(configPath, AbortSignal.timeout(5000), options(root),
+        new RuntimeRunner('{"sysbox-runc":{}}'))).rejects.toThrow(/401/);
+      expect(requests).toBeGreaterThan(0);
+      for (const capacity of ["primary", "secondary"]) {
+        const guard = await tryAcquireKernelGuard(join(root, "state", `${capacity}.json.guard`));
+        expect(guard).toBeDefined();
+        await guard?.release();
+      }
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("refuses an unregistered Sysbox runtime before contacting either service", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-native-root-host-service-"));

@@ -43,6 +43,9 @@ test("successful controller restart keeps the existing systemd command path", as
   const previousConfigHome = process.env.XDG_CONFIG_HOME;
   const previousCommandLog = process.env.DIM_TEST_COMMAND_LOG;
   const previousMode = process.env.DIM_TEST_SYSTEMD_MODE;
+  const nativeVariables = ["DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE"] as const;
+  const previousNativeVariables = nativeVariables.map((name) => process.env[name]);
+  for (const name of nativeVariables) process.env[name] = path.join(fixture.root, `${name}.json`);
   process.env.PATH = fixture.env.PATH;
   process.env.XDG_CONFIG_HOME = fixture.env.XDG_CONFIG_HOME;
   process.env.DIM_TEST_COMMAND_LOG = fixture.env.DIM_TEST_COMMAND_LOG;
@@ -56,7 +59,13 @@ test("successful controller restart keeps the existing systemd command path", as
 
     assert.match(await readFile(fixture.commandLog, "utf8"), /systemctl --user restart dim-controller\.service/);
     assert.doesNotMatch(await readFile(fixture.commandLog, "utf8"), /journalctl|systemctl --user show/);
+    const unit = await readFile(path.join(fixture.env.XDG_CONFIG_HOME!, "systemd/user/dim-controller.service"), "utf8");
+    for (const name of nativeVariables) assert.ok(unit.includes(`${name}=${process.env[name]}`));
   } finally {
+    nativeVariables.forEach((name, index) => {
+      if (previousNativeVariables[index] === undefined) delete process.env[name];
+      else process.env[name] = previousNativeVariables[index];
+    });
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
     if (previousConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;

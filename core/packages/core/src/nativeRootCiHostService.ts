@@ -40,7 +40,7 @@ export async function runNativeRootCiHost(
     try {
       await serveNativeRootCiHostCapacity({ client: input.client, runner,
         gitExecutable: config.gitExecutable, nativeGitEndpoint: config.nativeGit.endpoint,
-        journalPath: input.journalPath }, workerSignal);
+        journalPath: input.journalPath, capacityGuard: input.capacityGuard }, workerSignal);
     } finally { await input.capacityGuard.release(); }
   });
   try {
