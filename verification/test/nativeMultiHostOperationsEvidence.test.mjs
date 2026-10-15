@@ -82,6 +82,39 @@ test("accepts host/root/tree-bound untruncated dual terminal evidence and reject
   assert.notEqual(wrongSchema.code, 0);
 });
 
+test.each([
+  ["ordinary-sysbox", "descriptor", undefined],
+  ["ordinary-sysbox", "descriptor", null],
+  ["ordinary-sysbox", "descriptor", "independent"],
+  ["qemu", "descriptor", undefined],
+  ["qemu", "descriptor", null],
+  ["qemu", "descriptor", "independent"],
+  ["qemu", "payload", undefined],
+  ["qemu", "payload", null],
+  ["qemu", "payload", "independent"]
+])("rejects %s evidence with %s class %s", async (kind, location, value) => {
+  const repository = await fixtureRepository();
+  const ordinaryRoot = join(repository, "dim-authoritative-statuses", "ordinary-sysbox", reviewId, "source");
+  const qemuRoot = join(repository, "dim-authoritative-qemu");
+  await mkdir(ordinaryRoot, { recursive: true });
+  await mkdir(qemuRoot, { recursive: true });
+  const ordinary = terminal("ordinary-sysbox", "source", "ordinary-a", markerDigest("ordinary-output"), "ordinary-attempt");
+  const qemu = terminal("qemu", "integration", "qemu-a", markerDigest("qemu-output"), "qemu-attempt");
+  const event = kind === "qemu" ? qemu : ordinary;
+  const target = location === "descriptor" ? event.payload.descriptor : event.payload;
+  target.evidenceClass = value;
+  await writeFile(join(ordinaryRoot, "1.json"), JSON.stringify(ordinary));
+  await writeFile(join(qemuRoot, "state.json"), JSON.stringify({ schemaVersion: 1,
+    attempts: [{ reviewId, attemptId: "qemu-attempt", descriptor: { jobName: "integration" } }],
+    statuses: [{ schemaVersion: 1, attemptId: "qemu-attempt", result: "success", event: qemu }] }));
+
+  const result = await runEvidenceFailure("ops_read_terminal_evidence \"$ENVELOPE\"", repository, {
+    ENVELOPE: JSON.stringify({ reviewId, candidateCommit, candidateTree, expectedProtectedHead: rootCommit })
+  });
+
+  assert.equal(result.code, 2);
+});
+
 function envelopeRecord(proposalRef) {
   const jobs = [
     { executionKind: "ordinary-sysbox", jobName: "source", evidenceClass: "candidate-controlled" },
@@ -95,9 +128,11 @@ function envelopeRecord(proposalRef) {
 
 function terminal(kind, jobName, hostId, digest, attemptId) {
   return { schemaVersion: kind === "qemu" ? 1 : 3, eventId: `${kind}-event`, payload: { executionKind: kind, reviewId, attemptId,
+    ...(kind === "qemu" ? { evidenceClass: "candidate-controlled" } : {}),
     hostId, result: "success", completion: { kind: "exited", exitCode: 0 },
     stdout: { sha256: digest, truncated: false }, stderr: { truncated: false },
-    descriptor: { jobName, candidateCommit, candidateTree, expectedProtectedHead: rootCommit } } };
+    descriptor: { jobName, candidateCommit, candidateTree, expectedProtectedHead: rootCommit,
+      evidenceClass: "candidate-controlled" } } };
 }
 
 async function fixtureRepository() {

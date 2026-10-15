@@ -139,6 +139,8 @@ function createAttempt(attempt) {
 
 function terminal(kind, jobName, hostId, marker, attemptId, reviewId, candidateCommit, candidateTree) {
   return { schemaVersion: kind === "qemu" ? 1 : 3, eventId: `${kind}-${attemptId}`, payload: { executionKind: kind, reviewId, attemptId,
+    ...(kind === "qemu" ? { evidenceClass: "candidate-controlled" } : {}),
     hostId, result: "success", completion: { kind: "exited", exitCode: 0 }, stdout: { sha256: markerDigest(marker), truncated: false },
-    stderr: { truncated: false }, descriptor: { jobName, candidateCommit, candidateTree, expectedProtectedHead: repeat("f", 40) } } };
+    stderr: { truncated: false }, descriptor: { jobName, candidateCommit, candidateTree, expectedProtectedHead: repeat("f", 40),
+      evidenceClass: "candidate-controlled" } } };
 }
