@@ -10,10 +10,24 @@ import { afterEach, test } from "vitest";
 const exec = promisify(execFile);
 const verificationRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const runner = join(verificationRoot, "scripts", "native-multi-host-operations.bash");
+const loggedRunner = join(verificationRoot, "scripts", "run-native-multi-host-operations-with-log.bash");
 const sshFixture = join(verificationRoot, "test", "fixtures", "native-multi-host-operations-ssh.mjs");
 const roots = [];
 
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
+
+test("logged operator wrapper preserves config secrecy and orders plan, preflight, and execution", async () => {
+  const script = await readFile(loggedRunner, "utf8");
+
+  assert.match(script, /chmod 0600 -- "\$log_path"/);
+  assert.match(script, /contents intentionally not logged/);
+  assert.doesNotMatch(script, /(?:cat|source)\s+(?:--\s+)?"?\$config_path/);
+  const plan = script.indexOf("--print-command-plan");
+  const preflight = script.indexOf("native-multi-host-operations-preflight");
+  const execution = script.indexOf('native-multi-host-operations "$config_path"');
+  assert.ok(plan >= 0 && plan < preflight && preflight < execution);
+  assert.match(script, /operations command returned success without OPS-PASSED/);
+});
 
 test("full entrypoint runs two real proposal/evidence paths around restart and publishes after cleanup", async () => {
   const fixture = await entrypointFixture("success");

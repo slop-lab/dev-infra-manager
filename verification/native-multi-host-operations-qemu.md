@@ -121,6 +121,14 @@ just verify native-multi-host-operations-preflight /absolute/operator/native-ope
 just verify native-multi-host-operations /absolute/operator/native-operations.conf
 ```
 
+두 명령과 고정 command plan의 화면 출력을 mode-`0600` 로그에도 함께 남기려면 다음
+래퍼를 대신 실행한다.
+
+```bash
+bash verification/scripts/run-native-multi-host-operations-with-log.bash \
+  /absolute/operator/native-operations.conf
+```
+
 성공 증거는 운영자 호스트의 `EVIDENCE_DIR/OPS-PASSED`다. VM 부팅이나 SSH 성공만으로
 검증을 통과한 것은 아니다. `125` 또는 marker 부재는 정리·검증 실패이며, journal을
 수동 삭제해 숨기지 않는다.

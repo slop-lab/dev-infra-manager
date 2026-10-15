@@ -251,6 +251,17 @@ just verify native-multi-host-operations \
   /absolute/operator/native-multi-host-operations.conf
 ```
 
+화면 출력과 mode-`0600` 영구 로그를 함께 남기면서 command plan, preflight와 본
+게이트를 순서대로 실행하려면 다음 래퍼를 사용할 수 있다. 기본 로그 경로는
+`.local/verification-logs/native-multi-host-operations-<UTC>-<PID>.log`다. 래퍼는
+비공개 config 내용이나 역할 JSON을 출력하지 않으며 기존 `EVIDENCE_DIR`을 삭제하거나
+재사용하지 않는다.
+
+```bash
+bash verification/scripts/run-native-multi-host-operations-with-log.bash \
+  /absolute/operator/native-multi-host-operations.conf
+```
+
 성공하면 `EVIDENCE_DIR/OPS-PASSED`는 JSON schema 1이며 `result`는
 `operations-passed`, `scope`는
 `prestable-two-node-control-qemu-plus-ordinary-operations`다. marker와 증거를
