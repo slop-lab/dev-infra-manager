@@ -24,6 +24,16 @@ This same-host result is mechanics evidence. It is not independent-host
 verification, human approval, protected-ref promotion, or full release
 acceptance.
 
+## Two-node operations profile
+
+For a pre-stable, operator-prepared two-node run that deliberately excludes
+human approval and protected-ref promotion, follow the Korean
+[native multi-host operations runbook](native-multi-host-operations.md). It
+documents the required topology, private role-file ownership, inactive user
+units, identical prepared-source checks, preflight, evidence, and explicit
+scope gaps. This profile is operational verification, not full cutover
+acceptance.
+
 ## Operator deployment smoke
 
 For separately configured hosts, copy the literal mode-`0600` fixture and run:

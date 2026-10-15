@@ -113,6 +113,14 @@ control-plane-install-live:
 native-cutover-clean-host-smoke config:
 	cd .. && bash verification/scripts/native-cutover-clean-host.bash "{{config}}"
 
+# Validate the operator-prepared two-node operations profile without starting its services or jobs.
+native-multi-host-operations-preflight config:
+	cd .. && bash verification/scripts/native-multi-host-operations.bash --preflight-only "{{config}}"
+
+# Run the operator-prepared two-node ordinary Sysbox and QEMU KVM operations profile without approval or promotion.
+native-multi-host-operations config:
+	cd .. && bash verification/scripts/native-multi-host-operations.bash "{{config}}"
+
 # Real installed four-policy happy-path matrix; fault, authority, traffic, recovery, and independent-host execution remain deferred.
 native-cutover-policy-matrix config:
 	cd .. && bash verification/scripts/native-cutover-policy-matrix.bash "{{config}}"
