@@ -152,3 +152,92 @@ operator-owned configuration and deliberately start the required services.
 This guide and its automated sandbox tests do not claim that the bootstrap has
 been executed on a fresh VM. Record that live evidence separately when the two
 role commands are exercised on disposable Ubuntu 24.04 amd64 guests.
+
+## Disposable fresh-VM acceptance profile
+
+`verification/scripts/bootstrap-ubuntu-vm-smoke.bash` drives both role commands
+through two sequential fresh guests. It uses the official dated Ubuntu 24.04
+amd64 cloud image at
+`https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-amd64.img`,
+whose SHA-256 in Ubuntu's dated `SHA256SUMS` is
+`6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2`.
+The URL and checksum are embedded in the driver; it does not consult `latest`
+or update the checksum from network metadata.
+
+The ordinary guest has 2 vCPUs, 2 GiB RAM, and a thin 32 GiB overlay. The
+control/QEMU guest runs afterward with 2 vCPUs, 3 GiB RAM, and a fresh thin
+32 GiB overlay. Both use KVM only, loopback-only randomized SSH forwarding,
+preseeded ephemeral SSH host keys, and a UID-1001 `dim` operator with
+guest-local passwordless sudo. The first SSH login must finish the bootstrap
+with status 3; a new SSH login performs the resume. Each guest proves the
+installed `0.10.0-local-<64 lowercase hex>` facade and a real Sysbox container.
+The control/QEMU guest additionally runs the existing
+`just verify control-plane-install-live` and
+`just verify native-basic-lifecycle` gates. It does not create TLS material,
+native global-role credentials, workers, or a generic multi-host bridge.
+
+For a standalone KVM host, invoke the profile with an absolute bundle path and
+the exact commit and tree it contains:
+
+```bash
+bash verification/scripts/bootstrap-ubuntu-vm-smoke.bash \
+  --source-bundle /absolute/reviewed/root.bundle \
+  --source-sha FULL_40_HEX_COMMIT \
+  --source-tree FULL_40_HEX_TREE
+```
+
+The equivalent manifest form is:
+
+```bash
+bash verification/scripts/bootstrap-ubuntu-vm-smoke.bash \
+  --source-bundle /absolute/reviewed/root.bundle \
+  --source-manifest /absolute/reviewed/manifest.json
+```
+
+`manifest.json` has exactly this schema; additional or missing properties are
+rejected:
+
+```json
+{
+  "schemaVersion": 1,
+  "sourceSha": "FULL_40_HEX_COMMIT",
+  "sourceTree": "FULL_40_HEX_TREE"
+}
+```
+
+The disposable outer verification guest recognizes one fixed protected input
+layout only:
+
+```text
+/mnt/dim-inputs/bootstrap-source/root.bundle
+/mnt/dim-inputs/bootstrap-source/manifest.json
+```
+
+When either path exists, `kvm-guest-verification-smoke.bash` adds the
+`fresh-ubuntu-bootstrap` stage and dispatches the delegate's fixed `bootstrap`
+mode. With neither path, the historical nine-stage aggregate is unchanged.
+The delegate takes no source path, SHA, command, or arbitrary executable from
+the caller. Place both regular files directly in one private host directory
+and pass that directory through the existing protected service input API:
+
+```bash
+bash verification/scripts/kvm-host-install-smoke.bash \
+  --input bootstrap-source=/absolute/private/bootstrap-source
+```
+
+The existing launcher snapshots the directory as `bootstrap-source`; no new
+root command or service API is used. Inside the guest its fixed aggregate
+command remains:
+
+```bash
+cd /home/dim/dim/workbench
+bash verification/scripts/kvm-guest-verification-smoke.bash
+```
+
+SSH readiness is bounded to 15 minutes, each source transfer to 5 minutes,
+the image download to 30 minutes, and each provisioning or live-gate command
+to 90 minutes. QEMU PIDs, process start times, private overlay paths, and
+temporary-directory identities are checked before cleanup. An ownership or
+cleanup ambiguity preserves the private work directory and returns status 125.
+Role console, bootstrap, installer, lifecycle, image, and source-identity logs
+remain under the printed mode-0700 evidence directory.
