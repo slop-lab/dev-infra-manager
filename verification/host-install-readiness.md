@@ -67,6 +67,17 @@ review-policy provisioning described below.
 
 ## P0: install and use the current basic workspace on a capable host
 
+### Fresh Ubuntu VM convenience path
+
+For a new Ubuntu 24.04 amd64 VM, follow
+[the role bootstrap](bootstrap-ubuntu-vm.md). Choose `ordinary` or
+`control-qemu`, review its read-only plan, and execute from one clean reviewed
+commit. It installs pinned tools and the local candidate without public package
+publication. Exit `3` requires a new login and identical rerun. TLS, private
+native configuration, lingering, and service activation remain operator-owned.
+Sandbox bootstrap tests and earlier VM evidence do not prove that this new
+bootstrap has completed on a fresh guest; retain that live evidence separately.
+
 ### Source and QEMU prerequisites are separate profiles
 
 Run the source gate without installing its pinned toolchain on the host:

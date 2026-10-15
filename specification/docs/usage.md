@@ -4,6 +4,9 @@
 > retained for prior-release export only. Use [Overview](overview.md),
 > [Configuration](configuration.md), and
 > [Native Project and workspace lifecycle](project-workspaces.md).
+> For current fresh Ubuntu VM preparation, use the
+> [role bootstrap](../../verification/bootstrap-ubuntu-vm.md), not the historical
+> provider setup below.
 
 ## Requirements
 
