@@ -1,0 +1,38 @@
+# Copy to a caller-owned mode-0600 file. Values are literal; this is not shell.
+# Replace both all-zero SHA placeholders with full reviewed 40-hex commits.
+CONTROL_SSH=dim-control
+ORDINARY_SSH=dim-ordinary
+EXPECTED_COMMIT=0000000000000000000000000000000000000000
+CONTROL_SOURCE_ROOT=/srv/dim-source
+ORDINARY_SOURCE_ROOT=/srv/dim-source
+CONTROL_INSTALL_CONFIG=/srv/dim-operator/install.json
+PROJECT_NAME=native-operations
+PROJECT_ID=native-operations-root
+PROJECT_SOURCE=/srv/dim-operator/projects/native-basic-root
+PROJECT_REF=refs/heads/main
+PROJECT_COMMIT=0000000000000000000000000000000000000000
+REGISTRAR_CONNECTION=/srv/dim-operator/registrar.json
+IMPORTER_CONNECTION=/srv/dim-operator/importer.json
+CONTROL_PLANE_CONNECTION=/srv/dim-operator/control-plane.json
+WORKSPACE_NAME=native-operations-workspace
+WORKSPACE_REPOSITORY=/workspace
+ORDINARY_HOST_CONFIG=/srv/dim-operator/ordinary-host.json
+ORDINARY_HOST_ID=ordinary-a
+ORDINARY_UNIT=dim-native-root-host.service
+ORDINARY_STATE_DIRECTORY=/srv/dim-state/native-ordinary-host
+QEMU_SCHEDULER_CONFIG=/srv/dim-operator/qemu-scheduler.json
+QEMU_HOST_CONFIG=/srv/dim-operator/qemu-host.json
+QEMU_HOST_ID=qemu-a
+QEMU_SCHEDULER_UNIT=dim-native-qemu-scheduler.service
+QEMU_HOST_UNIT=dim-native-qemu-host.service
+NATIVE_GIT_CONTAINER=dim-control-plane-native-git-1
+ORDINARY_CI_CONTAINER=dim-control-plane-ordinary-ci-1
+ORDINARY_JOB=source
+QEMU_JOB=integration
+ORDINARY_MARKER=native-basic-ordinary-ok
+QEMU_MARKER=native-basic-qemu-ok
+EVIDENCE_DIR=/srv/dim-evidence/native-multi-host-operations
+PROTECTED_QEMU_MODE=unused
+# After confirming both nodes are disposable and exclusive to this run, replace
+# UNCONFIRMED with the exact value control-qemu-and-ordinary.
+DISPOSABLE_EXCLUSIVE_NODES_ACK=UNCONFIRMED
