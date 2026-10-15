@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+Target: `0.10.0` internal-development candidate. This section does not claim
+registry publication, a release tag, deployment, or full release acceptance.
+
+- Prepare fresh Ubuntu 24.04 amd64 development VMs with an explicit ordinary
+  or control/QEMU role, checksum-pinned tools, signed exact Docker packages,
+  reviewed source installation, and a durable candidate facade. Existing DIM
+  or Docker state is refused; group refresh is explicit, and secrets, TLS,
+  lingering, worker activation, and publication remain operator-owned.
 - Replace the provider-backed multi-repository product with one root-only
   native DIM lifecycle. Projects now bootstrap and publish exactly one reviewed
   native root; schema-6 Project and schema-9 workspace state are strict;
@@ -28,7 +36,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   and human release acceptance. An operator-prepared two-node operations profile
   now checks real ordinary Sysbox and QEMU KVM jobs before and after idle service
   process restarts, protected-ref stability, configured claim cleanup, and
-  workspace cleanup. Its `OPS-PASSED` evidence excludes human approval,
+  workspace cleanup. Persisted terminal evidence must retain the kind-specific
+  `candidate-controlled` classification; missing or mismatched classifications
+  cannot satisfy `OPS-PASSED`. Its evidence excludes human approval,
   promotion, host reboot, crash recovery, failure/stale/replay matrices, traffic
   and guest authority inspection, administrative independence, and full stable
   release acceptance.

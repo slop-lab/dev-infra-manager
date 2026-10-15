@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+Target: `0.10.0` internal-development candidate. The matched source package set
+is not a published release.
+
 - Select a recommended core-managed workspace environment when the immutable
   root has no custom lifecycle files. Setup now requires a host-side
   unprivileged Sysbox agent to be running and its proposal-scoped checkout to be

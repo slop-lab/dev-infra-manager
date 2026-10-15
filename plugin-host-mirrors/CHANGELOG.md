@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+Target: `0.10.0` internal-development candidate. The plugin remains part of the
+matched unpublished source package set.
+
 - Let a reviewed, host-installed plugin select the exact digest-pinned Docker
   registry and APT cache images for DIM-managed workspaces and CI. Projects and
   workspaces cannot choose host packages. The host refuses missing or conflicting
