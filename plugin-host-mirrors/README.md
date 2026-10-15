@@ -8,8 +8,8 @@ cannot select, replace, or disable them.
 Install this plugin at the same exact version as DIM:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' installer install plugin \
-  '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+npx '@slop-lab/dim-installer@0.10.0' installer install plugin \
+  '@slop-lab/dim-plugin-host-mirrors@0.10.0'
 ```
 
 Restart the managed controller after changing the enabled plugin set. Workspace
