@@ -86,5 +86,9 @@ if [[ "${DIM_KVM_GUEST_DELEGATED:-}" == 1 ]]; then
     bootstrap) fresh_ubuntu_bootstrap ;;
   esac
 else
+  if [[ "$action" == bootstrap ]]; then
+    source "$script_dir/lib/bootstrap-guest-inputs.bash"
+    bootstrap_guest_inputs_normalize
+  fi
   delegate "$action"
 fi
