@@ -29,10 +29,21 @@ approval or the final compare-and-swap.
 DIM is pre-stable and part of the host trust boundary. Pin and review one exact
 release or complete source commit.
 
+`0.10.0` is currently an internal-development target and is not yet available
+from the public registry. The exact coordinates below describe the matched
+candidate set; use them only from reviewed source preparation or after a
+separate public release is completed.
+
+For a fresh Ubuntu 24.04 amd64 VM, use the reviewed source
+[role bootstrap](verification/bootstrap-ubuntu-vm.md). It prepares Docker,
+Sysbox, pinned build tools, and a durable local DIM facade without requiring
+registry publication. Select `ordinary` or `control-qemu`; TLS, private native
+configuration, lingering, and worker activation remain explicit operator steps.
+
 ```bash
-mise use --raw --global 'npm:@slop-lab/dim-installer@0.9.0'
+mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
 dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
 dim doctor
 ```
 
@@ -48,8 +59,8 @@ services. They are not created per Project:
 
 ```bash
 dim ci native-root host run /absolute/operator/ordinary-host.json
-dim ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.9.0
-dim ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.9.0
+dim ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.10.0
+dim ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.10.0
 dim ci native-qemu scheduler run /absolute/operator/qemu-scheduler.json
 dim ci native-qemu host run qemu-a /absolute/operator/qemu-host.json
 ```
