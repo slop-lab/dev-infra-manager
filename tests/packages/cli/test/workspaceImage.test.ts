@@ -43,10 +43,10 @@ test("workspace image build uses shipped context without controller or backend c
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "Built workspace image dev-infra-project-workspace:0.9.0\n");
+    assert.equal(result.stdout, "Built workspace image dev-infra-project-workspace:0.10.0\n");
     assert.equal(result.stderr, "");
     const log = await readFile(fixture.commandLog, "utf8");
-    assert.match(log, /^docker buildx build --load --build-arg DIM_UID=\d+ --build-arg DIM_GID=\d+ --tag dev-infra-project-workspace:0\.9\.0 --file Dockerfile \.\n$/);
+    assert.match(log, /^docker buildx build --load --build-arg DIM_UID=\d+ --build-arg DIM_GID=\d+ --tag dev-infra-project-workspace:0\.10\.0 --file Dockerfile \.\n$/);
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }

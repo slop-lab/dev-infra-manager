@@ -139,7 +139,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const { env } = await baseEnv(root);
     const result = await runCli(["--version"], tsxPath!, env, root);
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("DIM installer 0.9.0");
+    expect(result.stdout).toContain("DIM installer 0.10.0");
     expect(result.stdout).toContain("DIM CLI: not installed");
   });
 
@@ -361,7 +361,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const bin = join(root, "bin");
     const npmArgs = join(root, "npm-args.json");
     await mkdir(bin, { recursive: true });
-    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.10.0" });
 
     // When
     const result = await runCli(
@@ -373,7 +373,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
 
     // Then
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("--host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'");
+    expect(result.stderr).toContain("--host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'");
     await expect(access(npmArgs)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -384,13 +384,13 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const bin = join(root, "bin");
     const npmArgs = join(root, "npm-args.json");
     await mkdir(bin, { recursive: true });
-    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.10.0" });
 
     // When
     const result = await runCli(
       [
         "installer", "install", "core", "--no-local-bin",
-        "--host-mirror-plugin", "@slop-lab/dim-plugin-host-mirrors@0.9.0"
+        "--host-mirror-plugin", "@slop-lab/dim-plugin-host-mirrors@0.10.0"
       ],
       tsxPath!,
       { ...env, PATH: `${bin}:${env.PATH}` },
@@ -399,7 +399,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
 
     // Then
     expect(result.code, result.stderr).toBe(0);
-    expect(JSON.parse(await readFile(npmArgs, "utf8"))).toContain("@slop-lab/dim-plugin-host-mirrors@0.9.0");
+    expect(JSON.parse(await readFile(npmArgs, "utf8"))).toContain("@slop-lab/dim-plugin-host-mirrors@0.10.0");
     expect(JSON.parse(await readFile(join(dataHome, "runtime", "current", "plugins.json"), "utf8"))).toEqual({
       schemaVersion: 1,
       plugins: ["@slop-lab/dim-plugin-host-mirrors"]
@@ -422,7 +422,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
       schemaVersion: 1,
       plugins: ["@slop-lab/dim-plugin-host-mirrors"]
     }));
-    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.10.0" });
 
     // When
     const result = await runCli(
@@ -435,7 +435,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     // Then
     expect(result.code, result.stderr).toBe(0);
     const args = JSON.parse(await readFile(npmArgs, "utf8"));
-    expect(args).toContain("@slop-lab/dim-plugin-host-mirrors@0.9.0");
+    expect(args).toContain("@slop-lab/dim-plugin-host-mirrors@0.10.0");
     expect(args).not.toContain("@slop-lab/dim-plugin-host-mirrors@0.8.0");
   });
 
@@ -445,7 +445,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const { env, dataHome } = await baseEnv(root);
     const bin = join(root, "bin");
     await mkdir(bin, { recursive: true });
-    await writeFakeCliNpm(join(bin, "npm"), { argsFile: join(root, "npm-args.json"), versionOutput: "0.9.0" });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: join(root, "npm-args.json"), versionOutput: "0.10.0" });
 
     // When
     const result = await runCliInPty(
@@ -458,7 +458,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
 
     // Then
     expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(result.stdout).toContain("@slop-lab/dim-plugin-host-mirrors@0.9.0");
+    expect(result.stdout).toContain("@slop-lab/dim-plugin-host-mirrors@0.10.0");
     expect(JSON.parse(await readFile(join(dataHome, "runtime", "current", "plugins.json"), "utf8"))).toEqual({
       schemaVersion: 1,
       plugins: ["@slop-lab/dim-plugin-host-mirrors"]
@@ -472,7 +472,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const bin = join(root, "bin");
     const npmArgs = join(root, "npm-args.json");
     await mkdir(bin, { recursive: true });
-    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.10.0" });
 
     // When
     const result = await runCliInPty(
@@ -485,7 +485,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
 
     // Then
     expect(result.code).toBe(1);
-    expect(result.stdout).toContain("@slop-lab/dim-plugin-host-mirrors@0.9.0");
+    expect(result.stdout).toContain("@slop-lab/dim-plugin-host-mirrors@0.10.0");
     await expect(access(npmArgs)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(access(join(dataHome, "runtime"))).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -654,7 +654,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(echoed.argv).toEqual(["some", "random", "args", "--", "extra"]);
     expect(echoed.cwd).toBe(await realpath(cwd));
     expect(echoed.env.DIM_INVOKED_VIA_INSTALLER).toBe("1");
-    expect(echoed.env.DIM_INSTALLER_VERSION).toBe("0.9.0");
+    expect(echoed.env.DIM_INSTALLER_VERSION).toBe("0.10.0");
   });
 
   it("forwards --help to the configured CLI instead of intercepting it", async () => {
@@ -710,7 +710,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
 
     const result = await runCli(["--version"], tsxPath!, env, root);
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("DIM CLI 5.5.5 (via DIM installer 0.9.0)");
+    expect(result.stdout).toContain("DIM CLI 5.5.5 (via DIM installer 0.10.0)");
     expect(result.stderr).not.toContain("configured version");
   });
 
@@ -728,7 +728,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
 
     const result = await runCli(["--version"], tsxPath!, env, root);
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("DIM CLI 9.0.0 (via DIM installer 0.9.0)");
+    expect(result.stdout).toContain("DIM CLI 9.0.0 (via DIM installer 0.10.0)");
     expect(result.stderr).toContain("configured version 1.0.0 does not match installed 9.0.0");
   });
 

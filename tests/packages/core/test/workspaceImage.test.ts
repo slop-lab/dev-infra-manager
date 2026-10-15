@@ -175,14 +175,14 @@ describe("workspace image build", () => {
 
     const result = await buildWorkspaceImage(runner, {});
 
-    expect(result).toEqual({ image: "dev-infra-project-workspace:0.9.0" });
+    expect(result).toEqual({ image: "dev-infra-project-workspace:0.10.0" });
     expect(runner.calls).toEqual([{
       command: "docker",
       args: [
         "buildx", "build", "--load",
         "--build-arg", `DIM_UID=${process.getuid?.()}`,
         "--build-arg", `DIM_GID=${process.getgid?.()}`,
-        "--tag", "dev-infra-project-workspace:0.9.0",
+        "--tag", "dev-infra-project-workspace:0.10.0",
         "--file", "Dockerfile", "."
       ],
       cwd: expect.stringContaining("dim-workspace-image-")
@@ -218,7 +218,7 @@ describe("workspace image build", () => {
 
     const build = buildWorkspaceImage(runner, {});
 
-    await expect(build).rejects.toThrow("failed to build workspace image 'dev-infra-project-workspace:0.9.0': build denied");
+    await expect(build).rejects.toThrow("failed to build workspace image 'dev-infra-project-workspace:0.10.0': build denied");
     const context = runner.calls[0]?.cwd;
     expect(context).toBeDefined();
     await expect(access(context ?? "")).rejects.toMatchObject({ code: "ENOENT" });

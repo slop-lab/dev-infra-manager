@@ -67,7 +67,7 @@ describe("local source installation", () => {
     const installer = manifest.packages.find((entry) => entry.name === "@slop-lab/dim-installer");
     expect(installer).toBeDefined();
     const aggregateVersion = installer?.version ?? "";
-    expect(aggregateVersion).toMatch(/^0\.9\.0-local-[0-9a-f]{64}(?:-dirty)?$/);
+    expect(aggregateVersion).toMatch(/^0\.10\.0-local-[0-9a-f]{64}(?:-dirty)?$/);
     expect(new Set(manifest.packages.map((entry) => entry.version))).toEqual(new Set([aggregateVersion]));
 
     const installedFacade = run("npm", [

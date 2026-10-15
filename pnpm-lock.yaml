@@ -11,7 +11,7 @@ importers:
   core/packages/cli:
     dependencies:
       '@slop-lab/dim-core':
-        specifier: workspace:0.9.0
+        specifier: workspace:0.10.0
         version: link:../core
       commander:
         specifier: 14.0.0
@@ -42,7 +42,7 @@ importers:
   core/packages/controller-proxy:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: 0.9.0
+        specifier: 0.10.0
         version: link:../contracts/external-url
     devDependencies:
       '@types/node':
@@ -58,7 +58,7 @@ importers:
   core/packages/core:
     dependencies:
       '@slop-lab/dim-controller-proxy':
-        specifier: workspace:0.9.0
+        specifier: workspace:0.10.0
         version: link:../controller-proxy
       yaml:
         specifier: 2.8.3
@@ -124,10 +124,10 @@ importers:
   plugin-dns-cloudflare:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: 0.9.0
+        specifier: 0.10.0
         version: link:../core/packages/contracts/external-url
       '@slop-lab/dim-core':
-        specifier: 0.9.0
+        specifier: 0.10.0
         version: link:../core/packages/core
     devDependencies:
       '@types/node':
@@ -143,10 +143,10 @@ importers:
   plugin-external-urls:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: 0.9.0
+        specifier: 0.10.0
         version: link:../core/packages/contracts/external-url
       '@slop-lab/dim-core':
-        specifier: 0.9.0
+        specifier: 0.10.0
         version: link:../core/packages/core
     devDependencies:
       '@types/node':
@@ -162,7 +162,7 @@ importers:
   plugin-host-mirrors:
     dependencies:
       '@slop-lab/dim-core':
-        specifier: 0.9.0
+        specifier: 0.10.0
         version: link:../core/packages/core
     devDependencies:
       '@types/node':

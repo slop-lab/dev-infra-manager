@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-native-git",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "DIM-owned identity-scoped Git smart-HTTP transport",
   "license": "MIT",
   "repository": {

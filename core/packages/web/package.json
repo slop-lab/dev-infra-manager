@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-web",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Authenticated Project-scoped reviewer web API",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/slop-lab/dev-infra-manager.git", "directory": "core/packages/web" },
