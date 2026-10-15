@@ -1,0 +1,154 @@
+# Bootstrap a fresh Ubuntu VM
+
+This bootstrap installs one DIM candidate from one reviewed source commit on a
+fresh Ubuntu 24.04 amd64 VM. Run it as the normal sudo-capable operator from a
+clean checkout at the reviewed commit. Do not run it as root.
+
+The initial supported roles are:
+
+- `ordinary`: Docker CE with the containerd image store, Buildx, Compose v2,
+  Sysbox, the pinned source toolchain, and the source-built DIM candidate.
+- `control-qemu`: everything in `ordinary`, plus QEMU tooling and mandatory
+  access to a real `/dev/kvm`. The bootstrap provisions and checks device
+  access; it does not run a functional KVM acceleration probe. There is no TCG
+  fallback.
+
+## Review the plan
+
+Help and plan output are read-only. They may inspect a dirty preview checkout,
+but `--print-plan` explicitly does not validate a candidate.
+
+```bash
+bash scripts/bootstrap-ubuntu-vm.bash --help
+bash scripts/bootstrap-ubuntu-vm.bash --role ordinary --print-plan
+bash scripts/bootstrap-ubuntu-vm.bash --role control-qemu --print-plan
+```
+
+## Run a role bootstrap
+
+Set `REVIEWED_SHA` to the full lowercase 40-hex commit reviewed for the
+candidate. The checkout must have that exact `HEAD`, no tracked modifications,
+and no untracked files. The package version must be `0.10.0` unless the command
+explicitly selects another expected pre-stable version.
+Use the default user paths: unset DIM config/data/plugin/install/state path
+overrides and `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_STATE_HOME`.
+Also unset `DOCKER_HOST`, `DOCKER_CONTEXT`, `DOCKER_CONFIG`,
+`DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH`, and `DOCKER_API_VERSION`. The
+bootstrap accepts only Docker's `default` context when it resolves to the local
+system Unix socket.
+
+Ordinary host:
+
+```bash
+REVIEWED_SHA=REPLACE_WITH_FULL_REVIEWED_COMMIT
+bash scripts/bootstrap-ubuntu-vm.bash \
+  --role ordinary \
+  --source-sha "$REVIEWED_SHA" \
+  --expected-version 0.10.0 \
+  --acknowledge-fresh-vm
+```
+
+Control and QEMU host:
+
+```bash
+REVIEWED_SHA=REPLACE_WITH_FULL_REVIEWED_COMMIT
+bash scripts/bootstrap-ubuntu-vm.bash \
+  --role control-qemu \
+  --source-sha "$REVIEWED_SHA" \
+  --expected-version 0.10.0 \
+  --acknowledge-fresh-vm
+```
+
+`--acknowledge-fresh-vm` is an explicit assertion that this disposable VM has
+no DIM state or Docker workloads to adopt, migrate, or preserve. Before any
+privileged or network operation, the bootstrap refuses existing DIM product or
+prepared state, Docker containers, volumes, images, non-default networks,
+daemon configuration, systemd Docker overrides, existing Docker or containerd
+data roots, and a foreign DIM facade. It never deletes Docker data, removes
+conflicting packages, or overrides daemon configuration.
+
+## Refresh groups and resume
+
+The first run may add the operator to `docker` and, for `control-qemu`, `kvm`.
+When the command exits with status `3`, log out of the VM completely and log
+back in. Rerun the identical command. Do not use `sg`, a forged
+`XDG_RUNTIME_DIR`, or a sudo shell to bypass the login boundary.
+
+Before host mutation, the bootstrap writes an owner-only resume marker at
+`~/.local/state/dim-bootstrap/ubuntu-vm.state`. A resume accepts only an
+`awaiting-login` marker matching the exact role, reviewed source SHA, expected
+version, operator UID, generated backend-config digest, and absent-or-exact
+bootstrap-produced Docker daemon-config digest. It then skips all host
+installers. A changed, foreign, incomplete, or completed marker fails closed
+rather than adopting state.
+
+The resumed run verifies the local Docker context and socket, every exact
+Docker/Sysbox package pin, the daemon version, containerd image store, Sysbox
+runtime, source tool versions, and role-specific KVM access. It then invokes
+the existing source flow exactly as follows:
+
+```bash
+DIM_SOURCE_ROOT_COMMIT="$REVIEWED_SHA" just prepare-local
+DIM_SOURCE_ROOT_COMMIT="$REVIEWED_SHA" just install-local
+```
+
+## Installed paths and pins
+
+- Node.js 24.19.0: `/usr/local/lib/dim-qemu-node-24.19.0`
+- pnpm 10.13.1 and Just 1.43.1:
+  `/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1`
+- Prepared candidate bundle: `<checkout>/.local/dim-packages`
+- Durable candidate runtime:
+  `~/.local/lib/dim-candidates/<local-bundle-version>-<reviewed-sha>`
+- Operator facade: `~/.local/bin/dim`
+
+The facade executes the packaged POSIX launcher with the dedicated trusted Node
+and pinned source-tool directories first in `PATH`, so it remains usable after
+a new login without publishing or replacing `/usr/local/bin/node`. Invoke the
+pinned build tools explicitly when needed:
+
+```bash
+/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin/just --version
+/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin/pnpm --version
+```
+
+Candidate publication holds `.local/prepare-install.lock` while it revalidates
+the prepared-state digest, source SHA, local bundle version, exact installer
+manifest entry, and installer tarball identity before and after staging. It
+publishes the facade only after the staged launcher reports the same full local
+bundle version; concurrent or altered preparation fails closed.
+
+The executable downloads are fixed URLs with embedded SHA-256 values. Docker
+uses Docker's signed Noble APT repository, verifies signing-key fingerprint
+`9DC858229FC7DD38854AE2D88D81803C0EBFCD88`, installs exact package versions,
+and places the five Docker packages on hold. Sysbox 0.7.0 uses its existing
+architecture-specific embedded SHA-256.
+
+Reviewed executable artifacts:
+
+| Tool | Official artifact | SHA-256 |
+| --- | --- | --- |
+| Node.js 24.19.0 | `https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz` | `14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647` |
+| pnpm 10.13.1 | `https://github.com/pnpm/pnpm/releases/download/v10.13.1/pnpm-linux-x64` | `e1cab530ea8252eb90e4add71d95838fd6f2656e6977f120df5ecb6f5b2822e0` |
+| Just 1.43.1 | `https://github.com/casey/just/releases/download/1.43.1/just-1.43.1-x86_64-unknown-linux-musl.tar.gz` | `6a3003f68fa4d86ada8afe33830a88ffdb6c2fcaff4e5a840b1cb90eaf6f46fc` |
+| Sysbox 0.7.0 | `https://downloads.nestybox.com/sysbox/releases/v0.7.0/sysbox-ce_0.7.0-0.linux_amd64.deb` | `eeff273671467b8fa351ab3d40709759462dc03d9f7b50a1b207b37982ce40a9` |
+
+The Noble Docker package tuple is `docker-ce` and `docker-ce-cli`
+`5:29.1.4-1~ubuntu.24.04~noble`, `containerd.io`
+`2.2.1-1~ubuntu.24.04~noble`, `docker-buildx-plugin`
+`0.31.1-1~ubuntu.24.04~noble`, and `docker-compose-plugin`
+`2.40.3-1~ubuntu.24.04~noble`. The bootstrap also requires `docker compose
+version --short` to report exactly `2.40.3`.
+
+## Operator handoff
+
+The bootstrap does not create TLS material, secrets, native connection JSON,
+worker configuration, systemd worker units, user lingering, or native CI
+services. It does not publish packages, create tags, or start a release. After
+the candidate facade reports the expected version, continue with
+[`native-multi-host-operations.md`](native-multi-host-operations.md) to create
+operator-owned configuration and deliberately start the required services.
+
+This guide and its automated sandbox tests do not claim that the bootstrap has
+been executed on a fresh VM. Record that live evidence separately when the two
+role commands are exercised on disposable Ubuntu 24.04 amd64 guests.

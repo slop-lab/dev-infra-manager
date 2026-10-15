@@ -50,6 +50,47 @@ Unsupported Sysbox architectures must fail. Installation records `sysbox` in
 DIM user configuration. From a source checkout, the operator runs
 `just run-cli doctor` afterward.
 
+The optional second argument `docker-ce` selects the exact Docker CE package
+tuple used by the fresh-VM bootstrap instead of the Ubuntu Docker packages.
+It verifies the signed repository key, refuses conflicting distro packages,
+requires the containerd image store, and never removes packages or Docker data
+to make an existing host fit. The bootstrap's explicit acknowledgement supplies
+the host install confirmation; standalone invocation still prompts by default.
+
+## Fresh Ubuntu VM Bootstrap
+
+`scripts/bootstrap-ubuntu-vm.bash` MUST support explicit `ordinary` and
+`control-qemu` roles for Ubuntu 24.04 amd64 internal-development VMs. Its
+`--help` and `--print-plan` surfaces MUST be non-mutating and MUST NOT claim
+candidate validation. Execution MUST require a normal sudo-capable operator,
+explicit fresh-VM acknowledgement, one full reviewed root commit matching a
+clean checkout, and the expected pre-stable package version.
+
+Before privileged or network operations it MUST refuse predecessor DIM state,
+prepared artifacts, Docker workloads or non-default resources, and existing
+daemon overrides. It MUST NOT delete, adopt, migrate, or overwrite them.
+Executable tools MUST use reviewed exact versions and embedded checksums;
+Docker packages MUST use an exact signed package tuple. The host image-store
+requirement MUST NOT change the distinct trusted inner-daemon storage contract.
+
+Both roles install Docker CE 29.1.4, Compose v2, Buildx, Sysbox 0.7.0, Node.js
+24.19.0, pnpm 10.13.1, and Just 1.43.1. Only `control-qemu` installs QEMU tooling
+and requires a real readable/writable KVM device, without TCG substitution.
+Provisioning device access alone MUST NOT be reported as a functional KVM test.
+Group changes MUST stop with exit `3` for an explicit new login and identical
+rerun. An owner-only resume marker MUST bind the phase, role, source, version,
+operator, and bootstrap-created configuration; foreign or changed state MUST
+fail closed.
+
+After host prerequisites, the bootstrap MUST reuse reviewed `prepare-local`
+and `install-local` transactions. Its durable installer facade MUST use the
+exact prepared installer and pinned Node/tool paths, remain usable after a new
+login, and preserve foreign targets. Package/image registry publication, tags,
+TLS, secrets, native role JSON, lingering, and worker activation MUST remain
+outside bootstrap authority. See the
+[operator guide](../../../verification/bootstrap-ubuntu-vm.md) for commands,
+artifact checksums, and separate live-VM verification requirements.
+
 ## KVM Host-install Smoke
 
 `verification/scripts/install-kvm-verify-deps-ubuntu.bash` installs QEMU, qcow2,
