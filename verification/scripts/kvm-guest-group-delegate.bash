@@ -46,6 +46,14 @@ qemu_mechanics() {
   exec /usr/bin/bash "$script_dir/native-qemu-guest-mechanics-kvm-smoke.bash"
 }
 
+fresh_ubuntu_bootstrap() {
+  kvm_preflight
+  cd "$repo_root"
+  exec /usr/bin/bash "$script_dir/bootstrap-ubuntu-vm-smoke.bash" \
+    --source-bundle /mnt/dim-inputs/bootstrap-source/root.bundle \
+    --source-manifest /mnt/dim-inputs/bootstrap-source/manifest.json
+}
+
 delegate() {
   local action="$1" uid gid kvm_gid groups groups_csv
   uid="$(id -u)"
@@ -64,7 +72,7 @@ delegate() {
 [[ "$#" -eq 1 ]] || refuse
 action="$1"
 case "$action" in
-  preflight|run) ;;
+  preflight|run|bootstrap) ;;
   *) refuse ;;
 esac
 guest_guard
@@ -75,6 +83,7 @@ if [[ "${DIM_KVM_GUEST_DELEGATED:-}" == 1 ]]; then
   case "$action" in
     preflight) kvm_preflight ;;
     run) qemu_mechanics ;;
+    bootstrap) fresh_ubuntu_bootstrap ;;
   esac
 else
   delegate "$action"
