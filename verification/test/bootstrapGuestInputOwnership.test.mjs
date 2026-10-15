@@ -7,7 +7,7 @@ import { test } from "vitest";
 
 const helper = new URL("../scripts/lib/bootstrap-guest-inputs.bash", import.meta.url);
 
-test.each(["valid", "symlink", "hardlink", "writable-directory", "wrong-uid"])(
+test.each(["valid", "root-extracted", "symlink", "hardlink", "writable-directory", "wrong-uid"])(
   "guest input assignment handles %s without widening its fixed paths",
   async (scenario) => {
     const root = await mkdtemp(join(tmpdir(), "dim-bootstrap-input-owner-"));
@@ -22,7 +22,7 @@ test.each(["valid", "symlink", "hardlink", "writable-directory", "wrong-uid"])(
 set -euo pipefail
 shift
 command="$1"; shift
-if [[ "$command" == /usr/bin/chown ]]; then
+if [[ "$command" == /usr/bin/chown || "$command" == /usr/bin/chmod ]]; then
   printf '%s\\n' "$*" >>"$COMMAND_LOG"
   exit 0
 fi
@@ -31,7 +31,11 @@ if [[ "$2" == '%u:%g' ]]; then printf '1001:1001\\n'; exit 0; fi
 path="\${*: -1}"
 case "$path" in
   /mnt/dim-inputs/bootstrap-source)
-    if [[ "$SCENARIO" == writable-directory ]]; then printf 'directory:700:2:1000:1000\\n'; else printf 'directory:500:2:1000:1000\\n'; fi ;;
+    case "$SCENARIO" in
+      writable-directory) printf 'directory:700:2:1000:1000\\n' ;;
+      root-extracted) printf 'directory:755:2:0:0\\n' ;;
+      *) printf 'directory:500:2:1000:1000\\n' ;;
+    esac ;;
   */manifest.json)
     if [[ "$SCENARIO" == symlink ]]; then printf 'symbolic link:777:1:1000:1000\\n'; else printf 'regular file:400:1:1000:1000\\n'; fi ;;
   */root.bundle)
@@ -47,9 +51,11 @@ esac
         encoding: "utf8", env: { ...process.env, SCENARIO: scenario, COMMAND_LOG: log }
       });
 
-      assert.equal(result.status, scenario === "valid" ? 0 : 2, result.stderr);
-      assert.equal(await readFile(log, "utf8"), scenario === "valid"
+      const accepted = scenario === "valid" || scenario === "root-extracted";
+      assert.equal(result.status, accepted ? 0 : 2, result.stderr);
+      assert.equal(await readFile(log, "utf8"), accepted
         ? "--no-dereference 1001:1001 -- /mnt/dim-inputs/bootstrap-source /mnt/dim-inputs/bootstrap-source/root.bundle /mnt/dim-inputs/bootstrap-source/manifest.json\n"
+          + (scenario === "root-extracted" ? "0500 -- /mnt/dim-inputs/bootstrap-source\n" : "")
         : "");
     } finally {
       await rm(root, { recursive: true, force: true });
