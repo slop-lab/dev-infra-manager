@@ -29,7 +29,7 @@ scheduler. Historical state for those products is rejection/export-only.
 Pin exactly the version used by the CLI:
 
 ```bash
-npm install --save-exact '@slop-lab/dim-core@0.9.0'
+npm install --save-exact '@slop-lab/dim-core@0.10.0'
 ```
 
 The package is ESM-only, supports Node.js 24 and 26, and runs on Linux. Runtime
