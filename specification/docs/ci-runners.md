@@ -4,8 +4,8 @@ Ordinary and QEMU execution are global host services:
 
 ```bash
 dim ci native-root host run /absolute/operator/ordinary-host.json
-dim ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.9.0
-dim ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.9.0
+dim ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.10.0
+dim ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.10.0
 dim ci native-qemu scheduler run /absolute/operator/qemu-scheduler.json
 dim ci native-qemu host run qemu-a /absolute/operator/qemu-host.json
 ```
