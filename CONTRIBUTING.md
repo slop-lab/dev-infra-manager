@@ -20,7 +20,7 @@ bash verification/scripts/local-ci-matrix.bash # exact Node.js 24/26 CI matrix v
 just build-workspace-image # run the source CLI's shipped-asset release image build
 just build-local-workspace-image # image-only build for the current worktree
 just prepare-local   # matched package/image candidate from one reviewed root commit
-just install-local   # install the prepared candidate without restarting the controller
+just install-local   # install the prepared candidate, enable plugins, and restart the controller
 just restart-controller # restart the controller with the installed packages
 just install-local-control-plane # install packages with transactional controller readiness
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
@@ -101,6 +101,22 @@ backend installers, KVM-based installer/backend smoke tests, the
 `just verify container` integration suite, the direct host-backend smoke scripts,
 and the installer/example smoke tests — is the
 [verification contract](specification/specs/12-verification.md).
+
+## Fresh internal-development VMs
+
+For a new Ubuntu 24.04 amd64 VM, use
+[the role bootstrap](verification/bootstrap-ubuntu-vm.md) instead of assembling
+the host and build-tool installers manually:
+
+```bash
+bash scripts/bootstrap-ubuntu-vm.bash --role ordinary --print-plan
+bash scripts/bootstrap-ubuntu-vm.bash --role control-qemu --print-plan
+```
+
+Execution requires the full reviewed commit SHA, a clean checkout, and explicit
+fresh-VM acknowledgement. Exit `3` means log out, log back in, and rerun the
+same command. It does not configure secrets, TLS, lingering, or native worker
+services. The `0.10.0` target is internal and pre-stable, not a public release.
 
 ## Repository layout
 

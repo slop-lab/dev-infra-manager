@@ -49,7 +49,7 @@ check-source-native:
 prepare-local:
     bash scripts/prepare-source-build.bash
 
-# Install the prepared local DIM package set without changing the managed controller.
+# Install the prepared local package set, enable plugins, and restart the controller.
 install-local:
     bash scripts/install-source-build.bash
 
