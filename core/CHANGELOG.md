@@ -97,8 +97,12 @@ is not a published release.
   policy is rejected before mutation; completed earlier flat-policy rows remain
   proof/read-only while incomplete rows cannot resume. The service verifies its complete object graph, durably binds the
   import, and uses an exact service-owned CAS to create only the initially
-  unborn protected ref. Pack/ref sync and strict restart recovery preserve the
-  bound commit and tree; import itself grants no workspace writer. The separate
+   unborn protected ref. Pack/ref sync and strict restart recovery preserve the
+   bound commit and tree; import itself grants no workspace writer. Git creation
+   pins owner-only `0600` sharing permissions independently of the caller's
+   umask, so ordinary Ubuntu user defaults cannot create unsafe object or ref
+   paths. Startup rejects missing or changed creation policy without repairing
+   unsafe Git metadata. The separate
   owner-host issuer can mint only a short-lived, Project/root-scoped
   upload-pack lease after live imported-root verification. Its own credential
   cannot read Git, and no read lease can use receive-pack or write a ref. A

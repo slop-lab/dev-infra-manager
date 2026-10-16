@@ -58,6 +58,12 @@ Registered repository and hook paths reject symbolic links, and each backend
 invocation overrides repository-controlled hook and receive policy settings.
 Backend process concurrency, request size, and execution time are bounded.
 
+Service-owned bare repositories are created with `core.sharedRepository=0600`,
+independent of the operator's umask. Git-created files and directories remain
+owner-only, including future object and protected-ref writes. Startup rejects a
+missing or changed creation setting; it does not repair unsafe object/ref
+metadata or adopt predecessor repositories.
+
 Terminate TLS in a reviewed reverse proxy or expose the service only on a
 private isolated network. Basic credentials must not cross an untrusted
 plaintext network.
