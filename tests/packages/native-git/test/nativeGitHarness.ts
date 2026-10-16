@@ -56,7 +56,7 @@ export async function nativeGitFixture(objectFormat: NativeGitObjectFormat = "sh
     if (objectFormat === "sha256") {
       const repositoryPath = join(storageRoot, repository.projectId, `${repository.repositoryId}.git`);
       await mkdir(join(storageRoot, repository.projectId), { recursive: true, mode: 0o700 });
-      await run(gitExecutable, ["init", "--bare", "--initial-branch=main", "--object-format=sha256", repositoryPath]);
+      await run(gitExecutable, ["init", "--shared=0600", "--bare", "--initial-branch=main", "--object-format=sha256", repositoryPath]);
     }
     const bare = await initializeNativeRepository(config, repository);
     await seedRepository(root, bare, `${repository.projectId}-initial`, objectFormat);
