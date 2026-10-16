@@ -6,9 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
+const cli = fileURLToPath(new URL("../../../../core/packages/cli/dist/cli.js", import.meta.url));
 const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", import.meta.url));
-const tsxImport = import.meta.resolve("tsx");
 
 type ImageFixture = {
   readonly root: string;
@@ -215,7 +214,7 @@ exit 97
 }
 
 function run(args: readonly string[], env: NodeJS.ProcessEnv = process.env) {
-  return spawnSync(process.execPath, ["--import", tsxImport, cli, ...args], {
+  return spawnSync(process.execPath, [cli, ...args], {
     cwd: packageDirectory,
     encoding: "utf8",
     env

@@ -2,6 +2,11 @@
 set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+node_major="${DIM_SOURCE_NODE_MAJOR:-24}"
+case "$node_major" in
+  24|26) ;;
+  *) printf 'DIM_SOURCE_NODE_MAJOR must be 24 or 26, received: %s\n' "$node_major" >&2; exit 2 ;;
+esac
 container="dim-source-gate-$(printf '%s' "$$-$(date +%s%N)" | sha256sum | cut -c1-12)"
 verification_id="$container"
 
@@ -49,13 +54,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker build --iidfile "$iid_file" "$repository_root/verification/source-gate"
+docker build --target "source-node-$node_major" --iidfile "$iid_file" "$repository_root/verification/source-gate"
 image_id="$(tr -d '\r\n' <"$iid_file")"
 [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || {
   printf 'source-gate build returned malformed image ID: %s\n' "$image_id" >&2
   exit 1
 }
-printf 'source-gate image ID: %s\n' "$image_id"
+printf 'source-gate Node.js lane: %s; image ID: %s\n' "$node_major" "$image_id"
 docker run --detach --init --name "$container" \
   --label "org.dim.verification=$verification_id" \
   --label "org.dim.resource=source-gate" \
@@ -74,7 +79,7 @@ docker exec "$container" git -C /workspace commit --quiet --message source-gate-
 docker exec "$container" pnpm install --frozen-lockfile
 
 if (( $# == 0 )); then
-  docker exec "$container" /usr/local/bin/dim-source-gate-run
+  docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" "$container" /usr/local/bin/dim-source-gate-run
 else
-  docker exec "$container" /usr/local/bin/dim-source-gate-run "$@"
+  docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" "$container" /usr/local/bin/dim-source-gate-run "$@"
 fi

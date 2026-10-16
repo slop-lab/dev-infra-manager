@@ -16,7 +16,7 @@ just build-packages  # publishable package builds
 just check-source    # isolated pinned source gate; Docker is the only toolchain prerequisite
 just check-source-native # same gate in an already pinned native environment
 just verify agent    # strongest gate supported inside this repository's DIM agent
-bash verification/scripts/local-ci-matrix.bash # exact Node.js 24/26 CI matrix via mise
+bash verification/scripts/local-ci-matrix.bash # isolated Node.js 24/26 source matrix plus mise host integrations
 just build-workspace-image # run the source CLI's shipped-asset release image build
 just build-local-workspace-image # image-only build for the current worktree
 just prepare-local   # matched package/image candidate from one reviewed root commit
@@ -42,10 +42,14 @@ host:
 
 ```bash
 bash verification/scripts/source-gate-container.bash
+# Select the real Node.js 26 source lane explicitly:
+DIM_SOURCE_NODE_MAJOR=26 bash verification/scripts/source-gate-container.bash
 ```
 
 `just check-source` and `just check-source-container` are convenience aliases
-for that command. The wrapper builds an image from digest-pinned Node.js 24 and
+for the default Node.js 24 command. `DIM_SOURCE_NODE_MAJOR` accepts only `24`
+or `26` and selects an independently checked Node.js 24.19.0 or 26.5.0 runtime.
+The wrapper builds an image from digest-pinned Node.js and
 Python 3.13.7 bases with checksum-pinned Git 2.43.0 and Just 1.43.1, plus
 exact-version pnpm 10.13.1. It copies the current worktree, including tracked and untracked changes,
 into a disposable container;
@@ -73,7 +77,7 @@ provides `/usr/bin/git` 2.43.0, Node.js 24 or 26, pnpm 10.13.1, a trusted
 temporary directory, and disposable root-ownership fixture capability. It
 preserves the direct gate used by pinned CI environments.
 
-The `Expensive integration` workflow has dedicated native ordinary Sysbox and
+The `Native integration` workflow has dedicated native ordinary Sysbox and
 native QEMU KVM mechanics lanes. Their matching local recipes are `just verify
 native-ordinary-guest-mechanics` and `just verify
 native-qemu-guest-mechanics-kvm`. Missing Sysbox or KVM host capability is not
@@ -82,9 +86,11 @@ prerequisite before starting an expensive journey. Same-host mechanics do not
 replace clean independent-host release acceptance or human review.
 
 `local-ci-matrix.bash` requires mise, Docker with Compose v2, and the same host
-capabilities as the container integration tests. It installs the locked
-dependencies under Node.js 24 and 26, then runs the same source and container
-gates used by the hosted CI workflows. The `--manual` option also
+capabilities as the container integration tests. It first runs the complete
+source suite, package dry-runs, and production audit in each pinned disposable
+Node.js 24/26 lane, matching the `Verify native candidate` workflow. Host plugin
+checks use mise-selected Node.js 24 and 26; the container checks use Node.js 26.
+The `--manual` option also
 runs the same Sysbox isolation and KVM backend-installer recipes as the
 manually dispatched workflows; it requires a registered `sysbox-runc` runtime,
 QEMU tooling, and readable/writable `/dev/kvm`.

@@ -149,10 +149,9 @@ the candidate facade reports the expected version, continue with
 [`native-multi-host-operations.md`](native-multi-host-operations.md) to create
 operator-owned configuration and deliberately start the required services.
 
-Both roles were executed successfully on fresh disposable Ubuntu 24.04 amd64
-guests for the exact candidate recorded in
-[`release-0.10.0.md`](release-0.10.0.md). That record distinguishes the passing
-guest aggregate from the deployed older outer launcher's subsequent failure.
+Run both roles against the exact candidate using the acceptance profile below.
+Retain guest phase logs and the outer invocation's final status separately;
+passing guest stages do not establish that the complete outer invocation passed.
 
 ## Disposable fresh-VM acceptance profile
 
@@ -243,9 +242,9 @@ node .dim/qemu-client.mjs run \
 ```
 
 `BROKER_SOURCE_ROOT` is the operator-provided source root in the broker's mount
-namespace. An agent's `/workspace` path need not exist in that namespace. The
-tested deployment used `/var/lib/dim/workspace-data/workspace`; this is not a
-generic product-wide host path or an additional capability grant.
+namespace. An agent's `/workspace` path need not exist in that namespace.
+Obtain the exact broker-side source path from the operator; do not infer a
+product-wide host path or an additional capability grant from the agent path.
 
 Before delegation, the disposable-guest guard validates and seals only the two
 fixed regular, single-link input files and their directory, then assigns them

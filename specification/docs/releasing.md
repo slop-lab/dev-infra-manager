@@ -55,8 +55,10 @@ replace the subsequent operator-owned two-node operations gate. Record a new
 bootstrap execution against the candidate; older VM results do not prove new
 installer code or a newly versioned artifact set.
 
-The current internal target's preparation evidence and remaining operator steps
-are recorded in [`verification/release-0.10.0.md`](../../verification/release-0.10.0.md).
+Keep candidate-specific results, timestamps, and logs in external CI artifacts
+or operator evidence directories, not in tracked preparation reports. Tracked
+documentation describes reproducible commands and evidence requirements; an
+older successful run never establishes the current candidate's readiness.
 
 This preparation does not publish packages or images, create a tag or release,
 deploy services, or establish public availability. Native multi-host operations
@@ -71,8 +73,10 @@ those claims are made.
 Run source and package verification from the exact candidate:
 
 ```bash
-just check-source-native
-just verify package-packs
+for node_major in 24 26; do
+  DIM_SOURCE_NODE_MAJOR="$node_major" bash verification/scripts/source-gate-container.bash \
+    bash -lc 'just check-source-native && just verify package-packs && pnpm audit --prod'
+done
 just verify native-idle-service-images
 just verify control-plane-install-live
 ```
@@ -96,6 +100,11 @@ evidence and separately complete `VERIFICATION-NATIVE-CUTOVER-001`, including
 fault, stale/wrong-kind, replay, crash/reboot, guest-authority, traffic,
 interactive human approval, and checked promotion observations. Missing
 hardware is `unavailable`, never a pass.
+
+The isolated source gate needs Bash and Docker on the invoking host, not sudo
+or a host pnpm installation. Its root-owned fixtures exist only inside its
+disposable container. `just check-source-native` is for an already pinned,
+disposable environment, not an ordinary hosted-runner user or a live sudo shell.
 
 The GitHub workflows `.github/workflows/verify.yml` and
 `.github/workflows/integration.yml` must run against the canonical candidate

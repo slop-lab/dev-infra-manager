@@ -136,6 +136,7 @@ describe("Ubuntu VM role bootstrap", () => {
     ["Docker endpoint", { DIM_TEST_DOCKER_ENDPOINT: "tcp://remote.example:2376" }, "Docker endpoint must be the local system socket"],
     ["Docker package", { DIM_TEST_DOCKER_PACKAGE_VERSION: "5:29.1.3-1~ubuntu.24.04~noble" }, "pinned host package mismatch"],
     ["Sysbox package", { DIM_TEST_SYSBOX_PACKAGE_VERSION: "0.7.0-0.linux" }, "pinned host package mismatch"],
+    ["Node.js version", { DIM_TEST_TRUSTED_NODE_VERSION: "v26.5.0" }, "Node.js is not pinned 24.19.0"],
   ])("rejects %s drift after host installation", async (_label, environment, message) => {
     const value = await fixture();
 

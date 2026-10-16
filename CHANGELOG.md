@@ -101,9 +101,8 @@ registry publication, a release tag, deployment, or full release acceptance.
   workspace-identity-bound; operators must leave it intact or explicitly copy
   data before full discard. Native root bootstrap also accepts an explicit
   owner-private reviewed policy for manifest-free roots, with no automatic
-  approval fallback. The physical recommended-environment Sysbox smoke remains
-  blocked in the current runc-only environment without the required host lab;
-  this entry does not claim operational acceptance.
+  approval fallback. Operational acceptance requires the separate real-host
+  Sysbox verification described in the host readiness runbook.
 
 - Workspaces now expose reviewed root lifecycle bytes read-only while Project
   code owns repository aliases, refs, materialization, and persistent checkout

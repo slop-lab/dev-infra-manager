@@ -123,7 +123,16 @@ JSON
  ln -s ../dim-fixture/dim "$prefix/node_modules/.bin/dim"
  [[ -z "\${DIM_TEST_MUTATE_PREPARED:-}" ]] || printf 'drift\\n' >>"$PWD/.local/prepared-local.state"
  `);
-  await executable(trustedNode, `printf 'trusted-node\\n' >>${JSON.stringify(trustedNodeLog)}\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+  // Model the installed Ubuntu target's pinned version independently of the
+  // test runner (Node 24 or 26); execute fixture JavaScript with the real runner.
+  await executable(trustedNode, `
+printf 'trusted-node\\n' >>${JSON.stringify(trustedNodeLog)}
+if [[ "\${1:-}" == --version ]]; then
+  printf '%s\\n' "\${DIM_TEST_TRUSTED_NODE_VERSION:-v24.19.0}"
+  exit 0
+fi
+exec ${JSON.stringify(process.execPath)} "$@"
+`);
   await executable(resolve(sourceTools, "bin/pnpm"), "printf '10.13.1\\n'\n");
   await executable(resolve(sourceTools, "bin/just"), "printf 'just 1.43.1\\n'\n");
   await executable(resolve(tools, "node"), `exec ${JSON.stringify(process.execPath)} "$@"\n`);

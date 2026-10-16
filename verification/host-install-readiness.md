@@ -1,12 +1,12 @@
 # Host installation and real-use readiness
 
-## Status and scope
+## Scope
 
-The root-only native environment has passed its basic workspace journey and
-ordinary/nested-KVM mechanics inside a disposable KVM VM reached through the
-protected verification service. This is **not independent-host or human release
-acceptance**. The development agent itself still has only runc and no direct
-`/dev/kvm`; do not substitute those local capabilities for the observed VM run.
+Use this checklist to reproduce host readiness against one clean exact source
+candidate. Source tests, same-host mechanics, two-node operations, and full
+independent-host/human release acceptance are separate evidence classes. Retain
+run-specific logs outside tracked documentation; do not transfer earlier
+candidate results to the current installation.
 
 There are only two environment contracts:
 
@@ -24,53 +24,6 @@ Basic workspace use does not require QEMU, native CI, or package publication.
 Gitea-free use additionally requires the native Git deployment and explicit
 review-policy provisioning described below.
 
-## Evidence already available
-
-- The 0.10.0 code candidate `2804eeab` passed all ten disposable guest stages,
-  including both fresh Ubuntu role bootstraps, full control-plane installation
-  in the new control VM, native workspace lifecycle, private agent Docker, and
-  real ordinary/KVM mechanics. The separately staged older outer launcher then
-  failed on removed `--repos` input; the outer service did not report success.
-  See [the exact candidate and qualification](release-0.10.0.md).
-- On 2026-10-14, source candidate `5c79444b` passed the pinned isolated source
-  gate: type checks, all package builds, 2,080 unit/integration tests (one
-  ownership-test skip), 155 CLI tests, and 447 verification tests. The subsequent
-  bounded-output change has two additional passing focused regressions.
-- Runtime candidate `23a08fa9` passed all nine native guest stages, including
-  installed-service install/update/rollback/recovery, ordinary Sysbox execution,
-  a real recommended workspace with proposal-only Git and retained checkout
-  across stop/start/restart/update, and nested QEMU with KVM acceleration.
-  Guest KVM access used a transient non-root supplementary group after checking
-  the disposable guest identity. That helper issues no device-permission or
-  persistent group-membership changes.
-- The deployed outer root launcher still returned failure after those nine
-  passes because its older, separately staged continuation invokes the removed
-  `--repos` option. The current source launcher no longer contains that legacy
-  continuation. An operator must review and redeploy the current privileged
-  launcher closure before claiming a successful end-to-end service status.
-  Do not reintroduce obsolete CLI input or replace privileged staged files from
-  the agent to conceal this distinction. The agent retained the run output at
-  `.local/verification/qemu-native-cutover-compact-run.log`.
-- The entries below describe earlier candidates, not substitutes for that
-  native-only run or for independent release acceptance.
-- This removal passed workspace type checks/builds, 214 workspace/native-lifecycle
-  regression tests, and a post-fix driver exercising recommended selection, actual custom hooks,
-  and obsolete-selector rejection.
-- Before this removal, the recommended-default candidate passed the complete
-  core suite with 1,847 passing tests and two skips, plus 15 real native
-  bootstrap CLI tests. These are earlier-candidate results, not a claim that
-  the full suite was rerun for this removal.
-- Release Docker image tooling and the owned relay were executed locally,
-  including Alpine lock behavior, fixed-origin HTTP/TLS forwarding, phase
-  gating, process reuse, and cleanup. This does not prove Sysbox isolation.
-- Earlier native idle-image and installer Docker gates passed install, update,
-  rollback, recovery, and owned-resource cleanup on their recorded candidates.
-- The supplied independent-VM report covers unmodified `c46434b4`: both Ubuntu
-  nodes installed the same artifact, ran Sysbox, and reported functional nested
-  KVM. Native jobs were blocked by the nonterminating readiness probe. The
-  `19d3a3f1` fix and later recommended-environment commits have not been
-  reinstalled and accepted in those VMs.
-
 ## P0: install and use the current basic workspace on a capable host
 
 ### Fresh Ubuntu VM convenience path
@@ -81,9 +34,11 @@ For a new Ubuntu 24.04 amd64 VM, follow
 commit. It installs pinned tools and the local candidate without public package
 publication. Exit `3` requires a new login and identical rerun. TLS, private
 native configuration, lingering, and service activation remain operator-owned.
-The two roles have current real-VM evidence in
-[the internal release record](release-0.10.0.md); sandbox tests alone are not
-that evidence, and older candidate runs do not transfer to a newer commit.
+Run the documented disposable fresh-VM acceptance profile for both roles.
+Record guest phase outcomes and the final outer launcher status separately;
+an outer failure must not be relabelled success because its guest stages pass.
+Review and deploy protected host launcher code through the trusted operator
+workflow, never by replacing root-owned staged files from an agent.
 
 ### Source and QEMU prerequisites are separate profiles
 
@@ -91,6 +46,7 @@ Run the source gate without installing its pinned toolchain on the host:
 
 ```bash
 bash verification/scripts/source-gate-container.bash
+DIM_SOURCE_NODE_MAJOR=26 bash verification/scripts/source-gate-container.bash
 ```
 
 The complete source suite uses an integration fixture pinned to
@@ -254,13 +210,11 @@ not repair or delete an existing Docker data root.
 The runc lane now explicitly uses the production
 `DIM_DOCKERD_FLAGS=--feature containerd-snapshotter=false` profile and a named
 volume at `/var/lib/dim/workspace-data`; expect classic `overlay2` there. The
-Sysbox lane keeps the agent's own daemon profile. The earlier both-lane PASS
-with `overlayfs`/containerd did not prove the production runc profile. Likewise,
-the corrected `container-inner-docker-smoke.bash` no longer places the initial
-nested Docker data root in the outer writable overlay layer or forces an
-unsupported `overlayfs` storage driver. A local backing-device contrast proved
-those paths differ; the capable host must still verify whether this corrects
-its earlier mount error.
+Sysbox lane keeps the agent's own daemon profile. A run with
+`overlayfs`/containerd does not prove the production runc profile. The standalone
+`container-inner-docker-smoke.bash` uses a dedicated nested Docker data root,
+not the outer writable overlay layer, and does not force an unsupported
+`overlayfs` driver. Record the actual driver and backing filesystem in each lane.
 
 After the diagnostic, run the full standalone smoke without treating the
 diagnostic as a replacement:
@@ -274,11 +228,10 @@ This gate additionally checks network access, immutable-root replacement,
 cached inner-image execution, and data ownership persistence. Its success
 marker is emitted only after owned cleanup succeeds.
 
-The development agent's runc-only daemon currently reports a cgroup permission
-error at `nested-image-run`; the earlier capable host report describes an
-overlay-mount `invalid argument`. These are observations from different hosts,
-not a confirmed common cause. Preserve both outputs, inspect fresh disposable
-volumes and the reported storage backing before changing any daemon setting.
+Inspect each lane's failure stage and cgroup configuration separately from its
+storage errors. Similar messages from different hosts do not establish a common
+cause. Preserve the outputs and inspect fresh disposable volumes and the
+reported storage backing before changing any daemon setting.
 
 ## P1: integrations needed by the chosen real-use profile
 
@@ -305,7 +258,7 @@ volumes and the reported storage backing before changing any daemon setting.
 
 These are not prerequisites for a basic workspace:
 
-1. Reinstall the current exact candidate on both independent nodes and rerun
+1. Install the current exact candidate on both independent nodes and run
    the fixed host and runner-image KVM readiness probes. Prove normal completion,
    cancellation failure, timeout failure, and owned cleanup; a QMP capability
    probe is not a completed CI job.
@@ -324,8 +277,8 @@ These are not prerequisites for a basic workspace:
    not a substitute for the guest test.
 2. Provision global ordinary/QEMU service role files, units, immutable images,
    registry and transport trust, and the four Project policy fixtures. Verify
-   Docker `type=image` support on the execution host. Those operator inputs
-   were not created in the supplied VM report.
+   Docker `type=image` support on the execution host; a bootstrap run does not
+   provision those operator inputs.
 3. Run both the native dual-kind smoke and empty/ordinary/QEMU/dual policy
    matrix using [the native host runbook](native-cutover-host.md). Keep the
    interactive exact-commit human approval and checked promotion step intact.

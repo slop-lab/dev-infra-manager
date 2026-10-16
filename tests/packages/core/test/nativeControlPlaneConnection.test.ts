@@ -146,10 +146,10 @@ describe("native control-plane host connection", () => {
     await run("/usr/bin/mkfifo", [path]);
     await chmod(path, 0o600);
     const moduleUrl = pathToFileURL(join(import.meta.dirname,
-      "../../../../core/packages/core/src/nativeControlPlaneConnection.ts")).href;
+      "../../../../core/packages/core/dist/nativeControlPlaneConnection.js")).href;
 
     // When
-    const child = run(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+    const child = run(process.execPath, ["--input-type=module", "-e", `
       const { loadNativeControlPlaneConnection } = await import(process.env.DIM_TEST_MODULE);
       await loadNativeControlPlaneConnection(process.env.DIM_TEST_PATH).then(
         () => process.exit(1),

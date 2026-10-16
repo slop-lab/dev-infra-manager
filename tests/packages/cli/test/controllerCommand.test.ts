@@ -9,9 +9,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { lifecycleOptionsForBackend } from "@slop-lab/dim-core";
 
-const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
+const cli = fileURLToPath(new URL("../../../../core/packages/cli/dist/cli.js", import.meta.url));
 const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", import.meta.url));
-const tsxImport = import.meta.resolve("tsx");
 
 test("controller serve preserves the active owner and cleans up its runtime files", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-test-"));
@@ -28,7 +27,7 @@ test("controller serve preserves the active owner and cleans up its runtime file
   );
   await installProviderPlugin(pluginHome);
   const args = [
-    "--import", tsxImport, cli, "controller", "serve", "--socket", socket,
+    cli, "controller", "serve", "--socket", socket,
     "--admin-socket", adminSocket, "--agent-socket", agentSocket
   ];
   const env = {
@@ -188,7 +187,7 @@ test("native controller serves host shutdown and start without predecessor servi
   };
   const pidPath = path.join(lifecycleOptionsForBackend("sysbox", env).controllerRuntimeDirectory, "controller.pid");
   const controller = spawn(process.execPath, [
-    "--import", tsxImport, cli, "controller", "serve", "--socket", socket,
+    cli, "controller", "serve", "--socket", socket,
     "--admin-socket", adminSocket, "--agent-socket", agentSocket, "--pid-file", pidPath
   ], { cwd: packageDirectory, env, stdio: ["ignore", "pipe", "pipe"] });
   const controllerExit = once(controller, "exit");
@@ -295,7 +294,7 @@ test("controller stop terminates with an attacker-held partial workspace request
     XDG_RUNTIME_DIR: runtimeRoot
   };
   const controller = spawn(process.execPath, [
-    "--import", tsxImport, cli, "controller", "serve",
+    cli, "controller", "serve",
     "--socket", socket, "--admin-socket", adminSocket,
     "--agent-socket", agentSocket, "--pid-file", pidPath
   ], { cwd: packageDirectory, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -376,7 +375,7 @@ test("controller serve identifies plugin route initialization as the failing sta
 `);
   try {
     const result = spawnSync(process.execPath, [
-      "--import", tsxImport, cli, "controller", "serve",
+      cli, "controller", "serve",
       "--socket", path.join(root, "controller.sock"),
       "--admin-socket", path.join(root, "admin.sock"),
       "--agent-socket", path.join(root, "agent.sock"),
@@ -458,7 +457,7 @@ async function runCli(
   args: readonly string[],
   env: NodeJS.ProcessEnv
 ): Promise<{ readonly code: number | null; readonly stdout: string; readonly stderr: string }> {
-  const child = spawn(process.execPath, ["--import", tsxImport, cli, ...args], {
+  const child = spawn(process.execPath, [cli, ...args], {
     cwd: packageDirectory,
     env,
     stdio: ["ignore", "pipe", "pipe"]

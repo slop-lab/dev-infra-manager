@@ -12,8 +12,8 @@ Start with:
 The normative contracts are indexed in [`../specs/README.md`](../specs/README.md).
 
 DIM's runtime is native-only. Forge-specific contribution helpers are outside
-the product boundary. Documents not linked above describe predecessor designs
-or development history and are not active operator journeys.
+the product boundary. Use the index above for active operator journeys and
+the normative specification index for contracts.
 
 ## Glossary
 

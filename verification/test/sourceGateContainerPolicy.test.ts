@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const wrapperPath = resolve(workspaceRoot, "verification/scripts/source-gate-container.bash");
@@ -81,7 +82,12 @@ describe("isolated source gate policy", () => {
     const runner = await readFile(runnerPath, "utf8");
 
     expect(dockerfile).toMatch(/^FROM python:3\.13\.7-slim-bookworm@sha256:[0-9a-f]{64} AS python$/m);
-    expect(dockerfile).toMatch(/^FROM node:24\.19\.0-bookworm-slim@sha256:[0-9a-f]{64}$/m);
+    expect(dockerfile).toMatch(/^FROM node:24\.19\.0-bookworm-slim@sha256:[0-9a-f]{64} AS source-toolchain$/m);
+    expect(dockerfile).toMatch(/^FROM node:26\.5\.0-bookworm-slim@sha256:[0-9a-f]{64} AS node26-runtime$/m);
+    expect(dockerfile).toContain("FROM source-toolchain AS source-node-26");
+    expect(dockerfile).toContain("COPY --from=node26-runtime /usr/local/bin/node /usr/local/bin/node");
+    expect(dockerfile).toContain('test "$(node --version)" = "v26.5.0"');
+    expect(dockerfile).toContain("FROM source-toolchain AS source-node-24");
     expect(dockerfile).toContain("git-2.43.0.tar.xz");
     expect(dockerfile).toContain("5446603e73d911781d259e565750dcd277a42836c8e392cac91cf137aa9b76ec");
     expect(dockerfile).toContain("pnpm@10.13.1");
@@ -94,6 +100,32 @@ describe("isolated source gate policy", () => {
     expect(await readFile(wrapperPath, "utf8")).toContain("pnpm install --frozen-lockfile");
     expect(runner).toContain("exec just check-source-native");
     expect(runner).not.toContain("test-isolated");
+    expect(runner).toContain('24) test "$(node --version)" = "v24.19.0"');
+    expect(runner).toContain('26) test "$(node --version)" = "v26.5.0"');
+  });
+
+  it("runs hosted source and package checks in both disposable runtime lanes", async () => {
+    const workflow = parse(await readFile(resolve(workspaceRoot, ".github/workflows/verify.yml"), "utf8"));
+    const source = workflow.jobs.source;
+    expect(workflow.on.push.branches).toContain("development");
+    expect(source.strategy.matrix.node).toEqual([24, 26]);
+    expect(source.strategy["fail-fast"]).toBe(false);
+    const step = source.steps.find((step: { env?: Record<string, string> }) => step.env?.DIM_SOURCE_NODE_MAJOR);
+    expect(step.env.DIM_SOURCE_NODE_MAJOR).toBe("${{ matrix.node }}");
+    expect(step.run).toContain("bash verification/scripts/source-gate-container.bash");
+    expect(step.run).toContain("just check-source-native && just verify package-packs && pnpm audit --prod");
+    expect(source.steps.some((step: { run?: string }) => step.run === "just check-source-native")).toBe(false);
+    const artifact = source.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/upload-artifact@"));
+    expect(artifact.with.name).toContain("${{ matrix.node }}");
+    expect(artifact.with.name).toContain("${{ github.sha }}");
+  });
+
+  it("selects both container runtimes in the local matrix instead of relabelling a Node 24 run", async () => {
+    const matrix = await readFile(resolve(workspaceRoot, "verification/scripts/local-ci-matrix.bash"), "utf8");
+    expect(matrix).toContain("for node_major in 24 26; do");
+    expect(matrix).toContain('DIM_SOURCE_NODE_MAJOR="$node_major" bash verification/scripts/source-gate-container.bash');
+    expect(matrix).toContain("just check-source-native && just verify package-packs && pnpm audit --prod");
+    expect(matrix).not.toContain("just check-source &&");
   });
 
   it.each([wrapperPath, runnerPath])("has valid Bash syntax in %s", (script) => {

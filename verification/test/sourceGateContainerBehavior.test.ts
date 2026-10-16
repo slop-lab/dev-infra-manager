@@ -84,6 +84,32 @@ describe("source gate container behavior", () => {
     }
   });
 
+  it.each(["24", "26"])("builds and checks the requested Node.js %s lane", async (major) => {
+    const fixture = await fakeDockerFixture(false);
+    try {
+      const result = runWrapper(fixture, major);
+      const log = await readFile(fixture.log, "utf8");
+      expect(result.status, result.stderr).toBe(0);
+      expect(log).toContain(`build\t--target\tsource-node-${major}\t--iidfile`);
+      expect(log).toContain(`exec\t--env\tDIM_SOURCE_NODE_MAJOR=${major}\t`);
+      expect(result.stdout).toContain(`source-gate Node.js lane: ${major}`);
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["22", "latest", "26 --privileged"])("rejects unsupported lane %s before Docker runs", async (major) => {
+    const fixture = await fakeDockerFixture(false);
+    try {
+      const result = runWrapper(fixture, major);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain("DIM_SOURCE_NODE_MAJOR must be 24 or 26");
+      await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("preserves a foreign replacement even when inspect output has trailing newlines", async () => {
     // Given
     const fixture = await fakeDockerFixture(true);
@@ -147,11 +173,12 @@ esac
   return { root, tools, log, foreign };
 }
 
-function runWrapper(fixture: FakeDockerFixture) {
+function runWrapper(fixture: FakeDockerFixture, major = "24") {
   return spawnSync("bash", [wrapperPath, "true"], {
     encoding: "utf8",
     env: {
       ...process.env,
+      DIM_SOURCE_NODE_MAJOR: major,
       PATH: `${fixture.tools}:${process.env.PATH ?? "/usr/bin:/bin"}`,
       DIM_FAKE_DOCKER_LOG: fixture.log
     }

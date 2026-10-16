@@ -217,10 +217,10 @@ describe("native Project admission-pending store", () => {
     await run("/usr/bin/mkfifo", [projectPath]);
     await chmod(projectPath, 0o600);
     const moduleUrl = pathToFileURL(join(import.meta.dirname,
-      "../../../../core/packages/core/src/nativeProjectPendingFiles.ts")).href;
+      "../../../../core/packages/core/dist/nativeProjectPendingFiles.js")).href;
 
     // When
-    const child = run(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+    const child = run(process.execPath, ["--input-type=module", "-e", `
       const { readNativeProjectPending } = await import(process.env.DIM_TEST_MODULE);
       await readNativeProjectPending(process.env.DIM_TEST_ROOT, process.env.DIM_TEST_PATH).then(
         () => process.exit(1),

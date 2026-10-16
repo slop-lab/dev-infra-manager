@@ -30,15 +30,16 @@ run_node() {
   mise exec "node@${version}" -- "$@"
 }
 
-run_node 24 pnpm install --frozen-lockfile
-run_node 24 bash -lc 'just check-source && just verify plugin-install && pnpm audit --prod && just verify package-packs'
-
-run_node 26 pnpm install --frozen-lockfile
-run_node 26 bash -lc 'just check-source && just verify plugin-install && pnpm audit --prod && just verify package-packs'
-run_node 26 bash -lc 'just check-source && just verify workspace-runtime && bash verification/scripts/container-cgroup-smoke.bash'
+for node_major in 24 26; do
+  DIM_SOURCE_NODE_MAJOR="$node_major" bash verification/scripts/source-gate-container.bash \
+    bash -lc 'just check-source-native && just verify package-packs && pnpm audit --prod'
+  run_node "$node_major" pnpm install --frozen-lockfile
+  run_node "$node_major" bash -lc 'just verify plugin-install'
+done
+run_node 26 bash -lc 'just verify workspace-runtime && bash verification/scripts/container-cgroup-smoke.bash'
 
 if [[ "$manual" == true ]]; then
-  run_node 26 bash -lc 'just check-source && just verify container && bash verification/scripts/container-sysbox-isolation-smoke.bash'
+  run_node 26 bash -lc 'just verify container && bash verification/scripts/container-sysbox-isolation-smoke.bash'
   run_node 26 bash -lc 'test -r /dev/kvm -a -w /dev/kvm && just verify environments-kvm'
   echo "[local-ci] automatic matrix and manual workflows passed"
 else

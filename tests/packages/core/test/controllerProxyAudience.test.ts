@@ -79,8 +79,8 @@ describe("controller proxy audience integration", () => {
     // When
     const resources = await request(resourcesSocket, "GET", "/api/workspace/resources");
     const resourcesB = await request(resourcesSocketB, "GET", "/api/workspace/resources");
-    const helper = await runHelper("workspace-resources-cli.ts", ["show"], resourcesSocket);
-    const nproc = await runHelper("nproc-cli.ts", [], resourcesSocket);
+    const helper = await runHelper("workspace-resources-cli.js", ["show"], resourcesSocket);
+    const nproc = await runHelper("nproc-cli.js", [], resourcesSocket);
     const restartDiscovery = await request(restartSocket, "GET", "/api");
 
     // Then
@@ -108,9 +108,8 @@ describe("controller proxy audience integration", () => {
 
   it("rejects a proxy that combines workspace and agent audience routes", async () => {
     // Given
-    const executable = resolve(import.meta.dirname, "../../../node_modules/.bin/tsx");
-    const cli = resolve(import.meta.dirname, "../../../../core/packages/controller-proxy/src/cli.ts");
-    const child = spawn(executable, [
+    const cli = resolve(import.meta.dirname, "../../../../core/packages/controller-proxy/dist/cli.js");
+    const child = spawn(process.execPath, [
       cli,
       "agent",
       "--listen",
@@ -137,9 +136,8 @@ async function startProxy(
   capability: "--allow-workspace-restart" | "--allow-workspace-resources",
   environment: NodeJS.ProcessEnv
 ): Promise<ChildProcess> {
-  const executable = resolve(import.meta.dirname, "../../../node_modules/.bin/tsx");
-  const cli = resolve(import.meta.dirname, "../../../../core/packages/controller-proxy/src/cli.ts");
-  const child = spawn(executable, [cli, "agent", "--listen", socketPath, capability], {
+  const cli = resolve(import.meta.dirname, "../../../../core/packages/controller-proxy/dist/cli.js");
+  const child = spawn(process.execPath, [cli, "agent", "--listen", socketPath, capability], {
     env: environment,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -158,13 +156,12 @@ async function startProxy(
 }
 
 async function runHelper(
-  sourceName: "workspace-resources-cli.ts" | "nproc-cli.ts",
+  sourceName: "workspace-resources-cli.js" | "nproc-cli.js",
   arguments_: readonly string[],
   socketPath: string
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  const executable = resolve(import.meta.dirname, "../../../node_modules/.bin/tsx");
-  const source = resolve(import.meta.dirname, `../../../../core/packages/controller-proxy/src/${sourceName}`);
-  const child = spawn(executable, [source, ...arguments_], {
+  const source = resolve(import.meta.dirname, `../../../../core/packages/controller-proxy/dist/${sourceName}`);
+  const child = spawn(process.execPath, [source, ...arguments_], {
     env: { ...process.env, DIM_AGENT_CONTROLLER_SOCKET: socketPath },
     stdio: ["ignore", "pipe", "pipe"]
   });
