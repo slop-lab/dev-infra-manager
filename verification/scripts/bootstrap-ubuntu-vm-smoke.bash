@@ -40,10 +40,12 @@ bootstrap_cleanup() {
   local status=$? cleanup_status=0
   trap - EXIT INT TERM
   if [[ "$status" -ne 0 ]]; then
-    for log in "$BOOTSTRAP_EVIDENCE_ROOT"/*.log; do
+    for log in "$BOOTSTRAP_EVIDENCE_ROOT"/*-console.log \
+      "$BOOTSTRAP_EVIDENCE_ROOT"/*-bootstrap-pass1.log "$BOOTSTRAP_EVIDENCE_ROOT"/*-bootstrap-pass2.log \
+      "$BOOTSTRAP_EVIDENCE_ROOT"/*-control-plane-install.log "$BOOTSTRAP_EVIDENCE_ROOT"/*-native-basic-lifecycle.log; do
       [[ -f "$log" ]] || continue
       printf '\nfailed fresh Ubuntu VM diagnostic: %s\n' "$log" >&2
-      tail -c 16384 -- "$log" >&2
+      tail -c 4096 -- "$log" >&2
     done
   fi
   if [[ "$BOOTSTRAP_CLEANUP_COMPLETE" -eq 0 ]]; then

@@ -79,9 +79,15 @@ qemu_mechanics() {
 }
 
 fresh_ubuntu_bootstrap() {
+  local detail_log="$DIM_VERIFICATION_LOG_ROOT/bootstrap-prerequisites.log" status
   /usr/bin/bash "$script_dir/kvm-guest-group-delegate.bash" preflight
-  sudo -n apt-get update
-  sudo -n apt-get install -y cloud-image-utils qemu-system-x86 qemu-utils
+  if { sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends cloud-image-utils qemu-system-x86 qemu-utils; } >"$detail_log" 2>&1; then
+    printf 'fresh Ubuntu guest prerequisites installed; details=%s\n' "$detail_log"
+  else
+    status=$?
+    tail -c 4096 -- "$detail_log" >&2
+    return "$status"
+  fi
   /usr/bin/bash "$script_dir/kvm-guest-group-delegate.bash" bootstrap
 }
 

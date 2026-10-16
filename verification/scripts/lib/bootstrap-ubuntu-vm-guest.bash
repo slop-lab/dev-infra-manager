@@ -164,6 +164,7 @@ REMOTE
 
 bootstrap_guest_run_acceptance() {
   local role="$1" status
+  printf 'fresh-ubuntu phase=bootstrap-pass1 role=%s source=%s\n' "$role" "$SOURCE_SHA"
   set +e
   timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" \
     bash -s -- "$SOURCE_SHA" "$role" >"$BOOTSTRAP_EVIDENCE_ROOT/$role-bootstrap-pass1.log" 2>&1 <<'REMOTE'
@@ -178,6 +179,7 @@ REMOTE
     printf 'first bootstrap login must exit 3; role=%s status=%s\n' "$role" "$status" >&2
     return 1
   }
+  printf 'fresh-ubuntu phase=bootstrap-pass2 role=%s source=%s\n' "$role" "$SOURCE_SHA"
   timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" \
     bash -s -- "$SOURCE_SHA" "$role" >"$BOOTSTRAP_EVIDENCE_ROOT/$role-bootstrap-pass2.log" 2>&1 <<'REMOTE'
 set -euo pipefail
@@ -191,10 +193,12 @@ docker run --rm --runtime=sysbox-runc \
   alpine:3.22.2@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412 true
 REMOTE
   if [[ "$role" == control-qemu ]]; then
+    printf 'fresh-ubuntu phase=control-plane-install role=%s source=%s\n' "$role" "$SOURCE_SHA"
     timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" \
       'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench && just verify control-plane-install-live' \
       >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-control-plane-install.log" 2>&1
     printf 'PASS fresh-ubuntu control-plane-install source=%s\n' "$SOURCE_SHA"
+    printf 'fresh-ubuntu phase=native-basic-lifecycle role=%s source=%s\n' "$role" "$SOURCE_SHA"
     timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" \
       'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench && just verify native-basic-lifecycle' \
       >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-native-basic-lifecycle.log" 2>&1
