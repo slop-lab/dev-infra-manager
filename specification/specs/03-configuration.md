@@ -23,6 +23,15 @@ root-importer role bound to the same service, endpoint, owner host, and serving
 generation. List and show are local bounded queries and do not load importer
 credentials.
 
+## Native Git storage
+
+**CONFIG-NATIVE-GIT-PERMISSIONS-001:** Service-owned bare repositories MUST be
+created with numeric Git sharing mode `0600`, independent of the caller's
+umask. Future Git object and ref creation MUST preserve owner-only permissions.
+Registered-repository startup validation MUST require the exact creation
+setting and reject missing or changed values. It MUST NOT weaken durable-file
+checks or repair unsafe object/ref metadata to accept existing state.
+
 ## Workspace runtime
 
 **CONFIG-WORKSPACE-001:** The current release accepts only
