@@ -19,6 +19,27 @@ afterEach(async () => {
 });
 
 describe("DIM native Git startup policy", () => {
+  it.each(["missing", "group", "umask", "0640"])("refuses changed Git creation permissions %s without repair", async (value) => {
+    // Given
+    const root = await temporaryRoot();
+    const config = serviceConfig(root, "2.43.0");
+    const repositoryPath = await initializeNativeRepository(config, firstRepository(config));
+    await run(config.gitExecutable, ["--git-dir", repositoryPath, "config", "core.sharedRepository", "0600"]);
+    await run(config.gitExecutable, ["--git-dir", repositoryPath, "config",
+      ...(value === "missing" ? ["--unset", "core.sharedRepository"] : ["core.sharedRepository", value])]);
+    const before = await readFile(join(repositoryPath, "config"));
+    const service = createNativeGitServer(config);
+
+    // When / Then
+    try {
+      await expect(service.listen()).rejects.toThrow(/creation permissions/);
+      expect(service.server.listening).toBe(false);
+      expect(await readFile(join(repositoryPath, "config"))).toEqual(before);
+    } finally {
+      if (service.server.listening) await service.close();
+    }
+  });
+
   it("refuses to listen when a registered repository receive hook was replaced", async () => {
     // Given
     const root = await temporaryRoot();

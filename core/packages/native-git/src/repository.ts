@@ -78,7 +78,7 @@ export async function initializeNativeRepository(
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new NativeGitConfigError("registered repository must be a directory");
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-    await execute(config.gitExecutable, ["init", "--bare", "--initial-branch=main", repositoryPath], { env: { LC_ALL: "C" } });
+    await execute(config.gitExecutable, ["init", "--shared=0600", "--bare", "--initial-branch=main", repositoryPath], { env: { LC_ALL: "C" } });
   }
   await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "http.receivepack", "true"], { env: { LC_ALL: "C" } });
   await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "receive.denyNonFastForwards", "true"], { env: { LC_ALL: "C" } });
@@ -142,6 +142,11 @@ export async function assertRegisteredRepository(
     ...gitMetadataProcessOptions
   });
   if (fullPathname.stdout.trim() !== "error") throw new NativeGitConfigError("registered repository pathname fsck policy is invalid");
+  const shared = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--get", "--default", "", "core.sharedRepository"], {
+    env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
+    ...gitMetadataProcessOptions
+  });
+  if (shared.stdout.trim() !== "0600") throw new NativeGitConfigError("registered repository Git creation permissions must be private");
   await assertReviewStore(repositoryPath);
   await assertStatusStore(repositoryPath);
   await assertJobAttemptStore(repositoryPath);

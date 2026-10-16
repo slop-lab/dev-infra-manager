@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { access, chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, chmod, mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterEach, test } from "node:test";
+import { promisify } from "node:util";
 import { cleanupNativeProjectFixtures, nativeFixture } from "./nativeProjectCommandsFixture.js";
 
 const externalRoots: string[] = [];
+const run = promisify(execFile);
 
 afterEach(async () => {
   await cleanupNativeProjectFixtures();
@@ -50,3 +53,27 @@ test("native fixture cleanup repairs only owned directories below its registered
   await assert.rejects(access(root), { code: "ENOENT" });
   assert.equal((await stat(externalRoot)).mode & 0o777, 0o500);
 });
+
+for (const mask of [0o002, 0o000]) {
+  test(`native root import keeps Git storage private under umask ${mask.toString(8)}`, async () => {
+    // Given
+    const previous = process.umask(mask);
+    try {
+      // When
+      const fixture = await nativeFixture();
+
+      // Then
+      const repository = join(fixture.serviceRoot, "project-a", "root.git");
+      const shared = await run("/usr/bin/git", ["--git-dir", repository, "config", "--get", "core.sharedRepository"]);
+      assert.equal(shared.stdout.trim(), "0600");
+      for (const relative of ["", "objects", "objects/pack", "refs", "refs/heads", "refs/heads/main"]) {
+        assert.equal((await stat(join(repository, relative))).mode & 0o077, 0, relative);
+      }
+      for (const name of await readdir(join(repository, "objects", "pack"))) {
+        assert.equal((await stat(join(repository, "objects", "pack", name))).mode & 0o077, 0, name);
+      }
+    } finally {
+      process.umask(previous);
+    }
+  });
+}
