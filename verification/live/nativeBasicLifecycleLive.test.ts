@@ -87,6 +87,7 @@ describe("native basic lifecycle live mechanics", () => {
       expect(workspace).toMatchObject({ schemaVersion: 9, phase: "ready", environment: "recommended" });
 
       const agent = workspaceAgentIdentity(workspace).containerName;
+      await assertWorkspaceVerificationCapabilities(agent);
       const proposal = `refs/heads/proposals/${workspace.workspaceId}/native-basic`;
       const pushed = await runner.run("docker", [
         "exec", "--user", "dim", "--workdir", "/workspace", agent,
@@ -169,6 +170,16 @@ test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$protected"
 test "$(git ls-remote origin "$proposal" | cut -f1)" = "$candidate"
 printf '%s\n' "$candidate"
 `;
+
+async function assertWorkspaceVerificationCapabilities(agent: string): Promise<void> {
+  const result = await runner.run("docker", [
+    "exec", "--user", "dim", agent, "bash", "-lc",
+    'set -euo pipefail; test ! -e /dev/kvm; test ! -e /run/dim/qemu-verification; test -z "${DIM_QEMU_VERIFICATION_SOCKET:-}"; docker info >/dev/null; printf "private-docker=ready direct-kvm=absent default-qemu-broker=absent\\n"'
+  ], { signal: AbortSignal.timeout(30_000) });
+  if (result.exitCode !== 0) throw nativeLifecycleCommandFailure("workspace verification capabilities", result);
+  expect(result.stdout.trim()).toBe("private-docker=ready direct-kvm=absent default-qemu-broker=absent");
+  process.stdout.write(`native-workspace-verification ${result.stdout}`);
+}
 
 async function assertCheckout(agent: string, candidate: string): Promise<void> {
   const result = await runner.run("docker", [
