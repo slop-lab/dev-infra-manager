@@ -10,6 +10,6 @@ dim_buildx_package_version='0.31.1-1~ubuntu.24.04~noble'
 dim_compose_version=2.40.3
 dim_compose_package_version='2.40.3-1~ubuntu.24.04~noble'
 dim_sysbox_version=0.7.0
-dim_sysbox_package_version='0.7.0-0.linux'
+dim_sysbox_package_version='0.7.0.linux'
 dim_node_root=/usr/local/lib/dim-qemu-node-24.19.0
 dim_source_tools_root=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1

@@ -70,7 +70,7 @@ export async function fixture(groups = "operator docker kvm"): Promise<Fixture> 
    containerd.io) printf '2.2.1-1~ubuntu.24.04~noble' ;;
    docker-buildx-plugin) printf '0.31.1-1~ubuntu.24.04~noble' ;;
    docker-compose-plugin) printf '2.40.3-1~ubuntu.24.04~noble' ;;
-   sysbox-ce) printf '0.7.0-0.linux' ;;
+    sysbox-ce) printf '%s' "\${DIM_TEST_SYSBOX_PACKAGE_VERSION:-0.7.0.linux}" ;;
    *) exit 1 ;;
  esac
  `);

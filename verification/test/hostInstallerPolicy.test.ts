@@ -24,6 +24,7 @@ describe("Ubuntu host installer policy", () => {
     expect(pins).toContain("dim_containerd_package_version='2.2.1-1~ubuntu.24.04~noble'");
     expect(pins).toContain("dim_buildx_package_version='0.31.1-1~ubuntu.24.04~noble'");
     expect(pins).toContain("dim_compose_package_version='2.40.3-1~ubuntu.24.04~noble'");
+    expect(pins).toContain("dim_sysbox_package_version='0.7.0.linux'");
     expect(installer).toContain('source "$pins_helper"');
     expect(installer).toContain("9DC858229FC7DD38854AE2D88D81803C0EBFCD88");
     expect(installer).toContain("io.containerd.snapshotter.v1");
