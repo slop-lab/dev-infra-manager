@@ -63,7 +63,7 @@ test("maps only armed lifecycle cleanup uncertainty to exit 125", async () => {
       { body: "exit 1", status: 1 },
       { body: 'printf uncertain >"$DIM_NATIVE_BASIC_LIFECYCLE_CLEANUP_SENTINEL"; exit 1', status: 125 }
     ]) {
-      await writeFile(pnpm, `#!/usr/bin/env bash\n${scenario.body}\n`, { mode: 0o700 });
+      await writeFile(pnpm, `#!/usr/bin/env bash\n[[ "\${*: -1}" != build ]] || exit 0\n${scenario.body}\n`, { mode: 0o700 });
       await chmod(pnpm, 0o700);
       const result = spawnSync("bash", [driverPath], {
         encoding: "utf8",
@@ -71,6 +71,25 @@ test("maps only armed lifecycle cleanup uncertainty to exit 125", async () => {
       });
       assert.equal(result.status, scenario.status, result.stderr);
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("builds the runtime proxy before launching the live workspace fixture", async () => {
+  const root = await mkdtemp("/tmp/dim-native-basic-build-order-");
+  try {
+    const pnpm = join(root, "pnpm");
+    const log = join(root, "commands.log");
+    await writeFile(pnpm, '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >>"$COMMAND_LOG"\n', { mode: 0o700 });
+    const result = spawnSync("bash", [driverPath], {
+      encoding: "utf8", env: { ...process.env, PATH: `${root}:${process.env.PATH ?? ""}`, COMMAND_LOG: log }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const commands = (await readFile(log, "utf8")).trim().split("\n");
+    assert.equal(commands.length, 2);
+    assert.match(commands[0], /\/core\/packages\/controller-proxy run build$/);
+    assert.match(commands[1], /exec vitest run .*nativeBasicLifecycleLive\.test\.ts$/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -29,6 +29,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+pnpm --dir "$repo_root/core/packages/controller-proxy" run build
+
 set +e
 DIM_NATIVE_BASIC_LIFECYCLE_CLEANUP_SENTINEL="$cleanup_sentinel" \
   pnpm --dir "$repo_root/verification" exec vitest run \
