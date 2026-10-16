@@ -26,6 +26,12 @@ review-policy provisioning described below.
 
 ## Evidence already available
 
+- The 0.10.0 code candidate `2804eeab` passed all ten disposable guest stages,
+  including both fresh Ubuntu role bootstraps, full control-plane installation
+  in the new control VM, native workspace lifecycle, private agent Docker, and
+  real ordinary/KVM mechanics. The separately staged older outer launcher then
+  failed on removed `--repos` input; the outer service did not report success.
+  See [the exact candidate and qualification](release-0.10.0.md).
 - On 2026-10-14, source candidate `5c79444b` passed the pinned isolated source
   gate: type checks, all package builds, 2,080 unit/integration tests (one
   ownership-test skip), 155 CLI tests, and 447 verification tests. The subsequent
@@ -75,8 +81,9 @@ For a new Ubuntu 24.04 amd64 VM, follow
 commit. It installs pinned tools and the local candidate without public package
 publication. Exit `3` requires a new login and identical rerun. TLS, private
 native configuration, lingering, and service activation remain operator-owned.
-Sandbox bootstrap tests and earlier VM evidence do not prove that this new
-bootstrap has completed on a fresh guest; retain that live evidence separately.
+The two roles have current real-VM evidence in
+[the internal release record](release-0.10.0.md); sandbox tests alone are not
+that evidence, and older candidate runs do not transfer to a newer commit.
 
 ### Source and QEMU prerequisites are separate profiles
 

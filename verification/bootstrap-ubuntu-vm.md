@@ -149,9 +149,10 @@ the candidate facade reports the expected version, continue with
 [`native-multi-host-operations.md`](native-multi-host-operations.md) to create
 operator-owned configuration and deliberately start the required services.
 
-This guide and its automated sandbox tests do not claim that the bootstrap has
-been executed on a fresh VM. Record that live evidence separately when the two
-role commands are exercised on disposable Ubuntu 24.04 amd64 guests.
+Both roles were executed successfully on fresh disposable Ubuntu 24.04 amd64
+guests for the exact candidate recorded in
+[`release-0.10.0.md`](release-0.10.0.md). That record distinguishes the passing
+guest aggregate from the deployed older outer launcher's subsequent failure.
 
 ## Disposable fresh-VM acceptance profile
 
@@ -173,8 +174,12 @@ with status 3; a new SSH login performs the resume. Each guest proves the
 installed `0.10.0-local-<64 lowercase hex>` facade and a real Sysbox container.
 The control/QEMU guest additionally runs the existing
 `just verify control-plane-install-live` and
-`just verify native-basic-lifecycle` gates. It does not create TLS material,
-native global-role credentials, workers, or a generic multi-host bridge.
+`just verify native-basic-lifecycle` gates. It does not create persistent
+operator TLS material, native global-role credentials, worker deployments, or
+a generic multi-host bridge; the gates own and clean their disposable fixtures.
+The acceptance profile installs the checkout's frozen development dependencies
+before these source gates. Production bootstrap itself builds in an isolated
+source archive; it does not populate the checkout's `node_modules`.
 
 For a standalone KVM host, invoke the profile with an absolute bundle path and
 the exact commit and tree it contains:
@@ -213,17 +218,40 @@ layout only:
 /mnt/dim-inputs/bootstrap-source/manifest.json
 ```
 
-When either path exists, `kvm-guest-verification-smoke.bash` adds the
-`fresh-ubuntu-bootstrap` stage and dispatches the delegate's fixed `bootstrap`
-mode. With neither path, the historical nine-stage aggregate is unchanged.
+When the fixed `bootstrap-source` directory exists,
+`kvm-guest-verification-smoke.bash` adds the `fresh-ubuntu-bootstrap` stage and
+dispatches the delegate's fixed `bootstrap`
+mode, including when its files are not yet readable. Without that directory,
+the default nine-stage aggregate is unchanged.
 The delegate takes no source path, SHA, command, or arbitrary executable from
 the caller. Place both regular files directly in one private host directory
 and pass that directory through the existing protected service input API:
 
 ```bash
+export DIM_QEMU_NODE_EXECUTABLE=/usr/local/lib/dim-qemu-node-24.19.0/bin/node
+sudo -v
 bash verification/scripts/kvm-host-install-smoke.bash \
   --input bootstrap-source=/absolute/private/bootstrap-source
 ```
+
+In a workspace with this reviewed Project's broker already provisioned, use
+the client instead of the trusted-host setup command:
+
+```bash
+node .dim/qemu-client.mjs run \
+  --input "bootstrap-source=$BROKER_SOURCE_ROOT/.local/verification/bootstrap-source"
+```
+
+`BROKER_SOURCE_ROOT` is the operator-provided source root in the broker's mount
+namespace. An agent's `/workspace` path need not exist in that namespace. The
+tested deployment used `/var/lib/dim/workspace-data/workspace`; this is not a
+generic product-wide host path or an additional capability grant.
+
+Before delegation, the disposable-guest guard validates and seals only the two
+fixed regular, single-link input files and their directory, then assigns them
+to UID 1001. Root-owned transport copies are made owner-read-only before
+ownership transfer. Host originals, source bytes, staged host code, and device
+permissions are not changed; SHA/tree verification still follows the handoff.
 
 The existing launcher snapshots the directory as `bootstrap-source`; no new
 root command or service API is used. Inside the guest its fixed aggregate
