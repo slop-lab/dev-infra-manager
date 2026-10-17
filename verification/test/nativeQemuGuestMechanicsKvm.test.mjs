@@ -57,6 +57,11 @@ test("runs real KVM guest mechanics without claiming independent acceptance", as
   assert.match(smoke, /type=volume,source=.*guest_root_volume/);
   assert.doesNotMatch(smoke, /type=bind/);
   assert.match(smoke, /--device \/dev\/kvm/);
+  assert.match(smoke, /--user 65534:65534/);
+  assert.match(smoke, /--cap-drop ALL --security-opt no-new-privileges/);
+  assert.match(smoke, /id=workspace,path=\/run\/dim\/workspace,security_model=mapped-xattr/);
+  assert.match(smoke, /host-workspace-ownership\.log/);
+  assert.match(productionLauncher, /id=workspace,path=\/run\/dim\/workspace,security_model=mapped-xattr/);
   assert.match(smoke, /timeout --signal=TERM --kill-after=15s 180s[\s\\]*docker run/);
   assert.match(smoke, /cleanup_resources \|\| exit 125/);
   assert.match(smoke, /resource_label="dim\.verification\.native-qemu-kvm=\$suffix"/);

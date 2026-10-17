@@ -77,6 +77,12 @@ Docker image-mount support, and the pinned job image before attestation or
 claim. The guest receives only verified candidate bytes and bounded writable
 workspace state. It receives no scheduler, native Git, reviewer, promotion,
 Docker-host, or DIM host credential. There is no TCG or ordinary fallback.
+The QEMU supervisor runs with the host worker's UID/GID, only the KVM device
+group, no capabilities, and no privilege regain. Writable 9p workspace metadata
+uses `mapped-xattr`, so guest ownership and permission changes do not alter host
+ownership or prevent normal-user cleanup. The workspace filesystem must support
+user extended attributes. Ordinary hosts keep polling while accepted results
+await the central reporter's acknowledgement; capacity remains fenced until then.
 
 Candidate-selected ordinary or QEMU success is evidence, not approval.
 Protected promotion requires the exact immutable review, required human

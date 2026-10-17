@@ -72,6 +72,7 @@ describe("native QEMU runner resource boundary", () => {
     expect(launcher).toContain('guest_memory_bytes=${6-}');
     expect(launcher).toContain('memory_mib=$((guest_memory_bytes / 1048576))');
     expect(launcher).toContain('dim.pids=$pids');
+    expect(launcher).toContain('id=workspace,path=/run/dim/workspace,security_model=mapped-xattr');
   });
 
   it("places the guest job process tree under the trusted PID limit", async () => {

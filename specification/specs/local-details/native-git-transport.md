@@ -707,6 +707,10 @@ bound host and capacity. It requires the current active claim and service epoch,
 `ordinary-sysbox` terminal event matching the exact current attempt and
 descriptor. One transaction stores the immutable result, changes the claim and
 demand to reported, and creates the report outbox before returning `202`.
+While a capacity is in this reported state, a new reservation returns empty
+(`204`) so the host can keep polling until the reporter obtains the exact native
+acknowledgement. It does not allocate another claim or release capacity early;
+preparing and active capacity conflicts still return `409`.
 Conflicting replay is `409`; foreign or missing authority is concealed.
 
 The result reporter uses only `nativeGit.resultReporter`. It sends one stored

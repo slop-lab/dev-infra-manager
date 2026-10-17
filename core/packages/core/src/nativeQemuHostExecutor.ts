@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { verifyAndMaterializeNativeQemuCandidate } from "./nativeQemuHostCandidateVerifier.js";
 import type { NativeQemuCapacity } from "./nativeQemuSchedulerConfig.js";
@@ -51,7 +51,15 @@ export async function executeNativeQemuAssignment(input: {
     await writeFile(descriptorPath, JSON.stringify(input.assignment.attempt.descriptor), { mode: 0o400, flag: "wx" });
     try {
       input.signal.throwIfAborted();
+      const kvm = await stat("/dev/kvm");
+      const uid = process.getuid?.();
+      const gid = process.getgid?.();
+      if (uid === undefined || gid === undefined || !kvm.isCharacterDevice()) {
+        throw new NativeQemuHostExecutionError("native QEMU requires a Linux host identity and KVM device");
+      }
       exitCode = await input.runner.runStreaming("docker", ["run", "--rm", "--read-only", "--network", "none",
+        "--user", `${uid}:${gid}`, "--group-add", String(kvm.gid),
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--device", "/dev/kvm:/dev/kvm", "--cpus", input.capacity.bounds.cpu,
         "--memory", input.capacity.supervisorMemoryBytes, "--pids-limit", input.capacity.bounds.pids,
         "--label", `dev.dim.native-qemu.claim=${claimId}`,

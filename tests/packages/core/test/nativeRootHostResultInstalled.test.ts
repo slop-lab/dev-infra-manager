@@ -58,7 +58,9 @@ describe("installed native ordinary host results", () => {
     expect([accepted.status, replay.status, restartReplay.status]).toEqual([202, 202, 202]);
     expect(mismatch.status).toBe(409);
     expect(accepted.body).toEqual({ schemaVersion: 1, claimId: active.claim.claimId, accepted: true });
-    expect([competing.status, restartCompeting.status]).toEqual([409, 409]);
+    // Accepted results still fence capacity, but an idle worker must keep
+    // polling while the asynchronous reporter obtains its acknowledgement.
+    expect([competing.status, restartCompeting.status]).toEqual([204, 204]);
     expect(resultRows(restarted.database)).toEqual({
       results: [{ claim_id: active.claim.claimId, request_id: request.requestId,
         cleanup_resource_id: active.claim.claimId, cleanup_complete: 1,

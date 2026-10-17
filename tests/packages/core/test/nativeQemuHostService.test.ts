@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { executeNativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostService.js";
 import { claimNativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostService.js";
 import { replayNativeQemuHostJournal } from "../../../../core/packages/core/src/nativeQemuHostService.js";
@@ -9,6 +9,12 @@ import { NativeQemuHostJournal } from "../../../../core/packages/core/src/native
 import type { NativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostClient.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { qemuAssignment as assignment, qemuAuthority } from "./nativeQemuHostFixture.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...original, stat: vi.fn((path: string) => path === "/dev/kvm"
+    ? Promise.resolve({ gid: 108, isCharacterDevice: () => true }) : original.stat(path)) };
+});
 
 const claimId = "00000000-0000-4000-8000-000000000001";
 const capacity = { capacity: "kvm-a", runnerBaseImage: `runner@sha256:${"3".repeat(64)}`,

@@ -178,11 +178,13 @@ docker run --rm --interactive --mount "type=volume,source=$job_volume,target=/ta
   sh -c 'cat > /target/script && chmod 0444 /target/script' <"$work_dir/job-script"
 printf 'dim-qemu-candidate-marker\n' | docker run --rm --interactive \
   --mount "type=volume,source=$workspace_volume,target=/target" "$runner_image" \
-  sh -c 'chmod 0755 /target && cat > /target/candidate-marker && chmod 0644 /target/candidate-marker'
+  sh -c 'chmod 0700 /target && cat > /target/candidate-marker && chmod 0644 /target/candidate-marker && chown -R 65534:65534 /target'
 
 set +e
 timeout --signal=TERM --kill-after=15s 180s docker run --rm --name "$qemu_container" \
   --label "$resource_label" --read-only --network none --pids-limit 128 --device /dev/kvm \
+  --user 65534:65534 --group-add "$(stat -Lc '%g' /dev/kvm)" \
+  --cap-drop ALL --security-opt no-new-privileges \
   --mount "type=volume,source=$guest_root_volume,target=/run/dim/guest-root,readonly" \
   --mount "type=volume,source=$job_volume,target=/run/dim/job,readonly" \
   --mount "type=volume,source=$workspace_volume,target=/run/dim/workspace" \
@@ -196,12 +198,17 @@ timeout --signal=TERM --kill-after=15s 180s docker run --rm --name "$qemu_contai
   -device virtio-9p-pci,fsdev=jobroot,mount_tag=jobroot \
   -fsdev local,id=job,path=/run/dim/job,security_model=none,readonly=on \
   -device virtio-9p-pci,fsdev=job,mount_tag=job \
-  -fsdev local,id=workspace,path=/run/dim/workspace,security_model=none \
+  -fsdev local,id=workspace,path=/run/dim/workspace,security_model=mapped-xattr \
   -device virtio-9p-pci,fsdev=workspace,mount_tag=workspace \
   >"$evidence_dir/guest-console.log" 2>&1
 qemu_exit_code=$?
 set -e
 [[ "$qemu_exit_code" -eq 85 ]]
+
+# Guest chown/chmod and newly-created output must not change host ownership.
+docker run --rm --mount "type=volume,source=$workspace_volume,target=/source,readonly" "$runner_image" \
+  sh -ec 'test "$(stat -c %u:%g /source)" = 65534:65534; test "$(stat -c %u:%g /source/workspace-write)" = 65534:65534' \
+  >"$evidence_dir/host-workspace-ownership.log" 2>&1
 
 job_container="$(docker create --label "$resource_label" \
   --mount "type=volume,source=$workspace_volume,target=/source,readonly" "$runner_image" true)"

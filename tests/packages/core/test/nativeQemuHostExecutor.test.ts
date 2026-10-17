@@ -1,11 +1,17 @@
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { cleanupNativeQemuAssignment } from "../../../../core/packages/core/src/nativeQemuHostExecutor.js";
 import { executeNativeQemuAssignment } from "../../../../core/packages/core/src/nativeQemuHostExecutor.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { qemuAssignment, qemuAuthority, qemuScript } from "./nativeQemuHostFixture.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...original, stat: vi.fn((path: string) => path === "/dev/kvm"
+    ? Promise.resolve({ gid: 108, isCharacterDevice: () => true }) : original.stat(path)) };
+});
 
 describe("native QEMU host cleanup", () => {
   it("removes only containers returned by the exact claim label and then the private root", async () => {
@@ -65,6 +71,10 @@ describe("native QEMU execution evidence", () => {
     expect(payload.stderr).toEqual({ bytes: "0", sha256: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", truncated: true });
     expect(runner.streamingArgs).toContain("--memory");
     expect(runner.streamingArgs).toContain("2097152");
+    expect(runner.streamingArgs).toEqual(expect.arrayContaining([
+      "--user", `${process.getuid?.()}:${process.getgid?.()}`, "--group-add", "108",
+      "--cap-drop", "ALL", "--security-opt", "no-new-privileges"
+    ]));
     expect(runner.streamingArgs).toContain(`type=image,src=job@sha256:${"2".repeat(64)},dst=/run/dim/guest-root`);
     expect(runner.streamingArgs.slice(-7)).toEqual(["/run/dim/job/descriptor.json", "/run/dim/job/script",
       "/run/dim/workspace",

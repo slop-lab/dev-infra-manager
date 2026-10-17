@@ -45,8 +45,12 @@ is not a published release.
   every capacity through replay and execution. The guest initramfs now loads
   usable 9p modules, enables the cgroup-v2 PID controller, and launches the
   fixed Bash command as UID/GID 1000 with no effective capabilities or
-  privilege regain while keeping kernel and cgroup controls read-only. Ordinary
-  and QEMU native event delivery now stores strict destination-bound,
+  privilege regain while keeping kernel and cgroup controls read-only.
+  QEMU supervisors run with the worker's UID/GID and only KVM device access;
+  mapped workspace metadata preserves normal-user ownership and cleanup when
+  the operator is not UID 1000. Ordinary workers continue polling while an
+  accepted result awaits central acknowledgement without releasing capacity early.
+  Ordinary and QEMU native event delivery now stores strict destination-bound,
   deadline-bearing acknowledgements and automatically refreshes eligibility
   after expiry without duplicate execution; definitive stale events receive a
   finite suppression deadline, no longer block newer work, and retry rather

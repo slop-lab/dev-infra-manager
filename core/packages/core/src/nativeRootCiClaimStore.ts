@@ -57,9 +57,12 @@ export class NativeRootCiClaimStore {
       }
       const capacity = this.context.capacities.get(`${request.hostId}\0${request.capacity}`);
       if (capacity === undefined) return { kind: "conflict" };
-      if (this.database.prepare(`SELECT 1 FROM native_root_ci_claims
+      const occupied = this.database.prepare(`SELECT state FROM native_root_ci_claims
         WHERE host_id = ? AND capacity = ? AND state <> 'released'`).get(
-        request.hostId, request.capacity) !== undefined) return { kind: "conflict" };
+        request.hostId, request.capacity);
+      // Result intake acknowledges durable storage before the reporter releases
+      // capacity. Keep polling without granting a second claim in that window.
+      if (occupied !== undefined) return { kind: field(occupied, "state") === "reported" ? "empty" : "conflict" };
       const row = this.database.prepare(`SELECT d.demand_id, d.admission_generation, r.event_digest, r.event_json,
         a.project_id, a.import_nonce, a.root_sequence, a.protected_ref, a.root_commit, a.root_tree,
         a.policy_digest, a.capacity_config_digest, a.lease_expires_at

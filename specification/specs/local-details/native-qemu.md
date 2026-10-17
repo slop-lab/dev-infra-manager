@@ -27,6 +27,13 @@ with the fixed `/usr/local/bin/dim-native-qemu-run` launcher. The host mounts
 the configured digest-pinned job image read-only as the guest root; candidate
 script and descriptor bytes enter the guest through a separate read-only 9p
 mount. The launcher provides no network device or reusable credential.
+The supervisor runs as the host worker's UID/GID with the KVM device's group,
+all capabilities dropped, and no-new-privileges. The writable workspace uses
+9p `security_model=mapped-xattr` on a filesystem supporting user extended
+attributes. Guest UID/GID and mode updates must remain virtual metadata, not
+change host ownership; newly created files remain owned by the worker so
+normal-user cleanup does not depend on the operator being UID 1000. Read-only
+job and guest-root mounts continue to use unmapped, read-only metadata.
 
 The target scheduler file is strict schema `2` and contains exactly `schemaVersion`,
 `serviceId`, `host`, `port`, `database`, `eligibilityLeaseMilliseconds`,

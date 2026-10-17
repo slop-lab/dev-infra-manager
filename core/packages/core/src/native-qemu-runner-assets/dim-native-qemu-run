@@ -36,7 +36,7 @@ qemu-system-x86_64 \
   -device virtio-9p-pci,fsdev=jobroot,mount_tag=jobroot \
   -fsdev local,id=job,path=/run/dim/job,security_model=none,readonly=on \
   -device virtio-9p-pci,fsdev=job,mount_tag=job \
-  -fsdev local,id=workspace,path=/run/dim/workspace,security_model=none \
+  -fsdev local,id=workspace,path=/run/dim/workspace,security_model=mapped-xattr \
   -device virtio-9p-pci,fsdev=workspace,mount_tag=workspace
 status=$?
 set -e
