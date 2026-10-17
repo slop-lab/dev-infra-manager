@@ -63,6 +63,13 @@ intentionally download packages. The gate runs the complete recursive source
 unit, verification, and CLI suites; hardware and live-runtime verification
 remain explicit separate gates.
 
+The centralized package Vitest suite uses a 15-second default per-test harness
+budget because its fixtures include real Git imports, HTTP services, fsync, and
+service restart recovery on shared CI CPUs. Production deadlines, lease expiry,
+and explicitly shorter test-operation limits are unchanged. Use explicit
+barriers or controlled clocks for ordering/expiry assertions; this scheduling
+budget is not a substitute for those checks.
+
 Run the real native ordinary executor Docker integration separately on a host
 with a reachable Docker daemon, `sysbox-runc`, and both digest-pinned fixture
 images already available through `DIM_TEST_NATIVE_RUNNER_IMAGE` and
