@@ -56,7 +56,9 @@ describe("installed native ordinary result reporting denials", () => {
       // Then
       expect(reportState(fixture.database)).toEqual({ state: "pending", acknowledgement: null,
         claim: "reported", receipt: "reported", demand: "reported" });
-      expect(competing.status).toBe(409);
+      // A pending central acknowledgement withholds work but is not a fatal
+      // host conflict: the same worker must continue idle polling.
+      expect(competing.status).toBe(204);
     }, 30_000
   );
 
