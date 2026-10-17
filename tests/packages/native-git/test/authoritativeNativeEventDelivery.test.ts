@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { chmod, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { bundleSecrets } from "./bundleConfigFixture.js";
 import {
   authorization,
@@ -30,11 +30,26 @@ import {
 
 const scenarios: DeliveryScenario[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(scenarios.splice(0).map((scenario) => scenario.close()));
   await cleanupFinalizeFixtures();
 });
 
 describe("installed authoritative native event delivery", () => {
+  it("holds automatic receipt delivery until the scenario fault mode is configured", async () => {
+    const scenario = await scenarioFor("receipt-start-barrier");
+    await scenario.bridge.receiptPending;
+    expect(scenario.bridge.requests.filter(({ path }) => path === "/v1/native-root-ci-events")).toEqual([]);
+    expect(receiptRows(scenario.ordinaryDatabase)).toEqual([]);
+
+    scenario.bridge.mode = "unavailable";
+    await createBundleReview(scenario.native.service);
+    await waitFor(() => scenario.bridge.requests.some(({ path }) => path === "/v1/native-root-ci-events"));
+
+    expect(receiptRows(scenario.ordinaryDatabase)).toEqual([]);
+    expect(await deliveredMarkers(scenario)).toEqual([]);
+  });
+
   it("keeps QEMU demand in an independent durable outbox", async () => {
     // Given
     const scenario = await scenarioFor("qemu-outbox");
@@ -205,6 +220,8 @@ describe("installed authoritative native event delivery", () => {
   it("temporarily suppresses a stale response, then retries and replaces the marker with a receipt", async () => {
     // Given
     const scenario = await scenarioFor("pending-admission");
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     scenario.bridge.mode = "unavailable";
     const envelope = await createBundleReview(scenario.native.service);
     const staleEvent = envelope.events.find(({ executionKind }) => executionKind === "ordinary-sysbox");
@@ -229,8 +246,12 @@ describe("installed authoritative native event delivery", () => {
       retryAfter: expect.any(Number) }));
     expect(superseded.retryAfter - superseded.rejectedAt).toBe(250);
     const requestsBeforeDeadline = scenario.bridge.requests.length;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    now = superseded.retryAfter - 1;
+    // Real timer turns may pass under CI load; the expiry decision is driven
+    // by the controlled clock, not by how fast the assertions reach the marker.
+    await new Promise((resolve) => setTimeout(resolve, 300));
     expect(scenario.bridge.requests).toHaveLength(requestsBeforeDeadline);
+    now = superseded.retryAfter;
     await waitFor(() => receiptRows(scenario.ordinaryDatabase).length === 1);
     expect(receiptRows(scenario.ordinaryDatabase)).toEqual([
       expect.objectContaining({ event_id: staleEvent.eventId })

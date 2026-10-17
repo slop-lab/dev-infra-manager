@@ -32,8 +32,25 @@ export class DeliveryBridge implements AdmissionVerifierHttpClient {
   readonly receiptBodies: string[] = [];
   private lostAcknowledgementResolve: (() => void) | undefined;
   readonly lostAcknowledgement = new Promise<void>((resolve) => { this.lostAcknowledgementResolve = resolve; });
+  private releaseReceipts: (() => void) | undefined;
+  private readonly receiptsStarted = new Promise<void>((resolve) => { this.releaseReceipts = resolve; });
+  private receiptPendingResolve: (() => void) | undefined;
+  readonly receiptPending = new Promise<void>((resolve) => { this.receiptPendingResolve = resolve; });
+
+  resumeReceipts(): void { this.releaseReceipts?.(); }
 
   async request(input: AdmissionVerifierHttpRequest): Promise<AdmissionVerifierHttpResponse> {
+    if (input.path === "/v1/native-root-ci-events") {
+      this.receiptPendingResolve?.();
+      input.signal.throwIfAborted();
+      let abort: (() => void) | undefined;
+      const cancelled = new Promise<never>((_resolve, reject) => {
+        abort = () => reject(input.signal.reason);
+        input.signal.addEventListener("abort", abort, { once: true });
+      });
+      try { await Promise.race([this.receiptsStarted, cancelled]); }
+      finally { if (abort !== undefined) input.signal.removeEventListener("abort", abort); }
+    }
     this.requests.push(input);
     if (input.path === "/v1/native-root-ci-events" && this.staleResponsesRemaining > 0) {
       this.staleResponsesRemaining -= 1;
@@ -105,7 +122,16 @@ export async function startDeliveryScenario(
   bridge.targetOrigin = ordinaryOrigin;
   await post(ordinaryOrigin, "/v1/activation", `Bearer ${activationToken}`, { schemaVersion: 1, generationId });
   const admissionGeneration = randomUUID();
-  return { bridge, native, ordinaryServer, ordinaryOrigin,
+  // Proposal push already queues automatic delivery. Hold it until the caller
+  // has configured its fault mode and explicitly creates the review under test.
+  const controlledNative: NativeBundleReviewFixture = { ...native, service: { ...native.service,
+    async createReview(input) {
+      const review = await native.service.createReview(input);
+      bridge.resumeReceipts();
+      return review;
+    }
+  } };
+  return { bridge, native: controlledNative, ordinaryServer, ordinaryOrigin,
     ordinaryDatabase: join(root, "ordinary", "ordinary-ci.sqlite3"), admissionGeneration,
     async close() {
       if (ordinaryServer.listening) {
