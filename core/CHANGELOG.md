@@ -48,7 +48,9 @@ is not a published release.
   privilege regain while keeping kernel and cgroup controls read-only.
   QEMU supervisors run with the worker's UID/GID and only KVM device access;
   mapped workspace metadata preserves normal-user ownership and cleanup when
-  the operator is not UID 1000. Ordinary workers continue polling while an
+  the operator is not UID 1000. Read-only candidate inputs remain readable by the distinct guest UID without
+  exposing the private host claim ancestor or read authority. Ordinary workers
+  continue polling while an
   accepted result awaits central acknowledgement without releasing capacity early.
   Ordinary and QEMU native event delivery now stores strict destination-bound,
   deadline-bearing acknowledgements and automatically refreshes eligibility

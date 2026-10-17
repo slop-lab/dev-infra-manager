@@ -51,6 +51,10 @@ describe("native QEMU execution evidence", () => {
       const jobRoot = jobMount.slice("type=bind,src=".length, -",dst=/run/dim/job,readonly".length);
       const workspace = workspaceMount.slice("type=bind,src=".length, -",dst=/run/dim/workspace".length);
       await expect(readFile(join(jobRoot, "script"))).resolves.toEqual(qemuScript);
+      expect((await stat(jobRoot)).mode & 0o777).toBe(0o755);
+      expect((await stat(join(jobRoot, "script"))).mode & 0o777).toBe(0o444);
+      expect((await stat(join(jobRoot, "descriptor.json"))).mode & 0o777).toBe(0o444);
+      expect((await stat(join(jobRoot, ".."))).mode & 0o777).toBe(0o700);
       await expect(readFile(join(workspace, "candidate.txt"), "utf8")).resolves.toBe("verified tree\n");
       await writeFile(join(workspace, "guest-output"), "writable\n");
       verifiedAtLaunch = true;

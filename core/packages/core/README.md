@@ -83,6 +83,8 @@ uses `mapped-xattr`, so guest ownership and permission changes do not alter host
 ownership or prevent normal-user cleanup. The workspace filesystem must support
 user extended attributes. Ordinary hosts keep polling while accepted results
 await the central reporter's acknowledgement; capacity remains fenced until then.
+Read-only candidate job inputs are readable by guest UID 1000 even when the
+host operator has a different UID; their host ancestor stays owner-only.
 
 Candidate-selected ordinary or QEMU success is evidence, not approval.
 Protected promotion requires the exact immutable review, required human

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { verifyAndMaterializeNativeQemuCandidate } from "./nativeQemuHostCandidateVerifier.js";
 import type { NativeQemuCapacity } from "./nativeQemuSchedulerConfig.js";
@@ -49,6 +49,12 @@ export async function executeNativeQemuAssignment(input: {
       descriptorDigest: input.assignment.attempt.descriptorDigest, workspace, scriptFile: scriptPath,
       signal: input.signal });
     await writeFile(descriptorPath, JSON.stringify(input.assignment.attempt.descriptor), { mode: 0o400, flag: "wx" });
+    // The read-only 9p job mount is traversed by guest UID 1000, not the host
+    // operator's UID. These public candidate bytes remain beneath the claim's 0700
+    // host ancestor, separate from the private read authority.
+    await chmod(jobRoot, 0o755);
+    await chmod(scriptPath, 0o444);
+    await chmod(descriptorPath, 0o444);
     try {
       input.signal.throwIfAborted();
       const kvm = await stat("/dev/kvm");

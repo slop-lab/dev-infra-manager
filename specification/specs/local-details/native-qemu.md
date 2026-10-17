@@ -34,6 +34,10 @@ attributes. Guest UID/GID and mode updates must remain virtual metadata, not
 change host ownership; newly created files remain owned by the worker so
 normal-user cleanup does not depend on the operator being UID 1000. Read-only
 job and guest-root mounts continue to use unmapped, read-only metadata.
+The read-only job directory is mode `0755` and its public candidate script and
+descriptor are mode `0444`, so guest UID 1000 can read them independently of
+the host UID. Their host claim ancestor remains mode `0700`; private read
+authority files are not part of the job mount and retain owner-only access.
 
 The target scheduler file is strict schema `2` and contains exactly `schemaVersion`,
 `serviceId`, `host`, `port`, `database`, `eligibilityLeaseMilliseconds`,
