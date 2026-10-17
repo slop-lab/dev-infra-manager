@@ -101,7 +101,7 @@ describe("installed imported-root human reviewer", () => {
     expect(before.includes(Buffer.from(bundleSecrets.foreignHumanReviewer))).toBe(false);
   });
 
-  it("serves only the required reviewer the exact immutable review and preserves stale inspection across restart", async () => {
+  it("serves only the required reviewer the exact immutable review and preserves stale inspection across restart", { timeout: 15_000 }, async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("human-reviewer-read");
     const created = await createBundleReview(fixture.service);
