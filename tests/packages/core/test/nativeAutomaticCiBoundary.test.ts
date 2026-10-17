@@ -8,7 +8,7 @@ import type { NativeJobAttemptIssuance } from "../../../../core/packages/core/sr
 import { createNativeRootCiHostClient } from "../../../../core/packages/core/src/nativeRootCiHostClient.js";
 import { NativeQemuHostClient, type NativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostClient.js";
 import { authoritativePolicy } from "../../native-git/test/authoritativeNativeCandidateFixture.js";
-import { reviewProposalRef } from "../../native-git/test/nativeBundleReviewFixture.js";
+import { refreshBundleReviewWriter, reviewProposalRef } from "../../native-git/test/nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, generationId,
   runGit } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import { nativeAutomaticCiFixture, ordinaryHostToken, qemuRequestId,
@@ -60,6 +60,7 @@ describe("automatic native CI boundary", () => {
     await writeFile(join(fixture.native.clone, ".dim/ci/jobs/source.bash"), "set -euo pipefail\nprintf 'source-v2\\n'\n");
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "add", ".dim/ci"]);
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "commit", "-m", "change candidate jobs"]);
+    await refreshBundleReviewWriter(fixture.native);
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
     await fixture.startOrdinary();
     const ordinaryB = createNativeRootCiHostClient({ hostId: "host-b", capacity: "backup", generationId,
@@ -88,6 +89,7 @@ describe("automatic native CI boundary", () => {
     await writeFile(join(fixture.native.clone, ".dim/ci/runner.yml"), "schemaVersion: 4\nunknown: true\n");
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "add", ".dim/ci/runner.yml"]);
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "commit", "-m", "invalid candidate jobs"]);
+    await refreshBundleReviewWriter(fixture.native);
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
     const persistedState = Buffer.concat([
       await readFile(fixture.ordinaryDatabase), await readFile(fixture.qemuDatabase)

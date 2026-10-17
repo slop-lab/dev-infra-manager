@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { NativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostClient.js";
-import { reviewProposalRef } from "../../native-git/test/nativeBundleReviewFixture.js";
+import { refreshBundleReviewWriter, reviewProposalRef } from "../../native-git/test/nativeBundleReviewFixture.js";
 import { runGit } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import { qemuBrokerFixture, type QemuBrokerFixture } from "./nativeCandidateLeaseBrokerFixture.js";
 
@@ -17,6 +17,7 @@ describe("installed native candidate lease denial", () => {
     // Given
     const { fixture, assignment } = await activeAssignment();
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "commit", "--allow-empty", "-m", "stale"]);
+    await refreshBundleReviewWriter(fixture.native);
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
     const statePath = join(fixture.native.root, "native-idle.sqlite3");
     const qemuPath = join(fixture.native.root, "project-a", "root.git", "dim-authoritative-qemu", "state.json");

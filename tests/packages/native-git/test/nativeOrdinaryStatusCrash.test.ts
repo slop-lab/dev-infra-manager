@@ -20,6 +20,8 @@ import {
 
 afterEach(cleanupFinalizeFixtures);
 
+// Each case imports a real Git root and restarts the service around fsync
+// recovery; its fixture lifecycle is not bounded by Vitest's default 5 seconds.
 describe("installed native ordinary status crash consistency", () => {
   it.each(["beforeWrite", "beforeFileSync"] as const)(
     "leaves no visible final after a kill at %s and permits a safe retry after restart",
@@ -56,7 +58,7 @@ describe("installed native ordinary status crash consistency", () => {
       expect(retried.created).toBe(true);
       expect((await lstat(finalPath)).nlink).toBe(1);
       await closeFinalizeService(restarted);
-    }
+    }, 15_000
   );
 
   it("restores one complete same-inode final after a kill following publication", async () => {
@@ -95,7 +97,7 @@ describe("installed native ordinary status crash consistency", () => {
     expect((await lstat(finalPath)).mtimeMs).toBe(finalAfter.mtimeMs);
     expect((await readdir(dirname(finalPath))).filter((entry) => entry.startsWith(".1.json."))).toEqual([]);
     await closeFinalizeService(restarted);
-  });
+  }, 15_000);
 });
 
 async function onlyStagedPath(finalPath: string): Promise<string> {

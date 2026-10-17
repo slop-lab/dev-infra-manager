@@ -92,6 +92,12 @@ export async function addCandidateCommit(clone: string, path: string, contents: 
   await runGit("/usr/bin/git", ["-C", clone, "commit", "-m", path]);
 }
 
+export async function refreshBundleReviewWriter(fixture: NativeBundleReviewFixture): Promise<void> {
+  const lease = await issueWorkspaceLease(fixture.service.origin);
+  await runGit("/usr/bin/git", ["-C", fixture.clone, "remote", "set-url", "origin",
+    authenticatedRemote(fixture.service.origin, lease)]);
+}
+
 export async function publishedReviewNames(root: string): Promise<readonly string[]> {
   try {
     return await readdir(join(rootRepository(root), "dim-authoritative-reviews", "proposals"));
