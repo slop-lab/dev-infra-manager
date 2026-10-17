@@ -36,7 +36,7 @@ jobs:
           bash -lc 'just check-source-native && just verify package-packs && pnpm audit --prod'
       - name: Upload exact-tree evidence
         if: always()
-        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2 (Node 20)
         with:
           name: native-candidate-source-node-${{ matrix.node }}-${{ github.sha }}
           path: /tmp/dim-candidate-source-evidence.json

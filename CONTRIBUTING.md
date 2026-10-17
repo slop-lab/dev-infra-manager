@@ -85,6 +85,10 @@ a pass: these recipes stop with exit status 2 and identify the unavailable
 prerequisite before starting an expensive journey. Same-host mechanics do not
 replace clean independent-host release acceptance or human review.
 
+For GitHub UI/CLI manual dispatch, default-branch and disposable-runner
+prerequisites, exact-SHA result checks, and remaining release gates, follow
+[the release verification runbook](specification/docs/releasing.md#github-manual-triggers).
+
 `local-ci-matrix.bash` requires mise, Docker with Compose v2, and the same host
 capabilities as the container integration tests. It first runs the complete
 source suite, package dry-runs, and production audit in each pinned disposable

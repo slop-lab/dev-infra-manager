@@ -48,7 +48,7 @@ function expectEvidenceArtifact(job: WorkflowJob, expectedCommit: string): void 
     }),
     expect.objectContaining({
       if: "always()",
-      uses: "actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5",
+      uses: "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
       with: expect.objectContaining({ path: artifactPath, "if-no-files-found": "error" }),
     }),
   ]));
@@ -83,6 +83,41 @@ describe("candidate source workflows", () => {
     expect(source).toContain("just verify native-ordinary-executor-live");
     expect(source).toContain("just verify native-qemu-guest-mechanics-kvm");
     expect(source).not.toMatch(/gitea|ordinary-ci-pool|shared-qemu|ci runner/i);
+    for (const job of Object.values(workflow.jobs)) {
+      expectExactCheckout(job, "${{ github.sha }}");
+      const pnpm = job.steps.find((step) => step.uses?.startsWith("pnpm/action-setup@"));
+      expect(pnpm).toMatchObject({
+        uses: "pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d",
+        with: { version: "10.13.1" },
+      });
+      const install = job.steps.findIndex((step) => step.run === "pnpm install --frozen-lockfile");
+      const build = job.steps.findIndex((step) => step.run === "just build-packages");
+      const gate = job.steps.findIndex((step) => step.run?.startsWith("just verify "));
+      expect(install).toBeGreaterThan(-1);
+      expect(build).toBeGreaterThan(install);
+      expect(gate).toBeGreaterThan(build);
+    }
+  });
+
+  it("uses only reviewed existing action commits with supported Node runtimes", async () => {
+    // Reviewed upstream action.yml runtimes: checkout v4, upload-artifact
+    // v4.6.2, and pnpm/action-setup v4.1.0 all use node20. The artifact v3
+    // commit and the nonexistent pnpm commit must not return to either workflow.
+    const approved = new Set([
+      "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d",
+    ]);
+    for (const name of ["verify", "integration"]) {
+      const { workflow } = await readWorkflow(name);
+      for (const job of Object.values(workflow.jobs)) {
+        for (const step of job.steps) {
+          if (step.uses === undefined) continue;
+          expect(step.uses).toMatch(/^[\w-]+\/[\w-]+@[0-9a-f]{40}$/);
+          expect(approved.has(step.uses), step.uses).toBe(true);
+        }
+      }
+    }
   });
 
   it("has no obsolete candidate assembly entry point in the tracked source layout", async () => {

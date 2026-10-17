@@ -112,6 +112,109 @@ SHA. Dispatch ordinary and `qemu-kvm` integration lanes on fresh matching
 self-hosted runners and require their recorded `headSha` to equal
 `candidate_root_sha`.
 
+### GitHub manual triggers
+
+Manual dispatch does not install or register a runner. Before dispatching:
+
+- The workflow file must be present on the repository's **default branch**,
+  and must declare `workflow_dispatch`. A file present only on `development`
+  is not sufficient. Have a maintainer review and promote a compatible source
+  revision containing the native workflows into the default branch; do not
+  copy just the YAML onto incompatible source, change the default branch, or run
+  predecessor workflows to bypass this prerequisite. Check with
+  `gh repo view --json defaultBranchRef` and `gh workflow list --all`.
+- The selected branch or tag must point at the reviewed clean candidate.
+  Dispatch uses a branch/tag ref, not a promise that a moving branch will
+  remain at the SHA inspected earlier. Freeze the ref for the three dispatches
+  and reject any run whose `headSha` differs from the candidate.
+- The source workflow uses fresh `ubuntu-24.04` hosted runners. Integration
+  requires fresh, disposable Linux self-hosted runners with labels
+  `dim-native-ordinary` and `dim-native-qemu`, respectively. Prepare a supported
+  Node.js 24/26 host interpreter, Just 1.43.1, Docker with Buildx and Compose,
+  and the normal runner user's Docker access before dispatch. The workflow
+  installs pnpm 10.13.1 and builds all packages before its live gates.
+- The ordinary runner needs registered `sysbox-runc`, supported Docker image
+  mounts, and cached digest-pinned images selected by its reviewed fixed
+  `DIM_TEST_NATIVE_RUNNER_IMAGE` and `DIM_TEST_NATIVE_JOB_IMAGE` environment.
+  The fixture pins are defined in
+  `verification/scripts/native-ordinary-guest-mechanics-smoke.bash`; configure
+  the runner environment and preload those images before starting its service.
+  These are public test images, not production role credentials.
+- The QEMU runner must be x86-64 with a character `/dev/kvm` readable and
+  writable by the runner user and usable from Docker. TCG is not accepted.
+  Missing/offline runners leave a job queued, not passed. Use only disposable
+  test hosts; do not expose production DIM state, credentials, or protected
+  host verification services to GitHub jobs.
+
+See GitHub's [manual workflow documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
+for the default-branch requirement. In the UI, select **Actions → workflow →
+Run workflow**, choose the reviewed branch/tag, and select the integration
+lane. Repeat for both integration lanes. CLI equivalent, after the prerequisites
+and reviewed candidate publication are complete:
+
+```bash
+repository=slop-lab/dev-infra-manager
+candidate_ref=development # Or an operator-maintained, frozen candidate branch/tag.
+candidate_root_sha="$(git rev-parse HEAD)"
+(
+  set -euo pipefail
+  test -z "$(git status --porcelain)"
+  test "$(gh api "repos/$repository/commits/$candidate_ref" --jq .sha)" = "$candidate_root_sha"
+  default_branch="$(gh repo view "$repository" --json defaultBranchRef --jq .defaultBranchRef.name)"
+  for workflow in verify.yml integration.yml; do
+    gh api --method GET "repos/$repository/contents/.github/workflows/$workflow" \
+      -f ref="$default_branch" --jq .sha >/dev/null
+  done
+
+  gh workflow run verify.yml --repo "$repository" --ref "$candidate_ref"
+  gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=ordinary
+  gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=qemu-kvm
+
+  gh run list --repo "$repository" --commit "$candidate_root_sha" \
+    --event workflow_dispatch --limit 20 \
+    --json databaseId,workflowName,headSha,status,conclusion,url
+)
+```
+
+Select the **new** run IDs from those dispatches, not an older successful run
+at the same SHA. For each run:
+
+```bash
+run_id=REPLACE_WITH_NEW_RUN_ID
+(
+  set -euo pipefail
+  test "$(gh run view "$run_id" --repo "$repository" --json headSha --jq .headSha)" = "$candidate_root_sha"
+  gh run view "$run_id" --repo "$repository" --json jobs,url
+  gh run watch "$run_id" --repo "$repository" --exit-status
+)
+```
+
+Require both source matrix jobs and the selected job of each integration run
+to succeed. The unselected integration job is skipped by design; a skipped
+selected job, queued job, cancellation, failure, or timeout is not success.
+Retain the exact run URLs and source artifacts
+`native-candidate-source-node-{24,26}-<SHA>` outside tracked source. Old failed
+runs retain their old workflow/action revisions: re-running their failed jobs
+does not test a newly fixed workflow. Dispatch a new run on the corrected ref.
+
+### Remaining verification and publication boundaries
+
+After successful GitHub runs, retain the exact-candidate fresh Ubuntu bootstrap
+results and complete the configured
+[two-node operations gate](../../verification/native-multi-host-operations.md).
+Neither source CI, same-host KVM mechanics, nor that operations marker proves
+independent-host acceptance. The fault/replay/reboot, traffic/guest authority,
+interactive human approval, and checked promotion phases above remain separate.
+Update a protected QEMU host launcher only through trusted operator review and
+deployment; do not change root-owned staged files from an agent to make a
+verification run appear successful. Report guest stages and the outer
+invocation's final status separately.
+
+Keep the completion status and candidate-specific evidence in external run
+records. Runner registration, default-branch promotion, workflow dispatch,
+publication, and production deployment require their own operator authority;
+the commands here document those actions rather than performing them.
+
 ## Publish
 
 Before publication, reconcile package versions, package-group and root
