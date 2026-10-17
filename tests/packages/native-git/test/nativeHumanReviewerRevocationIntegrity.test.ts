@@ -33,12 +33,16 @@ describe("installed native human revocation storage integrity", () => {
     if (_label !== "wrong path") expect(await readFile(fixture.record)).toEqual(before);
   });
 
-  it("rejects an orphan revocation and duplicate active approvals at startup", async () => {
+  // Each independent corruption case owns one Git/service fixture so its
+  // timeout measures that case, not two sequential fixture lifecycles.
+  it("rejects an orphan revocation at startup", async () => {
     const orphan = await revokedFixture("revocation-orphan");
     await unlink(orphan.approvalRecord);
     await closeFinalizeService(orphan.service);
     await expect(startFinalizeService(orphan.root)).rejects.toThrow(/no matching approval/);
+  });
 
+  it("rejects duplicate active approvals at startup", async () => {
     const duplicate = await revokedFixture("revocation-duplicate-active");
     await approve(duplicate.endpoint, randomUUID());
     await unlink(duplicate.record);
