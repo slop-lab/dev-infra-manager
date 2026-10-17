@@ -146,8 +146,9 @@ export async function rewriteJson(
   await writeFile(path, JSON.stringify(update(value)), { mode: 0o600 });
 }
 
-export async function runCli(args: readonly string[], environment: NodeJS.ProcessEnv) {
-  const child = spawn(process.execPath, ["--import", tsxImport, cli, ...args], {
+export async function runCli(args: readonly string[], environment: NodeJS.ProcessEnv,
+  nodeArguments: readonly string[] = []) {
+  const child = spawn(process.execPath, ["--import", tsxImport, ...nodeArguments, cli, ...args], {
     cwd: packageDirectory, env: environment, stdio: ["ignore", "pipe", "pipe"]
   });
   let stdout = "";

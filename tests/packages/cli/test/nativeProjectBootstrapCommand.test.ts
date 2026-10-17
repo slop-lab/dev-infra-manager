@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile, spawn, spawnSync } from "node:child_process";
-import { once } from "node:events";
+import { execFile, spawnSync } from "node:child_process";
 import { chmod, link, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -156,36 +155,32 @@ test("native root bootstrap rejects an in-place policy rewrite before service mu
   await writeFile(policyPath, policy.padEnd(60 * 1024, " "), { mode: 0o600 });
   const databasePath = join(fixture.serviceRoot, "native-idle.sqlite3");
   const databaseBefore = await readFile(databasePath);
-  const writer = spawn(process.execPath, ["-e", `
-    const fs = require("node:fs");
-    const fd = fs.openSync(process.argv[1], "r+");
-    let alternate = false;
-    process.stdout.write("ready\\n");
-    while (true) {
-      fs.writeSync(fd, alternate ? " " : "\\t", ${policy.length}, "utf8");
-      alternate = !alternate;
-    }
-  `, policyPath], { stdio: ["ignore", "pipe", "inherit"] });
-  await once(writer.stdout, "data");
+  const before = await stat(policyPath);
+  const marker = join(fixture.stateRoot, "policy-rewrite-observed");
+  fixture.environment.DIM_TEST_REVIEW_POLICY_PATH = policyPath;
+  fixture.environment.DIM_TEST_REVIEW_POLICY_MARKER = marker;
+  const mutationImport = new URL("./fixtures/mutate-review-policy-during-read.mjs", import.meta.url).href;
 
   // When
-  const result = await runBootstrap(fixture, policyPath).finally(async () => {
-    writer.kill("SIGKILL");
-    if (writer.exitCode === null) await once(writer, "exit");
-  });
+  const result = await runBootstrap(fixture, policyPath, ["--import", mutationImport]);
 
   // Then
+  assert.equal(await readFile(marker, "utf8"), "rewritten-during-read\n");
+  const after = await stat(policyPath);
+  assert.equal(after.ino, before.ino);
+  assert.equal(after.size, before.size);
   assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /native review policy changed during inspection/);
   assert.deepEqual(await readFile(databasePath), databaseBefore);
   await assert.rejects(stat(join(fixture.stateRoot, "native-project-drafts")), { code: "ENOENT" });
 });
 
-function runBootstrap(fixture: NativeFixture, reviewPolicy: string) {
+function runBootstrap(fixture: NativeFixture, reviewPolicy: string, nodeArguments: readonly string[] = []) {
   return runCli(["project", "bootstrap-native-root", "acme",
     "--project-id", "project-a", "--source-repository", fixture.sourceRepository,
     "--source-ref", "refs/heads/main", "--registrar-connection", fixture.registrarPath,
     "--importer-connection", fixture.importerPath, "--review-policy", reviewPolicy, "--json"],
-  fixture.environment);
+  fixture.environment, nodeArguments);
 }
 
 async function removeReviewedManifest(fixture: NativeFixture): Promise<void> {
