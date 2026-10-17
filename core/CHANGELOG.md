@@ -52,7 +52,8 @@ is not a published release.
   finite suppression deadline, no longer block newer work, and retry rather
   than being permanently discarded. Active ordinary execution leases remain valid across
   intake-cache expiry while exact generation, root, capacity, and lease fences
-  still apply.
+  still apply. Both delivery loops retry temporary shared-operation saturation
+  without permanently disabling delivery or treating it as corrupt storage.
 
 - Add the native ordinary authority library as the first bounded slice of the
   native ordinary-CI target. Its separate schema-3 SQLite state admits exact

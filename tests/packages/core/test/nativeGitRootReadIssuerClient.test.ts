@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
 import {
   createNativeGitRootReadIssuerClient,
@@ -28,8 +28,10 @@ import {
 
 const run = promisify(execFile);
 const roots: string[] = [];
+const leaseNow = 1_000_000;
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupFinalizeFixtures();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -114,9 +116,10 @@ describe("native Git root read issuer host client", () => {
     ["noncanonical username", { bodyChange: { username: "reader" } }],
     ["noncanonical password", { bodyChange: { password: "secret" } }],
     ["oversized body", { bodyChange: { username: `root-read-${"a".repeat(65 * 1024)}` } }],
-    ["expired lease", { bodyChange: { expiresAt: Date.now() } }],
-    ["overlong lease", { bodyChange: { expiresAt: Date.now() + 31_000 } }]
+    ["expired lease", { bodyChange: { expiresAt: leaseNow } }],
+    ["overlong lease", { bodyChange: { expiresAt: leaseNow + 31_000 } }]
   ] as const)("rejects a %s lease response", async (_label, change) => {
+    vi.spyOn(Date, "now").mockReturnValue(leaseNow);
     const responseBody = {
       schemaVersion: 1, serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root",
       generationId, username: `root-read-${Buffer.alloc(18, 1).toString("base64url")}`,

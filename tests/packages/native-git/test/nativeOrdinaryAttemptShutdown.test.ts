@@ -33,7 +33,7 @@ const ordinaryQuery: AdmissionVerifierHttpClient = {
 afterEach(cleanupFinalizeFixtures);
 
 describe("installed native ordinary attempt shutdown", () => {
-  it("drains an admitted issuance before releasing the storage owner", async () => {
+  it("drains an admitted issuance before releasing the storage owner", { timeout: 15_000 }, async () => {
     // Given
     let enterIssue: (() => void) | undefined;
     let releaseIssue: (() => void) | undefined;

@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { executeNativeHostClaim, NativeHostLeaseError } from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
 import { dependencies, execution, ExecutorRunner } from "./nativeOrdinaryExecutorFixture.js";
 
+vi.mock("node:timers/promises", async () => {
+  const { fakeTimerDelay } = await import("./fakeTimerDelay.js");
+  return { setTimeout: fakeTimerDelay };
+});
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -55,6 +60,9 @@ describe("native ordinary executor limits and lease ownership", () => {
     vi.useFakeTimers();
     const runner = new ExecutorRunner();
     runner.waitForAbort = true;
+    let waitStarted: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => { waitStarted = resolve; });
+    runner.onWait = () => waitStarted?.();
     let renewals = 0;
     const reports: unknown[] = [];
     const recoveries: unknown[] = [];
@@ -72,6 +80,7 @@ describe("native ordinary executor limits and lease ownership", () => {
     const running = executeNativeHostClaim(fixture, execution());
 
     // When
+    await waiting;
     await vi.advanceTimersByTimeAsync(2);
     const completed = await running;
 
@@ -218,6 +227,9 @@ describe("native ordinary executor limits and lease ownership", () => {
     vi.useFakeTimers();
     const runner = new ExecutorRunner();
     runner.waitForAbort = true;
+    let waitStarted: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => { waitStarted = resolve; });
+    runner.onWait = () => waitStarted?.();
     const leaseFailure = new Error("lease uncertain");
     const recoveryFailure = new Error("recovery unavailable");
     let renewals = 0;
@@ -234,6 +246,7 @@ describe("native ordinary executor limits and lease ownership", () => {
     const running = executeNativeHostClaim(fixture, execution());
 
     // When
+    await waiting;
     await vi.advanceTimersByTimeAsync(2);
 
     // Then

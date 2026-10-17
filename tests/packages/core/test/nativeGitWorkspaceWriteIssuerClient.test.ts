@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
 import {
   createNativeGitWorkspaceWriteIssuerClient,
@@ -25,9 +25,11 @@ import {
 } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 
 const roots: string[] = [];
+const leaseNow = 1_000_000;
 const workspaceId = Buffer.alloc(32, 60).toString("base64url");
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupFinalizeFixtures();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -85,10 +87,11 @@ describe("native Git workspace write issuer host client", () => {
     ["noncanonical username", { bodyChange: { username: "writer" } }],
     ["noncanonical password", { bodyChange: { password: "secret" } }],
     ["oversized body", { bodyChange: { username: `workspace-write-${"a".repeat(65 * 1024)}` } }],
-    ["expired lease", { bodyChange: { expiresAt: Date.now() } }],
-    ["overlong lease", { bodyChange: { expiresAt: Date.now() + 31_000 } }]
+    ["expired lease", { bodyChange: { expiresAt: leaseNow } }],
+    ["overlong lease", { bodyChange: { expiresAt: leaseNow + 31_000 } }]
   ] as const)("rejects a %s lease response", async (_label, change) => {
     // Given
+    vi.spyOn(Date, "now").mockReturnValue(leaseNow);
     const responseBody = {
       schemaVersion: 1, serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       generationId, workspaceId, username: `workspace-write-${Buffer.alloc(18, 1).toString("base64url")}`,

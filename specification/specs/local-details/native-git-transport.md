@@ -825,6 +825,11 @@ publication. Undelivered events are never pruned. The dispatcher has no native s
 promoter, Git transport, or ordinary query credential. Transient marker I/O
 keeps the event pending and retries; unrecoverable marker integrity failures
 withhold native Git readiness rather than leaving a silent healthy dispatcher.
+Both ordinary and QEMU dispatchers treat temporary saturation of the shared
+operation gate as retryable backpressure. They retain pending evidence and use
+bounded exponential backoff without bypassing the gate or permanently poisoning
+delivery health. Closed admission and non-transient integrity errors still fail
+closed.
 
 The envelope also carries the exact candidate planning status. A missing
 `.dim/ci/runner.yml` is canonical valid-empty planning with an empty event set.

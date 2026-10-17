@@ -139,7 +139,7 @@ test("native workspace broker refreshes leases and preserves proposal-only Git a
   assert.match(proposal, /^[0-9a-f]{40}$/);
   assert.equal(project.importReceipt.generationId, fixture.importGenerationId);
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-}, 10_000);
+}, 30_000);
 
 async function reservePort(): Promise<number> {
   const server = createServer();

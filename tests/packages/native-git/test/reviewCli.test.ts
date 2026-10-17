@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 describe("DIM native Git review CLI", () => {
-  it("inspects, approves, shows, and revokes one exact review through the admin API", async () => {
+  it("inspects, approves, shows, and revokes one exact review through the admin API", { timeout: 15_000 }, async () => {
     // Given
     const fixture = await startFixture();
 

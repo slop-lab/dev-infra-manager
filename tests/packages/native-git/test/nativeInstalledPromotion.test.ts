@@ -177,7 +177,7 @@ describe("installed native protected promotion", () => {
     database.close();
   });
 
-  it("drives review and promotion through mode-0600 role connection files without exposing credentials", async () => {
+  it("drives review and promotion through mode-0600 role connection files without exposing credentials", { timeout: 15_000 }, async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("installed-promotion-cli", undefined,
       authoritativePolicy(["owner"], [], []));

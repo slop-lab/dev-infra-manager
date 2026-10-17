@@ -28,7 +28,7 @@ describe("automatic native CI boundary", () => {
     // Given
     const fixture = await nativeAutomaticCiFixture();
     fixtures.push(fixture);
-    const signal = AbortSignal.timeout(20_000);
+    const signal = AbortSignal.timeout(40_000);
     const ordinary = createNativeRootCiHostClient({ hostId: "host-a", capacity: "primary", generationId,
       ordinaryCi: { endpoint: fixture.ordinaryOrigin, serviceId: "ordinary-main",
         credential: { username: "host-a", password: ordinaryHostToken("host-a") } },

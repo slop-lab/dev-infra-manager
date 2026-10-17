@@ -8,6 +8,7 @@ import { acknowledgeAuthoritativeNativeQemuDelivery,
   type AuthoritativeNativeQemuPendingDelivery } from "./authoritative-native-qemu-delivery-store.js";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
+import { AuthoritativeNativeReviewAdmissionBusyError } from "./authoritative-native-review-controller.js";
 import type { AdmissionVerifierHttpClient, AdmissionVerifierHttpResponse } from "./ordinary-admission-http.js";
 import type { NativeGitBundleState } from "./native-bundle-state.js";
 import { readNativeProjectRegistrations } from "./native-bundle-state.js";
@@ -73,7 +74,8 @@ export async function createAuthoritativeNativeQemuEventDispatcher(
         persistenceUnavailable = false; retry = timing.minimum;
       } catch (error) {
         if (shutdown.signal.aborted) return;
-        if (!(error instanceof AuthoritativeNativeQemuEventDeliveryError) && !transientFilesystemError(error)) throw error;
+        if (!(error instanceof AuthoritativeNativeQemuEventDeliveryError)
+          && !(error instanceof AuthoritativeNativeReviewAdmissionBusyError) && !transientFilesystemError(error)) throw error;
         if (transientFilesystemError(error)) persistenceUnavailable = true;
         await wait(retry); retry = Math.min(timing.maximum, retry * 2);
       }

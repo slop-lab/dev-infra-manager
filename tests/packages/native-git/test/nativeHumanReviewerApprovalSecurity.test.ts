@@ -57,28 +57,25 @@ describe("installed native human approval security", () => {
       .rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("refuses candidate and protected-ref drift without publishing approval evidence", async () => {
+  it.each(["candidate", "protected"] as const)("refuses %s ref drift without publishing approval evidence", async (kind) => {
     // Given
-    const candidateFixture = await nativeBundleReviewFixture("human-approval-candidate-drift");
-    const candidateReview = await createBundleReview(candidateFixture.service);
-    await addCandidateCommit(candidateFixture.clone, "later.txt", Buffer.from("later\n"));
-    await runGit("/usr/bin/git", ["-C", candidateFixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
-    const protectedFixture = await nativeBundleReviewFixture("human-approval-protected-drift");
-    const protectedReview = await createBundleReview(protectedFixture.service);
-    await runGit("/usr/bin/git", ["--git-dir", rootRepository(protectedFixture.root), "update-ref",
-      "refs/heads/main", protectedReview.review.candidateCommit, protectedReview.review.expectedProtectedHead]);
+    const fixture = await nativeBundleReviewFixture(`human-approval-${kind}-drift`);
+    const { review } = await createBundleReview(fixture.service);
+    if (kind === "candidate") {
+      await addCandidateCommit(fixture.clone, "later.txt", Buffer.from("later\n"));
+      await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
+    } else {
+      await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root), "update-ref",
+        "refs/heads/main", review.candidateCommit, review.expectedProtectedHead]);
+    }
 
     // When
-    const candidateResponse = await approve(candidateFixture.service.origin, candidateReview.review.reviewId);
-    const protectedResponse = await approve(protectedFixture.service.origin, protectedReview.review.reviewId);
+    const response = await approve(fixture.service.origin, review.reviewId);
 
     // Then
-    expect(candidateResponse.status).toBe(409);
-    expect([409, 503]).toContain(protectedResponse.status);
-    for (const fixture of [candidateFixture, protectedFixture]) {
-      await expect(readdir(join(rootRepository(fixture.root), "dim-authoritative-approvals")))
-        .rejects.toMatchObject({ code: "ENOENT" });
-    }
+    expect(kind === "candidate" ? [409] : [409, 503]).toContain(response.status);
+    await expect(readdir(join(rootRepository(fixture.root), "dim-authoritative-approvals")))
+      .rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("publishes only stale old-tuple evidence when the proposal moves after final proof", async () => {

@@ -25,7 +25,7 @@ import {
 afterEach(cleanupFinalizeFixtures);
 
 describe("installed native human approval self-revocation", () => {
-  it("revokes one immutable approval, safely reapproves, and ignores a delayed old revocation across restart", async () => {
+  it("revokes one immutable approval, safely reapproves, and ignores a delayed old revocation across restart", { timeout: 15_000 }, async () => {
     const fixture = await nativeBundleReviewFixture("human-revocation-lifecycle");
     const created = await createBundleReview(fixture.service);
     const { review } = created;

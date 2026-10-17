@@ -626,6 +626,10 @@ The installed event dispatcher uses only its outbound webhook credential. It sub
 events to `/v1/native-root-ci-events`, retries identical bytes after uncertain
 delivery, and writes a private digest-bound marker only after the exact durable
 receipt. QEMU events never enter this lane.
+The separate ordinary and QEMU dispatchers both retry temporary saturation of
+the shared operation gate with bounded exponential backoff. They do not bypass
+capacity limits or permanently lose health because of backpressure; integrity
+failures still fail closed.
 
 For ordinary work, the paired services keep proof, attempt issuance, result
 reporting, query, webhook, and host credentials distinct. The attempt issuer

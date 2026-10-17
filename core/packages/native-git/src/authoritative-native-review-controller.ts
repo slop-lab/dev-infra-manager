@@ -30,7 +30,7 @@ export function createAuthoritativeNativeReviewController(
     const admitted = queue.then(async () => {
       const release = input.operations.acquire();
       if (release === undefined) {
-        throw new AuthoritativeNativeReviewControllerError("native Git bundle review admission is unavailable");
+        throw new AuthoritativeNativeReviewAdmissionBusyError("native Git bundle review admission is unavailable");
       }
       try {
         return await operation();
@@ -53,5 +53,9 @@ export function createAuthoritativeNativeReviewController(
 }
 
 export class AuthoritativeNativeReviewControllerError extends Error {
-  readonly name = "AuthoritativeNativeReviewControllerError";
+  readonly name: string = "AuthoritativeNativeReviewControllerError";
+}
+
+export class AuthoritativeNativeReviewAdmissionBusyError extends AuthoritativeNativeReviewControllerError {
+  override readonly name = "AuthoritativeNativeReviewAdmissionBusyError";
 }

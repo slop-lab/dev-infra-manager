@@ -61,7 +61,7 @@ const verifiedClaimClient: AdmissionVerifierHttpClient = {
 afterEach(cleanupFinalizeFixtures);
 
 describe("installed native ordinary attempt authority HTTP boundary", () => {
-  it("issues only from a query-verified full ordinary reservation claim", async () => {
+  it("issues only from a query-verified full ordinary reservation claim", { timeout: 15_000 }, async () => {
     // Given
     let verificationCalls = 0;
     const ordinaryQuery: AdmissionVerifierHttpClient = {

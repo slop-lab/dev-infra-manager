@@ -7,6 +7,7 @@ import {
   type AuthoritativeNativePendingDelivery
 } from "./authoritative-native-delivery-store.js";
 import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
+import { AuthoritativeNativeReviewAdmissionBusyError } from "./authoritative-native-review-controller.js";
 import { readNativeProjectRegistrations, type NativeGitBundleState } from "./native-bundle-state.js";
 import type { AdmissionVerifierHttpClient, AdmissionVerifierHttpResponse } from "./ordinary-admission-http.js";
 import type { ReviewPublicationFaults } from "./review-record-storage.js";
@@ -99,6 +100,7 @@ export async function createAuthoritativeNativeEventDispatcher(
       } catch (error) {
         if (shutdown.signal.aborted) return;
         if (!(error instanceof AuthoritativeNativeEventDeliveryError)
+          && !(error instanceof AuthoritativeNativeReviewAdmissionBusyError)
           && !transientFilesystemError(error)) throw error;
         if (transientFilesystemError(error)) persistenceUnavailable = true;
         await wait(retry);
