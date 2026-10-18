@@ -6,6 +6,7 @@ import type { RunOptions } from "../types.js";
 import { workspaceImageReference } from "../workspaceImageReference.js";
 import type { AcquiredWorkspaceSource, WorkspaceRecord, WorkspaceResources, WorkspaceSource, WorkspaceView } from "./models.js";
 import { WorkspaceStore, validateResources, workspaceName } from "./store.js";
+import { validateWorkspacePort } from "./portBridge.js";
 
 export interface WorkspaceRuntime {
   inspect(record: WorkspaceRecord): Promise<{ running: boolean } | undefined>;
@@ -16,6 +17,12 @@ export interface WorkspaceRuntime {
   updateResources(record: WorkspaceRecord, resources: WorkspaceResources): Promise<{ recreated: boolean }>;
   seed(record: WorkspaceRecord, directory: string): Promise<void>;
   exec(record: WorkspaceRecord, command: string[], options?: RunOptions): Promise<number>;
+  connect(record: WorkspaceRecord, port: number, options?: WorkspaceConnectOptions): Promise<number>;
+}
+
+export interface WorkspaceConnectOptions extends Pick<RunOptions, "stdin" | "stdout" | "stderr" | "signal"> {
+  /** A long-lived forward must not follow a reused workspace name. */
+  workspaceId?: string;
 }
 
 export interface CreateWorkspaceInput {
@@ -131,6 +138,17 @@ export class WorkspaceService {
     this.requireInitialized(record);
     if (record.phase !== "running") throw new UserError(`workspace '${name}' is ${record.phase}; run dim start ${name}`);
     return this.runtime.exec(record, command, options);
+  }
+
+  async connect(name: string, port: number, options: WorkspaceConnectOptions = {}): Promise<number> {
+    validateWorkspacePort(port);
+    const record = await this.store.read(workspaceName(name));
+    this.requireInitialized(record);
+    if (options.workspaceId !== undefined && options.workspaceId !== record.id) {
+      throw new UserError(`workspace '${name}' was replaced; restart forwarding to connect to its new identity`);
+    }
+    if (record.phase !== "running") throw new UserError(`workspace '${name}' is ${record.phase}; run dim start ${name}`);
+    return this.runtime.connect(record, port, options);
   }
 
   private async change<T>(name: string, operation: string, action: (record: WorkspaceRecord) => Promise<T>, validate: (record: WorkspaceRecord) => void = () => {}): Promise<T> {

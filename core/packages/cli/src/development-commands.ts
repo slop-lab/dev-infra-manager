@@ -3,6 +3,7 @@ import { type Command } from "commander";
 import { UserError, type WorkspaceRecord, type WorkspaceView } from "@slop-lab/dim-core/workspace";
 import { HostContextStore, type HostTarget } from "./host-context.js";
 import { callHost, streamHost } from "./host-transport.js";
+import { forwardWorkspace } from "./port-forward.js";
 
 interface OutputFlags { json?: boolean }
 interface CreateFlags extends OutputFlags {
@@ -34,6 +35,35 @@ export function registerDevelopmentCommands(program: Command): void {
 }
 
 function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): void {
+  parent.command("connect")
+    .description("Connect standard input/output to a workspace loopback TCP port")
+    .argument("<name>")
+    .argument("<port>")
+    .action(async (name: string, port: string, _flags: unknown, command: Command) => {
+      const remotePort = portNumber(port);
+      const target = await selectedHost(command, hosts);
+      await withConnectionSignals(async (signal) => {
+        process.exitCode = await streamHost(target, { operation: "connect", input: { name, port: remotePort } }, {
+          terminal: false, signal, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr
+        });
+      });
+    });
+
+  parent.command("forward")
+    .description("Forward a client loopback port to a workspace loopback TCP port")
+    .argument("<name>")
+    .argument("<local:remote>", "use local port 0 to select an available port")
+    .action(async (name: string, ports: string, _flags: unknown, command: Command) => {
+      const match = /^(\d+):(\d+)$/.exec(ports);
+      if (!match) throw new UserError("forward requires LOCAL:REMOTE ports, such as 3000:3000");
+      const localPort = portNumber(match[1]!, true), remotePort = portNumber(match[2]!);
+      const target = await selectedHost(command, hosts);
+      await withConnectionSignals((signal) => forwardWorkspace(target, name, localPort, remotePort, {
+        signal,
+        onListening: (port) => process.stderr.write(`Forwarding 127.0.0.1:${port} to ${target.name}/${name}:127.0.0.1:${remotePort}\n`)
+      }));
+    });
+
   parent.command("image").description("Manage workspace images on the selected host")
     .command("build")
     .description("Build the default development workspace image")
@@ -231,4 +261,29 @@ function capitalize(value: string): string { return value[0]?.toUpperCase() + va
 function workspaceStatus(record: WorkspaceView): string {
   const observed = record.runtimeStatus ?? record.phase;
   return observed === record.phase ? record.phase : `${record.phase}/${observed}`;
+}
+
+function portNumber(value: string, allowZero = false): number {
+  const port = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isSafeInteger(port) || port < (allowZero ? 0 : 1) || port > 65535) {
+    throw new UserError(`port must be an integer between ${allowZero ? 0 : 1} and 65535`);
+  }
+  return port;
+}
+
+async function withConnectionSignals(action: (signal: AbortSignal) => Promise<void>): Promise<void> {
+  const abort = new AbortController();
+  let signalCode: number | undefined;
+  const stop = (signal: NodeJS.Signals) => {
+    signalCode = signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 129;
+    abort.abort();
+  };
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+  for (const signal of signals) process.once(signal, stop);
+  try { await action(abort.signal); }
+  catch (error) { if (!abort.signal.aborted) throw error; }
+  finally {
+    for (const signal of signals) process.off(signal, stop);
+    if (signalCode !== undefined) process.exitCode = signalCode;
+  }
 }

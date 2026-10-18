@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { type Readable, type Writable } from "node:stream";
 import { type HostTarget, validateTarget } from "./host-context.js";
 
 export interface HostRequest {
@@ -12,6 +13,8 @@ export interface HostTransportOptions {
   readonly sshExecutable?: string;
   readonly terminal?: boolean;
   readonly signal?: AbortSignal;
+  readonly stdin?: Readable;
+  readonly stdout?: Writable;
   readonly stderr?: NodeJS.WritableStream;
 }
 
@@ -112,23 +115,65 @@ export async function streamHost(
   request: HostRequest,
   options: HostTransportOptions = {}
 ): Promise<number> {
+  if (options.signal?.aborted) throw new HostTransportError("host connection cancelled", 130);
+  if (options.terminal && (options.stdin || options.stdout)) {
+    throw new HostTransportError("custom byte streams cannot use a terminal", 2);
+  }
   const invocation = hostInvocation(target, request, options);
   const child = spawn(invocation.file, invocation.args, {
-    stdio: "inherit",
-    ...(options.signal === undefined ? {} : { signal: options.signal })
+    stdio: [options.stdin ? "pipe" : "inherit", options.stdout ? "pipe" : "inherit", options.stderr ? "pipe" : "inherit"]
   });
-  return processExit(child, target);
+  const streamAbort = new AbortController();
+  const signal = options.signal ? AbortSignal.any([options.signal, streamAbort.signal]) : streamAbort.signal;
+  const failedStream = () => streamAbort.abort();
+  const unpipeInput = () => {
+    if (child.stdin) options.stdin?.unpipe(child.stdin);
+  };
+  options.stdin?.once("error", failedStream);
+  options.stdout?.once("error", failedStream);
+  options.stderr?.once("error", failedStream);
+  if (child.stdin && options.stdin) {
+    child.stdin.once("error", unpipeInput);
+    options.stdin.pipe(child.stdin);
+  }
+  if (child.stdout && options.stdout) child.stdout.pipe(options.stdout);
+  if (child.stderr && options.stderr) child.stderr.pipe(options.stderr, { end: false });
+  try {
+    return await processExit(child, target, signal);
+  } finally {
+    unpipeInput();
+    options.stdin?.pause();
+    options.stdin?.off("error", failedStream);
+    options.stdout?.off("error", failedStream);
+    options.stderr?.off("error", failedStream);
+    if (options.stdout) child.stdout?.unpipe(options.stdout);
+    if (options.stderr) child.stderr?.unpipe(options.stderr);
+  }
 }
 
-function processExit(child: ReturnType<typeof spawn>, target: HostTarget): Promise<number> {
+function processExit(child: ReturnType<typeof spawn>, target: HostTarget, signal?: AbortSignal): Promise<number> {
   return new Promise((resolve, reject) => {
-    child.once("error", (error) => reject(new HostTransportError(
-      `could not run command on host '${target.name}': ${error.message}`, 1, { cause: error }
-    )));
-    child.once("close", (code, signal) => {
-      if (signal) reject(new HostTransportError(`host '${target.name}' command terminated by ${signal}`));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let terminating = false;
+    const abort = () => {
+      if (terminating) return;
+      terminating = true;
+      child.kill("SIGTERM");
+      // The host may need its bounded three-second container exec cleanup.
+      timer = setTimeout(() => child.kill("SIGKILL"), 5000);
+    };
+    const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); };
+    child.once("error", (error) => {
+      cleanup();
+      reject(new HostTransportError(`could not run command on host '${target.name}': ${error.message}`, 1, { cause: error }));
+    });
+    child.once("close", (code, terminatedBy) => {
+      cleanup();
+      if (terminatedBy) reject(new HostTransportError(`host '${target.name}' command terminated by ${terminatedBy}`));
       else resolve(code ?? 1);
     });
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
   });
 }
 

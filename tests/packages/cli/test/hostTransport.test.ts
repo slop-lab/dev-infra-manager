@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { execFile, spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Writable } from "node:stream";
+import { PassThrough, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
 import {
-  callHost, decodeHostRequest, encodeHostRequest, hostInvocation, HostTransportError
+  callHost, decodeHostRequest, encodeHostRequest, hostInvocation, HostTransportError, streamHost
 } from "../../../../core/packages/cli/src/host-transport.js";
 
 const peer = fileURLToPath(new URL("./fixtures/host-peer.mjs", import.meta.url));
@@ -123,6 +124,22 @@ test("request envelope validation rejects malformed encoding and non-object inpu
     assert.throws(() => decodeHostRequest(encoded), /invalid host request/);
   }
   assert.throws(() => hostInvocation({ name: "remote", ssh: "-oProxyCommand=bad" }, { operation: "list" }), /SSH target/);
+});
+
+test("custom streams cancel an unresponsive host process and restore stream listeners", async () => {
+  const input = new PassThrough(), output = new PassThrough();
+  const abort = new AbortController();
+  const inputErrors = input.listenerCount("error"), outputErrors = output.listenerCount("error");
+  const ready = once(output, "data");
+  const call = streamHost(local, { operation: "ignorecancel" }, {
+    localCommand, stdin: input, stdout: output, signal: abort.signal
+  });
+  await ready;
+  abort.abort();
+  await assert.rejects(call, /terminated by SIGKILL/);
+  assert.equal(input.listenerCount("error"), inputErrors);
+  assert.equal(output.listenerCount("error"), outputErrors);
+  input.destroy(); output.destroy();
 });
 
 function shellArgument(value: string): string {

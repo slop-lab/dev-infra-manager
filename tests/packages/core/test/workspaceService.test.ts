@@ -17,7 +17,8 @@ async function fixture() {
     async create() { calls.push("create"); }, async start() { calls.push("start"); },
     async stop() { calls.push("stop"); }, async seed() { calls.push("seed"); },
     async remove(_record, options) { calls.push(options.keepData ? "remove:keep" : "remove:delete"); },
-    async exec(_record, command) { calls.push(`exec:${command.join(" ")}`); return 17; }
+    async exec(_record, command) { calls.push(`exec:${command.join(" ")}`); return 17; },
+    async connect(record, port) { calls.push(`connect:${record.id}:${port}`); return 0; }
   };
   let acquisitions = 0;
   const store = new WorkspaceStore(root);
@@ -99,6 +100,22 @@ describe("workspace application lifecycle", () => {
     f.runtime.inspect = async () => { throw new Error("Docker offline"); };
     expect((await f.service.show("dev")).runtimeError).toBe("Docker offline");
     expect((await f.store.read("dev")).phase).toBe("running");
+  });
+
+  it("pins forwarded connections to the selected identity and rejects invalid ports before runtime access", async () => {
+    const f = await fixture();
+    const original = await f.service.create(create);
+    await f.service.connect("dev", 3000, { workspaceId: original.id });
+    expect(f.calls.at(-1)).toBe(`connect:${original.id}:3000`);
+    for (const port of [0, -1, 65536, 1.5, NaN]) await expect(f.service.connect("dev", port)).rejects.toThrow("port must be");
+    await f.service.discard("dev");
+    const replacement = await f.service.create(create);
+    await expect(f.service.connect("dev", 3000, { workspaceId: original.id })).rejects.toThrow("was replaced");
+    expect(f.calls.filter((call) => call.startsWith("connect:"))).toEqual([`connect:${original.id}:3000`]);
+    expect((await f.store.read("dev")).phase).toBe("running");
+    await f.service.connect("dev", 3000, { workspaceId: replacement.id });
+    await f.service.stop("dev");
+    await expect(f.service.connect("dev", 3000)).rejects.toThrow("run dim start dev");
   });
 
   it("validates complete persisted records rather than asserting partial data", async () => {

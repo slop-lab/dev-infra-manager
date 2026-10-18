@@ -36,6 +36,13 @@ Resource updates report whether container recreation was necessary. Failed
 initialization remains distinguishable from a ready workspace, and malformed
 state is rejected at the storage boundary.
 
+`connect(name, port, { stdin, stdout, stderr, signal, workspaceId? })` streams
+bytes to one TCP port on the workspace's loopback interface. Runtime ownership
+is checked before connecting; no host address or control socket is passed into
+the workspace. Long-lived clients can bind connections to `workspaceId` so
+reusing a display name cannot redirect them to another workspace. Connection
+failures do not rewrite lifecycle state.
+
 The root export and `/workspace` expose the base API. Optional managed
 workspaces, native Git clients, controllers, ordinary CI, QEMU and plugin
 integration live in `@slop-lab/dim-managed`; they are not installed by the base

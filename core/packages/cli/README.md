@@ -69,6 +69,29 @@ Workspace state and source paths belong to the execution host. Inspection does
 not start a controller or provision runtime resources. Removing a context
 changes client configuration only.
 
+## Access workspace services
+
+Run a server bound to loopback inside the workspace, then forward it in another
+terminal:
+
+```bash
+dim exec dev -- python3 -m http.server 3000 --bind 127.0.0.1
+# In another terminal:
+dim forward dev 3000:3000
+```
+
+Open `http://127.0.0.1:3000` on the client. Forwarding uses the selected local or
+SSH host and binds only the client's loopback interface. Local port `0` selects
+an available port and reports it on stderr. Stop forwarding with Ctrl-C.
+The connection remains pinned to the original workspace identity; discarding
+and recreating another workspace with the same name requires restarting the
+forward.
+
+`dim connect dev 3000` exposes the same workspace loopback connection as raw
+stdin/stdout for protocol clients such as SSH ProxyCommand. It never allocates
+a terminal or writes status messages into the protocol stream. These commands
+do not require managed Git, external URL plugins or host-published Docker ports.
+
 ## Optional managed administration
 
 ```bash

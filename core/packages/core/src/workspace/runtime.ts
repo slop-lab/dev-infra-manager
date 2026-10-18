@@ -1,11 +1,13 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { UserError } from "../errors.js";
-import type { CommandResult, RunOptions, StreamingCommandRunner } from "../types.js";
+import type { CommandResult, CommandRunner, RunOptions, StreamingCommandRunner } from "../types.js";
 import type { WorkspaceRecord, WorkspaceResources } from "./models.js";
+import type { WorkspaceConnectOptions } from "./service.js";
+import { validateWorkspacePort, workspacePortBridge, workspacePortBridgeMarker, workspacePortCleanup } from "./portBridge.js";
 
 export interface WorkspaceRuntimeInspection {
   id: string;
@@ -26,7 +28,7 @@ export function workspaceRuntimeResources(record: Pick<WorkspaceRecord, "id">) {
 
 /** Owns runtime resources only. The application owns records, Git acquisition and locks. */
 export class ContainerWorkspaceRuntime {
-  constructor(private readonly runner: StreamingCommandRunner) {}
+  constructor(private readonly runner: StreamingCommandRunner, private readonly cleanupRunner: CommandRunner = runner) {}
 
   async inspect(record: WorkspaceRecord): Promise<WorkspaceRuntimeInspection | undefined> {
     const resources = workspaceRuntimeResources(record);
@@ -206,6 +208,30 @@ export class ContainerWorkspaceRuntime {
   async exec(record: WorkspaceRecord, command: string[], options: RunOptions = {}): Promise<number> {
     const container = await this.requireRunning(record);
     return this.runner.runStreaming("docker", this.execArguments(container.id, command, options), options);
+  }
+
+  async connect(record: WorkspaceRecord, port: number, options: WorkspaceConnectOptions = {}): Promise<number> {
+    validateWorkspacePort(port);
+    const container = await this.requireRunning(record);
+    const token = randomUUID();
+    let exitCode: number | undefined;
+    try {
+      exitCode = await this.runner.runStreaming("docker", this.execArguments(container.id, [
+        "node", "--input-type=commonjs", "-e", workspacePortBridge, String(port), workspacePortBridgeMarker, token
+      ], options), options);
+      return exitCode;
+    } finally {
+      // A cancelled Docker CLI does not reliably terminate its exec process.
+      // Cleanup has its own short lifetime, independent of the cancelled request.
+      if (exitCode !== 0 || options.signal?.aborted) {
+        const cleanup = await this.cleanupRunner.run("docker", [
+          "exec", "--user", "dim", container.id, "node", "--input-type=commonjs", "-e", workspacePortCleanup, token
+        ], { signal: AbortSignal.timeout(3000) });
+        if (cleanup.exitCode !== 0 && !/no such container|container .* is not running/i.test(cleanup.stderr)) {
+          throw new UserError(`workspace '${record.name}' connection cleanup could not be confirmed: ${cleanup.stderr.trim()}`);
+        }
+      }
+    }
   }
 
   private execArguments(container: string, command: string[], options: RunOptions): string[] {

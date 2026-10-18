@@ -10,9 +10,9 @@ import { decodeHostRequest } from "./host-transport.js";
 export async function runHostRequest(encoded: string): Promise<void> {
   const abort = new AbortController();
   const stop = () => abort.abort();
-  process.once("SIGINT", stop); process.once("SIGTERM", stop);
+  process.once("SIGINT", stop); process.once("SIGTERM", stop); process.once("SIGHUP", stop);
   try { await dispatchHostRequest(encoded, abort.signal); }
-  finally { process.off("SIGINT", stop); process.off("SIGTERM", stop); }
+  finally { process.off("SIGINT", stop); process.off("SIGTERM", stop); process.off("SIGHUP", stop); }
 }
 
 async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promise<void> {
@@ -27,8 +27,8 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
       processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal })
   };
   const service = new WorkspaceService(
-    new WorkspaceStore(path.resolve(process.env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim"))),
-    new ContainerWorkspaceRuntime(runner), (input) => acquireWorkspaceSource({ ...input, runner, signal })
+    new WorkspaceStore(path.resolve(process.env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")), { signal }),
+    new ContainerWorkspaceRuntime(runner, processRunner), (input) => acquireWorkspaceSource({ ...input, runner, signal })
   );
   let result: unknown;
   switch (request.operation) {
@@ -61,6 +61,14 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
       if (!Array.isArray(input.command) || input.command.some((v) => typeof v !== "string")) throw new UserError("command must be an argument array");
       process.exitCode = await service.exec(string(input.name, "name"), input.command as string[], {
         signal, stdin: process.stdin, ...(input.interactive === true ? { terminal: true } : {})
+      });
+      return;
+    }
+    case "connect": {
+      if (typeof input.port !== "number") throw new UserError("port must be an integer between 1 and 65535");
+      process.exitCode = await service.connect(string(input.name, "name"), input.port, {
+        signal, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr,
+        ...(input.workspaceId === undefined ? {} : { workspaceId: string(input.workspaceId, "workspaceId") })
       });
       return;
     }

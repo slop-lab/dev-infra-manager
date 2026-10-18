@@ -9,6 +9,8 @@ dim create /path/on/host/repository dev
 dim ls
 dim exec dev -- git status
 dim shell dev
+dim connect dev 3000
+dim forward dev 3000:3000
 dim stop dev
 dim start dev
 dim recreate dev
@@ -35,6 +37,15 @@ state, images and Docker resources. `exec` preserves stdin, output and command
 exit status. `shell` requests an interactive terminal. Machine-readable record
 commands support `--json`; progress and diagnostics must not corrupt stdout.
 User/input errors exit 2 and unexpected failures exit 1.
+
+`connect WORKSPACE PORT` carries raw stdin/stdout to `127.0.0.1:PORT` inside
+the workspace, without a terminal. Diagnostics use stderr. `forward WORKSPACE
+LOCAL:REMOTE` listens only on the client's `127.0.0.1`, forwarding each accepted
+connection through the selected host. Local port zero selects an available
+port; remote ports are integers from 1 to 65535. Forwarding pins workspace
+identity once and rejects a replacement that reuses its name. Closing clients
+or cancelling forwarding closes owned streams and host processes. Neither
+command publishes a Docker port or requires a managed service.
 
 Managed administration is loaded only when selected and requires the optional
 `@slop-lab/dim-managed` package. Missing installation produces actionable setup

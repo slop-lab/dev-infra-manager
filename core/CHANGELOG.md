@@ -12,6 +12,9 @@ is not a published release.
   resource limits accept `unlimited` and report when a container is replaced.
   Managed administration is loaded separately. Source acquisition does not share
   the host checkout, Git object store or host credentials with the workspace.
+  Loopback forwarding and raw protocol connections make workspace services
+  accessible over the selected SSH host without managed services or published
+  host ports, and prevent name reuse from redirecting an existing forward.
 
 The managed integration below is optional; its historical native-only rules do
 not apply to the base workspace path.

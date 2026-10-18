@@ -152,12 +152,24 @@ test("shell, exec and run dispatch raw commands with the remote exit status", as
   });
 });
 
+test("connect passes raw stdin and stdout through the selected SSH host", async () => {
+  await withFixture(async (fixture) => {
+    await configureRemote(fixture);
+    const input = "protocol bytes\0\nnot JSON";
+    const result = await run(["--host", "devbox", "connect", "dev", "3000"], fixture, input);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, input);
+    assert.deepEqual(await request(fixture), { operation: "connect", input: { name: "dev", port: 3000 } });
+  });
+});
+
 test("invalid and destructive arguments fail before contacting a remote host", async () => {
   await withFixture(async (fixture) => {
     await configureRemote(fixture);
     for (const args of [
       ["discard", "dev"], ["resources", "dev"], ["create", "url", "dev", "--git-user-name", "Alice"],
       ["run", "dev", "exec"], ["run", "dev", "shell", "extra"], ["exec", "dev"],
+      ["connect", "dev", "0"], ["connect", "dev", "65536"], ["forward", "dev", "0:0"], ["forward", "dev", "0.0.0.0:3000:3000"],
       ["create", "url"], ["create", "url", "dev", "--repo-ref", "main"]
     ]) {
       const result = await run(["--host", "devbox", ...args], fixture);
@@ -206,6 +218,7 @@ if (process.argv[2] !== '__host' || process.argv.length !== 4) throw Error('unex
 const request = JSON.parse(Buffer.from(process.argv[3], 'base64url').toString('utf8'));
 fs.writeFileSync(process.env.DIM_TEST_REQUEST, JSON.stringify(request));
 if (request.operation === 'exec') { process.stdout.write('command output\\n'); process.exitCode = 17; }
+else if (request.operation === 'connect') { process.stdin.pipe(process.stdout); }
 else if (request.operation === 'image.build') { process.stdout.write(JSON.stringify({image:request.input.image})); }
 else if (request.operation === 'doctor') { const ok = !process.env.DIM_TEST_DOCTOR_FAIL; process.stdout.write(JSON.stringify([{name:'Docker',ok,detail:ok?'ready':'not available'}])); }
 else {
@@ -231,10 +244,11 @@ else {
   finally { await rm(root, { recursive: true, force: true }); }
 }
 
-async function run(args: string[], fixture: Fixture): Promise<{ status: number | null; stdout: string; stderr: string }> {
+async function run(args: string[], fixture: Fixture, input?: string): Promise<{ status: number | null; stdout: string; stderr: string }> {
   const child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), cli, ...args], {
-    env: fixture.env, stdio: ["ignore", "pipe", "pipe"]
+    env: fixture.env, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"]
   });
+  if (input !== undefined) child.stdin?.end(input);
   let stdout = "", stderr = "";
   child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
   child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
