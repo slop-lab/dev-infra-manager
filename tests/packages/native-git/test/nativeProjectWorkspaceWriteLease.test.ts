@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { isExitError } from "./nativeGitHarness.js";
+import { isExitError } from "../../../support/gitHelpers.js";
 import { publishedReviewNames } from "./nativeBundleReviewFixture.js";
 import {
   activateFinalizeService,

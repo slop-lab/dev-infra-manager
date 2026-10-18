@@ -2,13 +2,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createNativeGitCandidateReadAuthority, type NativeGitReaderLimits } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import {
-  nativeGitFixture,
-  type NativeGitFixture,
-  type NativeGitObjectFormat
-} from "../../native-git/test/nativeGitHarness.js";
+  gitHttpFixture,
+  type GitHttpFixture,
+  type GitObjectFormat
+} from "../../../support/gitHttpFixture.js";
 
 export type CandidateReadFixture = {
-  readonly native: NativeGitFixture;
+  readonly native: GitHttpFixture;
   readonly clone: string;
   readonly temporaryRoot: string;
   readonly destinationParent: string;
@@ -18,12 +18,12 @@ export type CandidateReadFixture = {
   authority(candidate: { readonly commit: string; readonly tree: string }, limits?: Partial<NativeGitReaderLimits>): ReturnType<typeof createNativeGitCandidateReadAuthority>;
 };
 
-export async function candidateReadFixture(objectFormat: NativeGitObjectFormat = "sha1"): Promise<CandidateReadFixture> {
-  const native = await nativeGitFixture(objectFormat);
+export async function candidateReadFixture(objectFormat: GitObjectFormat = "sha1"): Promise<CandidateReadFixture> {
+  const native = await gitHttpFixture(objectFormat);
   const clone = join(native.root, "candidate-writer");
   const temporaryRoot = join(native.root, "candidate-reader-temp");
   const destinationParent = join(native.root, "candidate-destinations");
-  await native.git(native.root, ["clone", native.url("writer-a", "writer-a-secret-1", "project-a", "source"), clone]);
+  await native.git(native.root, ["clone", native.url("project-a", "source"), clone]);
   await native.git(clone, ["config", "user.name", "DIM writer"]);
   await native.git(clone, ["config", "user.email", "writer@example.invalid"]);
   await mkdir(temporaryRoot, { mode: 0o700 });

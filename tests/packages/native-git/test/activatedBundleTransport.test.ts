@@ -19,7 +19,7 @@ import {
 } from "../../../../core/packages/native-git/src/native-bundle-server.js";
 import { beginNativeProjectPreparation } from "../../../../core/packages/native-git/src/native-project-registry-state.js";
 import { idleNativeConfig } from "./bundleConfigFixture.js";
-import { isExitError, refValue } from "./nativeGitHarness.js";
+import { isExitError, refValue } from "../../../support/gitHelpers.js";
 
 const run = promisify(execFile);
 const generationId = "a".repeat(64);

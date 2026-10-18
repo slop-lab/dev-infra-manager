@@ -1,8 +1,8 @@
+import { candidateArgv } from "@slop-lab/dim-plugin-ci-workflows";
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { candidateArgv } from "../../../../core/packages/native-git/src/candidate-execution-schema.js";
 import { assertNativeQemuAuthorityStore, NativeQemuAuthorityState,
   type NativeQemuAuthorityPublicationFaults }
   from "../../../../core/packages/native-git/src/native-qemu-authority-state.js";

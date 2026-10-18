@@ -6,7 +6,7 @@ import {
   CandidateExecutionError,
   loadNativeCandidateJobInputs
 } from "../../../../core/packages/native-git/src/index.js";
-import { git } from "./candidateExecutionHarness.js";
+import { git } from "../../../support/gitCommands.js";
 import {
   nativeCandidateJobInputsFixture,
   nativeRunnerYaml,

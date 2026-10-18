@@ -342,18 +342,6 @@ describe("native Git image configuration preflight CLI", () => {
     expect(await Promise.all([readFile(native), readFile(ordinary)])).toEqual(before);
   });
 
-  it("keeps normal serve configuration strict about non-empty Project state", async () => {
-    // Given
-    const native = await fixtureFile("native.json", idleNativeConfig(), 0o600);
-
-    // When
-    const result = await runProcess(join(packageRoot, "dist/cli.js"), ["serve", native]);
-
-    // Then
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toMatch(/too_small/);
-  });
-
   it("reports exact schema-8 compatibility metadata from the built executable", async () => {
     // Given / When
     const result = await invoke(["compatibility", "--json"]);

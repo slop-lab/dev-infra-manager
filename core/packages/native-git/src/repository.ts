@@ -5,9 +5,6 @@ import { dirname, join, parse, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import type { NativeGitRepository, NativeGitServiceConfig } from "./config.js";
 import { NativeGitConfigError } from "./config.js";
-import { assertReviewStore, initializeReviewStore } from "./review-store.js";
-import { assertStatusStore, initializeStatusStore } from "./status-store.js";
-import { assertJobAttemptStore, initializeJobAttemptStore } from "./job-attempt-store.js";
 
 const execute = promisify(execFile);
 const gitMetadataProcessOptions = { maxBuffer: 4096, timeout: 10_000 } as const;
@@ -102,9 +99,6 @@ export async function initializeNativeRepository(
     await hookFile.close();
   }
   await chmod(repositoryPath, 0o700);
-  await initializeReviewStore(repositoryPath);
-  await initializeStatusStore(repositoryPath);
-  await initializeJobAttemptStore(repositoryPath);
   return repositoryPath;
 }
 
@@ -147,9 +141,6 @@ export async function assertRegisteredRepository(
     ...gitMetadataProcessOptions
   });
   if (shared.stdout.trim() !== "0600") throw new NativeGitConfigError("registered repository Git creation permissions must be private");
-  await assertReviewStore(repositoryPath);
-  await assertStatusStore(repositoryPath);
-  await assertJobAttemptStore(repositoryPath);
 }
 
 async function assertOwnedDirectory(path: string, label: string): Promise<void> {

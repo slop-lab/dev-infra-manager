@@ -1,3 +1,4 @@
+import { candidateArgv } from "@slop-lab/dim-plugin-ci-workflows";
 import { createHash } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -5,7 +6,6 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CandidateExecutionError,
-  candidateArgv,
   candidateOrdinaryExecutionDescriptorSchema,
   descriptorDigest,
   qemuExecutionDescriptorDigest,

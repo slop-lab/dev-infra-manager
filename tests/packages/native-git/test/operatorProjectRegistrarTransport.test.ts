@@ -13,7 +13,7 @@ import {
 } from "../../../../core/packages/native-git/src/native-bundle-server.js";
 import type { NativeGitProjectRegistrar } from "../../../../core/packages/native-git/src/native-project-registrar-http.js";
 import { idleNativeConfig } from "./bundleConfigFixture.js";
-import { isExitError, refValue } from "./nativeGitHarness.js";
+import { isExitError, refValue } from "../../../support/gitHelpers.js";
 
 const run = promisify(execFile);
 const generationId = "a".repeat(64);

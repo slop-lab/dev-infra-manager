@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
-import { candidateArgv } from "./candidate-execution-schema.js";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);

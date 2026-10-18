@@ -6,7 +6,7 @@ import {
   CandidateExecutionError,
   loadNativeCandidateJobInputs
 } from "../../../../core/packages/native-git/src/index.js";
-import { git, gitExecutable } from "./candidateExecutionHarness.js";
+import { git, gitExecutable } from "../../../support/gitCommands.js";
 import {
   nativeCandidateJobInputsFixture,
   type NativeCandidateJobInputsFixture

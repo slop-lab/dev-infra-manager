@@ -13,7 +13,7 @@ import {
   type NativeGitBundleServer
 } from "../../../../core/packages/native-git/src/native-bundle-server.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
-import { refValue } from "./nativeGitHarness.js";
+import { refValue } from "../../../support/gitHelpers.js";
 
 const run = promisify(execFile);
 const generationId = "a".repeat(64);

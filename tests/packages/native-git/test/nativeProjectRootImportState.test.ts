@@ -18,7 +18,7 @@ import {
 } from "../../../../core/packages/native-git/src/native-bundle-activation.js";
 import { executeNativeProjectPreparation } from "../../../../core/packages/native-git/src/native-project-registration.js";
 import { rootBundlePath } from "../../../../core/packages/native-git/src/native-root-import-storage.js";
-import { refValue } from "./nativeGitHarness.js";
+import { refValue } from "../../../support/gitHelpers.js";
 
 const roots: string[] = [];
 const generationId = "a".repeat(64);

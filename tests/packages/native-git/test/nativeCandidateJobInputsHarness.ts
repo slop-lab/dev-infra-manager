@@ -6,7 +6,7 @@ import {
   type NativeCandidateRequiredJob,
   type NativeGitServiceConfig
 } from "../../../../core/packages/native-git/src/index.js";
-import { git, gitExecutable } from "./candidateExecutionHarness.js";
+import { git, gitExecutable } from "../../../support/gitCommands.js";
 
 export const nativeRequiredJobs = [
   { name: "source", kind: "ordinary-sysbox" },

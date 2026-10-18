@@ -1,666 +1,90 @@
 # `@slop-lab/dim-native-git`
 
-DIM-owned Git smart-HTTP transport, complete-tree review evidence, exact CI
-status evidence, and protected promotion for registered Project repositories.
-This package supports clone, fetch, workspace proposal pushes, host-side
-inspection and human approval of immutable proposal tuples, authenticated
-per-job terminal CI results, and a host promotion API. It is not an issue
-tracker, workflow runner, or GitHub Actions-compatible API.
+The optional DIM Git authority owns imported Project roots, proposal transport,
+immutable review evidence, human approvals and protected-ref promotion. Ordinary
+local and remote Git workspaces do not require this package.
 
-## Security boundary
+Service composition belongs to `@slop-lab/dim-managed`. Its native Git service
+entrypoint supplies the workflow compiler and serves the generation-bound
+installed bundle. The native Git package provides the authority library and
+operator review client.
 
-The service authenticates HTTP Basic identities from a trusted startup
-configuration. Every identity is bound to one Project and an explicit set of
-repository IDs. A reader may advertise and fetch those repositories. A writer
-may additionally create or fast-forward only refs below:
+## Authority boundaries
 
-```text
-refs/heads/proposals/<workspace-id>/
+A Project has one owned `root` repository and a protected head. Host bootstrap
+imports the reviewed root through a bounded upload/finalization protocol.
+Workspace writers receive short-lived credentials scoped to the Project,
+workspace and proposal-ref namespace. CI readers receive credentials bound to
+one exact execution attempt and candidate tuple. Neither obtains protected-ref
+write authority or host controller credentials.
+
+A proposal push records an immutable complete-tree review and job plan before
+reporting success. Restart reconciliation finishes publication after an
+interrupted push. Review evidence includes the expected protected head,
+candidate commit/tree, policy revisions, changed paths and patch bytes.
+
+Human approval and revocation apply to the exact current review. Promotion
+rechecks the policy, expected head, approvals and required CI evidence, then
+updates the protected ref with compare-and-swap. Source or policy drift makes
+previous evidence stale. The Git authority owns these decisions; CI workers
+only report execution evidence.
+
+## Workflow compilation
+
+`configuredNativeGitBundleServer` requires a `WorkflowCompiler`. The compiler
+chooses a repository-relative configuration path and produces jobs with names,
+execution kinds, script paths and argument vectors. The authority validates
+those paths and vectors, reads bounded regular blobs from the exact candidate
+and records their object IDs and SHA-256 hashes. Returned job order is
+canonicalized independently of the source language.
+
+The managed service supplies `@slop-lab/dim-plugin-ci-workflows`:
+
+```yaml
+jobs:
+  source:
+    script: scripts/check.sh
+  integration:
+    script: scripts/integration.sh
+    runtime: qemu
 ```
 
-The server-side `pre-receive` policy denies all other refs, proposal deletion,
-and non-fast-forward proposal updates. Reviewer and administrator identities
-cannot use Git transport. Reviewers may approve only a complete immutable
-base-to-candidate review for which policy designates them; administrators may
-inspect and revoke but cannot approve. Approval is durable evidence only.
-The configured `ordinaryCi.attemptIssuer` credential derives candidate
-ordinary-execution descriptors and issues and revokes current job attempts,
-but cannot use Git transport or report results. The configured
-`ordinaryCi.resultReporter` credential can report only an exact current issued
-attempt, and only a dedicated promoter identity can request the checked
-promotion transaction. Neither ordinary-CI credential is a native Git identity.
-Administrator credentials cannot approve or promote. No Git transport identity
-can update a protected ref.
+The plugin owns syntax and supplies the Bash command. The authority library has
+no YAML parser or dependency on that plugin. Other compositions can inject a
+different language or configuration location. Trusted host policy owns images,
+resources and credentials. Workers verify configuration/script identities
+without interpreting the workflow language again.
 
-Each review binds the Project and repository, protected and proposal refs,
-expected protected head, candidate commit and tree, policy, review, and job-set
-revisions, proposal writer, required human reviewers, complete changed-path
-metadata, and binary-preserving patch evidence. Changed paths include old and
-new modes and object IDs, rename/copy identity, and symbolic-link targets.
-Path-prefix rules may add required reviewers based on either side of a rename,
-but every approval still covers the entire review object. A moved protected or
-proposal ref, changed candidate tree, changed policy, or changed bound identity
-makes existing approval stale.
-Installed native reviews use strict review schema 2, envelope schema 2, and
-event schema 3. The immutable human review identity binds only the security,
-complete-tree, and reviewer tuple. A separate envelope identity binds that
-review, the current quality revision, the complete candidate config/script
-identities and planning status. A quality-only revision therefore preserves
-human approval identity while creating new events; evidence from the prior
-envelope is not applicable to promotion.
+All valid candidate jobs can be scheduled. Project quality policy independently
+selects which jobs and execution kinds are required for promotion.
 
-Unknown routes, foreign Projects, foreign repositories, malformed paths, and
-unregistered repositories are not passed to Git. Both receive-pack discovery
-and receive-pack RPC require an authorized writer. The configured absolute Git
-executable must be a trusted regular file, report the exact configured
-`gitVersion`, and retain the same filesystem identity for the service lifetime.
-Registered repository and hook paths reject symbolic links, and each backend
-invocation overrides repository-controlled hook and receive policy settings.
-Backend process concurrency, request size, and execution time are bounded.
+## Human review
 
-Service-owned bare repositories are created with `core.sharedRepository=0600`,
-independent of the operator's umask. Git-created files and directories remain
-owner-only, including future object and protected-ref writes. Startup rejects a
-missing or changed creation setting; it does not repair unsafe object/ref
-metadata or adopt predecessor repositories.
-
-Terminate TLS in a reviewed reverse proxy or expose the service only on a
-private isolated network. Basic credentials must not cross an untrusted
-plaintext network.
-
-## Configuration
-
-The executable accepts exactly one absolute JSON configuration path:
+Use a private generation-bound reviewer connection generated by the managed
+control-plane setup, or the optional browser review application:
 
 ```bash
-dim-native-git serve /etc/dim/native-git.json
+dim-native-git operator review resolve /private/reviewer.json project-a PROPOSAL_REF
+dim-native-git operator review inspect /private/reviewer.json project-a REVIEW_ID
+dim-native-git operator review approve /private/reviewer.json project-a REVIEW_ID
+dim-native-git operator review revoke /private/reviewer.json project-a REVIEW_ID APPROVAL_ID
 ```
 
-The configuration must be a caller-owned, non-symlink, mode-`0600` regular
-file because it contains transport credentials.
-
-Example schema-2 configuration:
-
-```json
-{
-  "schemaVersion": 2,
-  "serviceId": "native-main",
-  "host": "127.0.0.1",
-  "port": 9080,
-  "storageRoot": "/var/lib/dim/native-git",
-  "gitExecutable": "/usr/bin/git",
-  "gitVersion": "2.43.0",
-  "ordinaryCi": {
-    "endpoint": "http://ordinary-ci:8080",
-    "serviceId": "ordinary-main",
-    "query": {
-      "username": "native-main",
-      "password": "replace-with-query-only-dependency-credential"
-    },
-    "identity": {
-      "username": "ordinary-identity",
-      "password": "replace-with-identity-credential"
-    },
-    "attemptIssuer": {
-      "username": "ordinary-attempts",
-      "password": "replace-with-attempt-issuer-credential"
-    },
-    "resultReporter": {
-      "username": "ordinary-results",
-      "password": "replace-with-result-reporter-credential"
-    },
-    "webhook": {
-      "endpoint": "http://ordinary-ci:8080/v1/native-events",
-      "username": "native-events",
-      "password": "replace-with-webhook-only-credential"
-    }
-  },
-  "repositories": [{
-    "projectId": "project-a",
-    "repositoryId": "root",
-    "reviewPolicies": [{
-      "protectedRef": "refs/heads/main",
-      "policyRevision": "policy-1",
-      "requiredReviewRevision": "reviews-1",
-      "requiredJobSetRevision": "jobs-1",
-      "requiredJobNames": ["source", "security"],
-      "requiredReviewerIds": ["owner"],
-      "pathReviewerRules": [{
-        "pathPrefix": ".dim/",
-        "reviewerIds": ["lifecycle-owner"]
-      }]
-    }]
-  }],
-  "identities": [
-    {
-      "role": "writer",
-      "username": "workspace-a",
-      "password": "replace-with-random-secret",
-      "projectId": "project-a",
-      "repositoryIds": ["root"],
-      "workspaceId": "workspace-a"
-    },
-    {
-      "role": "reviewer",
-      "username": "owner-reviewer",
-      "password": "replace-with-random-secret",
-      "projectId": "project-a",
-      "repositoryIds": ["root"],
-      "reviewerId": "owner"
-    },
-    {
-      "role": "reviewer",
-      "username": "lifecycle-reviewer",
-      "password": "replace-with-random-secret",
-      "projectId": "project-a",
-      "repositoryIds": ["root"],
-      "reviewerId": "lifecycle-owner"
-    },
-    {
-      "role": "promoter",
-      "username": "host-promoter",
-      "password": "replace-with-random-secret",
-      "projectId": "project-a",
-      "repositoryIds": ["root"]
-    },
-    {
-      "role": "administrator",
-      "username": "review-admin",
-      "password": "replace-with-random-secret",
-      "projectId": "project-a",
-      "repositoryIds": ["root"]
-    }
-  ]
-}
-```
-
-`ordinaryCi.endpoint` and `ordinaryCi.webhook.endpoint` are exactly the private
-Compose origin and native-event path shown above. All five ordinary-service
-usernames and passwords must be pairwise distinct and must not equal any native
-Git identity username or password. The standalone service uses `query` only for
-the exact admission and current-attempt verification requests below. Installed
-native Git readiness does not query ordinary eligibility; the paired ordinary
-service reconciles eligibility internally from each authenticated native review
-event.
-
-Native Git identities are limited to reader, writer, reviewer, promoter, and
-administrator roles. Schema-2 configuration rejects the obsolete generic
-`scheduler` and `ci` identity variants; ordinary protected-promotion evidence
-must use `ordinaryCi.attemptIssuer` and `ordinaryCi.resultReporter`.
-
-The webhook credential is outbound-only and is sent only in the Authorization
-header. After repository validation, one service-owned dispatcher submits the
-oldest undelivered canonical review-job event to the fixed webhook. Review
-creation does not wait for ordinary CI: outage, timeout, rejection, malformed
-JSON, a wrong event ID, a cacheable response, or a redirect leaves the event
-pending and retries the identical bytes with bounded exponential backoff up to
-30 seconds. Only exact `202 application/json`, `Cache-Control: no-store`, and
-`{schemaVersion:1,eventId,accepted:true}` acknowledgement creates a durable
-mode-`0600` `dim-reviews/delivered/<event-id>.json` marker containing the exact
-event digest. Startup validates every marker against its immutable envelope;
-enumeration excludes only valid markers. Shutdown aborts in-flight delivery and
-clears retry waits before releasing storage ownership.
-
-Each repository admits at most 10,000 pending events and reserves at most
-100,000 permanent delivery markers. Reviews reserve marker capacity for their
-complete required-job event set before publication. Pending events and delivery
-markers are never age-pruned; at capacity, exact existing review replay remains
-idempotent while a new review fails with `429`.
-
-Verification uses exact `POST /v1/admission-verifications` and
-`POST /v1/current-attempt-verifications` requests. Each request carries a fresh
-UUID nonce and the complete descriptor admission or current-attempt tuple. A
-successful `200 application/json` response must set `Cache-Control: no-store`,
-identify the pinned service, authorize the request, and echo the nonce and
-entire tuple exactly. Responses are limited to 64 KiB. Redirects, malformed or
-extra JSON fields, replayed nonces, non-200 statuses, tuple differences,
-timeouts, and transport errors reject. The client performs no retry.
-
-The `ordinaryCi.identity` credential is accepted only by the native Git
-ordinary-authority proof API. It is not a native Git identity and cannot use
-Git transport, reviews, descriptor derivation, attempt issuance or revocation,
-status reporting, promotion, or administration. The service exposes exactly:
-
-- `GET /v1/ordinary-authority/identity`, attesting schema 1, service ID
-  `native-main`, role `ordinary-authority-reader`, and ordered scope
-  `policy:read`, `review-event:read`, `attempt:read`.
-- `POST /v1/projects/<project>/repositories/<repository>/ordinary-authority/policy`,
-  accepting only a fresh request UUID and exact protected ref. It returns the
-  registered Project/repository/ref, current policy revisions, and sorted
-  required job names. It does not accept or return host/capacity eligibility.
-- `POST /v1/projects/<project>/repositories/<repository>/ordinary-authority/review-event`,
-  accepting only a fresh request UUID plus exact event, review, and job IDs. It
-  derives every repository, ref, candidate, and policy field from the immutable
-  stored envelope, rechecks the live review under the protected-ref serializer,
-  and returns the echoed nonce with the exact canonical non-executable event.
-  Missing or selector-mismatched events return `404`; policy or live-ref
-  staleness returns `409`.
-- `POST /v1/projects/<project>/repositories/<repository>/ordinary-authority/current-attempt`,
-  accepting only a fresh request UUID plus exact review, job, and attempt IDs.
-  It returns the complete canonical current unrevoked assignment projected from
-  the immutable schema-2 attempt record.
-
-All three proof requests require exact JSON, reject query parameters, and cap
-both request and successful response bodies at 64 KiB. They return
-`Cache-Control: no-store`. Missing, foreign, unissued,
-revoked, replaced, stale-review, or current-policy-drifted tuples return no
-proof. The review-event request cannot supply an image, script, command,
-descriptor, ref, candidate object, policy revision, or administrator selector.
-Responses contain no credentials, reviewer rules, patches, or candidate blob
-bytes.
-
-Trusted host setup calls `initializeNativeRepository` before starting the
-service. Registration derives storage only from validated Project and
-repository IDs, creates a bare repository below `storageRoot`, pins receive
-policy, and installs the proposal-only hook. Initial import is a separate
-trusted host operation and is not exposed over HTTP.
-
-## Review administration
-
-The review CLI calls the authenticated review API. Supply credentials through
-the environment so passwords do not appear in command arguments or output:
+Promotion uses the separately scoped host-promoter connection:
 
 ```bash
-export DIM_NATIVE_GIT_USERNAME=owner-reviewer
-export DIM_NATIVE_GIT_PASSWORD='replace-with-random-secret'
-
-dim-native-git review http://127.0.0.1:9080 inspect \
-  project-a root refs/heads/main \
-  refs/heads/proposals/workspace-a/change-1
-dim-native-git review http://127.0.0.1:9080 show \
-  project-a root REVIEW_ID
-dim-native-git review http://127.0.0.1:9080 approve \
-  project-a root REVIEW_ID
-dim-native-git review http://127.0.0.1:9080 revoke \
-  project-a root REVIEW_ID APPROVAL_ID
+dim-native-git operator review promote /private/promoter.json project-a REVIEW_ID
 ```
 
-`inspect` and `show` return the exact SHAs, refs, changed paths, modes,
-symbolic-link targets, patch, required reviewers, and current status as JSON.
-Review objects and approval/revocation events are immutable mode-`0600` records
-inside the owned bare repository and are validated when the service restarts.
+The client reads a caller-owned mode-0600 connection file and sends its exact
+generation with each operation. The service rejects stale generations and
+credentials outside their role or Project scope.
 
-## CI evidence and promotion
+## Development
 
-For the standalone schema-2 service, the dedicated `ordinaryCi.attemptIssuer`
-credential first issues the current attempt through
-`POST .../reviews/<review-id>/job-attempts`; it may revoke that attempt through
-`POST .../job-attempt-revocations`. Only `ordinaryCi.resultReporter` submits
-CI reports, using its native `dim.ci.job.completed` schema-2 event envelope.
-The installed bundle's schema-3 authority is described under Current integration
-status. Standalone issuance requires a UUID
-`issuanceRequestId`, the expected canonical descriptor digest and all operator
-descriptor inputs, plus the assigned `hostId` and `capacity`. Native Git derives
-the full descriptor again under the protected-ref serializer, verifies current
-ordinary admission, and durably stores the full descriptor and assignment.
-Exact current replay returns the same attempt; changed or superseded request-ID
-reuse conflicts. The payload repeats the full descriptor, digest, assignment,
-server-issued attempt identity, start and finish times, terminal completion,
-result, and bounded stdout/stderr byte counts and digests. This is a DIM event
-contract, not an emulation of GitHub Actions or another provider API. Records
-are immutable, restart-checked, and conflict when the same job attempt is
-reported with different evidence.
-
-Only the current, unrevoked issued attempt can be reported or satisfy an
-ordinary quality condition. Issuance and reporting, plus promotion when the
-Project quality policy selects ordinary jobs, require an injected ordinary-admission
-verifier to confirm the exact current generation, descriptor digest, host, and
-capacity. The executable uses a rejecting verifier by default; protected CI
-mutation therefore fails closed until the authenticated ordinary-service client
-is configured. The native attempt binds evidence class `candidate-controlled`
-and the exact candidate config/script blobs,
-normalized fixed argv, operator job-base and runner-base digests, effective
-bounds, host, and capacity. A successful result records that the selected
-candidate-controlled tests executed within the recorded sandbox and exited
-zero. Protected policy may require that evidence, but it is not independent
-verification, does not establish that the tests are correct or complete, and
-does not replace product/QA review or complete-tree human approval. This
-package exports `loadCandidateOrdinaryExecution` as the narrow candidate-tree
-reader for that future adapter. It accepts a registered native Git configuration
-and the exact review/admission tuple, reads only `.dim/ci/runner.yml` and its
-selected script from the named candidate tree, and returns the normalized
-descriptor and digest. It does not schedule or launch work.
-
-Workflow interpretation belongs to the optional `@slop-lab/dim-plugin-ci-workflows`
-package. Its default `.dim/ci/runner.yml` format declares jobs with a repository
-script path and optional `runtime: qemu`; Sysbox is the default. The plugin
-supplies the normalized Bash execution command. Projects cannot select trusted
-images, resources, mounts or credentials through workflow configuration.
-
-The `loadNativeCandidateJobInputs(config, selector, compiler)` library API and
-installed bundle require an injected `WorkflowCompiler`. The compiler chooses
-its configuration path and converts bytes into language-neutral job definitions.
-Git validates safe candidate-relative paths and argument vectors, pins the
-protected head, commit and tree, reads bounded regular configuration/script
-blobs, and rechecks the protected head. The returned identities include the
-configuration path, object IDs and SHA-256 digests. Workers verify those
-identities without interpreting the source language again. The managed native
-Git service composes the authority with the default compiler; callers can
-supply another language without adding a dependency from Git to its plugin.
-
-Candidate job names and kinds come only from the strict candidate plan. The distinct internal
-`loadAuthoritativeNativeCandidateJobInputs` entrypoint instead accepts the
-trusted activated bundle runtime plus only a Project and candidate commit/tree.
-It derives the owner host from registered state and the protected ref, expected
-head from the exact live durable `authoritative-v1` imported-root state, then
-derives the complete kind-labelled job set from the candidate. It performs full owner, bundle, ref,
-commit, tree, and reachable-graph verification before and after bounded Git
-reads, including exact current serving-generation activation. A completed
-`legacy-import-only` row remains available to import proof and protected-root
-read paths but cannot authorize this reader. The entrypoint returns the same
-identity-only plan and has no HTTP route, admission, scheduling, execution,
-review, result, or state-mutation authority.
-
-Before issuing an attempt, the attempt issuer obtains that descriptor through exact
-`POST /v1/projects/<project>/repositories/<repository>/reviews/<review-id>/ordinary-execution-descriptors`.
-The request has no query parameters, is bounded to 64 KiB, requires exact
-`application/json`, and accepts only:
-
-```json
-{
-  "jobName": "source",
-  "admissionGeneration": "generation-7",
-  "jobBaseImage": "registry.example/job@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-  "runnerBaseImage": "registry.example/runner@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "bounds": {
-    "cpu": "2",
-    "memoryBytes": "2147483648",
-    "pids": "512",
-    "wallClockSeconds": "900",
-    "outputBytes": "10485760"
-  }
-}
-```
-
-Unknown fields and noncanonical values are rejected. The service derives the
-Project, repository, protected ref, expected head, candidate commit and tree,
-and policy revisions from the named immutable review. It returns only
-`{reviewId, descriptor, digest}` and creates no attempt, result, or other state.
-Pending, approved, and revoked current reviews may produce descriptors so CI
-can inform review; stale reviews and invalid candidate execution trees return
-conflict. The service checks review status both before and after its bounded
-local Git object reads, closing proposal fast-forward races that bypass the
-in-process ref serializer. Exact replay with unchanged review and operator
-inputs returns the same descriptor and digest.
-
-The reader represents config and script SHA-256 fields as
-`sha256:<64 lowercase hexadecimal digits>`. Its CPU, memory-byte, PID,
-wall-clock-second, and output-byte bounds are positive canonical decimal
-strings. The descriptor hash starts with the unframed ASCII domain
-`dim-native-ordinary-execution-v1`; each of the 28 following fields is encoded
-as its ASCII decimal UTF-8 byte length, one colon, and its UTF-8 bytes. These
-choices are part of the exported library contract so scheduler and host
-reverification cannot choose different normalized encodings.
-Standalone attempt, revocation, status-envelope, and status-record state accepts
-only schema version 2. Existing version-1 CI evidence is rejected at startup
-without rewriting it; reviews and human approvals remain immutable and
-unaffected.
-The service holds an exclusive rollback-journal SQLite transaction in
-`.dim-native-git-owner.sqlite3` below the canonical storage root. The database
-is bound to that root's filesystem identity, and a second process sharing the
-volume fails before repository validation or TCP listen even when it runs in a
-different network namespace. The kernel releases the transaction after a
-crash, so a replacement process can recover without PID liveness checks or
-stale-owner cleanup. Startup rejects symbolic-link or malformed owner state and
-storage on filesystems outside the supported local Linux filesystem allowlist.
-
-`POST .../reviews/<review-id>/promotions` is accepted only for the dedicated
-promoter identity. Under the per-repository/ref serializer it rereads policy,
-refs, approvals, and the current issued attempt for every required job;
-requires current verifier admission, exact exited-zero terminal evidence and
-descriptor/assignment identity, and descendant ancestry; then uses
-one Git ref transaction to verify the proposal candidate and update exactly the
-expected protected object ID to the reviewed candidate. Mismatch leaves the
-protected ref unchanged. Repeating the request returns `already-current` only
-when that exact reviewed candidate is current and the remaining tuple evidence
-is still valid.
-
-## Current integration status
-
-`@slop-lab/dim-core` selects this package for explicitly configured native
-Project readiness, protected-root reads, and workspace proposal transport.
-Provider-backed lifecycle is not part of the current product and has no
-fallback through this package. The installed native Git image uses strict format-8 state and a strict
-schema-7 operator config with distinct host-bound Project registrars, root
-importers, root read issuers, workspace write issuers, and global human
-reviewer credentials. Each human reviewer has a unique reviewer ID and
-canonical 32-byte credential; there is no static Project grant in config.
-Empty role lists retain the idle service only
-for empty Project state. With a registrar configured, the activated service
-prepares one owned, inaccessible root per Project after exact generation
-activation. A different authenticated importer can then submit one bounded,
-self-contained Git bundle and a strict schema-1 imported-root policy. That
-policy stores sorted `{name, kind, evidenceClass: "candidate-controlled"}` jobs,
-uses v2 policy/job revision domains, retains the v1 reviewer revision domain,
-and is hashed and retained in the format-8 import row's `policy_json`. Fresh flat-name policies
-are rejected before state mutation. Completed flat-policy rows from the earlier
-unreleased implementation remain live-proof/read-only data; incomplete rows
-cannot resume or roll generations. The read issuer can
-request a live-proof-bound root-read lease only for an imported Project owned
-by its configured host. Exact
-`POST /v1/projects/<project>/root-read-leases` accepts only schema version 1 and
-the active generation. It returns a service-selected 30-second random Basic
-credential scoped to that Project's fixed `root` repository. The issuer
-credential is not itself accepted by Git. Lease digests and scope exist only in
-memory, so expiry and service restart invalidate the credential without durable
-cleanup. The service retains at most 16 unexpired leases, prunes expired entries
-before issuance and authentication, and bounds lease issuance plus transport to
-16 concurrent operations. A separate owner-host workspace write issuer can
-request an equally short-lived lease for `root` and one canonical 43-character
-base64url workspace ID only after live authoritative imported-policy proof.
-That credential can fetch and can create or fast-forward only its own
-`refs/heads/proposals/<workspace-id>/...` refs. The service rechecks the Git
-executable identity and exact installed hook before every backend; protected
-refs, tags, foreign workspace namespaces, deletion, and non-fast-forward writes
-remain denied. Read and write use the same 16-operation gate and both lease
-registries are memory-only. The service durably binds the import digest and the
-expected commit, verifies the complete object graph with image-pinned Git
-`2.39.5`, and uses a separate exact finalize request to install only objects
-before an unborn-ref compare-and-swap creates the initial protected head.
-File and directory syncs precede the durable import completion record; restart
-rechecks and resumes only the bound import. Foreign storage, changed intent,
-or a preexisting protected ref is not adopted. Obsolete format-5 and format-6
-draft state is rejected unchanged.
-
-The host-side core package exports a distinct mode-`0600` root importer
-connection and a bounded streaming client.
-`GET /v1/operator-root-importer-identity` attests the importer role, owner host,
-service, and exact generation without mutating the database, including before
-activation. The client verifies that identity immediately before both upload
-and finalize, then binds the service receipts to the source commit, protected
-ref, bundle digest and size. This does not make the Project runnable.
-
-The importer-only `GET /v1/projects/<project>/root-import/proof` returns a
-strict schema-3 envelope containing the current serving generation, the original
-import receipt, and a separate verified current head only
-while the durable activation token, Project owner
-marker, private bare repository path, retained bundle, sole protected ref,
-original commit and tree, and full reachable graph still agree. Sequence zero
-exactly identifies the import. Later sequences fold only authorization-verified,
-contiguous finalized promotion transitions whose import, parent, policy, review,
-and selected ordinary/QEMU evidence tuple remains canonical. Unresolved intents
-with verified authorization are reconciled against the protected ref before any
-current-head proof is served; unattested ledger rows and unrecorded ref drift
-yield no proof. A completed legacy-policy import remains
-sequence-zero read-only data and cannot authorize promotion. The endpoint neither installs
-objects nor writes refs or service state. A host compares this read-only proof
-with its durable non-runnable draft's byte-identical nested receipt before
-persisting a final receipt or returning an already-imported draft. The host
-strictly parses the separate current head but never rewrites the original draft.
-Missing or stale proof never grants Git
-transport, review, CI, or Project readiness. The same full live check runs
-again before every lease-backed upload-pack discovery and RPC. A moved or
-foreign ref, changed durable bundle, missing owner marker, incomplete object
-graph, wrong Project or repository, expired lease, generation mismatch, or
-restart denies access. Receive-pack is always denied for these leases and
-disabled in the backend for non-writers. Transport re-authenticates after live
-verification before spawning Git. Shutdown first stops lease/read admission and
-invalidates leases, then drains admitted verification and backend work before
-releasing storage ownership.
-
-Root import does not publish a runnable DIM Project or issue a durable Git
-reader, workspace writer, reviewer, or promoter credential. The installed
-bundle exposes the short-lived, owner-host-issued protected-root upload-pack
-lease above plus a distinct 30-second workspace-write lease after live
-authoritative imported-policy proof. That write lease permits only creation or
-fast-forward of its exact workspace proposal namespace through the checked
-pre-receive hook; it has no protected-ref, tag, deletion, force-rewrite, reviewer,
-CI, promotion, or Project-ready authority. Core uses the lease only through the
-host broker for an already-ready schema-6 Project and its schema-9 workspace;
-the lease does not itself grant readiness, QEMU CI, or ordinary CI authority.
-The host-only draft reader consumes the root-read lease after matching the original
-receipt and current serving proof, but its presence does not make a Project
-ready or selectable. Each successful proposal create or fast-forward derives
-the live authoritative policy, protected head, candidate commit/tree, and
-workspace namespace, then stores one immutable complete-tree envelope with a
-sorted kind-aware `candidate-controlled` event set before ending the receive
-response. Client disconnect does not cancel this service-owned publication.
-Startup and activation scan every bounded registered proposal namespace and
-reconcile a ref committed before envelope publication without another push.
-Review state is strictly checked on restart. Schema 7 additionally exposes exact
-`GET /v1/human-reviewer-identity` and
-`GET /v1/projects/<project>/repositories/root/reviews/<review-id>`, plus a
-reviewer-only exact `POST` to that review's `/approvals` or `/revocations`
-suffix. Reviewer-only `POST .../reviews/resolve` reads the exact current
-proposal envelope and creates no review or CI work. The GET
-requires the identity-attested serving generation in `x-dim-generation-id` and
-returns the immutable envelope, approvals, and `pending`, `approved`, or
-`stale` status after fresh
-import, policy, protected-head, proposal-commit, and proposal-tree checks. Scope
-is derived from the stored review's required reviewer IDs; unknown Projects and
-review IDs are concealed, other known roles and unrequired reviewers are
-denied, and proof outage is unavailable. Proposal, head, or policy drift leaves
-the historical review readable as stale. The POST accepts only a UUID
-`requestId`, derives every other field, requires the review to be current, and
-reconstructs the complete review identity from current policy and pinned Git
-evidence, including path-added reviewers, and publishes one domain-digested
-mode-`0600` single-link immutable approval without replacement.
-Exact retry converges across restart; a conflicting active request is refused.
-The response includes freshly rechecked status and stale reasons after publication;
-an old-tuple approval does not assert current approval after ref drift.
-Revocation accepts only one 64-hex approval ID, derives the reviewer from the
-credential, and allows only that reviewer to revoke their exact historical
-approval even when the proposal is stale. It publishes a separately
-domain-digested immutable record binding review, reviewer, and approval. Exact
-replay converges; reapproval requires a new request UUID, and a delayed
-revocation of approval A cannot affect later approval B. Startup validates
-approval and revocation bytes, paths, ownership, mode, link count, cross-links,
-and active uniqueness against the immutable review. `stale` dominates the
-otherwise `pending`, `approved`, or `revoked` decision status. No endpoint lists
-reviews or returns credentials, and administrator, reviewer, and CI identities
-cannot promote. The distinct host promoter may call exact
-`POST /v1/projects/<project>/repositories/root/reviews/<review-id>/promotions`.
-The serialized operation rereads the immutable review, current active approvals,
-policy and refs; verifies every selected ordinary and QEMU terminal result;
-records a durable authorization-verified intent; and performs one protected-ref
-compare-and-swap before finalizing the transition. Startup reconciles crashes
-before or after that compare-and-swap exactly once. Protected-write authority
-exists only inside this checked host operation; smart HTTP remains proposal-only
-and has no administrator bypass. The packaged `dim-native-git operator review`
-commands resolve, inspect, approve, revoke, and promote through caller-owned,
-single-link mode-`0600` connection files so credentials never appear in argv or
-output. The obsolete host-promoter review collection POST and operator `create`
-command are rejected rather than aliased. Core readiness and workspace lifecycle wiring plus the host-side
-workspace-write lease client are active; reviewer UI remains separate work.
-Independent CI, when a Project requires it, must use a separately selected
-command definition and evidence class; native ordinary candidate self-tests do
-not acquire that label by running on another host.
-
-The internal authoritative candidate reader, review creator, and bounded human
-decision boundary do not make
-imported Projects runnable and provide no ordinary or QEMU scheduler, proposal
-writer, result, promotion, or Project-ready authority.
-
-The installed bundle now also exposes trusted in-process, read-only
-`deriveOrdinaryExecutionDescriptor` and `deriveQemuExecutionDescriptor` methods
-as adapter prerequisites. Their strict inputs name only a Project, immutable
-review, required job, and an explicitly operator-trusted capacity containing
-the admission generation, digest-pinned job/runner images, and bounds. Each
-reconstructs current review identity before and after the bounded compiler-produced
-candidate reads and requires matching policy/review and candidate-plan kinds.
-The QEMU result is a separate strict schema-1 descriptor with
-`executionKind: "qemu"` and the `dim-native-qemu-execution-v1` digest domain;
-ordinary evidence cannot satisfy it. These methods have no HTTP route or
-credential and perform no admission, scheduling, attempt, result, execution,
-VM launch, promotion, ref, review, or Project-readiness mutation.
-
-When the optional strict `qemuCi` dependency is present in installed native-Git
-configuration, the bundle exposes a separate `native-qemu-proof` policy/event
-namespace, QEMU descriptor and attempt issuance/revocation routes, and
-`qemu-statuses`. Its scheduler `query` and `eventIntake` credentials and native
-Git `identity`, `attemptIssuer`, and `resultReporter`
-credentials are distinct from every ordinary and Git identity. QEMU attempts
-and statuses are stored under `dim-authoritative-qemu` in the owned repository,
-retain `executionKind: "qemu"`, verify the
-`dim-native-qemu-execution-v1` descriptor digest, and cannot satisfy ordinary
-evidence. Attempt issuance returns the bounded exact script bytes with the
-descriptor only to the authenticated scheduler issuer; no credential or
-candidate-selected image, argv, host, or bounds is returned.
-
-QEMU review events use a separate service-owned outbox under
-`dim-authoritative-reviews/qemu-delivered`. Native Git submits exact
-stored `qemu` events with `qemuCi.eventIntake`. Lost responses retry identical
-bytes; the scheduler's event primary key prevents duplicate execution. The
-ordinary event endpoint, proof protocol, and delivered-marker namespace are
-not used by this path.
-
-The schema-7 installed bundle also exposes a separate read-only
-`native-root-ci-proof` HTTP namespace only to `ordinaryCi.identity`. Its
-identity route attests role `native-root-ci-proof-reader`, the ordered imported
-policy and ordinary-event scopes, and the serving generation even before
-activation. Its Project/root policy route returns the complete canonical
-`authoritative-v1` policy, kind-labelled jobs, reviewer rules, import nonce, and
-current root. The review-event route proves only an exact current stored
-`ordinary-sysbox` schema-3 event. These proofs mutate no state, don't imply
-approval, and have no fallback to the standalone `ordinary-authority` API.
-
-The paired installed ordinary service stores admission, review-event demand,
-claim lifecycle, cleaned host result, and result-delivery state in strict format
-12. Earlier formats aren't adopted or migrated. Event intake automatically
-reconciles complete kind-labelled policy and import identity to the installer
-generation and global capacity digest.
-
-The installed event dispatcher uses only its outbound webhook credential. It submits ordinary
-events to `/v1/native-root-ci-events`, retries identical bytes after uncertain
-delivery, and writes a private digest-bound marker only after the exact durable
-receipt. QEMU events never enter this lane.
-The separate ordinary and QEMU dispatchers both retry temporary saturation of
-the shared operation gate with bounded exponential backoff. They do not bypass
-capacity limits or permanently lose health because of backpressure; integrity
-failures still fail closed.
-
-For ordinary work, the paired services keep proof, attempt issuance, result
-reporting, query, webhook, and host credentials distinct. The attempt issuer
-uses exact review-scoped descriptor, issuance, and revocation routes. Native Git
-stores strict schema-3 `ordinary-sysbox` attempts in format-8 state and proves
-only the current unrevoked attempt. The host claim is activated only after that
-proof and remains bound to its generation, service epoch, host, capacity,
-descriptor, and attempt.
-
-The host submits a strict schema-2 result request to `/v1/host-results` only
-after cleanup. Its `resourceId` must equal `claimId`, and its terminal event is
-strict schema 3 with `executionKind: "ordinary-sysbox"`. Ordinary CI commits the
-immutable result and durable report outbox atomically before returning `202`.
-The result reporter retries the same stored event through the native Git
-review-scoped `/statuses` route. Native Git accepts it only from the separate
-reporter credential, rechecks the current unrevoked attempt and current ordinary
-proof, stores one immutable schema-3 status, and returns an exact acknowledgement.
-Capacity is released only after activation-bound acknowledgement, or after a
-terminal denial when cleanup is already proved.
-
-The installed bundle object exposes read-only
-`currentOrdinaryTerminalEvidence`. It rechecks the current imported root and
-review around the proof call, requires the local current unrevoked attempt and
-immutable status, and accepts only a delivered ordinary proof whose
-acknowledgement bytes match that status. The returned evidence remains labelled
-`ordinary-sysbox` and `candidate-controlled`; a QEMU result cannot satisfy it.
-
-The core host worker can journal claim, result, and recovery operations across
-restart, read exact candidate inputs through a scoped Git credential, execute
-one bounded Sysbox job, and verify container plus private-root cleanup. It isn't
-started by the installed CLI or controller. The native Project adapter supports
-readiness and Sysbox workspaces. The separately deployed native QEMU scheduler,
-operator admission/status commands, and trusted host worker are installed;
-protected promotion requires exact-tree human approval and every ordinary and
-QEMU evidence kind selected by protected policy. Clean-host KVM acceptance
-remains a separate release gate.
+Production source belongs to this package; tests and fixtures live in `tests/`.
+Run `pnpm run check` or `pnpm run build` here. Installed-service tests exercise
+real Git repositories, publication recovery, short-lived credential boundaries,
+review decisions, terminal evidence and compare-and-swap promotion. Low-level
+Git materialization tests use a minimal test smart-HTTP transport to cover
+object identity, byte budgets and filesystem path safety independently.

@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
 import { configuredNativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
 import { idleNativeConfig } from "./bundleConfigFixture.js";
-import { isExitError } from "./nativeGitHarness.js";
+import { isExitError } from "../../../support/gitHelpers.js";
 
 const run = promisify(execFile);
 const generationId = "a".repeat(64);

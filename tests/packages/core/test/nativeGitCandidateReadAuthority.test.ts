@@ -3,12 +3,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNativeGitCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import {
-  nativeGitFixture,
-  type NativeGitFixture,
-  type NativeGitObjectFormat
-} from "../../native-git/test/nativeGitHarness.js";
+  gitHttpFixture,
+  type GitHttpFixture,
+  type GitObjectFormat
+} from "../../../support/gitHttpFixture.js";
 
-const fixtures: NativeGitFixture[] = [];
+const fixtures: GitHttpFixture[] = [];
 
 afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
@@ -18,14 +18,14 @@ describe("native Git candidate read authority", () => {
   it.each([
     { objectFormat: "sha1", objectIdLength: 40 },
     { objectFormat: "sha256", objectIdLength: 64 }
-  ] satisfies readonly { readonly objectFormat: NativeGitObjectFormat; readonly objectIdLength: number }[])(
+  ] satisfies readonly { readonly objectFormat: GitObjectFormat; readonly objectIdLength: number }[])(
     "fetches an exact $objectFormat promoted candidate after its proposal advances and materializes its tree",
     async ({ objectFormat, objectIdLength }) => {
     // Given
-    const fixture = await nativeGitFixture(objectFormat);
+    const fixture = await gitHttpFixture(objectFormat);
     fixtures.push(fixture);
     const clone = join(fixture.root, "writer");
-    await fixture.git(fixture.root, ["clone", fixture.url("writer-a", "writer-a-secret-1", "project-a", "source"), clone]);
+    await fixture.git(fixture.root, ["clone", fixture.url("project-a", "source"), clone]);
     await fixture.git(clone, ["config", "user.name", "DIM writer"]);
     await fixture.git(clone, ["config", "user.email", "writer@example.invalid"]);
     await mkdir(join(clone, "src"));

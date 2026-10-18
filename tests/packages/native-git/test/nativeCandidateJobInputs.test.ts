@@ -1,11 +1,11 @@
+import { candidateArgv } from "@slop-lab/dim-plugin-ci-workflows";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  candidateArgv,
   loadNativeCandidateJobInputs
 } from "../../../../core/packages/native-git/src/index.js";
-import { git } from "./candidateExecutionHarness.js";
+import { git } from "../../../support/gitCommands.js";
 import {
   integrationScript,
   nativeCandidateJobInputsFixture,

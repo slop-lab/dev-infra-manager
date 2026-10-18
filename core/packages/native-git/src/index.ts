@@ -52,13 +52,10 @@ export { NativeGitProjectRegistrarError } from "./native-project-registrar-http.
 export type { NativeGitProjectRegistrar } from "./native-project-registrar-http.js";
 export {
   CandidateExecutionError,
-  candidateArgv,
-  candidateOrdinaryExecutionDescriptorSchema,
-  candidateOrdinaryExecutionRequestSchema
+  candidateOrdinaryExecutionDescriptorSchema
 } from "./candidate-execution-schema.js";
 export type {
-  CandidateOrdinaryExecutionDescriptor,
-  CandidateOrdinaryExecutionRequest
+  CandidateOrdinaryExecutionDescriptor
 } from "./candidate-execution-schema.js";
 export type { WorkflowCompiler, WorkflowJob, NativeCandidateRequiredJob } from "./workflowCompiler.js";
 export { loadNativeCandidateJobInputs } from "./native-candidate-job-inputs.js";
@@ -74,10 +71,7 @@ export type {
   AuthoritativeNativeCandidateJobSelector,
   AuthoritativeNativeCandidateRuntime
 } from "./authoritative-native-candidate-job-inputs.js";
-export { descriptorDigest, loadCandidateOrdinaryExecution } from "./candidate-execution.js";
-export type {
-  CandidateOrdinaryExecution
-} from "./candidate-execution.js";
+export { descriptorDigest } from "./candidate-execution.js";
 export {
   qemuExecutionDescriptorDigest,
   qemuExecutionDescriptorSchema
@@ -85,34 +79,13 @@ export {
 export type { QemuExecutionDescriptor } from "./qemu-execution-descriptor.js";
 export * from "./native-qemu-authority-http.js";
 export * from "./native-qemu-authority-state.js";
-export type { AdmissionVerifier } from "./admission-verifier.js";
 export {
   createNodeAdmissionVerifierHttpClient,
-  createOrdinaryAdmissionVerifier,
   OrdinaryAdmissionVerifierError
 } from "./ordinary-admission-http.js";
-export {
-  createNativeEventDispatcher,
-  createNodeNativeEventHttpClient,
-  NativeEventDeliveryError
-} from "./native-event-dispatcher.js";
-export type {
-  NativeEventDispatcher,
-  NativeEventDispatcherOptions,
-  NativeEventHttpClient,
-  NativeEventHttpRequest,
-  NativeEventHttpResponse
-} from "./native-event-dispatcher.js";
 export type {
   AdmissionVerifierHttpClient,
   AdmissionVerifierHttpRequest,
-  AdmissionVerifierHttpResponse,
-  OrdinaryAdmissionVerifierOptions
+  AdmissionVerifierHttpResponse
 } from "./ordinary-admission-http.js";
 export { initializeNativeRepository } from "./repository.js";
-export {
-  createConfiguredNativeGitServer,
-  createNativeGitServer,
-  createNativeGitServerWithDependencies
-} from "./server.js";
-export type { NativeGitServer, NativeGitServerDependencies } from "./server.js";

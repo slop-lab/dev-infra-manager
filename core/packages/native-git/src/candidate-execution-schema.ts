@@ -1,4 +1,3 @@
-import { isScalar, parseDocument, visit } from "yaml";
 import { z } from "zod";
 import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
 
@@ -10,25 +9,6 @@ const positiveInteger = z.string().regex(/^[1-9][0-9]*$/);
 const image = z.string().regex(/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/);
 const protectedRef = z.string().max(1024).refine((value) => safeHeadRef(value));
 const scriptPath = z.string().refine(isCandidatePath);
-
-export const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;
-
-const candidateJobSchema = z.object({
-  script: scriptPath,
-  argv: z.tuple([
-    z.literal(candidateArgv[0]),
-    z.literal(candidateArgv[1]),
-    z.literal(candidateArgv[2]),
-    z.literal(candidateArgv[3])
-  ]).readonly()
-}).strict().readonly();
-
-const candidateConfigSchema = z.object({
-  schemaVersion: z.literal(3),
-  ordinary: z.object({
-    jobs: z.record(identifier, candidateJobSchema)
-  }).strict().readonly()
-}).strict().readonly();
 
 export const ordinaryExecutionDescriptorRequestFields = {
   admissionGeneration: generation,
@@ -46,19 +26,6 @@ export const ordinaryExecutionDescriptorRequestFields = {
 
 export const ordinaryExecutionDescriptorRequestSchema = z.object(ordinaryExecutionDescriptorRequestFields).strict().readonly();
 
-const candidateOrdinaryExecutionRequestFields = {
-  ...ordinaryExecutionDescriptorRequestFields,
-  projectId: identifier,
-  repositoryId: identifier,
-  protectedRef,
-  expectedProtectedHead: objectId,
-  candidateCommit: objectId,
-  candidateTree: objectId,
-  policyRevision: revision,
-  requiredReviewRevision: revision,
-  requiredJobSetRevision: revision
-} as const;
-
 const candidateOrdinaryExecutionDescriptorFields = {
   admissionGeneration: generation,
   jobName: identifier,
@@ -75,14 +42,10 @@ const candidateOrdinaryExecutionDescriptorFields = {
   requiredJobSetRevision: revision
 } as const;
 
-export const candidateOrdinaryExecutionRequestSchema = z.object(candidateOrdinaryExecutionRequestFields).strict().readonly();
-
 const blobIdentityFields = {
   objectId,
   sha256: z.string().regex(/^sha256:[0-9a-f]{64}$/)
 } as const;
-
-const blobIdentitySchema = z.object(blobIdentityFields).strict().readonly();
 
 export const candidateOrdinaryExecutionDescriptorSchema = z.object({
   ...candidateOrdinaryExecutionDescriptorFields,
@@ -94,56 +57,7 @@ export const candidateOrdinaryExecutionDescriptorSchema = z.object({
 }).strict().readonly();
 
 export type OrdinaryExecutionDescriptorRequest = z.infer<typeof ordinaryExecutionDescriptorRequestSchema>;
-export type CandidateOrdinaryExecutionRequest = z.infer<typeof candidateOrdinaryExecutionRequestSchema>;
 export type CandidateOrdinaryExecutionDescriptor = z.infer<typeof candidateOrdinaryExecutionDescriptorSchema>;
-export type CandidateJob = z.infer<typeof candidateJobSchema>;
-
-export function parseCandidateConfig(bytes: Buffer): Readonly<Record<string, CandidateJob>> {
-  if (bytes.length > 64 * 1024) throw new CandidateExecutionError("candidate runner config exceeds 64 KiB");
-  if (bytes.includes(0)) throw new CandidateExecutionError("candidate runner config contains NUL");
-  let source: string;
-  try {
-    source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch (error) {
-    if (error instanceof TypeError) throw new CandidateExecutionError("candidate runner config is not UTF-8", { cause: error });
-    throw error;
-  }
-  const document = parseDocument(source, {
-    keepSourceTokens: true,
-    merge: false,
-    schema: "core",
-    strict: true,
-    uniqueKeys: true,
-    version: "1.2"
-  });
-  if (document.errors.length > 0 || document.warnings.length > 0) {
-    throw new CandidateExecutionError("candidate runner config is not strict YAML");
-  }
-  visit(document, {
-    Alias() {
-      throw new CandidateExecutionError("candidate runner config contains an alias");
-    },
-    Node(_key, node) {
-      if (node.anchor !== undefined) throw new CandidateExecutionError("candidate runner config contains an anchor");
-      if (node.tag !== undefined) throw new CandidateExecutionError("candidate runner config contains an explicit tag");
-    },
-    Pair(_key, pair) {
-      if (!isScalar(pair.key) || typeof pair.key.value !== "string") {
-        throw new CandidateExecutionError("candidate runner config contains a non-string mapping key");
-      }
-      if (pair.key.value === "<<") {
-        throw new CandidateExecutionError("candidate runner config contains a merge key");
-      }
-    }
-  });
-  const parsed = candidateConfigSchema.safeParse(document.toJS({ maxAliasCount: 0 }));
-  if (!parsed.success) throw new CandidateExecutionError("candidate runner config has an invalid schema", { cause: parsed.error });
-  const jobs = parsed.data.ordinary.jobs;
-  const count = Object.keys(jobs).length;
-  if (count < 1 || count > 64) throw new CandidateExecutionError("candidate runner config must define 1 to 64 jobs");
-  return jobs;
-}
-
 export class CandidateExecutionError extends Error {
   readonly name = "CandidateExecutionError";
 }

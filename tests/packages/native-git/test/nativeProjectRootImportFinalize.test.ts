@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { refValue } from "./nativeGitHarness.js";
+import { refValue } from "../../../support/gitHelpers.js";
 import {
   activateFinalizeService,
   cleanupFinalizeFixtures,
