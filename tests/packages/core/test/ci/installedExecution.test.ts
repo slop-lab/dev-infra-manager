@@ -65,8 +65,11 @@ it("runs grant, candidate lease and durable result through installed services; p
     expect((await worker.claim(request))?.result?.logs.stdout.base64).toBe(diagnostic.toString("base64"));
     const query = config.credentials.query;
     const jobs = await fetch(`${ciOrigin}/v1/jobs`, { headers: {
-      authorization: `Basic ${Buffer.from(`${query.username}:${query.password}`).toString("base64")}` } });
-    expect(JSON.stringify(await jobs.json())).toContain(diagnostic.toString("base64"));
+      authorization: `Basic ${Buffer.from(`${query.username}:${query.password}`).toString("base64")}`, "X-Dim-Generation-Id": generationId } });
+    expect(JSON.stringify(await jobs.json())).not.toContain(diagnostic.toString("base64"));
+    const detail = await fetch(`${ciOrigin}/v1/jobs/${claim.id}`, { headers: {
+      authorization: `Basic ${Buffer.from(`${query.username}:${query.password}`).toString("base64")}`, "X-Dim-Generation-Id": generationId } });
+    expect(JSON.stringify(await detail.json())).toContain(diagnostic.toString("base64"));
     expect(ci.store.pendingResults()).toHaveLength(1);
     const envelope = (await publishedReviewEnvelopes(native.root))[0]!;
     expect((await post("/v1/projects/project-a/repositories/root/reviews/resolve", humanReviewerAuthorization,

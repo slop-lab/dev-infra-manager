@@ -77,6 +77,29 @@ leases remain fenced until cleanup is known. Git publication retries separately
 from durable result acceptance and capacity reuse. No separate QEMU scheduler or
 Project-scoped runner exists. See [execution setup](../../../../specification/docs/ci-runners.md).
 
+Read recent execution summaries and one execution's diagnostics on the selected
+host:
+
+```bash
+dim --host devbox managed ci jobs
+dim --host devbox managed ci jobs --json
+dim --host devbox managed ci logs EXECUTION_ID
+dim --host devbox managed ci logs EXECUTION_ID --json
+```
+
+`control-plane connect` writes an owner-only `ci-query.json` beside the saved
+host connection. Query commands use it by default; `--connection FILE` selects
+another private query connection. Connecting does not require the CI service to
+be online. Use `connect --ci-endpoint http://127.0.0.1:PORT` for a separate SSH
+forward to CI. Actual queries require the exact connected service generation
+and a distinct read-only credential, never a worker token.
+
+The list contains at most 100 recent summaries and no raw logs or execution
+grants. Logs retain at most 64 KiB per stdout/stderr stream; text output preserves
+bytes on their original streams and reports truncation. JSON includes result
+metadata and base64 prefixes. A cleaned result can still await Git publication;
+the list shows publication separately from execution outcome.
+
 ## Projects and workspaces
 
 Bootstrap an exact branch from an already-local reviewed repository through the

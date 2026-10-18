@@ -1,3 +1,4 @@
+import { ciQueryConnectionSchema } from "./ci/queryClient.js";
 import { parseControlPlaneServicePair } from "./controlPlaneServicePair.js";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
@@ -77,11 +78,11 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
 
 /** Bind client credentials to the generation attested by the live deployed service. */
 export async function connectControlPlane(directoryInput: string, options: {
-  readonly endpoint?: string; readonly outputDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
+  readonly endpoint?: string; readonly ciEndpoint?: string; readonly outputDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
 } = {}): Promise<{ directory: string; generationId: string; hostId: string }> {
   const directory = path.resolve(directoryInput);
   const native = parseNativeGitBundleConfig(await privateJson(path.join(directory, "native-git.json")));
-  const install = await privateJson(path.join(directory, "install.json")) as { nativeGit?: { publish?: { host?: unknown; port?: unknown } } };
+  const install = await privateJson(path.join(directory, "install.json")) as { nativeGit?: { publish?: { host?: unknown; port?: unknown } }; ordinaryCi?: { publish?: { host?: unknown; port?: unknown } } };
   const publish = install.nativeGit?.publish;
   if (publish?.host !== "127.0.0.1" || typeof publish.port !== "number") throw new UserError("prepared control-plane loopback endpoint is invalid");
   const endpoint = options.endpoint ?? `http://127.0.0.1:${port(publish.port)}`;
@@ -136,11 +137,17 @@ export async function connectControlPlane(directoryInput: string, options: {
     transport: "loopback-http", endpoint, serviceId: "native-main", generationId,
     workspaceWriteIssuer: { ...selected(native.workspaceWriteIssuers), username: hostId }, rootReadIssuer: selected(native.projectRootReadIssuers)
   } });
+  const ciPublish = install.ordinaryCi?.publish;
+  if (ciPublish?.host !== "127.0.0.1" || typeof ciPublish.port !== "number") throw new UserError("prepared CI loopback endpoint is invalid");
+  const { ordinary } = parseControlPlaneServicePair(native, await privateJson(path.join(directory, "ordinary-ci.json")));
+  const ciQueryConnection = ciQueryConnectionSchema.parse({ schemaVersion: 1, role: "query", generationId,
+    endpoint: options.ciEndpoint ?? `http://127.0.0.1:${port(ciPublish.port)}`, credential: ordinary.credentials.query });
   const output = path.resolve(options.outputDirectory ?? path.join(directory, "connections"));
   await privateDirectory(output, async () => {
     await json(path.join(output, "registrar.json"), registrarConnection);
     await json(path.join(output, "importer.json"), importerConnection);
     await json(path.join(output, "host.json"), hostConnection);
+    await json(path.join(output, "ci-query.json"), ciQueryConnection);
     await json(path.join(output, "reviewer.json"), { schemaVersion: 1, serviceId: "native-main", baseUrl: endpoint,
       reviewerId: reviewer.reviewerId, username: reviewer.username, password: reviewer.password, generationId });
     await json(path.join(output, "promoter.json"), { schemaVersion: 1, serviceId: "native-main", endpoint,

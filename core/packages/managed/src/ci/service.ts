@@ -1,3 +1,4 @@
+import { executionSummary } from "./query.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
@@ -66,9 +67,14 @@ export function configuredExecutionServer(input: {
       const execution = store.enqueue(body.event);
       return send(response, 202, { executionId: execution.id, eventId: execution.event.eventId, generationId: generation });
     }
-    if (request.method === "GET" && url.pathname === "/v1/jobs") {
+    const query = /^\/v1\/jobs(?:\/([0-9a-f-]{36}))?$/.exec(url.pathname);
+    if (request.method === "GET" && query) {
       if (!basic(request, config.credentials.query.username, config.credentials.query.password)) return unauthorized(response);
-      return send(response, 200, store.list().map(({ leaseToken: _token, ...job }) => job));
+      if (request.headers["x-dim-generation-id"] !== generation) return send(response, 409, { error: "CI query generation is stale" });
+      if (query[1] === undefined) return send(response, 200, store.recentSummaries());
+      const job = store.find(query[1]);
+      if (!job) return send(response, 404, { error: "CI execution was not found" });
+      return send(response, 200, { job: executionSummary(job), ...(job.result === undefined ? {} : { result: job.result }) });
     }
     const worker = workers.find((worker) => basic(request, worker.id, worker.token));
     if (worker === undefined) return unauthorized(response);

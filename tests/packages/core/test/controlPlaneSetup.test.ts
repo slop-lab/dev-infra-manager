@@ -77,9 +77,12 @@ describe("optional control-plane setup", () => {
       const printed = vi.spyOn(console, "log").mockImplementation(() => {});
       const program = new Command(); registerControlPlaneCommands(program);
       await program.parseAsync(["control-plane", "connect", directory, "--endpoint", endpoint,
-        "--output-directory", output], { from: "user" });
+        "--output-directory", output, "--ci-endpoint", "http://127.0.0.1:1"], { from: "user" });
       expect(await selectedControlPlaneHostFile()).toBe(path.join(output, "host.json"));
       expect(await selectedControlPlaneImporterFile()).toBe(path.join(output, "importer.json"));
+      expect(JSON.parse(await readFile(path.join(output, "ci-query.json"), "utf8"))).toMatchObject({ role: "query",
+        endpoint: "http://127.0.0.1:1", generationId: connected.generationId });
+      expect((await stat(path.join(output, "ci-query.json"))).mode & 0o777).toBe(0o600);
       expect((await stat(path.join(selectedState, "active-control-plane.json"))).mode & 0o777).toBe(0o600);
       expect(printed.mock.calls.flat().join("\n")).toContain("Selected this control plane");
       printed.mockRestore();

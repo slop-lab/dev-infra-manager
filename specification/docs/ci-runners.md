@@ -53,3 +53,24 @@ Workers retain their own capacity journal independently of mirror resources.
 Service grammar and worker grammar belong to the execution implementation in
 `core/packages/managed/src/ci/`; Git owns only its job/grant/evidence wire contract.
 Installation, image/state checks and activation remain installer responsibilities.
+
+## Inspect executions
+
+```bash
+dim --host devbox managed ci jobs --json
+dim --host devbox managed ci logs EXECUTION_ID
+dim --host devbox managed ci logs EXECUTION_ID --json
+```
+
+Control-plane connect generates private `ci-query.json` from the prepared CI
+query role, bound to the installed generation. It saves the connection beside
+the selected host connection even when CI is offline. Queries check that
+service generation when used; worker and webhook credentials cannot read jobs.
+An explicit `--connection FILE` overrides the selected host's query file.
+
+Recent history returns at most 100 summaries, without execution grants, lease
+tokens or raw diagnostics. Individual execution detail retains at most 64 KiB
+per output stream. Text logs preserve stdout/stderr bytes and report retained
+prefix lengths when truncated; JSON carries base64 diagnostics and result
+metadata. Result acceptance, Git publication and human approval are distinct
+states: a successful execution can still await publication and review.

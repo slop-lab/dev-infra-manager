@@ -25,8 +25,9 @@ export function registerControlPlaneCommands(program: Command): void {
     .description("Verify the live generation and write private host/bootstrap connections")
     .argument("<directory>")
     .option("--endpoint <loopback-origin>", "SSH-forwarded native Git endpoint")
+    .option("--ci-endpoint <origin>", "CI query endpoint, for a separate SSH loopback forward")
     .option("--output-directory <directory>", "new connection directory, useful after a service upgrade")
-    .action(async (directory: string, flags: { endpoint?: string; outputDirectory?: string }) => {
+    .action(async (directory: string, flags: { endpoint?: string; ciEndpoint?: string; outputDirectory?: string }) => {
       const connected = await connectControlPlane(directory, flags);
       await saveControlPlaneSelection({ hostConnectionFile: path.join(connected.directory, "host.json"),
         importerConnectionFile: path.join(connected.directory, "importer.json") });

@@ -1,3 +1,4 @@
+import { executionSummary, executionSummaryRowSchema, type ExecutionSummary } from "./query.js";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmodSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
@@ -149,9 +150,21 @@ export class ExecutionStore {
     return this.database.prepare("SELECT * FROM executions WHERE phase='finished' AND publication='pending' ORDER BY created_at,rowid LIMIT 100").all().map(decode);
   }
   get(id: string): Execution {
+    const execution = this.find(id);
+    if (execution === undefined) throw new ExecutionConflictError("execution was not found");
+    return execution;
+  }
+  find(id: string): Execution | undefined {
     const row = this.database.prepare("SELECT * FROM executions WHERE id=?").get(id);
-    if (row === undefined) throw new ExecutionConflictError("execution was not found");
-    return decode(row);
+    return row === undefined ? undefined : decode(row);
+  }
+  recentSummaries(): ExecutionSummary[] {
+    // SQLite removes large diagnostics and grants before rows cross into Node.
+    return this.database.prepare("SELECT id,event_id,generation_id,phase,worker_id,slot_id,request_id,created_at,execution_kind,publication,lease_expires_at,json_remove(body,'$.result.logs','$.grant','$.leaseToken','$.profile') AS body FROM executions ORDER BY created_at DESC,rowid DESC LIMIT 100")
+      .all().map((row) => {
+        const value = executionSummaryRowSchema.parse(JSON.parse(String(row.body)));
+        assertIndexes(row, value); return executionSummary(value);
+      });
   }
   list(limit = 100): Execution[] {
     if (!Number.isInteger(limit) || limit < 1 || limit > 1_000) throw new Error("CI history query limit is invalid");
@@ -184,9 +197,11 @@ export class ExecutionStore {
 function decode(row: unknown): Execution {
   if (row === null || typeof row !== "object" || typeof Reflect.get(row, "body") !== "string") throw new Error("CI state row is invalid");
   const value = parseExecution(JSON.parse(Reflect.get(row, "body")));
+  assertIndexes(row, value); return value;
+}
+function assertIndexes(row: unknown, value: Pick<Execution, "id" | "event" | "generationId" | "phase" | "workerId" | "slotId" | "requestId" | "createdAt" | "publication" | "leaseExpiresAt">): void {
   const fields = { id: value.id, event_id: value.event.eventId, generation_id: value.generationId, phase: value.phase, worker_id: value.workerId ?? null,
     slot_id: value.slotId ?? null, request_id: value.requestId ?? null, created_at: value.createdAt, execution_kind: value.event.executionKind,
     publication: value.publication, lease_expires_at: value.leaseExpiresAt ?? null };
-  if (Object.entries(fields).some(([key, expected]) => Reflect.get(row, key) !== expected)) throw new Error("CI execution indexes disagree with state");
-  return value;
+  if (Object.entries(fields).some(([key, expected]) => row === null || typeof row !== "object" || Reflect.get(row, key) !== expected)) throw new Error("CI execution indexes disagree with state");
 }

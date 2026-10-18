@@ -64,7 +64,7 @@ CI. Preparation installs nothing and sends no credentials over the network.
 
 `connect` verifies live service role identities and the exact generation before
 writing `connections/host.json`, `registrar.json`, `importer.json`,
-`reviewer.json` and `promoter.json`. It does
+`reviewer.json`, `promoter.json` and `ci-query.json`. It does
 not select a backend, start a host controller or install a UI. The initial host
 connection supports Projects whose policies require no CI. Use the generated
 connections to import an ordinary local repository. The connect command saves
