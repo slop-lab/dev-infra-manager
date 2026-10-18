@@ -12,7 +12,7 @@ import {
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { hostMirrorInspection } from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
 import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
-import { hostLifecycleOptions, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
+import { hostMirrorOptions, TEST_HOST_MIRROR_OWNERSHIP } from "./hostMirrorFixture.js";
 
 const APT_IMAGE = `registry.example/apt-cache@sha256:${"b".repeat(64)}`;
 
@@ -63,7 +63,7 @@ describe("APT cache", () => {
     // Given
     const runner = new AptCacheRunner();
     const options = {
-      ...hostLifecycleOptions(stateRoot),
+      ...hostMirrorOptions(stateRoot),
       hostMirrorProvider: {
         dockerImage: `registry.example/docker-cache@sha256:${"a".repeat(64)}`,
         aptImage: APT_IMAGE
@@ -80,7 +80,7 @@ describe("APT cache", () => {
   it("fails before Docker mutation when no host mirror provider is enabled", async () => {
     // Given
     const runner = new AptCacheRunner();
-    const { hostMirrorProvider: _provider, ...options } = hostLifecycleOptions(stateRoot);
+    const { hostMirrorProvider: _provider, ...options } = hostMirrorOptions(stateRoot);
 
     // When
     const ensure = ensureAptCache(runner, options);
@@ -104,7 +104,7 @@ describe("APT cache", () => {
       async runStreaming() { return 0; }
     };
     const options = {
-      ...hostLifecycleOptions(stateRoot),
+      ...hostMirrorOptions(stateRoot),
       hostMirrorProvider: { dockerImage: APT_IMAGE, aptImage: APT_IMAGE }
     };
 
@@ -130,7 +130,7 @@ describe("APT cache", () => {
       async runStreaming() { return 0; }
     };
     const options = {
-      ...hostLifecycleOptions(stateRoot),
+      ...hostMirrorOptions(stateRoot),
       hostMirrorProvider: { dockerImage: APT_IMAGE, aptImage: APT_IMAGE }
     };
 

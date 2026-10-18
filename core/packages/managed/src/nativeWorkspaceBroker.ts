@@ -35,11 +35,12 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       if (!discovery && !protocol) { response.writeHead(404).end(); return; }
       const connection = await loadNativeControlPlaneConnection(attachment.connectionFile);
       const project = await new NativeProjectPendingStore(attachment.managedStateRoot).read(attachment.projectName, connection.hostId);
-      if (project?.phase !== "ready" || project.projectId !== attachment.projectId) { response.writeHead(409).end(); return; }
+      if (project?.phase !== "ready" || project.projectId !== attachment.projectId
+        || project.protectedRef !== attachment.protectedRef) { response.writeHead(409).end(); return; }
       const proof = await proveNativeProjectReadiness(connection, project, AbortSignal.timeout(5000), {
         commit: attachment.commit, tree: attachment.tree, allowFastForward: true
       });
-      if (proof.commit !== attachment.commit || proof.tree !== attachment.tree || proof.policyRevision !== attachment.policyRevision
+      if (proof.policyRevision !== attachment.policyRevision
         || proof.requiredReviewRevision !== attachment.requiredReviewRevision || proof.requiredJobSetRevision !== attachment.requiredJobSetRevision) {
         response.writeHead(409).end(); return;
       }

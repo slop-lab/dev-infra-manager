@@ -4,6 +4,7 @@ import {
   acquireWorkspaceSource, buildWorkspaceImage, checkWorkspaceHost, ContainerWorkspaceRuntime, ProcessRunner, UserError,
   WorkspaceService, WorkspaceStore, type CreateWorkspaceInput
 } from "@slop-lab/dim-core/workspace";
+import { createWorkspaceOnHost, ensureWorkspaceIntegration } from "./workspace-composition.js";
 import { decodeHostRequest } from "./host-transport.js";
 
 /** All filesystem/runtime work happens here, on the host selected by the client. */
@@ -26,9 +27,11 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
     runStreaming: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
       processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal })
   };
+  const store = new WorkspaceStore(path.resolve(process.env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")), { signal });
+  const context = { store, runner, cleanupRunner: processRunner, signal };
   const service = new WorkspaceService(
-    new WorkspaceStore(path.resolve(process.env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")), { signal }),
-    new ContainerWorkspaceRuntime(runner, processRunner), (input) => acquireWorkspaceSource({ ...input, runner, signal })
+    store, new ContainerWorkspaceRuntime(runner, processRunner),
+    (input) => acquireWorkspaceSource({ ...input, runner, signal })
   );
   let result: unknown;
   switch (request.operation) {
@@ -41,11 +44,23 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
     case "doctor": result = await checkWorkspaceHost(runner); break;
     case "list": result = await service.list(); break;
     case "show": result = await service.show(string(input.name, "name")); break;
-    case "create": result = await service.create(createInput(input)); break;
-    case "start": result = await service.start(string(input.name, "name")); break;
+    case "create": result = await createWorkspaceOnHost(createInput(input), service, context); break;
+    case "start": {
+      const record = await service.start(string(input.name, "name"));
+      await ensureWorkspaceIntegration(record, context);
+      result = record; break;
+    }
     case "stop": result = await service.stop(string(input.name, "name")); break;
-    case "restart": result = await service.restart(string(input.name, "name")); break;
-    case "recreate": result = await service.recreate(string(input.name, "name")); break;
+    case "restart": {
+      const record = await service.restart(string(input.name, "name"));
+      await ensureWorkspaceIntegration(record, context);
+      result = record; break;
+    }
+    case "recreate": {
+      const record = await service.recreate(string(input.name, "name"));
+      await ensureWorkspaceIntegration(record, context);
+      result = record; break;
+    }
     case "resources": {
       const resources = object(input.resources, "resources");
       result = await service.resources(string(input.name, "name"), {
@@ -59,7 +74,9 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
       await service.discard(string(input.name, "name")); result = { removed: true }; break;
     case "exec": {
       if (!Array.isArray(input.command) || input.command.some((v) => typeof v !== "string")) throw new UserError("command must be an argument array");
-      process.exitCode = await service.exec(string(input.name, "name"), input.command as string[], {
+      const name = string(input.name, "name");
+      await ensureWorkspaceIntegration(await store.read(name), context);
+      process.exitCode = await service.exec(name, input.command as string[], {
         signal, stdin: process.stdin, ...(input.interactive === true ? { terminal: true } : {})
       });
       return;

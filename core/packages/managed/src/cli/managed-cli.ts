@@ -10,10 +10,6 @@ import { registerExternalUrlCommands } from "./external-url-commands.js";
 import { registerHostIntegrationCommands } from "./host-integration-commands.js";
 import { packageVersion } from "./package-version.js";
 import { registerProjectCommands } from "./project-commands.js";
-import { registerWorkspaceCommands } from "./workspace-commands.js";
-import { registerWorkspaceExecutionCommands } from "./workspace-execution-commands.js";
-import { registerWorkspaceImageCommands } from "./workspace-image-commands.js";
-import { registerWorkspaceLifecycleCommands } from "./workspace-lifecycle-commands.js";
 
 const program = new Command();
 
@@ -28,13 +24,6 @@ program
 registerControlPlaneCommands(program);
 registerProjectCommands(program);
 registerCiCommands(program);
-const workspace = program.command("workspace").description("Manage persistent development workspaces");
-for (const parent of [program, workspace]) {
-  registerWorkspaceCommands(parent);
-  registerWorkspaceExecutionCommands(parent);
-  registerWorkspaceLifecycleCommands(parent);
-}
-registerWorkspaceImageCommands(workspace);
 registerDoctorAndPluginCommands(program);
 registerExternalUrlCommands(program);
 registerControllerCommands(program);

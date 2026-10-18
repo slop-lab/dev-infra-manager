@@ -1,3 +1,4 @@
+import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import {
@@ -25,8 +26,7 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput, contex
   const match = /^dim:\/\/([a-z0-9][a-z0-9-]*)\/?$/.exec(input.source.url);
   if (!match) throw new UserError("managed source must be dim://PROJECT");
   const projectName = match[1]!;
-  const connectionFile = process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE;
-  if (!connectionFile || !path.isAbsolute(connectionFile)) throw new UserError("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE must select a private host connection");
+  const connectionFile = await selectedControlPlaneHostFile();
   const stateRoot = managedStateRoot(process.env);
   const connection = await loadNativeControlPlaneConnection(connectionFile);
   const project = await new NativeProjectPendingStore(stateRoot).read(projectName, connection.hostId);

@@ -4,24 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  configuredDimAgentController,
-  configuredDimController,
-  controllerRoutesForAudience,
   createDimController,
   initializeControllerRoutes
 } from "../../../../core/packages/managed/src/controller.js";
 import { UserError } from "../../../../core/packages/core/src/errors.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
-import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { lifecycleOptions } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/managed/src/plugin.js";
-import { workspaceRecord } from "./hostLifecycleFixture.js";
+import { workspaceRecord } from "../../../support/workspaceFixture.js";
 
 describe("DIM controller", () => {
   const servers: ReturnType<typeof createDimController>[] = [];
   afterEach(async () => {
     await Promise.all(servers.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
     servers.length = 0;
+    vi.unstubAllEnvs();
   });
 
 it("authenticates, discovers plugin routes, dispatches parameters, and resolves workspace targets", async () => {
@@ -42,7 +39,6 @@ it("authenticates, discovers plugin routes, dispatches parameters, and resolves 
         method: "POST",
         path: "/things/:id",
         summary: "Test plugin route",
-        audiences: ["workspace"],
         plugin: "test",
         discovery: { ingresses: ["tailnet"] },
         async handle(context) {
@@ -149,7 +145,7 @@ it("resolves registered host inputs with authenticated workspace context", async
         return operation();
       },
       resolveTarget: vi.fn(),
-      routes: [{ method: "POST", path: "/mutation", summary: "Mutate", audiences: ["workspace"], handle }]
+      routes: [{ method: "POST", path: "/mutation", summary: "Mutate", handle }]
     });
     servers.push(server);
     server.listen(0, "127.0.0.1");
@@ -175,8 +171,9 @@ it("resolves registered host inputs with authenticated workspace context", async
   it("excludes discarding workspaces from controller route restoration", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-controller-restore-"));
-    const state = new LifecycleState(root);
-    await state.claimWorkspace(workspaceRecord("discarding", "discarding"));
+    vi.stubEnv("DIM_STATE_ROOT", root);
+    const state = new WorkspaceStore(root);
+    await state.write(workspaceRecord("discarding", { phase: "discarding" }));
     const restored: string[] = [];
     const plugin = await registerPlugin({
       name: "test",
@@ -186,7 +183,6 @@ it("resolves registered host inputs with authenticated workspace context", async
           method: "GET",
           path: "/restore",
           summary: "Restore",
-          audiences: ["workspace"],
           initialize: async (runtime) => {
             restored.push(...(await runtime.listWorkspaces()).map(({ name }) => name));
           },
@@ -196,8 +192,8 @@ it("resolves registered host inputs with authenticated workspace context", async
     });
 
     // When
-    await initializeControllerRoutes(lifecycleOptionsForBackend("sysbox", {
-      DIM_STATE_ROOT: root
+    await initializeControllerRoutes(lifecycleOptions({
+      DIM_MANAGED_STATE_ROOT: join(root, "managed")
     }), plugin, {
       run: async (command, args) => ({ command, args, stdout: "", stderr: "", exitCode: 0 }),
       runStreaming: async () => 0

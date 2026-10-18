@@ -1,3 +1,5 @@
+import path from "node:path";
+import { saveControlPlaneSelection } from "../controlPlaneSelection.js";
 import type { Command } from "commander";
 import { prepareControlPlane, connectControlPlane } from "../controlPlaneSetup.js";
 
@@ -26,10 +28,11 @@ export function registerControlPlaneCommands(program: Command): void {
     .option("--output-directory <directory>", "new connection directory, useful after a service upgrade")
     .action(async (directory: string, flags: { endpoint?: string; outputDirectory?: string }) => {
       const connected = await connectControlPlane(directory, flags);
+      await saveControlPlaneSelection({ hostConnectionFile: path.join(connected.directory, "host.json"),
+        importerConnectionFile: path.join(connected.directory, "importer.json") });
       console.log(`Connected host ${connected.hostId} to generation ${connected.generationId}`);
       console.log(`Private connections: ${connected.directory}`);
-      console.log(`export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=${quote(`${connected.directory}/host.json`)}`);
-      console.log(`export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=${quote(`${connected.directory}/importer.json`)}`);
+      console.log("Selected this control plane for native Project and workspace commands on this host.");
       console.log("Bootstrap a reviewed repository with 'dim managed project bootstrap-native-root', using registrar.json and importer.json from that directory.");
     });
 }

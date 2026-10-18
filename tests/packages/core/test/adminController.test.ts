@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { configuredDimAdminController } from "../../../../core/packages/managed/src/adminController.js";
-import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import type { LifecycleOptions } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/managed/src/plugin.js";
 
@@ -47,7 +46,6 @@ describe("DIM admin controller", () => {
     expect(await (await fetch(`${base}/healthz`)).json()).toEqual({
       ok: true,
       ready: true,
-      hostPhase: "ready",
       apiVersion: 1
     });
     const discovery = await fetch(`${base}/v1`);
@@ -69,45 +67,15 @@ describe("DIM admin controller", () => {
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({ error: "invalid plugin input" });
 
-    const started = await fetch(`${base}/v1/sessions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ operation: "workspace.exec", input: {} })
+    expect((await fetch(`${base}/v1/sessions`, { method: "POST" })).status).toBe(404);
+    const removed = await fetch(`${base}/v1/call/workspace.start`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "work" })
     });
-    expect(started.status).toBe(202);
-    const session = await started.json() as { id: string };
-    const events = await fetch(`${base}/v1/sessions/${session.id}/events`);
-    expect(events.headers.get("content-type")).toContain("text/event-stream");
-    expect(await events.text()).toMatch(/event: error[\s\S]*name must be a string/);
-
-    const rejected = await fetch(`${base}/v1/sessions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ operation: "plugin.unreviewed", input: {} })
+    expect(removed.status).toBe(400);
+    const listed = await fetch(`${base}/v1/call/plugin.list`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}"
     });
-    expect(rejected.status).toBe(400);
-    expect(await rejected.json()).toEqual({ error: "operation 'plugin.unreviewed' is not streamable" });
-    for (const operation of ["project.remove", "project.purge", "repo.delete", "service.ensure", "git.setup"]) {
-      const obsolete = await fetch(`${base}/v1/call/${operation}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "acme", project: "acme", alias: "root" })
-      });
-      expect(obsolete.status).toBe(400);
-      expect(await obsolete.json()).toEqual({ error: `unknown admin operation '${operation}'` });
-    }
-    await new LifecycleState(stateRoot).writeHostLifecycle({
-      schemaVersion: 2,
-      phase: "stopped",
-      resumeWorkspaces: ["work"],
-      updatedAt: new Date().toISOString()
-    });
-    expect(await (await fetch(`${base}/healthz`)).json()).toMatchObject({
-      ok: true,
-      ready: false,
-      hostPhase: "stopped"
-    });
-    expect((await fetch(`${base}/readyz`)).status).toBe(503);
+    expect(await listed.json()).toMatchObject({ plugins: ["test.admin"] });
     await rm(stateRoot, { recursive: true, force: true });
     await plugins.dispose();
   });

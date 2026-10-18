@@ -78,8 +78,8 @@ export function installerFacadeHelpText(program: Command): (context: AddHelpText
   const rootText = `
 Typical flow:
   dim managed project create PROJECT
-  dim managed workspace create PROJECT WORKSPACE
-  dim managed workspace exec WORKSPACE -- bash
+  dim create dim://PROJECT WORKSPACE
+  dim exec WORKSPACE -- bash
 
 Run 'dim managed --help' to list administrative commands.
 Source: https://github.com/slop-lab/dev-infra-manager`;

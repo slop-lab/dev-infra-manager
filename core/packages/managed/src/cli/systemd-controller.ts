@@ -21,7 +21,6 @@ export function usesSystemdManagedController(options: LifecycleOptions): boolean
   return options.stateRoot === defaultStateRoot
     && options.controllerRuntimeDirectory === runtimeDirectory
     && options.controllerSocketPath === path.join(runtimeDirectory, "workspace", "controller.sock")
-    && options.agentControllerSocketPath === path.join(runtimeDirectory, "agent", "controller.sock")
     && options.adminControllerSocketPath === path.join(runtimeDirectory, "admin", "controller.sock");
 }
 
@@ -45,7 +44,6 @@ export async function startSystemdManagedController(options: LifecycleOptions): 
     "DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE",
     "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE",
     "DIM_CONTROLLER_SOCKET",
-    "DIM_AGENT_CONTROLLER_SOCKET",
     "DIM_ADMIN_CONTROLLER_SOCKET",
     "DOCKER_HOST",
     "PATH",
@@ -62,8 +60,6 @@ export async function startSystemdManagedController(options: LifecycleOptions): 
     "serve",
     "--socket",
     options.controllerSocketPath,
-    "--agent-socket",
-    options.agentControllerSocketPath,
     "--admin-socket",
     options.adminControllerSocketPath,
     "--pid-file",

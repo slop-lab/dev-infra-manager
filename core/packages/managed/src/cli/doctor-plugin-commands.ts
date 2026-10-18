@@ -1,6 +1,6 @@
 import { type Command } from "commander";
 import {
-  configuredWorkspaceBackend, inspectWorkspaceBackends, lifecycleOptionsForBackend,
+  configuredWorkspaceBackend, inspectWorkspaceBackends,
   runCommonDoctorChecks, runDoctor, runtimeBackendChecks, setConfiguredWorkspaceBackend, UserError
 } from "@slop-lab/dim-managed";
 import {
@@ -27,7 +27,7 @@ export function registerDoctorAndPluginCommands(program: Command): void {
       process.exitCode = 1;
       return;
     }
-    const checks = await runDoctor(runner, backend, lifecycleOptionsForBackend(backend));
+    const checks = await runDoctor(runner, backend);
     printDoctorChecks(checks);
     if (checks.some((check) => !check.ok)) process.exitCode = 1;
   });
@@ -39,7 +39,7 @@ doctor.command("configure-backend")
     const backend = backendArgument === undefined
       ? await selectInstalledWorkspaceBackend()
       : parseWorkspaceBackend(backendArgument);
-    const checks = await runtimeBackendChecks(runner, backend, lifecycleOptionsForBackend(backend));
+    const checks = await runtimeBackendChecks(runner, backend);
     printDoctorChecks(checks);
     if (checks.some((check) => !check.ok)) {
       throw new UserError(`workspace backend '${backend}' is not installed and ready`);

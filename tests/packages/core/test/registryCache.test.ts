@@ -13,7 +13,7 @@ import {
 } from "../../../../core/packages/managed/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { hostMirrorInspection } from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
-import { hostLifecycleOptions, registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
+import { hostMirrorOptions, registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostMirrorFixture.js";
 import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 
 const REGISTRY_CACHE_IMAGE = `registry.example/docker-cache@sha256:${"a".repeat(64)}`;
@@ -68,7 +68,7 @@ describe("registry cache", () => {
     const runner = new RegistryCacheRunner(undefined, undefined);
 
     // When
-    const { hostMirrorProvider: _provider, ...options } = hostLifecycleOptions(stateRoot);
+    const { hostMirrorProvider: _provider, ...options } = hostMirrorOptions(stateRoot);
     const reconciliation = ensureRegistryCache(runner, options);
 
     // Then

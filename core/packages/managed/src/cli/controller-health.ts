@@ -17,7 +17,6 @@ export async function managedControllerReady(options: LifecycleOptions): Promise
 
 export async function controllersHealthy(options: LifecycleOptions): Promise<boolean> {
   return await controllerHealthy(options.controllerSocketPath)
-    && await controllerHealthy(options.agentControllerSocketPath)
     && await controllerHealthy(options.adminControllerSocketPath);
 }
 

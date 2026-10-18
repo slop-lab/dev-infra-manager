@@ -37,7 +37,7 @@ function advancingClock(start: number): {
   };
 }
 
-describe("lifecycle lock ownership", () => {
+describe("Project lock ownership", () => {
   let root: string;
   let children: LockChild[];
 
@@ -68,11 +68,11 @@ describe("lifecycle lock ownership", () => {
     // Given: one process owns the workspace lock for longer than five minutes.
     const clock = advancingClock(0);
     const state = new LifecycleState(root, { ...clock, waitTimeoutMs: 20, retryDelayMs: 5 });
-    const releaseFirst = await state.acquireWorkspaceLock("work-1");
+    const releaseFirst = await state.acquireProjectLock("work-1");
 
     // When: an independent acquisition contends for the same lock.
     let secondAcquired = false;
-    const second = state.acquireWorkspaceLock("work-1").then((release) => {
+    const second = state.acquireProjectLock("work-1").then((release) => {
       secondAcquired = true;
       return release;
     });
@@ -88,10 +88,10 @@ describe("lifecycle lock ownership", () => {
     const state = new LifecycleState(root);
 
     // When: this process acquires the lock.
-    const release = await state.acquireWorkspaceLock("work-1");
+    const release = await state.acquireProjectLock("work-1");
 
     // Then: the owner record contains every process-instance and release identity field.
-    const ownerPath = join(root, "locks", "workspace-work-1.lock");
+    const ownerPath = join(root, "locks", "project-work-1.lock");
     const owner = JSON.parse(await readFile(ownerPath, "utf8"));
     expect(owner).toEqual({
       version: 1,
@@ -115,10 +115,10 @@ describe("lifecycle lock ownership", () => {
     await child.kill();
 
     // When: this process acquires the abandoned lock.
-    const release = await new LifecycleState(root, { waitTimeoutMs: 2_000 }).acquireWorkspaceLock("work-1");
+    const release = await new LifecycleState(root, { waitTimeoutMs: 2_000 }).acquireProjectLock("work-1");
 
     // Then: the dead child's owner record has been reclaimed.
-    const owner = JSON.parse(await readFile(join(root, "locks", "workspace-work-1.lock"), "utf8"));
+    const owner = JSON.parse(await readFile(join(root, "locks", "project-work-1.lock"), "utf8"));
     expect(owner.pid).toBe(process.pid);
     await release();
   });
@@ -126,8 +126,8 @@ describe("lifecycle lock ownership", () => {
   it("reclaims an owner when the PID belongs to a different process instance", async () => {
     // Given: a valid owner record names a PID whose start identity is reported as reused.
     const original = new LifecycleState(root);
-    const releaseOriginal = await original.acquireWorkspaceLock("work-1");
-    const ownerPath = join(root, "locks", "workspace-work-1.lock");
+    const releaseOriginal = await original.acquireProjectLock("work-1");
+    const ownerPath = join(root, "locks", "project-work-1.lock");
     const oldOwner = await readFile(ownerPath, "utf8");
     await releaseOriginal();
     await writeFile(ownerPath, oldOwner);
@@ -137,7 +137,7 @@ describe("lifecycle lock ownership", () => {
     });
 
     // When: a new nonce acquires the reused-PID owner's lock.
-    const release = await state.acquireWorkspaceLock("work-1");
+    const release = await state.acquireProjectLock("work-1");
 
     // Then: the record is replaced rather than blocked by PID existence alone.
     expect(await readFile(ownerPath, "utf8")).not.toBe(oldOwner);
@@ -147,10 +147,10 @@ describe("lifecycle lock ownership", () => {
   it("does not let an old release closure remove a successor owner", async () => {
     // Given: the first acquisition has released and a successor owns the same lock.
     const state = new LifecycleState(root);
-    const releaseFirst = await state.acquireWorkspaceLock("work-1");
+    const releaseFirst = await state.acquireProjectLock("work-1");
     await releaseFirst();
-    const releaseSecond = await state.acquireWorkspaceLock("work-1");
-    const ownerPath = join(root, "locks", "workspace-work-1.lock");
+    const releaseSecond = await state.acquireProjectLock("work-1");
+    const ownerPath = join(root, "locks", "project-work-1.lock");
     const successor = await readFile(ownerPath, "utf8");
 
     // When: the old release closure is invoked again.
@@ -164,8 +164,8 @@ describe("lifecycle lock ownership", () => {
   it("refuses to release an owner record published with another nonce", async () => {
     // Given: the owner path no longer contains the acquiring nonce.
     const state = new LifecycleState(root);
-    const release = await state.acquireWorkspaceLock("work-1");
-    const ownerPath = join(root, "locks", "workspace-work-1.lock");
+    const release = await state.acquireProjectLock("work-1");
+    const ownerPath = join(root, "locks", "project-work-1.lock");
     const owner = JSON.parse(await readFile(ownerPath, "utf8"));
     const successor = { ...owner, nonce: "A".repeat(43) };
     await writeFile(ownerPath, `${JSON.stringify(successor)}\n`);
@@ -182,13 +182,13 @@ describe("lifecycle lock ownership", () => {
     // Given: the shared owner path contains malformed state.
     const locks = join(root, "locks");
     await mkdir(locks, { recursive: true });
-    const ownerPath = join(locks, "workspace-work-1.lock");
+    const ownerPath = join(locks, "project-work-1.lock");
     await writeFile(ownerPath, "{partial");
     const clock = advancingClock(0);
     const state = new LifecycleState(root, { ...clock, waitTimeoutMs: 20, retryDelayMs: 5 });
 
     // When: acquisition exhausts its bounded wait.
-    const acquisition = state.acquireWorkspaceLock("work-1");
+    const acquisition = state.acquireProjectLock("work-1");
 
     // Then: corruption is surfaced and never removed as stale state.
     await expect(acquisition).rejects.toThrow(/malformed owner record.*timed out/i);
@@ -199,7 +199,7 @@ describe("lifecycle lock ownership", () => {
     // Given: a 36-character owner boot ID has valid characters but misplaced hyphens.
     const locks = join(root, "locks");
     await mkdir(locks, { recursive: true });
-    const ownerPath = join(locks, "workspace-work-1.lock");
+    const ownerPath = join(locks, "project-work-1.lock");
     const ownerBytes = `${JSON.stringify({
       version: 1,
       pid: process.pid,
@@ -219,7 +219,7 @@ describe("lifecycle lock ownership", () => {
     });
 
     // When: acquisition retries until the configured deadline.
-    const acquisition = state.acquireWorkspaceLock("work-1");
+    const acquisition = state.acquireProjectLock("work-1");
 
     // Then: malformed ownership is never probed, reclaimed, or rewritten.
     try {
@@ -238,7 +238,7 @@ describe("lifecycle lock ownership", () => {
       // Given: an existing owner record cannot be read while the bounded clock advances.
       const locks = join(root, "locks");
       await mkdir(locks, { recursive: true });
-      const ownerPath = join(locks, "workspace-work-1.lock");
+      const ownerPath = join(locks, "project-work-1.lock");
       const ownerBytes = "opaque owner bytes\n";
       await writeFile(ownerPath, ownerBytes);
       ownerReadFailures.failures.set(ownerPath, code);
@@ -246,7 +246,7 @@ describe("lifecycle lock ownership", () => {
       const state = new LifecycleState(root, { ...clock, waitTimeoutMs: 20, retryDelayMs: 5 });
 
       // When: acquisition retries until the configured deadline.
-      const acquisition = state.acquireWorkspaceLock("work-1");
+      const acquisition = state.acquireProjectLock("work-1");
 
       // Then: every bounded attempt remains closed and the owner bytes are never reclaimed.
       await expect(acquisition).rejects.toThrow(new RegExp(`unreadable owner record.*${code}.*timed out`, "i"));
@@ -260,11 +260,11 @@ describe("lifecycle lock ownership", () => {
     // Given: a crashed publisher left only its nonce-specific temporary file.
     const locks = join(root, "locks");
     await mkdir(locks, { recursive: true });
-    const temporary = join(locks, "workspace-work-1.lock.tmp-orphan");
+    const temporary = join(locks, "project-work-1.lock.tmp-orphan");
     await writeFile(temporary, "{partial");
 
     // When: a later process acquires and releases the lock.
-    const release = await new LifecycleState(root).acquireWorkspaceLock("work-1");
+    const release = await new LifecycleState(root).acquireProjectLock("work-1");
     await release();
 
     // Then: incomplete unpublished bytes neither become ownership nor remain as state.
@@ -299,13 +299,12 @@ describe("lifecycle lock ownership", () => {
     await loser.release();
   });
 
-  it("bounds independent same-process acquisition and preserves lifecycle lock identities", async () => {
-    // Given: the required Project, hook, setup, and reconciliation lock identities are acquired in order.
+  it("bounds same-process contention while independent Project and hook locks coexist", async () => {
+    // Given: the independent Project and hook lock identities are acquired in order.
     const state = new LifecycleState(root);
     const releaseProject = await state.acquireProjectLock("project");
     const releaseHook = await state.acquireQemuProjectHookPublicationLock("project-id");
-    const releaseSetup = await state.acquireWorkspaceSetupLock("work-1");
-    const releaseWorkspace = await state.acquireWorkspaceLock("work-1");
+    const releaseWorkspace = await state.acquireProjectLock("work-1");
     const clock = advancingClock(0);
 
     // When: an independent acquisition in this process contends for the workspace lock.
@@ -313,12 +312,11 @@ describe("lifecycle lock ownership", () => {
       ...clock,
       waitTimeoutMs: 20,
       retryDelayMs: 5
-    }).acquireWorkspaceLock("work-1");
+    }).acquireProjectLock("work-1");
 
     // Then: it times out while all distinct lock identities remain independently releasable.
-    await expect(duplicate).rejects.toThrow(/timed out waiting for workspace 'work-1' reconciliation lock/);
+    await expect(duplicate).rejects.toThrow(/timed out waiting for Project 'work-1' reconciliation lock/);
     await releaseWorkspace();
-    await releaseSetup();
     await releaseHook();
     await releaseProject();
   });

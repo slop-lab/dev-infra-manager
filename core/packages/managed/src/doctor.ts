@@ -1,7 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { lifecycleOptions, lifecycleOptionsForBackend } from "./lifecycleOptions.js";
-import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
-import { workspaceRuntimePlan } from "./runtimeBackends.js";
+import type { WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 import type { CommandRunner } from "@slop-lab/dim-core";
 
 export interface DoctorCheck {
@@ -18,8 +16,7 @@ export interface WorkspaceBackendInspection {
 
 export async function runDoctor(
   runner: CommandRunner,
-  backend: WorkspaceRuntimeBackendKind = lifecycleOptions().defaultWorkspaceBackend,
-  options: LifecycleOptions = lifecycleOptions()
+  backend: WorkspaceRuntimeBackendKind = "sysbox"
 ): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
   checks.push(await commandCheck(runner, "node", ["--version"], "Node.js"));
@@ -33,19 +30,18 @@ export async function runDoctor(
   checks.push(await appArmorUserNamespaceCheck(runner));
   checks.push(await commandCheck(runner, "docker", ["--version"], "Docker CLI"));
   checks.push(await dockerDaemonCheck(runner));
-  checks.push(...(await runtimeBackendChecks(runner, backend, options)));
+  checks.push(...(await runtimeBackendChecks(runner, backend)));
   checks.push(await cgroupCheck());
   return checks;
 }
 
 export async function inspectWorkspaceBackends(
-  runner: CommandRunner,
-  env: NodeJS.ProcessEnv = process.env
+  runner: CommandRunner
 ): Promise<WorkspaceBackendInspection[]> {
   const backends: WorkspaceRuntimeBackendKind[] = ["sysbox"];
   const inspections: WorkspaceBackendInspection[] = [];
   for (const backend of backends) {
-    const checks = await runtimeBackendChecks(runner, backend, lifecycleOptionsForBackend(backend, env));
+    const checks = await runtimeBackendChecks(runner, backend);
     inspections.push({
       backend,
       checks,
@@ -74,10 +70,9 @@ export async function runCommonDoctorChecks(runner: CommandRunner): Promise<Doct
 
 export async function runtimeBackendChecks(
   runner: CommandRunner,
-  backend: WorkspaceRuntimeBackendKind,
-  options: LifecycleOptions
+  backend: WorkspaceRuntimeBackendKind
 ): Promise<DoctorCheck[]> {
-  workspaceRuntimePlan(backend, options);
+  if (backend !== "sysbox") throw new Error(`unsupported workspace backend '${backend}'`);
   return [
     await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"),
     await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"),

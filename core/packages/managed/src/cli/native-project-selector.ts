@@ -1,3 +1,4 @@
+import { selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../controlPlaneSelection.js";
 import path from "node:path";
 import {
   createNativeGitRootImporterClient,
@@ -49,16 +50,7 @@ export async function selectNativeProject(
   if (unsupported !== undefined) {
     throw new UserError(`${unsupported} is unsupported by the native-only DIM CLI`);
   }
-  const selected = environment.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE;
-  if (selected === undefined) {
-    if (environment.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE !== undefined) {
-      throw new UserError("native root importer connection requires native control-plane selection");
-    }
-    throw new UserError("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE is required for native Project commands");
-  }
-  if (selected.length === 0) {
-    throw new UserError("native control-plane connection file selector must not be empty");
-  }
+  const selected = await selectedControlPlaneHostFile(environment);
   const connection = await loadNativeControlPlaneConnection(path.resolve(selected));
   const stateRoot = managedStateRoot(environment);
   return { connection, store: new NativeProjectPendingStore(stateRoot), environment };
@@ -70,10 +62,7 @@ export async function nativeProjectImporter(
   if (selection.connection.nativeGit.transport !== "loopback-http") {
     throw new UserError("native Project pending admission requires loopback-http until root import supports HTTPS");
   }
-  const selected = selection.environment.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE;
-  if (selected === undefined || selected.length === 0) {
-    throw new UserError("DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE is required for native project create");
-  }
+  const selected = await selectedControlPlaneImporterFile(selection.environment);
   let connection;
   try {
     connection = await loadNativeGitRootImporterConnection(path.resolve(selected));
@@ -85,7 +74,8 @@ export async function nativeProjectImporter(
   }
   if (connection.serviceId !== selection.connection.nativeGit.serviceId
     || connection.endpoint !== selection.connection.nativeGit.endpoint
-    || connection.hostId !== selection.connection.hostId) {
+    || connection.hostId !== selection.connection.hostId
+    || connection.generationId !== selection.connection.nativeGit.generationId) {
     throw new UserError("native root importer connection conflicts with native control-plane selection");
   }
   return createNativeGitRootImporterClient(connection);

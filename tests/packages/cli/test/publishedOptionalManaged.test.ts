@@ -41,7 +41,7 @@ test("published base CLI works without managed services and gives an installatio
     const doctorHelp = await run(process.execPath, [executable, "doctor", "--help"], options);
     assert.match(doctorHelp.stdout, /Check development host readiness/);
 
-    for (const arguments_ of [["managed", "--help"], ["controller", "restart"]]) {
+    for (const arguments_ of [["managed", "--help"], ["controller", "restart"], ["create", "dim://project", "dev", "--json"]]) {
       await assert.rejects(run(process.execPath, [executable, ...arguments_], options), (error: unknown) => {
         assert.ok(error instanceof Error && "code" in error && "stderr" in error);
         assert.equal(error.code, 2);

@@ -8,7 +8,6 @@ import {
   sysboxExecutionCheck,
   userLingerCheck
 } from "../../../../core/packages/managed/src/doctor.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import type { CommandResult, CommandRunner, RunOptions } from "../../../../core/packages/core/src/types.js";
 
 class QueueRunner implements CommandRunner {
@@ -69,11 +68,6 @@ describe("doctor checks", () => {
   });
 
   it("checks Sysbox without making KVM a backend prerequisite", async () => {
-    const root = await mkdtemp(join(tmpdir(), "dim-doctor-"));
-    temporaryDirectories.push(root);
-    const configPath = join(root, "dim.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
-    const options = lifecycleOptionsForBackend("sysbox", { DIM_CONFIG_PATH: configPath });
     const runner = new QueueRunner([
       result(0, "", "sysbox-runc version"),
       result(0, "", "active"),
@@ -81,7 +75,7 @@ describe("doctor checks", () => {
       result(0)
     ]);
 
-    const checks = await runtimeBackendChecks(runner, "sysbox", options);
+    const checks = await runtimeBackendChecks(runner, "sysbox");
     expect(checks.map((check) => check.name)).toContain("Sysbox container execution");
     expect(checks.map((check) => check.name)).not.toContain("KVM device");
   });

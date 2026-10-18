@@ -46,11 +46,6 @@ await writeFile(new URL("../dist/cli/package-version.js", import.meta.url), `exp
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
 await cp(
-  new URL("../src/workspace-image-assets", import.meta.url),
-  new URL("../dist/workspace-image-assets", import.meta.url),
-  { recursive: true }
-);
-await cp(
   new URL("../src/native-qemu-scheduler-assets", import.meta.url),
   new URL("../dist/native-qemu-scheduler-assets", import.meta.url),
   { recursive: true }

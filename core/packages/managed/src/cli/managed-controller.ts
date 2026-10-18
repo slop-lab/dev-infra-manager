@@ -6,6 +6,7 @@ import {
   UserError,
   type LifecycleOptions
 } from "@slop-lab/dim-managed";
+import { acquireLifecycleLock } from "@slop-lab/dim-core";
 import { runner } from "./cli-runtime.js";
 import { managedControllerReady, processExists } from "./controller-health.js";
 import { startSystemdManagedController, usesSystemdManagedController } from "./systemd-controller.js";
@@ -21,30 +22,14 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
     return;
   }
   const runtimeDir = options.controllerRuntimeDirectory;
-  const lockDir = path.join(runtimeDir, "ensure.lock");
-  await mkdir(runtimeDir, { recursive: true });
-  let ownsLock = false;
-  for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
-    try {
-      await mkdir(lockDir);
-      ownsLock = true;
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      if (await managedControllerReady(options)) return;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
-  if (!ownsLock) {
-    await rm(lockDir, { recursive: true, force: true });
-    return ensureManagedController(options);
-  }
+  const release = await acquireLifecycleLock({
+    root: runtimeDir, name: "controller-bootstrap", description: "optional controller startup"
+  });
   try {
     if (await managedControllerReady(options)) return;
     await rm(options.controllerSocketPath, { force: true });
-    await rm(options.agentControllerSocketPath, { force: true });
     await rm(options.adminControllerSocketPath, { force: true });
-    const log = await open(path.join(runtimeDir, "controller.log"), "a");
+    const log = await open(path.join(runtimeDir, "controller.log"), "a", 0o600);
     const script = process.argv[1];
     if (!script) throw new UserError("cannot locate the DIM CLI entrypoint");
     const child = spawn(process.execPath, [
@@ -54,8 +39,6 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
       "serve",
       "--socket",
       options.controllerSocketPath,
-      "--agent-socket",
-      options.agentControllerSocketPath,
       "--admin-socket",
       options.adminControllerSocketPath,
       "--pid-file",
@@ -65,15 +48,21 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
       stdio: ["ignore", log.fd, log.fd],
       env: process.env
     });
+    let startupError: Error | undefined;
+    child.once("error", (error) => { startupError = error; });
     child.unref();
     await log.close();
     for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
       if (await managedControllerReady(options)) return;
+      if (startupError || child.exitCode !== null || child.signalCode !== null) {
+        throw new UserError(`managed controller exited during startup; see ${path.join(runtimeDir, "controller.log")}`,
+          startupError ? { cause: startupError } : undefined);
+      }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     throw new UserError(`managed controller failed to start; see ${path.join(runtimeDir, "controller.log")}`);
   } finally {
-    await rm(lockDir, { recursive: true, force: true });
+    await release();
   }
 }
 
@@ -202,7 +191,6 @@ export async function stopManagedController(options: LifecycleOptions): Promise<
     }
     if (pidFileRemoved
       && !await unixSocketAcceptingConnections(options.controllerSocketPath)
-      && !await unixSocketAcceptingConnections(options.agentControllerSocketPath)
       && !await unixSocketAcceptingConnections(options.adminControllerSocketPath)) return;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
@@ -216,7 +204,6 @@ export async function restartManagedController(options: LifecycleOptions): Promi
   }
   await stopManagedController(options);
   await rm(options.controllerSocketPath, { force: true });
-  await rm(options.agentControllerSocketPath, { force: true });
   await rm(options.adminControllerSocketPath, { force: true });
   await ensureManagedController(options);
 }

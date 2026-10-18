@@ -26,7 +26,7 @@ const release = await new LifecycleState(root, {
     process.stdout.write("contended\n");
     await waitForCommand("retry");
   }
-}).acquireWorkspaceLock(name);
+}).acquireProjectLock(name);
 process.stdout.write("acquired\n");
 await waitForCommand("release");
 await release();

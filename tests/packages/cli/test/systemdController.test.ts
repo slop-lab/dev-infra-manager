@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { lifecycleOptions } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import { startSystemdManagedController } from "../../../../core/packages/managed/src/cli/systemd-controller.js";
 
 const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
@@ -17,17 +17,15 @@ const tsxImport = import.meta.resolve("tsx");
 test("successful controller restart keeps the existing systemd command path", async () => {
   const fixture = await createSystemdFixture("success");
   const runtimeRoot = path.join(fixture.root, "runtime");
-  const options = lifecycleOptionsForBackend("sysbox", {
+  const options = lifecycleOptions({
     ...fixture.env,
     DIM_STATE_ROOT: path.join(fixture.root, "state"),
     DIM_CONTROLLER_SOCKET: path.join(runtimeRoot, "workspace.sock"),
-    DIM_AGENT_CONTROLLER_SOCKET: path.join(runtimeRoot, "agent.sock"),
     DIM_ADMIN_CONTROLLER_SOCKET: path.join(runtimeRoot, "admin.sock"),
     XDG_RUNTIME_DIR: runtimeRoot
   });
   const socketPaths = [
     options.controllerSocketPath,
-    options.agentControllerSocketPath,
     options.adminControllerSocketPath
   ];
   await Promise.all(socketPaths.map(async (socketPath) => await mkdir(path.dirname(socketPath), { recursive: true })));
