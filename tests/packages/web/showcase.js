@@ -1,3 +1,19 @@
+// @ts-check
+
+/**
+ * @template {HTMLElement} T
+ * @param {string} selector
+ * @param {{new(): T}} constructor
+ * @param {ParentNode} parent
+ * @returns {T}
+ */
+function element(selector, constructor, parent = document) {
+  const found = parent.querySelector(selector);
+  if (!(found instanceof constructor)) throw new Error(`Missing showcase element: ${selector}`);
+  return found;
+}
+
+/** @type {Array<[string, string]>} */
 const standardPatchLines = [
   ["hunk", "@@ -18,7 +18,15 @@ export function renderPolicy(input) {"],
   ["context", "   const policy = parsePolicy(input);"],
@@ -10,6 +26,7 @@ const standardPatchLines = [
   ["add", "+// Untrusted sample: <script>window.secret = true</script>"],
 ];
 
+/** @type {Array<[string, string]>} */
 const cjkPatchLines = [
   ["hunk", "@@ -18,7 +18,15 @@ export function renderPolicy(input) {"],
   ["context", "   const 설명 = \"검토 증거\";"],
@@ -44,11 +61,12 @@ const stateContent = {
     </div>`,
 };
 
-const patchCode = document.querySelector("#patch-code");
-const patchRegion = document.querySelector(".patch-region");
-const patchScrollCue = document.querySelector("#patch-scroll-cue");
-const patchScrollIndicator = document.querySelector(".patch-scroll-indicator");
+const patchCode = element("#patch-code", HTMLElement);
+const patchRegion = element(".patch-region", HTMLElement);
+const patchScrollCue = element("#patch-scroll-cue", HTMLElement);
+const patchScrollIndicator = element(".patch-scroll-indicator", HTMLElement);
 
+/** @param {Array<[string, string]>} lines */
 function renderPatch(lines) {
   const fragment = document.createDocumentFragment();
   for (const [kind, text] of lines) {
@@ -83,12 +101,12 @@ patchRegion.addEventListener("scroll", updatePatchScrollCue);
 window.addEventListener("resize", updatePatchScrollCue);
 renderPatch(standardPatchLines);
 
-const loginForm = document.querySelector("#login-form");
-const email = document.querySelector("#email");
-const password = document.querySelector("#password");
-const loginButton = document.querySelector("#login-submit");
-const loginButtonLabel = loginButton.querySelector(".button-label");
-const loginStatus = document.querySelector("#login-status");
+const loginForm = element("#login-form", HTMLFormElement);
+const email = element("#email", HTMLInputElement);
+const password = element("#password", HTMLInputElement);
+const loginButton = element("#login-submit", HTMLButtonElement);
+const loginButtonLabel = element(".button-label", HTMLElement, loginButton);
+const loginStatus = element("#login-status", HTMLElement);
 let loginPending = false;
 
 loginForm.addEventListener("submit", (event) => {
@@ -100,8 +118,8 @@ loginForm.addEventListener("submit", (event) => {
 
   email.setAttribute("aria-invalid", String(!emailValid));
   password.setAttribute("aria-invalid", String(!passwordValid));
-  document.querySelector("#email-error").textContent = emailValid ? "" : "Enter a complete email address.";
-  document.querySelector("#password-error").textContent = passwordValid ? "" : "Enter at least eight characters.";
+  element("#email-error", HTMLElement).textContent = emailValid ? "" : "Enter a complete email address.";
+  element("#password-error", HTMLElement).textContent = passwordValid ? "" : "Enter at least eight characters.";
 
   if (!emailValid || !passwordValid) {
     (emailValid ? password : email).focus();
@@ -125,10 +143,10 @@ loginForm.addEventListener("submit", (event) => {
   }, 450);
 });
 
-const decisionBadge = document.querySelector("#decision-badge");
-const decisionStatus = document.querySelector("#decision-status");
-const approveButton = document.querySelector("#approve-button");
-const revokeButton = document.querySelector("#revoke-button");
+const decisionBadge = element("#decision-badge", HTMLElement);
+const decisionStatus = element("#decision-status", HTMLElement);
+const approveButton = element("#approve-button", HTMLButtonElement);
+const revokeButton = element("#revoke-button", HTMLButtonElement);
 
 approveButton.addEventListener("click", () => {
   decisionBadge.className = "badge badge-approved";
@@ -148,26 +166,26 @@ revokeButton.addEventListener("click", () => {
   approveButton.focus();
 });
 
-const stressToggle = document.querySelector("#stress-toggle");
-const cjkToggle = document.querySelector("#cjk-toggle");
+const stressToggle = element("#stress-toggle", HTMLElement);
+const cjkToggle = element("#cjk-toggle", HTMLElement);
 
 function updateEvidenceContent() {
   const usesLongContent = stressToggle.getAttribute("aria-pressed") === "true";
   const usesCjkContent = cjkToggle.getAttribute("aria-pressed") === "true";
 
-  document.querySelector("#patch-path").textContent = usesCjkContent
+  element("#patch-path", HTMLElement).textContent = usesCjkContent
     ? "packages/reviewer/src/검토/証拠/完整树/정책.ts"
     : usesLongContent
       ? "packages/controller/src/review-boundaries/a-very-long-directory-name-without-shortcuts/revalidate-complete-tree-proposal-before-authorized-approval.ts"
       : "packages/controller/src/policy.ts";
-  document.querySelector("#expected-head").textContent = usesLongContent
+  element("#expected-head", HTMLElement).textContent = usesLongContent
     ? "7c21a93b99d10fe6c6c953b5f2b9d9a1d33eb2cad34f167790e549feb12cc0fe"
     : "7c21a93";
-  document.querySelector("#file-summary").textContent = usesCjkContent
+  element("#file-summary", HTMLElement).textContent = usesCjkContent
     ? "追加 12件, 削除 4件 · 검토 증거"
     : "12 additions, 4 deletions";
-  document.querySelector("#project-value").textContent = usesCjkContent ? "개발-검토" : "dim-dev";
-  document.querySelector("#reviewer-value").textContent = usesCjkContent ? "ホスト審査員" : "host-reviewer";
+  element("#project-value", HTMLElement).textContent = usesCjkContent ? "개발-검토" : "dim-dev";
+  element("#reviewer-value", HTMLElement).textContent = usesCjkContent ? "ホスト審査員" : "host-reviewer";
   renderPatch(usesCjkContent ? cjkPatchLines : standardPatchLines);
 }
 
@@ -185,9 +203,10 @@ cjkToggle.addEventListener("click", () => {
   updateEvidenceContent();
 });
 
-const statePanel = document.querySelector("#state-panel");
-const stateChoices = [...document.querySelectorAll(".state-choice")];
+const statePanel = element("#state-panel", HTMLElement);
+const stateChoices = [...document.querySelectorAll(".state-choice")].filter((node) => node instanceof HTMLElement);
 
+/** @param {keyof typeof stateContent} state */
 function showState(state) {
   statePanel.innerHTML = stateContent[state];
   for (const choice of stateChoices) {
@@ -197,13 +216,16 @@ function showState(state) {
     showState("loading");
     window.setTimeout(() => {
       showState("empty");
-      statePanel.querySelector("h3").focus({ preventScroll: true });
+      element("h3", HTMLElement, statePanel).focus({ preventScroll: true });
     }, 450);
   });
 }
 
 for (const choice of stateChoices) {
-  choice.addEventListener("click", () => showState(choice.dataset.state));
+  choice.addEventListener("click", () => {
+    const state = choice.dataset.state;
+    if (state === "loading" || state === "empty" || state === "error") showState(state);
+  });
 }
 
 showState("empty");

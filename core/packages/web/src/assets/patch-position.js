@@ -1,3 +1,5 @@
+// @ts-check
+/** @param {Pick<ReturnType<typeof import("./reviewer-elements.js").reviewerElements>, "patchRegion" | "patchCue" | "patchTrack" | "patchThumb">} elements */
 export function updatePatchPosition(elements) {
   const maximum = elements.patchRegion.scrollWidth - elements.patchRegion.clientWidth;
   const fits = maximum <= 0;

@@ -1,6 +1,7 @@
+// @ts-check
 "use strict";
 
-import { parseReview, parseSession, text } from "./review-data.js";
+import { parseReview, parseSession, record, text } from "./review-data.js";
 import { clearReview, renderReview } from "./review-renderer.js";
 import { createOperationCoordinator } from "./operation-coordinator.js";
 import { updatePatchPosition } from "./patch-position.js";
@@ -9,20 +10,26 @@ import { reviewerElements } from "./reviewer-elements.js";
 
 const elements = reviewerElements();
 
+/** @type {import("./types.js").Session | null} */
 let session = null;
+/** @type {(() => void) | null} */
 let retryAction = null;
 let decisionPending = false;
-const pendingControls = new Set();
+const pendingControls = new Set(/** @type {HTMLButtonElement[]} */ ([]));
 const operations = createOperationCoordinator();
 
+/** @param {string} path @param {import("./types.js").Operation} operation @param {RequestInit} options @returns {Promise<import("./types.js").RequestResult>} */
 async function request(path, operation, options = {}) {
   try {
+    const headers = new Headers(options.headers);
+    if (!headers.has("Accept")) headers.set("Accept", "application/json");
     const response = await fetch(path, {
       ...options,
       credentials: "same-origin",
-      headers: { Accept: "application/json", ...options.headers },
+      headers,
       signal: AbortSignal.any([operation.signal, AbortSignal.timeout(10_000)])
     });
+    /** @type {unknown} */
     const body = response.status === 204 ? null : await response.json();
     return { body, ok: response.ok, status: response.status };
   } catch (error) {
@@ -47,6 +54,7 @@ function showSignedOut(message = "") {
   elements.username.focus();
 }
 
+/** @param {import("./types.js").Session} activeSession */
 function showWorkspace(activeSession) {
   session = activeSession;
   elements.restore.hidden = true;
@@ -64,6 +72,7 @@ function showWorkspace(activeSession) {
   elements.workspaceTitle.focus();
 }
 
+/** @param {HTMLButtonElement} button */
 function beginBusy(button) {
   if (pendingControls.has(button)) return false;
   pendingControls.add(button);
@@ -72,12 +81,14 @@ function beginBusy(button) {
   return true;
 }
 
+/** @param {HTMLButtonElement} button */
 function endBusy(button) {
   pendingControls.delete(button);
   button.removeAttribute("aria-busy");
   button.removeAttribute("aria-disabled");
 }
 
+/** @param {HTMLButtonElement | null} button */
 function startOperation(button = null) {
   for (const pending of pendingControls) endBusy(pending);
   const operation = operations.start();
@@ -97,6 +108,7 @@ function unlockDecisionNavigation() {
     elements.createButton, elements.openButton, elements.logoutButton]) control.disabled = false;
 }
 
+/** @param {string} message @param {(() => void) | null} retry @param {string} title */
 function showRequestError(message, retry, title = "Evidence request failed") {
   elements.requestError.textContent = message;
   elements.alertAnnouncer.textContent = message;
@@ -106,6 +118,7 @@ function showRequestError(message, retry, title = "Evidence request failed") {
   elements.retryButton.hidden = retry === null;
 }
 
+/** @param {"empty" | "loading" | "error" | "ready"} state */
 function showEvidenceState(state) {
   elements.emptyState.hidden = state !== "empty";
   elements.loadingState.hidden = state !== "loading";
@@ -114,6 +127,7 @@ function showEvidenceState(state) {
   elements.statusAnnouncer.textContent = state === "loading" ? "Loading review evidence." : state === "ready" ? "Review evidence loaded." : state === "error" ? "Review evidence could not be loaded." : "No review is open.";
 }
 
+/** @param {string} reviewId @param {import("./types.js").Operation} operation */
 async function openReview(reviewId, operation) {
   if (session === null) return;
   showEvidenceState("loading");
@@ -176,7 +190,7 @@ elements.createForm.addEventListener("submit", async (event) => {
     const result = await request(`/v1/projects/${encodeURIComponent(session.projectId)}/repositories/${encodeURIComponent("root")}/reviews/resolve`, operation, { method: "POST", headers: { "Content-Type": "application/json", "X-DIM-CSRF": session.csrfToken }, body: JSON.stringify({ proposalRef: elements.proposalRef.value }) });
     if (!operations.isCurrent(operation)) return;
     if (result.status === 401) return showSignedOut("Your session ended. Sign in again.");
-    const created = typeof result.body === "object" && result.body !== null && !Array.isArray(result.body) ? result.body : null;
+    const created = record(result.body);
     const reviewId = text(created?.reviewId);
     if (!result.ok || reviewId === null) {
       showEvidenceState("error");

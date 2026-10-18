@@ -1,8 +1,11 @@
+// @ts-check
 import { parseReview } from "./review-data.js";
 import { renderReview } from "./review-renderer.js";
 import { updatePatchPosition } from "./patch-position.js";
 
+/** @param {import("./types.js").ReviewerElements} elements @param {import("./types.js").ReviewLifecycle} lifecycle */
 export function createReviewActions(elements, lifecycle) {
+  /** @param {"approvals" | "revocations"} action @param {HTMLButtonElement} button @param {HTMLButtonElement} inverseButton */
   async function mutate(action, button, inverseButton) {
     const session = lifecycle.session();
     if (session === null || lifecycle.isPending(button)) return;

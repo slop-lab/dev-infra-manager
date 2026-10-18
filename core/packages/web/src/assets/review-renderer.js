@@ -1,7 +1,12 @@
+// @ts-check
+/** @typedef {ReturnType<typeof import("./reviewer-elements.js").reviewerElements>} ReviewerElements */
+/** @typedef {NonNullable<ReturnType<typeof import("./review-data.js").parseReview>>} ParsedReview */
+
 const MAX_HIGHLIGHTED_LINES = 5_000;
 const MAX_PATCH_LINES = 250_000;
 const MAX_PATCH_BYTES = 8 * 1024 * 1024;
 
+/** @param {string} status */
 function statusClass(status) {
   switch (status) {
     case "pending": return "badge badge-pending";
@@ -12,6 +17,7 @@ function statusClass(status) {
   }
 }
 
+/** @param {HTMLElement} container @param {string} label @param {string} value @param {boolean} mono */
 function appendMetadata(container, label, value, mono = false) {
   const row = document.createElement("div");
   const term = document.createElement("dt");
@@ -23,12 +29,13 @@ function appendMetadata(container, label, value, mono = false) {
   container.append(row);
 }
 
+/** @param {ReviewerElements} elements @param {ParsedReview} review @param {string} reviewerId */
 export function renderReview(elements, review, reviewerId) {
   const { input, changes, requiredReviewerIds, staleReasons, approvals, revocations, canDecide } = review;
   elements.reviewId.value = input.reviewId;
   elements.reviewTitle.textContent = `Review ${input.reviewId.slice(0, 12)}`;
   elements.reviewStatus.className = statusClass(input.status);
-  elements.reviewStatus.textContent = input.status[0].toUpperCase() + input.status.slice(1);
+  elements.reviewStatus.textContent = input.status.charAt(0).toUpperCase() + input.status.slice(1);
   elements.stalePanel.hidden = input.status !== "stale";
   elements.staleReasons.replaceChildren(...staleReasons.map((reason) => {
     const item = document.createElement("li");
@@ -36,6 +43,7 @@ export function renderReview(elements, review, reviewerId) {
     return item;
   }));
   elements.metadata.replaceChildren();
+  /** @type {Array<[string, string, boolean?]>} */
   const values = [
     ["Project", input.projectId], ["Repository", input.repositoryId], ["Protected ref", input.protectedRef],
     ["Proposal ref", input.proposalRef], ["Expected head", input.expectedProtectedHead, true],
@@ -54,7 +62,7 @@ export function renderReview(elements, review, reviewerId) {
     kind.className = "path-kind";
     path.className = "path-value";
     kind.textContent = change.status;
-    const value = change.oldPath !== null && change.newPath !== null && change.oldPath !== change.newPath ? `${change.oldPath} -> ${change.newPath}` : change.newPath ?? change.oldPath;
+    const value = change.oldPath !== null && change.newPath !== null && change.oldPath !== change.newPath ? `${change.oldPath} -> ${change.newPath}` : change.newPath ?? change.oldPath ?? "";
     const segments = value.match(/[^/_-]*[/_-]|[^/_-]+$/gu) ?? [];
     for (const [index, segment] of segments.entries()) {
       path.append(document.createTextNode(segment));
@@ -70,6 +78,7 @@ export function renderReview(elements, review, reviewerId) {
   return renderPatch(elements, input.patch);
 }
 
+/** @param {ReviewerElements} elements */
 export function clearReview(elements) {
   for (const container of [elements.staleReasons, elements.metadata, elements.changedPaths, elements.patchCode]) {
     container.replaceChildren();
@@ -92,6 +101,7 @@ export function clearReview(elements) {
   elements.loginButton.classList.remove("is-loading");
 }
 
+/** @param {ReviewerElements} elements @param {string} status @param {string} reviewerId @param {ParsedReview["approvals"]} approvals @param {ParsedReview["revocations"]} revocations @param {boolean} canDecide */
 function renderDecision(elements, status, reviewerId, approvals, revocations, canDecide) {
   const revokedIds = new Set(revocations.map(({ approvalId }) => approvalId));
   const ownApprovals = approvals.filter((approval) => approval.reviewerId === reviewerId);
@@ -118,6 +128,7 @@ function renderDecision(elements, status, reviewerId, approvals, revocations, ca
         : "You have not approved this exact review.";
 }
 
+/** @param {ReviewerElements} elements @param {string} patch */
 function renderPatch(elements, patch) {
   let lineCount = patch.length === 0 ? 0 : 1;
   for (const character of patch) {

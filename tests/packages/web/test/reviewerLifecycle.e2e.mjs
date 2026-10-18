@@ -1,3 +1,5 @@
+// @ts-check
+import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import {
@@ -11,7 +13,21 @@ const playwrightPath = process.env.DIM_PLAYWRIGHT_CORE;
 if (playwrightPath === undefined) {
   throw new Error("DIM_PLAYWRIGHT_CORE must name playwright-core/index.mjs");
 }
-const { chromium } = await import(pathToFileURL(playwrightPath).href);
+const moduleUrl = pathToFileURL(playwrightPath);
+/** @type {unknown} */
+const metadata = JSON.parse(await readFile(new URL("./package.json", moduleUrl), "utf8"));
+if (typeof metadata !== "object" || metadata === null || !("version" in metadata) || metadata.version !== "1.64.1") {
+  throw new Error("The browser regression requires playwright-core 1.64.1, matching its checked API types");
+}
+/** @type {unknown} */
+const loaded = await import(moduleUrl.href);
+if (typeof loaded !== "object" || loaded === null || !("chromium" in loaded)
+  || typeof loaded.chromium !== "object" || loaded.chromium === null
+  || !("launch" in loaded.chromium) || typeof loaded.chromium.launch !== "function") {
+  throw new Error("DIM_PLAYWRIGHT_CORE did not export the Chromium launch API");
+}
+// The supplied package version and the only consumed entrypoint are checked above.
+const chromium = /** @type {Pick<import("playwright-core").BrowserType, "launch">} */ (loaded.chromium);
 const READ_ONLY_USERNAME = "read-only-reviewer";
 const fixture = await reviewerWebFixture({ accounts: [WEB_USERNAME, READ_ONLY_USERNAME], reviewerAccountId: WEB_USERNAME });
 const browser = await chromium.launch({
@@ -19,6 +35,7 @@ const browser = await chromium.launch({
   headless: true
 });
 const page = await browser.newPage();
+/** @type {string[]} */
 const pageErrors = [];
 page.on("pageerror", (error) => { pageErrors.push(error.message); console.error(error.message); });
 
@@ -34,7 +51,7 @@ try {
     await page.getByLabel("Review ID").fill(fixture.reviewId);
     await page.getByRole("button", { name: "Open review" }).click();
     await page.locator("#review-view").waitFor({ state: "visible" });
-    assert.ok((await page.locator("#patch-code").textContent()).length > 0);
+    assert.ok(((await page.locator("#patch-code").textContent()) ?? "").length > 0);
   };
   const expectEmptyReview = async () => {
     await page.locator("#empty-state").waitFor({ state: "visible" });
@@ -55,12 +72,10 @@ try {
   await page.getByRole("button", { name: "Find and open" }).click();
   await page.locator("#review-view").waitFor({ state: "visible" });
   assert.equal(await page.locator("#review-id").inputValue(), fixture.reviewId);
-  assert.ok((await page.locator("#patch-code").textContent()).length > 0);
+  assert.ok(((await page.locator("#patch-code").textContent()) ?? "").length > 0);
 
-  let releaseApproval;
-  let markApprovalCommitted;
-  const approvalReleased = new Promise((resolve) => { releaseApproval = resolve; });
-  const approvalCommitted = new Promise((resolve) => { markApprovalCommitted = resolve; });
+  const { promise: approvalReleased, resolve: releaseApproval } = deferred();
+  const { promise: approvalCommitted, resolve: markApprovalCommitted } = deferred();
   const approvalPath = `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}/approvals`;
   await page.route(`**${approvalPath}`, async (route) => {
     const response = await route.fetch();
@@ -73,7 +88,10 @@ try {
   await page.getByRole("button", { name: "Approve review" }).click();
   await approvalCommitted;
   const authoritative = await fixture.native.request("reviewer-a-user", "GET", reviewPath(`/${fixture.reviewId}`));
-  await page.locator("#open-form").evaluate((form) => form.requestSubmit());
+  await page.locator("#open-form").evaluate((form) => {
+    if (!(form instanceof HTMLFormElement)) throw new Error("Open review form is missing");
+    form.requestSubmit();
+  });
 
   // Then
   assert.equal(objectArrayField(await readJsonObject(authoritative), "approvals").length, 1);
@@ -101,10 +119,14 @@ try {
   await login(READ_ONLY_USERNAME);
   await openReview();
   const bobStatuses = await page.evaluate(async (path) => {
+    /** @type {unknown} */
     const activeSession = await fetch("/v1/session").then((response) => response.json());
+    if (typeof activeSession !== "object" || activeSession === null
+      || !("csrfToken" in activeSession) || typeof activeSession.csrfToken !== "string") throw new Error("Missing browser session token");
+    const csrfToken = activeSession.csrfToken;
     return Promise.all(["approvals", "revocations"].map(async (action) => (await fetch(`${path}/${action}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-DIM-CSRF": activeSession.csrfToken },
+      headers: { "Content-Type": "application/json", "X-DIM-CSRF": csrfToken },
       body: "{}"
     })).status));
   }, `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`);
@@ -143,12 +165,9 @@ try {
 
   const reviewMemberPath = `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`;
   const reviewBody = await page.evaluate(async (path) => (await fetch(path)).text(), reviewMemberPath);
-  let releaseReview;
-  let markRouteStarted;
-  let markRouteFinished;
-  const reviewReleased = new Promise((resolve) => { releaseReview = resolve; });
-  const routeStarted = new Promise((resolve) => { markRouteStarted = resolve; });
-  const routeFinished = new Promise((resolve) => { markRouteFinished = resolve; });
+  const { promise: reviewReleased, resolve: releaseReview } = deferred();
+  const { promise: routeStarted, resolve: markRouteStarted } = deferred();
+  const { promise: routeFinished, resolve: markRouteFinished } = deferred();
   await page.route(`**${reviewMemberPath}`, async (route) => {
     markRouteStarted();
     await reviewReleased;
@@ -185,7 +204,7 @@ try {
   await page.locator(".context-rail").evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
   const railAfter = await page.locator(".context-rail").evaluate((element) => ({
     scrollTop: element.scrollTop,
-    openButtonBottom: document.querySelector("#open-button").getBoundingClientRect().bottom
+    openButtonBottom: document.querySelector("#open-button")?.getBoundingClientRect().bottom ?? Infinity
   }));
   await page.locator("#proposal-ref").focus();
   const tabOrder = [];
@@ -212,4 +231,12 @@ try {
 } finally {
   await browser.close();
   await fixture.close();
+}
+
+/** @returns {{promise: Promise<void>, resolve: () => void}} */
+function deferred() {
+  /** @type {() => void} */
+  let resolve = () => { throw new Error("Deferred promise was not initialized"); };
+  const promise = new Promise((done) => { resolve = () => done(undefined); });
+  return { promise, resolve };
 }
