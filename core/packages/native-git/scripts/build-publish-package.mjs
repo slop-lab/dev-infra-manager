@@ -16,6 +16,7 @@ output.types = "./index.d.ts";
 output.exports = {
   ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" },
   "./service": { types: "./service.d.ts", import: "./service.js" },
+  "./execution": { types: "./execution-protocol.d.ts", import: "./execution-protocol.js" },
   "./workflow": { types: "./workflowCompiler.d.ts", import: "./workflowCompiler.js" }
 };
 output.bin = { "dim-native-git": "cli.js" };

@@ -10,7 +10,6 @@ import type { AdmissionVerifierHttpClient } from "../../../../core/packages/nati
 import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
 import type { AuthoritativeNativeReviewHooks } from "../../../../core/packages/native-git/src/authoritative-native-review.js";
 import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
-import type { NativeOrdinaryAttemptHooks } from "../../../../core/packages/native-git/src/native-ordinary-attempt-http.js";
 import type { NativeInstalledPromotionHooks } from "../../../../core/packages/native-git/src/native-installed-promotion.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
 import type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit, WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
@@ -90,7 +89,7 @@ export async function startFinalizeService(
   nativeHumanReviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
   deliveryFaults?: ReviewPublicationFaults,
-  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks,
+  nativeOrdinaryAttemptHooks?: undefined,
   configOverrides: object = {},
   nativePromotionHooks?: NativeInstalledPromotionHooks
 ): Promise<RunningService> {
@@ -114,7 +113,7 @@ export async function startFinalizeServiceForGeneration(
   nativeHumanReviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
   deliveryFaults?: ReviewPublicationFaults,
-  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks,
+  nativeOrdinaryAttemptHooks?: undefined,
   configOverrides: object = {},
   nativePromotionHooks?: NativeInstalledPromotionHooks
 ): Promise<RunningService> {
@@ -143,7 +142,6 @@ export async function startFinalizeServiceForGeneration(
     ...(nativeHumanReviewerHooks === undefined ? {} : { nativeHumanReviewerHooks }),
     ...(ordinaryIdentityHttpClient === undefined ? {} : { ordinaryIdentityHttpClient }),
     ...(deliveryFaults === undefined ? {} : { deliveryFaults }),
-    ...(nativeOrdinaryAttemptHooks === undefined ? {} : { nativeOrdinaryAttemptHooks }),
     ...(nativePromotionHooks === undefined ? {} : { nativePromotionHooks })
   };
   const service = await configuredNativeGitBundleServer(options);
@@ -242,7 +240,7 @@ export function parseImportReceipt(value: unknown): ImportReceipt {
     || Reflect.get(value, "serviceId") !== "native-main"
     || Reflect.get(value, "rootRepositoryId") !== "root"
     || Reflect.get(value, "phase") !== "bundle-durable") {
-    throw new Error("invalid root import receipt fixture");
+    throw new Error(`invalid root import receipt fixture: ${JSON.stringify(value)}`);
   }
   const projectId = stringField(value, "projectId");
   const receiptGeneration = stringField(value, "generationId");
@@ -252,7 +250,7 @@ export function parseImportReceipt(value: unknown): ImportReceipt {
   const policyDigest = stringField(value, "policyDigest");
   const bundleDigest = stringField(value, "bundleDigest");
   const bundleSize = Reflect.get(value, "bundleSize");
-  if (typeof bundleSize !== "number") throw new Error("invalid root import receipt fixture");
+  if (typeof bundleSize !== "number") throw new Error(`invalid root import receipt fixture: ${JSON.stringify(value)}`);
   return {
     schemaVersion: 1,
     serviceId: "native-main",
@@ -283,6 +281,6 @@ function importPolicy() {
 
 function stringField(value: object, field: string): string {
   const selected = Reflect.get(value, field);
-  if (typeof selected !== "string") throw new Error("invalid root import receipt fixture");
+  if (typeof selected !== "string") throw new Error(`invalid root import receipt fixture: ${JSON.stringify(value)}`);
   return selected;
 }

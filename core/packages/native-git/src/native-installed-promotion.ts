@@ -1,3 +1,4 @@
+import { currentExecutionEvidence } from "./execution-evidence.js";
 import { createHash } from "node:crypto";
 import { readAuthoritativeNativeDecisions } from "./authoritative-native-decision-store.js";
 import { readAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
@@ -28,9 +29,6 @@ export type NativeInstalledPromotionContext = {
   readonly config: NativeGitBundleConfig;
   readonly runtime: AuthoritativeNativeCandidateRuntime;
   readonly stateDirectory: string;
-  readonly currentOrdinaryEvidence: (input: {
-    readonly projectId: string; readonly reviewId: string; readonly jobName: string;
-  }) => Promise<OrdinaryEvidence>;
   readonly hooks?: NativeInstalledPromotionHooks;
 };
 
@@ -91,12 +89,15 @@ export async function promoteInstalledNativeReview(
   const jobs = [] as Array<NativeProjectRootPromotionEvidence["jobs"][number]>;
   for (const required of target.imported.policy.requiredJobs) {
     if (required.kind === "ordinary-sysbox") {
-      const evidence = await context.currentOrdinaryEvidence({ projectId, reviewId, jobName: required.name });
-      if (evidence.result !== "success" || evidence.completion.kind !== "exited" || evidence.completion.exitCode !== 0) {
-        throw new NativeInstalledPromotionError("ordinary evidence is not successful");
+      const event = envelope.events.find((event) => event.executionKind === required.kind && event.jobName === required.name);
+      if (event === undefined) throw new NativeInstalledPromotionError("required execution event is missing");
+      const evidence = await currentExecutionEvidence(context.runtime, target.repository, event);
+      if (evidence.result.result !== "success" || evidence.result.completion.kind !== "exited"
+        || !("exitCode" in evidence.result.completion) || evidence.result.completion.exitCode !== 0) {
+        throw new NativeInstalledPromotionError("execution evidence is not successful");
       }
       jobs.push({ executionKind: required.kind, jobName: required.name, evidenceClass: required.evidenceClass,
-        evidenceDigest: digest("dim-native-ordinary-promotion-evidence-v1\0", evidence) });
+        evidenceDigest: evidence.digest });
     } else {
       if (context.config.qemuCi === undefined) throw new NativeInstalledPromotionError("QEMU evidence service is unavailable");
       jobs.push({ executionKind: required.kind, jobName: required.name, evidenceClass: required.evidenceClass,

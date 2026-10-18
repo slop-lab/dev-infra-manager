@@ -3,8 +3,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { NativeHostPrivateRoot, type NativeHostPrivateRootIdentity } from "../../../../core/packages/managed/src/nativeOrdinaryExecutorRoot.js";
-import { executeNativeHostClaim } from "../../../../core/packages/managed/src/nativeOrdinaryExecutor.js";
-import { authority, dependencies, execution, ExecutorRunner } from "./nativeOrdinaryExecutorFixture.js";
 
 const roots: string[] = [];
 
@@ -13,29 +11,6 @@ afterEach(async () => {
 });
 
 describe("native ordinary private work root", () => {
-  it("removes the standalone root before reporting cleanup complete", async () => {
-    // Given
-    const runner = new ExecutorRunner();
-    let privateRoot: string | undefined;
-    const fixture = {
-      ...dependencies(runner),
-      createReadAuthority(input: Parameters<ReturnType<typeof dependencies>["createReadAuthority"]>[0]) {
-        privateRoot = input.privateRoot;
-        return authority();
-      },
-      async reportResult() {
-        if (privateRoot === undefined) throw new Error("private root was not observed");
-        await expect(lstat(privateRoot)).rejects.toMatchObject({ code: "ENOENT" });
-      }
-    };
-
-    // When
-    const completed = await executeNativeHostClaim(fixture, execution());
-
-    // Then
-    expect(completed.disposition).toBe("reported");
-  });
-
   it("removes only the exact identity-bound owned root", async () => {
     // Given
     const journal = await temporaryPrivateRoots();
@@ -45,11 +20,11 @@ describe("native ordinary private work root", () => {
       rootId: "91000000-0000-4000-8000-000000000001"
     } as const;
     const privateRoot = journal.privateRoot(identity);
-    const path = await privateRoot.create(execution().claim.claimId);
+    const path = await privateRoot.create("20000000-0000-4000-8000-000000000001");
     await writeFile(join(path, "candidate-data"), "untrusted\n");
 
     // When
-    const cleaned = await privateRoot.cleanup(execution().claim.claimId);
+    const cleaned = await privateRoot.cleanup("20000000-0000-4000-8000-000000000001");
 
     // Then
     expect(cleaned).toBe(true);
@@ -79,7 +54,7 @@ describe("native ordinary private work root", () => {
         path = privateRoot.path;
         await symlink(target, path);
       } else {
-        path = await privateRoot.create(execution().claim.claimId);
+        path = await privateRoot.create("20000000-0000-4000-8000-000000000001");
         if (variant === "permissive") {
           await chmod(path, 0o755);
         } else if (variant === "hard-linked-marker") {
@@ -95,7 +70,7 @@ describe("native ordinary private work root", () => {
       }
 
       // When
-      const cleaned = await privateRoot.cleanup(execution().claim.claimId);
+      const cleaned = await privateRoot.cleanup("20000000-0000-4000-8000-000000000001");
 
       // Then
       expect(cleaned).toBe(false);
@@ -113,7 +88,7 @@ describe("native ordinary private work root", () => {
       rootId: "94000000-0000-4000-8000-000000000001"
     } as const;
     const createdRoot = journal.privateRoot(planned);
-    const path = await createdRoot.create(execution().claim.claimId);
+    const path = await createdRoot.create("20000000-0000-4000-8000-000000000001");
     const identity = createdRoot.identity;
     const marker = (await readdir(path))[0];
     if (marker === undefined) throw new Error("private root marker is missing");
@@ -129,7 +104,7 @@ describe("native ordinary private work root", () => {
       .not.toEqual({ device: replacementIdentity.dev, inode: replacementIdentity.ino });
 
     // When
-    const cleaned = await journal.privateRoot(identity).cleanup(execution().claim.claimId);
+    const cleaned = await journal.privateRoot(identity).cleanup("20000000-0000-4000-8000-000000000001");
 
     // Then
     expect(cleaned).toBe(false);
@@ -163,7 +138,7 @@ describe("native ordinary private work root", () => {
       }
 
       // When
-      const cleaned = await privateRoot.cleanup(execution().claim.claimId);
+      const cleaned = await privateRoot.cleanup("20000000-0000-4000-8000-000000000001");
 
       // Then
       expect(cleaned).toBe(false);

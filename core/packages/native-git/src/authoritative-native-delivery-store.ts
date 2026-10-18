@@ -28,9 +28,8 @@ const markerBase = {
   destinationDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/)
 } as const;
 const markerSchema = z.discriminatedUnion("state", [z.object({ ...markerBase, state: z.literal("recorded"),
-  serviceGenerationId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
-  eligibilityGeneration: uuidV4,
-  eligibilityExpiresAt: z.number().int().positive()
+  generationId: z.string().regex(/^[0-9a-f]{64}$/),
+  executionId: z.string().uuid()
 }).strict().readonly(), z.object({ ...markerBase, state: z.literal("superseded"),
   rejectionStatus: z.union([z.literal(404), z.literal(409)]), rejectedAt: z.number().int().positive(),
   retryAfter: z.number().int().positive()
@@ -66,8 +65,7 @@ export async function readPendingAuthoritativeNativeDeliveries(
 export async function acknowledgeAuthoritativeNativeDelivery(
   repository: string,
   delivery: AuthoritativeNativePendingDelivery,
-  acknowledgement: { readonly serviceId: string; readonly serviceGenerationId: string;
-    readonly eligibilityGeneration: string; readonly eligibilityExpiresAt: number },
+  acknowledgement: { readonly serviceId: string; readonly generationId: string; readonly executionId: string },
   binding: AuthoritativeNativeDeliveryBinding,
   faults: ReviewPublicationFaults = {}
 ): Promise<z.infer<typeof markerSchema>> {
@@ -79,9 +77,8 @@ export async function acknowledgeAuthoritativeNativeDelivery(
   }
   const marker = markerSchema.parse({ schemaVersion: 3, state: "recorded", eventId: delivery.event.eventId,
     eventDigest: delivery.eventDigest, serviceId: acknowledgement.serviceId,
-    serviceGenerationId: acknowledgement.serviceGenerationId, destinationDigest: binding.destinationDigest,
-    eligibilityGeneration: acknowledgement.eligibilityGeneration,
-    eligibilityExpiresAt: acknowledgement.eligibilityExpiresAt });
+    generationId: acknowledgement.generationId, destinationDigest: binding.destinationDigest,
+    executionId: acknowledgement.executionId });
   const path = join(paths.delivered, `${marker.eventId}.json`);
   try {
     await publishReviewRecord({ path, serialized: `${JSON.stringify(marker)}\n`,
@@ -152,7 +149,7 @@ async function readMarkers(
       throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker does not match its event");
     }
     if (marker.serviceId === binding.serviceId && marker.destinationDigest === binding.destinationDigest
-      && (marker.state === "superseded" ? marker.retryAfter > now : marker.eligibilityExpiresAt > now)) {
+      && (marker.state === "superseded" ? marker.retryAfter > now : true)) {
       delivered.add(eventId);
     }
   }

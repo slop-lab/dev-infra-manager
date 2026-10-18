@@ -15,9 +15,8 @@ import type { ReviewPublicationFaults } from "./review-record-storage.js";
 const maximumResponseBytes = 64 * 1024;
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const uuidV4 = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-const acknowledgementSchema = z.object({ schemaVersion: z.literal(2), serviceId: z.literal("ordinary-main"),
-  serviceGenerationId: digest, generationId: digest, eligibilityGeneration: uuidV4,
-  eligibilityExpiresAt: z.number().int().positive(), eventId: digest, recorded: z.literal(true) }).strict().readonly();
+const acknowledgementSchema = z.object({ executionId: z.string().uuid(), eventId: digest,
+  generationId: digest }).strict().readonly();
 
 export type AuthoritativeNativeEventDispatcher = {
   readonly start: () => void;
@@ -149,13 +148,12 @@ async function deliver(
   options: AuthoritativeNativeEventDispatcherOptions,
   pending: Pending,
   context: DeliveryContext
-): Promise<{ readonly serviceId: string; readonly serviceGenerationId: string;
-  readonly eligibilityGeneration: string; readonly eligibilityExpiresAt: number }> {
+): Promise<{ readonly serviceId: string; readonly generationId: string; readonly executionId: string }> {
   const signal = AbortSignal.any([context.shutdown, AbortSignal.timeout(context.timeoutMilliseconds)]);
   const event = pending.delivery.event;
-  const receipt = { schemaVersion: 1, generationId: options.generationId, event } as const;
+  const receipt = { generationId: options.generationId, event } as const;
   const acknowledgementResult = acknowledgementSchema.safeParse(await requestJson(options.httpClient, {
-    endpoint: options.webhook.endpoint, method: "POST", path: "/v1/native-root-ci-events",
+    endpoint: options.webhook.endpoint, method: "POST", path: "/v1/jobs",
     authorization: authorization(options.webhook), body: JSON.stringify(receipt), signal
   }, 202));
   if (!acknowledgementResult.success) {
@@ -163,12 +161,11 @@ async function deliver(
   }
   const acknowledged = acknowledgementResult.data;
   if (acknowledged.generationId !== options.generationId
-    || acknowledged.serviceGenerationId !== options.generationId || acknowledged.eventId !== event.eventId) {
+    || acknowledged.eventId !== event.eventId) {
     throw new AuthoritativeNativeEventDeliveryError("ordinary receipt acknowledgement does not match delivery");
   }
-  return { serviceId: acknowledged.serviceId, serviceGenerationId: acknowledged.serviceGenerationId,
-    eligibilityGeneration: acknowledged.eligibilityGeneration,
-    eligibilityExpiresAt: acknowledged.eligibilityExpiresAt };
+  return { serviceId: "ordinary-main", generationId: acknowledged.generationId,
+    executionId: acknowledged.executionId };
 }
 
 async function requestJson(

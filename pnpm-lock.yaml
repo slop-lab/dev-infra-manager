@@ -195,6 +195,9 @@ importers:
         version: 2.8.3
   core/packages/managed:
     dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
       "@slop-lab/dim-native-git":
         specifier: workspace:0.10.0
         version: link:../native-git

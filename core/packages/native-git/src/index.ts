@@ -34,8 +34,6 @@ export {
 } from "./native-bundle-server.js";
 export type {
   AuthoritativeNativeReviewSelector,
-  CurrentOrdinaryTerminalEvidence,
-  CurrentOrdinaryTerminalEvidenceSelector,
   NativeGitBundleServer,
   NativeGitBundleServerOptions,
   NativeGitPreparedProject

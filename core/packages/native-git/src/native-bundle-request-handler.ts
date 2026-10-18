@@ -1,3 +1,4 @@
+import type { ExecutionHttpService } from "./execution-http.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { bindExactActivation } from "./native-bundle-activation.js";
@@ -20,9 +21,6 @@ import type { NativeProjectRootReadService } from "./native-project-root-read-ht
 import type { NativeProjectWorkspaceWriteService } from "./native-project-workspace-write-http.js";
 import { nativeGitRoute } from "./routing.js";
 import type { NativeHumanReviewerService } from "./native-human-reviewer-http.js";
-import type { NativeRootCiProofService } from "./native-root-ci-proof-http.js";
-import type { NativeOrdinaryAttemptService } from "./native-ordinary-attempt-http.js";
-import type { NativeOrdinaryStatusService } from "./native-ordinary-status-http.js";
 import { handleNativeProjectReadinessHttp } from "./native-project-readiness-http.js";
 import type { NativeQemuAuthorityService } from "./native-qemu-authority-http.js";
 import type { NativeHostPromoterService } from "./native-host-promoter-http.js";
@@ -39,11 +37,9 @@ type RequestHandlerInput = {
   readonly state: NativeGitBundleState;
   readonly workspaceWriteService: NativeProjectWorkspaceWriteService;
   readonly humanReviewerService: NativeHumanReviewerService;
-  readonly rootCiProofService: NativeRootCiProofService;
-  readonly ordinaryAttemptService: NativeOrdinaryAttemptService;
-  readonly ordinaryStatusService: NativeOrdinaryStatusService;
   readonly qemuAuthorityService: NativeQemuAuthorityService | undefined;
   readonly hostPromoterService: NativeHostPromoterService;
+  readonly executionService: ExecutionHttpService;
   readonly candidateReadService: NativeCandidateReadService;
   readonly deliveryHealthy: () => boolean;
   readonly activated: () => boolean;
@@ -77,16 +73,14 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
       await input.activate();
       return sendJson(response, 200, { schemaVersion: 1, generationId, activated: true });
     }
+    if (await input.executionService.handle(request, response, url)) return;
     if (await input.rootReadService.handleLeaseRequest(request, response, url)) return;
     if (await input.candidateReadService.handleLeaseRequest(request, response, url)) return;
     if (await input.workspaceWriteService.handleLeaseRequest(request, response, url)) return;
     if (await handleNativeProjectReadinessHttp(input.readiness, request, response, url)) return;
     if (await input.humanReviewerService.handle(request, response, url)) return;
     if (await input.hostPromoterService.handle(request, response, url)) return;
-    if (await input.ordinaryAttemptService.handle(request, response, url)) return;
-    if (await input.ordinaryStatusService.handle(request, response, url)) return;
     if (await input.qemuAuthorityService?.handle(request, response, url)) return;
-    if (await input.rootCiProofService.handle(request, response, url)) return;
     if (/^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/root-import\/proof$/.test(url.pathname)
       && (request.method !== "GET" || url.search !== "")) return sendNotFound(response);
     if (url.search === "" && (url.pathname === "/v1/operator-root-importer-identity"
@@ -123,6 +117,7 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     }
     const route = nativeGitRoute(request);
     if (route === undefined) return sendNotFound(response);
+    if (await input.executionService.serveGit(request, response, route)) return;
     if (await input.candidateReadService.serveGit(request, response, route)) return;
     if (await input.workspaceWriteService.serveGit(request, response, route)) return;
     return input.rootReadService.serveGit(request, response, route);

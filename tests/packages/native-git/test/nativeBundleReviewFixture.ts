@@ -7,7 +7,6 @@ import type {
 } from "../../../../core/packages/native-git/src/index.js";
 import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
 import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
-import type { NativeOrdinaryAttemptHooks } from "../../../../core/packages/native-git/src/native-ordinary-attempt-http.js";
 import type { NativeInstalledPromotionHooks } from "../../../../core/packages/native-git/src/native-installed-promotion.js";
 import { parseAuthoritativeNativeReviewEnvelope } from "../../../../core/packages/native-git/src/authoritative-native-review-schema.js";
 import { authoritativePolicy, matchingRunner } from "./authoritativeNativeCandidateFixture.js";
@@ -44,7 +43,7 @@ export async function nativeBundleReviewFixture(
   reviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
   deliveryFaults?: ReviewPublicationFaults,
-  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks,
+  nativeOrdinaryAttemptHooks?: undefined,
   configOverrides: object = {},
   nativePromotionHooks?: NativeInstalledPromotionHooks,
   runner = matchingRunner(),

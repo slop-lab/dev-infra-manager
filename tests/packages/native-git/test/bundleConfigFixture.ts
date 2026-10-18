@@ -46,7 +46,7 @@ export function idleNativeConfig() {
       candidateReader: { username: "ordinary-candidate-reader", password: bundleSecrets.candidateReader },
       resultReporter: { username: "ordinary-results", password: bundleSecrets.resultReporter },
       webhook: {
-    endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events",
+    endpoint: "http://ordinary-ci:8080/v1/jobs",
         username: "native-events",
         password: bundleSecrets.webhook
       }

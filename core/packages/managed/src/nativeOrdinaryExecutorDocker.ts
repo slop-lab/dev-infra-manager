@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { NativeHostClaim } from "./nativeOrdinaryClaimProtocol.js";
+import type { ExecutionGrant } from "@slop-lab/dim-native-git/execution";
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 
 const labelKeys = [
@@ -21,11 +21,11 @@ export type NativeDockerPaths = {
   readonly daemonConfig: string;
 };
 
-export async function prepareNativeImages(runner: StreamingCommandRunner, claim: NativeHostClaim, signal: AbortSignal): Promise<void> {
+export async function prepareNativeImages(runner: StreamingCommandRunner, claim: ExecutionGrant, signal: AbortSignal): Promise<void> {
   await pullAndVerify(runner, claim.descriptor.runnerBaseImage, signal);
 }
 
-export function nativeContainerArgs(claim: NativeHostClaim, paths: NativeDockerPaths, routing?: NativeHostImageRouting): string[] {
+export function nativeContainerArgs(claim: ExecutionGrant, paths: NativeDockerPaths, routing?: NativeHostImageRouting): string[] {
   const labels = ownershipLabels(claim);
   return [
     "run", "--detach", "--name", containerName(claim), "--runtime", "sysbox-runc",
@@ -45,7 +45,7 @@ export function nativeContainerArgs(claim: NativeHostClaim, paths: NativeDockerP
   ];
 }
 
-export async function cleanupNativeContainer(runner: StreamingCommandRunner, claim: NativeHostClaim): Promise<boolean> {
+export async function cleanupNativeContainer(runner: StreamingCommandRunner, claim: ExecutionGrant): Promise<boolean> {
   const format = ["{{.Id}}", ...labelKeys.map((key) => `{{index .Config.Labels \"${key}\"}}`)].join("|");
   const inspected = await runner.run("docker", ["container", "inspect", containerName(claim), "--format", format], {
     signal: AbortSignal.timeout(30_000)
@@ -100,19 +100,19 @@ async function pullAndVerify(runner: StreamingCommandRunner, image: string, sign
   }
 }
 
-function ownershipLabels(claim: NativeHostClaim): readonly string[] {
-  const fields = ["true", "dim", claim.hostId, claim.capacity, claim.admissionGeneration, claim.attemptId, claim.claimId, "native-ordinary-runner"];
+function ownershipLabels(claim: ExecutionGrant): readonly string[] {
+  const fields = ["true", "dim", claim.workerId, claim.slotId, claim.generationId, claim.executionId, claim.executionId, "native-ordinary-runner"];
   const hash = createHash("sha256").update("dim-native-ordinary-resource-v1", "ascii");
   for (const field of fields) hash.update(`${Buffer.byteLength(field)}:`, "ascii").update(field);
   return [
-    "dim.managed=true", "dim.owner=dim", `dim.host=${claim.hostId}`, `dim.capacity=${claim.capacity}`,
-    `dim.admission-generation=${claim.admissionGeneration}`, `dim.attempt=${claim.attemptId}`,
-    `dim.resource=${claim.claimId}`, "dim.kind=native-ordinary-runner", `dim.digest=sha256:${hash.digest("hex")}`
+    "dim.managed=true", "dim.owner=dim", `dim.host=${claim.workerId}`, `dim.capacity=${claim.slotId}`,
+    `dim.admission-generation=${claim.generationId}`, `dim.attempt=${claim.executionId}`,
+    `dim.resource=${claim.executionId}`, "dim.kind=native-ordinary-runner", `dim.digest=sha256:${hash.digest("hex")}`
   ];
 }
 
-function containerName(claim: NativeHostClaim): string {
-  return `dim-native-ci-${createHash("sha256").update(claim.claimId).digest("hex").slice(0, 20)}`;
+function containerName(claim: ExecutionGrant): string {
+  return `dim-native-ci-${createHash("sha256").update(claim.executionId).digest("hex").slice(0, 20)}`;
 }
 
 function isMissing(stderr: string, target: string): boolean {

@@ -46,7 +46,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     workspaceWriteIssuers: [hostRole("writer")],
     humanReviewers: [{ reviewerId: "owner", ...credential("reviewer-owner") }], hostPromoters: [hostRole("promoter")],
     ordinaryCi: { endpoint: "http://ordinary-ci:8080", serviceId: "ordinary-main", ...roles,
-      webhook: { endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events", ...roles.webhook } }
+      webhook: { endpoint: "http://ordinary-ci:8080/v1/jobs", ...roles.webhook } }
   };
   const ordinary = {
     schemaVersion: 5, serviceId: "ordinary-main", database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",

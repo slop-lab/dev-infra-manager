@@ -25,6 +25,10 @@
     "./workflow": {
       "types": "./src/workflowCompiler.ts",
       "import": "./dist/workflowCompiler.js"
+    },
+    "./execution": {
+      "types": "./src/execution-protocol.ts",
+      "import": "./dist/execution-protocol.js"
     }
   },
   "bin": {

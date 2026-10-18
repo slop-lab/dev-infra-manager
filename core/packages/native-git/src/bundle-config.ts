@@ -88,7 +88,7 @@ const nativeBundleConfigSchema = nativeGitServiceConfigSchema.unwrap().extend({
     candidateReader: credential,
     resultReporter: credential,
     webhook: z.object({
-      endpoint: z.literal("http://ordinary-ci:8080/v1/native-root-ci-events"),
+      endpoint: z.literal("http://ordinary-ci:8080/v1/jobs"),
       username: credentialUsername,
       password: bundleToken
     }).strict().readonly()

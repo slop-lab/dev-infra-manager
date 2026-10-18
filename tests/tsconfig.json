@@ -35,6 +35,9 @@
       ],
       "@slop-lab/dim-native-git/workflow": [
         "../core/packages/native-git/src/workflowCompiler.ts"
+      ],
+      "@slop-lab/dim-native-git/execution": [
+        "../core/packages/native-git/src/execution-protocol.ts"
       ]
     }
   },

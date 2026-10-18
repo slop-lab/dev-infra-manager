@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmod, writeFile } from "node:fs/promises";
 import { UserError } from "@slop-lab/dim-core";
-import { parseNativeDescriptor } from "./nativeOrdinaryAuthorityModel.js";
-import { nativeDescriptorDigest, type NativeOrdinaryDescriptor } from "./nativeOrdinaryAuthorityProtocol.js";
+import { executionDescriptorSchema, executionDescriptorDigest, type ExecutionDescriptor } from "@slop-lab/dim-native-git/execution";
 
 export type NativeCandidateBlob = {
   readonly objectId: string;
@@ -19,7 +18,7 @@ export interface NativeCandidateReadAuthority {
 
 export type NativeCandidateVerificationInput = {
   readonly authority: NativeCandidateReadAuthority;
-  readonly descriptor: NativeOrdinaryDescriptor;
+  readonly descriptor: ExecutionDescriptor;
   readonly descriptorDigest: string;
   readonly workspace: string;
   readonly scriptFile: string;
@@ -27,14 +26,14 @@ export type NativeCandidateVerificationInput = {
 };
 
 export async function verifyAndMaterializeCandidate(input: NativeCandidateVerificationInput): Promise<void> {
-  let descriptor: NativeOrdinaryDescriptor;
+  let descriptor: ExecutionDescriptor;
   try {
-    descriptor = parseNativeDescriptor(input.descriptor);
+    descriptor = executionDescriptorSchema.parse(input.descriptor);
   } catch (error) {
     if (error instanceof UserError) throw new NativeHostVerificationError("claim descriptor is invalid", { cause: error });
     throw error;
   }
-  if (nativeDescriptorDigest(descriptor) !== input.descriptorDigest) {
+  if (executionDescriptorDigest(descriptor) !== input.descriptorDigest) {
     throw new NativeHostVerificationError("claim descriptor digest does not match its descriptor");
   }
   const identity = { projectId: descriptor.projectId, repositoryId: descriptor.repositoryId };

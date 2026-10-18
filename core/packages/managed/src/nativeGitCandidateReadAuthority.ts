@@ -1,5 +1,4 @@
 import type { NativeCandidateReadAuthority } from "./nativeOrdinaryCandidateVerifier.js";
-import type { NativeCandidateReadAuthorityFactory } from "./nativeOrdinaryExecutor.js";
 import {
   materializeVerifiedTree,
   readVerifiedBlob,
@@ -46,27 +45,6 @@ export type NativeGitCandidateReaderConfig = Omit<
   NativeGitCandidateReadOptions,
   "claim" | "temporaryRoot"
 >;
-
-export function createNativeGitCandidateReadAuthorityFactory(
-  config: NativeGitCandidateReaderConfig
-): NativeCandidateReadAuthorityFactory {
-  return ({ claim, privateRoot, signal }) => {
-    signal.throwIfAborted();
-    const descriptor = claim.descriptor;
-    return createNativeGitCandidateReadAuthority({
-      ...config,
-      temporaryRoot: privateRoot,
-      claim: {
-        projectId: descriptor.projectId,
-        repositoryId: descriptor.repositoryId,
-        protectedRef: descriptor.protectedRef,
-        expectedProtectedHead: descriptor.expectedProtectedHead,
-        candidateCommit: descriptor.candidateCommit,
-        candidateTree: descriptor.candidateTree
-      }
-    });
-  };
-}
 
 export function createNativeGitCandidateReadAuthority(
   options: NativeGitCandidateReadOptions

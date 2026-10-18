@@ -1,3 +1,4 @@
+import { createExecutionHttpService } from "./execution-http.js";
 import { once } from "node:events";
 import { createNativeBundleShutdown } from "./native-bundle-shutdown.js";
 import { parseNativeGitBundleConfig } from "./bundle-config.js";
@@ -28,10 +29,6 @@ import { createAuthoritativeNativeEventDispatcher,
   type AuthoritativeNativeEventDispatcher } from "./authoritative-native-event-dispatcher.js";
 import { createAuthoritativeNativeQemuEventDispatcher } from "./authoritative-native-qemu-event-dispatcher.js";
 import { nativeBundleKnownCredentials } from "./native-bundle-known-credentials.js";
-import { createOrdinaryReservationClaimVerifier } from "./ordinary-reservation-claim.js";
-import { createNativeBundleOrdinaryServices } from "./native-bundle-ordinary-services.js";
-import { currentOrdinaryTerminalEvidence as readCurrentOrdinaryTerminalEvidence }
-  from "./current-ordinary-terminal-evidence.js";
 import { createNativeBundleHttpServer } from "./native-bundle-http-server.js";
 import { createNativeQemuAuthorityService } from "./native-qemu-authority-http.js";
 import { createNativeHostPromoterService } from "./native-host-promoter-http.js";
@@ -43,9 +40,7 @@ export type {
   AuthoritativeNativeReviewSelector,
   NativeGitBundleServer,
   NativeGitBundleServerOptions,
-  NativeGitPreparedProject,
-  CurrentOrdinaryTerminalEvidence,
-  CurrentOrdinaryTerminalEvidenceSelector
+  NativeGitPreparedProject
 } from "./native-bundle-server-types.js";
 
 export async function configuredNativeGitBundleServer(
@@ -194,19 +189,9 @@ export async function configuredNativeGitBundleServer(
   const candidateReadService = createNativeCandidateReadService({ config, runtime: authoritativeRuntime,
     gitExecutable: config.gitExecutable, stateDirectory: options.stateDirectory,
     now: options.rootReadLeaseClock ?? Date.now, serialize: reviewController.run });
-  const ordinaryServices = createNativeBundleOrdinaryServices({
-    attemptHooks: options.nativeOrdinaryAttemptHooks,
-    config,
-    httpClient: identityHttpClient,
-    knownCredentials,
-    runtime: authoritativeRuntime,
-    serialize: reviewController.run,
-    verifyClaim: createOrdinaryReservationClaimVerifier({
-      config: config.ordinaryCi,
-      generationId: options.expectedGenerationId,
-      httpClient: identityHttpClient
-    }).verify
-  });
+  const executionService = createExecutionHttpService({ config, runtime: authoritativeRuntime,
+    stateDirectory: options.stateDirectory, serialize: reviewController.run,
+    ...(options.rootReadLeaseClock === undefined ? {} : { now: options.rootReadLeaseClock }) });
   const qemuAuthorityService = createNativeQemuAuthorityService({ config, knownCredentials,
     runtime: authoritativeRuntime, serialize: reviewController.run });
   const humanReviewerService = createNativeHumanReviewerService({
@@ -222,13 +207,6 @@ export async function configuredNativeGitBundleServer(
       config,
       runtime: authoritativeRuntime,
       stateDirectory: options.stateDirectory,
-      currentOrdinaryEvidence: (selector) => readCurrentOrdinaryTerminalEvidence({
-        config: config.ordinaryCi,
-        httpClient: identityHttpClient,
-        runtime: authoritativeRuntime,
-        serialize: reviewController.run,
-        alreadySerialized: true
-      }, selector),
       ...(options.nativePromotionHooks === undefined ? {} : { hooks: options.nativePromotionHooks })
     }, projectId, reviewId))
   });
@@ -272,9 +250,7 @@ export async function configuredNativeGitBundleServer(
     humanReviewerService,
     hostPromoterService,
     candidateReadService,
-    rootCiProofService: ordinaryServices.rootCiProofService,
-    ordinaryAttemptService: ordinaryServices.ordinaryAttemptService,
-    ordinaryStatusService: ordinaryServices.ordinaryStatusService,
+    executionService,
     qemuAuthorityService,
     deliveryHealthy: () => eventDispatcher.healthy() && proposalReconciliationHealthy,
     activated: () => businessReady,
@@ -296,6 +272,7 @@ export async function configuredNativeGitBundleServer(
       closed = true;
       rootReadService.close();
       candidateReadService.close();
+      executionService.close();
       workspaceWriteService.close();
     },
     async drainOperations() {
@@ -328,14 +305,7 @@ export async function configuredNativeGitBundleServer(
     deriveQemuExecutionDescriptor(input) {
       return reviewController.run(() => deriveAuthoritativeQemuExecutionDescriptor(authoritativeRuntime, input));
     },
-    async currentOrdinaryTerminalEvidence(input) {
-      return readCurrentOrdinaryTerminalEvidence({
-        config: config.ordinaryCi,
-        httpClient: identityHttpClient,
-        runtime: authoritativeRuntime,
-        serialize: reviewController.run
-      }, input);
-    },
+
     close
   };
 

@@ -4,8 +4,8 @@ import { open } from "node:fs/promises";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
 import { parseNativeOrdinaryBundleConfig } from "./nativeOrdinaryBundleConfig.js";
-import { inspectNativeOrdinaryBundleState } from "./nativeOrdinaryBundleState.js";
-import { configuredNativeRootAdmissionServer } from "./nativeRootAdmissionService.js";
+import { inspectExecutionState } from "./ci/state.js";
+import { configuredExecutionServer } from "./ci/service.js";
 import { checkNativeOrdinaryServiceReadiness } from "./nativeOrdinaryServiceReadiness.js";
 
 const configPath = "/run/secrets/service.json";
@@ -29,26 +29,26 @@ export async function runNativeOrdinaryServiceCli(
     return;
   }
   if (arguments_.length === 2 && arguments_[0] === "compatibility" && arguments_[1] === "--json") {
-    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 12, readableFormats: [12] })}\n`);
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 101, readableFormats: [101] })}\n`);
     return;
   }
   if (arguments_.length === 4 && arguments_[0] === "check-state" && arguments_[1] === "--read-only"
     && arguments_[2] === stateDirectory && arguments_[3] === "--json") {
-    const result = await inspectNativeOrdinaryBundleState(dependencies.stateDirectory ?? stateDirectory);
+    const result = await inspectExecutionState(dependencies.stateDirectory ?? stateDirectory);
     process.stdout.write(`${JSON.stringify({ schemaVersion: 1, stateFormat: result.stateFormat })}\n`);
     return;
   }
   if (arguments_.length === 3 && arguments_[0] === "serve" && arguments_[1] === configPath) {
     const expectedGenerationId = parseGenerationId(arguments_[2]);
     const config = parseNativeOrdinaryBundleConfig(await readJson(configPath, 0o444));
-    const server = await configuredNativeRootAdmissionServer({
+    const service = configuredExecutionServer({
       config,
       stateDirectory,
       readinessToken: await readToken(readinessTokenPath, "readiness"),
       activationToken: await readToken(activationTokenPath, "activation"),
       expectedGenerationId
     });
-    await listenUntilTermination(server);
+    try { await listenUntilTermination(service.server); } finally { await service.close(); }
     return;
   }
   if (arguments_.length === 2 && arguments_[0] === "activate") {

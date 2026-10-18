@@ -1,11 +1,9 @@
 import { join } from "node:path";
 import { UserError } from "@slop-lab/dim-core";
-import { createNativeRootCiHostClient } from "./nativeRootCiHostClient.js";
+import { executionWorkerClient } from "./ci/client.js";
+import { runExecutionWorker } from "./ci/worker.js";
+import { sysboxBackend } from "./ci/backends/sysbox.js";
 import { loadNativeRootCiHostConfig } from "./nativeRootCiHostConfig.js";
-import {
-  acquireNativeRootCiHostCapacityGuard,
-  serveNativeRootCiHostCapacity
-} from "./nativeRootCiHostWorker.js";
 import { ProcessRunner } from "@slop-lab/dim-core";
 import { CONTROL_NETWORK, DOCKER_HUB_DIRECT_HOSTNAMES, sysboxRegistryDaemonConfig, ensureRegistryCache } from "./registryCache.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
@@ -19,42 +17,17 @@ export async function runNativeRootCiHost(
 ): Promise<void> {
   const config = await loadNativeRootCiHostConfig(configPath);
   await requireSysboxRuntime(runner, signal);
-  const imageRouting = options.hostMirrorProvider === undefined ? undefined : {
-    network: CONTROL_NETWORK, blockedHostnames: DOCKER_HUB_DIRECT_HOSTNAMES,
-    dockerDaemonConfig: sysboxRegistryDaemonConfig()
-  };
-  if (imageRouting !== undefined) await ensureRegistryCache(runner, options);
-  const capacityInputs = config.capacities.map((capacity) => ({ capacity,
-    client: createNativeRootCiHostClient({ hostId: config.hostId, capacity, generationId: config.generationId,
-      ordinaryCi: { endpoint: config.ordinaryCi.endpoint, serviceId: config.ordinaryCi.serviceId,
-        credential: config.ordinaryCi.credential },
-      nativeGit: { endpoint: config.nativeGit.endpoint, serviceId: config.nativeGit.serviceId } }),
-    journalPath: join(config.stateDirectory, `${capacity}.json`) }));
-  const guardedInputs = [];
-  try {
-    for (const input of capacityInputs) guardedInputs.push({ ...input,
-      capacityGuard: await acquireNativeRootCiHostCapacityGuard(input.journalPath) });
-  } catch (error) {
-    await Promise.all(guardedInputs.map(({ capacityGuard }) => capacityGuard.release()));
-    throw error;
-  }
   const controller = new AbortController();
   const workerSignal = AbortSignal.any([signal, controller.signal]);
-  const workers = guardedInputs.map(async (input) => {
-    try {
-      await serveNativeRootCiHostCapacity({ client: input.client, runner,
-        gitExecutable: config.gitExecutable, nativeGitEndpoint: config.nativeGit.endpoint,
-        journalPath: input.journalPath, capacityGuard: input.capacityGuard,
-        ...(imageRouting === undefined ? {} : { imageRouting }) }, workerSignal);
-    } finally { await input.capacityGuard.release(); }
-  });
-  try {
-    await Promise.all(workers);
-  } catch (error) {
-    controller.abort();
-    await Promise.allSettled(workers);
-    throw error;
-  }
+  const workers = config.capacities.map((slotId) => runExecutionWorker({
+    directory: join(config.stateDirectory, slotId),
+    client: executionWorkerClient({ endpoint: config.ordinaryCi.endpoint, workerId: config.hostId,
+      slotId, token: config.ordinaryCi.credential.password, generationId: config.generationId }),
+    backend: sysboxBackend, runner, gitExecutable: config.gitExecutable,
+    gitEndpoint: config.nativeGit.endpoint, signal: workerSignal
+  }));
+  try { await Promise.all(workers); }
+  catch (error) { controller.abort(); await Promise.allSettled(workers); if (!signal.aborted) throw error; }
 }
 
 async function requireSysboxRuntime(runner: StreamingCommandRunner, signal: AbortSignal): Promise<void> {

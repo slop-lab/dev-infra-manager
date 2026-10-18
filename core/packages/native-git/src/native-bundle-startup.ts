@@ -13,8 +13,6 @@ import { recoverNativeProjectProvisioning } from "./native-project-recovery.js";
 import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-import-transitions.js";
 import { recoverNativeRootImports } from "./native-root-import-recovery.js";
 import { assertGitVersion, type GitExecutableIdentity } from "./repository.js";
-import { assertAuthoritativeOrdinaryAttemptStore } from "./authoritative-ordinary-attempt-store.js";
-import { assertAuthoritativeOrdinaryStatusStore } from "./authoritative-ordinary-status-store.js";
 import { recoverNativeProjectRootPromotions } from "./native-project-root-promotion-recovery.js";
 import { assertNativeQemuAuthorityStore } from "./native-qemu-authority-state.js";
 
@@ -73,8 +71,6 @@ export async function initializeNativeBundleRuntime(
     await assertAuthoritativeNativeReviewStore(repository);
     await assertAuthoritativeNativeApprovalStore(repository);
     await assertAuthoritativeNativeRevocationStore(repository);
-    await assertAuthoritativeOrdinaryAttemptStore(repository);
-    await assertAuthoritativeOrdinaryStatusStore(repository);
     await readAuthoritativeNativeDecisions(repository);
   }));
   return { activationTokenDigest, activated, gitIdentity, runtimeConfig };

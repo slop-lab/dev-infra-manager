@@ -1,5 +1,8 @@
 {
   "name": "dim-ordinary-ci-service-image",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "zod": "4.1.11"
+  }
 }

@@ -16,7 +16,6 @@ import {
   sendJson,
   sendNotFound
 } from "./native-bundle-http.js";
-import { currentAttemptProof } from "./native-current-attempt-proof.js";
 import {
   NativeImportedRootInactiveError,
   NativeImportedRootNotFoundError
@@ -29,7 +28,7 @@ const leaseLifetimeMilliseconds = 30_000;
 const requestSchema = z.object({
   schemaVersion: z.literal(1),
   requestId: z.string().uuid(),
-  executionKind: z.enum(["ordinary-sysbox", "qemu"]),
+  executionKind: z.literal("qemu"),
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   reviewId: z.string().regex(/^[0-9a-f]{64}$/),
   jobName: z.string().regex(/^[a-z][a-z0-9-]{0,62}$/),
@@ -63,8 +62,7 @@ export function createNativeCandidateReadService(input: {
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 }): NativeCandidateReadService {
   const leases = new Map<string, CandidateLease>();
-  const credentials = [input.config.ordinaryCi.candidateReader,
-    ...(input.config.qemuCi === undefined ? [] : [input.config.qemuCi.candidateReader])];
+  const credentials = input.config.qemuCi === undefined ? [] : [input.config.qemuCi.candidateReader];
   const prune = (): void => {
     for (const [username, lease] of leases) if (input.now() >= lease.expiresAt) leases.delete(username);
   };
@@ -85,8 +83,7 @@ export function createNativeCandidateReadService(input: {
       }
       const body = requestSchema.safeParse(rawBody);
       if (!body.success) { sendJson(response, 400, { error: "candidate lease request is invalid" }); return true; }
-      const credential = body.data.executionKind === "ordinary-sysbox"
-        ? input.config.ordinaryCi.candidateReader : input.config.qemuCi?.candidateReader;
+      const credential = input.config.qemuCi?.candidateReader;
       if (credential === undefined || !nativeBasicAuthorized(request, credential)) {
         const known = credentials.some((candidate) => nativeBasicAuthorized(request, candidate));
         sendJson(response, known ? 403 : 401, { error: known ? "forbidden" : "unauthorized" });
@@ -133,16 +130,6 @@ export function createNativeCandidateReadService(input: {
 async function currentDescriptor(runtime: AuthoritativeNativeCandidateRuntime,
   selector: CandidateLeaseRequest): Promise<Readonly<Record<string, unknown>> | "conflict" | undefined> {
   try {
-    if (selector.executionKind === "ordinary-sysbox") {
-      const proof = await currentAttemptProof(runtime, selector.projectId, { schemaVersion: 1,
-        requestId: selector.requestId, reviewId: selector.reviewId, executionKind: "ordinary-sysbox",
-        jobName: selector.jobName, attemptId: selector.attemptId });
-      if (proof === undefined || proof === "conflict") return proof;
-      const assignment = record(proof.assignment);
-      const descriptor = record(assignment.descriptor);
-      return assignment.descriptorDigest === selector.descriptorDigest
-        && assignment.hostId === selector.hostId && assignment.capacity === selector.capacity ? descriptor : "conflict";
-    }
     const target = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.projectId });
     const current = await new NativeQemuAuthorityState(target.repository).current(selector.reviewId, selector.jobName);
     if (current === undefined) return undefined;
