@@ -258,6 +258,44 @@ that an arbitrary large codebase has no possible further improvements.
 - Optional installation and active-controller recovery: `004e724d`.
 - Real SSH-host lifecycle evidence: `50844092`; source existed only on the
   selected remote host, with stdin/status and persistent data verified.
-- Physical optional-package extraction, base image reduction and local bundle
-  selection are in progress. This does not mark CI state-model/workflow-provider
-  consolidation or the remaining backlog complete.
+- Physical optional-package extraction and independent state/image namespaces:
+  `7c6ccdd2`. The base package has no production dependencies or service binary.
+  This extraction checkpoint made the base deployable before the deeper managed
+  model consolidation; relocation alone is not considered that consolidation.
+- Local installation selects an exact transitive dependency closure, preserving
+  explicit integrations without installing every bundled artifact: `067d6d9b`.
+  Actual tarball installs verified base-only and optional managed graphs.
+- Removed the unused standalone CI authority/worker branch and its tests:
+  `909aa8fd`. The current root execution path retains meaningful cleanup, lease,
+  replay, cancellation and fencing verification.
+- Generic workspace TCP connect/forward: `65ed4dd7`; actual SSH/Sysbox binary,
+  concurrent connection, half-close and in-container cancellation cleanup:
+  `c49107e0`. Listener binds client loopback and pins the workspace UUID.
+- Workflow language extraction and neutral plan injection: `98dc66f4` and
+  `647040d2`. The selected plugin, Git object authority and runtime verifier
+  have separate responsibilities.
+- Optional control-plane preparation, live generation checks and scoped role
+  connections: `9fa0943f`, `0519fb08`. Reviewer web uses the installed human
+  review API (`2d9055f3`); private initialization and actual Chromium proposal,
+  diff, approve/revoke, expiry and stale-generation checks passed (`adaab5dd`).
+- Managed source uses the core's single Sysbox workspace and scoped host broker:
+  `8892c26a`. The initial real proposal/lifecycle/data smoke passed. The expanded
+  post-promotion fetch journey is being checked against the new execution chain.
+- Optional controller and URL targets use the core UUID/state and revalidate
+  new connections: `ce66fb85`. Actual Sysbox byte relay, concurrent binary data,
+  half-close, name reuse denial and cleanup passed.
+- Removed the parallel workspace/host lifecycle, outer image, controller RPC
+  sessions and obsolete state contracts: `aec19847`; 85 CLI tests passed. Shared
+  runtime documentation and obsolete acceptance retirement: `eb5da2f1`.
+- Source `--with-managed` installs the library without implicitly selecting
+  plugins or starting a controller: `bd10c47c`. Base and managed sources use
+  the same workspace image and runtime.
+- Fresh host provisioning no longer writes unused backend selection state;
+  login/resume and foreign-state protections pass 24 tests: `a11dabb9`.
+
+The remaining execution consolidation is active work: one durable execution
+aggregate for Sysbox and QEMU, cleanup-fenced capacity and independent Git
+publication. Final matched build, installation graph, expanded native workspace
+and execution runtime checks follow that change. Persistent VM workspaces and
+the larger LLM/router service remain separate product work; their requirements
+are represented in the issue map without claiming their implementation.

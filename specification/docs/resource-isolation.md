@@ -28,6 +28,6 @@ Runtime observations do not overwrite persisted lifecycle state. `dim ls` and
 `dim show` expose missing, stopped or unavailable runtime observations separately
 from a recorded running phase.
 
-The optional managed Project runtime has a different topology and resource
-assignment. Its [resource guide](../../core/packages/managed/docs/resources.md)
-applies only to that integration.
+Managed Git uses the same runtime and resource accounting. Its optional host
+Git broker is scoped service infrastructure; it does not add an outer workload
+container or split the workspace budget.

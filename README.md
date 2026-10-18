@@ -11,7 +11,7 @@ bind of the host checkout. These are practical development isolation boundaries,
 not a claim that arbitrary hostile workloads cannot escape the host kernel.
 
 Managed Git, proposal/review workflows, CI and development URL integrations are
-optional. Their implementation is being separated from the base workspace path;
+optional. They are separated from the base workspace dependency and startup path;
 see the [architecture rework plan](specification/docs/architecture-rework-plan.md)
 for the remaining work and the exported issue backlog.
 
@@ -125,13 +125,13 @@ dim installer install plugin PACKAGE@EXACT_VERSION
 dim installer install control-plane --config /absolute/operator/install.json
 ```
 
-Managed Git/review/CI operations remain available under `dim managed ...` while
-the optional feature boundary is extracted. The installer integration also keeps
+Managed Git/review/CI operations remain available under `dim managed ...` in the optional managed component. The installer integration also keeps
 `dim controller restart` directly reachable. The normal workspace path uses no
 managed-Git role files and does not load its service implementation.
 
-The current advanced control-plane installer configuration remains supported;
-a simpler managed install/connect profile is planned. The reviewer web service
+Use `dim managed control-plane prepare` to generate private deployment
+configuration and `connect` to validate and save host connections. The advanced
+installer configuration remains available. The reviewer web service
 is a separate optional package. DIM does not embed an issue tracker.
 
 ## Development and verification
@@ -153,6 +153,5 @@ pnpm --dir tests exec tsx ../verification/scripts/base-workspace-runtime-smoke.m
 
 This check creates disposable Sysbox resources, exercises nested Docker and
 storage/resource lifecycle behavior, and cleans up its resources. Container
-runtime evidence does not establish VM/KVM support. VM workspaces, managed
-session resume and a complete optional-feature extraction remain tracked in
-the architecture plan rather than being claimed as finished.
+runtime evidence does not establish VM/KVM support. VM workspaces and automatic tool-specific session continuation remain future
+product work; the architecture plan records their relation to the issue backup.

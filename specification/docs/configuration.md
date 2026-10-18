@@ -34,21 +34,23 @@ Optional managed administration is installed with:
 dim installer install core --with-managed
 ```
 
-It uses separate default state `$HOME/.local/state/dim/managed` and runtime
-socket directories below `$XDG_RUNTIME_DIR/dim/managed`. Its image namespace is
-`dev-infra-managed-workspace:<installed-version>`. Explicit
-`DIM_MANAGED_STATE_ROOT` and `DIM_MANAGED_WORKSPACE_IMAGE` select alternatives.
-A common `DIM_STATE_ROOT`/`DIM_WORKSPACE_IMAGE` remains an explicit override when
-running managed administration, rather than changing the base defaults.
+Managed Project/service state defaults to `$HOME/.local/state/dim/managed`;
+`DIM_MANAGED_STATE_ROOT` selects an alternative. Controller sockets live below
+`$XDG_RUNTIME_DIR/dim/managed`. Managed sources use the base workspace runtime,
+image and volumes; there is no separate managed workspace image or backend file.
 
-Native Git integrations use `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` and a
-separate `DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE`. Those private files and
-managed Project/CI configuration are required only for that integration. The
-advanced control-plane installer takes a caller-owned configuration through
-`dim installer install control-plane --config FILE`. It does not become the
-base development host by being installed.
+`dim managed control-plane prepare DIRECTORY` generates private role and service
+configuration from reviewed image digests. After installing the configured
+services through the facade, `dim managed control-plane connect DIRECTORY`
+validates the serving generation and records host-local connections. Explicit
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` and
+`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE` override saved selection. Configure
+connections on the selected development host for SSH workspace creation.
 
-The detailed [configuration reference](../specs/03-configuration.md) currently
-covers managed features. The rework plan tracks its consolidation with these
-base host/context settings. Older schemas and internal formats have no stable
-compatibility guarantee; preserve user data explicitly before replacing state.
+The advanced installer accepts caller-owned configuration through
+`dim installer install control-plane --config FILE`. Neither installation nor
+connection is required for an ordinary Git source.
+
+See the [configuration reference](../specs/03-configuration.md) for ownership
+and role boundaries. Internal formats have no stable compatibility guarantee;
+preserve user data explicitly before replacing incompatible state.

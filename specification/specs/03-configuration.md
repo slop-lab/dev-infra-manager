@@ -1,73 +1,41 @@
-> Scope: optional managed integration. Base workspace behavior is defined in
-> [the specification index](README.md); this document does not require managed
-> services for ordinary development.
+# Configuration ownership
 
-# Configuration
+Client host contexts contain local/SSH selection and launcher settings. The
+selected host owns source paths, workspace state, runtime access and optional
+service credentials. A remote command does not reinterpret a host path on the
+client or forward the client's environment as implicit configuration.
 
-**Kind: Contract**
+Base workspace state defaults to `$HOME/.local/state/dim`; `DIM_STATE_ROOT`
+selects an explicit root. The host validates complete records before resource
+access. Base configuration needs neither a backend-selection file nor a
+controller, native Git role, workflow or CI service. `DIM_WORKSPACE_IMAGE` and
+explicit command flags select the workspace image and resource bounds.
 
-## Native selection
+Managed Project/service state defaults to `$HOME/.local/state/dim/managed`;
+`DIM_MANAGED_STATE_ROOT` overrides it. Managed source attachments refer to the
+core workspace UUID and store only host-side broker/connection configuration.
+They do not create another workspace lifecycle or select another agent image.
 
-**CONFIG-NATIVE-ONLY-001:** Every Project lifecycle operation requires
-`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`. The value names one absolute,
-caller-owned, single-link, non-symlink, mode-`0600` schema-1 file. It binds the
-host ID, native Git service and generation, credential-free endpoint, and
-distinct root-read and workspace-write issuer roles.
+Optional control-plane preparation writes private service and role files from
+reviewed image digests. Connecting validates the serving generation before
+recording reusable host connections. Explicit connection environment variables
+remain overrides. Private role files have owner-only permissions, cannot be
+symlink aliases, and bind credentials to their service and role. Importer,
+reviewer, promoter, workspace issuer and execution roles remain distinct.
 
-An absent, empty, unsafe, malformed, stale, or unauthenticated file fails
-before Project, Git, workspace, runtime, or service mutation. There is no
-managed-provider default and no provider fallback. Predecessor selectors,
-including `DIM_GITEA_CONNECTION_FILE`, `DIM_GIT_SYNC_CONNECTION_FILE`,
-`DIM_QEMU_SCHEDULER_CONNECTION_FILE`, and
-`DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, are rejected even when empty.
+Native Git owns repository storage and protected-ref policy. Service-owned bare
+repositories use numeric Git sharing mode `0600`; startup rejects unsafe state
+rather than widening permissions. Candidate-controlled configuration cannot
+select host paths, devices, credentials or privileged runtime arguments.
 
-`dim project create` additionally requires
-`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE`. It names a distinct private
-root-importer role bound to the same service, endpoint, owner host, and serving
-generation. List and show are local bounded queries and do not load importer
-credentials.
+Optional execution has one operator-owned capacity and execution model. A
+workflow plugin compiles candidate configuration into normalized plans; trusted
+profiles choose images, resource bounds and backend. Mirrors are optional:
+ordinary direct access works without a provider, while an explicitly selected
+provider must reconcile successfully. KVM execution requires real KVM and never
+silently falls back to another execution kind.
 
-## Native Git storage
-
-**CONFIG-NATIVE-GIT-PERMISSIONS-001:** Service-owned bare repositories MUST be
-created with numeric Git sharing mode `0600`, independent of the caller's
-umask. Future Git object and ref creation MUST preserve owner-only permissions.
-Registered-repository startup validation MUST require the exact creation
-setting and reject missing or changed values. It MUST NOT weaken durable-file
-checks or repair unsafe object/ref metadata to accept existing state.
-
-## Workspace runtime
-
-**CONFIG-WORKSPACE-001:** The current release accepts only
-`workspaceBackend: "sysbox"`. Backend, image, and resource configuration is
-trusted host input. Project content cannot select a runtime driver, host path,
-socket, device, network, storage provider, image, or low-level QEMU argument.
-
-Native workspaces use strict schema 9 with `source.kind: "native"`. Historical
-provider-backed or minimal records are rejected unchanged. They are never
-aliased, migrated, or adopted.
-
-## Global CI
-
-**CONFIG-NATIVE-CI-001:** Ordinary and QEMU capacity is global operator state,
-not Project state. Private exact-schema files bind one service generation,
-host identity, named capacities, immutable digest-pinned runner/job images,
-and fixed resource limits. Candidate content may select only a reviewed job
-name, script blob, and runtime-fixed argv.
-
-The ordinary host requires registered `sysbox-runc` and the enabled exact-
-version host mirror provider; startup reconciles the DIM-owned pull-through
-cache and control network before advertising capacity. The QEMU host requires a
-functional character `/dev/kvm`; missing KVM is unavailable and cannot select
-TCG or ordinary execution. No CI config contains a Project registrar,
-reviewer, promoter, Actions token, provider webhook, or reusable guest
-credential.
-
-## State contraction
-
-**CONFIG-NATIVE-CUTOVER-001:** There is no in-place migration or adoption from
-predecessor Project, repository, runner, or provider state. Operators use the
-pinned prior release to stop services and export declared user data, validate
-it outside DIM state, then create fresh native state and restore only that
-data. Native installation does not delete old containers, volumes, remotes,
-credentials, or repositories.
+Internal storage formats may change together with code. DIM does not silently
+adopt old state or erase existing data. Export user data before replacing an
+incompatible installation. The installer facade's separate transactional
+installation and recovery behavior remains supported.

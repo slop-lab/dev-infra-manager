@@ -41,17 +41,16 @@ or foreign storage; it never interprets missing user data as a new empty checkou
 Docker resource changes report whether replacement was needed. Process capture,
 streaming and PTY execution share process-group cancellation ownership.
 
-The base image owns only development/runtime tools and its entrypoint. The
-optional managed integration owns trusted outer lifecycle infrastructure, Git
-relays/proxies, QEMU assets and its own image namespace. Base and managed state,
-runtime sockets and default image tags are separate.
+The workspace image owns development/runtime tools and its entrypoint. Managed
+Git adds a host-owned scoped Git broker and attachment keyed by core workspace
+UUID. It uses the same lifecycle and image; there is no second outer runtime.
+Optional service configuration and Project state have their own namespace.
 
 The optional native Git service owns registered repository identity, protected
 refs, proposal namespaces, immutable review tuples, human approval and checked
 promotion. Optional execution services report candidate-bound evidence; execution
-results do not grant approval or promotion authority. Existing ordinary/root-CI/
-QEMU state models and workflow parsing are still being consolidated. Their
-presence in `dim-managed` is an isolation step, not the finished execution design.
+results do not grant approval or promotion authority. The selected workflow plugin compiles candidate configuration into normalized
+plans; Git and execution consume that plan without interpreting its language.
 
 The installer facade retains installation, exact package selection, promotion,
 activation and recovery. It does not start an optional controller on a fresh

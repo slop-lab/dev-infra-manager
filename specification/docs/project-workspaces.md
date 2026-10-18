@@ -1,31 +1,41 @@
-> Scope: optional managed Git integration. Ordinary development uses the
-> [base workspace flow](usage.md) and requires no Project registration.
+# Managed Projects and workspaces
 
-# Native Projects and workspaces
+Managed Git is optional. Ordinary development needs only a Git URL or a path
+on the selected host; see [usage](usage.md).
+
+Install the optional integration with `dim installer install core --with-managed`.
+Use `dim managed control-plane prepare` and `connect` to configure services and
+host connections. Bootstrap a reviewed repository with the generated registrar
+and importer roles, then create its Project:
 
 ```bash
-dim project bootstrap-native-root PROJECT \
+dim managed project bootstrap-native-root PROJECT \
   --project-id PROJECT_ID \
   --source-repository /absolute/reviewed/root \
   --source-ref refs/heads/main \
   --registrar-connection /absolute/operator/registrar.json \
   --importer-connection /absolute/operator/importer.json --json
-
-export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/absolute/operator/control-plane.json
-export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
-dim project create PROJECT --json
-dim project list --json
-dim project show PROJECT --json
-dim managed create PROJECT WORKSPACE
-dim managed show WORKSPACE --json
+dim managed project create PROJECT --json
+dim managed project list --json
+dim create dim://PROJECT dev
+dim exec dev -- git status
 ```
 
-Bootstrap stages immutable reviewed root bytes and creates no runnable state.
-Create performs fresh native proof and atomically publishes ready state.
-Workspace creation uses that snapshot and proposal-only Git authority. It does
-not wait for ordinary or QEMU CI.
+The host holding the Project registration and private connection creates the
+workspace. With SSH, select that host with `--host`; client-side paths and
+credentials are not implicitly transferred.
 
-Workspace run, exec, setup, start, stop, restart, update, and discard operate on
-that native record. DIM has no public repository CRUD or Project removal/purge
-surface. Export predecessor data with the pinned prior release; do not edit or
-adopt old records.
+Project readiness proves registered repository ownership and protected-source
+access. It requires neither CI capacity nor a proposal approval. Managed source
+acquisition seeds the selected protected commit once, then configures a scoped
+Git broker for reads and workspace proposal pushes. The workspace receives a
+scoped grant, never the host's importer, reviewer or promoter credentials.
+
+Core owns the same single Sysbox container and persistent volumes used by
+ordinary Git workspaces. `dim stop`, `start`, `restart`, `recreate`, `resources`
+and `discard` apply to both. Protected-ref promotion does not reset an existing
+checkout; developers fetch and reconcile their own local changes.
+
+Managed Project registration and Git review are separate from disposable
+workspace runtime identity. Old internal storage formats are not adopted or
+migrated; preserve user data before replacing an incompatible installation.

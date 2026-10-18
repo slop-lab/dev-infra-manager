@@ -538,175 +538,26 @@ host process acquires it after the probe, installation MUST fail closed and
 retain the candidate generation and any created data volumes for inspection;
 it MUST NOT report success or adopt that process.
 
-## Admission and native-CI dependency
+## Optional service responsibility
 
-**INSTALLER-CONTROL-PLANE-ADMISSION-001:** Bundle readiness is not Project
-admission. Installing the bundle creates no Project, repository, runner,
-capacity, workflow, webhook, or job image. This installer contract does not
-select native Git for core Project lifecycle. The strict native schema-7 config
-may supply independent host-bound Project registrar, root-importer, root
-read-issuer, workspace-write-issuer, and read-only human-reviewer credentials
-through the existing generation-snapshotted private service file.
-Only the authenticated registrar's configured host ID may prepare an
-inaccessible, empty Project root after exact activation; it cannot issue
-workspace credentials, read Git, import objects, or change protected policy.
-A separate authenticated importer for that owning host may submit one bounded,
-self-contained bundle and normalized initial policy, then request service-only
-compare-and-swap publication of the initially unborn protected ref after
-complete Git verification. The importer cannot directly push, replace an
-existing protected ref, review, promote, or admit CI. Neither request may
-select its own host. The owning host's separate read issuer may mint only a
-30-second Project/root-scoped upload-pack lease after exact activation and
-live imported-root verification. The issuer is not a Git identity, the lease
-is not durable, receive-pack remains denied, and neither capability makes the
-Project runnable. The owner host's separate write issuer may mint only a
-30-second Project/root/workspace-scoped transport lease after the same live
-authoritative imported-policy proof. That lease may create or fast-forward only
-its own proposal refs through the checked installed hook; it cannot write a
-protected ref, tag, foreign workspace ref, deletion, or non-fast-forward update
-and grants no reviewer, CI, promotion, readiness, or runnable-Project authority.
-Empty registrar, importer, and issuer lists start
-the idle service only with empty Project state; an importer or issuer without a
-registrar does not create an implicit active service. The first separately
-selected adapter step MAY publish only the strict schema-`5`
-`admission-pending` identity in `PROJECT-NATIVE-PENDING-001` from an exact
-imported draft and fresh proof. The installer does not perform that transition.
-Until the full Project/repository adapter is verified, requests to mark a
-Project runnable or advertise ordinary or QEMU capacity MUST fail before
-admission or runtime mutation. Root preparation, import, pending identity, or
-bundle readiness alone grants no workspace, review, CI, or promotion authority.
-The later Project-ready transition is governed by
-`TRUST-NATIVE-READINESS-001`: it requires registered owned root and protected
-state, an immutable snapshot, proposal-only authority, and workspace runtime
-prerequisites. It MUST NOT require ordinary or QEMU capacity, a CI result,
-human approval of a proposal, or a prior promotion.
+Bundle readiness means that the selected native Git and execution services
+have accepted their exact installed configuration and activation generation.
+It does not register a Project, create a workspace, start a worker, approve a
+candidate or promote a protected ref. Installing the base CLI does not deploy
+this bundle or require any of its credentials.
 
-The trusted host may retain a separate non-runnable native bootstrap draft
-and its exact private bundle as `PROJECT-NATIVE-DRAFT-001`, use the separate
-registrar/importer roles to import one protected root, and persist its exact
-final receipt. Neither this
-host state nor a service-side `root-imported` receipt is installer readiness,
-ordinary/QEMU admission, a workspace credential, or native Project selection.
-Bundle updates MUST retain that draft, any canonical `admission-pending`
-record, and the native service volume; missing
-or ambiguous binding is a refusal, not an invitation to recreate a Project
-or switch to Gitea. The pending record does not make installation, service, or
-Project readiness successful. The native adapter needs its own real workspace
-readiness gate. Fresh-host acceptance and removal of the predecessor Gitea
-dependency additionally require the full packaged Sysbox/KVM journey in
-`VERIFICATION-NATIVE-CUTOVER-001`; that broader deployment gate does not make
-CI a Project readiness prerequisite.
+Native Git owns source/import, proposal, human-review and protected-ref policy.
+Execution owns the shared job queue, worker leases, cleanup fencing and durable
+results. Workflow compilation belongs to the selected plugin. These internal
+protocols are independent of the installer facade and can evolve together with
+the service packages; the installer must not duplicate their business rules.
+It asks each selected image to validate its own configuration and state.
 
-Historical provider-backed Project and workspace records remain rejection-only
-state during native-only cutover. The installer and native lifecycle MUST NOT
-auto-migrate, reinterpret, adopt, rename, or clean those records or their
-resources. Operators use the pinned predecessor release to stop predecessor
-services and export required data, validate that export outside DIM state, then
-create fresh native Project and workspace identities. Disposal of predecessor
-state is a separate explicit operator action after export validation.
-
-**INSTALLER-NATIVE-PROJECT-CI-001 (accepted target, not implemented):** The
-later adapter MUST separate trusted native Project registration from candidate
-job selection. Every Project whose separate quality policy selects CI is
-CI-eligible without a separate Project-specific CI approval, runner
-registration or capacity list. A Project with an empty quality policy needs no
-CI admission or result. Admission binds one native Git
-Project/repository, protected ref, policy and required-review/required-job-set
-revisions, required job names and their `candidate-controlled` evidence class,
-the ordinary service's global operator capacity-config digest, and admission
-generation. It carries no
-per-Project capacity list. In the accepted Gitea-free target, the operator
-fixes digest-pinned runner and job base images globally for each executor;
-neither Project nor candidate config may select or override an image. This
-supersedes the candidate-image field of the earlier schema-2
-`CI-NATIVE-CANDIDATE-JOB-001` draft. Its strict schema-3 file rejects
-candidate image fields and schema 2 rather than accepting both shapes. The
-exact candidate commit/tree selects only strict job names and
-script blobs, executed through runtime-fixed argv. Those candidate bytes are
-unreviewed execution input, not admission authority or independent evidence.
-The adapter must not create a persistent per-Project runner,
-worker container, image copy, or capacity record. These tuple fields constrain
-the service interfaces but do not authorize admission before that adapter
-exists.
-
-Native Git MUST fail closed for a protected ref that requires ordinary CI
-unless the ordinary service reports the exact current admission and current
-scheduler-issued attempts for every required ordinary job. Missing, unreachable,
-expired, revoked, stale, foreign, or tuple-mismatched ordinary admission makes
-the native service not ready for promotion and leaves the protected ref
-unchanged. It MUST NOT reinterpret service process health, a webhook delivery,
-available host capacity, an earlier successful attempt, or a Project-scoped
-runner record as CI evidence. Repository read and proposal-only write transport
-may remain available during an ordinary scheduler outage; protected promotion
-may not.
-
-For a candidate-controlled required job, native Git MUST also require the
-current terminal record to match the exact execution-descriptor digest issued
-for that attempt. The reviewer and promotion DTOs MUST label it
-`candidate-controlled` and expose the candidate config/script, selected
-operator-owned image, fixed argv, and resource-bound provenance. A successful
-exit MAY satisfy that explicitly configured required condition, but MUST NOT be
-described as an independent check, proof that its
-tests are correct or complete, or blanket product correctness. Product
-maintainers still review changed requirements, implementation, test definitions,
-and relevant results. Infrastructure security review separately follows secret
-exposure and trusted capability changes. Current complete-tree human approval
-and the final checked compare-and-swap remain mandatory.
-Ordinary CI identities, runners, schedulers, and capacity hosts have no review,
-approval, promotion, or protected-ref write authority.
-
-The optional shared QEMU scheduler is a predecessor Gitea-only service and
-configuration. It is never added to this Compose project, cannot be configured
-with native selection, is not an ordinary-job fallback, and does not satisfy
-the native ordinary-CI prerequisite. Absence of QEMU capacity is reported as
-unavailable, never as successful ordinary CI.
-
-The installer accepts the native Git schema-7 optional `qemuCi` dependency for
-a separately deployed native scheduler. Its strict fields are `endpoint`,
-`serviceId: "qemu-main"`, `query`, `eventIntake`, `identity`, `attemptIssuer`,
-`candidateReader`, and `resultReporter`. The endpoint is an HTTP(S) origin
-without user information. Every role is a strict `{username, password}`
-credential and participates in the same cross-role distinctness, activation
-token collision checks, and diagnostic secret redaction as ordinary roles.
-This does not add a scheduler to the control-plane Compose bundle.
-
-**INSTALLER-NATIVE-QEMU-EVIDENCE-001 (accepted target, not implemented):**
-Once a separate authenticated native QEMU scheduler and host-capacity adapter
-have passed their own acceptance gate, a native Project MAY require named QEMU
-jobs independently of ordinary Sysbox jobs. QEMU is not a third Compose
-service and its claims/results MUST NOT enter the ordinary inbox, claim, or
-report tables. The operator fixes the digest-pinned common guest/runner and
-job base images and resource ceilings for all Projects using that capacity;
-candidate bytes can select only the strict script executed by fixed argv in
-the disposable guest. Native Git MUST derive `executionKind=qemu` and
-`evidenceClass=candidate-controlled` from current protected policy and the
-authenticated QEMU attempt, never from a webhook, candidate claim, or the
-presence of `/dev/kvm`. Reviewer and promotion output MUST expose candidate
-script and fixed image/argv/bounds provenance. A current zero-exit result may
-satisfy only the exact QEMU job with the matching review, commit/tree, policy
-revisions, admission generation, attempt and execution descriptor. Missing
-KVM, unavailable scheduler, lost/uncleaned lease, failed job, wrong-kind
-result, stale generation, or replayed earlier success MUST leave a required
-QEMU condition unsatisfied and the protected ref unchanged. It cannot be
-substituted by ordinary success or downgraded to optional; optional QEMU
-results remain visible without changing ordinary or human approval rules.
-An ordinary-only, QEMU-only, or empty Project quality policy MUST NOT wait for
-an unselected execution kind. QEMU identities, runners, schedulers, and
-capacity hosts have no review, approval, promotion, or protected-ref write
-authority.
-The current Gitea-only QEMU scheduler stays rejected with native selection
-until this distinct path is implemented and verified.
-`CONFIG-NATIVE-QEMU-001` supplies only host-scoped QEMU service authority and
-operator-owned named capacities, not per-Project runner/webhook tokens. The
-separate scheduler must authenticate native Git's QEMU-only event and policy
-proof, issue one kind-bound current attempt and exact descriptor per claim,
-and retain a separate durable QEMU inbox, claims, results and report outbox.
-It cannot reuse an ordinary credential, result table, descriptor digest, or
-success. The host supervisor may report only after exact owned VM cleanup;
-unavailable KVM fences required QEMU evidence. The exact target service
-roles, routes, and proof tuple are in
-[Native QEMU Scheduler and Evidence](local-details/native-qemu.md); none are
-provided by the current installed bundle.
+Private service-role files remain distinct, generation-snapshotted inputs.
+The installer never gives operator credentials to a workspace or job. An empty
+execution capacity list is valid for an idle deployment; source readiness does
+not require workers or successful CI. Managed setup may generate initial role
+configuration, but deployment still uses the facade transaction below.
 
 ## Validation, update, readiness, and rollback
 
@@ -973,63 +824,19 @@ rejected by the normal daemon publication probe. This contract defines no
 backup, export, or data-conversion authority.
 
 Required acceptance evidence is specified by
-[Verification](12-verification.md#control-plane-bundle-gate).
+[Verification](12-verification.md).
 
 ## Current availability
 
-The pre-stable facade implements `dim installer install control-plane --config
-FILE`, including first installation, identical-input no-op, checked update,
-pre-activation rollback, explicit exact roll-forward recovery after uncertain
-activation, and pre-forward rejection of obsolete `dim install-cp`. The command
-installs only the two-service native Git/ordinary-CI bundle. Ordinary CI starts
-without admissions, and native Git starts idle with no
-Project role credentials and empty state.
-Configured registrars may prepare owned roots, and distinct configured importers
-may submit and finalize a verified initial protected head through the service's
-checked CAS. An owner-host issuer may obtain only a short-lived read lease for
-that imported root after full live proof; it cannot write a ref or mark a Project
-runnable. A completed import retains its original receipt across serving
-generations, while an incomplete old-generation import blocks candidate startup.
-The native image accepts only strict marked format-8 state and pins
-Git `2.39.5` in its runtime image. The installer itself does not create a Project.
+`dim installer install control-plane --config FILE` supports first installation,
+identical-input no-op, checked update, pre-activation rollback and explicit exact
+roll-forward recovery after uncertain activation. The deployment slots retain
+the native Git and ordinary-CI component names at the facade boundary. Internal
+execution state and protocol versions are owned by the service implementation.
 
-After exact activation, a distinct ordinary registrar can explicitly register
-or revoke full imported-root kind-labelled policy eligibility. Strict format-11
-state binds the import nonce, installer generation, global operator capacity
-digest, service epoch, demand, claims, cleaned results, and report outbox. Exact
-replays are historical receipts; readers MUST use a new UUIDv4 request ID for
-each current-validity check. This does not publish a runnable Project or
-advertise installed host capacity. A separately selected adapter may expose the
-canonical `PROJECT-NATIVE-PENDING-001` identity through native list/show, but
-it cannot turn registration, event receipt, a queued demand, or terminal
-evidence into runtime authority.
-
-The same service may durably acknowledge only a current canonical schema-2
-ordinary review event after exact native proof under
-`POST /v1/native-root-ci-events`. The installed native Git dispatcher invokes
-this endpoint after read-only admission discovery. A new receipt atomically
-creates one queued demand. Exact replay does not requeue it; stale admission or
-root state supersedes it. A configured host credential can reserve the oldest
-eligible demand for one configured capacity. Separate proof, attempt-issuer,
-result-reporter, query, webhook, and host credentials bind descriptor
-derivation, strict schema-3 native attempt issuance, exact current-attempt
-proof, claim activation and renewal, and schema-2 cleaned host result intake.
-The result's `resourceId` MUST equal `claimId`; its terminal event is strict
-schema 3. Result and report-outbox rows commit atomically. The reporter retries
-the same stored bytes and releases capacity only after exact activation-bound
-native acknowledgement or cleanup-gated terminal denial. Native Git's read-only
-current-terminal evidence additionally requires that delivered ordinary proof,
-its local current unrevoked attempt and status, a live root and review, and the
-policy-controlled execution and evidence classes.
-
-The callable host worker journals claim, result, and recovery operations and
-checks container and private-root cleanup, but the installed host CLI and
-controller do not start it. The native Project/repository adapter, Project
-admission beyond strict `admission-pending`, capacity advertisement, native
-QEMU scheduler/executor, protected promotion, and reviewer browser UI remain
-unavailable. No clean-host
-Sysbox/KVM acceptance or runtime-ready claim follows from this command. A later
-promotion path MUST keep ordinary and QEMU evidence independent and require
-every policy-selected kind plus exact-tree human approval. A policy may select
-zero jobs, one execution kind, or both; no runner authority may approve or
-promote.
+The source build includes optional managed Project acquisition, scoped Git
+proposal access, human review, checked protected promotion and shared execution.
+These features are not implicitly activated by installing a bundle. Worker and
+KVM checks have separate host prerequisites; installation success alone proves
+neither successful job mechanics nor independently administered release
+acceptance. See [verification](12-verification.md).

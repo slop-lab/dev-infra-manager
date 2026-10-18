@@ -1,222 +1,39 @@
-# Root Monorepo
+# Root monorepo
 
-> **Historical development document.** Provider and self-Project sections
-> below describe the predecessor workflow, not a supported runtime journey.
-> Use [Architecture](architecture.md) for the current native-only boundary.
+DIM is developed, tested and built from one root repository. The source commit
+identifies the full package/plugin/test tree; separately packed packages retain
+that shared source identity. There is no required sibling checkout.
 
-## Integrated Layout
+| Path | Responsibility |
+| --- | --- |
+| `core/packages/core` | Base workspace application, state, runtime/source primitives |
+| `core/packages/cli` | Commands, presentation, host contexts and SSH transport |
+| `core/packages/managed` | Optional Project/source attachment, controller and execution composition |
+| `core/packages/native-git` | Optional repository, proposal, review and protected-ref authority |
+| `core/packages/installer` | Exact component installation, activation and recovery behind the facade |
+| `plugin-*/` | Explicitly selected integrations and workflow language |
+| `tests/` | Centralized behavior tests and fixtures |
+| `verification/` | Disposable cross-component, packaging and physical runtime checks |
+| `specification/` | Current architecture, usage and design records |
+| `.dim/`, `agent/` | Explicit repository development tools and optional host verification helpers |
 
-DIM is developed, tested, reviewed, and released from one tracked root
-repository. A candidate is one exact root commit and tree. No sibling checkout,
-temporary assembled tree, or second repository identity is part of the current
-source contract. See [DIM Self-development
-Boundaries](self-development-boundaries.md) for the review model.
+The base dependency graph is CLI → workspace core. Managed code is loaded only
+when its operation/source is selected. A workflow plugin compiles configuration
+into a neutral plan; repository authority does not interpret that language.
+Service plugins use the managed plugin host and shared contracts. Shared
+contracts do not import concrete adapters, and one package does not depend on
+another package's private source layout.
 
-```text
-/workspace/                     canonical repository root and agent cwd
-├── .dim/                       reviewed self-Project lifecycle contract
-├── agent/                      agent development image
-├── core/                       production core packages and group changelog
-├── plugin-*/                   production plugin packages and changelogs
-├── tests/                      centralized core and plugin tests
-├── specification/              documentation and normative specifications
-├── examples/                   reviewed Project examples
-└── verification/               cross-component, host, container, and QEMU gates
-```
+Installation selects the transitive closure of requested components from a
+matched bundle. The existence of an optional artifact does not activate it.
+The installer facade remains the supported installation boundary; internal
+package exports and storage protocols can change together during development.
 
-The root `package.json`, lockfile, TypeScript configuration, `justfile`, and
-workflow files coordinate the whole tree. `core/packages/cli` imports only the
-public `@slop-lab/dim-core` entrypoint; core never imports the CLI. Package and
-plugin build inputs remain identifiable under their production directories,
-while tests and test-only fixtures are centralized under `tests/`.
+The same one-container workspace develops DIM and other repositories. Coding
+agent tools and repository tasks are workspace user code. There is no required
+trusted outer lifecycle, rootless sidecar daemon or automatic host hook.
+See [self-development boundaries](self-development-boundaries.md).
 
-Package-specific changelogs and design contracts live with their owning
-production package or package group. `core/CHANGELOG.md` retains the core group
-history, including the historical 0.9.0 record. Plugin changelogs live in each
-plugin root. Cross-package release outcomes live in the root `CHANGELOG.md`, and
-cross-package normative contracts live under `specification/`. The root
-changelog does not duplicate package release history or invent a root release.
-
-DIM-managed Gitea is the internal proposal, review, and automatic-CI host for
-the root repository. GitHub is the canonical public source, tag, release, and
-downstream source-link location. A trusted maintainer publishes the reviewed
-root commit to GitHub separately. Internal review authority cannot publish to
-GitHub, create a release, or substitute a different tree.
-
-## Dependency Direction
-
-```text
-core/packages/cli ──> core/packages/core
-core/packages/controller-proxy (Node built-ins only)
-core/packages/native-git ──> zod
-plugin-external-urls
-  ──> core/packages/{core,contracts/external-url}
-plugin-dns-cloudflare
-  ──> core/packages/{core,contracts/external-url}
-```
-
-`dim-plugin-*` identifies a package that implements DIM's plugin API; DIM does
-not scan npm names or filesystem prefixes to discover it. A project must
-explicitly install and list every plugin. Reusable implementations stay in
-`dim-*` packages so a plugin can compose them without making the
-implementation itself a plugin. Plugins may register named extension
-implementations, such as External URL DNS provider drivers, through the common
-plugin host without adding dependencies to their consumers.
-
-Disallowed dependencies:
-
-- A shared contract importing a provider adapter.
-- One package importing another package's private source.
-- Provider-neutral code importing Gitea, Caddy, Cloudflare, or Tailscale
-  implementation details.
-
-## Optional Hosting Components
-
-Git hosting and externally reachable entries are optional capabilities.
-Configuration must select providers explicitly and disabling a capability must
-not require its binaries, containers, credentials, or network access.
-
-The current core contains one built-in managed Gitea service boundary. The
-separate `dim-native-git` package now provides an unselected proposal-only
-smart-HTTP host with durable complete-tree human-review evidence. Approval is
-non-promotable: the package exposes no CI status, merge, or protected-promotion
-authority and does not replace current Gitea lifecycle behavior.
-External source and destination transport still runs through the host Git CLI
-and is provider-neutral. A future replacement for managed Gitea must preserve
-the Project/repository records, protected-ref boundary, and separate
-host/workspace endpoint contract without leaking provider details into
-Project-owned repository configuration. See
-[DIM Development Repositories](development-repositories.md) for how that
-replaceable managed host relates to the canonical public source repository.
-
-The DIM controller API authenticates an agent workspace and lets installed
-plugins register routes. External URL ingresses accept only a constrained
-workspace target and derive the upstream from the workspace grant rather than
-accepting an arbitrary host. Discovery exposes ingress name, description, and
-URL scheme without leaking proxy or TLS implementation details.
-
-The standard workspace image includes `dim-controller-proxy`. Reviewed root
-lifecycle code can use its verified feature presets or Node.js API to expose a
-new, policy-constrained Unix socket to a development container without
-sharing the original controller socket or workspace grant.
-
-## DIM self-development workspace
-
-This repository uses the same project-facing contract as an external project:
-
-```text
-.dim/
-├── dind/
-│   ├── Dockerfile
-│   ├── agent.sh
-│   └── entrypoint.sh
-├── docker-compose.yml
-├── kvm.sh
-├── setup.sh
-├── entrypoint.sh
-└── teardown.sh
-```
-
-The role-neutral `core/images/project-workspace` image is the trusted lifecycle
-container. The reviewed `.dim/setup.sh` obtains the host Git author through
-the narrow host-input API and starts only the repository-owned Compose
-`agent-dind` service. That private rootless daemon creates the development agent
-inside its own runtime. Its pinned agent image supplies the common development
-toolchain and a Docker client connected only to the private daemon. Coding-agent
-tools are installed separately by explicit workspace-user action. The agent
-receives neither the host Docker socket nor the trusted workspace's Docker
-socket. The daemon adopts the reviewed workspace checkout's UID/GID.
-The agent runs as UID 0 only inside the daemon's rootless user namespace, where
-that identity maps to the non-root workspace owner rather than
-trusted-workspace or host root.
-
-Projects that run secret-bearing workloads use the separate `secure-dind`
-Compose profile. Its daemon has distinct storage and no agent-home, source, or
-Git-credential mounts; Project-reviewed tasks are responsible for injecting
-the narrowly scoped secrets and build inputs those workloads need. Both private
-daemons use explicit Unix-only `dockerd` listeners. Reviewed secret operations
-resolve their scripts and Compose configuration from the immutable root rather
-than from the agent-writable Project checkout.
-
-The outer lifecycle mounts a Project-owned named volume into the private
-runtime, which bind-mounts it as the agent's `/home/dim-agent`. Separate
-`dim run` invocations therefore share user-installed tools and configuration
-until the workspace is discarded; source remains in `/workspace`.
-
-Create the self Project and a persistent workspace from the canonical root:
-
-```bash
-dim project create dim-self \
-  --bootstrap-git-url https://github.com/slop-lab/dev-infra-manager.git \
-  --bootstrap-git-ref main \
-  --apply-repos
-dim workspace create dim-self dim-self-dev
-dim run dim-self-dev bash
-```
-
-`run` dispatches the repository's checked-in `.dim/entrypoint.sh` task
-contract into the Project-owned agent. The canonical contract deliberately
-exposes only these tasks:
-
-- `bash` starts Bash inside the unprivileged Project-owned agent container,
-  not in the trusted workspace container.
-- `backup` writes a gzip tar stream of the agent home to stdout, and `restore`
-  reads that stream from stdin. Both stop the agent for consistency and use a
-  networkless temporary container that receives only the named home volume;
-  backup mounts it read-only and restore mounts it read-write. The Project owns
-  the archive contract.
-
-Use `bash -- -lc 'just RECIPE'` for repository recipes instead of adding a
-task alias for each recipe.
-Install the optional reviewed OpenCode bootstrap explicitly from inside the
-agent task boundary:
-
-```bash
-dim run dim-self-dev bash -- \
-  /workspace/scripts/workspace-user-setup.bash
-```
-
-The script is development-owned, installs pinned packages only into the
-persistent user home, and preserves comments while making targeted
-configuration edits. OpenCode uses the home-confined XDG configuration
-directory. OMO 4.19.4 uses `$HOME/.omo/omo.jsonc`, with bounded settings at
-`["[opencode]"].team_mode`: `enabled=true`, `max_parallel_members=4`,
-`max_members=8`, and `tmux_visualization=false`. Concurrent setup is serialized,
-and a retry converges after an interrupted partial update; the files are not
-promised to change as one transaction. The script does not perform
-authentication, alter global Git configuration, expose OpenCode Web, or
-receive DIM controller or plugin authority. Run OpenCode afterward as an
-ordinary command through `bash`; it is an optional tool, not a DIM task or
-lifecycle feature.
-
-`dim exec dim-self-dev -- bash` remains the raw trusted-workspace recovery or
-interactive shell path. The agent bind-mounts the workspace checkout and its
-private-Docker state uses a separate Project volume; no host checkout or
-Docker socket is mounted.
-
-On a host with accessible KVM, interactive creation recommends and confirms
-exposing `/dev/kvm`; automation can use `--kvm` or `--no-kvm`. Run
-`dim workspace exec dim-self-dev -- sh .dim/kvm.sh` to verify the
-trusted workspace's effective KVM capability; `/dev/kvm` is intentionally not
-passed to the ordinary agent. The `verify` agent task remains portable to
-hosts without KVM.
-
-## State And Credentials
-
-- Application state is separate per service under the configured state root.
-- Provider credentials are host-side secrets and are never placed in agent
-  configuration, shared package source, or Git-managed route records.
-- Git hosting, edge routing, tunnel credentials, and the root Docker
-  controller use separate processes and least-privilege service identities.
-- Machine-scope route reconciliation is trusted infrastructure behavior.
-
-## Workspace Commands
-
-Run the current manager verification:
-
-```bash
-just check-source
-```
-
-This verifies root lifecycle materialization, then runs the matching check,
-test, and build scripts across the integrated development tree.
+Optional managed review and CI operate on exact candidate bytes. Protected-ref
+promotion, host installation, public tags and package publication have distinct
+roles. Internal test evidence does not publish or approve the candidate.

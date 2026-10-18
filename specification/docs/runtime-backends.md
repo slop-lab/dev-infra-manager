@@ -11,5 +11,4 @@ checks these prerequisites; `dim image build` builds the base image. The
 
 VM support remains future work. The [runtime contract](../specs/05-runtime-backends.md)
 describes current behavior without reserving an unimplemented VM schema.
-Managed Project environments retain their separate
-[runtime implementation](../../core/packages/managed/docs/workspace-runtime.md).
+Managed Git uses this same runtime and adds only a scoped source attachment.

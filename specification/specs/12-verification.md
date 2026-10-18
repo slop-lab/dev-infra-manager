@@ -1,76 +1,40 @@
-> Scope: optional managed integration. Base workspace behavior is defined in
-> [the specification index](README.md); this document does not require managed
-> services for ordinary development.
-
 # Verification
 
-**Kind: Verification**
+Test behavior at the component that owns it: parsed state and transitions,
+process cancellation, SSH byte streams, exact runtime ownership, persistent
+storage, scoped source access, Git/ref races, execution fencing and installer
+recovery. Do not retain tests solely to pin a retired schema or source layout.
 
-## Required native evidence
+Base acceptance needs ordinary Git workspace creation and daily operations
+without managed packages or services. Verify local and actual SSH paths,
+stdin/exit status, binary TCP forwarding, cancellation, resource updates,
+stop/start/recreate data preservation and explicit owned discard.
 
-**VERIFICATION-NATIVE-LIFECYCLE-001:** Tests must bootstrap one reviewed local
-root, create/list/show a schema-6 ready Project, create/show a schema-9 native
-workspace while CI is unavailable, and exercise setup/restart plus a real Git
-proposal push. Protected writes, delete, force, tag, foreign-workspace, and
-foreign-Project access must leave refs unchanged. Readiness creates no CI,
-review, approval, or promotion authority.
+Managed acceptance adds a first-Project journey, real scoped proposal pushes,
+protected/foreign ref denial, review and checked promotion, then continued use
+of the existing workspace after protected-ref advancement. CI absence must not
+block source readiness. Optional controller tests cover current UUID grants,
+agent/private-Docker target resolution, connection forwarding and name reuse.
+Browser verification uses the installed review API rather than a substitute
+backend retained for browser fixtures.
 
-Strict rejection tests retain historical provider-backed Project/workspace
-records only as input fixtures. They must remain byte-identical and receive
-prior-release export guidance. No successful test may start, contact, adopt,
-or clean a provider service.
+Execution acceptance covers one durable job/attempt/lease/result lifecycle,
+cleanup before capacity reuse, expiry/recovery, stale worker fencing and Git
+publication retries. Real Sysbox and real KVM mechanics are distinct evidence.
+Missing KVM is unavailable; mocks, TCG or ordinary containers cannot establish
+KVM behavior. Candidate-controlled results never establish human approval.
 
-**VERIFICATION-NATIVE-CI-001:** A real ordinary mechanics phase must run one
-digest-pinned bounded Sysbox job and prove terminal output plus owned cleanup.
-A distinct QEMU mechanics phase must run a real KVM guest job and prove fixed
-argv, guest bounds, output, and owned cleanup. Hardware absence is unavailable;
-TCG and ordinary evidence cannot satisfy the QEMU phase. Both results are
-`candidate-controlled`.
+Use disposable names, directories, repositories and resources. Cleanup removes
+only exact run-owned resources. Never replace running host installations as a
+side effect of source checks. Full package builds and selected tarball install
+checks must use a matched snapshot; concurrent dist replacement is not a valid
+test environment.
 
-**VERIFICATION-NATIVE-PROMOTION-001:** Deterministic native Git tests must keep
-exact current-generation, wrong-kind, missing, failed, stale, foreign,
-mismatched, replay, old-attempt, policy, tree, and protected-head denials. A
-successful protected update requires a current exact-tree human approval,
-every policy-selected current result, and one checked compare-and-swap.
+Deterministic tests, same-host physical mechanics and independently operated
+multi-host/release acceptance are separate claims. Record what actually ran,
+what was unavailable and any remaining concrete limitation. A script name or
+historical specification is not evidence that the current architecture passed.
 
-## Evidence classes
-
-The repository reports three different outcomes:
-
-1. Deterministic contract tests validate parsers, state machines, role
-   separation, current-generation fences, compare-and-swap, and cleanup rules.
-2. Same-host mechanics run actual installed services, a real Sysbox job, and a
-   real KVM guest on one disposable host. They prove mechanics, not independent
-   execution or human release acceptance.
-3. Full release acceptance uses separately administered ordinary and QEMU
-   hosts, reviewed exact source/image digests, effective traffic and guest
-   authority inspection, reboot/crash recovery, operator review, and real human
-   approval. It is recorded by an operator and is never emitted automatically.
-
-`VERIFICATION-NATIVE-CUTOVER-001` passes only at level 3. Reviewer fixture
-posts may prove the protocol at levels 1 or 2, but must not be labelled human
-approval and must never promote a pre-existing protected ref.
-
-## Executable gates
-
-```bash
-just check-source-native
-just verify native-idle-service-images
-just verify control-plane-install-live
-just verify native-basic-lifecycle
-just verify native-ordinary-guest-mechanics
-just verify native-qemu-guest-mechanics-kvm
-bash verification/scripts/kvm-guest-verification-smoke.bash
-```
-
-The guest aggregate runs independent native phases through the shared stage
-runner. It prints `PASS`, `FAIL`, and dependency-derived `BLOCKED` records,
-retains mode-`0600` logs, forwards cancellation to the active process group,
-and returns `125` when cleanup is uncertain. Missing architecture, Docker,
-Sysbox, KVM, pinned images, or required network access exits `2` as unavailable,
-not `0`.
-
-The aggregate must not launch a Gitea service, register an Actions runner,
-consume a provider webhook, or use repository/Project purge as cleanup. It
-removes only exact run-owned resources. Existing provider containers, volumes,
-remotes, credentials, and repositories remain untouched.
+See [host readiness](../../verification/host-install-readiness.md) and the
+current [verification recipes](../../verification/verify.just) for executable
+checks. The architecture plan maps the preserved issue backup to workstreams.

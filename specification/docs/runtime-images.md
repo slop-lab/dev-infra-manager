@@ -30,12 +30,7 @@ just install-local
 
 Preparation archives a source identity and aggregate lockfile, builds matching
 artifacts and publishes readiness only after staging succeeds. Installation
-validates that preparation rather than rebuilding the image. Base and managed
-images use different names and contexts.
-
-The optional managed runtime includes the trusted Project lifecycle and
-controller-proxy assets. Its default tag is
-`dev-infra-managed-workspace:<installed package version>` and its explicit
-override is `DIM_MANAGED_WORKSPACE_IMAGE`. Build it through
-`dim managed workspace image build` after configuring the managed integration.
-Do not substitute the base image for a managed lifecycle image.
+validates that preparation rather than rebuilding the image. Ordinary and
+managed Git sources use this same workspace image. Optional native Git, execution
+and reviewer services have separate deployment images; installing or building
+them does not replace the workspace runtime.

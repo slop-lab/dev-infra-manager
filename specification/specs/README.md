@@ -15,8 +15,7 @@ reworked according to the [implementation plan](../docs/architecture-rework-plan
 | [Lifecycle](13-repo-workspace-lifecycle.md) | Workspace data and runtime transitions |
 | [Installer](14-installer-facade.md) | Preserved installer facade |
 
-The configuration, capability matrix and native verification documents numbered
-03, 04 and 12 describe the optional managed integration. They do not impose a
-native Project, CI or controller on base workspaces. Managed-specific lifecycle,
-CLI and trust details live under `core/packages/managed/docs/`. Historical
-decisions and candidate VM profiles are design context, not stable contracts.
+[Configuration](03-configuration.md), [authority responsibilities](04-trust-lifecycle-capability-matrix.md)
+and [verification](12-verification.md) cover the shared architecture and optional
+integrations. Managed-specific details live under `core/packages/managed/docs/`.
+Historical decisions and candidate VM profiles are design context.

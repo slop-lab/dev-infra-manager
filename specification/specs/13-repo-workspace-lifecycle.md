@@ -4,7 +4,8 @@ A base workspace has a host-generated immutable UUID, a user-facing name,
 committed source identity, image, resource budget, Git author, timestamps,
 initialization result and lifecycle phase. The current record schema is 10.
 The exact parser validates the complete record before resource access. Managed
-Project/workspace records belong to a separate state namespace and parser.
+Project registration has separate state; its workspaces use this same record
+and lifecycle with a host-side source attachment.
 
 Creation serializes mutation, acquires a committed source snapshot, records
 creation intent, creates owned runtime resources, starts the agent and private

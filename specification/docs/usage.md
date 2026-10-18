@@ -101,21 +101,28 @@ A prepared source bundle can also install managed services and integrations:
 just install-local --with-managed
 ```
 
-This explicit profile installs managed Git/workspace support and the bundled
-DNS, External URLs and host mirror plugins, and activates their controller.
-It does not provision a native Git/CI deployment or invent its credentials.
-For a registry package set, the equivalent library selection is
-`dim installer install core --with-managed`; plugins remain explicit installs.
-Managed runtime images and base workspace images are distinct.
+This profile installs managed support as an optional library. It does not
+select plugins, start a controller, build another workspace image or deploy a
+control plane. Explicit plugins remain separate installer operations. For a
+registry package set, use `dim installer install core --with-managed`.
 
-The optional control-plane deployment has its own installer command:
+Prepare and connect an optional control plane through the managed CLI:
 
 ```bash
-dim installer install control-plane --config /absolute/operator-config.json
+dim managed control-plane prepare /absolute/operator/deployment \
+  --native-git-image registry.example/native-git@sha256:DIGEST \
+  --ordinary-ci-image registry.example/ci@sha256:DIGEST
+dim installer install control-plane --config /absolute/operator/deployment/install.json
+dim managed control-plane connect /absolute/operator/deployment
 ```
 
-Its private config, service roles, images and recovery behavior are described
-in the [installer specification](../specs/14-installer-facade.md) and managed
-package documentation. Ordinary workspaces continue to use Git directly.
-Managed administration and managed workspace operations belong to
-[`dim managed`](../../core/packages/managed/docs/cli.md).
+Supply actual reviewed image digests. The prepare command reports the exact
+configuration path and follow-up commands. Connecting checks the live service
+generation and stores private host connections. Bootstrap/register Projects
+with those scoped roles, then create their workspaces through `dim create
+dim://PROJECT NAME`. Ordinary Git workspaces use the same lifecycle without
+these services.
+
+The [installer specification](../specs/14-installer-facade.md) defines facade
+installation and recovery. See [managed administration](../../core/packages/managed/docs/cli.md)
+for optional Project/review/CI operations and explicit service roles.

@@ -1,419 +1,46 @@
-> Scope: optional managed integration. Base workspace behavior is defined in
-> [the specification index](README.md); this document does not require managed
-> services for ordinary development.
+# Authority and lifecycle responsibilities
 
-# Trust and Lifecycle Capability Matrix
+This document describes current responsibilities. Internal protocol versions
+and retired runtime layouts are not compatibility requirements.
 
-**Kind: Contract**
-
-## Scope
-
-This contract fixes the authority and state transitions shared by protected Git
-promotion, workspace backends, Project lifecycle hooks, retained workspace
-data, and External URL approval. Backend and plugin implementations MAY choose
-different mechanisms only when they preserve every allowed and denied case
-below.
-
-A **workspace instance** is identified by the persistent Project ID and a
-fresh, unguessable workspace ID created with the workspace record. A display
-name is not an authority identity. The ID remains stable across stop, start,
-restart, setup, and update. After discard, creating the same display name MUST
-create a new workspace ID.
-
-A **runtime generation** identifies one realization of that workspace
-instance. Replacing a container, VM, or nested target changes its runtime
-generation without changing the workspace ID.
-
-## Protected source promotion
-
-**TRUST-NATIVE-READINESS-001:** Native Project readiness is an infrastructure
-state, not a CI result or a protected-ref promotion. A native Project may
-publish `ready` only after the trusted host has registered its immutable
-Project and repository identities, verified exact ownership of its one root
-repository and protected ref, published the immutable protected-root snapshot,
-installed scoped read and proposal-only writer authority, and satisfied the
-selected workspace runtime prerequisites. Readiness MUST NOT require a CI
-scheduler, runner, capacity, attempt, result, human approval for a proposal, or
-a prior protected-ref promotion. A CI outage or an empty required-job set MUST
-NOT make an otherwise valid ready Project or workspace non-ready.
-
-Native readiness grants no protected-ref write, review, promotion, CI
-execution, runner, scheduler, or result-reporting authority. These
-authorities remain separately scoped. In particular, a runner, scheduler,
-capacity host, attempt issuer, or result reporter MUST NOT approve a review or
-promote a protected ref.
-
-**TRUST-NATIVE-CI-ELIGIBILITY-001:** Registering a Project through the trusted
-native lifecycle makes that Project and its root repository eligible for every
-globally enabled native CI execution kind. This is a central consequence of
-Project registration, not a per-Project runner registration, admission request,
-quality-policy selection, or human decision. Hosts and named capacities are
-registered once in operator-owned service configuration and may serve any
-eligible native Project. A Project, workspace, candidate, webhook, reviewer, or
-promoter MUST NOT add a host, widen a capacity, change an image or resource
-ceiling, or obtain a host credential.
-
-Each create or fast-forward update of a workspace-scoped proposal ref MUST
-cause native Git to durably reconcile one exact candidate envelope and queue
-every valid job declared by that candidate's `.dim/ci/runner.yml`. CI starts
-without a host-promoter creating a review and without a reviewer approving the
-config, script, job name, or execution kind. The internal envelope MAY use the
-same immutable review and provenance records used by promotion, but creating it
-is a service action derived from the proposal push, not a review or promotion
-decision. A candidate may add, remove, or change valid jobs without changing
-Project policy. The candidate cannot make its Project eligible, escape the
-strict job schema, or alter operator-owned limits.
-
-The quality policy is only a promotion filter. Its `requiredJobs` set selects
-which exact candidate job results must be successful before protected
-promotion. It MUST NOT limit which valid candidate jobs execute, create CI
-eligibility, or serve as the source of CI events. Extra candidate jobs remain
-visible candidate-controlled evidence but are not promotion requirements.
-Absent candidate jobs produce no work; a required job absent from the exact
-candidate result set leaves promotion unsatisfied.
-
-Candidate planning MUST distinguish an absent `.dim/ci/runner.yml` from a
-present invalid file. Absence is a valid empty candidate plan and produces no
-events. A present file is parsed as one complete strict schema-4 plan,
-independently of `requiredJobs`; every valid ordinary and QEMU job produces an
-event, up to 64 jobs combined. If the file, any declared job, or any referenced
-script is invalid, native Git MUST durably record an invalid planning status
-for that exact candidate and publish zero events. It MUST NOT publish a partial
-plan, represent invalid planning as successful CI, or discard the status merely
-because the quality policy selects no jobs. Invalid planning and a selected job
-missing from a valid plan both leave promotion unsatisfied.
-
-Eligibility and proposal delivery MUST reconcile automatically after service
-restart, generation rollover, lease expiry, policy change, or a dependency
-outage. Operators MUST NOT refresh or readmit each Project. Durable candidate
-events remain queued and retry when the matching global service and capacity
-return. Old attempts stay fenced by their exact generation and lease, and no
-outage or retry may reuse an expired attempt, release uncleaned capacity, or
-convert unavailable capacity into success.
-
-**TRUST-PROMOTION-001:** Every proposal for a protected ref MUST bind the
-repository ID, protected ref, expected protected-ref head, candidate commit,
-candidate tree, protection-policy revision, and required-review revision as its
-security approval tuple. It MUST separately record the current Project
-quality-policy revision and its required-job set, which may be empty. Commit and
-tree identities MUST be complete object IDs. The review
-surface MUST show the complete base-to-candidate change set,
-including additions, modifications, deletions, renames, file modes, and
-symbolic links. Path-owner rules MAY add reviewers, but MUST NOT exempt any
-path or turn a path-filter result into approval of only part of the candidate
-tree.
-
-A designated human reviewer MAY approve only that immutable security approval
-tuple.
-The author, workspace writer, CI identity, and an identity controlled by the
-candidate workload MUST NOT satisfy human review. Changing any bound identity
-or security-policy revision makes the approval stale. Approval is review
-evidence, not Git write authority or CI evidence. Changing only the separately
-revisioned quality policy invalidates prior CI applicability but MUST NOT turn
-current human approval of the unchanged security tuple into a CI decision or
-make a runner capable of approval.
-
-CI is an optional Project quality gate. When the current Project quality policy
-requires no jobs, promotion requires no CI result. When it requires jobs, each
-CI result MUST bind the same repository, protected ref, candidate commit,
-candidate tree, policy revision, required-job-set revision, job name, attempt,
-and terminal result. CI MUST NOT update a protected ref, approve its own
-candidate, or convert unavailable capacity into success.
-Each result MUST be authenticated as the configured identity for that exact
-Project, repository, and job. The host scheduler MUST durably issue the current
-attempt and its unguessable identity before reporting; unknown, future, old, or
-revoked attempts MUST fail. An earlier success MUST NOT override a later failure or
-cancellation. Missing, malformed, foreign, nonterminal, or tuple-mismatched
-input is not successful CI evidence.
-
-CI evidence has two trust classes:
-
-- **Independent CI** executes a command and image definition selected from an
-  authority the candidate cannot change. It may support a claim about the
-  candidate that its independently selected check is designed to test.
-- **Candidate-controlled self-test** executes a candidate-selected test
-  definition and script inside an operator-pinned common job base image. A successful result proves only that
-  the recorded candidate-selected tests executed and exited successfully in the
-  recorded sandbox. It does not independently establish coverage, correctness
-  of the test definitions, product correctness, security, policy compliance, or
-  fitness for promotion.
-
-The Project quality policy MUST identify which trust class and execution kind
-satisfies each promotion-required job. It MAY select no jobs, only ordinary Sysbox jobs,
-only QEMU jobs, or jobs of both kinds. Evidence from an unselected kind is
-diagnostic only and MUST NOT become a readiness or promotion requirement.
-The quality policy is independently configured and revisioned from native
-readiness and the human-review policy. An implementation MAY store these
-policies in one document, but it MUST preserve their distinct revisions,
-authority checks, and effects. A quality-policy update MUST NOT revoke Project
-or workspace readiness.
-Evidence from one class MUST NOT be displayed or exported as the other. The
-native ordinary CI target uses candidate-controlled self-tests. Such a result
-MAY satisfy a required CI condition when the protected policy explicitly names
-that job and class, but it never replaces complete-tree human review. The
-reviewer surface MUST show the class, candidate-selected config and script
-digests, fixed argv, and operator job/runner image digests before approval and again when showing promotion
-readiness.
-
-This evidence limitation does not make test review optional. Product
-maintainers MUST review changed requirements, implementation, test definitions,
-and relevant results sufficiently to assess regressions before approving the
-candidate. Infrastructure security review is a separate dimension focused on
-secret exposure, protected-ref authority, host/runtime privilege, and trusted
-capability elevation. Minimizing that security review surface MUST NOT be
-reported as minimizing product or test review.
-
-**TRUST-PROMOTION-CAS-001:** Protected promotion MUST execute as one
-serialized compare-and-swap operation. While holding the repository/ref
-serialization boundary, the promoter MUST reread the protected ref and current
-security and quality policies, verify that:
-
-1. the live ref equals the proposal's expected head;
-2. the candidate descends from that head under the selected merge policy;
-3. the candidate commit and tree still match the reviewed proposal;
-4. every required current human approval is present and not revoked;
-5. when the current Project quality policy selects jobs, every selected job has
-   a successful terminal result for the exact promotion tuple and execution
-   kind; and
-6. the provider can atomically update that exact old object ID to the exact
-   candidate object ID.
-
-Any mismatch MUST leave the protected ref unchanged. Concurrent promotions
-from one expected head MUST permit at most one success. A retry after an
-uncertain result MUST reread the ref and return the already-applied result only
-when the exact candidate is current; it MUST NOT replay an update against a new
-head. Protected-ref deletion and forced update are denied.
-
-The host maintainer credential MAY perform this operation, provider repair,
-and credential recovery. DIM MUST NOT expose a direct protected-write or
-review-bypass operation to that credential. An operator action outside DIM's
-promotion operation is break-glass host administration, not a successful DIM
-review or promotion, and MUST NOT be reported as one.
-
-| Actor or evidence | Allowed | Denied |
+| Owner | Allowed authority | Boundary |
 | --- | --- | --- |
-| Workspace writer | Create and update proposal refs | Update, delete, or force a protected ref |
-| Human reviewer | Approve or reject one immutable complete-tree proposal | Self-approve, approve only selected paths, or reuse approval after tuple drift |
-| CI identity | Report one job attempt and its trust class for the exact candidate tuple | Approve, merge, deploy, report a different head/tree as the candidate, or label candidate-controlled evidence independent |
-| Host scheduler | Issue or revoke the current job attempt | Report a result, approve, promote, or write refs |
-| Host promoter | Perform the checked atomic old-ID to candidate-ID update | Bypass review or configured quality jobs, ignore policy drift, or overwrite a concurrently moved ref |
-| Repository owner or provider administrator | Configure policy through host administration | Routine direct push or provider review bypass |
+| Host operator | Install components, configure hosts/services, choose runtime images and capacity | Explicit operator input; candidate files grant no host authority |
+| Core workspace application | Create, observe, execute, stop/recreate/discard owned workspace resources | Immutable UUID, parsed record, per-workspace lock, exact ownership labels |
+| Workspace | Modify checkout/home/private Docker and run development services | No host Docker socket, host checkout bind or reusable host role credentials |
+| Managed Git broker | Read registered source and push one workspace proposal namespace | Scoped attachment and grant, live core UUID/state validation, private host listener |
+| Git authority | Own repositories, proposal evidence and protected refs | Protected writes use current policy, selected evidence, human decisions and atomic ref update |
+| Execution | Lease jobs, fence capacity, report candidate-bound results | No review, promotion, importer or general host authority |
+| Human reviewer | Inspect exact candidate evidence, approve or revoke | Approval binds the reviewed tuple and policy; CI is not approval |
+| Controller plugin | Serve explicitly enabled scoped routes and constrained inputs | Current core workspace UUID/state and target ownership checked at use |
+| Installer facade | Acquire exact components, promote installation, activate and recover | No implicit workspace or protected-ref mutation |
 
-## Backend and guest authority
+A workspace name is a display identifier. Creating the same name after discard
+produces a new UUID; old grants and listeners cannot resolve to that workspace.
+Recreate preserves UUID and selected data but replaces runtime realization.
+Missing or foreign resources fail ownership validation. Failed cleanup remains
+recorded for explicit retry rather than allowing accidental resource adoption.
 
-**TRUST-RUNTIME-001:** Backend mechanism is not a security conclusion. Every
-backend MUST enforce the same capability decisions at its untrusted execution
-boundary. The target backend identities are `container` for the Sysbox-based
-workspace shape and `vm` for a persistent virtual-machine workspace. An
-implementation MUST NOT represent a disposable CI VM or a Project-launched
-QEMU process as the `vm` workspace backend.
+Managed source acquisition shares the core runtime. There is no trusted outer
+container, two-level agent topology or separate managed workspace state machine.
+The scoped broker checks the current record and only supports the registered
+repository's Git operations; it is not a generic HTTP proxy or administration
+endpoint. Host role credentials stay outside the workspace.
 
-The `container` profile MAY place trusted Project lifecycle execution in the
-separate trusted outer workspace container. The `vm` profile MUST place
-reviewed Project lifecycle execution and every secret-bearing service outside
-the guest. The VM guest contains the untrusted agent and ordinary development
-workloads. Host lifecycle code MAY control VM power, attach owned storage and
-network interfaces, and dispatch through a bounded backend adapter. It MUST
-execute authority-bearing Project hooks from the immutable approved root, not
-from guest-writable data, and MUST NOT treat guest output as trusted executable
-configuration.
+Project readiness establishes registered source ownership and usable source
+access. It requires neither CI availability nor a proposal approval. A protected
+ref may advance while an existing workspace keeps its mutable checkout; reads
+may follow a proven fast-forward under the same Project/ref/policy. No lifecycle
+operation overwrites local work to enforce the latest protected commit.
 
-| Capability or resource | Untrusted container or VM guest | Trusted Project lifecycle area | DIM host authority |
-| --- | --- | --- | --- |
-| Mutable workspace data and user home | Allowed for its own workspace | May attach or archive only owned data | May ownership-check and attach or remove it |
-| Private nested container runtime | Allowed only for its own runtime | May own a separate Project runtime | Must not expose the host runtime socket |
-| Proposal Git credential | Allowed, scoped to proposal refs | May receive only the credential its operation needs | Owns credential issuance and revocation |
-| Agent controller or development-service capability | Allowed only for its workspace ID and declared audience | May construct a narrower reviewed proxy | Owns the authenticated endpoint and policy |
-| Host-admin or workspace-controller socket/grant | Denied | Allowed only where the lifecycle operation requires it | Owns and scopes it |
-| Host Docker, hypervisor, or generic controller socket | Denied | Denied as an unbounded pass-through | Allowed only to the responsible host service |
-| Raw product/runtime secret or secret volume | Denied | Allowed only to the separate reviewed secret-bearing service | May inject it through the reviewed operation |
-| Secret-bearing service control plane | Denied; only a fixed reviewed application protocol may cross | Owns deployment from the approved immutable root | May provide the narrow deployment capability |
-| Host `/dev/kvm`, VM manager API, or privileged device control | Denied, including inside the `vm` guest | Container profile may receive only a separately recorded capability; VM profile uses no guest grant | May use KVM for the selected VM mechanism |
-| Protected-ref maintainer, reviewer, or promotion credential | Denied | Denied | Allowed only to the corresponding host operation |
+Execution slots remain fenced after lease expiry until cleanup is confirmed.
+Terminal results are durably accepted independently of publication back to Git;
+a Git outage must not hold cleaned capacity indefinitely. Evidence must bind
+the exact candidate and current attempt. Retries and stale workers cannot
+replace newer results or obtain protected-ref authority.
 
-The guest network MAY reach explicitly configured workspace services and
-ordinary network destinations allowed by the installation. It MUST NOT join a
-host control network or gain a route that bypasses the scoped interfaces above.
-Stopping or rebooting a VM MUST preserve its owned persistent data, but MUST
-not move trusted lifecycle or secret-bearing execution into the guest.
-
-The first VM implementation candidate is an implementation choice, not an
-owner-trust decision. Incus VM with KVM is evaluated first. If it cannot pass
-the same persistence, guest Docker, lifecycle, network, resource, recovery, and
-memory-reclamation gates, another mechanism MAY be evaluated against unchanged
-gates. No mechanism is supported until its live capable-host gate passes.
-
-## Backend state compatibility
-
-**STATE-BACKEND-001:** Backend identity is immutable for one workspace
-instance. A workspace MUST NOT be changed in place between `container` and
-`vm`, and data from one backend MUST NOT be mounted into another by name-based
-adoption. The supported transition is export with the old backend, discard,
-create a fresh workspace instance with the new backend, and explicit restore
-of Project-owned data.
-
-The historical `sysbox` value and target `container` value MUST NOT be accepted
-as aliases. A release that still implements the historical profile continues
-to accept exactly `sysbox` and MUST NOT write `container`. A release that
-adopts this contract for new `container` state MUST reject existing `sysbox`
-configuration, records, and labeled resources unchanged, with guidance to keep
-the prior pinned release long enough to export data and recreate. It MUST NOT
-silently rewrite records, relabel or adopt resources, or infer compatibility
-from an equivalent runtime mechanism.
-
-| Persisted input | Result |
-| --- | --- |
-| Missing state for a new workspace | Create state with the selected supported backend identity |
-| Exact current schema and backend identity | Load only after ownership and schema validation |
-| Historical `sysbox` read by a `container`/`vm` release | Reject unchanged with export/recreate guidance |
-| Existing `container` workspace requested as `vm`, or the reverse | Reject unchanged; require export/discard/create/restore |
-| Unknown backend, schema, field, label, or mixed identity | Reject before runtime, plugin, hook, or state mutation |
-| Explicit migration not defined by a release contract | No migration authority exists |
-
-The exact host lifecycle schema-1 to schema-2 migration remains the sole
-existing automatic state migration and grants no precedent for backend,
-workspace, Project, runner, or plugin state conversion.
-
-Workspace schema `8` is the first schema implementing the workspace instance
-identity in this contract. Schema-`7` workspace records MUST be rejected
-unchanged with instructions to use the prior pinned release to export needed
-Project/user data before discard and recreation. Implementations MUST NOT infer
-an instance ID from the Project ID, display name, runtime resource, retained
-volume, grant file, or plugin state.
-
-## Workspace lifecycle and retained data
-
-**WORKSPACE-AUTHORITY-001:** Grants, sockets, route approvals, device grants,
-and protected credentials MUST bind to the workspace ID, not its display name,
-volume name, container name, VM name, or runtime generation. Retained data is
-not retained authority.
-
-| Operation | Workspace identity and data | Hooks and root | Grants and External URLs |
-| --- | --- | --- | --- |
-| `create` | Creates a fresh workspace ID; may attach only an ownership-validated retained volume for the same Project, name, and backend | Selects one approved immutable root and runs the applicable setup default | Issues fresh grants; no prior route or approval is imported |
-| `stop` | Keeps the workspace ID and persistent data; makes its runtime unavailable | Runs no setup or teardown | Terminates live flows/sessions; route records may remain but cannot forward |
-| `start` | Keeps the workspace ID; creates or resumes an owned runtime generation | Selects an approved root and runs setup | Revalidates grants; preserves approval state only for the same route tuple and workspace ID |
-| `restart` or `update` | Keeps the workspace ID and data; runtime generation may change | Selects and stages one approved root before lifecycle mutation, then runs setup; MUST NOT reuse the recorded root as a recovery fallback | Cannot broaden a grant; a changed route tuple requires a new pending request |
-| `setup` recovery | Keeps identity and data unchanged | Replays only the recorded immutable root | Cannot mint unrelated authority or follow a moved ref |
-| ordinary `discard` | Removes runtime, record, and DIM-owned data after ownership checks | Runs teardown with keep-volume false | Revokes routes and all server-side grants before removing state |
-| custom `discard --keep-volume` | Removes runtime and record but retains only owned Project/user data | Runs teardown with keep-volume true | Revokes exactly as ordinary discard; retained bytes confer no authority |
-| recommended `discard --keep-volume` | Rejects before phase, grant, route, runtime, record, or volume mutation; leaves the workspace intact | Runs no teardown | Revokes nothing because discard does not begin |
-| same-name recreation | Creates a new workspace ID and fresh runtime generation; may reuse validated retained data | Selects a currently approved immutable root | Issues fresh grants; old tokens, sockets, route IDs, approvals, slugs, and permalinks remain invalid |
-
-Retained data MAY include agent home, installed user tools, authorized agent SSH
-keys, and Project-owned nested storage. Those bytes carry agent-level authority
-inside the new workspace only. Any retained copy of an old DIM token, grant,
-socket path, URL credential, or approval ID MUST fail server-side
-authentication because it names the discarded workspace ID. Creation MUST
-recompute backend/device capabilities and MUST NOT infer them from retained
-data.
-
-Recommended home, checkout, and private-Docker volumes are bound to the current
-workspace identity and cannot be retained through `--keep-volume`. An operator
-who needs those bytes MUST leave the workspace intact or explicitly copy or
-back them up before ordinary full discard. Changing a recommended workspace to
-custom, or custom to recommended, still requires discard and fresh creation
-after that preservation step. The custom
-`--keep-volume` contract remains unchanged.
-
-Discard MUST atomically publish the non-ready `discarding` phase and revoke
-controller grants before invoking route or Project cleanup. Authenticated
-controller dispatch and startup route restoration MUST revalidate the workspace
-ID and active phase under a per-workspace authority lock. Controller request
-bodies MUST be completely buffered within the configured bound before that
-authority lock is acquired. The authority lock MUST be distinct from the setup
-lock so reviewed Project setup can call host-input routes while holding the
-setup lock. Discard MUST acquire the setup lock before the authority lock and
-publish denial while both are held. If cleanup fails, the workspace MUST remain
-non-ready and all old grants and routes MUST be denied while an ownership-safe
-retry completes.
-
-## External URL approval
-
-**URL-APPROVAL-001:** Each ingress declares whether host approval is required.
-The externally observable approval value MUST distinguish `not-required`,
-`pending`, `approved`, and `revoked`. For an approval-required ingress, a valid
-workspace request reserves a route ID and its authorities in `pending`, but the
-gateway MUST deny traffic until a host administrator approves it.
-
-Approval MUST bind the workspace ID, route ID, ingress identity and policy
-revision, exact logical target descriptor, protocol, port, and every slug or
-permalink authority returned for the route. The agent and workspace
-grants MUST NOT approve a route. They MAY revoke their own route. Host
-administration MAY approve a pending route or revoke any route after verifying
-that exact tuple. Revocation is terminal; later exposure requires a new route
-request and approval.
-
-The ingress policy revision MUST include the stable external listener address
-and port. It MUST NOT include an ephemeral internal router address or port that
-does not change external exposure. Policy drift returns a surviving route to
-`pending`. Revocation, deletion, and target rebinding MUST disconnect active
-HTTP streaming, upgraded HTTP/WebSocket, and raw TCP flows for the exact route
-claim before the old tuple is released or replaced.
-
-An approved route MAY follow a new runtime generation only when the workspace
-ID and exact logical target descriptor are unchanged; existing flows MUST be
-disconnected before rebinding. Controller restart preserves the recorded
-approval value. Workspace stop makes the route unavailable without converting
-`pending` to `approved`. Same-instance start may restore an `approved` route
-after target resolution. Target, ingress policy, or workspace-ID change MUST
-deny the old route. Mutable slug and permalink forms share one approval and
-revoke together.
-
-A hostname-routed HTTP or HTTPS route MUST return both its policy-selected slug
-URL and a stable permalink URL. The permalink authority MUST use
-`WORKSPACE-permalink-ROUTE_ID.DOMAIN`, remain bound to the route ID when policy
-drift changes its slug, and return to `pending` with that route. The registry
-MUST claim or reject both authorities atomically, and both authorities MUST
-select the same current target and lifecycle state. A fresh route, including a
-same-name workspace recreation, MUST receive a fresh route ID and permalink.
-Raw TCP routes remain address-and-port routes and MUST NOT return or reserve a
-hostname permalink.
-
-## Workspace environment selection and Project-owned hooks
-
-**PROJECT-HOOK-DEFAULTS-001:** Hook presence, environment selection, and hook
-bytes are selected only from the immutable approved root. Mutable workspace or
-guest data MUST NOT add, replace, or redirect a lifecycle hook. Any custom
-lifecycle file selects custom; no custom lifecycle file selects recommended.
-The obsolete `.dim/environment.yml` format MUST be rejected and MUST NOT act as
-a selector. A backend MUST preserve these defaults:
-
-| Root contents | Setup behavior | Task behavior | Discard behavior |
-| --- | --- | --- | --- |
-| `.dim/setup.sh` present | Trusted lifecycle area executes those immutable bytes | Unchanged | Unchanged |
-| no setup hook, `.dim/docker-compose.yml` present | Trusted lifecycle area performs the documented Compose setup | Unchanged | Documented Compose teardown when no teardown hook exists |
-| recommended, with no custom lifecycle file | Reconcile the DIM-managed agent before readiness | `run shell`, `run exec`, and `run custom` dispatch in the agent; `exec` also dispatches there | Full discard removes agent volumes; `--keep-volume` rejects before mutation |
-| custom, with neither setup hook nor Compose file | Successful no-op | Dispatch only through `.dim/entrypoint.sh`; reject `run` when absent, while `exec` bypasses it | Successful no-op when no teardown hook exists |
-| `.dim/entrypoint.sh` present | Unchanged | Dispatch through its immutable reviewed mapping | Unchanged |
-| no entrypoint hook | Unchanged | Recommended uses its built-in operations; custom rejects `run` | Unchanged |
-| `.dim/teardown.sh` present | Unchanged | Unchanged | Trusted lifecycle area executes it with the exact keep-volume value |
-
-Recommended setup seeds the mutable checkout from the exact selected root only
-when it has not yet been initialized. Later immutable lifecycle selection MUST
-leave checkout `HEAD`, index, user files, and local commits unchanged, MUST NOT
-fail setup because the lifecycle root moved, and MUST notify the user to fetch,
-review, and explicitly rebase or merge source through normal agent commands.
-
-For the `vm` backend, the trusted lifecycle area in this table is outside the
-guest. A hook may use the bounded backend adapter to prepare or dispatch guest
-work, but the guest MUST NOT receive the lifecycle grant or execute the hook
-with trusted authority.
-
-## Verification mapping
-
-**Kind: Verification**
-
-| Contract | Required positive evidence | Required denial evidence |
-| --- | --- | --- |
-| `TRUST-PROMOTION-001`, `TRUST-PROMOTION-CAS-001` | Complete-tree proposal, current human approval, every quality-policy-selected exact-head job, and one atomic promotion | Path-only review, stale/revoked approval, changed security policy/tree/head, stale quality evidence, wrong job attempt, force/delete, and concurrent second promotion leave the ref unchanged |
-| `TRUST-NATIVE-CI-ELIGIBILITY-001` | Registered Project proposal pushes automatically queue all valid exact-candidate jobs across multiple globally registered Sysbox and QEMU nodes, including recovery after outage | Per-Project admission, manual refresh, promoter-created CI, policy-filtered event creation, unclean lease reuse, and candidate changes to host limits are denied |
-| `TRUST-RUNTIME-001` | Same agent journey through each supported backend and live VM persistence/recovery on a KVM-capable host | Guest cannot read secrets, `/dev/kvm`, host/admin/runtime sockets, other-workspace data, or promotion credentials |
-| `STATE-BACKEND-001` | Exact current state round-trips | Historical `sysbox`, cross-backend, mixed-label, and unknown state remain byte-for-byte unchanged with no runtime mutation |
-| `WORKSPACE-AUTHORITY-001` | Stop/start preserves one instance; retained-volume recreation preserves declared data with a fresh workspace ID and grants | Old token, route, approval, permalink, device grant, foreign volume, and old runtime generation cannot authorize the recreated instance |
-| `URL-APPROVAL-001` | Pending request becomes reachable only after host approval; same-instance restart preserves exact approval | Pending/revoked, cross-workspace approval, target change, replay, and same-name recreation remain unreachable |
-| `PROJECT-HOOK-DEFAULTS-001` | Present and absent hook/default cases run from one immutable root on each backend | Guest mutation, symlink escape, moved root, or absent-hook inference starts no trusted hook |
-
-Source and deterministic tests are necessary but do not prove a VM or hardware
-boundary. Missing KVM or independent-host capacity MUST be reported as blocked,
-not passed, and MUST NOT delay source-only enforcement of denied operations.
+Optional published service routes resolve the current owned agent and, when
+requested, one target in its private Docker daemon. Each new HTTP request,
+WebSocket upgrade or TCP connection revalidates workspace authority. Cached IPs
+and display-name reuse are not authentication. Host administration uses a
+separate private socket; there is no automatic host socket mount into agents.
