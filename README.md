@@ -17,15 +17,24 @@ for the remaining work and the exported issue backlog.
 
 ## Install and start
 
-DIM is pre-stable. Use an exact reviewed release or complete source commit.
-The source on `development` can include changes beyond the published `0.10.0`
-packages; use the [local source workflow](specification/docs/releasing.md) to
-install this development version.
+This `development` branch contains the new base workspace flow. Published
+`0.10.0` packages still contain the earlier managed-only architecture. To use
+these commands, install a prepared source build:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
-dim installer install core
+mise install
+pnpm install --frozen-lockfile
+just prepare-local
+just install-local
 ```
+
+The preparation builds the package bundle and base workspace image. The install
+selects the base CLI and its dependencies; optional managed packages in the same
+bundle are not automatically installed. It uses an existing mise installer
+facade when configured and does not replace it with a direct CLI symlink.
+See the [source installation workflow](specification/docs/usage.md#install-development-sources) for
+artifact provenance and prerequisites.
 
 A runtime host needs Linux, Docker and `sysbox-runc`. For a new disposable Ubuntu
 VM, the [role bootstrap](verification/bootstrap-ubuntu-vm.md) installs host

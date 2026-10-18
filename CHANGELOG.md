@@ -15,17 +15,16 @@ registry publication, a release tag, deployment, or full release acceptance.
   reviewed source installation, and a durable candidate facade. Existing DIM
   or Docker state is refused; group refresh is explicit, and secrets, TLS,
   lingering, worker activation, and publication remain operator-owned.
-- Replace the provider-backed multi-repository product with one root-only
-  native DIM lifecycle. Projects now bootstrap and publish exactly one reviewed
-  native root; schema-6 Project and schema-9 workspace state are strict;
-  workspaces receive proposal-only Git authority; human approval and current
-  candidate-controlled ordinary/QEMU evidence feed checked protected-ref
-  compare-and-swap promotion. Repository CRUD/synchronization, Project
-  remove/purge, Project-scoped runners, ordinary-pool/shared-QEMU commands,
-  managed Gitea runtime, and provider fallback are removed. Existing provider
-  containers, volumes, remotes, credentials, and state are never adopted,
-  migrated, renamed, or deleted: operators must use the pinned prior release to
-  export data and then create fresh native state.
+- Develop from ordinary Git repositories on local or SSH-selected Linux hosts
+  without a control plane, Project registration or CI configuration. Persistent
+  Sysbox workspaces retain checkout, home and private Docker data across
+  recreation. Common commands, including `dim ls`, work directly at the root.
+  Base installation selects only the workspace dependency graph; managed Git,
+  reviews, CI and controller integrations are explicitly optional. Existing
+  incompatible state is rejected without adoption or automatic migration.
+
+The managed integration outcomes below apply when that optional capability is
+selected. They are not requirements of the base development flow.
 
 - Add the independently deployable Gitea-free native QEMU scheduler and trusted
   host worker surface, with fixed operator capacity, QEMU-specific native-Git

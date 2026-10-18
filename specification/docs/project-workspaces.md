@@ -1,3 +1,6 @@
+> Scope: optional managed Git integration. Ordinary development uses the
+> [base workspace flow](usage.md) and requires no Project registration.
+
 # Native Projects and workspaces
 
 ```bash
@@ -13,8 +16,8 @@ export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
 dim project create PROJECT --json
 dim project list --json
 dim project show PROJECT --json
-dim create PROJECT WORKSPACE
-dim show WORKSPACE --json
+dim managed create PROJECT WORKSPACE
+dim managed show WORKSPACE --json
 ```
 
 Bootstrap stages immutable reviewed root bytes and creates no runnable state.

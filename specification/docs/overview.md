@@ -1,16 +1,21 @@
 # Overview
 
-DIM owns a native Git control plane, persistent isolated workspaces, global
-ordinary Sysbox and native QEMU capacity, and review-gated protected-ref
-promotion. It does not own an issue tracker, hosted forge, Actions runtime, or
-agent orchestration policy.
+DIM provides persistent isolated development workspaces from ordinary Git
+repositories on local or SSH-selected Linux hosts. The host owns identity,
+source acquisition, state and runtime resources. The CLI owns presentation and
+transport. A workspace owns its development tools, checkout and private nested
+Docker daemon.
 
-One Project has one reviewed root. A workspace materializes the protected-root
-snapshot and receives only proposal-scoped write authority. Proposal pushes may
-queue candidate-declared jobs on globally configured capacity. Results remain
-candidate-controlled evidence. Human approval and checked promotion are
-separate mandatory authority boundaries.
+The base runtime is one unprivileged Sysbox container with persistent checkout,
+home and Docker-data volumes. It needs no resident controller or Project
+registration. Host controls and operator credentials stay outside the agent.
+This is practical development containment, not hostile-tenant security.
 
-The product has no repository CRUD or Project purge surface. Additional source
-repositories, if needed, are materialized by reviewed root lifecycle code and
-remain outside native Project identity.
+Managed Git, reviews, CI, shared services and URL publication are optional
+integrations. Their authority and configuration are independent of ordinary
+workspace lifecycle. Workflow interpretation belongs to a workflow integration;
+a generic runtime must not understand a repository's CI language.
+
+Start with [usage](usage.md), inspect the [responsibility map](architecture.md),
+or follow the [rework plan](architecture-rework-plan.md) for remaining changes
+and the backed-up issue backlog.
