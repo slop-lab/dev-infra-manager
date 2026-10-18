@@ -57,7 +57,7 @@ export function qemuContainerArguments(input: Pick<BackendInput, "grant" | "root
   return ["run", "--detach", "--name", containerName(input.grant), "--read-only", "--network", "none",
     "--user", `${identity.uid}:${identity.gid}`, "--group-add", String(identity.kvmGroup),
     "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--device", "/dev/kvm:/dev/kvm",
-    "--cpus", descriptor.bounds.cpu, "--memory", String(supervisorMemory), "--pids-limit", descriptor.bounds.pids,
+    "--cpus", descriptor.bounds.cpu, "--memory", String(supervisorMemory), "--pids-limit", descriptor.bounds.pids, "--oom-score-adj", "500",
     ...ownershipLabels(input.grant, "qemu").flatMap((label) => ["--label", label]),
     "--mount", `type=bind,src=${join(input.root, "job")},dst=/run/dim/job,readonly`,
     "--mount", `type=bind,src=${join(input.root, "workspace")},dst=/run/dim/workspace`,

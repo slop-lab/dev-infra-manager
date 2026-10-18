@@ -7,6 +7,7 @@ it("routes QEMU through a bounded unprivileged KVM supervisor with public candid
   const option = (name: string) => args[args.indexOf(name) + 1];
   expect(qemuBackend.kind).toBe("qemu"); expect(option("--device")).toBe("/dev/kvm:/dev/kvm");
   expect(option("--network")).toBe("none"); expect(option("--cap-drop")).toBe("ALL");
+  expect(option("--oom-score-adj")).toBe("500");
   expect(option("--cpus")).toBe(authorized.profile.bounds.cpu);
   expect(BigInt(option("--memory")!)).toBe(BigInt(authorized.profile.bounds.memoryBytes) + 256n * 1024n * 1024n);
   expect(args).toContain(`type=image,src=${authorized.profile.jobBaseImage},dst=/run/dim/guest-root`);

@@ -30,6 +30,7 @@ it("runs verified candidate bytes with bounded Docker resources and cleans up be
   const options = await input(), completed = await sysboxBackend.run(options);
   expect(completed.result).toBe("success"); expect(completed.stdout.sha256).toBe(`sha256:${hash("executor-output\n")}`);
   const launched = options.runner.calls.find(({ args }) => args[0] === "run")!.args;
+  expect(launched[launched.indexOf("--oom-score-adj") + 1]).toBe("500");
   expect(launched).toContain("sysbox-runc"); expect(launched).toContain("--memory");
   expect(options.runner.calls.at(-1)?.args.slice(0, 3)).toEqual(["container", "rm", "--force"]);
 });

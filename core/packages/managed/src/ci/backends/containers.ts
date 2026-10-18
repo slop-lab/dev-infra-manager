@@ -30,7 +30,7 @@ export function nativeContainerArgs(claim: ExecutionGrant, paths: NativeDockerPa
   return [
     "run", "--detach", "--name", containerName(claim), "--runtime", "sysbox-runc",
     "--cpus", claim.descriptor.bounds.cpu, "--memory", claim.descriptor.bounds.memoryBytes,
-    "--pids-limit", claim.descriptor.bounds.pids, "--network", routing?.network ?? "bridge",
+    "--pids-limit", claim.descriptor.bounds.pids, "--oom-score-adj", "500", "--network", routing?.network ?? "bridge",
     ...(routing?.blockedHostnames ?? []).map((hostname) => `--add-host=${hostname}:127.0.0.1`),
     ...labels.flatMap((label) => ["--label", label]),
     "--mount", `type=bind,source=${paths.workspace},target=/workspace`,
@@ -76,7 +76,7 @@ if [ "$ready" != true ]; then exit 1; fi
 docker image pull "$DIM_JOB_IMAGE" >/dev/null
 job_digests="$(docker image inspect "$DIM_JOB_IMAGE" --format '{{json .RepoDigests}}')"
 printf '%s\n' "$job_digests" | grep -Fq -- "\"$DIM_JOB_IMAGE\""
-docker run --rm --network none --cpus "$DIM_JOB_CPUS" --memory "$DIM_JOB_MEMORY" --pids-limit "$DIM_JOB_PIDS" \
+docker run --rm --oom-score-adj 500 --network none --cpus "$DIM_JOB_CPUS" --memory "$DIM_JOB_MEMORY" --pids-limit "$DIM_JOB_PIDS" \
   --workdir /workspace --mount type=bind,source=/workspace,target=/workspace \
   --mount type=bind,source=/run/dim/job/script,target=/run/dim/job/script,readonly \
   --entrypoint /bin/bash "$DIM_JOB_IMAGE" --noprofile --norc /run/dim/job/script
