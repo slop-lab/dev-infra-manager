@@ -35,10 +35,10 @@ try {
   const bytes = Buffer.alloc(1024 * 1024 + 1); for (let i = 0; i < bytes.length; i++) bytes[i] = i % 256;
   assert.deepEqual(await Promise.all([exchange(first, bytes), exchange(first, Buffer.from("concurrent request"))]), [bytes, Buffer.from("concurrent request")]);
   const token = await controller.ensureGrant(record.name);
-  const ingressPort = await availablePort();
+  const ingressPort = await availablePort(), tcpIngressPort = await availablePort();
   plugin = await registerPlugins([createExternalUrlsPlugin({ ingresses: { smoke: {
     description: "Disposable ownership smoke", scheme: "http", domain: "smoke.test", listenHost: "127.0.0.1", listenPort: ingressPort
-  } } })]);
+  }, raw: { description: "Disposable half-close smoke", scheme: "tcp", domain: "127.0.0.1", listenHost: "127.0.0.1", listenPort: tcpIngressPort } } })]);
   api = createDimController({ stateRoot: join(root, "managed"), routes: plugin.controllerRoutes,
     authenticate: (grant) => controller.authenticate(grant), runWorkspaceRequest: (workspace, operation) => controller.run(workspace, operation),
     resolveTarget: (workspace, requested) => controller.resolveTarget(workspace, requested) });
@@ -48,6 +48,11 @@ try {
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ ingress: "smoke", subdomain: "relay-smoke--app", target: { containers: [], port: 3457, protocol: "http" } }) });
   assert.equal(route.status, 201, await route.clone().text());
+  const tcpRoute = await fetch(`http://127.0.0.1:${apiPort}/api/urls`, { method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ ingress: "raw", target }) });
+  assert.equal(tcpRoute.status, 201, await tcpRoute.clone().text());
+  assert.deepEqual(await exchange({ host: "127.0.0.1", port: tcpIngressPort }, bytes), bytes);
   const gateway = () => new Promise((resolve, reject) => {
     const request = http.get({ host: "127.0.0.1", port: ingressPort, headers: { host: "relay-smoke--app.smoke.test" } }, (response) => {
       const chunks = []; response.on("data", (chunk) => chunks.push(chunk)); response.once("error", reject);
@@ -64,6 +69,8 @@ try {
   const freshResponse = await gateway(); assert.equal(freshResponse.status, 200); assert.equal(await freshResponse.text(), "recreated");
   const refreshedHttp = await controller.resolveTarget(selected, httpTarget);
   assert.notEqual(refreshedHttp.fingerprint, initialHttp.fingerprint);
+  assert.deepEqual(await exchange({ host: "127.0.0.1", port: tcpIngressPort }, bytes), bytes);
+  console.log("PASS raw TCP gateway preserves binary half-close responses before and after recreation");
   // Leave the core record unchanged, then put an unrelated runtime at its cached relay endpoint.
   assert.equal((await runner.run("docker", ["rm", "--force", recreated.id])).exitCode, 0);
   const marker = randomUUID(), foreignName = `dim-relay-foreign-${marker}`;

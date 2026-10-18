@@ -65,7 +65,7 @@ export class TcpIngressListener {
     this.#connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
     this.#idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
     this.#authority = `${options.publicHost}:${options.listenPort}`;
-    this.#server = net.createServer((client) => this.#forward(client));
+    this.#server = net.createServer({ allowHalfOpen: true }, (client) => this.#forward(client));
     this.#ready = new Promise((resolve, reject) => {
       this.#server.once("error", reject);
       this.#server.listen(options.listenPort, options.listenHost, () => {
@@ -154,7 +154,7 @@ export class TcpIngressListener {
       client.destroy();
       return;
     }
-    const upstream = net.connect(target.port, target.host);
+    const upstream = net.connect({ port: target.port, host: target.host, allowHalfOpen: true });
     const connection = { client, upstream };
     this.#connections.add(connection);
     const destroy = () => {
@@ -168,11 +168,11 @@ export class TcpIngressListener {
       upstream.setTimeout(this.#idleTimeoutMs);
       client.pipe(upstream).pipe(client);
     });
-    upstream.once("close", destroy);
-    upstream.once("end", destroy);
+    // A clean read EOF ends only the opposite write direction through pipe().
+    // In particular, client FIN must leave room for a delayed upstream reply.
+    upstream.once("close", () => { if (!upstream.readableEnded) destroy(); });
     upstream.once("error", destroy);
     client.once("close", destroy);
-    client.once("end", destroy);
     client.once("error", destroy);
   }
 

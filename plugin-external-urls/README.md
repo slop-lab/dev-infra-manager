@@ -111,6 +111,8 @@ seconds, and closes a flow after five idle minutes. Revocation, listener
 shutdown and explicit route rebinding destroy both socket directions. Each new
 connection resolves the current owned runtime. Existing connections remain
 pinned to their selected target until they end or are explicitly revoked.
+Closing one sending direction preserves the other direction, including a
+server response sent after the client finishes uploading.
 
 ## Caddy HTTPS
 
