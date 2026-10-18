@@ -129,7 +129,7 @@ describe("installed native protected promotion", () => {
     await addCandidateCommit(fixture.clone, "later.txt", Buffer.from("later\n"));
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
     const before = await protectedHead(fixture.root);
-    const ciAuthorization = `Basic ${Buffer.from(`ordinary-results:${bundleSecrets.resultReporter}`).toString("base64")}`;
+    const ciAuthorization = `Basic ${Buffer.from(`ci-results:${bundleSecrets.resultReporter}`).toString("base64")}`;
 
     // When
     const outcomes = await Promise.all([

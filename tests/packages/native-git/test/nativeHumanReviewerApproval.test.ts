@@ -14,7 +14,7 @@ import {
   startFinalizeService
 } from "./nativeRootImportFinalizeFixture.js";
 import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
-import { bundleSecrets } from "./bundleConfigFixture.js";
+import { bundleSecrets, idleOrdinaryConfig } from "./bundleConfigFixture.js";
 import { createBundleReview, nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
 
 afterEach(cleanupFinalizeFixtures);
@@ -129,26 +129,15 @@ describe("installed native human approval", () => {
     ]);
     replaceImportedPolicy(fixture.root, ordinaryOnly);
     const restarted = await startFinalizeService(fixture.root);
-    const identityAuthorization = `Basic ${Buffer.from(
-      `ordinary-identity:${bundleSecrets.nativeIdentity}`
-    ).toString("base64")}`;
-    const proofHeaders = { authorization: identityAuthorization, "content-type": "application/json" };
-    const proofRequest = { schemaVersion: 1, requestId: randomUUID(), generationId };
-    const policyProof = await fetch(`${restarted.origin}/v1/projects/project-a/repositories/root/native-root-ci-proof/policy`, {
-      method: "POST", headers: proofHeaders, body: JSON.stringify(proofRequest)
-    });
-    const currentRoot = recordField(await policyProof.json(), "currentRoot");
-
     // When
     const status = await fetch(endpoint.replace(fixture.service.origin, restarted.origin), { headers: reviewerHeaders });
-    const staleEvidence = await fetch(
-      `${restarted.origin}/v1/projects/project-a/repositories/root/native-root-ci-proof/review-event`, {
-        method: "POST", headers: proofHeaders, body: JSON.stringify({ ...proofRequest,
-          importNonce: stringField(currentRoot, "importNonce"), policyDigest: envelope.policyDigest,
-          eventId: event.eventId, reviewId: event.reviewId,
-          executionKind: event.executionKind, jobName: event.jobName })
-      }
-    );
+    const staleEvidence = await fetch(`${restarted.origin}/v1/execution-grants`, {
+      method: "POST", headers: {
+        authorization: `Basic ${Buffer.from(`ci-grants:${bundleSecrets.attemptIssuer}`).toString("base64")}`,
+        "content-type": "application/json", "x-dim-generation-id": generationId
+      }, body: JSON.stringify({ executionId: randomUUID(), generationId, event,
+        workerId: "worker-a", slotId: "build-1", profile: idleOrdinaryConfig().workers[0]!.slots[0]!.profile })
+    });
 
     // Then
     expect(status.status).toBe(200);
@@ -163,13 +152,6 @@ function replaceImportedPolicy(root: string, policy: object): void {
   database.prepare("UPDATE native_project_root_import SET policy_json = ?, policy_sha256 = ?")
     .run(policyJson, createHash("sha256").update(policyJson).digest("hex"));
   database.close();
-}
-
-function recordField(value: unknown, field: string): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ApprovalFixtureError();
-  const selected = Reflect.get(value, field);
-  if (typeof selected !== "object" || selected === null || Array.isArray(selected)) throw new ApprovalFixtureError();
-  return selected;
 }
 
 function stringField(value: unknown, field: string): string {
