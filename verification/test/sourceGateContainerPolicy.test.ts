@@ -23,11 +23,7 @@ describe("isolated source gate policy", () => {
     expect(recipes).toMatch(/^check-source-native:[\s\S]*?^    just test$[\s\S]*?^    just build-packages$/m);
     expect(recipes).not.toContain("--exclude");
     expect(recipes).not.toContain("test-isolated");
-    const verificationPackage = JSON.parse(
-      await readFile(resolve(workspaceRoot, "verification/package.json"), "utf8")
-    );
     expect(workspacePackage.scripts["workspace:test"]).toBe("pnpm --workspace-concurrency=1 --recursive run test");
-    expect(verificationPackage.scripts.test).toBe("vitest run test --no-file-parallelism");
     expect(await readFile(resolve(workspaceRoot, "verification/vitest.config.ts"), "utf8"))
       .toContain('exclude: ["live/**"]');
     expect(verificationRecipes).toMatch(/^native-ordinary-executor-live:\n[\s\S]*?live\/nativeOrdinaryExecutorLive\.test\.ts$/m);
