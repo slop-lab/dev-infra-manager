@@ -279,8 +279,8 @@ that an arbitrary large codebase has no possible further improvements.
   review API (`2d9055f3`); private initialization and actual Chromium proposal,
   diff, approve/revoke, expiry and stale-generation checks passed (`adaab5dd`).
 - Managed source uses the core's single Sysbox workspace and scoped host broker:
-  `8892c26a`. The initial real proposal/lifecycle/data smoke passed. The expanded
-  post-promotion fetch journey is being checked against the new execution chain.
+  `8892c26a`. Real proposal/lifecycle/data checks and post-promotion fetch plus
+  another proposal in the same workspace passed (`b51a3fe7`).
 - Optional controller and URL targets use the core UUID/state and revalidate
   new connections: `ce66fb85`. Actual Sysbox byte relay, concurrent binary data,
   half-close, name reuse denial and cleanup passed.
@@ -293,9 +293,26 @@ that an arbitrary large codebase has no possible further improvements.
 - Fresh host provisioning no longer writes unused backend selection state;
   login/resume and foreign-state protections pass 24 tests: `a11dabb9`.
 
-The remaining execution consolidation is active work: one durable execution
-aggregate for Sysbox and QEMU, cleanup-fenced capacity and independent Git
-publication. Final matched build, installation graph, expanded native workspace
-and execution runtime checks follow that change. Persistent VM workspaces and
-the larger LLM/router service remain separate product work; their requirements
-are represented in the issue map without claiming their implementation.
+- Host-local saved control-plane selection: `08aa7855`; existing managed
+  workspaces reconnect only after same-authority/Project/ref/policy proof:
+  `05f98e35`. The real service generation-rotation test passed.
+- Optional administration follows local/SSH host selection, including clients
+  with only the base package: `299c36a2`. Real SSH preparation created private
+  control-plane files only on the selected host; runtime/forwarding checks passed.
+- Explicit self-development tasks replace the privileged nested self-Project
+  framework and obsolete templates: `e3f625e8`. Standalone KVM service mechanics
+  remain separate from a workspace adapter.
+- First execution consolidation: `2ebc6f1a`. Ordinary execution uses one durable
+  aggregate, cleans before capacity reuse and publishes results independently.
+  Actual HTTP/Git latest-result and checked-promotion integration passed.
+- Installer private service credential pairing uses the unified CI roles while
+  retaining facade deployment syntax and transaction behavior: `b6fc02d6`.
+  Installer behavior suites passed 302 tests, with one existing skipped case.
+
+The remaining execution consolidation is active work: QEMU shares the same
+queue/worker, legacy configuration and proof authorities are removed, and final
+runtime/image checks follow the matched build. Plugin request targets are being
+revalidated across same-UUID runtime recreation. The unused controller-proxy
+package and source-bundle closure are under final review. Persistent VM
+workspaces and the larger LLM/router service remain separate product work;
+their requirements are represented in the issue map without claiming implementation.

@@ -45,8 +45,9 @@ workspace.
 
 The generated files contain credentials; retain their owner-only permissions.
 
-Selection belongs to the executing host. For `dim --host REMOTE create dim://demo
-work-1`, run control-plane setup and connect on that remote host first. The local
+Selection belongs to the executing host. Use `dim --host REMOTE managed
+control-plane connect DIRECTORY` before `dim --host REMOTE create dim://demo
+work-1`. The local
 client does not transfer its control-plane credentials. Explicit
 `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` and
 `DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE` override the saved selection for an
@@ -57,22 +58,24 @@ UI deployments.
 
 ## CI capacity
 
-Start global ordinary and QEMU capacity separately:
+One execution service and worker protocol handle Sysbox and QEMU slots:
 
 ```bash
-dim managed ci native-root host run /absolute/operator/ordinary-host.json
-dim managed ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.10.0
-dim managed ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.10.0
-dim managed ci native-qemu scheduler run /absolute/operator/qemu-scheduler.json
-dim managed ci native-qemu host run qemu-a /absolute/operator/qemu-host.json
-dim managed ci native-qemu event status EVENT_ID /absolute/operator/qemu-scheduler.json
+dim managed ci worker /absolute/operator/worker.json
+dim managed ci qemu-image registry.example/qemu-supervisor:reviewed
 ```
 
-These long-running commands consume fixed operator configuration. Candidate
-bytes cannot choose credentials, images, bounds, mounts, networks, or fallback
-executors. The ordinary host loads the enabled exact-version host mirror plugin
-and reconciles DIM-owned cache and control-network resources before it locks
-capacity. QEMU execution requires KVM; there is no TCG or ordinary fallback.
+The owner-only host file binds a worker, installed generation, endpoints, owned
+state directory and fixed slots. Service configuration owns slot runtime profiles,
+reviewed image digests and resource bounds. Candidate files cannot select host
+credentials, mounts, devices or fallback executors. Docker and required
+Sysbox/KVM access are checked before claiming work. Mirrors are optional; an
+explicitly enabled provider must reconcile successfully.
+
+A durable request/result journal supports retries and cleanup recovery. Expired
+leases remain fenced until cleanup is known. Git publication retries separately
+from durable result acceptance and capacity reuse. No separate QEMU scheduler or
+Project-scoped runner exists. See [execution setup](../../../../specification/docs/ci-runners.md).
 
 ## Projects and workspaces
 
