@@ -13,11 +13,10 @@ export function text(value) {
 export function parseSession(value) {
   const input = record(value);
   const projectId = text(input?.projectId);
-  const repositoryIds = textList(input?.repositoryIds);
   const reviewerId = text(input?.reviewerId);
   const csrfToken = text(input?.csrfToken);
-  if (input?.authenticated !== true || projectId === null || repositoryIds === null || repositoryIds.length === 0 || reviewerId === null || csrfToken === null) return null;
-  return { projectId, repositoryIds, reviewerId, csrfToken };
+  if (input?.authenticated !== true || projectId === null || reviewerId === null || csrfToken === null) return null;
+  return { projectId, reviewerId, csrfToken };
 }
 
 export function parseReview(value) {
@@ -25,7 +24,7 @@ export function parseReview(value) {
   const changes = Array.isArray(input?.changes) ? input.changes.map(parseChange) : null;
   const approvals = Array.isArray(input?.approvals) ? input.approvals.map(parseApproval) : null;
   const revocations = Array.isArray(input?.revocations) ? input.revocations.map(parseRevocation) : null;
-  const requiredStrings = ["projectId", "repositoryId", "protectedRef", "proposalRef", "expectedProtectedHead", "candidateCommit", "candidateTree", "policyRevision", "requiredReviewRevision", "requiredJobSetRevision", "workspaceId", "reviewId", "createdAt", "status", "patch"];
+  const requiredStrings = ["projectId", "repositoryId", "protectedRef", "proposalRef", "expectedProtectedHead", "candidateCommit", "candidateTree", "policyRevision", "requiredReviewRevision", "qualityRevision", "workspaceId", "reviewId", "createdAt", "status", "patch"];
   if (input === null || typeof input.canDecide !== "boolean" || changes === null || changes.includes(null) || approvals === null || approvals.includes(null)
     || revocations === null || revocations.includes(null) || requiredStrings.some((key) => text(input[key]) === null)) return null;
   const staleReasons = textList(input.staleReasons);

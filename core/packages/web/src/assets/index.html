@@ -76,20 +76,12 @@
             <div><dt>Reviewer</dt><dd id="scope-reviewer"></dd></div>
           </dl>
           <form id="create-form" class="rail-form" aria-labelledby="create-title">
-            <h2 id="create-title">Create evidence</h2>
-            <div class="field">
-              <label for="repository">Repository</label>
-              <select id="repository" name="repository"></select>
-            </div>
-            <div class="field">
-              <label for="protected-ref">Protected ref</label>
-              <input id="protected-ref" name="protectedRef" value="refs/heads/main" required>
-            </div>
+            <h2 id="create-title">Find review</h2>
             <div class="field">
               <label for="proposal-ref">Proposal ref</label>
               <input id="proposal-ref" name="proposalRef" placeholder="refs/heads/proposals/review" required>
             </div>
-            <button id="create-button" class="button button-primary" type="submit">Create and open</button>
+            <button id="create-button" class="button button-primary" type="submit">Find and open</button>
           </form>
           <form id="open-form" class="rail-form" aria-labelledby="open-title">
             <h2 id="open-title">Open exact review</h2>
@@ -109,7 +101,7 @@
             <div class="state-content">
               <span class="state-symbol" aria-hidden="true">0</span>
               <h2>No review is open</h2>
-              <p>Create evidence from exact refs or enter a 64-character review ID.</p>
+              <p>Find review from exact refs or enter a 64-character review ID.</p>
             </div>
           </article>
           <article id="loading-state" class="panel state-panel" hidden>

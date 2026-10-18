@@ -5,7 +5,7 @@ import {
   WEB_PASSWORD,
   WEB_USERNAME
 } from "./webHarness.js";
-import { objectArrayField, readJsonObject, reviewPath } from "../../native-git/test/nativeGitReviewHarness.js";
+import { objectArrayField, readJsonObject, reviewPath } from "./httpFixture.js";
 
 const playwrightPath = process.env.DIM_PLAYWRIGHT_CORE;
 if (playwrightPath === undefined) {
@@ -40,7 +40,6 @@ try {
     assert.equal(await page.locator("#retry-button").isHidden(), true);
     assert.equal(await page.locator("#patch-code").textContent(), "");
     assert.equal(await page.locator("#review-id").inputValue(), "");
-    assert.equal(await page.locator("#protected-ref").inputValue(), "");
     assert.equal(await page.locator("#proposal-ref").inputValue(), "");
     assert.equal(await page.locator("#review-metadata").textContent(), "");
     assert.equal(await page.locator("#changed-paths").textContent(), "");
@@ -56,7 +55,7 @@ try {
   let markApprovalCommitted;
   const approvalReleased = new Promise((resolve) => { releaseApproval = resolve; });
   const approvalCommitted = new Promise((resolve) => { markApprovalCommitted = resolve; });
-  const approvalPath = `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}/approvals`;
+  const approvalPath = `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}/approvals`;
   await page.route(`**${approvalPath}`, async (route) => {
     const response = await route.fetch();
     markApprovalCommitted();
@@ -74,7 +73,6 @@ try {
   assert.equal(objectArrayField(await readJsonObject(authoritative), "approvals").length, 1);
   assert.equal(await page.locator("#open-button").isDisabled(), true);
   assert.equal(await page.locator("#logout-button").isDisabled(), true);
-  assert.equal(await page.locator("#repository").isDisabled(), true);
   assert.equal(await page.locator("#review-id").isDisabled(), true);
   assert.equal(await page.locator("#decision-status").textContent(), "You have not approved this exact review.");
   releaseApproval();
@@ -103,7 +101,7 @@ try {
       headers: { "Content-Type": "application/json", "X-DIM-CSRF": activeSession.csrfToken },
       body: "{}"
     })).status));
-  }, `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`);
+  }, `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`);
 
   // Then
   assert.deepEqual(bobStatuses, [403, 403]);
@@ -138,7 +136,7 @@ try {
   await login();
   await expectEmptyReview();
 
-  const reviewMemberPath = `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`;
+  const reviewMemberPath = `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`;
   const reviewBody = await page.evaluate(async (path) => (await fetch(path)).text(), reviewMemberPath);
   let releaseReview;
   let markRouteStarted;

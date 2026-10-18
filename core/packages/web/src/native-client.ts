@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { z } from "zod";
@@ -6,45 +7,41 @@ import { reviewDto, type ReviewDto } from "./dto.js";
 
 const MAX_NATIVE_RESPONSE_BYTES = 8 * 1024 * 1024;
 const identitySchema = z.object({
-  role: z.literal("reviewer"),
-  projectId: z.string(),
-  repositoryIds: z.array(z.string()).readonly(),
-  reviewerId: z.string()
-}).strict().readonly();
+  schemaVersion: z.literal(1), serviceId: z.literal("native-main"), role: z.literal("human-reviewer"),
+  reviewerId: z.string(), generationId: z.string().regex(/^[0-9a-f]{64}$/)
+}).strict();
 type NativeConfig = ReviewerWebConfig["nativeGit"];
 type NativeRequest = { readonly method: "GET" | "POST"; readonly path: string; readonly body?: unknown };
 
 export class NativeGitClient {
+  private generationId: string | undefined;
   constructor(private readonly config: NativeConfig) {}
 
   async attest(): Promise<void> {
-    const identity = identitySchema.parse(await this.request({ method: "GET", path: "/v1/identity" }));
-    const exactRepositories = identity.repositoryIds.length === this.config.repositoryIds.length
-      && identity.repositoryIds.every((repositoryId, index) => repositoryId === this.config.repositoryIds[index]);
-    if (identity.projectId !== this.config.projectId || identity.reviewerId !== this.config.reviewerId || !exactRepositories) {
-      throw new NativeGitClientError("native Git reviewer identity does not match configured scope");
-    }
+    const identity = identitySchema.parse(await this.request({ method: "GET", path: "/v1/human-reviewer-identity" }));
+    if (identity.reviewerId !== this.config.reviewerId) throw new NativeGitClientError("native Git human reviewer identity does not match configuration");
+    this.generationId = identity.generationId;
   }
 
   async getReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
-    return reviewDto(await this.request({
+    return this.decodeReview(await this.request({
       method: "GET",
       path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`
     }));
   }
 
-  async createReview(projectId: string, repositoryId: string, body: unknown): Promise<ReviewDto> {
-    return reviewDto(await this.request({
-      method: "POST",
-      path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews`,
-      body
+  async resolveReview(projectId: string, body: { proposalRef: string }): Promise<ReviewDto> {
+    const result = z.object({ review: z.object({ reviewId: z.string().regex(/^[0-9a-f]{64}$/) }) }).parse(await this.request({
+      method: "POST", path: `/v1/projects/${projectId}/repositories/root/reviews/resolve`,
+      body: { schemaVersion: 1, proposalRef: body.proposalRef }
     }));
+    return this.getReview(projectId, "root", result.review.reviewId);
   }
 
   async approveReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
     const path = `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`;
-    await this.request({ method: "POST", path: `${path}/approvals`, body: {} });
-    return reviewDto(await this.request({ method: "GET", path }));
+    await this.request({ method: "POST", path: `${path}/approvals`, body: { requestId: randomUUID() } });
+    return this.decodeReview(await this.request({ method: "GET", path }));
   }
 
   async revokeApproval(
@@ -55,7 +52,12 @@ export class NativeGitClient {
   ): Promise<ReviewDto> {
     const path = `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`;
     await this.request({ method: "POST", path: `${path}/revocations`, body: { approvalId } });
-    return reviewDto(await this.request({ method: "GET", path }));
+    return this.decodeReview(await this.request({ method: "GET", path }));
+  }
+
+  private decodeReview(input: unknown): ReviewDto {
+    try { return reviewDto(input); }
+    catch (cause) { throw new NativeGitClientError("native Git returned invalid review evidence", { cause }); }
   }
 
   private async request(input: NativeRequest): Promise<unknown> {
@@ -68,6 +70,7 @@ export class NativeGitClient {
         headers: {
           Authorization: `Basic ${Buffer.from(`${this.config.username}:${this.config.password}`).toString("base64")}`,
           Accept: "application/json",
+          ...(this.generationId === undefined ? {} : { "X-Dim-Generation-Id": this.generationId }),
           ...(body === undefined ? {} : { "Content-Type": "application/json", "Content-Length": String(body.length) })
         },
         signal: AbortSignal.timeout(5_000)
@@ -81,7 +84,8 @@ export class NativeGitClient {
         });
         incoming.on("end", () => resolve({ status: incoming.statusCode ?? 503, bytes: Buffer.concat(chunks) }));
       });
-      outgoing.on("error", reject);
+      outgoing.on("error", (cause) => reject(new NativeGitClientError("native Git is unavailable", { cause })));
+      outgoing.once("response", (incoming) => incoming.once("error", (cause) => reject(new NativeGitClientError("native Git response failed", { cause }))));
       outgoing.end(body);
     });
     if (response.status < 200 || response.status >= 300) throw new NativeGitHttpError(response.status);

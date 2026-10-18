@@ -19,6 +19,16 @@ is not a published release.
 The managed integration below is optional; its historical native-only rules do
 not apply to the base workspace path.
 
+- Prepare private control-plane service configuration and initial review policy
+  from exact image digests, then connect managed clients to the live generation
+  for a first Project without enabling CI.
+
+- Reviewer web now uses the installed control plane's human-reviewer APIs to
+  find published proposal evidence, inspect diffs, approve and revoke decisions.
+  Requests pin the attested control-plane generation and reject a generation
+  change until the reviewer service restarts.
+
+
 - Select a recommended core-managed workspace environment when the immutable
   root has no custom lifecycle files. Setup now requires a host-side
   unprivileged Sysbox agent to be running and its proposal-scoped checkout to be

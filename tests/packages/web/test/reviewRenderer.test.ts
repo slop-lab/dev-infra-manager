@@ -39,7 +39,7 @@ describe("review patch rendering", () => {
     const patch = "+first\n\n-second\n";
 
     // When
-    renderReview(elements, review(patch), "reviewer-a");
+    renderReview(elements, review(patch), "owner");
 
     // Then
     expect(elements.patchCode.children.map((child) => child.textContent).join("")).toBe(patch);
@@ -53,7 +53,7 @@ describe("review patch rendering", () => {
     const patch = Array.from({ length: 6_000 }, (_, index) => `+line-${index}\n`).join("");
 
     // When
-    renderReview(elements, review(patch), "reviewer-a");
+    renderReview(elements, review(patch), "owner");
 
     // Then
     expect(elements.patchCode.children.length).toBeLessThanOrEqual(5_000);
@@ -70,7 +70,7 @@ describe("review patch rendering", () => {
     fixture.changes.splice(0, 1, { status: "modified", oldPath: path, newPath: path });
 
     // When
-    renderReview(elements, fixture, "reviewer-a");
+    renderReview(elements, fixture, "owner");
 
     // Then
     const pathElement = elements.changedPaths.children.at(0)?.children.at(1);
@@ -90,7 +90,7 @@ describe("review patch rendering", () => {
     const patch = "\n".repeat(250_001);
 
     // When
-    const result = renderReview(elements, review(patch), "reviewer-a");
+    const result = renderReview(elements, review(patch), "owner");
 
     // Then
     expect(result).toEqual({ complete: false });
@@ -105,14 +105,13 @@ describe("review patch rendering", () => {
     Object.defineProperty(globalThis, "document", { configurable: true, value: fakeDocument() });
     const { clearReview, renderReview } = await import(rendererUrl);
     const elements = reviewElements();
-    elements.protectedRef.value = "refs/heads/main";
     elements.proposalRef.value = "refs/heads/proposals/workspace-a/change-1";
     elements.requestError.textContent = "retryable error";
     elements.errorDetail.textContent = "retryable error";
     elements.scopeProject.textContent = "project-a";
-    elements.scopeReviewer.textContent = "reviewer-a";
-    elements.reviewerLabel.textContent = "reviewer-a";
-    renderReview(elements, review("+secret evidence\n"), "reviewer-a");
+    elements.scopeReviewer.textContent = "owner";
+    elements.reviewerLabel.textContent = "owner";
+    renderReview(elements, review("+secret evidence\n"), "owner");
     elements.reviewView.hidden = false;
     elements.emptyState.hidden = true;
     elements.retryButton.hidden = false;
@@ -127,8 +126,8 @@ describe("review patch rendering", () => {
     expect(elements.retryButton.hidden).toBe(true);
     expect([elements.patchCode, elements.metadata, elements.changedPaths, elements.staleReasons]
       .map((element) => element.children.length)).toEqual([0, 0, 0, 0]);
-    expect([elements.reviewId, elements.protectedRef, elements.proposalRef, elements.password]
-      .map((element) => element.value.length)).toEqual([0, 0, 0, 0]);
+    expect([elements.reviewId, elements.proposalRef, elements.password]
+      .map((element) => element.value.length)).toEqual([0, 0, 0]);
     expect([elements.pathCount, elements.reviewTitle, elements.reviewStatus, elements.patchError,
       elements.patchCue, elements.requestError, elements.errorTitle, elements.errorDetail,
       elements.scopeProject, elements.scopeReviewer, elements.reviewerLabel]
@@ -145,13 +144,13 @@ describe("review patch rendering", () => {
       ...base,
       input: { ...base.input, status: "approved" },
       approvals: [
-        { approvalId: "11111111-1111-4111-8111-111111111111", reviewerId: "reviewer-a", approvedAt: "2026-10-03T00:00:00Z" },
+        { approvalId: "11111111-1111-4111-8111-111111111111", reviewerId: "owner", approvedAt: "2026-10-03T00:00:00Z" },
         { approvalId: "22222222-2222-4222-8222-222222222222", reviewerId: "docs-reviewer", approvedAt: "2026-10-03T00:00:00Z" }
       ]
     };
 
     // When
-    renderReview(elements, fixture, "reviewer-a");
+    renderReview(elements, fixture, "owner");
 
     // Then
     expect(elements.approveButton.hidden).toBe(true);
@@ -168,7 +167,7 @@ describe("review patch rendering", () => {
     fixture.canDecide = false;
 
     // When
-    renderReview(elements, fixture, "reviewer-a");
+    renderReview(elements, fixture, "owner");
 
     // Then
     expect(elements.approveButton.hidden).toBe(true);
@@ -180,7 +179,6 @@ describe("review patch rendering", () => {
 function reviewElements() {
   return {
     reviewId: new FakeElement(),
-    protectedRef: new FakeElement(),
     proposalRef: new FakeElement(),
     password: new FakeElement(),
     loginButton: new FakeElement(),
@@ -243,7 +241,7 @@ function review(patch: string) {
       candidateTree: "c".repeat(40),
       policyRevision: "policy-1",
       requiredReviewRevision: "review-1",
-      requiredJobSetRevision: "jobs-1",
+      qualityRevision: "jobs-1",
       workspaceId: "workspace-1",
       reviewId: "d".repeat(64),
       createdAt: "2026-10-03T00:00:00Z",
@@ -251,7 +249,7 @@ function review(patch: string) {
     },
     changes: [{ status: "modified", oldPath: "file.txt", newPath: "file.txt" }],
     staleReasons: [],
-    requiredReviewerIds: ["reviewer-a"],
+    requiredReviewerIds: ["owner"],
     approvals: [],
     revocations: [],
     canDecide: true

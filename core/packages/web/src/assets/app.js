@@ -60,13 +60,7 @@ function showWorkspace(activeSession) {
   elements.password.value = "";
   elements.username.removeAttribute("aria-invalid");
   elements.password.removeAttribute("aria-invalid");
-  elements.repository.replaceChildren();
-  for (const repositoryId of activeSession.repositoryIds) {
-    const option = document.createElement("option");
-    option.value = repositoryId;
-    option.textContent = repositoryId;
-    elements.repository.append(option);
-  }
+
   elements.workspaceTitle.focus();
 }
 
@@ -93,13 +87,13 @@ function startOperation(button = null) {
 
 function lockDecisionNavigation() {
   decisionPending = true;
-  for (const control of [elements.repository, elements.protectedRef, elements.proposalRef, elements.reviewId,
+  for (const control of [elements.proposalRef, elements.reviewId,
     elements.createButton, elements.openButton, elements.logoutButton]) control.disabled = true;
 }
 
 function unlockDecisionNavigation() {
   decisionPending = false;
-  for (const control of [elements.repository, elements.protectedRef, elements.proposalRef, elements.reviewId,
+  for (const control of [elements.proposalRef, elements.reviewId,
     elements.createButton, elements.openButton, elements.logoutButton]) control.disabled = false;
 }
 
@@ -124,7 +118,7 @@ async function openReview(reviewId, operation) {
   if (session === null) return;
   showEvidenceState("loading");
   showRequestError("", null);
-  const repositoryId = elements.repository.value;
+  const repositoryId = "root";
   const result = await request(`/v1/projects/${encodeURIComponent(session.projectId)}/repositories/${encodeURIComponent(repositoryId)}/reviews/${encodeURIComponent(reviewId)}`, operation);
   if (!operations.isCurrent(operation)) return;
   if (result.status === 401) return showSignedOut("Your session ended. Sign in again.");
@@ -179,14 +173,14 @@ elements.createForm.addEventListener("submit", async (event) => {
   showEvidenceState("loading");
   showRequestError("", null);
   try {
-    const result = await request(`/v1/projects/${encodeURIComponent(session.projectId)}/repositories/${encodeURIComponent(elements.repository.value)}/reviews`, operation, { method: "POST", headers: { "Content-Type": "application/json", "X-DIM-CSRF": session.csrfToken }, body: JSON.stringify({ protectedRef: elements.protectedRef.value, proposalRef: elements.proposalRef.value }) });
+    const result = await request(`/v1/projects/${encodeURIComponent(session.projectId)}/repositories/${encodeURIComponent("root")}/reviews/resolve`, operation, { method: "POST", headers: { "Content-Type": "application/json", "X-DIM-CSRF": session.csrfToken }, body: JSON.stringify({ proposalRef: elements.proposalRef.value }) });
     if (!operations.isCurrent(operation)) return;
     if (result.status === 401) return showSignedOut("Your session ended. Sign in again.");
     const created = typeof result.body === "object" && result.body !== null && !Array.isArray(result.body) ? result.body : null;
     const reviewId = text(created?.reviewId);
     if (!result.ok || reviewId === null) {
       showEvidenceState("error");
-      showRequestError("Review evidence could not be created. The entered refs were preserved; verify them and retry.", () => elements.createForm.requestSubmit());
+      showRequestError("Review evidence could not be found. Check the proposal ref and retry.", () => elements.createForm.requestSubmit());
       elements.errorTitle.focus();
       return;
     }

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createReviewerWebServerFromConfigFile } from "../../../../core/packages/web/src/index.js";
-import { nativeGitReviewFixture, type ReviewFixture } from "../../native-git/test/nativeGitReviewHarness.js";
+import { installedReviewerFixture, type ReviewFixture } from "./webHarness.js";
 import { webConfig } from "./webHarness.js";
 
 const roots: string[] = [];
@@ -46,7 +46,6 @@ describe("DIM reviewer web startup policy", () => {
     const cases = [
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), password: "incorrect-password" } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), username: "admin-a", password: "admin-a-secret-1" } },
-      { ...base, nativeGit: { ...objectField(base, "nativeGit"), projectId: "project-b" } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), repositoryIds: ["source", "foreign"] } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), reviewerId: "reviewer-b" } }
     ];
@@ -99,7 +98,7 @@ describe("DIM reviewer web startup policy", () => {
 });
 
 async function startNative(): Promise<ReviewFixture> {
-  const fixture = await nativeGitReviewFixture();
+  const fixture = await installedReviewerFixture();
   nativeFixtures.push(fixture);
   return fixture;
 }

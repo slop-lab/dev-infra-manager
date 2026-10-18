@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
 import { createReviewerWebServerFromConfigFile, type ReviewerWebServer } from "../../../../core/packages/web/src/index.js";
-import { readJsonObject, stringField } from "../../native-git/test/nativeGitReviewHarness.js";
+import { readJsonObject, stringField } from "./httpFixture.js";
 import { WEB_PASSWORD, WEB_USERNAME, webConfig } from "./webHarness.js";
 
 const roots: string[] = [];
@@ -27,9 +27,9 @@ describe("DIM reviewer web browser-boundary rejection", () => {
     // Given
     let nativeReviewRequests = 0;
     const native = createServer((request, response) => {
-      if (request.url === "/v1/identity") {
+      if (request.url === "/v1/human-reviewer-identity") {
         response.writeHead(200, { "Content-Type": "application/json" });
-        response.end(`${JSON.stringify({ role: "reviewer", projectId: "project-a", repositoryIds: ["source"], reviewerId: "reviewer-a" })}\n`);
+        response.end(`${JSON.stringify({ schemaVersion: 1, serviceId: "native-main", role: "human-reviewer", generationId: "a".repeat(64), reviewerId: "owner" })}\n`);
         return;
       }
       nativeReviewRequests += 1;
@@ -57,7 +57,7 @@ describe("DIM reviewer web browser-boundary rejection", () => {
     const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
     const csrfToken = stringField(await readJsonObject(login), "csrfToken");
     if (cookie === undefined) throw new Error("expected session cookie");
-    const collection = `${baseUrl}/v1/projects/project-a/repositories/source/reviews`;
+    const collection = `${baseUrl}/v1/projects/project-a/repositories/root/reviews/resolve`;
     const body = JSON.stringify({ protectedRef: "refs/heads/main", proposalRef: "refs/heads/proposals/workspace-a/change-1" });
 
     // When
@@ -70,7 +70,7 @@ describe("DIM reviewer web browser-boundary rejection", () => {
       fetch(collection, { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json", Origin: "http://127.0.0.1:1", "X-DIM-CSRF": csrfToken }, body }),
       fetch(collection, { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json", Origin: origin, "X-DIM-CSRF": "wrong-token" }, body }),
       fetch(collection, { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json", Origin: origin, "X-DIM-CSRF": csrfToken }, body: JSON.stringify({ protectedRef: "refs/heads/main\nforged", proposalRef: "refs/heads/proposals/workspace-a/change-1" }) }),
-      fetch(`${baseUrl}/v1/projects/project-b/repositories/source/reviews/${"a".repeat(64)}`, { headers: { Cookie: cookie } })
+      fetch(`${baseUrl}/v1/projects/project-b/repositories/root/reviews/${"a".repeat(64)}`, { headers: { Cookie: cookie } })
     ]);
 
     // Then

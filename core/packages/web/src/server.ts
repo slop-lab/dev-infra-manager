@@ -5,7 +5,7 @@ import { z } from "zod";
 import { loadReviewerWebConfig, type ReviewerWebConfig } from "./config.js";
 import { accountReviewDto, type ReviewDto } from "./dto.js";
 import { BodyError, HttpResponseError, readJson, sendEmpty, sendJson } from "./http-response.js";
-import { NativeGitClient, NativeGitHttpError } from "./native-client.js";
+import { NativeGitClient, NativeGitHttpError, NativeGitClientError } from "./native-client.js";
 import { AccountAuthenticator, SessionStore, type AuthenticationState, type ReviewerSession } from "./session.js";
 import { serveStaticAsset } from "./static-assets.js";
 import { printableText } from "./text-schema.js";
@@ -14,11 +14,11 @@ const DEFAULT_AUTHENTICATION_DERIVATIONS = 2;
 const DEFAULT_SESSIONS = 256;
 const RETRY_AFTER_SECONDS = "1";
 const identifierPattern = "[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?";
-const collectionPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews$`);
+const collectionPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/resolve$`);
 const memberPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})$`);
 const actionPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})/(approvals|revocations)$`);
 const loginSchema = z.object({ username: z.string().min(1).max(256), password: z.string().min(1).max(1024) }).strict().readonly();
-const createSchema = z.object({ protectedRef: printableText(1024).min(1), proposalRef: printableText(1024).min(1) }).strict().readonly();
+const resolveSchema = z.object({ proposalRef: printableText(1024).min(1) }).strict().readonly();
 const emptySchema = z.object({}).strict().readonly();
 
 export type ReviewerWebServerOptions = {
@@ -75,6 +75,7 @@ function createReviewerWebServer(config: ReviewerWebConfig, native: NativeGitCli
       if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof BodyError) {
         return sendJson(response, { status: 400, body: { error: "invalid request" } });
       }
+      if (error instanceof NativeGitClientError) return sendJson(response, { status: 503, body: { error: "review service unavailable" } });
       if (error instanceof NativeGitHttpError) {
         if (error.status === 404) return sendJson(response, { status: 404, body: { error: "review not found" } });
         if (error.status === 409) return sendJson(response, { status: 409, body: { error: "review is stale" } });
@@ -165,8 +166,8 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
     if (projectId === undefined || repositoryId === undefined) throw new HttpResponseError(404, "not found");
     requireScope(context.config, projectId, repositoryId);
     requireMutation(context.config, request, session);
-    const body = createSchema.parse(await readJson(request));
-    return sendJson(response, { status: 201, body: reviewBody(context.config, session, await context.native.createReview(projectId, repositoryId, body)) });
+    const body = resolveSchema.parse(await readJson(request));
+    return sendJson(response, { status: 200, body: reviewBody(context.config, session, await context.native.resolveReview(projectId, body)) });
   }
   throw new HttpResponseError(404, "not found");
 }
@@ -224,12 +225,12 @@ function requireOrigin(config: ReviewerWebConfig, request: IncomingMessage): voi
 }
 
 function requireScope(config: ReviewerWebConfig, projectId: string, repositoryId: string): void {
-  if (projectId !== config.nativeGit.projectId || !config.nativeGit.repositoryIds.includes(repositoryId)) throw new HttpResponseError(404, "not found");
+  if (projectId !== config.nativeGit.projectId || repositoryId !== "root") throw new HttpResponseError(404, "not found");
 }
 
 function sessionBody(config: ReviewerWebConfig, session: ReviewerSession) {
   return {
-    authenticated: true, projectId: config.nativeGit.projectId, repositoryIds: config.nativeGit.repositoryIds,
+    authenticated: true, projectId: config.nativeGit.projectId,
     reviewerId: config.nativeGit.reviewerId, csrfToken: session.csrfToken
   };
 }

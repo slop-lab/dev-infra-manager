@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { readJsonObject, stringField } from "../../native-git/test/nativeGitReviewHarness.js";
+import { readJsonObject, stringField } from "./httpFixture.js";
 import { reviewerWebFixture, type WebFixture } from "./webHarness.js";
 
 const fixtures: WebFixture[] = [];
@@ -15,7 +15,7 @@ describe("DIM reviewer web decision authorization", () => {
     fixtures.push(fixture);
     const alice = await sessionFor(fixture, "alice");
     const bob = await sessionFor(fixture, "bob");
-    const memberPath = `${fixture.baseUrl}/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`;
+    const memberPath = `${fixture.baseUrl}/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`;
     const mutate = (session: AccountSession, suffix: string) => fetch(`${memberPath}/${suffix}`, {
       method: "POST",
       headers: {

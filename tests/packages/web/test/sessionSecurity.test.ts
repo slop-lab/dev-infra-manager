@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readJsonObject, stringField } from "../../native-git/test/nativeGitReviewHarness.js";
+import { readJsonObject, stringField } from "./httpFixture.js";
 import {
   authenticatedSession,
   reviewerWebFixture,

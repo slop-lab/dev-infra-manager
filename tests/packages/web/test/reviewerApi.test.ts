@@ -6,7 +6,7 @@ import {
   readJsonObject,
   reviewPath,
   stringField
-} from "../../native-git/test/nativeGitReviewHarness.js";
+} from "./httpFixture.js";
 import {
   authenticatedSession,
   reviewerWebFixture,
@@ -66,8 +66,7 @@ describe("DIM reviewer web API", () => {
     expect(await readJsonObject(response)).toEqual({
       authenticated: true,
       projectId: "project-a",
-      repositoryIds: ["source"],
-      reviewerId: "reviewer-a",
+      reviewerId: "owner",
       csrfToken: expect.stringMatching(/^[A-Za-z0-9_-]+$/)
     });
     expect(await readFile(fixture.configPath, "utf8")).not.toContain("local-reviewer-password");
@@ -92,7 +91,7 @@ describe("DIM reviewer web API", () => {
     const { cookie } = await authenticatedSession(fixture);
 
     // When
-    const response = await fetch(`${fixture.baseUrl}/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`, {
+    const response = await fetch(`${fixture.baseUrl}/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`, {
       headers: { Cookie: cookie }
     });
 
@@ -101,7 +100,7 @@ describe("DIM reviewer web API", () => {
     const body = await readJsonObject(response);
     expect(body).toMatchObject({
       projectId: "project-a",
-      repositoryId: "source",
+      repositoryId: "root",
       reviewId: fixture.reviewId,
       status: "pending",
       patch: expect.stringContaining("diff --git")
@@ -117,10 +116,10 @@ describe("DIM reviewer web API", () => {
     const fixture = await startFixture();
     const { cookie } = await authenticatedSession(fixture);
     const paths = [
-      `/v1/projects/project-b/repositories/source/reviews/${fixture.reviewId}`,
+      `/v1/projects/project-b/repositories/root/reviews/${fixture.reviewId}`,
       `/v1/projects/project-a/repositories/foreign/reviews/${fixture.reviewId}`,
-      `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}/approvals`,
-      `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}%2fapprovals`,
+      `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}/approvals`,
+      `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}%2fapprovals`,
       "/v1/identity"
     ];
 
@@ -135,8 +134,8 @@ describe("DIM reviewer web API", () => {
     // Given
     const fixture = await startFixture();
     const { cookie, csrfToken } = await authenticatedSession(fixture);
-    const body = JSON.stringify({ protectedRef: "refs/heads/main", proposalRef: fixture.native.proposalRef });
-    const request = (origin: string, token: string) => fetch(`${fixture.baseUrl}/v1/projects/project-a/repositories/source/reviews`, {
+    const body = JSON.stringify({ proposalRef: fixture.native.proposalRef });
+    const request = (origin: string, token: string) => fetch(`${fixture.baseUrl}/v1/projects/project-a/repositories/root/reviews/resolve`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json", Origin: origin, "X-DIM-CSRF": token },
       body,
@@ -151,7 +150,7 @@ describe("DIM reviewer web API", () => {
     // Then
     expect(wrongOrigin.status).toBe(403);
     expect(wrongToken.status).toBe(403);
-    expect(accepted.status).toBe(201);
+    expect(accepted.status).toBe(200);
     const logout = await fetch(`${fixture.baseUrl}/v1/session`, {
       method: "DELETE",
       headers: { Cookie: cookie, Origin: fixture.origin, "X-DIM-CSRF": csrfToken }
@@ -165,7 +164,7 @@ describe("DIM reviewer web API", () => {
     // Given
     const fixture = await startFixture();
     const { cookie, csrfToken } = await authenticatedSession(fixture);
-    const actionPath = `${fixture.baseUrl}/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`;
+    const actionPath = `${fixture.baseUrl}/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`;
     const mutate = (suffix: string, body: object = {}) => fetch(`${actionPath}/${suffix}`, {
       method: "POST",
       headers: {
@@ -176,13 +175,7 @@ describe("DIM reviewer web API", () => {
       },
       body: JSON.stringify(body)
     });
-    const foreignApprovalResponse = await fixture.native.request(
-      "docs-reviewer-user",
-      "POST",
-      reviewPath(`/${fixture.reviewId}/approvals`),
-      {}
-    );
-    const foreignApprovalId = stringField(await readJsonObject(foreignApprovalResponse), "approvalId");
+    const foreignApprovalId = "f".repeat(64);
 
     // When
     const foreignRevocation = await mutate("revocations", { approvalId: foreignApprovalId });
@@ -190,7 +183,7 @@ describe("DIM reviewer web API", () => {
     const approval = await mutate("approvals");
     const approvedReview = await readJsonObject(approval);
     const ownApproval = objectArrayField(approvedReview, "approvals")
-      .find((entry) => entry.reviewerId === "reviewer-a");
+      .find((entry) => entry.reviewerId === "owner");
     if (ownApproval === undefined) throw new Error("expected authenticated reviewer approval");
     const revocation = await mutate("revocations");
     const revokedReview = await readJsonObject(revocation);
@@ -215,7 +208,7 @@ describe("DIM reviewer web API", () => {
     // Given
     const fixture = await startFixture();
     const { cookie, csrfToken } = await authenticatedSession(fixture);
-    const actionPath = `${fixture.baseUrl}/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}/approvals`;
+    const actionPath = `${fixture.baseUrl}/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}/approvals`;
     const request = (path: string, origin: string, token: string, includeCookie = true) => fetch(path, {
       method: "POST",
       headers: {
@@ -243,9 +236,21 @@ describe("DIM reviewer web API", () => {
       .toEqual([401, 404, 403, 403, 409]);
     expect(await readJsonObject(stale)).toEqual({ error: "review is stale" });
     expect(objectArrayField(await readJsonObject(await fetch(
-      `${fixture.baseUrl}/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`,
+      `${fixture.baseUrl}/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`,
       { headers: { Cookie: cookie } }
     )), "approvals")).toEqual([]);
+  });
+
+  it("pins the attested control-plane generation across a restart", async () => {
+    const fixture = await startFixture();
+    const { cookie, csrfToken } = await authenticatedSession(fixture);
+    await fixture.native.restart();
+    const member = `${fixture.baseUrl}/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}`;
+    const read = await fetch(member, { headers: { Cookie: cookie } });
+    const decision = await fetch(`${member}/approvals`, { method: "POST", headers: {
+      Cookie: cookie, Origin: fixture.origin, "X-DIM-CSRF": csrfToken, "Content-Type": "application/json"
+    }, body: "{}" });
+    expect([read.status, decision.status]).toEqual([409, 409]);
   });
 
   it("rejects wrong credentials and idle or absolute expired sessions", async () => {

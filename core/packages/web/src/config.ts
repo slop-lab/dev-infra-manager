@@ -36,7 +36,6 @@ const configSchema = z.object({
     username: z.string().min(1).max(256),
     password: z.string().min(16).max(1024),
     projectId: identifier,
-    repositoryIds: z.array(identifier).min(1).max(256).readonly(),
     reviewerId: identifier
   }).strict().readonly(),
   accounts: z.array(z.object({
@@ -57,9 +56,7 @@ const configSchema = z.object({
   if (config.accounts.filter(({ username }) => username === config.reviewerAccountId).length !== 1) {
     context.addIssue({ code: "custom", path: ["reviewerAccountId"], message: "must match exactly one configured account" });
   }
-  if (new Set(config.nativeGit.repositoryIds).size !== config.nativeGit.repositoryIds.length) {
-    context.addIssue({ code: "custom", path: ["nativeGit", "repositoryIds"], message: "contains duplicates" });
-  }
+
 }).readonly();
 
 export type ReviewerWebConfig = z.infer<typeof configSchema>;

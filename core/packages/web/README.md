@@ -7,7 +7,7 @@ account without returning the native Basic credential or a raw native review
 response to the browser. Other configured accounts can inspect evidence but
 cannot mutate reviewer decisions.
 
-The browser page signs in, creates immutable review evidence from exact refs,
+The browser page signs in, resolves existing immutable review evidence from a proposal ref,
 opens an exact review ID, displays allowlisted metadata, changed paths, and
 literal patch text, approves that exact review, revokes only the configured
 reviewer's active approval, and signs out. It keeps the CSRF token in memory and
@@ -19,9 +19,13 @@ outside this slice.
 ## Security boundary
 
 The service binds only to `127.0.0.1` or `::1`. Before binding, it authenticates
-to exact native `GET /v1/identity` and requires the configured role, Project,
-ordered repository set, and reviewer ID to match. Authentication failure,
-native unavailability, a non-reviewer role, or any scope mismatch fails startup.
+to native `GET /v1/human-reviewer-identity` and requires the configured human
+reviewer ID to match. Every review operation pins the attested generation using
+`X-Dim-Generation-Id`; a control-plane generation change fails closed until the
+web service restarts and attests again. The configured Project limits browser
+access to its `root` repository; native Git checks that the authenticated human
+is required by each exact review's policy. Identity attestation does not grant
+Project access. Native credential failure or unavailability fails startup.
 
 The absolute startup configuration path must name a caller-owned, non-symlink,
 mode-`0600` regular file no larger than 64 KiB. Local account passwords are
@@ -96,11 +100,10 @@ Schema 1 has this shape:
   "reviewerAccountId": "local-reviewer",
   "nativeGit": {
     "baseUrl": "http://127.0.0.1:9080",
-    "username": "reviewer-a-user",
+    "username": "human-reviewer-owner",
     "password": "replace-with-native-random-secret",
     "projectId": "project-a",
-    "repositoryIds": ["source"],
-    "reviewerId": "reviewer-a"
+    "reviewerId": "owner"
   },
   "accounts": [{
     "username": "local-reviewer",
@@ -125,7 +128,7 @@ The supported password-hash parameters are exactly scrypt `N=16384`, `r=8`,
 | `GET` | `/v1/session` | Return the attested scope and CSRF token |
 | `DELETE` | `/v1/session` | Invalidate the current session |
 | `GET` | `/v1/projects/:project/repositories/:repository/reviews/:review` | Return a scoped review DTO |
-| `POST` | `/v1/projects/:project/repositories/:repository/reviews` | Create review evidence for exact refs |
+| `POST` | `/v1/projects/:project/repositories/root/reviews/resolve` | Find current published review evidence for a proposal ref |
 | `POST` | `/v1/projects/:project/repositories/:repository/reviews/:review/approvals` | Approve the exact review as the attested reviewer |
 | `POST` | `/v1/projects/:project/repositories/:repository/reviews/:review/revocations` | Revoke only the attested reviewer's active approval |
 
@@ -139,3 +142,8 @@ decision routes. Other authenticated accounts receive `403` and receive review
 DTOs with `canDecide: false`; the browser therefore renders evidence without
 approval or revocation controls. While a decision is in flight, in-page review
 navigation and sign-out remain locked until the fresh native result is rendered.
+
+Review responses expose the authoritative review identity, quality revision,
+changed paths, literal patch, and human decisions. They do not synthesize CI
+statuses. Review creation and candidate evaluation belong to the installed
+control plane; this service only resolves and reviews its published evidence.
