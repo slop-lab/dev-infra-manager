@@ -1,3 +1,4 @@
+import { realGitVersion } from "./realGitIdentity.js";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,7 +14,7 @@ import {
 
 const run = promisify(execFile);
 const gitExecutable = "/usr/bin/git";
-const gitVersion = "2.43.0";
+const gitVersion = realGitVersion;
 
 export type NativeGitFixture = {
   readonly root: string;

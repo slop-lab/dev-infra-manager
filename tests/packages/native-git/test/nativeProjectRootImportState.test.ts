@@ -1,3 +1,4 @@
+import { realGitVersion } from "./realGitIdentity.js";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -247,7 +248,7 @@ async function preparedState(root: string) {
   await executeNativeProjectPreparation({
     database: state.database,
     stateDirectory: root,
-    runtimeConfig: { storageRoot: root, gitExecutable: "/usr/bin/git", gitVersion: "2.43.0" },
+    runtimeConfig: { storageRoot: root, gitExecutable: "/usr/bin/git", gitVersion: realGitVersion },
     generationId,
     ownerHostId: "host-a",
     input: project

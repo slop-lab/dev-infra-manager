@@ -1,3 +1,4 @@
+import { realGitVersion } from "./realGitIdentity.js";
 const token = (fill: number): string => Buffer.alloc(32, fill).toString("base64url");
 
 export const bundleSecrets = {
@@ -27,7 +28,7 @@ export function idleNativeConfig() {
     port: 8080,
     storageRoot: "/var/lib/dim-native-git",
     gitExecutable: "/usr/bin/git",
-    gitVersion: "2.43.0",
+    gitVersion: realGitVersion,
     repositories: [],
     identities: [],
     projectRegistrars: [],

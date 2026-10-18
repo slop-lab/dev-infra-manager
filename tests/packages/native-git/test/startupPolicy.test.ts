@@ -1,3 +1,4 @@
+import { realGitVersion } from "./realGitIdentity.js";
 import { execFile } from "node:child_process";
 import { once } from "node:events";
 import { access, chmod, copyFile, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
@@ -22,7 +23,7 @@ describe("DIM native Git startup policy", () => {
   it.each(["missing", "group", "umask", "0640"])("refuses changed Git creation permissions %s without repair", async (value) => {
     // Given
     const root = await temporaryRoot();
-    const config = serviceConfig(root, "2.43.0");
+    const config = serviceConfig(root, realGitVersion);
     const repositoryPath = await initializeNativeRepository(config, firstRepository(config));
     await run(config.gitExecutable, ["--git-dir", repositoryPath, "config", "core.sharedRepository", "0600"]);
     await run(config.gitExecutable, ["--git-dir", repositoryPath, "config",
@@ -43,7 +44,7 @@ describe("DIM native Git startup policy", () => {
   it("refuses to listen when a registered repository receive hook was replaced", async () => {
     // Given
     const root = await temporaryRoot();
-    const config = serviceConfig(root, "2.43.0");
+    const config = serviceConfig(root, realGitVersion);
     const repositoryPath = await initializeNativeRepository(config, firstRepository(config));
     await writeFile(join(repositoryPath, "hooks", "pre-receive"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     const service = createNativeGitServer(config);
@@ -65,7 +66,7 @@ describe("DIM native Git startup policy", () => {
   it("refuses to listen when repository config redirects the policy hook", async () => {
     // Given
     const root = await temporaryRoot();
-    const config = serviceConfig(root, "2.43.0");
+    const config = serviceConfig(root, realGitVersion);
     const repositoryPath = await initializeNativeRepository(config, firstRepository(config));
     await run(config.gitExecutable, ["--git-dir", repositoryPath, "config", "core.hooksPath", join(root, "bypass-hooks")]);
     const service = createNativeGitServer(config);
@@ -78,7 +79,7 @@ describe("DIM native Git startup policy", () => {
   it("refuses a registered repository reached through a lexical symlink", async () => {
     // Given
     const root = await temporaryRoot();
-    const config = serviceConfig(root, "2.43.0");
+    const config = serviceConfig(root, realGitVersion);
     const registeredPath = await initializeNativeRepository(config, firstRepository(config));
     const foreign = { projectId: "project-b", repositoryId: "source" } as const;
     const foreignPath = await initializeNativeRepository(config, foreign);
@@ -94,7 +95,7 @@ describe("DIM native Git startup policy", () => {
   it("preserves a foreign hook target when pre-receive is a symbolic link", async () => {
     // Given
     const root = await temporaryRoot();
-    const config = serviceConfig(root, "2.43.0");
+    const config = serviceConfig(root, realGitVersion);
     const repository = firstRepository(config);
     const repositoryPath = await initializeNativeRepository(config, repository);
     const hookPath = join(repositoryPath, "hooks", "pre-receive");
@@ -117,11 +118,11 @@ describe("DIM native Git startup policy", () => {
     const marker = join(root, "replacement-ran");
     await copyFile("/usr/bin/git", executable);
     await chmod(executable, 0o700);
-    const config = serviceConfig(root, "2.43.0", executable);
+    const config = serviceConfig(root, realGitVersion, executable);
     await initializeNativeRepository(config, firstRepository(config));
     const service = createNativeGitServer(config);
     const baseUrl = await service.listen();
-    await writeFile(replacement, `#!/bin/sh\nprintf '%s\\n' 'git version 2.43.0'\n: > '${marker}'\nprintf 'Content-Type: text/plain\\r\\n\\r\\n'\n`, { mode: 0o700 });
+    await writeFile(replacement, `#!/bin/sh\nprintf '%s\\n' 'git version ${realGitVersion}'\n: > '${marker}'\nprintf 'Content-Type: text/plain\\r\\n\\r\\n'\n`, { mode: 0o700 });
     await rename(replacement, executable);
 
     try {
@@ -141,7 +142,7 @@ describe("DIM native Git startup policy", () => {
   it("withholds identity while the service is not ready", async () => {
     // Given
     const root = await temporaryRoot();
-    const config = serviceConfig(root, "2.43.0");
+    const config = serviceConfig(root, realGitVersion);
     const service = createNativeGitServer(config);
     service.server.listen(0, config.host);
     await once(service.server, "listening");
@@ -171,7 +172,7 @@ describe("DIM native Git startup policy", () => {
     const marker = join(root, "identity-replacement-ran");
     await copyFile("/usr/bin/git", executable);
     await chmod(executable, 0o700);
-    const config = serviceConfig(root, "2.43.0", executable);
+    const config = serviceConfig(root, realGitVersion, executable);
     await initializeNativeRepository(config, firstRepository(config));
     const service = createNativeGitServer(config);
     const baseUrl = await service.listen();

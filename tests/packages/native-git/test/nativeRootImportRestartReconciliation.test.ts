@@ -1,3 +1,4 @@
+import { realGitVersion } from "./realGitIdentity.js";
 import { createHash } from "node:crypto";
 import {
   chmod,
@@ -181,7 +182,7 @@ async function preparedFixture() {
   await executeNativeProjectPreparation({
     database: state.database,
     stateDirectory: root,
-    runtimeConfig: { storageRoot: root, gitExecutable: "/usr/bin/git", gitVersion: "2.43.0" },
+    runtimeConfig: { storageRoot: root, gitExecutable: "/usr/bin/git", gitVersion: realGitVersion },
     generationId,
     ownerHostId: "host-a",
     input: project

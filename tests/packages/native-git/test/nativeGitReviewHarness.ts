@@ -1,3 +1,4 @@
+import { realGitVersion } from "./realGitIdentity.js";
 import { execFile } from "node:child_process";
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -70,7 +71,7 @@ export async function nativeGitReviewFixture(
     port: 0,
     storageRoot,
     gitExecutable: candidateReadGate.executable,
-    gitVersion: "2.43.0",
+    gitVersion: realGitVersion,
     ordinaryCi: {
       endpoint: "http://ordinary-ci:8080",
       serviceId: "ordinary-main",

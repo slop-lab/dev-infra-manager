@@ -1,3 +1,4 @@
+import { realGitVersion } from "./realGitIdentity.js";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -51,6 +52,6 @@ async function bareRepository() {
   roots.push(root);
   const repository = join(root, "root.git");
   await run("/usr/bin/git", ["init", "--bare", "--object-format=sha1", repository]);
-  const gitIdentity = await assertGitVersion({ gitExecutable: "/usr/bin/git", gitVersion: "2.43.0" });
+  const gitIdentity = await assertGitVersion({ gitExecutable: "/usr/bin/git", gitVersion: realGitVersion });
   return { root, repository, gitIdentity };
 }

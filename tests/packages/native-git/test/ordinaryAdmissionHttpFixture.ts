@@ -1,3 +1,4 @@
+import { realGitVersion } from "./realGitIdentity.js";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
@@ -122,7 +123,7 @@ export function nativeConfigInput(): Record<string, unknown> {
     port: 0,
     storageRoot: "/tmp/native-git-config-test",
     gitExecutable: "/usr/bin/git",
-    gitVersion: "2.43.0",
+    gitVersion: realGitVersion,
     repositories: [{ projectId: "project-a", repositoryId: "source" }],
     identities: [{
       role: "reader",
