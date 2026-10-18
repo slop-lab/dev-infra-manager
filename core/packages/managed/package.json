@@ -28,6 +28,10 @@
     "./cli": {
       "types": "./src/cli/managed-cli.ts",
       "import": "./dist/cli/managed-cli.js"
+    },
+    "./host": {
+      "types": "./src/nativeWorkspaceHost.ts",
+      "import": "./dist/nativeWorkspaceHost.js"
     }
   },
   "bin": {

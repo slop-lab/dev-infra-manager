@@ -31,6 +31,7 @@ output.exports = {
     import: "./index.js"
   }
 };
+output.exports["./host"] = { types: "./nativeWorkspaceHost.d.ts", import: "./nativeWorkspaceHost.js" };
 output.exports["./cli"] = { types: "./cli/managed-cli.d.ts", import: "./cli/managed-cli.js" };
 output.bin = { "dim-service": "nativeOrdinaryServiceCli.js",
   "dim-native-qemu-service": "nativeQemuServiceCli.js" };

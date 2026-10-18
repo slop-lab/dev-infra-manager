@@ -192,8 +192,8 @@ export class ContainerWorkspaceRuntime {
     const resources = workspaceRuntimeResources(record);
     const container = await this.inspect(record);
     if (container !== undefined) await this.checked(["rm", "--force", container.id]);
-    await this.removeResource("network", resources.network, record, "network");
     if (!options.keepData) {
+      await this.removeResource("network", resources.network, record, "network");
       for (const role of ["home", "checkout", "docker"] as const) {
         await this.removeResource("volume", resources[role], record, role);
       }

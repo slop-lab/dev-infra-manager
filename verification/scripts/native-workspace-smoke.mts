@@ -1,0 +1,116 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const repo = path.resolve(import.meta.dirname, "../..");
+const load = (file: string) => import(pathToFileURL(path.join(repo, file)).href);
+const { ProcessRunner, WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, workspaceRuntimeResources } = await load("core/packages/core/dist/workspace.js");
+const { prepareControlPlane, connectControlPlane } = await load("core/packages/managed/dist/controlPlaneSetup.js");
+const { configuredNativeGitBundleServer, parseNativeGitBundleConfig } = await load("core/packages/native-git/dist/service.js");
+const { dimWorkflowCompiler } = await load("plugin-ci-workflows/dist/index.js");
+const { bootstrapNativeProjectRoot } = await load("core/packages/managed/dist/nativeProjectBootstrap.js");
+const { NativeProjectPendingStore } = await load("core/packages/managed/dist/nativeProjectPendingStore.js");
+const { createNodeNativeGitRootImporterClient } = await load("core/packages/managed/dist/nativeGitRootImporterClient.js");
+const { loadNativeControlPlaneConnection } = await load("core/packages/managed/dist/nativeControlPlaneConnection.js");
+const { createManagedWorkspace, ensureManagedWorkspace } = await load("core/packages/managed/dist/nativeWorkspaceHost.js");
+const { readNativeWorkspaceAttachment, nativeWorkspaceAttachmentFile } = await load("core/packages/managed/dist/nativeWorkspaceAttachment.js");
+
+const root = await mkdtemp(path.join(os.tmpdir(), "dim-native-workspace-smoke-"));
+const name = `native-smoke-${Date.now()}`;
+const image = process.argv[2] ?? "dim-workspace-runtime-smoke:base-20261018";
+const runner = new ProcessRunner();
+const store = new WorkspaceStore(path.join(root, "workspaces"));
+const runtime = new ContainerWorkspaceRuntime(runner);
+const base = new WorkspaceService(store, runtime, async () => { throw new Error("existing workspace lifecycle must not reacquire source"); });
+let service: any;
+let record: any;
+const oldEnvironment = { DIM_MANAGED_STATE_ROOT: process.env.DIM_MANAGED_STATE_ROOT,
+  DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE };
+try {
+  const operator = path.join(root, "operator");
+  await prepareControlPlane({ directory: operator, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
+    ordinaryCiImage: `registry.example/ordinary@sha256:${"b".repeat(64)}` });
+  const native = JSON.parse(await readFile(path.join(operator, "native-git.json"), "utf8"));
+  native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
+  await writeFile(path.join(operator, "native-git.json"), JSON.stringify(native), { mode: 0o600 });
+  const generationId = "c".repeat(64);
+  const activationToken = Buffer.alloc(32, 71).toString("base64url");
+  service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
+    config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-service"),
+    readinessToken: Buffer.alloc(32, 72).toString("base64url"), activationToken, expectedGenerationId: generationId });
+  const endpoint = await service.listen("127.0.0.1", 0);
+  const connected = await connectControlPlane(operator, { endpoint });
+  const activated = await fetch(`${endpoint}/v1/activation`, { method: "POST",
+    headers: { authorization: `Bearer ${activationToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ schemaVersion: 1, generationId }) });
+  assert.equal(activated.status, 200);
+  const source = path.join(root, "source");
+  execFileSync("/usr/bin/git", ["init", "--initial-branch=main", source]);
+  await writeFile(path.join(source, "README.md"), "managed native workspace\n");
+  execFileSync("/usr/bin/git", ["-C", source, "add", "."]);
+  execFileSync("/usr/bin/git", ["-C", source, "-c", "user.name=DIM Smoke", "-c", "user.email=smoke@example.invalid", "commit", "-m", "initial"]);
+  const managedRoot = path.join(root, "managed"); await mkdir(managedRoot, { mode: 0o700 });
+  await bootstrapNativeProjectRoot({ name: "example", projectId: "example", stateRoot: managedRoot, scratchRoot: managedRoot,
+    sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main",
+    registrarConnectionFile: path.join(connected.directory, "registrar.json"), importerConnectionFile: path.join(connected.directory, "importer.json"),
+    policySource: { kind: "manifest-free", rootAlias: "root", review: { requiredReviewerIds: ["owner"], requiredJobs: [] } },
+    signal: AbortSignal.timeout(30_000) });
+  const projects = new NativeProjectPendingStore(managedRoot);
+  const connection = await loadNativeControlPlaneConnection(path.join(connected.directory, "host.json"));
+  await projects.admit("example", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), AbortSignal.timeout(10_000));
+  await projects.ready("example", connection, AbortSignal.timeout(10_000));
+  process.env.DIM_MANAGED_STATE_ROOT = managedRoot;
+  process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE = path.join(connected.directory, "host.json");
+  record = await createManagedWorkspace({ name, source: { url: "dim://example" }, image,
+    resources: { cpuCount: "2", memory: "2g", pidsLimit: "512" } }, { runner, store });
+  assert.equal(record.schemaVersion, 10);
+  assert.equal(record.source.url, "dim://example");
+  assert.equal((await base.list()).length, 1);
+  const resources = workspaceRuntimeResources(record);
+  const inspection = await runner.run("docker", ["inspect", resources.container]);
+  const actual = JSON.parse(inspection.stdout)[0];
+  assert.equal(actual.HostConfig.Privileged, false);
+  assert.equal(actual.HostConfig.Runtime, "sysbox-runc");
+  assert.deepEqual(actual.Mounts.map((mount: any) => mount.Type), ["volume", "volume", "volume"]);
+  const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managedRoot, record.id));
+  const auth = { authorization: `Basic ${Buffer.from(`dim:${attachment.grant}`).toString("base64")}` };
+  const broker = `http://${attachment.gateway}:${attachment.port}`;
+  assert.equal((await fetch(`${broker}/api/host-inputs/private`, { headers: auth })).status, 404);
+  assert.equal((await fetch(`${broker}/v1/projects/foreign/repositories/root.git/info/refs?service=git-upload-pack`, { headers: auth })).status, 404);
+  const git = async (args: string[], success = true) => {
+    const result = await runtime.run(record, ["git", ...args]);
+    assert.equal(result.exitCode === 0, success, `${args.join(" ")}: ${result.stderr}`);
+    return result;
+  };
+  await git(["fetch", "origin"]);
+  const changed = await runtime.run(record, ["sh", "-c", "printf 'proposal\\n' >> README.md && git add README.md && git commit -m proposal"]);
+  assert.equal(changed.exitCode, 0, changed.stderr);
+  await git(["push", "origin"]);
+  await git(["push", "origin", "HEAD:refs/heads/main"], false);
+  await git(["push", "origin", `HEAD:refs/heads/proposals/${Buffer.alloc(32, 99).toString("base64url")}/main`], false);
+  const protectedHead = execFileSync("/usr/bin/git", ["--git-dir", path.join(root, "native-service/example/root.git"), "rev-parse", "refs/heads/main"], { encoding: "utf8" }).trim();
+  assert.equal(protectedHead, record.source.commit);
+  console.log("single Sysbox workspace, core record, scoped broker, real proposal push and protected/foreign denials: passed");
+  const networkBefore = (await runner.run("docker", ["network", "inspect", resources.network, "--format", "{{.Id}}"])).stdout.trim();
+  await base.stop(name);
+  assert.equal((await fetch(`${broker}/v1/projects/example/repositories/root.git/info/refs?service=git-upload-pack`, { headers: auth })).status, 409);
+  await base.start(name); await ensureManagedWorkspace(await store.read(name), { runner, store });
+  await base.recreate(name); await ensureManagedWorkspace(await store.read(name), { runner, store });
+  assert.equal((await runner.run("docker", ["network", "inspect", resources.network, "--format", "{{.Id}}"])).stdout.trim(), networkBefore);
+  await git(["fetch", "origin"]);
+  await base.discard(name); record = undefined;
+  const remainsAuthorized = await fetch(`${broker}/health`, { headers: auth, signal: AbortSignal.timeout(500) })
+    .then((response) => response.status === 200, () => false);
+  assert.equal(remainsAuthorized, false);
+  console.log("shared stop/start/recreate retains network+checkout+Git, discard immediately revokes broker: passed");
+} finally {
+  await store.read(name).then(() => base.discard(name)).catch(() => {});
+  await service?.close();
+  for (const [key, value] of Object.entries(oldEnvironment)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  // Project readiness roots intentionally become readonly; restore only this disposable fixture for cleanup.
+  execFileSync("/usr/bin/chmod", ["-R", "u+rwX", root]);
+  await rm(root, { recursive: true, force: true });
+}

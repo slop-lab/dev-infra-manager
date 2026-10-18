@@ -1,20 +1,42 @@
 # Optional DIM managed services
 
-`@slop-lab/dim-managed` owns managed Project workspaces, native Git integration,
-review and CI workers, host controllers, plugins, and their deployment assets.
-The base `@slop-lab/dim-core` package operates local and remote Git workspaces
-without these services. The CLI loads this package only for managed commands.
+`@slop-lab/dim-managed` owns optional native Project/Git integration,
+review and CI workers, and explicitly selected host services. Base and native
+workspaces use the same core store, single Sysbox runtime and lifecycle.
 
-Managed state defaults to `~/.local/state/dim/managed`, with controller sockets
-beneath the runtime directory's `dim/managed` namespace. Set
-`DIM_MANAGED_STATE_ROOT` to select another managed state root; `DIM_STATE_ROOT`
-is also accepted when an explicit application context supplies it.
+After preparing a native Project, create its workspace with the ordinary host
+commands:
 
-Managed workspace images use `dev-infra-managed-workspace:<version>`; base
-workspace images use `dev-infra-project-workspace:<version>`. Build the managed
-image with `dim managed workspace image build`. `DIM_MANAGED_WORKSPACE_IMAGE`
-selects an explicit managed image, with `DIM_WORKSPACE_IMAGE` as a contextual
-fallback. Building either default image cannot replace the other feature's image.
+```bash
+dim create dim://example development
+dim ls
+dim exec development -- git push origin
+dim stop development
+dim start development
+dim recreate development
+dim discard development
+```
+
+The selected local or SSH host acquires the attested protected root, seeds the
+workspace's persistent checkout, and attaches a scoped Git broker. The broker
+binds only the workspace's private bridge gateway, checks its immutable core
+identity and current running state on every operation, and obtains short-lived
+native Git leases. Operator credentials remain on the host. Proposal pushes
+are scoped to that native workspace; protected refs remain review gated. Base
+discard or workspace-name reuse immediately invalidates the old broker grant.
+The broker exits after discard and is restored on managed workspace use after
+a host restart.
+
+Home, checkout and nested Docker data live in the same three volumes as an
+ordinary workspace. There is no privileged outer container, host socket mount,
+automatic Project setup hook, or separate native workspace image. Run Project
+setup and other tasks explicitly with `dim exec` inside that isolated runtime.
+
+Managed Project state defaults to `~/.local/state/dim/managed`. Set
+`DIM_MANAGED_STATE_ROOT` to select another managed state root. Ordinary
+workspace state remains in the base workspace store. Native attachments live
+under `native-workspace-attachments` in managed state and are keyed by the
+core workspace UUID; they do not add native fields to core records.
 
 ## Prepare optional control-plane services
 
@@ -83,3 +105,8 @@ The web package generates its own browser login; raw operator and service role
 credentials stay server-side. The generated reviewer connection pins the exact
 installed generation, so a service replacement requires reconnecting and
 updating the UI configuration.
+
+Native root CI hosts use direct registry access by default. No controller or
+host-mirror plugin is required. An explicitly enabled host-mirror provider
+selects the managed cache network and nested Docker mirror configuration;
+errors in that selected provider stop startup rather than changing routing.
