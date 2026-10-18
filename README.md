@@ -143,6 +143,10 @@ just test
 just build-packages
 ```
 
+`just typecheck` checks both TypeScript and all source JavaScript (`.js`,
+`.mjs`, `.cjs`) with the shared strict compiler settings. JavaScript sources
+use `// @ts-check`; run `pnpm check:js` for that check alone.
+
 Tests are under `tests/`; deployment and cross-component checks are under
 `verification/`. The source gate and fresh VM bootstrap describe their own
 host requirements. Targeted runtime verification with an already built image:

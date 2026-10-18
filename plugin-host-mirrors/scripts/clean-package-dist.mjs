@@ -1,3 +1,4 @@
+// @ts-check
 import { mkdir, rm } from "node:fs/promises";
 
 const dist = new URL("../dist/", import.meta.url);

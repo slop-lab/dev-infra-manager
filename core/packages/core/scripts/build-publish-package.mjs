@@ -1,11 +1,11 @@
-import { cp, copyFile, readFile, writeFile } from "node:fs/promises";
+// @ts-check
+import source from "../package.json" with { type: "json" };
+import { cp, copyFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
 import { publishPackageVersion } from "../../../scripts/publish-package-version.mjs";
 
-const sourcePath = new URL("../package.json", import.meta.url);
 const outputPath = new URL("../dist/package.json", import.meta.url);
 const versionModulePath = new URL("../dist/package-version.js", import.meta.url);
-const source = JSON.parse(await readFile(sourcePath, "utf8"));
 
 if (source.private !== true) {
   throw new Error("The source package.json must remain private");
@@ -22,10 +22,9 @@ output.exports = {
   ".": {
     types: "./index.d.ts",
     import: "./index.js"
-  }
+  },
+  "./workspace": { types: "./workspace.d.ts", import: "./workspace.js" }
 };
-output.exports["./workspace"] = { types: "./workspace.d.ts", import: "./workspace.js" };
-
 
 if ("private" in output) {
   throw new Error("The publish package.json must not contain private");

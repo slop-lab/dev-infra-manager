@@ -5,13 +5,18 @@
   "type": "module",
   "scripts": {
     "cli": "pnpm --filter @slop-lab/dim-core run build && pnpm --filter @slop-lab/dim-cli run build && node core/packages/cli/dist/cli.js",
-    "workspace:check": "pnpm --recursive run check",
+    "workspace:check": "pnpm run check:js && pnpm --recursive run check",
     "workspace:test": "pnpm --workspace-concurrency=1 --recursive run test",
-    "workspace:build": "pnpm --recursive run build"
+    "workspace:build": "pnpm --recursive run build",
+    "check:js": "tsc -p tsconfig.js.json"
   },
   "engines": {
     "node": "^24.0.0 || ^26.0.0",
     "pnpm": ">=10.0.0"
   },
-  "packageManager": "pnpm@10.13.1"
+  "packageManager": "pnpm@10.13.1",
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  }
 }

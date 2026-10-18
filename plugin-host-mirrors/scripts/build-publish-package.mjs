@@ -1,3 +1,4 @@
+// @ts-check
 import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { publishPackageVersion } from "./publish-package-version.mjs";
 

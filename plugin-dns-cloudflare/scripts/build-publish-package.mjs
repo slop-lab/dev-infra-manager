@@ -1,18 +1,19 @@
-import { copyFile, readFile, writeFile } from "node:fs/promises";
+// @ts-check
+import source from "../package.json" with { type: "json" };
+import { copyFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
 import { publishPackageVersion } from "./publish-package-version.mjs";
 
-const sourcePath = new URL("../package.json", import.meta.url);
 const outputPath = new URL("../dist/package.json", import.meta.url);
-const source = JSON.parse(await readFile(sourcePath, "utf8"));
+
 if (source.private !== true) throw new Error("The DNS provider source package.json must remain private");
 const output = minifyPackageJson(source, {
   stripPackagePathPrefix: "./dist/",
   includeFields: ["exports", "types", "publishConfig"]
 });
 output.version = publishPackageVersion(source.version);
-output.dependencies["@slop-lab/dim-contracts-external-url"] = output.version;
-output.peerDependencies["@slop-lab/dim-managed"] = output.version;
+output.dependencies = { ...source.dependencies, "@slop-lab/dim-contracts-external-url": output.version };
+output.peerDependencies = { ...source.peerDependencies, "@slop-lab/dim-managed": output.version };
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
 delete output.private;

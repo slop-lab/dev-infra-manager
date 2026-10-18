@@ -1,3 +1,4 @@
+// @ts-check
 import { runNativeGitServiceCli } from "../../../../../core/packages/managed/dist/nativeGitServiceCli.js";
 
 const [stateDirectory] = process.argv.slice(2);

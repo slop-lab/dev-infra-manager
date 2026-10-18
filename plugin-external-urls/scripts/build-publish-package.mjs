@@ -1,10 +1,11 @@
-import { copyFile, readFile, writeFile } from "node:fs/promises";
+// @ts-check
+import source from "../package.json" with { type: "json" };
+import { copyFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
 import { publishPackageVersion } from "./publish-package-version.mjs";
 
-const sourcePath = new URL("../package.json", import.meta.url);
 const outputPath = new URL("../dist/package.json", import.meta.url);
-const source = JSON.parse(await readFile(sourcePath, "utf8"));
+
 if (source.private !== true) throw new Error("The source package.json must remain private");
 
 const output = minifyPackageJson(source, {
@@ -14,8 +15,8 @@ const output = minifyPackageJson(source, {
 output.version = publishPackageVersion(source.version);
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
-output.dependencies["@slop-lab/dim-contracts-external-url"] = output.version;
-output.peerDependencies["@slop-lab/dim-managed"] = output.version;
+output.dependencies = { ...source.dependencies, "@slop-lab/dim-contracts-external-url": output.version };
+output.peerDependencies = { ...source.peerDependencies, "@slop-lab/dim-managed": output.version };
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);

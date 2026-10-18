@@ -1,10 +1,10 @@
-import { copyFile, readFile, writeFile } from "node:fs/promises";
+// @ts-check
+import source from "../package.json" with { type: "json" };
+import { copyFile, writeFile } from "node:fs/promises";
 import { publishPackageVersion } from "../../core/scripts/publish-package-version.mjs";
-const output = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-output.version = publishPackageVersion(output.version);
-delete output.private;
-delete output.scripts;
-delete output.devDependencies;
+const { private: privateSource, scripts: sourceScripts, devDependencies, ...metadata } = source;
+if (privateSource !== true) throw new Error("The source package.json must remain private");
+const output = { ...metadata, version: publishPackageVersion(source.version) };
 output.main = "./index.js";
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js" } };

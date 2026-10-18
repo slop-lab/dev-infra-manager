@@ -6,20 +6,28 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   core/packages/cli:
     dependencies:
-      "@slop-lab/dim-core":
+      '@slop-lab/dim-core':
         specifier: workspace:0.10.0
         version: link:../core
       commander:
         specifier: 14.0.0
         version: 14.0.0
     devDependencies:
-      "@slop-lab/dim-managed":
+      '@slop-lab/dim-managed':
         specifier: workspace:0.10.0
         version: link:../managed
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
@@ -28,9 +36,10 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+
   core/packages/contracts/external-url:
     devDependencies:
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
@@ -39,9 +48,10 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+
   core/packages/core:
     devDependencies:
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
@@ -50,9 +60,10 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+
   core/packages/installer:
     devDependencies:
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
@@ -61,13 +72,45 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+
+  core/packages/managed:
+    dependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core
+      '@slop-lab/dim-native-git':
+        specifier: workspace:0.10.0
+        version: link:../native-git
+      '@slop-lab/dim-plugin-ci-workflows':
+        specifier: workspace:0.10.0
+        version: link:../../../plugin-ci-workflows
+      commander:
+        specifier: 14.0.0
+        version: 14.0.0
+      yaml:
+        specifier: 2.8.3
+        version: 2.8.3
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   core/packages/native-git:
     dependencies:
       zod:
         specifier: 4.1.11
         version: 4.1.11
     devDependencies:
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
@@ -76,6 +119,23 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+
+  core/packages/web:
+    dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   plugin-ci-workflows:
     dependencies:
       yaml:
@@ -85,37 +145,23 @@ importers:
         specifier: 4.1.11
         version: 4.1.11
     devDependencies:
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3
-  core/packages/web:
-    dependencies:
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      "@types/node":
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
+
   plugin-dns-cloudflare:
     dependencies:
-      "@slop-lab/dim-contracts-external-url":
+      '@slop-lab/dim-contracts-external-url':
         specifier: 0.10.0
         version: link:../core/packages/contracts/external-url
     devDependencies:
-      "@slop-lab/dim-managed":
+      '@slop-lab/dim-managed':
         specifier: workspace:0.10.0
         version: link:../core/packages/managed
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
@@ -124,16 +170,17 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+
   plugin-external-urls:
     dependencies:
-      "@slop-lab/dim-contracts-external-url":
+      '@slop-lab/dim-contracts-external-url':
         specifier: 0.10.0
         version: link:../core/packages/contracts/external-url
     devDependencies:
-      "@slop-lab/dim-managed":
+      '@slop-lab/dim-managed':
         specifier: workspace:0.10.0
         version: link:../core/packages/managed
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
@@ -142,22 +189,27 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+
   plugin-host-mirrors:
     devDependencies:
-      "@slop-lab/dim-managed":
+      '@slop-lab/dim-managed':
         specifier: workspace:0.10.0
         version: link:../core/packages/managed
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+
   tests:
     devDependencies:
-      "@types/node":
+      '@types/node':
         specifier: 24.13.3
         version: 24.13.3
+      playwright-core:
+        specifier: 1.64.1
+        version: 1.64.1
       tsx:
         specifier: 4.20.3
         version: 4.20.3
@@ -167,6 +219,7 @@ importers:
       vitest:
         specifier: 3.2.4
         version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
+
   verification:
     devDependencies:
       verdaccio:
@@ -178,36 +231,6 @@ importers:
       yaml:
         specifier: 2.8.3
         version: 2.8.3
-  core/packages/managed:
-    dependencies:
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-      "@slop-lab/dim-native-git":
-        specifier: workspace:0.10.0
-        version: link:../native-git
-      "@slop-lab/dim-plugin-ci-workflows":
-        specifier: workspace:0.10.0
-        version: link:../../../plugin-ci-workflows
-      "@slop-lab/dim-core":
-        specifier: workspace:0.10.0
-        version: link:../core
-      commander:
-        specifier: 14.0.0
-        version: 14.0.0
-      yaml:
-        specifier: 2.8.3
-        version: 2.8.3
-    devDependencies:
-      "@types/node":
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
 
 packages:
 
@@ -1618,6 +1641,11 @@ packages:
 
   pino@9.14.0:
     resolution: {integrity: sha512-8OEwKp5juEvb/MjpIc4hjqfgCNysrS94RIOMXYvpYCdm/jglrKEiAYmiumbmGhCvs+IcInsphYDFwqrjr7398w==}
+    hasBin: true
+
+  playwright-core@1.64.1:
+    resolution: {integrity: sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==}
+    engines: {node: '>=20'}
     hasBin: true
 
   postcss@8.5.16:
@@ -3439,6 +3467,8 @@ snapshots:
       safe-stable-stringify: 2.5.0
       sonic-boom: 4.2.1
       thread-stream: 3.2.0
+
+  playwright-core@1.64.1: {}
 
   postcss@8.5.16:
     dependencies:
