@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -93,6 +94,28 @@ try {
   await git(["push", "origin", `HEAD:refs/heads/proposals/${Buffer.alloc(32, 99).toString("base64url")}/main`], false);
   const protectedHead = execFileSync("/usr/bin/git", ["--git-dir", path.join(root, "native-service/example/root.git"), "rev-parse", "refs/heads/main"], { encoding: "utf8" }).trim();
   assert.equal(protectedHead, record.source.commit);
+  const roleHeaders = (credential: { username: string; password: string }) => ({
+    authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`,
+    "content-type": "application/json", "x-dim-generation-id": generationId
+  });
+  const resolved = await fetch(`${endpoint}/v1/projects/example/repositories/root/reviews/resolve`, {
+    method: "POST", headers: roleHeaders(native.humanReviewers[0]),
+    body: JSON.stringify({ schemaVersion: 1, proposalRef: `refs/heads/proposals/${attachment.nativeWorkspaceId}/main` }) });
+  assert.equal(resolved.status, 200, await resolved.clone().text());
+  const envelope: any = await resolved.json();
+  const reviewPath = `${endpoint}/v1/projects/example/repositories/root/reviews/${envelope.review.reviewId}`;
+  const approved = await fetch(`${reviewPath}/approvals`, { method: "POST", headers: roleHeaders(native.humanReviewers[0]),
+    body: JSON.stringify({ requestId: randomUUID() }) });
+  assert.equal(approved.status, 201, await approved.clone().text());
+  const promoted = await fetch(`${reviewPath}/promotions`, { method: "POST", headers: roleHeaders(native.hostPromoters[0]),
+    body: JSON.stringify({ schemaVersion: 1 }) });
+  assert.equal(promoted.status, 201, await promoted.clone().text());
+  // Promotion changes the protected head without resetting an existing workspace checkout or its Git capability.
+  await git(["fetch", "origin"]);
+  const second = await runtime.run(record, ["sh", "-c", "printf 'second proposal\\n' >> README.md && git add README.md && git commit -m second"]);
+  assert.equal(second.exitCode, 0, second.stderr);
+  await git(["push", "origin"]);
+  console.log("human approval and checked promotion preserve the persistent workspace's scoped Git access: passed");
   console.log("single Sysbox workspace, core record, scoped broker, real proposal push and protected/foreign denials: passed");
   const networkBefore = (await runner.run("docker", ["network", "inspect", resources.network, "--format", "{{.Id}}"])).stdout.trim();
   await base.stop(name);
@@ -107,9 +130,14 @@ try {
   assert.equal(remainsAuthorized, false);
   console.log("shared stop/start/recreate retains network+checkout+Git, discard immediately revokes broker: passed");
 } finally {
-  await store.read(name).then(() => base.discard(name)).catch(() => {});
-  await service?.close();
+  const cleanupFailures: unknown[] = [];
+  let remaining;
+  try { remaining = await store.read(name); }
+  catch (error) { if (!(error instanceof Error && error.name === "MissingRecordError")) cleanupFailures.push(error); }
+  if (remaining) { try { await base.discard(name); } catch (error) { cleanupFailures.push(error); } }
+  try { await service?.close(); } catch (error) { cleanupFailures.push(error); }
   for (const [key, value] of Object.entries(oldEnvironment)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  if (cleanupFailures.length) throw new AggregateError(cleanupFailures, `native workspace cleanup failed; disposable state retained at ${root}`);
   // Project readiness roots intentionally become readonly; restore only this disposable fixture for cleanup.
   execFileSync("/usr/bin/chmod", ["-R", "u+rwX", root]);
   await rm(root, { recursive: true, force: true });
