@@ -1,24 +1,26 @@
 # Explicit repository development tasks
 
-The repository runs in the ordinary slim DIM workspace. It does not define a
-second privileged Project runtime, automatic lifecycle hooks or a private
-agent/secure Docker topology.
+This repository uses an ordinary DIM workspace. Its own task script manages
+repository dependencies and checks; generic coding-agent installation belongs
+to the optional tools plugin.
 
-```bash
+```sh
 dim create /path/on/selected/host/to/dev-infra-manager dev
 dim exec dev -- bash scripts/dev.bash setup
 dim exec dev -- bash scripts/dev.bash check
-dim exec dev -- bash scripts/dev.bash tool-setup codex
-dim exec dev -- bash scripts/dev.bash agent codex
+dim installer install plugin '@slop-lab/dim-plugin-agent-tools@0.10.0'
+dim tools setup dev codex
+dim tools run dev codex --resume-on-restart
 ```
 
-`setup` installs pinned workspace dependencies. `check` builds, checks and tests
-them. Tool installation is an explicit separate task using the existing
-user-home installer. `shell` and `web` run inside this same untrusted workspace;
-use `dim forward` for a selected service port.
+`dim run dev codex` and `dim run dev opencode` execute the installed tool
+normally. The `dim-agent` adapter adds explicit session continuation support;
+`dim tools run dev TOOL` invokes it on the selected local or SSH host. No
+repository-specific agent bootstrap or runtime hooks are required.
 
-To use OpenCode Web, run `tool-setup` without a tool argument, then `web`.
-It starts an authenticated server on workspace loopback port 4096 and prints
-the private credential file location. From the client, run
-`dim forward dev 4096:4096` and open `http://127.0.0.1:4096`. Read the credential
-file inside the workspace when signing in. No plugin or controller is needed.
+For OpenCode's browser UI, set up `opencode`, then run `dim tools server dev`.
+It starts only an authenticated loopback backend. The static
+[Pages UI](../tools/opencode-web/README.md) connects to its approved HTTPS URL;
+its workspace-owned temporary volume stays outside `/tmp` and authentication
+configuration. For local access use a separately configured local client
+origin rather than weakening the default Pages CORS policy.

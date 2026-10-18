@@ -1,22 +1,28 @@
 # Codex in a development workspace
 
-Create a workspace from this repository, then explicitly install the reviewed
-Codex tool selection into its persistent home:
+Use an ordinary Git source and the optional tool integration. The repository
+needs no Codex bootstrap code or DIM manifest:
 
-```bash
-dim create /path/on/selected/host/to/dev-infra-manager development
-dim exec development -- bash scripts/dev.bash tool-setup codex
-dim exec development -- bash scripts/dev.bash agent codex
+```sh
+dim installer install plugin '@slop-lab/dim-plugin-agent-tools@0.10.0'
+dim create https://example.com/team/app.git development
+dim tools setup development codex
+dim tools run development codex --resume-on-restart
 ```
 
-The user-home installer pins the tool version, checks its installation and
-writes its tool manifest. It does not start Codex or perform authentication.
-Credentials belong to the workspace user and should be supplied deliberately;
-host operator Git, DIM administration and deployment secrets stay outside the
-workspace. No coding-agent package is baked into the base runtime image.
+Tool setup pins Codex 0.156.1 in the workspace user's persistent home. It does
+not log in or copy host operator credentials. Authenticate deliberately using
+the tool's own flow. With `--resume-on-restart`, the next workspace start uses
+Codex's noninteractive `exec resume --last` adapter against its saved session.
+See [agent tools](../../../plugin-agent-tools/README.md) for permission policy,
+custom continuation commands and OpenCode's equivalent integration.
 
-`dim exec` runs in the same Sysbox workspace as repository development and
-nested Docker. Home and checkout survive stop/start and recreate. There is no
-parallel agent daemon, automatic Project hook or SSH proxy requirement. For
-ordinary remote hosts and service forwarding, see
-[basic-development](../../projects/basic-development/README.md).
+For the Codex app's SSH remote mode, configure the ordinary guest SSH adapter
+and ProxyCommand described in [workspace SSH](../../../core/packages/core/docs/workspace-client.md#ssh-and-remote-editors).
+Its name and API are independent of Codex and work with other remote editors.
+No host Docker socket, host private SSH key or DIM operator token enters the
+workspace. A separate operator SSH connection carries `dim connect` bytes.
+
+Home and checkout survive stop/start and recreation; discard removes their
+owned storage. Use `dim-nproc` to size local test concurrency and
+`dim-workspace resources --json` to inspect assigned limits inside the guest.

@@ -27,7 +27,7 @@ if [[ "${1:-}" == --version ]]; then
   printf '%s\n' 1.18.31
   exit 0
 fi
-[[ "${1:-}" == web ]]
+[[ "${1:-}" == serve ]]
 shift
 hostname=""
 port=""

@@ -1,6 +1,6 @@
 // @ts-check
 import source from "../package.json" with { type: "json" };
-import { copyFile, writeFile } from "node:fs/promises";
+import { cp, copyFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
 import { publishPackageVersion } from "./publish-package-version.mjs";
 
@@ -22,3 +22,5 @@ delete output.private;
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
+
+await cp(new URL("../skills/", import.meta.url), new URL("../dist/skills/", import.meta.url), { recursive: true });

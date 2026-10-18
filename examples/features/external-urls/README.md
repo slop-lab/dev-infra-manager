@@ -32,6 +32,14 @@ bash request-urls.bash external-dev
 
 The configuration script creates an HTTP ingress named `local-http` for
 `dev.test:8080`, listening only on host `127.0.0.1`, and requires host approval.
+Inside the workspace, an agent can make the same limited request without a
+host CLI or operator token:
+
+```sh
+dim-workspace expose --name app --port 3000 --ingress local-http
+dim-workspace urls --json
+```
+
 The request script uses the host CLI's scoped workspace grant to request
 `external-dev--app.dev.test`. It does not run an administration helper inside
 the container. The controller starts on demand; if its plugin configuration

@@ -32,3 +32,18 @@ it.each(["create", "recreate"] as const)("also cleans partial or failed %s works
   expect(test.discarded).toHaveLength(1);
   expect(test.present()).toBe(false);
 });
+
+it("uses the independent UUID-fenced cleanup port after caller cancellation", async () => {
+  const test = fixture();
+  const discard = test.service.discard.bind(test.service);
+  test.service.discard = async () => { throw new Error("caller runner is aborted"); };
+  test.service.recreate = async () => { throw new DOMException("caller cancelled", "AbortError"); };
+  const cleaned: { name: string; id: string | undefined }[] = [];
+  await expect(checkWorkspace(test.service, { source: "https://example.com/app.git" }, async (name, id) => {
+    cleaned.push({ name, id });
+    await discard(name);
+  })).rejects.toThrow(/caller cancelled/);
+  expect(cleaned).toHaveLength(1);
+  expect(cleaned[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(test.present()).toBe(false);
+});

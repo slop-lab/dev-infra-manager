@@ -9,11 +9,15 @@ dim workspace-check /absolute/path/on/selected/host/to/repository
 # Or: dim --host devbox workspace-check https://example.com/team/app.git --image REVIEWED_IMAGE
 ```
 
+Use `--runtime NAME` to test an explicitly installed runtime plugin, with its
+reviewed image selected through `--image` when required.
+
 The command creates a new disposable workspace, writes checkout and home
 sentinels, and creates a volume in its nested Docker daemon. It verifies those
 three data stores after stop/start and recreation, then discards its own
 workspace. It never accepts an existing workspace name. A failing assertion
-also discards the test workspace. Cleanup also removes a partial runtime when creation fails. If the runtime
+also discards the test workspace. Cancellation uses a fresh, bounded cleanup
+context fenced to the created workspace UUID. Cleanup also removes a partial runtime when creation fails. If the runtime
 refuses cleanup, the command fails and reports that error for inspection
 through the normal `dim ls` and `dim discard` commands.
 

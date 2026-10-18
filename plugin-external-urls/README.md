@@ -167,3 +167,11 @@ See the complete
 [External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/specification/docs/external-urls.md),
 [feature example](https://github.com/slop-lab/dev-infra-manager/tree/main/examples/features/external-urls),
 and [source repository](https://github.com/slop-lab/dev-infra-manager).
+
+## Coding agents
+
+The package includes [the workspace URL skill](skills/external-urls/SKILL.md).
+Inside a workspace, `dim-workspace expose --name app --port 3000 --ingress NAME`
+requests a route through the scoped guest API; `dim-workspace urls --json`
+inspects its own routes. A pending route still needs host approval. This API
+never provides host-admin credentials or allows another workspace selector.

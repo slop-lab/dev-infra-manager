@@ -22,16 +22,13 @@ case "$task" in
     exec bash scripts/workspace-user-setup.bash "$@"
     ;;
   agent)
-    tool="${1:-opencode}"
-    [[ $# -eq 0 ]] || shift
-    case "$tool" in opencode|codex) ;; *) echo 'agent accepts opencode or codex' >&2; exit 2 ;; esac
-    exec "$HOME/.local/bin/$tool" "$@"
+    exec dim-agent "$@"
     ;;
   web)
-    exec bash scripts/opencode-web.bash "$@"
+    exec dim-opencode-server "$@"
     ;;
   shell)
     exec bash "$@"
     ;;
-  *) echo 'usage: bash scripts/dev.bash [setup|check|tool-setup [opencode|codex]|agent [opencode|codex] [ARGS...]|web|shell]' >&2; exit 2 ;;
+  *) echo 'usage: bash scripts/dev.bash [setup|check|tool-setup [opencode|codex]|agent TOOL [ARGS...]|web|shell]' >&2; exit 2 ;;
 esac

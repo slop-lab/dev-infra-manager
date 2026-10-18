@@ -41,17 +41,16 @@ test -s "$work_dir/help.stdout"
 test -s "$work_dir/exec-help.stdout"
 test -s "$work_dir/app-server-help.stdout"
 
-tool_launcher="$HOME/.local/libexec/dim-project-tool-launch"
-tool_manifest="$HOME/.local/state/dim-project-tool/manifest.json"
+tool_launcher="$HOME/.local/bin/dim-agent"
+tool_manifest="$HOME/.local/state/dim-tools/codex.json"
 tool_executable="$HOME/.local/bin/codex"
 node - "$tool_manifest" "$tool_executable" <<'NODE'
 const fs = require("node:fs")
 const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
-if (manifest.contractVersion !== 1) throw new Error("unexpected contract version")
 if (manifest.tool !== "codex" || manifest.version !== "0.156.1") throw new Error("unexpected tool identity")
-if (manifest.launchers?.agent?.executable !== process.argv[3]) throw new Error("unexpected agent executable")
+if (manifest.executable !== process.argv[3]) throw new Error("unexpected agent executable")
 NODE
-test "$("$tool_launcher" 1 agent codex 0.156.1 "$tool_executable" --version)" = "codex-cli 0.156.1"
+test "$("$tool_launcher" codex --version)" = "codex-cli 0.156.1"
 
 mkdir -p "$HOME/.codex"
 printf '%s\n' 'auth-sentinel' >"$HOME/.codex/auth.json"
@@ -71,12 +70,12 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
 manifest.version = "0.156.0"
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 NODE
-if "$tool_launcher" 1 agent codex 0.156.1 "$tool_executable" --version \
+if "$tool_launcher" codex --version \
   >"$work_dir/incompatible.stdout" 2>"$work_dir/incompatible.stderr"; then
   printf 'Codex launcher unexpectedly accepted incompatible state\n' >&2
   exit 1
 fi
-grep -Fq 'installed tool manifest is missing or incompatible' "$work_dir/incompatible.stderr"
+grep -Fq 'dim-agent:' "$work_dir/incompatible.stderr"
 cp --preserve=mode "$manifest_backup" "$tool_manifest"
 
 executable_backup="$work_dir/codex"
@@ -86,7 +85,7 @@ cat >"$tool_executable" <<'EOF'
 printf '<%s>\n' "$@"
 EOF
 chmod 0700 "$tool_executable"
-mapfile -t forwarded < <("$tool_launcher" 1 agent codex 0.156.1 "$tool_executable" \
+mapfile -t forwarded < <("$tool_launcher" codex \
   'space value' --flag=-leading '')
 test "${forwarded[0]}" = '<space value>'
 test "${forwarded[1]}" = '<--flag=-leading>'
@@ -99,11 +98,11 @@ printf 'outside executable ran\n'
 EOF
 chmod 0700 "$work_dir/outside-codex"
 ln -s "$work_dir/outside-codex" "$tool_executable"
-if "$tool_launcher" 1 agent codex 0.156.1 "$tool_executable" --version \
+if "$tool_launcher" codex --version \
   >"$work_dir/outside.stdout" 2>"$work_dir/outside.stderr"; then
   printf 'Codex launcher unexpectedly accepted an executable outside HOME\n' >&2
   exit 1
 fi
-grep -Fq 'installed tool manifest is missing or incompatible' "$work_dir/outside.stderr"
+grep -Fq 'dim-agent:' "$work_dir/outside.stderr"
 
 echo codex-user-setup-smoke-ok

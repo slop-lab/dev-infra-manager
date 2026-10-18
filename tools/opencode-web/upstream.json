@@ -1,0 +1,7 @@
+{
+  "version": "1.18.31",
+  "commit": "014614d35b397775e5d397a490fc72368c894ec2",
+  "repository": "https://github.com/anomalyco/opencode.git",
+  "bun": "1.3.14",
+  "pagesBase": "/dev-infra-manager/opencode-web/v/1.18.31/"
+}

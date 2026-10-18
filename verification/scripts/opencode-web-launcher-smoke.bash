@@ -29,7 +29,7 @@ if [[ "${1:-}" == --version ]]; then
   printf '%s\n' "${MOCK_OPENCODE_VERSION:-1.18.31}"
   exit 0
 fi
-[[ "${1:-}" == web ]]
+[[ "${1:-}" == serve ]]
 shift
 hostname=""
 port=""
@@ -162,7 +162,7 @@ password="$(sed -n '2p' "$credential_file")"
 [[ "$(stat -c %a "$state_dir/server.pid")" = 600 ]]
 [[ "$(stat -c %a "$state_dir/server.log")" = 600 ]]
 ! grep -Fq "$password" "$state_dir/server.log"
-if ! grep -Fqx "127.0.0.1 $port --cors=https://localhost:4096" "$opencode_arguments"; then
+if ! grep -Fqx "127.0.0.1 $port --cors=https://slop-lab.github.io" "$opencode_arguments"; then
   printf 'unexpected OpenCode arguments:\n' >&2
   cat "$opencode_arguments" >&2
   exit 1
@@ -192,7 +192,7 @@ for invalid_cors in 'not-json' '["*"]' '["https://%2a.example.com"]'; do
 done
 
 credential_before_change="$(cat "$credential_file")"
-additional_cors='["https://remote-web.example/","https://localhost:4096","https://remote-web.example"]'
+additional_cors='["https://remote-web.example/","https://slop-lab.github.io","https://remote-web.example"]'
 changed_output="$(env "${base_env[@]}" OPENCODE_WEB_CORS_ORIGINS="$additional_cors" bash "$launcher")"
 changed_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")"
 [[ "$changed_output" = "$first_output" ]]
@@ -200,7 +200,7 @@ changed_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.
 ! kill -0 "$server_pid" 2>/dev/null
 server_pid="$changed_pid"
 [[ "$(cat "$credential_file")" = "$credential_before_change" ]]
-grep -Fqx "127.0.0.1 $port --cors=https://localhost:4096 --cors=https://remote-web.example" "$opencode_arguments"
+grep -Fqx "127.0.0.1 $port --cors=https://remote-web.example --cors=https://slop-lab.github.io" "$opencode_arguments"
 
 equivalent_cors='["https://remote-web.example","https://remote-web.example/"]'
 env "${base_env[@]}" OPENCODE_WEB_CORS_ORIGINS="$equivalent_cors" bash "$launcher" >/dev/null
@@ -213,7 +213,7 @@ default_again_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/s
 ! kill -0 "$server_pid" 2>/dev/null
 server_pid="$default_again_pid"
 [[ "$(cat "$credential_file")" = "$credential_before_change" ]]
-grep -Fqx "127.0.0.1 $port --cors=https://localhost:4096" "$opencode_arguments"
+grep -Fqx "127.0.0.1 $port --cors=https://slop-lab.github.io" "$opencode_arguments"
 kill -0 "$unrelated_pid"
 
 
