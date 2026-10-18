@@ -1,14 +1,16 @@
+// @ts-check
 import { execFileSync } from "node:child_process";
 import { closeSync, fchmodSync, openSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 const arguments_ = process.argv.slice(2);
 const [expectedCommit, output] = arguments_;
-if (arguments_.length !== 2 || !/^[0-9a-f]{40}$/.test(expectedCommit ?? "") || !isAbsolute(output ?? "")) {
+if (arguments_.length !== 2 || typeof expectedCommit !== "string" || typeof output !== "string" || !/^[0-9a-f]{40}$/.test(expectedCommit ?? "") || !isAbsolute(output ?? "")) {
   throw new Error("expected a complete lowercase candidate commit and absolute evidence path");
 }
 
 const root = resolve(process.cwd());
+/** @param {...string} gitArguments */
 function git(...gitArguments) {
   return execFileSync("git", gitArguments, {
     cwd: root,

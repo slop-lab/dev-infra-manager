@@ -1,10 +1,15 @@
+// @ts-check
 import { createServer } from "node:http";
 import { writeFile } from "node:fs/promises";
 
 const port = Number.parseInt(process.env.CF_MOCK_PORT ?? "", 10);
-const zoneFile = process.env.CF_MOCK_ZONE_FILE;
+const zoneFileInput = process.env.CF_MOCK_ZONE_FILE;
+if (!zoneFileInput) throw new Error("CF_MOCK_ZONE_FILE is required");
+const zoneFile = zoneFileInput;
 const zoneName = normalize(process.env.CF_MOCK_ZONE ?? "example.test");
 const zoneId = "local-zone";
+/** @typedef {{ id: string, name: string, type: string, content: string, proxied: boolean }} DnsRecord */
+/** @type {Map<string, DnsRecord>} */
 const records = new Map();
 let nextRecord = 1;
 let serial = Math.floor(Date.now() / 1000);
@@ -48,6 +53,7 @@ createServer(async (request, response) => {
     );
     if (recordMatch && request.method === "PUT") {
       const id = recordMatch[1];
+      if (id === undefined) throw new Error("record ID missing");
       if (!records.has(id)) return reply(response, 404, undefined, [{ message: "record not found" }]);
       const record = validateRecord(await readBody(request), id);
       records.set(id, record);
@@ -55,7 +61,9 @@ createServer(async (request, response) => {
       return reply(response, 200, record);
     }
     if (recordMatch && request.method === "DELETE") {
-      records.delete(recordMatch[1]);
+      const id = recordMatch[1];
+      if (id === undefined) throw new Error("record ID missing");
+      records.delete(id);
       await persistZone();
       return reply(response, 200, {});
     }
@@ -67,7 +75,9 @@ createServer(async (request, response) => {
   console.log(`cloudflare-dns-mock-ready:${port}`);
 });
 
+/** @param {unknown} input @param {string} id @returns {DnsRecord} */
 function validateRecord(input, id) {
+  if (typeof input !== "object" || input === null || !("type" in input) || !("name" in input) || !("content" in input) || !("proxied" in input) || typeof input.type !== "string" || typeof input.name !== "string") throw new Error("invalid record");
   if (!["A", "AAAA", "CNAME"].includes(input.type)) throw new Error("unsupported record type");
   const name = normalize(input.name);
   if (!name.endsWith(`.${zoneName}`)) throw new Error("record is outside the mock zone");
@@ -97,16 +107,20 @@ async function persistZone() {
   await writeFile(zoneFile, `${lines.join("\n")}\n`, { mode: 0o644 });
 }
 
+/** @param {import("node:http").IncomingMessage} request @returns {Promise<unknown>} */
 async function readBody(request) {
+  /** @type {Buffer[]} */
   const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+/** @param {string} value */
 function normalize(value) {
   return value.toLowerCase().replace(/^\.+|\.+$/g, "");
 }
 
+/** @param {import("node:http").ServerResponse} response @param {number} status @param {unknown} result @param {{message: string}[]} [errors] */
 function reply(response, status, result, errors = []) {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify({ success: status < 400, errors, result }));

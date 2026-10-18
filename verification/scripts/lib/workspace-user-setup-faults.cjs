@@ -1,3 +1,4 @@
+// @ts-check
 const fs = require("node:fs")
 const path = require("node:path")
 
@@ -11,18 +12,18 @@ if (fault !== undefined) {
     writeFileSync: fs.writeFileSync,
   }
   const temporaryPattern = /^\.(?:opencode\.jsonc?|omo\.jsonc)\.\d+\.[0-9a-f]{12}\.tmp$/
+  /** @type {Set<number>} */
   const targetDescriptors = new Set()
   let renameCount = 0
 
+  /** @param {unknown} filePath */
   function isTargetTemporary(filePath) {
     return typeof filePath === "string" && temporaryPattern.test(path.basename(filePath))
   }
 
+  /** @param {string} operation @returns {never} */
   function fail(operation) {
-    const error = new Error(`injected workspace setup ${operation} failure`)
-    error.code = "EIO"
-    error.errno = -5
-    error.syscall = operation
+    const error = Object.assign(new Error(`injected workspace setup ${operation} failure`), { code: "EIO", errno: -5, syscall: operation })
     throw error
   }
 
@@ -33,7 +34,7 @@ if (fault !== undefined) {
   }
 
   fs.writeFileSync = function (file, data, options) {
-    if (fault === "write" && targetDescriptors.has(file)) fail("write")
+    if (fault === "write" && typeof file === "number" && targetDescriptors.has(file)) fail("write")
     return original.writeFileSync.call(fs, file, data, options)
   }
 

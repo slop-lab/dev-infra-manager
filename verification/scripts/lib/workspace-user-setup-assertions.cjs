@@ -1,3 +1,4 @@
+// @ts-check
 const fs = require("node:fs")
 const path = require("node:path")
 
@@ -8,9 +9,12 @@ if (installPrefix === undefined || openCodePath === undefined || omoPath === und
 if (fixture !== "fresh" && fixture !== "preserved") throw new Error(`unknown fixture: ${fixture}`)
 
 const parserPath = path.join(installPrefix, "lib", "node_modules", "jsonc-parser")
+/** @type {{parse: (contents: string, errors: unknown[], options: {allowTrailingComma: boolean, disallowComments: boolean}) => unknown}} */
 const { parse } = require(parserPath)
 
+/** @param {string} filePath @returns {Record<string, unknown>} */
 function parseJsonc(filePath) {
+  /** @type {unknown[]} */
   const errors = []
   const value = parse(fs.readFileSync(filePath, "utf8"), errors, {
     allowTrailingComma: true,
@@ -19,7 +23,7 @@ function parseJsonc(filePath) {
   if (errors.length !== 0 || value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`invalid JSONC object: ${filePath}`)
   }
-  return value
+  return /** @type {Record<string, unknown>} */ (value)
 }
 
 const expectedVersions = {
@@ -27,10 +31,14 @@ const expectedVersions = {
   "oh-my-openagent": "4.19.4",
   "jsonc-parser": "3.3.1",
 }
+/** @type {Record<string, string>} */
 const versions = {}
 for (const [name, expectedVersion] of Object.entries(expectedVersions)) {
   const packagePath = path.join(installPrefix, "lib", "node_modules", name, "package.json")
-  const installedVersion = JSON.parse(fs.readFileSync(packagePath, "utf8")).version
+  /** @type {unknown} */
+  const installedPackage = JSON.parse(fs.readFileSync(packagePath, "utf8"))
+  if (typeof installedPackage !== "object" || installedPackage === null || !("version" in installedPackage)) throw new Error("invalid installed package")
+  const installedVersion = installedPackage.version
   if (installedVersion !== expectedVersion) {
     throw new Error(`${name} version ${installedVersion} did not equal ${expectedVersion}`)
   }
@@ -47,7 +55,7 @@ if (JSON.stringify(openCode.plugin) !== JSON.stringify(expectedPlugins)) {
 }
 
 const omo = parseJsonc(omoPath)
-const omoOpenCode = omo["[opencode]"]
+const omoOpenCode = object(omo["[opencode]"])
 const expectedTeamMode = fixture === "preserved"
   ? {
       label: "preserved",
@@ -68,12 +76,18 @@ if (JSON.stringify(omoOpenCode.team_mode) !== JSON.stringify(expectedTeamMode)) 
 }
 
 if (fixture === "preserved") {
-  if (openCode.theme !== "dim-smoke" || openCode.nested?.keep !== true) {
+  if (openCode.theme !== "dim-smoke" || object(openCode.nested).keep !== true) {
     throw new Error("unrelated OpenCode configuration was not preserved")
   }
-  if (omo.unrelated?.keep !== true || omoOpenCode.channel !== "stable") {
+  if (object(omo.unrelated).keep !== true || omoOpenCode.channel !== "stable") {
     throw new Error("unrelated OMO configuration was not preserved")
   }
 }
 
 process.stdout.write(`${JSON.stringify({ versions, openCode, omo })}\n`)
+
+/** @param {unknown} value @returns {Record<string, unknown>} */
+function object(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("expected configuration object")
+  return /** @type {Record<string, unknown>} */ (value)
+}

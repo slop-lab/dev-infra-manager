@@ -1,3 +1,4 @@
+// @ts-check
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -12,6 +13,7 @@ const aggregatePath = join(verificationRoot, "scripts", "kvm-guest-verification-
 const delegatePath = join(verificationRoot, "scripts", "kvm-guest-group-delegate.bash");
 const sourceHelperPath = join(verificationRoot, "scripts", "lib", "bootstrap-ubuntu-vm-source.bash");
 const guestHelperPath = join(verificationRoot, "scripts", "lib", "bootstrap-ubuntu-vm-guest.bash");
+/** @type {string[]} */
 const temporaryRoots = [];
 
 afterEach(async () => {

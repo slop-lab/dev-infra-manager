@@ -1,15 +1,22 @@
 #!/usr/bin/env node
+// @ts-check
+import { object, array, string, parseJson } from "./lib/json-values.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-if (process.argv.length !== 3) throw new Error("usage: node local-bundle-profiles-smoke.mjs BUNDLE_DIRECTORY");
+if (process.argv.length !== 3 || !process.argv[2]) throw new Error("usage: node local-bundle-profiles-smoke.mjs BUNDLE_DIRECTORY");
 const bundle = path.resolve(process.argv[2]);
-const manifest = JSON.parse(readFileSync(path.join(bundle, "packages.json"), "utf8"));
+const manifest = object(parseJson(readFileSync(path.join(bundle, "packages.json"), "utf8")));
+const packages = array(manifest.packages).map((value) => {
+  const entry = object(value);
+  return { name: string(entry.name), file: string(entry.file), version: string(entry.version) };
+});
+/** @param {string} name */
 const artifact = (name) => {
-  const entry = manifest.packages.find((entry) => entry.name === name);
+  const entry = packages.find((entry) => entry.name === name);
   if (!entry) throw new Error(`bundle has no ${name}`);
   return path.join(bundle, entry.file);
 };
@@ -24,9 +31,10 @@ Object.assign(env, {
   npm_config_userconfig: "/dev/null", npm_config_ignore_scripts: "true"
 });
 const facade = path.join(scratch, "facade/node_modules/.bin/dim");
-const runtime = path.join(env.DIM_DATA_HOME, "runtime/current");
-const dependencies = () => JSON.parse(readFileSync(path.join(runtime, "package.json"), "utf8")).dependencies;
-const plugins = () => JSON.parse(readFileSync(path.join(runtime, "plugins.json"), "utf8")).plugins;
+const runtime = path.join(scratch, "data/dim/runtime/current");
+const dependencies = () => object(object(parseJson(readFileSync(path.join(runtime, "package.json"), "utf8"))).dependencies);
+const plugins = () => object(parseJson(readFileSync(path.join(runtime, "plugins.json"), "utf8"))).plugins;
+/** @param {string} file @param {string[]} args @param {boolean} [allowFailure] */
 function run(file, args, allowFailure = false) {
   const result = spawnSync(file, args, { env, encoding: "utf8", timeout: 120_000 });
   if (!allowFailure) assert.equal(result.status, 0, `${file} ${args.join(" ")}\n${result.stderr}\n${result.stdout}`);
@@ -51,17 +59,19 @@ try {
   assert.deepEqual(plugins(), []);
   run(facade, ["managed", "--help"]);
   for (const name of Object.keys(dependencies())) {
-    const expected = manifest.packages.find((entry) => entry.name === name).version;
-    assert.equal(JSON.parse(readFileSync(path.join(runtime, "node_modules", name, "package.json"), "utf8")).version, expected);
+    const entry = packages.find((entry) => entry.name === name);
+    assert.ok(entry, `missing ${name}`);
+    const expected = entry.version;
+    assert.equal(object(parseJson(readFileSync(path.join(runtime, "node_modules", name, "package.json"), "utf8"))).version, expected);
   }
   console.log("managed artifacts: exact optional dependency closure, no automatic plugin activation");
 
   run(facade, ["installer", "install", "plugin", artifact("@slop-lab/dim-plugin-host-mirrors")]);
   run(facade, install);
   assert.deepEqual(plugins(), ["@slop-lab/dim-plugin-host-mirrors"]);
-  assert.equal(path.resolve(runtime, dependencies()["@slop-lab/dim-plugin-host-mirrors"].slice(5)),
+  assert.equal(path.resolve(runtime, string(dependencies()["@slop-lab/dim-plugin-host-mirrors"]).slice(5)),
     artifact("@slop-lab/dim-plugin-host-mirrors"));
-  assert.equal(existsSync(path.join(env.XDG_CONFIG_HOME, "systemd/user/dim-controller.service")), false);
-  assert.equal(existsSync(path.join(env.XDG_RUNTIME_DIR, "dim/controller.pid")), false);
+  assert.equal(existsSync(path.join(scratch, "config", "systemd/user/dim-controller.service")), false);
+  assert.equal(existsSync(path.join(scratch, "run", "dim/controller.pid")), false);
   console.log("explicit plugin survives matched-bundle upgrade without controller activation");
 } finally { rmSync(scratch, { recursive: true, force: true }); }

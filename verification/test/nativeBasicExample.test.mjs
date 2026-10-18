@@ -1,3 +1,5 @@
+// @ts-check
+import { object } from "../scripts/lib/json-values.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -16,16 +18,18 @@ test("defines one protected native root and kind-distinct candidate jobs", async
   ]);
 
   // When
-  const repositories = parse(repositoriesSource);
-  const runner = parse(runnerSource);
+  const repositories = object(parse(repositoriesSource));
+  const nativeReview = object(repositories.nativeReview);
+  const rootRepository = object(object(repositories.repositories).root);
+  const runner = object(parse(runnerSource));
 
   // Then
-  assert.deepEqual(repositories.nativeReview.requiredJobs, [
+  assert.deepEqual(nativeReview.requiredJobs, [
     { name: "source", kind: "ordinary-sysbox" },
     { name: "integration", kind: "qemu" }
   ]);
-  assert.equal(repositories.repositories.root.root, true);
-  assert.deepEqual(repositories.repositories.root.protect, ["main"]);
+  assert.equal(rootRepository.root, true);
+  assert.deepEqual(rootRepository.protect, ["main"]);
   assert.deepEqual(runner.jobs, {
     source: { script: ".dim/ci/jobs/source.bash" },
     integration: { script: ".dim/ci/jobs/integration.bash", runtime: "qemu" }

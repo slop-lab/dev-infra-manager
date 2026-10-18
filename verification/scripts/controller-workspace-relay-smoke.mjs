@@ -1,3 +1,4 @@
+// @ts-check
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createConnection, createServer } from "node:net";
@@ -21,13 +22,21 @@ const service = new WorkspaceService(store, runtime, async ({ destination }) => 
   return { url: "https://example.invalid/relay-smoke.git", ref: "refs/heads/main", commit: "a".repeat(40) };
 });
 const controller = new ControllerWorkspaces({ stateRoot: join(root, "managed") }, runner, store.root);
-let record, plugin, api, foreign;
+/** @type {import("../../core/packages/core/dist/workspace.js").WorkspaceRecord | undefined} */
+let record;
+/** @type {Awaited<ReturnType<typeof registerPlugins>> | undefined} */
+let plugin;
+/** @type {ReturnType<typeof createDimController> | undefined} */
+let api;
+/** @type {{id: string, marker: string} | undefined} */
+let foreign;
 const previousCoreRoot = process.env.DIM_STATE_ROOT;
 process.env.DIM_STATE_ROOT = store.root;
 try {
   record = await service.create({ name: "relay-smoke", source: { url: "https://example.invalid/relay-smoke.git" }, image });
   const agent = await runtime.inspect(record); assert.ok(agent?.running);
   await startTarget(agent.id, "initial");
+  /** @type {import("../../core/packages/managed/dist/controller.js").WorkspaceTarget} */
   const target = { containers: [], port: 3456, protocol: "tcp" };
   const selected = { id: record.id, name: record.name };
   const first = await controller.resolveTarget(selected, target);
@@ -36,6 +45,7 @@ try {
   assert.deepEqual(await Promise.all([exchange(first, bytes), exchange(first, Buffer.from("concurrent request"))]), [bytes, Buffer.from("concurrent request")]);
   const token = await controller.ensureGrant(record.name);
   const ingressPort = await availablePort(), tcpIngressPort = await availablePort();
+  /** @type {Parameters<typeof createExternalUrlsPlugin>[0]} */
   const pluginOptions = { ingresses: { smoke: {
     description: "Disposable ownership smoke", scheme: "http", domain: "smoke.test", listenHost: "127.0.0.1", listenPort: ingressPort
   }, raw: { description: "Disposable half-close smoke", scheme: "tcp", domain: "127.0.0.1", listenHost: "127.0.0.1", listenPort: tcpIngressPort } } };
@@ -43,8 +53,8 @@ try {
   api = createDimController({ stateRoot: join(root, "managed"), routes: plugin.controllerRoutes,
     authenticate: (grant) => controller.authenticate(grant), runWorkspaceRequest: (workspace, operation) => controller.run(workspace, operation),
     resolveTarget: (workspace, requested) => controller.resolveTarget(workspace, requested) });
-  await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
-  const apiPort = api.address().port;
+  await listen(api);
+  const apiPort = portOf(api);
   const route = await fetch(`http://127.0.0.1:${apiPort}/api/urls`, { method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ ingress: "smoke", subdomain: "relay-smoke--app", target: { containers: [], port: 3457, protocol: "http" } }) });
@@ -54,17 +64,20 @@ try {
     body: JSON.stringify({ ingress: "raw", target }) });
   assert.equal(tcpRoute.status, 201, await tcpRoute.clone().text());
   assert.deepEqual(await exchange({ host: "127.0.0.1", port: tcpIngressPort }, bytes), bytes);
+  /** @returns {Promise<{status: number, text: () => Promise<string>}>} */
   const gateway = () => new Promise((resolve, reject) => {
     const request = http.get({ host: "127.0.0.1", port: ingressPort, headers: { host: "relay-smoke--app.smoke.test" } }, (response) => {
+      /** @type {Buffer[]} */
       const chunks = []; response.on("data", (chunk) => chunks.push(chunk)); response.once("error", reject);
-      response.once("end", () => resolve({ status: response.statusCode, text: async () => Buffer.concat(chunks).toString() }));
+      response.once("end", () => resolve({ status: response.statusCode ?? 0, text: async () => Buffer.concat(chunks).toString() }));
     }); request.once("error", reject);
   });
   assert.equal(await (await gateway()).text(), "initial");
+  /** @type {import("../../core/packages/managed/dist/controller.js").WorkspaceTarget} */
   const httpTarget = { containers: [], port: 3457, protocol: "http" };
   const initialHttp = await controller.resolveTarget(selected, httpTarget);
   record = await service.stop(record.name);
-  await new Promise((resolve) => { api.close(resolve); api.closeAllConnections(); }); api = undefined;
+  await closeApi(api); api = undefined;
   await plugin.dispose();
   plugin = await registerPlugins([createExternalUrlsPlugin(pluginOptions)]);
   const initialize = plugin.controllerRoutes.find((route) => route.initialize)?.initialize;
@@ -116,7 +129,7 @@ try {
   console.log("PASS owned Sysbox loopback relay, reuse, concurrent binary half-close, UUID fencing and discard");
 } finally {
   await removeForeign();
-  if (api) await new Promise((resolve) => { api.close(resolve); api.closeAllConnections(); });
+  if (api) await closeApi(api);
   await plugin?.dispose();
   if (previousCoreRoot === undefined) delete process.env.DIM_STATE_ROOT; else process.env.DIM_STATE_ROOT = previousCoreRoot;
   if (!record) { try { record = await store.read("relay-smoke"); } catch (error) { if (!(error instanceof Error) || error.name !== "MissingRecordError") throw error; } }
@@ -124,9 +137,11 @@ try {
   await rm(root, { recursive: true, force: true });
 }
 
+/** @param {{host: string, port: number}} target @param {Buffer} input @returns {Promise<Buffer>} */
 function exchange(target, input) {
   return new Promise((resolve, reject) => {
     const socket = createConnection({ host: target.host, port: target.port, allowHalfOpen: true });
+    /** @type {Buffer[]} */
     const chunks = [];
     socket.setTimeout(10000, () => socket.destroy(new Error("relay exchange timed out")));
     socket.on("data", (chunk) => chunks.push(chunk)); socket.once("error", reject);
@@ -135,14 +150,17 @@ function exchange(target, input) {
   });
 }
 
+/** @param {import("../../core/packages/core/dist/workspace.js").WorkspaceRecord} workspace */
 function workspaceNetwork(workspace) { return workspaceRuntimeResources(workspace).network; }
 async function availablePort() {
-  const listener = createServer(); await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
-  const port = listener.address().port; await new Promise((resolve) => listener.close(resolve)); return port;
+  const listener = createServer(); await listen(listener);
+  const port = portOf(listener); await new Promise((resolve) => listener.close(() => resolve(undefined))); return port;
 }
+/** @param {string} container @param {string} label */
 async function startTarget(container, label) {
   const started = await runner.run("docker", ["exec", "--detach", "--user", "dim", container, "node", "--input-type=commonjs", "-e", `
     require("node:net").createServer({ allowHalfOpen: true }, (socket) => {
+      /** @type {Buffer[]} */
       const chunks = []; socket.on("data", (chunk) => chunks.push(chunk));
       socket.on("end", () => socket.end(Buffer.concat(chunks)));
     }).listen(3456, "127.0.0.1");
@@ -157,3 +175,10 @@ async function removeForeign() {
   assert.equal(inspected.exitCode, 0, inspected.stderr); assert.equal(inspected.stdout.trim(), foreign.marker);
   const removed = await runner.run("docker", ["rm", "--force", foreign.id]); assert.equal(removed.exitCode, 0, removed.stderr); foreign = undefined;
 }
+
+/** @param {import("node:net").Server} server */
+function portOf(server) { const address = server.address(); assert.ok(address && typeof address !== "string"); return address.port; }
+/** @param {import("node:net").Server} server */
+function listen(server) { return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined))); }
+/** @param {import("node:http").Server} server */
+function closeApi(server) { return new Promise((resolve) => { server.close(() => resolve(undefined)); server.closeAllConnections(); }); }

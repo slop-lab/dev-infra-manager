@@ -1,3 +1,4 @@
+// @ts-check
 import { createHash } from "node:crypto";
 import { open, rename, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -70,6 +71,7 @@ process.stdout.write(`${JSON.stringify(readiness)}\n`);
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
 
+/** @param {import("node:http").IncomingMessage} request @param {import("node:http").ServerResponse} response */
 async function handleRequest(request, response) {
   const method = request.method ?? "GET";
   const pathname = new URL(request.url ?? "/", baseUrl).pathname;
@@ -113,6 +115,7 @@ async function handleRequest(request, response) {
   return registryError(request, response, 404, "UNSUPPORTED", "endpoint is not supported", {});
 }
 
+/** @param {Record<string, unknown>} fields */
 function record(fields) {
   const line = `${JSON.stringify({
     run_id: runId,
@@ -125,15 +128,18 @@ function record(fields) {
   return evidenceWrites;
 }
 
+/** @param {import("node:http").IncomingMessage} request @param {import("node:http").ServerResponse} response @param {Buffer} body @param {string} contentType @param {string} contentDigest */
 function artifact(request, response, body, contentType, contentDigest) {
   return reply(request, response, 200, body, contentType, { "docker-content-digest": contentDigest });
 }
 
+/** @param {import("node:http").IncomingMessage} request @param {import("node:http").ServerResponse} response @param {number} status @param {string} code @param {string} message @param {Record<string, unknown>} detail @param {Record<string, string>} [headers] */
 function registryError(request, response, status, code, message, detail, headers = {}) {
   const body = Buffer.from(JSON.stringify({ errors: [{ code, message, detail }] }));
   return reply(request, response, status, body, "application/json", headers);
 }
 
+/** @param {import("node:http").IncomingMessage} request @param {import("node:http").ServerResponse} response @param {number} status @param {Buffer} body @param {string} contentType @param {Record<string, string>} [headers] */
 function reply(request, response, status, body, contentType, headers = {}) {
   response.writeHead(status, {
     ...API_VERSION_HEADER,
@@ -144,26 +150,31 @@ function reply(request, response, status, body, contentType, headers = {}) {
   response.end(request.method === "HEAD" ? undefined : body);
 }
 
+/** @param {string} pathname */
 function routeFields(pathname) {
   const match = pathname.match(/^\/v2\/(.+?)\/(?:manifests|blobs)(?:\/|$)/);
   return match ? { repository: match[1] } : {};
 }
 
+/** @param {Buffer} bytes */
 function digest(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
+/** @param {string} value @param {string} name */
 function sanitize(value, name) {
   const sanitized = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   if (sanitized.length === 0) throw new TypeError(`${name} must contain an ASCII letter or number`);
   return sanitized;
 }
 
+/** @param {string[]} arguments_ */
 function parseOptions(arguments_) {
   if (arguments_.includes("--help")) {
     process.stdout.write("usage: registry-cache-evidence.mjs --run-id ID --route ROUTE --evidence-file PATH [--bind-address IPV4] [--port PORT] [--ready-file PATH]\n");
     process.exit(0);
   }
+  /** @type {Map<string, string>} */
   const values = new Map();
   for (let index = 0; index < arguments_.length; index += 2) {
     const key = arguments_[index];

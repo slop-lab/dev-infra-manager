@@ -1,9 +1,12 @@
 #!/usr/bin/env node
+// @ts-check
 /** Disposable SSH host verification. No installed DIM service or user SSH config is changed.
  * node base-workspace-ssh-smoke.mjs setup STATE_DIRECTORY
  * node base-workspace-ssh-smoke.mjs run STATE_DIRECTORY WORKSPACE_IMAGE
  * node base-workspace-ssh-smoke.mjs cleanup STATE_DIRECTORY
  */
+import { object, array, string, parseJson } from "./lib/json-values.mjs";
+import { parseWorkspaceRecord } from "../../core/packages/core/dist/workspace.js";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -12,35 +15,50 @@ import path from "node:path";
 import { connect } from "node:net";
 import { fileURLToPath } from "node:url";
 
-const [mode, directory, image] = process.argv.slice(2);
-if (!["setup", "run", "cleanup"].includes(mode) || !directory || !path.isAbsolute(directory)) {
+const [modeInput, directoryInput, image] = process.argv.slice(2);
+if (!modeInput || !["setup", "run", "cleanup"].includes(modeInput) || !directoryInput || !path.isAbsolute(directoryInput)) {
   throw new Error("usage: node base-workspace-ssh-smoke.mjs setup|run|cleanup ABSOLUTE_STATE_DIRECTORY [WORKSPACE_IMAGE]");
 }
+const mode = modeInput, directory = directoryInput;
 const stateFile = path.join(directory, "state.json");
 const repository = fileURLToPath(new URL("../..", import.meta.url));
 
+/** @typedef {{ env?: NodeJS.ProcessEnv, input?: string | Buffer, timeout?: number, allowFailure?: boolean }} RunOptions */
+/** @typedef {{code: number, stdout: Buffer, stderr: string}} RunResult */
+/** @typedef {{container: string, name: string, source: string, repository: string, workspaceId?: string}} State */
+/** @typedef {(args: string[], options?: RunOptions) => Promise<RunResult>} Cli */
+/** @param {string} file @param {string[]} args @param {RunOptions} [options] @returns {Promise<RunResult>} */
 async function run(file, args, options = {}) {
   const child = spawn(file, args, { env: options.env ?? process.env, stdio: ["pipe", "pipe", "pipe"] });
-  let stdout = "", stderr = "";
+  let stderr = "";
+  /** @type {Buffer[]} */
   const binary = [];
-  if (options.binary) child.stdout.on("data", (chunk) => binary.push(chunk));
-  else child.stdout.setEncoding("utf8").on("data", (chunk) => { stdout += chunk; });
+  child.stdout.on("data", (chunk) => binary.push(Buffer.from(chunk)));
   child.stderr.setEncoding("utf8").on("data", (chunk) => { stderr += chunk; });
-  child.stdin.on("error", (error) => { if (error.code !== "EPIPE") throw error; });
+  child.stdin.on("error", (error) => { if (!("code" in error) || error.code !== "EPIPE") throw error; });
   child.stdin.end(options.input ?? "");
   const timer = setTimeout(() => child.kill("SIGKILL"), options.timeout ?? 120_000);
   try {
-    const code = await new Promise((resolve, reject) => {
+    /** @type {Promise<number>} */
+    const completion = new Promise((resolve, reject) => {
       child.once("error", reject);
       child.once("close", (status) => resolve(status ?? 128));
     });
-    if (options.allowFailure !== true && code !== 0) throw new Error(`${file} ${args[0]} failed (${code}): ${stderr || stdout}`);
-    return { code, stdout: options.binary ? Buffer.concat(binary) : stdout, stderr };
+    const code = await completion;
+    if (options.allowFailure !== true && code !== 0) throw new Error(`${file} ${args[0]} failed (${code}): ${stderr || Buffer.concat(binary).toString()}`);
+    return { code, stdout: Buffer.concat(binary), stderr };
   } finally { clearTimeout(timer); }
 }
+/** @type {Cli} */
 const docker = (args, options) => run("docker", args, options);
+/** @param {State} state */
 const save = (state) => writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-const read = async () => JSON.parse(await readFile(stateFile, "utf8"));
+/** @returns {Promise<State>} */
+const read = async () => {
+  const value = object(parseJson(await readFile(stateFile, "utf8")));
+  return { container: string(value.container), name: string(value.name), source: string(value.source), repository: string(value.repository),
+    ...(value.workspaceId === undefined ? {} : { workspaceId: string(value.workspaceId) }) };
+};
 
 async function setup() {
   await mkdir(directory, { mode: 0o700 });
@@ -69,8 +87,8 @@ async function setup() {
     await docker(["cp", path.join(directory, "sshd_config"), `${state.container}:/etc/ssh/sshd_config`]);
     await docker(["exec", state.container, "chown", "root:root", "/etc/ssh/sshd_config", "/usr/local/bin/dim"]);
     await docker(["exec", "--detach", state.container, "/usr/sbin/sshd", "-D", "-E", "/tmp/sshd.log"]);
-    const port = (await docker(["port", state.container, "22/tcp"])).stdout.trim().split(":").at(-1);
-    const hostKey = (await docker(["exec", state.container, "cat", "/etc/ssh/ssh_host_ed25519_key.pub"])).stdout.trim();
+    const port = (await docker(["port", state.container, "22/tcp"])).stdout.toString().trim().split(":").at(-1);
+    const hostKey = (await docker(["exec", state.container, "cat", "/etc/ssh/ssh_host_ed25519_key.pub"])).stdout.toString().trim();
     await writeFile(path.join(directory, "known_hosts"), `[127.0.0.1]:${port} ${hostKey}\n`);
     await writeFile(path.join(directory, "ssh_config"), `Host dim-smoke-host\n  HostName 127.0.0.1\n  Port ${port}\n  User root\n  IdentityFile ${directory}/key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  UserKnownHostsFile ${directory}/known_hosts\n  LogLevel ERROR\n  BatchMode yes\n  ConnectTimeout 2\n`);
     const bin = path.join(directory, "bin");
@@ -99,59 +117,64 @@ async function setup() {
   } catch (error) { await cleanup(state); throw error; }
 }
 
+/** @param {State} state */
 async function verify(state) {
   if (!image) throw new Error("run requires a built workspace image");
   const client = path.join(directory, "client");
   const env = { ...process.env, HOME: client, XDG_CONFIG_HOME: path.join(client, "config"),
     XDG_DATA_HOME: path.join(client, "data"), DIM_STATE_ROOT: path.join(client, "state"),
     PATH: `${directory}/bin:${process.env.PATH}` };
+  /** @type {Cli} */
   const cli = (args, options = {}) => run(process.execPath, [path.join(repository, "core/packages/cli/dist/cli.js"), ...args], { env, ...options });
   try {
     await assert.rejects(access(state.source));
     await cli(["host", "add", "smoke", "--ssh", "dim-smoke-host"]);
     await cli(["host", "use", "smoke"]);
-    assert.deepEqual(JSON.parse((await cli(["ls", "--json"])).stdout), []);
+    assert.deepEqual(parseJson((await cli(["ls", "--json"])).stdout.toString()), []);
     const setupDirectory = "/var/lib/dim-test/managed-setup";
     await cli(["--host", "smoke", "managed", "control-plane", "prepare", setupDirectory,
       "--native-git-image", `registry.example/native@sha256:${"a".repeat(64)}`,
       "--ordinary-ci-image", `registry.example/execution@sha256:${"b".repeat(64)}`]);
-    assert.equal((await docker(["exec", state.container, "stat", "-c", "%a", `${setupDirectory}/install.json`])).stdout.trim(), "600");
+    assert.equal((await docker(["exec", state.container, "stat", "-c", "%a", `${setupDirectory}/install.json`])).stdout.toString().trim(), "600");
     await assert.rejects(access(setupDirectory));
     console.log("managed preparation executes on selected SSH host with host-local private files: passed");
     const created = await cli(["create", state.source, state.name, "--image", image,
       "--cpus", "1", "--memory", "2g", "--pids", "512", "--json"]);
-    const record = JSON.parse(created.stdout);
+    const record = parseWorkspaceRecord(parseJson(created.stdout.toString()));
     state.workspaceId = record.id;
     await save(state);
     assert.equal(record.source.url, state.source);
     assert.equal(record.phase, "running");
-    assert.equal((await cli(["exec", state.name, "--", "cat", "remote.txt"])).stdout.trim(), "remote-only checkout");
+    assert.equal((await cli(["exec", state.name, "--", "cat", "remote.txt"])).stdout.toString().trim(), "remote-only checkout");
     const streamed = await cli(["exec", state.name, "--", "sh", "-c", 'IFS= read -r value; printf "remote:%s\\n" "$value"; exit 37'],
       { input: "stdin-preserved\n", allowFailure: true });
     assert.equal(streamed.code, 37, streamed.stderr);
-    assert.equal(streamed.stdout.trim(), "remote:stdin-preserved");
+    assert.equal(streamed.stdout.toString().trim(), "remote:stdin-preserved");
     console.log("real SSH host selection, remote-only source and exec stdin/exit: passed");
     await cli(["exec", state.name, "--", "sh", "-c", 'printf preserved > local.txt; printf home-preserved > /home/dim/remote-smoke.txt']);
     await cli(["stop", state.name, "--json"]);
     await cli(["start", state.name, "--json"]);
     await cli(["recreate", state.name, "--json"]);
-    assert.equal((await cli(["exec", state.name, "--", "cat", "local.txt"])).stdout, "preserved");
-    assert.equal((await cli(["exec", state.name, "--", "cat", "/home/dim/remote-smoke.txt"])).stdout, "home-preserved");
+    assert.equal((await cli(["exec", state.name, "--", "cat", "local.txt"])).stdout.toString(), "preserved");
+    assert.equal((await cli(["exec", state.name, "--", "cat", "/home/dim/remote-smoke.txt"])).stdout.toString(), "home-preserved");
     const prefix = `dim-workspace-${createHash("sha256").update(record.id).digest("hex").slice(0, 24)}`;
     await verifyConnections(state, env, cli, prefix);
-    const runtime = JSON.parse((await docker(["container", "inspect", prefix])).stdout)[0];
-    assert.equal(runtime.HostConfig.Runtime, "sysbox-runc");
-    assert.equal(runtime.HostConfig.Privileged, false);
-    assert.equal(runtime.Mounts.length, 3);
-    assert.ok(runtime.Mounts.every((mount) => mount.Type === "volume"));
+    const runtime = object(array(parseJson((await docker(["container", "inspect", prefix])).stdout.toString()))[0]);
+    const hostConfig = object(runtime.HostConfig);
+    const mounts = array(runtime.Mounts);
+    assert.equal(hostConfig.Runtime, "sysbox-runc");
+    assert.equal(hostConfig.Privileged, false);
+    assert.equal(mounts.length, 3);
+    assert.ok(mounts.every((mount) => object(mount).Type === "volume"));
     await assert.rejects(access(path.join(client, "state")));
     console.log("remote lifecycle, persistent data and absence of host mounts in workspace: passed");
     await cli(["discard", state.name, "--yes", "--json"]);
-    assert.deepEqual(JSON.parse((await cli(["ls", "--json"])).stdout), []);
+    assert.deepEqual(parseJson((await cli(["ls", "--json"])).stdout.toString()), []);
     console.log("remote discard: passed");
   } finally { await cleanup(state); }
 }
 
+/** @param {State} state @param {NodeJS.ProcessEnv} env @param {Cli} cli @param {string} prefix */
 async function verifyConnections(state, env, cli, prefix) {
   const payload = Buffer.from(Array.from({ length: 65_536 }, (_, i) => i % 256));
   const server = `require("node:net").createServer({allowHalfOpen:true}, socket => {
@@ -160,12 +183,14 @@ async function verifyConnections(state, env, cli, prefix) {
     socket.on("error",()=>socket.destroy());
   }).listen(3000,"127.0.0.1")`;
   await docker(["exec", "--detach", "--user", "dim", prefix, "node", "-e", server]);
+  /** @type {RunResult | undefined} */
   let direct;
   for (let attempt = 0; attempt < 20; attempt++) {
-    direct = await cli(["connect", state.name, "3000"], { input: payload, binary: true, allowFailure: true, timeout: 10_000 });
+    direct = await cli(["connect", state.name, "3000"], { input: payload, allowFailure: true, timeout: 10_000 });
     if (direct.code === 0) break;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  assert.ok(direct);
   assert.equal(direct.code, 0, direct.stderr);
   assert.deepEqual(direct.stdout, payload, "SSH stdio connection altered binary data or lost half-close output");
   const child = spawn(process.execPath, [path.join(repository, "core/packages/cli/dist/cli.js"),
@@ -175,9 +200,11 @@ async function verifyConnections(state, env, cli, prefix) {
     child.once("error", reject); child.once("close", (code) => resolve(code));
   });
   const deadline = setTimeout(() => child.kill("SIGKILL"), 30_000);
+  /** @type {import("node:net").Socket | undefined} */
   let idle;
   try {
-    const port = await new Promise((resolve, reject) => {
+    /** @type {Promise<number>} */
+    const listening = new Promise((resolve, reject) => {
       child.stderr.setEncoding("utf8").on("data", (chunk) => {
         diagnostic += chunk;
         const match = /Forwarding 127\.0\.0\.1:(\d+)/.exec(diagnostic);
@@ -186,8 +213,11 @@ async function verifyConnections(state, env, cli, prefix) {
       child.once("close", () => reject(new Error(`forward exited before listening: ${diagnostic}`)));
       child.once("error", reject);
     });
+    const port = await listening;
+    /** @returns {Promise<Buffer>} */
     const exchange = () => new Promise((resolve, reject) => {
       const socket = connect({ host: "127.0.0.1", port });
+      /** @type {Buffer[]} */
       const chunks=[];
       socket.setTimeout(10_000, () => socket.destroy(new Error("forward response timed out")));
       socket.once("error", reject);
@@ -201,7 +231,8 @@ async function verifyConnections(state, env, cli, prefix) {
     // transport and in-workspace bridge must both terminate without a client EOF.
     idle = connect({ host: "127.0.0.1", port });
     idle.on("error", () => {});
-    await new Promise((resolve) => idle.once("connect", resolve));
+    const idleSocket = idle;
+    await new Promise((resolve) => idleSocket.once("connect", () => resolve(undefined)));
     await new Promise((resolve) => setTimeout(resolve, 500));
     child.kill("SIGTERM");
     assert.equal(await closed, 143, diagnostic);
@@ -217,7 +248,7 @@ async function verifyConnections(state, env, cli, prefix) {
     console.log(n)`;
   let remaining = -1;
   for (let attempt = 0; attempt < 20; attempt++) {
-    remaining = Number((await docker(["exec", "--user", "dim", prefix, "node", "-e", countBridge])).stdout.trim());
+    remaining = Number((await docker(["exec", "--user", "dim", prefix, "node", "-e", countBridge])).stdout.toString().trim());
     if (remaining === 0) break;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -225,11 +256,12 @@ async function verifyConnections(state, env, cli, prefix) {
   console.log("SSH binary connect, concurrent loopback forwards, half-close and cancellation cleanup: passed");
 }
 
+/** @param {State} state */
 async function cleanup(state) {
   if (!state.workspaceId) {
     const saved = await docker(["exec", state.container, "cat", `/var/lib/dim-test/state/workspaces/${state.name}.json`], { allowFailure: true });
     if (saved.code === 0) {
-      try { state.workspaceId = JSON.parse(saved.stdout).id; } catch { /* no published record */ }
+      try { state.workspaceId = string(object(parseJson(saved.stdout.toString())).id); } catch { /* no published record */ }
     }
   }
   if (typeof state.workspaceId === "string" && /^[0-9a-f-]{36}$/.test(state.workspaceId)) {
