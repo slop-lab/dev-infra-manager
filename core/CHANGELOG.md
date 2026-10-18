@@ -14,7 +14,7 @@ Target: `0.10.0` internal development candidate; this is not a published release
   runtime; remove the separate trusted outer runtime and duplicate lifecycle.
 - Keep the installer facade and exact component dependency selection. Optional
   control-plane preparation generates private service/role configuration and
-  optional initial worker slots from reviewed images/profiles;
+  optional initial container/VM worker slots from reviewed images/profiles;
   connection checks bind clients to the installed generation. Installation and
   activation failures retain transactional recovery. Source installation keeps
   the matching facade selected through mise.

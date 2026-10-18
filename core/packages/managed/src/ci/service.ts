@@ -22,7 +22,7 @@ export function configuredExecutionServer(input: {
   const generation = input.expectedGenerationId;
   const activation = createHash("sha256").update(input.activationToken).digest("hex");
   const workers: WorkerIdentity[] = config.workers.map((worker) => ({ id: worker.id, token: worker.token,
-    slots: worker.slots.map((slot) => ({ id: slot.id, kind: slot.runtime === "sysbox" ? "ordinary-sysbox" : "qemu",
+    slots: worker.slots.map((slot) => ({ id: slot.id, kind: slot.runtime === "container" ? "ordinary-sysbox" : "qemu",
       profile: slot.profile })) }));
   const store = new ExecutionStore(join(input.stateDirectory, "executions.sqlite3"), generation,
     config.claimLeaseMilliseconds, input.now);

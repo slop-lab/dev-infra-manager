@@ -25,7 +25,7 @@ it("connects a prepared private worker to its activated CI generation and reject
   try {
     await prepareControlPlane({ directory, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
       ordinaryCiImage: `registry.example/ci@sha256:${"b".repeat(64)}`, ciWorker: "worker-a",
-      ciSysboxSlots: 1, ciQemuSlots: 1, ciSysboxProfile: profile, ciQemuProfile: profile });
+      ciContainerSlots: 1, ciVmSlots: 1, ciContainerProfile: profile, ciVmProfile: profile });
     const nativeConfig = JSON.parse(await readFile(join(directory, "native-git.json"), "utf8"));
     // The fixture executes the host Git binary; production image pins remain unchanged.
     nativeConfig.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
@@ -59,7 +59,7 @@ it("connects a prepared private worker to its activated CI generation and reject
     expect(registration.status).toBe(200);
     expect(await registration.json()).toEqual({ generationId, workerId: worker.workerId,
       slots: config.workers[0]!.slots.map(({ id, runtime, profile }) => ({ id,
-        kind: runtime === "sysbox" ? "ordinary-sysbox" : "qemu", profile })) });
+        kind: runtime === "container" ? "ordinary-sysbox" : "qemu", profile })) });
     for (const slot of worker.slots) {
       const client = executionWorkerClient({ ...worker, slotId: slot.id });
       expect(await client.claim(randomUUID())).toBeUndefined();

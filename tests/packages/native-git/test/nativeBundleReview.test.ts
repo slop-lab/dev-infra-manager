@@ -64,10 +64,10 @@ describe("authoritative installed native review creation", () => {
     script: .dim/ci/jobs/source.bash
   integration:
     script: .dim/ci/jobs/integration.bash
-    runtime: qemu
+    runtime: vm
   smoke:
     script: .dim/ci/jobs/smoke.bash
-    runtime: qemu
+    runtime: vm
 `;
     await writeFile(join(fixture.clone, ".dim/ci/runner.yml"), runner);
     await writeFile(join(fixture.clone, ".dim/ci/jobs/lint.bash"), "set -euo pipefail\nprintf 'lint\\n'\n");

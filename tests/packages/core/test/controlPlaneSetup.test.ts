@@ -63,8 +63,8 @@ describe("optional control-plane setup", () => {
     const profile = { runnerBaseImage: `registry.example/qemu@sha256:${"e".repeat(64)}`,
       jobBaseImage: `registry.example/job@sha256:${"f".repeat(64)}`,
       bounds: { cpu: "1", memoryBytes: "2147483648", pids: "512", wallClockSeconds: "900", outputBytes: "1048576" } };
-    const { root, directory } = await fixture({ ciWorker: "worker-1", ciSysboxSlots: 1, ciQemuSlots: 1,
-      ciRunnerImage: `registry.example/sysbox@sha256:${"e".repeat(64)}`, ciJobImage: profile.jobBaseImage, ciQemuProfile: profile });
+    const { root, directory } = await fixture({ ciWorker: "worker-1", ciContainerSlots: 1, ciVmSlots: 1,
+      ciRunnerImage: `registry.example/sysbox@sha256:${"e".repeat(64)}`, ciJobImage: profile.jobBaseImage, ciVmProfile: profile });
     const ordinary = JSON.parse(await readFile(path.join(directory, "ordinary-ci.json"), "utf8"));
     const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
     native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
@@ -81,7 +81,7 @@ describe("optional control-plane setup", () => {
       expect(worker).toMatchObject({ workerId: "worker-1", token: ordinary.workers[0].token,
         generationId: connected.generationId, nativeGitEndpoint: endpoint,
         stateDirectory: path.join(directory, "worker-state"),
-        slots: [{ id: "sysbox-1", runtime: "sysbox" }, { id: "qemu-1", runtime: "qemu" }] });
+        slots: [{ id: "container-1", runtime: "container" }, { id: "vm-1", runtime: "vm" }] });
       expect(ordinary.workers[0].slots.map(({ id, runtime }: { id: string; runtime: string }) => ({ id, runtime }))).toEqual(worker.slots);
       expect((await stat(connected.workerConfigFile!)).mode & 0o777).toBe(0o600);
       const selectedState = path.join(root, "selected-host-state");
@@ -215,14 +215,14 @@ describe("optional control-plane setup", () => {
     await program.parseAsync(["control-plane", "prepare", directory,
       "--native-git-image", `registry.example/native@sha256:${"a".repeat(64)}`,
       "--ordinary-ci-image", `registry.example/ordinary@sha256:${"b".repeat(64)}`,
-      "--ci-worker", "local-ci", "--ci-sysbox-slots", "2",
+      "--ci-worker", "local-ci", "--ci-container-slots", "2",
       "--ci-runner-image", `registry.example/runner@sha256:${"c".repeat(64)}`,
       "--ci-job-image", `registry.example/job@sha256:${"d".repeat(64)}`], { from: "user" });
     const config = await readControlPlaneConfig(path.join(directory, "install.json"), ["127.0.0.1"]);
     const sources = await readControlPlaneSources(config);
     const ordinary = JSON.parse(sources.ordinaryCi.config.bytes.toString());
     expect(ordinary.workers).toHaveLength(1);
-    expect(ordinary.workers[0].slots.map(({ id }: { id: string }) => id)).toEqual(["sysbox-1", "sysbox-2"]);
+    expect(ordinary.workers[0].slots.map(({ id }: { id: string }) => id)).toEqual(["container-1", "container-2"]);
     expect(ordinary.workers[0].slots[0].profile.bounds).toMatchObject({ cpu: "1", memoryBytes: "2147483648", pids: "512" });
     expect(sources.credentialValues).toContain(ordinary.workers[0].token);
     expect(printed.mock.calls.flat().join("\n")).not.toContain(ordinary.workers[0].token);
@@ -230,11 +230,11 @@ describe("optional control-plane setup", () => {
   });
 
   it.each([
-    { ciSysboxSlots: 1 }, { ciWorker: "worker" }, { ciWorker: "worker", ciSysboxSlots: 1 },
-    { ciWorker: "worker", ciQemuSlots: 1 }, { ciWorker: "worker", ciSysboxSlots: -1 },
-    { ciWorker: "worker", ciSysboxSlots: 65 }, { ciWorker: "worker", ciSysboxSlots: 0.5 },
-    { ciWorker: "worker", ciSysboxSlots: 1, ciRunnerImage: "runner:latest", ciJobImage: "job:latest" },
-    { ciWorker: "worker", ciSysboxSlots: 1, ciSysboxProfile: {}, ciRunnerImage: "runner:latest" }
+    { ciContainerSlots: 1 }, { ciWorker: "worker" }, { ciWorker: "worker", ciContainerSlots: 1 },
+    { ciWorker: "worker", ciVmSlots: 1 }, { ciWorker: "worker", ciContainerSlots: -1 },
+    { ciWorker: "worker", ciContainerSlots: 65 }, { ciWorker: "worker", ciContainerSlots: 0.5 },
+    { ciWorker: "worker", ciContainerSlots: 1, ciRunnerImage: "runner:latest", ciJobImage: "job:latest" },
+    { ciWorker: "worker", ciContainerSlots: 1, ciContainerProfile: {}, ciRunnerImage: "runner:latest" }
   ])("rejects incomplete or unreviewed initial capacity before writing files: %j", async (options) => {
     const root = await mkdtemp(path.join(os.tmpdir(), "dim-ci-prepare-reject-")); roots.push(root);
     const directory = path.join(root, "operator");

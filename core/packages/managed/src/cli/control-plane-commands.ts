@@ -15,20 +15,20 @@ export function registerControlPlaneCommands(program: Command): void {
     .option("--native-git-port <port>", "loopback native Git port", "8787")
     .option("--ordinary-ci-port <port>", "loopback ordinary CI port", "8788")
     .option("--ci-worker <id>", "prepare one initial authenticated CI worker")
-    .option("--ci-sysbox-slots <count>", "number of Sysbox slots", "0")
-    .option("--ci-qemu-slots <count>", "number of KVM QEMU slots", "0")
+    .option("--ci-container-slots <count>", "number of Sysbox slots", "0")
+    .option("--ci-vm-slots <count>", "number of KVM QEMU slots", "0")
     .option("--ci-runner-image <digest-reference>", "reviewed Sysbox supervisor image")
     .option("--ci-job-image <digest-reference>", "reviewed Sysbox job environment image")
-    .option("--ci-sysbox-profile <file>", "advanced Sysbox execution profile, instead of image flags")
-    .option("--ci-qemu-profile <file>", "reviewed QEMU execution profile")
+    .option("--ci-container-profile <file>", "advanced Sysbox execution profile, instead of image flags")
+    .option("--ci-vm-profile <file>", "reviewed QEMU execution profile")
     .action(async (directory: string, flags: { nativeGitImage: string; ordinaryCiImage: string; hostId: string;
-      nativeGitPort: string; ordinaryCiPort: string; ciWorker?: string; ciSysboxSlots: string; ciQemuSlots: string;
-      ciRunnerImage?: string; ciJobImage?: string; ciSysboxProfile?: string; ciQemuProfile?: string }) => {
+      nativeGitPort: string; ordinaryCiPort: string; ciWorker?: string; ciContainerSlots: string; ciVmSlots: string;
+      ciRunnerImage?: string; ciJobImage?: string; ciContainerProfile?: string; ciVmProfile?: string }) => {
       const prepared = await prepareControlPlane({ directory, ...flags,
         nativeGitPort: Number(flags.nativeGitPort), ordinaryCiPort: Number(flags.ordinaryCiPort),
-        ciSysboxSlots: Number(flags.ciSysboxSlots), ciQemuSlots: Number(flags.ciQemuSlots),
-        ciSysboxProfile: flags.ciSysboxProfile === undefined ? undefined : JSON.parse(await readFile(flags.ciSysboxProfile, "utf8")),
-        ciQemuProfile: flags.ciQemuProfile === undefined ? undefined : JSON.parse(await readFile(flags.ciQemuProfile, "utf8")) });
+        ciContainerSlots: Number(flags.ciContainerSlots), ciVmSlots: Number(flags.ciVmSlots),
+        ciContainerProfile: flags.ciContainerProfile === undefined ? undefined : JSON.parse(await readFile(flags.ciContainerProfile, "utf8")),
+        ciVmProfile: flags.ciVmProfile === undefined ? undefined : JSON.parse(await readFile(flags.ciVmProfile, "utf8")) });
       console.log(`Prepared ${prepared.configFile}`);
       console.log("No services were installed. Review the generated files, then run:");
       console.log(`dim installer install control-plane --config ${quote(prepared.configFile)}`);

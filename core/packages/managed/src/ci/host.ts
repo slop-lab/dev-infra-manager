@@ -8,7 +8,6 @@ import { runExecutionWorker } from "./worker.js";
 import { createSysboxBackend } from "./backends/sysbox.js";
 import { lifecycleOptions } from "../lifecycleOptions.js";
 import type { LifecycleOptions } from "../lifecycleTypes.js";
-import { CONTROL_NETWORK, DOCKER_HUB_DIRECT_HOSTNAMES, ensureRegistryCache, sysboxRegistryDaemonConfig } from "../registryCache.js";
 import { qemuBackend } from "./backends/qemu.js";
 export async function runCiWorker(path: string, signal: AbortSignal, options: { runner?: StreamingCommandRunner; lifecycle?: LifecycleOptions } = {}): Promise<void> {
   const runner = options.runner ?? new ProcessRunner();
@@ -24,24 +23,22 @@ export async function runCiWorker(path: string, signal: AbortSignal, options: { 
   const docker = await runner.run("docker", ["info", "--format", "{{json .Runtimes}}"], { signal });
   if (docker.exitCode !== 0) throw new UserError("CI worker requires a working Docker daemon");
   const runtimes: unknown = JSON.parse(docker.stdout);
-  if (config.slots.some((slot) => slot.runtime === "sysbox") && (typeof runtimes !== "object" || runtimes === null
+  if (config.slots.some((slot) => slot.runtime === "container") && (typeof runtimes !== "object" || runtimes === null
     || !Object.hasOwn(runtimes, "sysbox-runc"))) throw new UserError("CI Sysbox slots require registered sysbox-runc");
-  if (config.slots.some((slot) => slot.runtime === "qemu")) {
+  if (config.slots.some((slot) => slot.runtime === "vm")) {
     const kvm = await stat("/dev/kvm");
     if (!kvm.isCharacterDevice()) throw new UserError("CI QEMU slots require /dev/kvm");
     const device = await open("/dev/kvm", constants.O_RDWR | constants.O_NOFOLLOW);
     await device.close();
   }
   const lifecycle = options.lifecycle ?? lifecycleOptions();
-  const routing = lifecycle.hostMirrorProvider === undefined ? undefined : {
-    network: CONTROL_NETWORK, blockedHostnames: DOCKER_HUB_DIRECT_HOSTNAMES, dockerDaemonConfig: sysboxRegistryDaemonConfig()
-  };
-  if (routing !== undefined && config.slots.some((slot) => slot.runtime === "sysbox")) await ensureRegistryCache(runner, lifecycle);
+  const routing = config.slots.some((slot) => slot.runtime === "container")
+    ? await lifecycle.hostMirrorProvider?.ensure(runner, lifecycle.stateRoot) : undefined;
   const stop = new AbortController(), workerSignal = AbortSignal.any([signal, stop.signal]);
   const workers = config.slots.map((slot) => runExecutionWorker({
     directory: join(config.stateDirectory, slot.id), client: executionWorkerClient({ endpoint: config.endpoint,
       workerId: config.workerId, slotId: slot.id, token: config.token, generationId: config.generationId }),
-    backend: slot.runtime === "sysbox" ? createSysboxBackend(routing) : qemuBackend, runner,
+    backend: slot.runtime === "container" ? createSysboxBackend(routing) : qemuBackend, runner,
     gitEndpoint: config.nativeGitEndpoint, gitExecutable: config.gitExecutable, signal: workerSignal
   }));
   try { await Promise.all(workers); }

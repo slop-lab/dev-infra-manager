@@ -6,7 +6,7 @@ describe("DIM workflow language", () => {
     const jobs = dimWorkflowCompiler.compile(Buffer.from(`jobs:
   integration:
     script: scripts/integration.sh
-    runtime: qemu
+    runtime: vm
   source:
     script: tools/source-check
 `));

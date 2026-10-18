@@ -96,7 +96,7 @@ export function matchingRunner(): string {
     script: .dim/ci/jobs/source.bash
   integration:
     script: .dim/ci/jobs/integration.bash
-    runtime: qemu
+    runtime: vm
 `;
 }
 

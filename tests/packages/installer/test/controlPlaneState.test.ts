@@ -44,7 +44,7 @@ describe("control-plane installed state", () => {
 
     // When: the generation and guarded installed record are published.
     const candidate = await finalizeControlPlaneGeneration({ lock: input.lock, staging: beforeTokens, config: input.config, sources: completed });
-    expect(candidate.generationId).toBe("58640578f6164928bf4b5927cde94cbdcdfade3515b3354f7752a2f2169a3137");
+    expect(candidate.generationId).toBe("74d760355e846a7cecf5f8d90de23f9eff8afbd46087ac701a8ad976216dbb5c");
     await publishControlPlaneInstalledState(input.lock, candidate, { volumesEstablished: true });
     await expect(readControlPlaneInstalledState(input.lock)).rejects.toThrow(/incomplete transaction/);
     await completeControlPlaneInstalledState(input.lock, candidate);

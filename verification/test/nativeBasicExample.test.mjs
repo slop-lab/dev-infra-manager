@@ -32,7 +32,7 @@ test("defines one protected native root and kind-distinct candidate jobs", async
   assert.deepEqual(rootRepository.protect, ["main"]);
   assert.deepEqual(runner.jobs, {
     source: { script: ".dim/ci/jobs/source.bash" },
-    integration: { script: ".dim/ci/jobs/integration.bash", runtime: "qemu" }
+    integration: { script: ".dim/ci/jobs/integration.bash", runtime: "vm" }
   });
   assert.match(ordinaryScript, /native-basic-ordinary-ok/);
   assert.match(qemuScript, /native-basic-qemu-ok/);

@@ -66,7 +66,7 @@ preparing a fresh deployment:
 dim managed control-plane prepare "$HOME/dim-control-plane" \
   --native-git-image 'registry.example/dim-native-git@sha256:REVIEWED_DIGEST' \
   --ordinary-ci-image 'registry.example/dim-ordinary-ci@sha256:REVIEWED_DIGEST' \
-  --ci-worker local-ci --ci-sysbox-slots 1 \
+  --ci-worker local-ci --ci-container-slots 1 \
   --ci-runner-image 'registry.example/sysbox-runner@sha256:REVIEWED_DIGEST' \
   --ci-job-image 'registry.example/job-environment@sha256:REVIEWED_DIGEST'
 dim installer install control-plane --config "$HOME/dim-control-plane/install.json"
@@ -82,9 +82,9 @@ the prepared service has no capacity and no worker file is emitted.
 The Sysbox runner image must provide Docker's `dockerd-entrypoint.sh` and client;
 the separate job image provides Bash and the Project's development tools.
 The common Sysbox profile bounds each slot to 1 CPU, 2 GiB memory, 512 PIDs,
-15 minutes and 1 MiB output. Use `--ci-sysbox-profile FILE` instead of runner/job
+15 minutes and 1 MiB output. Use `--ci-container-profile FILE` instead of runner/job
 image flags to supply an explicit profile with different reviewed bounds.
-QEMU capacity requires `--ci-qemu-slots COUNT --ci-qemu-profile FILE` and a capable
+QEMU capacity requires `--ci-vm-slots COUNT --ci-vm-profile FILE` and a capable
 KVM host; it does not fall back to emulation. Both runtimes may share this worker.
 
 For a different worker host, copy only its generated `worker.json` with mode

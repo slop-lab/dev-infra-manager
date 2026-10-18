@@ -51,7 +51,7 @@ export function idleOrdinaryConfig() {
       candidateReader: native.ci.candidateReader, resultReporter: native.ci.resultReporter },
     credentials: { webhook: { username: native.ci.webhook.username, password: native.ci.webhook.password },
       query: { username: "ci-query", password: bundleSecrets.nativeQuery }, operator: { username: "ci-operator", password: token(59) } },
-    workers: [{ id: "host-a", token: bundleSecrets.host, slots: [{ id: "primary", runtime: "sysbox",
+    workers: [{ id: "host-a", token: bundleSecrets.host, slots: [{ id: "primary", runtime: "container",
       profile: { runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`,
         jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`,
         bounds: { cpu: "4", memoryBytes: "8589934592", pids: "2048", wallClockSeconds: "3600", outputBytes: "16777216" } }

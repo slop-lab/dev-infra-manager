@@ -7,7 +7,7 @@ export const executionServiceConfigSchema = z.object({ schemaVersion: z.literal(
   workers: z.array(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/),
     token: executionCredentialSchema.unwrap().shape.password,
     slots: z.array(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/),
-      runtime: z.enum(["sysbox", "qemu"]), profile: executionProfileSchema }).strict().readonly()).min(1).readonly()
+      runtime: z.enum(["container", "vm"]), profile: executionProfileSchema }).strict().readonly()).min(1).readonly()
   }).strict().readonly()).readonly()
 }).strict().readonly().superRefine((config, context) => {
   const roles = [...Object.values(config.credentials), ...Object.entries(config.nativeGit)

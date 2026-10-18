@@ -67,7 +67,7 @@ export function ordinaryServiceConfig(): Readonly<Record<string, unknown>> {
       query: { username: "native-query", password: controlPlaneSecrets.query },
       operator: { username: "ci-operator", password: controlPlaneSecrets.operator }
     },
-    workers: [{ id: "host-a", token: controlPlaneSecrets.host, slots: [{ id: "ordinary", runtime: "sysbox", profile: {
+    workers: [{ id: "host-a", token: controlPlaneSecrets.host, slots: [{ id: "ordinary", runtime: "container", profile: {
       runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`,
       jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`,
       bounds: { cpu: "1", memoryBytes: "1073741824", pids: "256", wallClockSeconds: "60", outputBytes: "1048576" }

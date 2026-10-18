@@ -26,12 +26,12 @@ export interface PrepareControlPlaneOptions {
   readonly nativeGitPort?: number;
   readonly ordinaryCiPort?: number;
   readonly ciWorker?: string;
-  readonly ciSysboxSlots?: number;
-  readonly ciQemuSlots?: number;
+  readonly ciContainerSlots?: number;
+  readonly ciVmSlots?: number;
   readonly ciRunnerImage?: string;
   readonly ciJobImage?: string;
-  readonly ciSysboxProfile?: unknown;
-  readonly ciQemuProfile?: unknown;
+  readonly ciContainerProfile?: unknown;
+  readonly ciVmProfile?: unknown;
 }
 
 /** Reviewed deployment material belongs to the service composition, not the installer. */
@@ -200,13 +200,13 @@ function port(value: number): number {
   return value;
 }
 
-function initialWorkerSlots(options: PrepareControlPlaneOptions): { id: string; runtime: "sysbox" | "qemu"; profile: ExecutionProfile }[] {
-  const sysbox = options.ciSysboxSlots ?? 0, qemu = options.ciQemuSlots ?? 0;
+function initialWorkerSlots(options: PrepareControlPlaneOptions): { id: string; runtime: "container" | "vm"; profile: ExecutionProfile }[] {
+  const sysbox = options.ciContainerSlots ?? 0, qemu = options.ciVmSlots ?? 0;
   if (![sysbox, qemu].every((count) => Number.isSafeInteger(count) && count >= 0 && count <= 64) || sysbox + qemu > 64) {
     throw new UserError("CI slot counts must be nonnegative integers with at most 64 total slots");
   }
   const configured = sysbox + qemu > 0 || [options.ciRunnerImage, options.ciJobImage,
-    options.ciSysboxProfile, options.ciQemuProfile].some((value) => value !== undefined);
+    options.ciContainerProfile, options.ciVmProfile].some((value) => value !== undefined);
   if (options.ciWorker === undefined) {
     if (configured) throw new UserError("CI capacity requires --ci-worker");
     return [];
@@ -214,16 +214,16 @@ function initialWorkerSlots(options: PrepareControlPlaneOptions): { id: string; 
   if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(options.ciWorker) || sysbox + qemu === 0) {
     throw new UserError("CI worker requires a valid ID and at least one explicit slot");
   }
-  if (options.ciSysboxProfile !== undefined && (options.ciRunnerImage !== undefined || options.ciJobImage !== undefined)) {
+  if (options.ciContainerProfile !== undefined && (options.ciRunnerImage !== undefined || options.ciJobImage !== undefined)) {
     throw new UserError("choose a Sysbox profile file or runner/job images");
   }
-  if (sysbox === 0 && [options.ciSysboxProfile, options.ciRunnerImage, options.ciJobImage].some((value) => value !== undefined)
-    || qemu === 0 && options.ciQemuProfile !== undefined) throw new UserError("runtime profiles require matching CI slots");
-  const sysboxProfile = options.ciSysboxProfile ?? { runnerBaseImage: options.ciRunnerImage,
+  if (sysbox === 0 && [options.ciContainerProfile, options.ciRunnerImage, options.ciJobImage].some((value) => value !== undefined)
+    || qemu === 0 && options.ciVmProfile !== undefined) throw new UserError("runtime profiles require matching CI slots");
+  const sysboxProfile = options.ciContainerProfile ?? { runnerBaseImage: options.ciRunnerImage,
     jobBaseImage: options.ciJobImage,
     bounds: { cpu: "1", memoryBytes: "2147483648", pids: "512", wallClockSeconds: "900", outputBytes: "1048576" } };
-  return ([{ runtime: "sysbox", count: sysbox, profile: sysboxProfile },
-    { runtime: "qemu", count: qemu, profile: options.ciQemuProfile }] as const).flatMap(({ runtime, count, profile }) => {
+  return ([{ runtime: "container", count: sysbox, profile: sysboxProfile },
+    { runtime: "vm", count: qemu, profile: options.ciVmProfile }] as const).flatMap(({ runtime, count, profile }) => {
     if (count === 0) return [];
     const parsed = executionProfileSchema.safeParse(profile);
     if (!parsed.success) throw new UserError(`${runtime} CI slots require a valid reviewed profile with digest-pinned runner/job images and positive bounds`);

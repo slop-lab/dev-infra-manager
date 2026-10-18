@@ -3,7 +3,7 @@
 Prepare/install/connect the optional control plane as described in
 [managed administration](../../../core/packages/managed/docs/cli.md). Edit the
 private execution service configuration before deployment to add a worker and
-its slots. Each slot selects `sysbox` or `qemu` plus reviewed image digests and
+its slots. Each slot selects `container` or `vm` plus reviewed image digests and
 resource bounds. A worker may serve jobs from multiple Projects.
 
 For each slot, the service profile contains:
@@ -11,7 +11,7 @@ For each slot, the service profile contains:
 ```json
 {
   "id": "build-1",
-  "runtime": "sysbox",
+  "runtime": "container",
   "profile": {
     "runnerBaseImage": "registry.example/sysbox-runner@sha256:REVIEWED_DIGEST",
     "jobBaseImage": "registry.example/project-tools@sha256:REVIEWED_DIGEST",
@@ -37,7 +37,7 @@ slot identities; the host file is owner-only mode `0600`:
   "endpoint": "https://ci.example.test",
   "nativeGitEndpoint": "https://git.example.test",
   "token": "DISTINCT_PRIVATE_WORKER_TOKEN",
-  "slots": [{ "id": "build-1", "runtime": "sysbox" }]
+  "slots": [{ "id": "build-1", "runtime": "container" }]
 }
 ```
 
@@ -48,7 +48,7 @@ forward. Start it on that runtime host:
 dim --host devbox managed ci worker /srv/dim/worker-a.json
 ```
 
-A QEMU slot uses the same shape with `runtime: "qemu"`. Its runner image is the
+A QEMU slot uses the same shape with `runtime: "vm"`. Its runner image is the
 trusted QEMU supervisor built with `dim managed ci qemu-image IMAGE:TAG`; its job
 image supplies the guest root and reviewed tools. That host requires functional
 KVM. Hardware absence does not enable a fallback.
