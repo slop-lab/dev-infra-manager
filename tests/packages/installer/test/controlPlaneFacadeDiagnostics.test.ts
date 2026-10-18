@@ -54,7 +54,7 @@ describe("control-plane failure diagnostics", () => {
   });
 });
 
-const fakeDocker = `#!/usr/bin/env node
+const fakeDocker = `#!${process.execPath}
 import { appendFileSync } from "node:fs";
 const args = process.argv.slice(2);
 const ok = (value = "") => { process.stdout.write(value); process.exit(0); };

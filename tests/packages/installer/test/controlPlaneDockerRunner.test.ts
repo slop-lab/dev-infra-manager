@@ -136,7 +136,7 @@ async function fakeDocker(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "dim-installer-docker-runner-"));
   temporaryDirectories.push(directory);
   const executable = join(directory, "docker");
-  await writeFile(executable, `#!/usr/bin/env node
+  await writeFile(executable, `#!${process.execPath}
 const [command, ...args] = process.argv.slice(2);
 if (command === "record") process.stdout.write(JSON.stringify(args));
 else if (command === "output") process.stdout.write("x".repeat(1024));
