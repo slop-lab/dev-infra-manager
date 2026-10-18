@@ -117,7 +117,7 @@ fi
     dim: "#!/usr/bin/env bash\n{ printf 'dim'; printf ' %s' \"$@\"; printf '\\n'; } >>\"$DIM_INVOCATIONS\"\n",
     flock:
       "#!/usr/bin/env bash\nfd=\"${!#}\"\nprintf 'lock %s\\n' \"$(readlink \"/proc/$PPID/fd/$fd\")\" >>\"$DIM_INVOCATIONS\"\n",
-    id: "#!/usr/bin/env bash\ncase \"$1\" in -u) printf '1234\\n' ;; -g) printf '5678\\n' ;; esac\n",
+    id: "#!/usr/bin/env bash\nif [[ \"${DIM_SOURCE_TEST_REAL_ID:-0}\" == 1 ]]; then exec /usr/bin/id \"$@\"; fi\ncase \"$1\" in -u) printf '1234\\n' ;; -g) printf '5678\\n' ;; esac\n",
     mv: `#!/usr/bin/env bash
 { printf 'mv'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
 if [[ "\${DIM_READINESS_MOVE_FAILURE:-0}" == 1 && "$2" == */readiness && "$3" == */prepared-local.state ]]; then exit 42; fi
@@ -160,6 +160,9 @@ function runScript(fixture: Fixture, script: string, environment: Readonly<Recor
     env: {
       PATH: `${fixture.tools}:/usr/bin:/bin`,
       DIM_INVOCATIONS: fixture.log,
+      HOME: resolve(fixture.root, "home"),
+      DIM_DATA_HOME: resolve(fixture.root, "data"),
+      DIM_SOURCE_TEST_REAL_ID: script === "install-source-build.bash" ? "1" : "0",
       DIM_STATE_COUNT: resolve(fixture.root, "state-count"),
       DIM_DOCKER_FINAL_ID_FILE: fixture.imageState,
       DIM_DOCKER_ROLLBACK_ID_FILE: resolve(fixture.root, "rollback-image-id"),
@@ -760,7 +763,7 @@ describe("local source build policy", () => {
     const invocations = await readFile(fixture.log, "utf8");
 
     // Then
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(invocations).toContain("dim installer install core");
     expect(invocations).toContain("dim --version");
     expect(invocations).not.toContain("dim controller restart");

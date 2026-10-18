@@ -358,8 +358,8 @@ is implied by these source changes.
 
 ### Added
 
-- [Multi-repository project
-  example](examples/projects/multi-repository/README.md), with independent
+- Multi-repository project
+  example, with independent
   real-container verification of its materialized repository skeletons.
 - [External URL example](examples/features/external-urls/README.md), a copyable,
   dnsmasq-verified walkthrough covering a nested development container and a

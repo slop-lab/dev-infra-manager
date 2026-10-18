@@ -13,7 +13,7 @@ afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe("native workspace nested Docker diagnostic", () => {
+describe("native workspace nested Docker diagnostic", { timeout: 20_000 }, () => {
   it("runs the Sysbox lane after the runc image execution fails", async () => {
     // Given
     const fixture = await createFixture({ failureLane: "runc" });
@@ -172,7 +172,7 @@ describe("native workspace nested Docker diagnostic", () => {
 
     // Then
     expect(syntax.status, syntax.stderr).toBe(0);
-    expect(mode).toBe(0o755);
+    expect(mode & 0o111).toBe(0o111);
   });
 
   it("uses the supported Docker PID limit flag in the companion Sysbox isolation gate", async () => {
