@@ -5,7 +5,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
-import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
+import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/config";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-native-git/service";
 import { inspectNativeGitBundleState } from "@slop-lab/dim-native-git/service";
 import { assertGitVersion } from "@slop-lab/dim-native-git/service";

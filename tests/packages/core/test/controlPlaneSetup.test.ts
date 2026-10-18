@@ -14,7 +14,8 @@ const { Command } = createRequire(new URL("../../../../core/packages/managed/pac
 import { registerControlPlaneCommands } from "../../../../core/packages/managed/src/cli/control-plane-commands.js";
 import { saveControlPlaneSelection, selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../../../../core/packages/managed/src/controlPlaneSelection.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
-import { configuredNativeGitBundleServer, parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
+import { configuredNativeGitBundleServer } from "@slop-lab/dim-native-git/service";
+import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/config";
 import { prepareControlPlane, connectControlPlane } from "../../../../core/packages/managed/src/controlPlaneSetup.js";
 import { readControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
 import { readControlPlaneSources } from "../../../../core/packages/installer/src/controlPlaneSources.js";

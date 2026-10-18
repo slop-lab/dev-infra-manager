@@ -7,7 +7,9 @@ local and remote Git workspaces do not require this package.
 Service composition belongs to `@slop-lab/dim-managed`. Its native Git service
 entrypoint supplies the workflow compiler and serves the generation-bound
 installed bundle. The native Git package provides the authority library and
-operator review client.
+operator review client. Configuration-only consumers use
+`@slop-lab/dim-native-git/config`; the `/service` entrypoint loads the authority
+runtime and its persistent stores.
 
 ## Authority boundaries
 

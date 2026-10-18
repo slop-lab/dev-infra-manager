@@ -5,7 +5,7 @@ import { constants } from "node:fs";
 import { mkdir, open, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-core";
-import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
+import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/config";
 import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
 import type { NativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
 import { compileNativeRootBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";

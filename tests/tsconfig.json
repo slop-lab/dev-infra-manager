@@ -30,6 +30,9 @@
       "@slop-lab/dim-plugin-ci-workflows": [
         "../plugin-ci-workflows/src/index.ts"
       ],
+      "@slop-lab/dim-native-git/config": [
+        "../core/packages/native-git/src/bundle-config.ts"
+      ],
       "@slop-lab/dim-native-git/service": [
         "../core/packages/native-git/src/service.ts"
       ],

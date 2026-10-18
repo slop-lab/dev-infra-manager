@@ -29,6 +29,10 @@
     "./execution": {
       "types": "./src/execution-protocol.ts",
       "import": "./dist/execution-protocol.js"
+    },
+    "./config": {
+      "types": "./src/bundle-config.ts",
+      "import": "./dist/bundle-config.js"
     }
   },
   "bin": {

@@ -13,6 +13,7 @@ export default defineConfig({
       "@slop-lab/dim-native-git/execution": path.resolve(import.meta.dirname, "../core/packages/native-git/src/execution-protocol.ts"),
       "@slop-lab/dim-native-git/workflow": path.resolve(import.meta.dirname, "../core/packages/native-git/src/workflowCompiler.ts"),
       "@slop-lab/dim-plugin-ci-workflows": path.resolve(import.meta.dirname, "../plugin-ci-workflows/src/index.ts"),
+      "@slop-lab/dim-native-git/config": path.resolve(import.meta.dirname, "../core/packages/native-git/src/bundle-config.ts"),
       "@slop-lab/dim-native-git/service": path.resolve(import.meta.dirname, "../core/packages/native-git/src/service.ts"),
       "@slop-lab/dim-managed/cli": path.resolve(import.meta.dirname, "../core/packages/managed/src/cli/managed-cli.ts"),
       "@slop-lab/dim-managed": path.resolve(import.meta.dirname, "../core/packages/managed/src/index.ts"),
