@@ -62,10 +62,11 @@ invented. The sample review policy requires that human reviewer and no CI jobs.
 Edit the reviewed policy and configure real worker capacities before requiring
 CI. Preparation installs nothing and sends no credentials over the network.
 
-`connect` verifies live service role identities and the exact generation before
+`connect` verifies live Git service role identities and the exact generation before
 writing `connections/host.json`, `registrar.json`, `importer.json`,
-`reviewer.json`, `promoter.json` and `ci-query.json`. It does
-not select a backend, start a host controller or install a UI. The initial host
+`reviewer.json`, `promoter.json` and `ci-query.json`. CI may be offline during
+connection setup; `ci jobs` and `ci logs` verify its generation when used. Connecting
+does not select a backend, start a host controller or install a UI. The initial host
 connection supports Projects whose policies require no CI. Use the generated
 connections to import an ordinary local repository. The connect command saves
 the active host/importer paths privately in managed state; Project commands and
