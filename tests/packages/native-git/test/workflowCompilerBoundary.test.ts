@@ -35,6 +35,21 @@ describe("Git workflow compiler boundary", () => {
     }) })]);
   });
 
+  it("canonicalizes arbitrary compiler order before constructing authority envelopes", async () => {
+    const fixture = await nativeCandidateJobInputsFixture("sha1");
+    fixtures.push(fixture);
+    const unordered: WorkflowCompiler = { configurationPath: ".dim/ci/runner.yml", compile() {
+      return [
+        { name: "integration", kind: "qemu", script: ".dim/ci/jobs/integration.bash", argv: ["/bin/sh"] },
+        { name: "source", kind: "ordinary-sysbox", script: ".dim/ci/jobs/source.bash", argv: ["/bin/sh"] }
+      ];
+    } };
+
+    const inputs = await loadNativeCandidateJobInputs(fixture.config, fixture.input, unordered);
+
+    expect(inputs.plan.map(({ name }) => name)).toEqual(["source", "integration"]);
+  });
+
   it("rejects an unsafe compiler configuration path before repository path lookup", async () => {
     const fixture = await nativeCandidateJobInputsFixture("sha1");
     fixtures.push(fixture);

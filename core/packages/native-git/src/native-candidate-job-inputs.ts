@@ -87,7 +87,8 @@ export async function readNativeCandidateJobInputsFromGit(
     throw new CandidateExecutionError("compiled workflow job names must be unique");
   }
   const plan: NativeCandidateJobInputPlanEntry[] = [];
-  for (const job of compiled) {
+  for (const job of compiled.sort((left, right) => left.kind.localeCompare(right.kind)
+    || left.name.localeCompare(right.name))) {
     const scriptBlob = await readCandidateBlob(reader, target.candidateTree, job.script, 1024 * 1024);
     plan.push({
       name: job.name,

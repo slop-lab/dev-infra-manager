@@ -185,17 +185,12 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
   printf "trusted root\n" > /tmp/source/README.md
   mkdir -p /tmp/source/.dim/ci/jobs
   printf "%s\n" \
-    "schemaVersion: 4" \
-    "ordinary:" \
-    "  jobs:" \
-    "    source:" \
-    "      script: .dim/ci/jobs/source.bash" \
-    "      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]" \
-    "qemu:" \
-    "  jobs:" \
-    "    integration:" \
-    "      script: .dim/ci/jobs/integration.bash" \
-    "      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]" > /tmp/source/.dim/ci/runner.yml
+    "jobs:" \
+    "  source:" \
+    "    script: .dim/ci/jobs/source.bash" \
+    "  integration:" \
+    "    script: .dim/ci/jobs/integration.bash" \
+    "    runtime: qemu" > /tmp/source/.dim/ci/runner.yml
   printf "set -euo pipefail\nprintf source\\n\n" > /tmp/source/.dim/ci/jobs/source.bash
   printf "set -euo pipefail\nprintf integration\\n\n" > /tmp/source/.dim/ci/jobs/integration.bash
   git -C /tmp/source add README.md .dim/ci

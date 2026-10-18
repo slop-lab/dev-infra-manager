@@ -8,14 +8,10 @@ import { verifyAndMaterializeNativeQemuCandidate } from "../../../../core/packag
 import type { NativeCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeOrdinaryCandidateVerifier.js";
 
 const roots: string[] = [];
-const config = Buffer.from(`schemaVersion: 4
-ordinary:
-  jobs: {}
-qemu:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+const config = Buffer.from(`jobs:
+  integration:
+    script: .dim/ci/jobs/integration.bash
+    runtime: qemu
 `);
 const script = Buffer.from("set -o pipefail\nprintf 'candidate-executed\\n'\n");
 

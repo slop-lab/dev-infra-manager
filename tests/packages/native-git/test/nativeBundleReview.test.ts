@@ -57,23 +57,17 @@ describe("authoritative installed native review creation", () => {
   it("publishes candidate events for newly added ordinary and QEMU jobs", async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("bundle-review-added-jobs");
-    const runner = `schemaVersion: 4
-ordinary:
-  jobs:
-    lint:
-      script: .dim/ci/jobs/lint.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-    source:
-      script: .dim/ci/jobs/source.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-qemu:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-    smoke:
-      script: .dim/ci/jobs/smoke.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+    const runner = `jobs:
+  lint:
+    script: .dim/ci/jobs/lint.bash
+  source:
+    script: .dim/ci/jobs/source.bash
+  integration:
+    script: .dim/ci/jobs/integration.bash
+    runtime: qemu
+  smoke:
+    script: .dim/ci/jobs/smoke.bash
+    runtime: qemu
 `;
     await writeFile(join(fixture.clone, ".dim/ci/runner.yml"), runner);
     await writeFile(join(fixture.clone, ".dim/ci/jobs/lint.bash"), "set -euo pipefail\nprintf 'lint\\n'\n");
@@ -395,7 +389,7 @@ process.send?.({ kind: "ready", remote: remote.toString() });`;
   it("durably records invalid planning without partial events", async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("bundle-review-invalid-manifest");
-    await writeFile(join(fixture.clone, ".dim/ci/runner.yml"), "schemaVersion: 4\nordinary: invalid\n");
+    await writeFile(join(fixture.clone, ".dim/ci/runner.yml"), "jobs: invalid\n");
     await runGit("/usr/bin/git", ["-C", fixture.clone, "add", ".dim/ci/runner.yml"]);
     await runGit("/usr/bin/git", ["-C", fixture.clone, "commit", "-m", "invalid candidate jobs"]);
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);

@@ -86,7 +86,7 @@ describe("automatic native CI boundary", () => {
     await waitForResults(fixture, 2);
     await waitForEventCounts(fixture, { ordinary: 3, qemu: 2 });
     const countsBeforeInvalid = eventCounts(fixture);
-    await writeFile(join(fixture.native.clone, ".dim/ci/runner.yml"), "schemaVersion: 4\nunknown: true\n");
+    await writeFile(join(fixture.native.clone, ".dim/ci/runner.yml"), "jobs: invalid\n");
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "add", ".dim/ci/runner.yml"]);
     await runGit("/usr/bin/git", ["-C", fixture.native.clone, "commit", "-m", "invalid candidate jobs"]);
     await refreshBundleReviewWriter(fixture.native);
@@ -167,20 +167,14 @@ function qemuClient(
 }
 
 function changedRunner(): string {
-  return `schemaVersion: 4
-ordinary:
-  jobs:
-    check:
-      script: .dim/ci/jobs/check.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-    source:
-      script: .dim/ci/jobs/source.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-qemu:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+  return `jobs:
+  check:
+    script: .dim/ci/jobs/check.bash
+  source:
+    script: .dim/ci/jobs/source.bash
+  integration:
+    script: .dim/ci/jobs/integration.bash
+    runtime: qemu
 `;
 }
 

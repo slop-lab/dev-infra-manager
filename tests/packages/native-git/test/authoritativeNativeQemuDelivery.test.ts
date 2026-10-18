@@ -179,14 +179,10 @@ async function post(url: string, body: unknown, authorization: string): Promise<
 }
 
 function qemuOnlyRunner(): string {
-  return `schemaVersion: 4
-ordinary:
-  jobs: {}
-qemu:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+  return `jobs:
+  integration:
+    script: .dim/ci/jobs/integration.bash
+    runtime: qemu
 `;
 }
 function eventCount(database: string): number {

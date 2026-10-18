@@ -1,91 +1,32 @@
 import { describe, expect, it } from "vitest";
-import {
-  WorkflowSyntaxError,
-  parseDimWorkflow
-} from "../../../../plugin-ci-workflows/src/index.js";
+import { dimWorkflowCompiler, WorkflowSyntaxError } from "../../../../plugin-ci-workflows/src/index.js";
 
-function validConfig(): string {
-  return `schemaVersion: 4
-ordinary:
-  jobs:
-    source:
-      script: .dim/ci/jobs/source.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-qemu:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-`;
-}
-
-function rejects(bytes: Buffer): void {
-  expect(() => parseDimWorkflow(bytes)).toThrow(WorkflowSyntaxError);
-}
-
-describe("native schema-4 candidate job config rejection", () => {
-
+describe("DIM workflow input boundaries", () => {
   it.each([
-    ["schema 3", validConfig().replace("schemaVersion: 4", "schemaVersion: 3")],
-    ["schema 2", validConfig().replace("schemaVersion: 4", "schemaVersion: 2")],
-    ["a top-level field", `${validConfig()}image: candidate\n`],
-    ["an ordinary section field", validConfig().replace("ordinary:\n", "ordinary:\n  bounds: {}\n")],
-    ["a job field", validConfig().replace("      script: .dim/ci/jobs/source.bash", "      extra: value\n      script: .dim/ci/jobs/source.bash")],
-    ["a duplicate key", `${validConfig()}schemaVersion: 4\n`],
-    ["an alias", `job: &job\n  script: .dim/ci/jobs/source.bash\n  argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n${validConfig().replace("    source:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]", "    source: *job")}`],
-    ["an anchor", validConfig().replace("    source:", "    source: &source")],
-    ["an explicit tag", validConfig().replace("schemaVersion: 4", "schemaVersion: !!int 4")],
-    ["a merge key", validConfig().replace("      script: .dim/ci/jobs/source.bash", "      <<: {}\n      script: .dim/ci/jobs/source.bash")],
-    ["a modified argv", validConfig().replace("/run/dim/job/script", "/workspace/script")],
-    ["extra argv", validConfig().replace("/run/dim/job/script]", "/run/dim/job/script, unexpected]")],
-    ["an unsafe job name", validConfig().replace("    source:", "    ../source:")],
-    ["a traversing script", validConfig().replace(".dim/ci/jobs/source.bash", ".dim/ci/jobs/../source.bash")],
-    ["a nested script", validConfig().replace(".dim/ci/jobs/source.bash", ".dim/ci/jobs/nested/source.bash")],
-    ["a script with whitespace", validConfig().replace(".dim/ci/jobs/source.bash", ".dim/ci/jobs/source test.bash")]
-  ])("rejects %s", (_label, source) => {
-    // Given / When / Then
-    rejects(Buffer.from(source, "utf8"));
+    ["old grouped workflow", "schemaVersion: 4\nordinary: {jobs: {}}\nqemu: {jobs: {}}"],
+    ["missing script", "jobs: {check: {}}"],
+    ["unknown runtime", "jobs: {check: {script: check.sh, runtime: host}}"],
+    ["candidate-selected image", "jobs: {check: {script: check.sh, image: mutable:latest}}"],
+    ["candidate-selected argv", "jobs: {check: {script: check.sh, argv: [/bin/sh]}}"],
+    ["candidate-selected credential", "jobs: {check: {script: check.sh, credential: host}}"],
+    ["traversal", "jobs: {check: {script: ../host-secret}}"],
+    ["absolute script", "jobs: {check: {script: /etc/shadow}}"],
+    ["Git metadata", "jobs: {check: {script: .git/config}}"],
+    ["duplicate job names", "jobs:\n  check: {script: one}\n  check: {script: two}"],
+    ["YAML aliases", "jobs:\n  check: &job {script: one}\n  other: *job"],
+    ["YAML tags", "jobs: {check: {script: !!str one}}"]
+  ])("rejects %s", (_name, source) => {
+    expect(() => dimWorkflowCompiler.compile(Buffer.from(source))).toThrow(WorkflowSyntaxError);
   });
 
-  it.each(["image", "bounds", "env", "mounts", "network", "url", "hostCommand", "credential"])(
-    "rejects candidate-selected %s authority",
-    (field) => {
-      // Given
-      const source = validConfig().replace(
-        "      script: .dim/ci/jobs/source.bash",
-        `      ${field}: candidate-controlled\n      script: .dim/ci/jobs/source.bash`
-      );
-
-      // When / Then
-      rejects(Buffer.from(source, "utf8"));
+  it("rejects invalid UTF-8, NUL and oversized configuration bytes", () => {
+    for (const bytes of [Buffer.from([0xc3, 0x28]), Buffer.from("jobs: {}\0"), Buffer.alloc(65_537, 32)]) {
+      expect(() => dimWorkflowCompiler.compile(bytes)).toThrow(WorkflowSyntaxError);
     }
-  );
-
-  it("rejects non-UTF-8, NUL, and oversized buffers", () => {
-    // Given
-    const invalidUtf8 = Buffer.from([0xc3, 0x28]);
-    const nul = Buffer.from(`${validConfig()}\0`, "utf8");
-    const oversized = Buffer.from(`${validConfig()}#${"x".repeat(65_536)}`, "utf8");
-
-    // When / Then
-    rejects(invalidUtf8);
-    rejects(nul);
-    rejects(oversized);
   });
 
-  it("rejects overlapping candidate names", () => {
-    // Given
-    const overlappingConfig = validConfig().replace("    integration:", "    source:");
-    // When / Then
-    rejects(Buffer.from(overlappingConfig, "utf8"));
-  });
-
-  it("rejects more than 64 combined candidate jobs", () => {
-    // Given
-    const jobs = Array.from({ length: 65 }, (_value, index) => `    job-${index}:\n      script: .dim/ci/jobs/job-${index}.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]`).join("\n");
-    const source = `schemaVersion: 4\nordinary:\n  jobs:\n${jobs}\nqemu:\n  jobs: {}\n`;
-
-    // When / Then
-    rejects(Buffer.from(source));
+  it("bounds the number of jobs", () => {
+    const jobs = Object.fromEntries(Array.from({ length: 65 }, (_unused, index) => [`job-${index}`, { script: "check.sh" }]));
+    expect(() => dimWorkflowCompiler.compile(Buffer.from(JSON.stringify({ jobs })))).toThrow(WorkflowSyntaxError);
   });
 });

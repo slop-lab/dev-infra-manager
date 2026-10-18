@@ -92,17 +92,12 @@ export async function nativeCandidateJobInputsFixture(
 }
 
 export function nativeRunnerYaml(): string {
-  return `schemaVersion: 4
-ordinary:
-  jobs:
-    source:
-      script: .dim/ci/jobs/source.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-qemu:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+  return `jobs:
+  source:
+    script: .dim/ci/jobs/source.bash
+  integration:
+    script: .dim/ci/jobs/integration.bash
+    runtime: qemu
 `;
 }
 

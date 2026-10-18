@@ -2,7 +2,7 @@ import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect } from "vitest";
+import assert from "node:assert/strict";
 import { initializeNativeGitBundleState } from "../../../../core/packages/native-git/src/index.js";
 import { activationTokenSha256 } from "../../../../core/packages/native-git/src/native-bundle-activation.js";
 import { assertGitVersion } from "../../../../core/packages/native-git/src/repository.js";
@@ -34,9 +34,9 @@ export async function finalizedCandidateRoot(label: string, runner: string, poli
   await activateFinalizeService(service.origin);
   await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));
   const receipt = parseImportReceipt(await (await uploadRootBundle(service.origin, bundle, policy)).json());
-  expect((await finalizeRootImport(service.origin, {
+  assert.equal((await finalizeRootImport(service.origin, {
     schemaVersion: 1, generationId, importNonce: receipt.importNonce, bundleDigest: receipt.bundleDigest
-  })).status).toBe(200);
+  })).status, 200);
   await closeFinalizeService(service);
   const opened = await candidateContext(root);
   return {
@@ -91,32 +91,21 @@ export async function proofBytes(root: string): Promise<readonly Buffer[]> {
 }
 
 export function matchingRunner(): string {
-  return `schemaVersion: 4
-ordinary:
-  jobs:
-    source:
-      script: .dim/ci/jobs/source.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-qemu:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+  return `jobs:
+  source:
+    script: .dim/ci/jobs/source.bash
+  integration:
+    script: .dim/ci/jobs/integration.bash
+    runtime: qemu
 `;
 }
 
 export function wrongKindRunner(): string {
-  return `schemaVersion: 4
-ordinary:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-    source:
-      script: .dim/ci/jobs/source.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-qemu:
-  jobs: {}
+  return `jobs:
+  integration:
+    script: .dim/ci/jobs/integration.bash
+  source:
+    script: .dim/ci/jobs/source.bash
 `;
 }
 

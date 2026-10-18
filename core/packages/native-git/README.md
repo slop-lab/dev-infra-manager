@@ -321,24 +321,22 @@ and the exact review/admission tuple, reads only `.dim/ci/runner.yml` and its
 selected script from the named candidate tree, and returns the normalized
 descriptor and digest. It does not schedule or launch work.
 
-The package also exports `parseNativeCandidateJobConfig` as a parse-only boundary
-for the target schema-4 candidate file. It accepts raw bytes independently of
-the protected required-job policy, rejects overlapping ordinary/QEMU names,
-caps both kinds at 64 combined jobs, and returns canonical ordinary and
-QEMU job maps plus a deterministic kind-labelled plan. It does not read candidate
-trees or scripts, admit or schedule work, execute Sysbox or QEMU jobs, report
-results, or alter the active schema-3 ordinary path.
+Workflow interpretation belongs to the optional `@slop-lab/dim-plugin-ci-workflows`
+package. Its default `.dim/ci/runner.yml` format declares jobs with a repository
+script path and optional `runtime: qemu`; Sysbox is the default. The plugin
+supplies the normalized Bash execution command. Projects cannot select trusted
+images, resources, mounts or credentials through workflow configuration.
 
-The separate `loadNativeCandidateJobInputs` library API pins one registered
-Project repository and protected ref independently of the promotion-required
-job set, and pins the protected
-head, candidate commit, and candidate tree; reads
-the schema-4 config and every ordinary/QEMU script as bounded regular blobs from
-that exact tree; then rechecks the protected head after all reads. It supports
-both SHA-1 and SHA-256 repositories and returns only config/script object IDs,
-SHA-256 digests, safe paths, execution-kind labels, job names, and the fixed
-argv. It returns no executable bytes, images, bounds, host or capacity choices,
-credentials, admission, attempt, result, scheduling, or VM authority.
+The `loadNativeCandidateJobInputs(config, selector, compiler)` library API and
+installed bundle require an injected `WorkflowCompiler`. The compiler chooses
+its configuration path and converts bytes into language-neutral job definitions.
+Git validates safe candidate-relative paths and argument vectors, pins the
+protected head, commit and tree, reads bounded regular configuration/script
+blobs, and rechecks the protected head. The returned identities include the
+configuration path, object IDs and SHA-256 digests. Workers verify those
+identities without interpreting the source language again. The managed native
+Git service composes the authority with the default compiler; callers can
+supply another language without adding a dependency from Git to its plugin.
 
 Candidate job names and kinds come only from the strict candidate plan. The distinct internal
 `loadAuthoritativeNativeCandidateJobInputs` entrypoint instead accepts the
@@ -578,7 +576,7 @@ The installed bundle now also exposes trusted in-process, read-only
 as adapter prerequisites. Their strict inputs name only a Project, immutable
 review, required job, and an explicitly operator-trusted capacity containing
 the admission generation, digest-pinned job/runner images, and bounds. Each
-reconstructs current review identity before and after the bounded schema-4
+reconstructs current review identity before and after the bounded compiler-produced
 candidate reads and requires matching policy/review and candidate-plan kinds.
 The QEMU result is a separate strict schema-1 descriptor with
 `executionKind: "qemu"` and the `dim-native-qemu-execution-v1` digest domain;

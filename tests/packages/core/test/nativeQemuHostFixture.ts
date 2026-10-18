@@ -4,14 +4,10 @@ import { nativeQemuDescriptorDigest, type NativeQemuDescriptor,
   type NativeQemuHostAssignment } from "../../../../core/packages/managed/src/nativeQemuAssignment.js";
 import type { NativeCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeOrdinaryCandidateVerifier.js";
 
-export const qemuConfig = Buffer.from(`schemaVersion: 4
-ordinary:
-  jobs: {}
-qemu:
-  jobs:
-    integration:
-      script: .dim/ci/jobs/integration.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+export const qemuConfig = Buffer.from(`jobs:
+  integration:
+    script: .dim/ci/jobs/integration.bash
+    runtime: qemu
 `);
 export const qemuScript = Buffer.from("set -o pipefail\nprintf 'candidate-executed\\n'\n");
 

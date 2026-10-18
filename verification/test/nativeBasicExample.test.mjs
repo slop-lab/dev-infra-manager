@@ -26,10 +26,10 @@ test("defines one protected native root and kind-distinct candidate jobs", async
   ]);
   assert.equal(repositories.repositories.root.root, true);
   assert.deepEqual(repositories.repositories.root.protect, ["main"]);
-  assert.equal(runner.schemaVersion, 4);
-  assert.deepEqual(Object.keys(runner).sort(), ["ordinary", "qemu", "schemaVersion"]);
-  assert.deepEqual(runner.ordinary.jobs.source.argv, ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"]);
-  assert.deepEqual(runner.qemu.jobs.integration.argv, ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"]);
+  assert.deepEqual(runner.jobs, {
+    source: { script: ".dim/ci/jobs/source.bash" },
+    integration: { script: ".dim/ci/jobs/integration.bash", runtime: "qemu" }
+  });
   assert.match(ordinaryScript, /native-basic-ordinary-ok/);
   assert.match(qemuScript, /native-basic-qemu-ok/);
   assert.doesNotMatch(`${repositoriesSource}\n${runnerSource}`, /gitea|actions|webhook|runnerToken/i);

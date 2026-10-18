@@ -112,14 +112,9 @@ describe("installed two-service ordinary terminal evidence", () => {
     const policy = authoritativePolicy(["owner"], [], [
       { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }
     ]);
-    const runner = `schemaVersion: 4
-ordinary:
-  jobs:
-    source:
-      script: .dim/ci/jobs/source.bash
-      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
-qemu:
-  jobs: {}
+    const runner = `jobs:
+  source:
+    script: .dim/ci/jobs/source.bash
 `;
     const fixture = await nativeOrdinaryTerminalFixture("ordinary-terminal-promotion", true, policy, runner);
     const active = await createActiveAttempt(fixture);

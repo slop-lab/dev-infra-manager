@@ -106,7 +106,7 @@ function connection(hostId: string, hostToken: string, scheduler: string, native
       pids: 64, timeoutSeconds: 60, outputBytes: 1024 }] };
 }
 function qemuOnlyRunner(): string {
-  return "schemaVersion: 4\nordinary:\n  jobs: {}\nqemu:\n  jobs:\n    integration:\n      script: .dim/ci/jobs/integration.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n";
+  return "jobs:\n  integration:\n    script: .dim/ci/jobs/integration.bash\n    runtime: qemu\n";
 }
 function required(value: NativeQemuAuthorityClient | undefined): NativeQemuAuthorityClient {
   if (value === undefined) throw new TypeError("QEMU authority is unavailable"); return value;

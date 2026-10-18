@@ -2,79 +2,38 @@ import { isScalar, parseDocument, visit } from "yaml";
 import { z } from "zod";
 export const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;
 
-type CandidateJob = { readonly script: string; readonly argv: typeof candidateArgv };
 export class WorkflowSyntaxError extends Error {}
 
 const jobNameSchema = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
-const scriptPathSchema = z.string().regex(/^\.dim\/ci\/jobs\/[a-z][a-z0-9-]{0,62}\.bash$/);
-const executionKindSchema = z.enum(["ordinary-sysbox", "qemu"]);
-
 const jobSchema = z.object({
-  script: scriptPathSchema,
-  argv: z.tuple([
-    z.literal(candidateArgv[0]),
-    z.literal(candidateArgv[1]),
-    z.literal(candidateArgv[2]),
-    z.literal(candidateArgv[3])
-  ]).readonly()
+  script: z.string().refine((path) => path.length > 0 && path.length <= 4096 && !path.startsWith("/")
+    && !/[\\\x00-\x1f\x7f]/.test(path)
+    && path.split("/").every((part) => part.length > 0 && part !== "." && part !== ".." && part !== ".git")),
+  runtime: z.enum(["sysbox", "qemu"]).default("sysbox")
 }).strict().readonly();
+const configSchema = z.object({ jobs: z.record(jobNameSchema, jobSchema) }).strict().readonly();
 
-const jobGroupSchema = z.object({
-  jobs: z.record(jobNameSchema, jobSchema)
-}).strict().readonly();
-
-const configSchema = z.object({
-  schemaVersion: z.literal(4),
-  ordinary: jobGroupSchema,
-  qemu: jobGroupSchema
-}).strict().readonly();
-
-const candidateJobIdentitySchema = z.object({
-  name: jobNameSchema,
-  kind: executionKindSchema
-}).strict().readonly();
-export type NativeCandidateRequiredJob = z.infer<typeof candidateJobIdentitySchema>;
-
-export type NativeCandidateJobPlanEntry = NativeCandidateRequiredJob & CandidateJob;
-
-export type NativeCandidateJobConfig = {
-  readonly schemaVersion: 4;
-  readonly ordinary: { readonly jobs: Readonly<Record<string, CandidateJob>> };
-  readonly qemu: { readonly jobs: Readonly<Record<string, CandidateJob>> };
-  readonly plan: readonly NativeCandidateJobPlanEntry[];
+export type WorkflowJob = {
+  readonly name: string;
+  readonly kind: "ordinary-sysbox" | "qemu";
+  readonly script: string;
+  readonly argv: typeof candidateArgv;
 };
 
-export function parseDimWorkflow(
-  bytes: Buffer
-): NativeCandidateJobConfig {
-  const parsed = configSchema.safeParse(parseStrictYaml(bytes));
-  if (!parsed.success) {
-    throw new WorkflowSyntaxError("native candidate runner config has an invalid schema", { cause: parsed.error });
+export const dimWorkflowCompiler = {
+  configurationPath: ".dim/ci/runner.yml",
+  compile(bytes: Buffer): readonly WorkflowJob[] {
+    const parsed = configSchema.safeParse(parseStrictYaml(bytes));
+    if (!parsed.success) throw new WorkflowSyntaxError("workflow must define jobs with a script and optional runtime", {
+      cause: parsed.error
+    });
+    const jobs = Object.entries(parsed.data.jobs);
+    if (jobs.length > 64) throw new WorkflowSyntaxError("workflow exceeds 64 jobs");
+    return jobs.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([name, job]) => ({ name, kind: job.runtime === "qemu" ? "qemu" : "ordinary-sysbox",
+        script: job.script, argv: candidateArgv }));
   }
-  const ordinaryJobs = canonicalJobs(parsed.data.ordinary.jobs);
-  const qemuJobs = canonicalJobs(parsed.data.qemu.jobs);
-  const ordinaryNames = Object.keys(ordinaryJobs);
-  const qemuNames = Object.keys(qemuJobs);
-  if (ordinaryNames.some((name) => Object.hasOwn(qemuJobs, name))) {
-    throw new WorkflowSyntaxError("native candidate runner job names overlap across execution kinds");
-  }
-  if (ordinaryNames.length + qemuNames.length > 64) {
-    throw new WorkflowSyntaxError("native candidate runner config exceeds 64 combined jobs");
-  }
-
-  const ordinaryPlan = Object.entries(ordinaryJobs).map(([name, job]) => ({
-    name, kind: "ordinary-sysbox" as const, script: job.script, argv: candidateArgv
-  }));
-  const qemuPlan = Object.entries(qemuJobs).map(([name, job]) => ({
-    name, kind: "qemu" as const, script: job.script, argv: candidateArgv
-  }));
-  return {
-    schemaVersion: 4,
-    ordinary: { jobs: ordinaryJobs },
-    qemu: { jobs: qemuJobs },
-    plan: [...ordinaryPlan, ...qemuPlan]
-  };
-}
+};
 
 function parseStrictYaml(bytes: Buffer): unknown {
   if (bytes.length > 64 * 1024) {
@@ -126,14 +85,3 @@ function parseStrictYaml(bytes: Buffer): unknown {
   });
   return document.toJS({ maxAliasCount: 0 });
 }
-
-function canonicalJobs(jobs: Readonly<Record<string, CandidateJob>>): Readonly<Record<string, CandidateJob>> {
-  return Object.fromEntries(Object.entries(jobs).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0));
-}
-
-export const dimWorkflowCompiler = {
-  configurationPath: ".dim/ci/runner.yml",
-  compile(bytes: Buffer): readonly NativeCandidateJobPlanEntry[] {
-    return parseDimWorkflow(bytes).plan;
-  }
-};
