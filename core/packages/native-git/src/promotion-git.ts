@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { NativeGitServiceConfig } from "./config.js";
+import type { GitRepositoryRuntime } from "./repository.js";
 
 const execute = promisify(execFile);
 const MAX_STDERR_BYTES = 64 * 1024;
@@ -14,7 +14,7 @@ type PromotionTarget = {
 };
 
 export async function candidateDescendsFrom(
-  config: Pick<NativeGitServiceConfig, "gitExecutable" | "storageRoot">,
+  config: Pick<GitRepositoryRuntime, "gitExecutable" | "storageRoot">,
   target: Pick<PromotionTarget, "projectId" | "repositoryId">,
   expectedHead: string,
   candidateCommit: string
@@ -32,7 +32,7 @@ export async function candidateDescendsFrom(
 }
 
 export async function atomicPromote(
-  config: Pick<NativeGitServiceConfig, "gitExecutable" | "storageRoot">,
+  config: Pick<GitRepositoryRuntime, "gitExecutable" | "storageRoot">,
   target: PromotionTarget,
   expectedHead: string,
   candidateCommit: string

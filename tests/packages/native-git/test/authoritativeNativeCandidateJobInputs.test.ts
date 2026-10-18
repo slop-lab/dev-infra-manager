@@ -130,15 +130,9 @@ describe("authoritative imported-root candidate job inputs", () => {
       .run(policyJson, createHash("sha256").update(policyJson).digest("hex"));
     database.close();
     const before = await proofBytes(fixture.root);
-    const reopened = await candidateContext(fixture.root);
-
-    // When
-    const read = loadAuthoritativeNativeCandidateJobInputs(reopened.context, fixture.selector);
-
-    // Then
-    await expect(read).rejects.toBeInstanceOf(CandidateExecutionError);
+    // When / Then
+    await expect(candidateContext(fixture.root)).rejects.toThrow(/policy/);
     expect(await proofBytes(fixture.root)).toEqual(before);
-    await reopened.close();
   });
 
   it("reads an unchanged generation-A import under exact generation-B activation", async () => {

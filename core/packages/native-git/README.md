@@ -13,6 +13,9 @@ operator review client.
 
 A Project has one owned `root` repository and a protected head. Host bootstrap
 imports the reviewed root through a bounded upload/finalization protocol.
+That imported root supplies the authoritative Project policy; service configuration
+owns role credentials and Git execution settings. Repository registrations and
+policy do not live in parallel static service registries.
 Workspace writers receive short-lived credentials scoped to the Project,
 workspace and proposal-ref namespace. CI readers receive credentials bound to
 one exact execution attempt and candidate tuple. Neither obtains protected-ref

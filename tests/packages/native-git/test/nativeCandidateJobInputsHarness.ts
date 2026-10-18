@@ -1,11 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  parseNativeGitServiceConfig,
-  type NativeCandidateRequiredJob,
-  type NativeGitServiceConfig
-} from "../../../../core/packages/native-git/src/index.js";
+import type { NativeCandidateRequiredJob } from "../../../../core/packages/native-git/src/workflowCompiler.js";
+import type { CandidateGitReader } from "../../../../core/packages/native-git/src/candidate-execution-git.js";
+import { assertGitVersion, type GitRepositoryRuntime } from "../../../../core/packages/native-git/src/repository.js";
 import { git, gitExecutable } from "../../../support/gitCommands.js";
 
 export const nativeRequiredJobs = [
@@ -17,7 +15,8 @@ export type NativeCandidateJobInputsFixture = {
   readonly root: string;
   readonly source: string;
   readonly repositoryPath: string;
-  readonly config: NativeGitServiceConfig;
+  readonly gitRuntime: GitRepositoryRuntime;
+  readonly reader: CandidateGitReader;
   readonly input: {
     readonly projectId: string;
     readonly repositoryId: string;
@@ -50,36 +49,15 @@ export async function nativeCandidateJobInputsFixture(
   await mkdir(join(storageRoot, "project-a"), { recursive: true });
   await git(root, ["clone", "--bare", source, repositoryPath]);
   const gitVersion = (await git(root, ["--version"])).stdout.trim().replace("git version ", "");
-  const config = parseNativeGitServiceConfig({
-    schemaVersion: 2,
-    serviceId: "native-main",
-    host: "127.0.0.1",
-    port: 0,
-    storageRoot,
-    gitExecutable: gitReaderExecutable,
-    gitVersion,
-    repositories: [{
-      projectId: "project-a",
-      repositoryId: "source",
-      reviewPolicies: [{
-        protectedRef: "refs/heads/main",
-        policyRevision: "policy-1",
-        requiredReviewRevision: "review-1",
-        requiredJobSetRevision: "jobs-1",
-        requiredJobNames: ["source", "integration"],
-        requiredReviewerIds: ["owner"]
-      }]
-    }],
-    identities: [
-      { role: "reviewer", username: "owner", password: "owner-secret-value", projectId: "project-a", repositoryIds: ["source"], reviewerId: "owner" }
-    ]
-  });
+  const gitRuntime = { storageRoot, gitExecutable: gitReaderExecutable, gitVersion };
+  const reader = { executable: gitReaderExecutable, repositoryPath, identity: await assertGitVersion(gitRuntime) };
   const input = await inputFor(source);
   return {
     root,
     source,
     repositoryPath,
-    config,
+    gitRuntime,
+    reader,
     input,
     async commit(message, stage = true) {
       if (stage) await git(source, ["add", "-A"]);

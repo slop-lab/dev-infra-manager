@@ -2,10 +2,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   parseAuthoritativeImportedRootPolicy,
-  parseLegacyImportedRootPolicy,
   nativeImportedRootPolicySchema,
-  type NativeImportedRootPolicy,
-  type StoredImportedRootPolicy
+  type NativeImportedRootPolicy
 } from "./native-imported-root-policy.js";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
@@ -58,7 +56,7 @@ type NativeProjectRootImportCommon = {
   readonly expectedCommit: string;
   readonly policyDigest: string;
 };
-type NativeProjectRootImportBase = NativeProjectRootImportCommon & StoredImportedRootPolicy;
+type NativeProjectRootImportBase = NativeProjectRootImportCommon & { readonly policy: NativeImportedRootPolicy };
 
 export type NativeProjectRootImportIntent = NativeProjectRootImportBase & {
   readonly bundleDigest: null;
@@ -135,27 +133,14 @@ export function parseNativeProjectRootImportRow(row: unknown): NativeProjectRoot
     }
     throw error;
   }
-  let storedPolicy: StoredImportedRootPolicy;
-  try {
-    storedPolicy = { policyFormat: "authoritative-v1",
-      policy: parseAuthoritativeImportedRootPolicy(parsedPolicy) };
-  } catch (authoritativeError) {
-    if (result.data.phase !== "root-imported") {
-      throw new NativeProjectRootImportStateError("legacy native Project root import intent is incomplete", {
-        cause: authoritativeError
-      });
-    }
-    try {
-      storedPolicy = { policyFormat: "legacy-import-only", policy: parseLegacyImportedRootPolicy(parsedPolicy) };
-    } catch (legacyError) {
-      throw new NativeProjectRootImportStateError("native Project root import intent policy is invalid", {
-        cause: legacyError
-      });
-    }
+  let policy: NativeImportedRootPolicy;
+  try { policy = parseAuthoritativeImportedRootPolicy(parsedPolicy); }
+  catch (error) {
+    throw new NativeProjectRootImportStateError("native Project root import intent policy is invalid", { cause: error });
   }
-  const policyJson = JSON.stringify(storedPolicy.policy);
+  const policyJson = JSON.stringify(policy);
   const policyDigest = createHash("sha256").update(policyJson, "utf8").digest("hex");
-  if (result.data.protectedRef !== storedPolicy.policy.protectedRef || result.data.policyJson !== policyJson
+  if (result.data.protectedRef !== policy.protectedRef || result.data.policyJson !== policyJson
     || result.data.policyDigest !== policyDigest) {
     throw new NativeProjectRootImportStateError("native Project root import intent policy binding is invalid");
   }
@@ -166,7 +151,7 @@ export function parseNativeProjectRootImportRow(row: unknown): NativeProjectRoot
     if (result.data.resolvedTree !== null) {
       throw new NativeProjectRootImportStateError("native Project root import phase binding is invalid");
     }
-    return { ...result.data, ...storedPolicy, policyDigest, bundleDigest: null, bundleSize: null,
+    return { ...result.data, policy, policyDigest, bundleDigest: null, bundleSize: null,
       resolvedTree: null, phase: "intent" };
   }
   if (result.data.bundleDigest === null || result.data.bundleSize === null) {
@@ -176,13 +161,13 @@ export function parseNativeProjectRootImportRow(row: unknown): NativeProjectRoot
     if (result.data.resolvedTree !== null) {
       throw new NativeProjectRootImportStateError("native Project root import phase binding is invalid");
     }
-    return { ...result.data, ...storedPolicy, policyDigest, bundleDigest: result.data.bundleDigest,
+    return { ...result.data, policy, policyDigest, bundleDigest: result.data.bundleDigest,
       bundleSize: result.data.bundleSize, resolvedTree: null, phase: result.data.phase };
   }
   if (result.data.resolvedTree === null) {
     throw new NativeProjectRootImportStateError("native Project root import phase binding is invalid");
   }
-  return { ...result.data, ...storedPolicy, policyDigest, bundleDigest: result.data.bundleDigest,
+  return { ...result.data, policy, policyDigest, bundleDigest: result.data.bundleDigest,
     bundleSize: result.data.bundleSize, resolvedTree: result.data.resolvedTree, phase: result.data.phase };
 }
 

@@ -42,7 +42,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
   const native = {
     schemaVersion: 7, serviceId: "native-main", host: "0.0.0.0", port: 8080,
     storageRoot: "/var/lib/dim-native-git", gitExecutable: "/usr/bin/git", gitVersion: "2.39.5",
-    repositories: [], identities: [], projectRegistrars: [hostRole("registrar")],
+    projectRegistrars: [hostRole("registrar")],
     projectRootImporters: [hostRole("importer")], projectRootReadIssuers: [hostRole("reader")],
     workspaceWriteIssuers: [hostRole("writer")],
     humanReviewers: [{ reviewerId: "owner", ...credential("reviewer-owner") }], hostPromoters: [hostRole("promoter")],

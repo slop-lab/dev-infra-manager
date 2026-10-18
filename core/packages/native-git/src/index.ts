@@ -1,17 +1,4 @@
 export {
-  NativeGitConfigError,
-  nativeGitReviewPolicySchema,
-  nativeGitServiceConfigSchema,
-  parseNativeGitServiceConfig,
-  repositoryKey
-} from "./config.js";
-export type {
-  NativeGitIdentity,
-  NativeGitRepository,
-  NativeGitReviewPolicy,
-  NativeGitServiceConfig
-} from "./config.js";
-export {
   NativeGitBundleConfigError,
   parseNativeGitBundleConfig
 } from "./bundle-config.js";
@@ -50,12 +37,10 @@ export type {
   CandidateExecutionDescriptor
 } from "./candidate-execution-schema.js";
 export type { WorkflowCompiler, WorkflowJob, NativeCandidateRequiredJob } from "./workflowCompiler.js";
-export { loadNativeCandidateJobInputs } from "./native-candidate-job-inputs.js";
 export type {
   NativeCandidateBlobIdentity,
   NativeCandidateJobInputPlanEntry,
   NativeCandidateJobInputs,
-  NativeCandidateJobInputsRequest,
   NativeCandidateScriptIdentity
 } from "./native-candidate-job-inputs.js";
 export { loadAuthoritativeNativeCandidateJobInputs } from "./authoritative-native-candidate-job-inputs.js";

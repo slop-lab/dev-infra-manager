@@ -143,6 +143,8 @@ describe("control-plane private source staging", () => {
 
   it("rejects obsolete, missing, and unknown native role fields without changing operator input", async () => {
     const mutations = [
+      { ...nativeServiceConfig(), repositories: [] },
+      { ...nativeServiceConfig(), identities: [] },
       { ...nativeServiceConfig(), schemaVersion: 5 },
       Object.fromEntries(Object.entries(nativeServiceConfig()).filter(([key]) => key !== "projectRegistrars")),
       Object.fromEntries(Object.entries(nativeServiceConfig()).filter(([key]) => key !== "projectRootImporters")),

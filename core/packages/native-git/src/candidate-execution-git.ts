@@ -1,8 +1,6 @@
 import { execFile } from "node:child_process";
-import { join } from "node:path";
 import { promisify } from "node:util";
-import type { NativeGitServiceConfig } from "./config.js";
-import { assertGitExecutableIdentity, assertGitVersion, type GitExecutableIdentity } from "./repository.js";
+import { assertGitExecutableIdentity, type GitExecutableIdentity } from "./repository.js";
 import { CandidateExecutionError } from "./candidate-execution-schema.js";
 
 const execute = promisify(execFile);
@@ -26,18 +24,6 @@ export type CandidateObjectTuple = {
   readonly candidateCommit: string;
   readonly candidateTree: string;
 };
-
-export async function openCandidateGitReader(
-  config: Pick<NativeGitServiceConfig, "gitExecutable" | "gitVersion" | "storageRoot">,
-  projectId: string,
-  repositoryId: string
-): Promise<CandidateGitReader> {
-  return {
-    executable: config.gitExecutable,
-    repositoryPath: join(config.storageRoot, projectId, `${repositoryId}.git`),
-    identity: await assertGitVersion(config)
-  };
-}
 
 export async function assertCandidateObjects(
   reader: CandidateGitReader,

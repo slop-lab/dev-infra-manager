@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
-import type { NativeGitIdentity, NativeGitServiceConfig } from "./config.js";
+import type { GitRepositoryRuntime } from "./repository.js";
 import type { NativeGitRoute } from "./routing.js";
 
 const MAX_REQUEST_BYTES = 256 * 1024 * 1024;
@@ -122,8 +122,9 @@ export function serveGitBackend(
 }
 
 type GitBackendRequest = {
-  readonly config: Pick<NativeGitServiceConfig, "gitExecutable" | "storageRoot">;
-  readonly identity: Pick<NativeGitIdentity, "role" | "username"> & { readonly workspaceId?: string };
+  readonly config: Pick<GitRepositoryRuntime, "gitExecutable" | "storageRoot">;
+  readonly identity: { readonly role: "reader"; readonly username: string }
+    | { readonly role: "writer"; readonly username: string; readonly workspaceId: string };
   readonly route: NativeGitRoute;
   readonly request: IncomingMessage;
   readonly response: ServerResponse;

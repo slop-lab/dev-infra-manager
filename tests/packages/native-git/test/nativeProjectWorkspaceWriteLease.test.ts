@@ -137,17 +137,8 @@ describe("native Project workspace write lease", () => {
     database.prepare("UPDATE native_project_root_import SET policy_json = ?, policy_sha256 = ?")
       .run(policyJson, createHash("sha256").update(policyJson).digest("hex"));
     database.close();
-    const restarted = await startFinalizeService(fixture.root);
-
-    // When
-    const response = await fetch(`${restarted.origin}/v1/projects/project-a/workspace-write-leases`, {
-      method: "POST",
-      headers: { authorization: workspaceWriteIssuerAuthorization, "content-type": "application/json" },
-      body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId })
-    });
-
-    // Then
-    expect(response.status).toBe(409);
+    // When / Then
+    await expect(startFinalizeService(fixture.root)).rejects.toThrow(/policy/);
   });
 
   it("requires the exact route, issuer role, root repository, generation, and workspace ID", async () => {

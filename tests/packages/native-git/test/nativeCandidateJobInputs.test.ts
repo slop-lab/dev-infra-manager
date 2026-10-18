@@ -1,10 +1,8 @@
+import { readNativeCandidateJobInputsFromGit } from "../../../../core/packages/native-git/src/native-candidate-job-inputs.js";
 import { candidateArgv } from "@slop-lab/dim-plugin-ci-workflows";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  loadNativeCandidateJobInputs
-} from "../../../../core/packages/native-git/src/index.js";
 import { git } from "../../../support/gitCommands.js";
 import {
   integrationScript,
@@ -20,14 +18,14 @@ afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
 });
 
-describe("native schema-4 candidate job inputs", () => {
+describe("candidate job inputs", () => {
   it.each(["sha1", "sha256"] as const)("returns deterministic identity-only inputs from a real %s repository", async (format) => {
     // Given
     const fixture = await startFixture(format);
     const refsBefore = await refs(fixture);
 
     // When
-    const result = await loadNativeCandidateJobInputs(fixture.config, fixture.input, dimWorkflowCompiler);
+    const result = await readNativeCandidateJobInputsFromGit(fixture.reader, fixture.input, dimWorkflowCompiler);
 
     // Then
     expect(result).toEqual({

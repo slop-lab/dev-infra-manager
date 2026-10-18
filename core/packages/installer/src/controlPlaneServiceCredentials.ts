@@ -16,13 +16,11 @@ export function serviceCredentialValues(
 ): ServiceConfigurationValues {
   const native = exactRecord(nativeValue, [
     "schemaVersion", "serviceId", "host", "port", "storageRoot", "gitExecutable", "gitVersion",
-    "repositories", "identities", "projectRegistrars", "projectRootImporters", "projectRootReadIssuers",
+    "projectRegistrars", "projectRootImporters", "projectRootReadIssuers",
     "workspaceWriteIssuers", "humanReviewers", "hostPromoters", "ci"
   ], "native Git service config");
   if (native.schemaVersion !== 7 || native.serviceId !== "native-main" || native.host !== "0.0.0.0"
-    || native.port !== 8080 || native.storageRoot !== "/var/lib/dim-native-git"
-    || !Array.isArray(native.repositories) || native.repositories.length !== 0
-    || !Array.isArray(native.identities) || native.identities.length !== 0) {
+    || native.port !== 8080 || native.storageRoot !== "/var/lib/dim-native-git") {
     throw new ControlPlaneSourceError("native Git service config is not a bundle schema-7 config");
   }
   const projectRegistrars = hostCredentials(native.projectRegistrars, "native Git Project registrar");

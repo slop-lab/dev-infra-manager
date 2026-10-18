@@ -61,7 +61,7 @@ export async function initializeNativeBundleRuntime(
     gitIdentity
   });
   for (const imported of readNativeProjectRootImportsFromDatabase(state.database)) {
-    if (imported.policyFormat === "authoritative-v1") assertConfiguredHumanReviewers(config, imported.policy);
+    assertConfiguredHumanReviewers(config, imported.policy);
   }
   await Promise.all(readNativeProjectRegistrationsFromDatabase(state.database).map(async (registration) => {
     const repository = join(options.stateDirectory, registration.projectId, `${registration.rootRepositoryId}.git`);

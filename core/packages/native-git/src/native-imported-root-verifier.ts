@@ -55,7 +55,7 @@ export async function verifyImportedRootReadOnly(input: ImportedRootInput): Prom
     || registration.rootRepositoryId !== imported.rootRepositoryId) {
     throw new NativeProjectRootImportStateError("native Project imported root registration binding is invalid");
   }
-  const currentHead = readCurrentHead(input.state.database, imported);
+  const currentHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, imported.projectId);
   const repository = join(input.stateDirectory, input.projectId, "root.git");
   await assertStableStorage(input, registration, imported, repository);
   await inspectImportedNativeRootReadOnly({
@@ -73,30 +73,13 @@ export async function verifyImportedRootReadOnly(input: ImportedRootInput): Prom
   const current = requireImportedRoot(input);
   const currentRegistration = readNativeProjectRegistrationsFromDatabase(input.state.database)
     .find((entry) => entry.projectId === input.projectId);
-  const rereadHead = readCurrentHead(input.state.database, current);
+  const rereadHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, current.projectId);
   if (JSON.stringify(current) !== JSON.stringify(imported)
     || JSON.stringify(currentRegistration) !== JSON.stringify(registration)
     || JSON.stringify(rereadHead) !== JSON.stringify(currentHead)) {
     throw new NativeProjectRootImportStateError("native Project imported root changed during proof");
   }
   return { imported, currentHead, repository };
-}
-
-function readCurrentHead(
-  databasePath: string,
-  imported: NativeProjectRootImportInstalled
-): NativeProjectRootCurrentHead {
-  if (imported.policyFormat === "authoritative-v1") {
-    return readNativeProjectRootCurrentHeadFromDatabase(databasePath, imported.projectId);
-  }
-  return {
-    projectId: imported.projectId,
-    sequence: 0,
-    protectedRef: imported.protectedRef,
-    commit: imported.expectedCommit,
-    tree: imported.resolvedTree,
-    policyDigest: imported.policyDigest
-  };
 }
 
 function assertActive(input: LiveImportedRootInput): void {

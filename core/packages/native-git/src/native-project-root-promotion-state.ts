@@ -7,11 +7,9 @@ import {
 import type { NativeProjectRootImport, NativeProjectRootImportInstalled } from "./native-project-root-import-codec.js";
 import { assertNativeProjectRootImportRows } from "./native-project-root-import-state.js";
 import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-import-transitions.js";
-import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";
 
-type AuthoritativeNativeProjectRootImport = NativeProjectRootImportInstalled & {
-  readonly policyFormat: "authoritative-v1";
-  readonly policy: NativeImportedRootPolicy;
+type PromotableNativeProjectRoot = NativeProjectRootImportInstalled & {
+  readonly phase: "root-imported";
 };
 
 const transitionColumns = `project_id, transition_id, import_nonce, sequence, review_id, protected_ref,
@@ -181,7 +179,7 @@ export function readNativeProjectRootPromotionFinalized(
 }
 
 function foldCurrentHead(
-  imported: AuthoritativeNativeProjectRootImport,
+  imported: PromotableNativeProjectRoot,
   transitions: readonly NativeProjectRootPromotionTransition[],
   generations: ReadonlySet<string>
 ): NativeProjectRootCurrentHead {
@@ -195,7 +193,7 @@ function foldCurrentHead(
 }
 
 function assertNextTransition(
-  imported: AuthoritativeNativeProjectRootImport,
+  imported: PromotableNativeProjectRoot,
   current: NativeProjectRootCurrentHead,
   transition: NativeProjectRootPromotionTransition,
   generations: ReadonlySet<string>
@@ -219,7 +217,7 @@ function assertNextTransition(
   }
 }
 
-function initialHead(imported: AuthoritativeNativeProjectRootImport): NativeProjectRootCurrentHead {
+function initialHead(imported: PromotableNativeProjectRoot): NativeProjectRootCurrentHead {
   if (imported.expectedCommit.length !== imported.resolvedTree.length) {
     throw new NativeProjectRootPromotionStateError("native Project imported root object formats conflict");
   }
@@ -229,11 +227,11 @@ function initialHead(imported: AuthoritativeNativeProjectRootImport): NativeProj
 
 function requirePromotableImport(
   imported: NativeProjectRootImport | undefined
-): AuthoritativeNativeProjectRootImport {
-  if (imported === undefined || imported.phase !== "root-imported" || imported.policyFormat !== "authoritative-v1") {
+): PromotableNativeProjectRoot {
+  if (imported === undefined || imported.phase !== "root-imported") {
     throw new NativeProjectRootPromotionStateError("native Project root promotion requires an authoritative import");
   }
-  return imported;
+  return { ...imported, phase: "root-imported" };
 }
 
 function selectTransitions(

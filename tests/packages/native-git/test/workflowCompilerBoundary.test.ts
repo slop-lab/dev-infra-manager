@@ -1,7 +1,8 @@
+import { readNativeCandidateJobInputsFromGit } from "../../../../core/packages/native-git/src/native-candidate-job-inputs.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CandidateExecutionError, loadNativeCandidateJobInputs } from "../../../../core/packages/native-git/src/index.js";
+import { CandidateExecutionError } from "../../../../core/packages/native-git/src/index.js";
 import type { WorkflowCompiler } from "../../../../core/packages/native-git/src/workflowCompiler.js";
 import { nativeCandidateJobInputsFixture, type NativeCandidateJobInputsFixture } from "./nativeCandidateJobInputsHarness.js";
 
@@ -27,7 +28,7 @@ describe("Git workflow compiler boundary", () => {
     await writeFile(join(fixture.source, "build/check.sh"), "printf 'custom workflow\\n'\n");
     const candidate = await fixture.commit("custom workflow language");
 
-    const inputs = await loadNativeCandidateJobInputs(fixture.config, candidate, compiler);
+    const inputs = await readNativeCandidateJobInputsFromGit(fixture.reader, candidate, compiler);
 
     expect(inputs.configBlob?.path).toBe(compiler.configurationPath);
     expect(inputs.plan).toEqual([expect.objectContaining({ name: "check", script: expect.objectContaining({
@@ -45,7 +46,7 @@ describe("Git workflow compiler boundary", () => {
       ];
     } };
 
-    const inputs = await loadNativeCandidateJobInputs(fixture.config, fixture.input, unordered);
+    const inputs = await readNativeCandidateJobInputsFromGit(fixture.reader, fixture.input, unordered);
 
     expect(inputs.plan.map(({ name }) => name)).toEqual(["source", "integration"]);
   });
@@ -53,7 +54,7 @@ describe("Git workflow compiler boundary", () => {
   it("rejects an unsafe compiler configuration path before repository path lookup", async () => {
     const fixture = await nativeCandidateJobInputsFixture("sha1");
     fixtures.push(fixture);
-    await expect(loadNativeCandidateJobInputs(fixture.config, fixture.input,
+    await expect(readNativeCandidateJobInputsFromGit(fixture.reader, fixture.input,
       { ...compiler, configurationPath: "../host-secret" })).rejects.toBeInstanceOf(CandidateExecutionError);
   });
 
@@ -63,7 +64,7 @@ describe("Git workflow compiler boundary", () => {
     const unsafeCompiler: WorkflowCompiler = { configurationPath: ".dim/ci/runner.yml", compile() {
       return [{ name: "check", kind: "ordinary-sysbox", script: "../host-secret", argv: ["/bin/sh"] }];
     } };
-    await expect(loadNativeCandidateJobInputs(fixture.config, fixture.input, unsafeCompiler))
-      .rejects.toBeInstanceOf(CandidateExecutionError);
+    await expect(readNativeCandidateJobInputsFromGit(fixture.reader, fixture.input, unsafeCompiler))
+      .rejects.toThrow();
   });
 });

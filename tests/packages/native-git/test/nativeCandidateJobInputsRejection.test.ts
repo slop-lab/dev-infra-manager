@@ -1,11 +1,9 @@
+import { readNativeCandidateJobInputsFromGit } from "../../../../core/packages/native-git/src/native-candidate-job-inputs.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  CandidateExecutionError,
-  loadNativeCandidateJobInputs
-} from "../../../../core/packages/native-git/src/index.js";
+import { CandidateExecutionError } from "../../../../core/packages/native-git/src/index.js";
 import { git } from "../../../support/gitCommands.js";
 import {
   nativeCandidateJobInputsFixture,
@@ -19,40 +17,23 @@ afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
 });
 
-describe("native schema-4 candidate job input rejection", () => {
-  it("rejects stale heads, foreign repositories, commit/tree mismatch, and extra request fields", async () => {
+describe("candidate job input rejection", () => {
+  it("rejects stale protected heads, missing protected refs, and commit/tree mismatches", async () => {
     // Given
     const fixture = await startFixture();
     await writeFile(join(fixture.source, "moved.txt"), "moved\n");
     await fixture.commit("move protected head");
     const malformed = [
       fixture.input,
-      { ...fixture.input, repositoryId: "foreign" },
       { ...fixture.input, protectedRef: "refs/heads/foreign" },
       { ...fixture.input, candidateTree: "0".repeat(fixture.input.candidateTree.length) },
-      { ...fixture.input, candidateCommit: "0".repeat(fixture.input.candidateCommit.length) },
-      { ...fixture.input, unexpected: true }
+      { ...fixture.input, candidateCommit: "0".repeat(fixture.input.candidateCommit.length) }
     ];
 
     // When / Then
     for (const input of malformed) {
-      await expect(loadNativeCandidateJobInputs(fixture.config, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
+      await expect(readNativeCandidateJobInputsFromGit(fixture.reader, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
     }
-  });
-
-  it("accepts candidate jobs outside the registered protected policy", async () => {
-    // Given: the registered protected policy requires only the ordinary job.
-    const fixture = await startFixture();
-    const config = { ...fixture.config, repositories: fixture.config.repositories.map((repository) => ({
-      ...repository,
-      reviewPolicies: repository.reviewPolicies?.map((policy) => ({ ...policy, requiredJobNames: ["source"] }))
-    })) };
-
-    // When
-    const result = await loadNativeCandidateJobInputs(config, fixture.input, dimWorkflowCompiler);
-
-    // Then
-    expect(result.plan.map(({ name }) => name)).toEqual(["source", "integration"]);
   });
 
   it.each([
@@ -73,7 +54,7 @@ describe("native schema-4 candidate job input rejection", () => {
     const input = await fixture.commit(`nonregular ${path}`, mode !== "160000");
 
     // When / Then
-    await expect(loadNativeCandidateJobInputs(fixture.config, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
+    await expect(readNativeCandidateJobInputsFromGit(fixture.reader, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
   });
 
   it.each([
@@ -86,16 +67,16 @@ describe("native schema-4 candidate job input rejection", () => {
     const input = await fixture.commit(`oversized ${path}`);
 
     // When / Then
-    await expect(loadNativeCandidateJobInputs(fixture.config, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
+    await expect(readNativeCandidateJobInputsFromGit(fixture.reader, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
   });
 
-  it("wraps arbitrary Git failures in a stable typed error", async () => {
+  it("reports missing Git objects as candidate read failures", async () => {
     // Given
     const fixture = await startFixture();
     const input = { ...fixture.input, candidateCommit: "f".repeat(fixture.input.candidateCommit.length) };
 
     // When
-    const failure = loadNativeCandidateJobInputs(fixture.config, input, dimWorkflowCompiler);
+    const failure = readNativeCandidateJobInputsFromGit(fixture.reader, input, dimWorkflowCompiler);
 
     // Then
     await expect(failure).rejects.toMatchObject({

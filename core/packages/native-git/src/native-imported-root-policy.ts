@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { nativeGitReviewPolicySchema, type NativeGitReviewPolicy } from "./config.js";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const jobName = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
@@ -32,10 +31,6 @@ export const nativeImportedRootPolicySchema = z.object({
 }).strict().readonly();
 
 export type NativeImportedRootPolicy = z.infer<typeof nativeImportedRootPolicySchema>;
-export type StoredImportedRootPolicy =
-  | { readonly policyFormat: "authoritative-v1"; readonly policy: NativeImportedRootPolicy }
-  | { readonly policyFormat: "legacy-import-only"; readonly policy: NativeGitReviewPolicy };
-
 export function parseAuthoritativeImportedRootPolicy(value: unknown): NativeImportedRootPolicy {
   const result = nativeImportedRootPolicySchema.safeParse(value);
   if (!result.success) throw result.error;
@@ -57,17 +52,6 @@ export function parseAuthoritativeImportedRootPolicy(value: unknown): NativeImpo
       protectedRef: normalized.protectedRef, ...reviewers
     })) throw new ImportedRootPolicyError();
   return normalized;
-}
-
-export function parseLegacyImportedRootPolicy(value: unknown): NativeGitReviewPolicy {
-  const result = nativeGitReviewPolicySchema.safeParse(value);
-  if (!result.success) throw result.error;
-  assertUnique(result.data.requiredJobNames);
-  assertUnique(result.data.requiredReviewerIds);
-  for (const rule of result.data.pathReviewerRules) assertUnique(rule.reviewerIds);
-  return { ...result.data, requiredJobNames: [...result.data.requiredJobNames].sort(),
-    requiredReviewerIds: [...result.data.requiredReviewerIds].sort(),
-    pathReviewerRules: normalizeRules(result.data.pathReviewerRules) };
 }
 
 function normalizeRules(rules: readonly z.infer<typeof pathRule>[]): readonly z.infer<typeof pathRule>[] {

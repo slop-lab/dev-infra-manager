@@ -541,7 +541,7 @@ process.send?.({ kind: "ready", remote: remote.toString() });`;
       .run(policyJson, createHash("sha256").update(policyJson).digest("hex"));
     database.close();
     // When / Then
-    await expect(startFinalizeService(fixture.root)).rejects.toThrow(/legacy imported-root policy/);
+    await expect(startFinalizeService(fixture.root)).rejects.toThrow(/policy/);
     expect(await publishedReviewNames(fixture.root)).toHaveLength(1);
   });
 });

@@ -29,8 +29,6 @@ export function idleNativeConfig() {
     storageRoot: "/var/lib/dim-native-git",
     gitExecutable: "/usr/bin/git",
     gitVersion: realGitVersion,
-    repositories: [],
-    identities: [],
     projectRegistrars: [],
     projectRootImporters: [],
     projectRootReadIssuers: [],

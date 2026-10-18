@@ -1,11 +1,6 @@
 import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { executionSourceCredentialsSchema } from "./execution-protocol.js";
-import {
-  nativeGitIdentitySchema,
-  nativeGitRepositorySchema,
-  nativeGitServiceConfigSchema
-} from "./config.js";
 
 const identifier = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const credentialUsername = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/);
@@ -52,10 +47,14 @@ const hostPromoter = z.object({
   password: projectRegistrarToken
 }).strict().readonly();
 
-const nativeBundleConfigSchema = nativeGitServiceConfigSchema.unwrap().extend({
+const nativeBundleConfigSchema = z.object({
   schemaVersion: z.literal(7),
-  repositories: z.array(nativeGitRepositorySchema).readonly(),
-  identities: z.array(nativeGitIdentitySchema).readonly(),
+  serviceId: z.literal("native-main"),
+  host: z.string().min(1),
+  port: z.number().int().min(0).max(65_535),
+  storageRoot: z.string().startsWith("/"),
+  gitExecutable: z.string().startsWith("/"),
+  gitVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
   projectRegistrars: z.array(projectRegistrar).readonly(),
   projectRootImporters: z.array(projectRootImporter).readonly(),
   projectRootReadIssuers: z.array(projectRootReadIssuer).readonly(),
@@ -79,12 +78,6 @@ export function parseNativeGitBundleConfig(input: unknown): NativeGitBundleConfi
   }
   if (config.storageRoot !== "/var/lib/dim-native-git") {
     throw new NativeGitBundleConfigError("native Git bundle storage root must be /var/lib/dim-native-git");
-  }
-  if (config.repositories.length !== 0) {
-    throw new NativeGitBundleConfigError("native Git bundle repository registry must be empty");
-  }
-  if (config.identities.length !== 0) {
-    throw new NativeGitBundleConfigError("native Git bundle identity registry must be empty");
   }
   assertDistinctCredentials(Object.values(config.ci), [
     ...config.projectRegistrars.flatMap((entry) => [entry.username, entry.password]),

@@ -57,7 +57,7 @@ export async function verifyAuthoritativeWorkspaceRoot(
   projectId: string,
   ownerHostId: string
 ): Promise<void> {
-  const live = await verifyLiveImportedRoot({
+  await verifyLiveImportedRoot({
     activated: input.activated(),
     activationTokenDigest: input.activationTokenDigest,
     expectedGenerationId: input.expectedGenerationId,
@@ -68,7 +68,5 @@ export async function verifyAuthoritativeWorkspaceRoot(
     state: input.state,
     stateDirectory: input.stateDirectory
   });
-  if (live.imported.policyFormat !== "authoritative-v1") {
-    throw new NativeProjectRootImportStateError("legacy imported-root policy cannot authorize workspace writes");
-  }
+
 }

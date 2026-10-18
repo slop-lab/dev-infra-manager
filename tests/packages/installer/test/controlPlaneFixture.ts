@@ -32,8 +32,6 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
     storageRoot: "/var/lib/dim-native-git",
     gitExecutable: "/usr/bin/git",
     gitVersion: "2.39.5",
-    repositories: [],
-    identities: [],
     projectRegistrars: [],
     projectRootImporters: [],
     projectRootReadIssuers: [],

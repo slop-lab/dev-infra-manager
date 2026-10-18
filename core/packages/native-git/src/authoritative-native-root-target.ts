@@ -4,7 +4,6 @@ import { assertNativeGitBundleStateActive, readNativeProjectRegistrations,
   type NativeGitBundleState } from "./native-bundle-state.js";
 import { CandidateExecutionError } from "./candidate-execution-schema.js";
 import { verifyLiveImportedRoot } from "./native-imported-root-verifier.js";
-import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";
 import type { NativeProjectRootImportInstalled } from "./native-project-root-import-codec.js";
 import type { NativeProjectRootCurrentHead } from "./native-project-root-promotion-state.js";
 import type { GitExecutableIdentity } from "./repository.js";
@@ -28,10 +27,7 @@ export type AuthoritativeNativeCandidateRuntime = {
 export type AuthoritativeNativeRootTarget = {
   readonly repository: string;
   readonly currentHead: NativeProjectRootCurrentHead;
-  readonly imported: NativeProjectRootImportInstalled & {
-    readonly policyFormat: "authoritative-v1";
-    readonly policy: NativeImportedRootPolicy;
-  };
+  readonly imported: NativeProjectRootImportInstalled;
 };
 
 export async function resolveAuthoritativeNativeRootTarget(
@@ -62,9 +58,6 @@ export async function resolveAuthoritativeNativeRootTarget(
       state: runtime.state,
       stateDirectory: dirname(runtime.state.database)
     });
-    if (imported.policyFormat !== "authoritative-v1") {
-      throw new CandidateExecutionError("legacy imported-root policy cannot authorize native root access");
-    }
     assertNativeGitBundleStateActive(runtime.state);
     return { imported, currentHead, repository };
   } catch (error) {

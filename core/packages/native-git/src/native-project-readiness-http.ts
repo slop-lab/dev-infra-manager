@@ -62,8 +62,8 @@ export async function handleNativeProjectReadinessHttp(
       gitIdentity: input.gitIdentity, ownerHostId: issuer.hostId, projectId,
       state: input.state, stateDirectory: input.stateDirectory
     });
-    const policy = live.imported.policyFormat === "authoritative-v1" ? live.imported.policy : undefined;
-    if (policy === undefined || body.repositoryId !== live.imported.rootRepositoryId
+    const policy = live.imported.policy;
+    if (body.repositoryId !== live.imported.rootRepositoryId
       || body.protectedRef !== live.currentHead.protectedRef || body.policyRevision !== policy.policyRevision
       || body.requiredReviewRevision !== policy.requiredReviewRevision
       || body.requiredJobSetRevision !== policy.requiredJobSetRevision) {

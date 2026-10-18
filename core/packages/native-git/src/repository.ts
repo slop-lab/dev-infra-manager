@@ -3,8 +3,19 @@ import { constants } from "node:fs";
 import { chmod, lstat, mkdir, open, readFile } from "node:fs/promises";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import type { NativeGitRepository, NativeGitServiceConfig } from "./config.js";
-import { NativeGitConfigError } from "./config.js";
+
+export interface GitRepositoryRuntime {
+  readonly gitExecutable: string;
+  readonly gitVersion: string;
+  readonly storageRoot: string;
+}
+export interface GitRepositoryTarget {
+  readonly projectId: string;
+  readonly repositoryId: string;
+}
+export class NativeGitRepositoryError extends Error {
+  readonly name = "NativeGitRepositoryError";
+}
 
 const execute = promisify(execFile);
 const gitMetadataProcessOptions = { maxBuffer: 4096, timeout: 10_000 } as const;
@@ -33,7 +44,7 @@ export type GitExecutableIdentity = {
   readonly changed: bigint;
 };
 
-type GitConfig = Pick<NativeGitServiceConfig, "gitExecutable" | "gitVersion">;
+type GitConfig = Pick<GitRepositoryRuntime, "gitExecutable" | "gitVersion">;
 
 export async function assertGitVersion(config: GitConfig): Promise<GitExecutableIdentity> {
   const identity = await inspectGitExecutable(config.gitExecutable);
@@ -42,7 +53,7 @@ export async function assertGitVersion(config: GitConfig): Promise<GitExecutable
     ...gitMetadataProcessOptions
   });
   if (stdout.trim() !== `git version ${config.gitVersion}`) {
-    throw new NativeGitConfigError(`expected Git ${config.gitVersion}, received ${stdout.trim()}`);
+    throw new NativeGitRepositoryError(`expected Git ${config.gitVersion}, received ${stdout.trim()}`);
   }
   return identity;
 }
@@ -52,13 +63,13 @@ export async function assertGitExecutableIdentity(path: string, expected: GitExe
   if (actual.device !== expected.device || actual.inode !== expected.inode || actual.mode !== expected.mode
     || actual.owner !== expected.owner || actual.size !== expected.size || actual.modified !== expected.modified
     || actual.changed !== expected.changed) {
-    throw new NativeGitConfigError("configured Git executable changed after startup validation");
+    throw new NativeGitRepositoryError("configured Git executable changed after startup validation");
   }
 }
 
 export async function initializeNativeRepository(
-  config: Pick<NativeGitServiceConfig, "storageRoot" | "gitExecutable" | "gitVersion">,
-  repository: NativeGitRepository
+  config: Pick<GitRepositoryRuntime, "storageRoot" | "gitExecutable" | "gitVersion">,
+  repository: GitRepositoryTarget
 ): Promise<string> {
   await assertGitVersion(config);
   const storageRoot = resolve(config.storageRoot);
@@ -72,7 +83,7 @@ export async function initializeNativeRepository(
   await chmod(projectRoot, 0o700);
   try {
     const stat = await lstat(repositoryPath);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new NativeGitConfigError("registered repository must be a directory");
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new NativeGitRepositoryError("registered repository must be a directory");
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     await execute(config.gitExecutable, ["init", "--shared=0600", "--bare", "--initial-branch=main", repositoryPath], { env: { LC_ALL: "C" } });
@@ -88,7 +99,7 @@ export async function initializeNativeRepository(
   const hookFile = await open(hookPath, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o700)
     .catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ELOOP") {
-        throw new NativeGitConfigError("registered repository policy hook must not be a symbolic link");
+        throw new NativeGitRepositoryError("registered repository policy hook must not be a symbolic link");
       }
       throw error;
     });
@@ -103,8 +114,8 @@ export async function initializeNativeRepository(
 }
 
 export async function assertRegisteredRepository(
-  config: Pick<NativeGitServiceConfig, "storageRoot" | "gitExecutable">,
-  repository: NativeGitRepository
+  config: Pick<GitRepositoryRuntime, "storageRoot" | "gitExecutable">,
+  repository: GitRepositoryTarget
 ): Promise<void> {
   const root = resolve(config.storageRoot);
   const projectRoot = join(root, repository.projectId);
@@ -112,7 +123,7 @@ export async function assertRegisteredRepository(
   await assertTrustedDirectoryChain(root);
   await assertDirectory(projectRoot, "Project repository root");
   await assertDirectory(repositoryPath, "registered repository");
-  if (!repositoryPath.startsWith(`${root}${sep}`)) throw new NativeGitConfigError("registered repository escapes the storage root");
+  if (!repositoryPath.startsWith(`${root}${sep}`)) throw new NativeGitRepositoryError("registered repository escapes the storage root");
   const hooksPath = join(repositoryPath, "hooks");
   await assertDirectory(hooksPath, "repository hooks directory");
   const hookPath = join(hooksPath, "pre-receive");
@@ -120,41 +131,41 @@ export async function assertRegisteredRepository(
   const hookBytes = await readFile(hookPath, "utf8");
   if (!hookStat.isFile() || hookStat.isSymbolicLink() || (hookStat.mode & 0o777) !== 0o700
     || hookBytes !== hook || dirname(hookPath) !== join(repositoryPath, "hooks")) {
-    throw new NativeGitConfigError("registered repository policy hook is invalid");
+    throw new NativeGitRepositoryError("registered repository policy hook is invalid");
   }
   const { stdout } = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--path", "--get", "core.hooksPath"], {
     env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" }
   });
-  if (stdout.trim() !== hooksPath) throw new NativeGitConfigError("registered repository hooks path is invalid");
+  if (stdout.trim() !== hooksPath) throw new NativeGitRepositoryError("registered repository hooks path is invalid");
   const fsck = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--bool", "--get", "receive.fsckObjects"], {
     env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
     ...gitMetadataProcessOptions
   });
-  if (fsck.stdout.trim() !== "true") throw new NativeGitConfigError("registered repository receive fsck policy is invalid");
+  if (fsck.stdout.trim() !== "true") throw new NativeGitRepositoryError("registered repository receive fsck policy is invalid");
   const fullPathname = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--get", "receive.fsck.fullPathname"], {
     env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
     ...gitMetadataProcessOptions
   });
-  if (fullPathname.stdout.trim() !== "error") throw new NativeGitConfigError("registered repository pathname fsck policy is invalid");
+  if (fullPathname.stdout.trim() !== "error") throw new NativeGitRepositoryError("registered repository pathname fsck policy is invalid");
   const shared = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--get", "--default", "", "core.sharedRepository"], {
     env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
     ...gitMetadataProcessOptions
   });
-  if (shared.stdout.trim() !== "0600") throw new NativeGitConfigError("registered repository Git creation permissions must be private");
+  if (shared.stdout.trim() !== "0600") throw new NativeGitRepositoryError("registered repository Git creation permissions must be private");
 }
 
 async function assertOwnedDirectory(path: string, label: string): Promise<void> {
   const stat = await lstat(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== serviceUid()) {
-    throw new NativeGitConfigError(`${label} must be a caller-owned directory`);
+    throw new NativeGitRepositoryError(`${label} must be a caller-owned directory`);
   }
   await chmod(path, 0o700);
 }
 
 async function assertDirectory(path: string, label: string): Promise<void> {
   const stat = await lstat(path);
-  if (stat.isSymbolicLink()) throw new NativeGitConfigError(`${label} must not be a symbolic link`);
-  if (!stat.isDirectory()) throw new NativeGitConfigError(`${label} must be a directory`);
+  if (stat.isSymbolicLink()) throw new NativeGitRepositoryError(`${label} must not be a symbolic link`);
+  if (!stat.isDirectory()) throw new NativeGitRepositoryError(`${label} must be a directory`);
 }
 
 async function assertTrustedDirectoryChain(path: string): Promise<void> {
@@ -167,18 +178,18 @@ async function assertTrustedDirectoryChain(path: string): Promise<void> {
     const stickyRootDirectory = stat.uid === 0n && (stat.mode & 0o1000n) !== 0n;
     if (stat.isSymbolicLink() || !stat.isDirectory() || (stat.uid !== 0n && stat.uid !== BigInt(serviceUid()))
       || ((stat.mode & 0o022n) !== 0n && !stickyRootDirectory)) {
-      throw new NativeGitConfigError(`untrusted directory in configured path: ${current}`);
+      throw new NativeGitRepositoryError(`untrusted directory in configured path: ${current}`);
     }
   }
 }
 
 async function inspectGitExecutable(path: string): Promise<GitExecutableIdentity> {
-  if (resolve(path) !== path) throw new NativeGitConfigError("configured Git executable path must be canonical");
+  if (resolve(path) !== path) throw new NativeGitRepositoryError("configured Git executable path must be canonical");
   await assertTrustedDirectoryChain(dirname(path));
   const stat = await lstat(path, { bigint: true });
   if (stat.isSymbolicLink() || !stat.isFile() || (stat.mode & 0o111n) === 0n
     || (stat.mode & 0o022n) !== 0n || (stat.uid !== 0n && stat.uid !== BigInt(serviceUid()))) {
-    throw new NativeGitConfigError("configured Git executable must be a trusted executable regular file");
+    throw new NativeGitRepositoryError("configured Git executable must be a trusted executable regular file");
   }
   return {
     device: stat.dev,
@@ -193,6 +204,6 @@ async function inspectGitExecutable(path: string): Promise<GitExecutableIdentity
 
 function serviceUid(): number {
   const uid = process.getuid?.();
-  if (uid === undefined) throw new NativeGitConfigError("native Git requires a Linux user identity");
+  if (uid === undefined) throw new NativeGitRepositoryError("native Git requires a Linux user identity");
   return uid;
 }

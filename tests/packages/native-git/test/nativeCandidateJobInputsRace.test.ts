@@ -1,10 +1,11 @@
+import { assertGitVersion } from "../../../../core/packages/native-git/src/repository.js";
+import { readNativeCandidateJobInputsFromGit } from "../../../../core/packages/native-git/src/native-candidate-job-inputs.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CandidateExecutionError,
-  loadNativeCandidateJobInputs
 } from "../../../../core/packages/native-git/src/index.js";
 import { git, gitExecutable } from "../../../support/gitCommands.js";
 import {
@@ -18,7 +19,7 @@ afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
 });
 
-describe("native schema-4 candidate job input ref race", () => {
+describe("candidate job input ref race", () => {
   it("rejects protected-ref movement after all scripts are read", async () => {
     // Given
     const fixture = await nativeCandidateJobInputsFixture("sha1");
@@ -43,10 +44,11 @@ case " $* " in
 esac
 exec ${gitExecutable} "$@"
 `, { mode: 0o700 });
-    const config = { ...fixture.config, gitExecutable: executable };
+    const reader = { ...fixture.reader, executable,
+      identity: await assertGitVersion({ ...fixture.gitRuntime, gitExecutable: executable }) };
 
     // When
-    const pending = loadNativeCandidateJobInputs(config, fixture.input, dimWorkflowCompiler);
+    const pending = readNativeCandidateJobInputsFromGit(reader, fixture.input, dimWorkflowCompiler);
     await vi.waitFor(() => expect(access(entered)).resolves.toBeUndefined());
     await writeFile(join(fixture.source, "moved.txt"), "moved\n");
     await fixture.commit("move protected head during final script read");

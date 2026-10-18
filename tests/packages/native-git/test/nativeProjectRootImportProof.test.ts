@@ -56,7 +56,7 @@ describe("native Project imported root proof", () => {
     });
   });
 
-  it("restarts and proves a completed legacy import without accepting it as current kind authority", async () => {
+  it("rejects obsolete stored policy without changing the import or protected ref", async () => {
     // Given
     const fixture = await finalizedFixture("proof-legacy-quarantine");
     await closeFinalizeService(fixture.service);
@@ -72,17 +72,10 @@ describe("native Project imported root proof", () => {
     database.prepare("UPDATE native_project_root_import SET policy_json = ?, policy_sha256 = ?")
       .run(policyJson, legacyDigest);
     database.close();
-    const restarted = await startFinalizeService(fixture.root);
-    const expectedReceipt = { ...fixture.receipt, policyDigest: legacyDigest };
     const before = await readFile(databasePath);
 
-    // When
-    const legacyProof = await proof(restarted.origin, "project-a", authorization);
-    const replay = await uploadRootBundle(restarted.origin, fixture.bundle);
-
-    // Then
-    await expectExactProof(legacyProof, expectedReceipt, fixture.bundle.tree);
-    expect(replay.status).toBe(409);
+    // When / Then
+    await expect(startFinalizeService(fixture.root)).rejects.toThrow(/policy/);
     expect(await readFile(databasePath)).toEqual(before);
     expect((await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root), "rev-parse",
       "refs/heads/main"])).stdout.trim()).toBe(fixture.bundle.commit);

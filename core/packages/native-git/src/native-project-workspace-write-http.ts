@@ -193,7 +193,7 @@ export function createNativeProjectWorkspaceWriteService(
           await assertRegisteredRepository({
             gitExecutable: input.gitExecutable,
             storageRoot: input.stateDirectory
-          }, { projectId: route.projectId, repositoryId: "root", reviewPolicies: [] });
+          }, { projectId: route.projectId, repositoryId: "root" });
         } catch (error) {
           if (input.operations.isOpen()) sendVerificationFailure(response, error);
           return;

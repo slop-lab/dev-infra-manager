@@ -31,7 +31,7 @@ describe("authoritative imported-root target", () => {
     expect(target.imported).toMatchObject({ serviceId: "native-main", projectId: "project-a",
       rootRepositoryId: "root", protectedRef: "refs/heads/main",
       expectedCommit: fixture.bundle.commit, resolvedTree: fixture.bundle.tree,
-      policyFormat: "authoritative-v1", policy: authoritativePolicy() });
+      policy: authoritativePolicy() });
     expect(target.imported.policy.requiredJobs.map(({ name, kind }) => ({ name, kind }))).toEqual([
       { name: "integration", kind: "qemu" },
       { name: "source", kind: "ordinary-sysbox" }
@@ -85,14 +85,8 @@ describe("authoritative imported-root target", () => {
       .run(policyJson, createHash("sha256").update(policyJson).digest("hex"));
     database.close();
     const before = await proofBytes(fixture.root);
-    const reopened = await candidateContext(fixture.root);
-
-    // When
-    const read = resolveAuthoritativeNativeRootTarget(reopened.context, { projectId: "project-a" });
-
-    // Then
-    await expect(read).rejects.toBeInstanceOf(CandidateExecutionError);
+    // When / Then
+    await expect(candidateContext(fixture.root)).rejects.toThrow(/policy/);
     expect(await proofBytes(fixture.root)).toEqual(before);
-    await reopened.close();
   });
 });

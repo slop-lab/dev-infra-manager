@@ -27,7 +27,7 @@ export async function createOperatorFixture(input) {
   const nativeConfig = (projectRegistrars) => JSON.stringify({
     schemaVersion: 7, serviceId: "native-main", host: "0.0.0.0", port: 8080,
     storageRoot: "/var/lib/dim-native-git", gitExecutable: "/usr/bin/git", gitVersion: "2.39.5",
-    repositories: [], identities: [], projectRegistrars, projectRootImporters: [],
+    projectRegistrars, projectRootImporters: [],
     projectRootReadIssuers: [], workspaceWriteIssuers: [], humanReviewers: [], hostPromoters: [], ordinaryCi: {
       endpoint: "http://ordinary-ci:8080", serviceId: "ordinary-main",
       query: { username: "native-query", password: credentials.query },
