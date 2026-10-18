@@ -150,6 +150,7 @@ export function webConfig(input: {
       username: humanReviewer.username,
       password: humanReviewer.password,
       projectId: "project-a",
+      generationId,
       reviewerId: humanReviewer.reviewerId
     },
     accounts: (input.accounts ?? [WEB_USERNAME]).map((username) => ({
@@ -171,7 +172,7 @@ export async function authenticatedSession(fixture: WebFixture): Promise<{
   return { cookie, csrfToken: stringField(body, "csrfToken") };
 }
 
-async function availablePort(): Promise<number> {
+export async function availablePort(): Promise<number> {
   const server = createServer();
   server.listen(0, "127.0.0.1");
   await once(server, "listening");

@@ -16,13 +16,30 @@ administrator revocation, host administration, promotion, CI reporting,
 arbitrary native operations, or a generic proxy. Deployment integration remains
 outside this slice.
 
+## First use
+
+After `dim managed control-plane connect SETUP --endpoint ORIGIN`, use its private
+reviewer connection to generate a browser login and service configuration:
+
+```sh
+dim-reviewer-web init SETUP/connections/reviewer.json --project my-project --output ~/.config/dim/reviewer-web.json --port 9081
+dim-reviewer-web serve ~/.config/dim/reviewer-web.json
+```
+
+Save the generated browser password. Initialization verifies the live reviewer
+and generation, writes a new mode-0600 configuration without overwriting an
+existing file, and stores only a password hash for browser login. Forward client
+loopback port 9081 over SSH when running this service on a remote host. To publish
+it through HTTPS, set the private configuration's `publicOrigin` to that exact
+origin and use a trusted reverse proxy.
+
 ## Security boundary
 
 The service binds only to `127.0.0.1` or `::1`. Before binding, it authenticates
 to native `GET /v1/human-reviewer-identity` and requires the configured human
 reviewer ID to match. Every review operation pins the attested generation using
-`X-Dim-Generation-Id`; a control-plane generation change fails closed until the
-web service restarts and attests again. The configured Project limits browser
+`X-Dim-Generation-Id`; a control-plane generation change fails closed until a new connection is initialized and the
+web service restarts. The configured Project limits browser
 access to its `root` repository; native Git checks that the authenticated human
 is required by each exact review's policy. Identity attestation does not grant
 Project access. Native credential failure or unavailability fails startup.
@@ -103,6 +120,7 @@ Schema 1 has this shape:
     "username": "human-reviewer-owner",
     "password": "replace-with-native-random-secret",
     "projectId": "project-a",
+    "generationId": "CONTROL_PLANE_GENERATION_SHA256",
     "reviewerId": "owner"
   },
   "accounts": [{

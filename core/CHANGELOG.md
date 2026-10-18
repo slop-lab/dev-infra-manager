@@ -25,9 +25,9 @@ not apply to the base workspace path.
 
 - Reviewer web now uses the installed control plane's human-reviewer APIs to
   find published proposal evidence, inspect diffs, approve and revoke decisions.
-  Requests pin the attested control-plane generation and reject a generation
-  change until the reviewer service restarts.
-
+  Initialize private web configuration and a browser login directly from the
+  generated reviewer connection. Requests pin that control-plane generation;
+  a generation change requires reconnecting and initializing a current config.
 
 - Select a recommended core-managed workspace environment when the immutable
   root has no custom lifecycle files. Setup now requires a host-side

@@ -71,7 +71,7 @@ export function renderReview(elements, review, reviewerId) {
 }
 
 export function clearReview(elements) {
-  for (const container of [elements.staleReasons, elements.metadata, elements.changedPaths, elements.patchCode, elements.repository]) {
+  for (const container of [elements.staleReasons, elements.metadata, elements.changedPaths, elements.patchCode]) {
     container.replaceChildren();
   }
   for (const input of [elements.password, elements.proposalRef, elements.reviewId]) input.value = "";

@@ -36,6 +36,7 @@ const configSchema = z.object({
     username: z.string().min(1).max(256),
     password: z.string().min(16).max(1024),
     projectId: identifier,
+    generationId: z.string().regex(/^[0-9a-f]{64}$/),
     reviewerId: identifier
   }).strict().readonly(),
   accounts: z.array(z.object({
@@ -61,7 +62,17 @@ const configSchema = z.object({
 
 export type ReviewerWebConfig = z.infer<typeof configSchema>;
 
+export function parseReviewerWebConfig(input: unknown): ReviewerWebConfig {
+  const parsed = configSchema.safeParse(input);
+  if (!parsed.success) throw new ReviewerWebConfigError("reviewer web configuration is invalid");
+  return parsed.data;
+}
+
 export async function loadReviewerWebConfig(path: string): Promise<ReviewerWebConfig> {
+  return parseReviewerWebConfig(await loadPrivateJson(path));
+}
+
+export async function loadPrivateJson(path: string): Promise<unknown> {
   if (!isAbsolute(path)) throw new ReviewerWebConfigError("reviewer web configuration path must be absolute");
   let handle;
   try {
@@ -75,10 +86,7 @@ export async function loadReviewerWebConfig(path: string): Promise<ReviewerWebCo
     if (uid === undefined || !stat.isFile() || stat.uid !== uid || (stat.mode & 0o777) !== 0o600 || stat.size > MAX_CONFIG_BYTES) {
       throw new ReviewerWebConfigError("reviewer web configuration must be a caller-owned mode-0600 regular file");
     }
-    const input: unknown = JSON.parse(await handle.readFile("utf8"));
-    const parsed = configSchema.safeParse(input);
-    if (!parsed.success) throw new ReviewerWebConfigError("reviewer web configuration is invalid");
-    return parsed.data;
+    return JSON.parse(await handle.readFile("utf8")) as unknown;
   } catch (error) {
     if (error instanceof ReviewerWebConfigError) throw error;
     throw new ReviewerWebConfigError("reviewer web configuration is invalid", { cause: error });

@@ -19,6 +19,8 @@ const browser = await chromium.launch({
   headless: true
 });
 const page = await browser.newPage();
+const pageErrors = [];
+page.on("pageerror", (error) => { pageErrors.push(error.message); console.error(error.message); });
 
 try {
   // Given
@@ -49,7 +51,11 @@ try {
   await page.goto(fixture.baseUrl);
   await page.locator("#login-view").waitFor({ state: "visible" });
   await login();
-  await openReview();
+  await page.getByLabel("Proposal ref").fill(fixture.native.proposalRef);
+  await page.getByRole("button", { name: "Find and open" }).click();
+  await page.locator("#review-view").waitFor({ state: "visible" });
+  assert.equal(await page.locator("#review-id").inputValue(), fixture.reviewId);
+  assert.ok((await page.locator("#patch-code").textContent()).length > 0);
 
   let releaseApproval;
   let markApprovalCommitted;
@@ -78,7 +84,7 @@ try {
   releaseApproval();
   await page.getByRole("button", { name: "Revoke approval" }).waitFor({ state: "visible" });
   await page.unroute(`**${approvalPath}`);
-  assert.equal(await page.locator("#review-status").textContent(), "Pending");
+  assert.equal(await page.locator("#review-status").textContent(), "Approved");
   assert.equal(await page.locator("#decision-status").textContent(), "Your approval is recorded for this exact review.");
 
   // When
@@ -114,7 +120,6 @@ try {
   await login();
   await expectEmptyReview();
 
-  await page.getByLabel("Protected ref").fill("refs/heads/retained-only-while-authenticated");
   await page.getByLabel("Proposal ref").fill("refs/heads/private-proposal");
 
   // When
@@ -166,7 +171,7 @@ try {
   await expectEmptyReview();
 
   // Given
-  await page.setViewportSize({ width: 900, height: 900 });
+  await page.setViewportSize({ width: 900, height: 600 });
   await openReview();
   await page.locator(".context-rail").evaluate((element) => element.scrollTo({ top: 0 }));
   const railBefore = await page.locator(".context-rail").evaluate((element) => ({
@@ -194,7 +199,7 @@ try {
   assert.ok(railBefore.scrollHeight > railBefore.clientHeight);
   assert.equal(railBefore.scrollTop, 0);
   assert.ok(railAfter.scrollTop > 0);
-  assert.ok(railAfter.openButtonBottom <= 900);
+  assert.ok(railAfter.openButtonBottom <= 600);
   assert.deepEqual(tabOrder, ["create-button", "review-id", "open-button"]);
 
   // When
@@ -203,6 +208,7 @@ try {
 
   // Then
   assert.equal(metadataColumns, 1);
+  assert.deepEqual(pageErrors, []);
 } finally {
   await browser.close();
   await fixture.close();

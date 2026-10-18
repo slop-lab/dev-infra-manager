@@ -55,7 +55,7 @@ export async function createReviewerWebServerFromConfigFile(
   try {
     await native.attest();
   } catch (error) {
-    throw new ReviewerWebStartupError("native Git reviewer identity attestation failed", { cause: error });
+    throw new ReviewerWebStartupError("native Git reviewer identity attestation failed; reconnect the control plane and initialize a current reviewer configuration", { cause: error });
   }
   return createReviewerWebServer(config, native, options);
 }

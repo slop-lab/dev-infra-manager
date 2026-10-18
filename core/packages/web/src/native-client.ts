@@ -19,7 +19,7 @@ export class NativeGitClient {
 
   async attest(): Promise<void> {
     const identity = identitySchema.parse(await this.request({ method: "GET", path: "/v1/human-reviewer-identity" }));
-    if (identity.reviewerId !== this.config.reviewerId) throw new NativeGitClientError("native Git human reviewer identity does not match configuration");
+    if (identity.reviewerId !== this.config.reviewerId || identity.generationId !== this.config.generationId) throw new NativeGitClientError("native Git human reviewer identity or control-plane generation does not match connection");
     this.generationId = identity.generationId;
   }
 

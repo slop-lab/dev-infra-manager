@@ -44,6 +44,7 @@ describe("DIM reviewer web startup policy", () => {
     const native = await startNative();
     const base = webConfig({ nativeBaseUrl: native.baseUrl(), publicOrigin: "http://127.0.0.1:40102", port: 40102 });
     const cases = [
+      { ...base, nativeGit: { ...objectField(base, "nativeGit"), generationId: "b".repeat(64) } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), password: "incorrect-password" } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), username: "admin-a", password: "admin-a-secret-1" } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), repositoryIds: ["source", "foreign"] } },
