@@ -9,6 +9,7 @@ packages:
   - core/packages/contracts/*
   - plugin-dns-cloudflare
   - plugin-external-urls
+  - plugin-ci-workflows
   - plugin-host-mirrors
   - tests
   - verification

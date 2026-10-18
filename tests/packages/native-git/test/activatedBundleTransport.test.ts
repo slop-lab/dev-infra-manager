@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -221,7 +222,7 @@ async function start(
   root: string,
   ordinaryIdentityHttpClient?: NativeGitBundleServerOptions["ordinaryIdentityHttpClient"]
 ): Promise<RunningService> {
-  const service = await configuredNativeGitBundleServer({
+  const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
     config: parseNativeGitBundleConfig(idleNativeConfig()),
     stateDirectory: root,
     readinessToken,

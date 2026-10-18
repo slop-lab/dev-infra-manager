@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,7 +36,7 @@ describe("native schema-4 candidate job input rejection", () => {
 
     // When / Then
     for (const input of malformed) {
-      await expect(loadNativeCandidateJobInputs(fixture.config, input)).rejects.toBeInstanceOf(CandidateExecutionError);
+      await expect(loadNativeCandidateJobInputs(fixture.config, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
     }
   });
 
@@ -48,7 +49,7 @@ describe("native schema-4 candidate job input rejection", () => {
     })) };
 
     // When
-    const result = await loadNativeCandidateJobInputs(config, fixture.input);
+    const result = await loadNativeCandidateJobInputs(config, fixture.input, dimWorkflowCompiler);
 
     // Then
     expect(result.plan.map(({ name }) => name)).toEqual(["source", "integration"]);
@@ -72,7 +73,7 @@ describe("native schema-4 candidate job input rejection", () => {
     const input = await fixture.commit(`nonregular ${path}`, mode !== "160000");
 
     // When / Then
-    await expect(loadNativeCandidateJobInputs(fixture.config, input)).rejects.toBeInstanceOf(CandidateExecutionError);
+    await expect(loadNativeCandidateJobInputs(fixture.config, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
   });
 
   it.each([
@@ -85,7 +86,7 @@ describe("native schema-4 candidate job input rejection", () => {
     const input = await fixture.commit(`oversized ${path}`);
 
     // When / Then
-    await expect(loadNativeCandidateJobInputs(fixture.config, input)).rejects.toBeInstanceOf(CandidateExecutionError);
+    await expect(loadNativeCandidateJobInputs(fixture.config, input, dimWorkflowCompiler)).rejects.toBeInstanceOf(CandidateExecutionError);
   });
 
   it("wraps arbitrary Git failures in a stable typed error", async () => {
@@ -94,7 +95,7 @@ describe("native schema-4 candidate job input rejection", () => {
     const input = { ...fixture.input, candidateCommit: "f".repeat(fixture.input.candidateCommit.length) };
 
     // When
-    const failure = loadNativeCandidateJobInputs(fixture.config, input);
+    const failure = loadNativeCandidateJobInputs(fixture.config, input, dimWorkflowCompiler);
 
     // Then
     await expect(failure).rejects.toMatchObject({

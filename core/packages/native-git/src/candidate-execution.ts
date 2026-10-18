@@ -39,7 +39,7 @@ export async function loadCandidateOrdinaryExecution(
   const descriptor = candidateOrdinaryExecutionDescriptorSchema.parse({
     ...descriptorRequest,
     evidenceClass,
-    configBlob: { objectId: configBlob.objectId, sha256: sha256(configBlob.bytes) },
+    configBlob: { path: ".dim/ci/runner.yml", objectId: configBlob.objectId, sha256: sha256(configBlob.bytes) },
     script: { path: job.script, objectId: scriptBlob.objectId, sha256: sha256(scriptBlob.bytes) },
     argv: candidateArgv,
     jobImage: jobBaseImage
@@ -86,6 +86,7 @@ export function descriptorDigest(descriptor: CandidateOrdinaryExecutionDescripto
     descriptor.admissionGeneration,
     descriptor.jobName,
     descriptor.evidenceClass,
+    descriptor.configBlob.path,
     descriptor.configBlob.objectId,
     descriptor.configBlob.sha256,
     descriptor.script.path,

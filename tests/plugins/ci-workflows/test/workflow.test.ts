@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   candidateArgv,
-  parseNativeCandidateJobConfig
-} from "../../../../core/packages/native-git/src/index.js";
+  parseDimWorkflow
+} from "../../../../plugin-ci-workflows/src/index.js";
 
 function validConfig(): string {
   return `schemaVersion: 4
@@ -28,7 +28,7 @@ describe("native schema-4 candidate job config", () => {
     const bytes = Buffer.from(validConfig(), "utf8");
 
     // When
-    const config = parseNativeCandidateJobConfig(bytes);
+    const config = parseDimWorkflow(bytes);
 
     // Then
     expect(config).toEqual({
@@ -62,7 +62,7 @@ describe("native schema-4 candidate job config", () => {
       .replace("  jobs:\nqemu:", "  jobs: {}\nqemu:"));
 
     // When
-    const config = parseNativeCandidateJobConfig(bytes);
+    const config = parseDimWorkflow(bytes);
 
     // Then
     expect(config.ordinary.jobs).toEqual({});
@@ -78,7 +78,7 @@ describe("native schema-4 candidate job config", () => {
     ));
 
     // When: both job-kind sets are matched against trusted policy.
-    const config = parseNativeCandidateJobConfig(bytes);
+    const config = parseDimWorkflow(bytes);
 
     // Then: only the QEMU job points to its selected script.
     expect(config.qemu.jobs.integration?.script).toBe(".dim/ci/jobs/suite.bash");
@@ -90,7 +90,7 @@ describe("native schema-4 candidate job config", () => {
     const bytes = Buffer.from(validConfig().replace("    source:", "    extra:\n      script: .dim/ci/jobs/extra.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n    source:"));
 
     // When
-    const config = parseNativeCandidateJobConfig(bytes);
+    const config = parseDimWorkflow(bytes);
 
     // Then
     expect(config.plan.map(({ name, kind }) => ({ name, kind }))).toEqual([

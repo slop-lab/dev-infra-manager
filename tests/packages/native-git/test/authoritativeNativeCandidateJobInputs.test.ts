@@ -43,7 +43,7 @@ describe("authoritative imported-root candidate job inputs", () => {
 
     // Then
     expect(result).toEqual({
-      configBlob: {
+      configBlob: { path: ".dim/ci/runner.yml",
         objectId: await objectId(fixture, ".dim/ci/runner.yml"),
         sha256: digest(matchingRunner())
       },

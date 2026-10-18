@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
@@ -27,12 +28,11 @@ export const authoritativeNativeRequiredJobSchema = authoritativeNativeRequiredJ
 const blobIdentityObject = z.object({ objectId, sha256 }).strict();
 const blobIdentity = blobIdentityObject.readonly();
 const plannedJob = authoritativeNativeRequiredJobObject.extend({
-  script: blobIdentityObject.extend({ path: z.string().regex(/^\.dim\/ci\/jobs\/[a-z][a-z0-9-]{0,62}\.bash$/) }).strict().readonly(),
-  argv: z.tuple([z.literal("/bin/bash"), z.literal("--noprofile"), z.literal("--norc"),
-    z.literal("/run/dim/job/script")]).readonly()
+  script: blobIdentityObject.extend({ path: z.string().refine(isCandidatePath) }).strict().readonly(),
+  argv: z.array(z.string()).refine(isCandidateArgv).readonly()
 }).strict().readonly();
 const planning = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("valid"), configBlob: blobIdentity.nullable(), jobs: z.array(plannedJob).max(64).readonly() }).strict().readonly(),
+  z.object({ status: z.literal("valid"), configBlob: blobIdentityObject.extend({ path: z.string().refine(isCandidatePath) }).strict().readonly().nullable(), jobs: z.array(plannedJob).max(64).readonly() }).strict().readonly(),
   z.object({ status: z.literal("invalid"), reason: z.literal("invalid-candidate-job-plan") }).strict().readonly()
 ]);
 

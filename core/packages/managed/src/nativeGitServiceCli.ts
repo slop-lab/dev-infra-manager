@@ -1,14 +1,15 @@
 #!/usr/bin/env node
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
-import { parseNativeGitBundle, parseNativeGitBundleConfig } from "./bundle-config.js";
-import { configuredNativeGitBundleServer } from "./native-bundle-server.js";
-import { inspectNativeGitBundleState } from "./native-bundle-state.js";
-import { configuredNativeGitIdleServer } from "./native-idle-service.js";
-import { assertGitVersion } from "./repository.js";
-import { checkNativeGitServiceReadiness } from "./serviceReadiness.js";
+import { parseNativeGitBundle, parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
+import { configuredNativeGitBundleServer } from "@slop-lab/dim-native-git/service";
+import { inspectNativeGitBundleState } from "@slop-lab/dim-native-git/service";
+import { configuredNativeGitIdleServer } from "@slop-lab/dim-native-git/service";
+import { assertGitVersion } from "@slop-lab/dim-native-git/service";
+import { checkNativeGitServiceReadiness } from "@slop-lab/dim-native-git/service";
 
 const configPath = "/run/secrets/service.json";
 const stateDirectory = "/var/lib/dim-native-git";
@@ -58,6 +59,7 @@ export async function runNativeGitServiceCli(
     const expectedGenerationId = parseGenerationId(arguments_[2]);
     const config = parseNativeGitBundleConfig(await readJson(configPath, 0o444));
     const options = {
+      workflowCompiler: dimWorkflowCompiler,
       config,
       stateDirectory,
       readinessToken: await readToken(readinessTokenPath, "readiness"),

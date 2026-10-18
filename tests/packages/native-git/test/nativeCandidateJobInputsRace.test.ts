@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -45,7 +46,7 @@ exec ${gitExecutable} "$@"
     const config = { ...fixture.config, gitExecutable: executable };
 
     // When
-    const pending = loadNativeCandidateJobInputs(config, fixture.input);
+    const pending = loadNativeCandidateJobInputs(config, fixture.input, dimWorkflowCompiler);
     await vi.waitFor(() => expect(access(entered)).resolves.toBeUndefined());
     await writeFile(join(fixture.source, "moved.txt"), "moved\n");
     await fixture.commit("move protected head during final script read");

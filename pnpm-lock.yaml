@@ -94,6 +94,21 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+  plugin-ci-workflows:
+    dependencies:
+      yaml:
+        specifier: 2.8.3
+        version: 2.8.3
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      "@types/node":
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
   core/packages/web:
     dependencies:
       zod:
@@ -183,6 +198,12 @@ importers:
         version: 2.8.3
   core/packages/managed:
     dependencies:
+      "@slop-lab/dim-native-git":
+        specifier: workspace:0.10.0
+        version: link:../native-git
+      "@slop-lab/dim-plugin-ci-workflows":
+        specifier: workspace:0.10.0
+        version: link:../../../plugin-ci-workflows
       "@slop-lab/dim-controller-proxy":
         specifier: workspace:0.10.0
         version: link:../controller-proxy

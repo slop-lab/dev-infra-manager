@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
 import { candidateArgv } from "./candidate-execution-schema.js";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
@@ -9,10 +10,9 @@ const generation = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 const positiveInteger = z.string().regex(/^[1-9][0-9]*$/);
 const image = z.string().regex(/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/);
 const protectedRef = z.string().max(1024).refine((value) => safeHeadRef(value));
-const scriptPath = z.string().refine((value) => value.startsWith(".dim/ci/jobs/")
-  && value.endsWith(".bash") && !value.includes("\\")
-  && value.split("/").every((component) => component.length > 0 && component !== "." && component !== ".."));
+const scriptPath = z.string().refine(isCandidatePath);
 const blobIdentity = z.object({
+  path: scriptPath,
   objectId,
   sha256: z.string().regex(/^sha256:[0-9a-f]{64}$/)
 }).strict().readonly();
@@ -46,12 +46,7 @@ export const qemuExecutionDescriptorSchema = z.object({
     objectId,
     sha256: z.string().regex(/^sha256:[0-9a-f]{64}$/)
   }).strict().readonly(),
-  argv: z.tuple([
-    z.literal(candidateArgv[0]),
-    z.literal(candidateArgv[1]),
-    z.literal(candidateArgv[2]),
-    z.literal(candidateArgv[3])
-  ]).readonly(),
+  argv: z.array(z.string()).refine(isCandidateArgv).readonly(),
   jobImage: image
 }).strict().readonly();
 
@@ -71,6 +66,7 @@ export function qemuExecutionDescriptorDigest(descriptor: QemuExecutionDescripto
     descriptor.admissionGeneration,
     descriptor.jobName,
     descriptor.evidenceClass,
+    descriptor.configBlob.path,
     descriptor.configBlob.objectId,
     descriptor.configBlob.sha256,
     descriptor.script.path,

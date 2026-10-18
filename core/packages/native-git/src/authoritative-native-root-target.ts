@@ -13,7 +13,10 @@ const selectorSchema = z.object({
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)
 }).strict().readonly();
 
+import type { WorkflowCompiler } from "./workflowCompiler.js";
+
 export type AuthoritativeNativeCandidateRuntime = {
+  readonly workflowCompiler: WorkflowCompiler;
   readonly activated: () => boolean;
   readonly activationTokenDigest: string;
   readonly expectedGenerationId: string;

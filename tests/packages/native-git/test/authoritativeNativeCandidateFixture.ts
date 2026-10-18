@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -63,6 +64,7 @@ export async function candidateContext(
       expectedGenerationId: servingGeneration,
       gitExecutable: "/usr/bin/git",
       gitIdentity,
+      workflowCompiler: dimWorkflowCompiler,
       state
     },
     close: () => state.owner.release()

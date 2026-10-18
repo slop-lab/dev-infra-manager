@@ -26,6 +26,15 @@
       ],
       "@slop-lab/dim-managed/cli": [
         "../core/packages/managed/src/cli/managed-cli.ts"
+      ],
+      "@slop-lab/dim-plugin-ci-workflows": [
+        "../plugin-ci-workflows/src/index.ts"
+      ],
+      "@slop-lab/dim-native-git/service": [
+        "../core/packages/native-git/src/service.ts"
+      ],
+      "@slop-lab/dim-native-git/workflow": [
+        "../core/packages/native-git/src/workflowCompiler.ts"
       ]
     }
   },

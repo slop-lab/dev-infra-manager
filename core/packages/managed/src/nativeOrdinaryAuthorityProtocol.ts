@@ -42,9 +42,9 @@ export type NativeOrdinaryDescriptor = {
   readonly runnerBaseImage: string;
   readonly bounds: NativeResourceBounds;
   readonly evidenceClass: "candidate-controlled";
-  readonly configBlob: { readonly objectId: string; readonly sha256: string };
+  readonly configBlob: { readonly path: string; readonly objectId: string; readonly sha256: string };
   readonly script: { readonly objectId: string; readonly sha256: string; readonly path: string };
-  readonly argv: readonly ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"];
+  readonly argv: readonly string[];
   readonly jobImage: string;
 };
 
@@ -79,7 +79,7 @@ export function nativeDescriptorDigest(descriptor: NativeOrdinaryDescriptor): st
     descriptor.projectId, descriptor.repositoryId, descriptor.protectedRef, descriptor.expectedProtectedHead,
     descriptor.candidateCommit, descriptor.candidateTree, descriptor.policyRevision, descriptor.requiredReviewRevision,
     descriptor.requiredJobSetRevision, descriptor.admissionGeneration, descriptor.jobName, descriptor.evidenceClass,
-    descriptor.configBlob.objectId, descriptor.configBlob.sha256, descriptor.script.path, descriptor.script.objectId,
+    descriptor.configBlob.path, descriptor.configBlob.objectId, descriptor.configBlob.sha256, descriptor.script.path, descriptor.script.objectId,
     descriptor.script.sha256, ...descriptor.argv, descriptor.jobImage, descriptor.runnerBaseImage, descriptor.bounds.cpu,
     descriptor.bounds.memoryBytes, descriptor.bounds.pids, descriptor.bounds.wallClockSeconds, descriptor.bounds.outputBytes
   ];

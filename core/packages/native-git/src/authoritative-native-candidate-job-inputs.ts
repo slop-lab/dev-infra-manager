@@ -43,7 +43,8 @@ export async function loadAuthoritativeNativeCandidateJobInputs(
         repositoryPath: verified.repository,
         identity: runtime.gitIdentity
       },
-      target
+      target,
+      runtime.workflowCompiler
     );
     const current = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.data.projectId });
     if (current.repository !== verified.repository

@@ -1,0 +1,13 @@
+import { copyFile, readFile, writeFile } from "node:fs/promises";
+import { publishPackageVersion } from "../../core/scripts/publish-package-version.mjs";
+const output = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+output.version = publishPackageVersion(output.version);
+delete output.private;
+delete output.scripts;
+delete output.devDependencies;
+output.main = "./index.js";
+output.types = "./index.d.ts";
+output.exports = { ".": { types: "./index.d.ts", import: "./index.js" } };
+await writeFile(new URL("../dist/package.json", import.meta.url), `${JSON.stringify(output, null, 2)}\n`);
+await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
+await copyFile(new URL("../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));

@@ -154,7 +154,7 @@ async function claimedExecution(
     expectedProtectedHead: fixture.initialHead,
     candidateCommit: candidate.commit,
     candidateTree: candidate.tree,
-    configBlob: {
+    configBlob: { path: ".dim/ci/runner.yml",
       objectId: await gitObjectId(fixture, candidate.commit, ".dim/ci/runner.yml"),
       sha256: digest(candidate.config)
     },

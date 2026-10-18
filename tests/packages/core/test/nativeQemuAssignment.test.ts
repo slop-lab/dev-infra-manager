@@ -13,7 +13,7 @@ const descriptor = {
   expectedProtectedHead: "2".repeat(40), candidateCommit: "3".repeat(40), candidateTree: "4".repeat(40),
   policyRevision: "policy-1", requiredReviewRevision: "review-1", requiredJobSetRevision: "jobs-1",
   evidenceClass: "candidate-controlled" as const,
-  configBlob: { objectId: "5".repeat(40), sha256: `sha256:${"6".repeat(64)}` },
+  configBlob: { path: ".dim/ci/runner.yml", objectId: "5".repeat(40), sha256: `sha256:${"6".repeat(64)}` },
   script: { path: ".dim/ci/jobs/integration.bash", objectId: "7".repeat(40),
     sha256: `sha256:${createHash("sha256").update(script).digest("hex")}` },
   argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const,

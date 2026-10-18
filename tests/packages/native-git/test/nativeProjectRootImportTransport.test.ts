@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -193,7 +194,7 @@ async function start(root: string): Promise<RunningService> {
     ],
     humanReviewers: [{ reviewerId: "owner", username: "human-reviewer-owner", password: bundleSecrets.humanReviewer }]
   };
-  const service = await configuredNativeGitBundleServer({
+  const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
     config: parseNativeGitBundleConfig(config), stateDirectory: root, readinessToken, activationToken,
     expectedGenerationId: generationId
   });

@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -153,7 +154,7 @@ describe("operator Project registrar transport", () => {
 async function start(registrars: readonly NativeGitProjectRegistrar[], existingRoot?: string): Promise<RunningService> {
   const root = existingRoot ?? await mkdtemp(join(tmpdir(), "dim-native-registrar-"));
   if (existingRoot === undefined) roots.push(root);
-  const service = await configuredNativeGitBundleServer({
+  const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
     config: parseNativeGitBundleConfig({ ...idleNativeConfig(), projectRegistrars: registrars }), stateDirectory: root,
     readinessToken, activationToken, expectedGenerationId: generationId
   });

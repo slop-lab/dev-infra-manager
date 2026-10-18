@@ -14,9 +14,11 @@ const output = minifyPackageJson(source, {
 output.version = publishPackageVersion(source.version);
 output.types = "./index.d.ts";
 output.exports = {
-  ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" }
+  ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" },
+  "./service": { types: "./service.d.ts", import: "./service.js" },
+  "./workflow": { types: "./workflowCompiler.d.ts", import: "./workflowCompiler.js" }
 };
-output.bin = { "dim-native-git": "cli.js", "dim-service": "serviceCli.js" };
+output.bin = { "dim-native-git": "cli.js" };
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);

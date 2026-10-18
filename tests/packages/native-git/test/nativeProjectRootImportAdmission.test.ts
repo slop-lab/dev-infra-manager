@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { request as httpRequest } from "node:http";
 import { watch, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,7 +18,7 @@ const importer = {
 describe("native root import request admission", () => {
   it("rejects unauthenticated and concurrent uploads promptly while an authorized body remains incomplete", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-native-root-import-admission-"));
-    const service = await configuredNativeGitBundleServer({
+    const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
       config: parseNativeGitBundleConfig({
         ...idleNativeConfig(),
         projectRegistrars: [{ hostId: "host-a", username: "registrar-a", password: bundleSecrets.projectRegistrar }],

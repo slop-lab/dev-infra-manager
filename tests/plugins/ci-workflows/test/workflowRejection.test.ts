@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  CandidateExecutionError,
-  parseNativeCandidateJobConfig
-} from "../../../../core/packages/native-git/src/index.js";
-import { parseCandidateConfig } from "../../../../core/packages/native-git/src/candidate-execution-schema.js";
+  WorkflowSyntaxError,
+  parseDimWorkflow
+} from "../../../../plugin-ci-workflows/src/index.js";
 
 function validConfig(): string {
   return `schemaVersion: 4
@@ -21,17 +20,10 @@ qemu:
 }
 
 function rejects(bytes: Buffer): void {
-  expect(() => parseNativeCandidateJobConfig(bytes)).toThrow(CandidateExecutionError);
+  expect(() => parseDimWorkflow(bytes)).toThrow(WorkflowSyntaxError);
 }
 
 describe("native schema-4 candidate job config rejection", () => {
-  it("keeps the active schema-3 parser from accepting schema 4", () => {
-    // Given
-    const bytes = Buffer.from(validConfig(), "utf8");
-
-    // When / Then
-    expect(() => parseCandidateConfig(bytes)).toThrow(CandidateExecutionError);
-  });
 
   it.each([
     ["schema 3", validConfig().replace("schemaVersion: 4", "schemaVersion: 3")],

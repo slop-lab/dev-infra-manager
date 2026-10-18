@@ -87,6 +87,7 @@ export async function configuredNativeGitBundleServer(
   });
   const transportOperations = createRootReadOperationGate(16);
   const authoritativeRuntime = {
+    workflowCompiler: options.workflowCompiler,
     activated: () => activated,
     activationTokenDigest,
     expectedGenerationId: options.expectedGenerationId,

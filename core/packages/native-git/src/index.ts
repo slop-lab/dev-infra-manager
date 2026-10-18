@@ -60,12 +60,7 @@ export type {
   CandidateOrdinaryExecutionDescriptor,
   CandidateOrdinaryExecutionRequest
 } from "./candidate-execution-schema.js";
-export { parseNativeCandidateJobConfig } from "./native-candidate-job-config.js";
-export type {
-  NativeCandidateJobConfig,
-  NativeCandidateJobPlanEntry,
-  NativeCandidateRequiredJob
-} from "./native-candidate-job-config.js";
+export type { WorkflowCompiler, WorkflowJob, NativeCandidateRequiredJob } from "./workflowCompiler.js";
 export { loadNativeCandidateJobInputs } from "./native-candidate-job-inputs.js";
 export type {
   NativeCandidateBlobIdentity,

@@ -14,7 +14,6 @@ import type { NativeRootCiHostJournal } from "./nativeRootCiHostJournal.js";
 import type { NativeHostPrivateRootIdentity } from "./nativeOrdinaryExecutorRoot.js";
 import type { NativeHostResultRequest } from "./nativeOrdinaryResultProtocol.js";
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
-import { verifyAndMaterializeNativeRootCiCandidate } from "./nativeRootCiHostCandidateVerifier.js";
 
 export type NativeRootCiHostExecutionDependencies = {
   readonly client: NativeRootCiHostClient;
@@ -55,8 +54,7 @@ export async function executeNativeRootCiHostClaim(
       privateRoot.identity, request, requestSignal),
     recoverClaim: (request, requestSignal) => recover(dependencies, claim, active,
       privateRoot.identity, request, requestSignal),
-    randomId: dependencies.randomId,
-    verifyCandidate: verifyAndMaterializeNativeRootCiCandidate
+    randomId: dependencies.randomId
   }, { claim: legacyClaim, signal, managedPrivateRoot: { root: privateRoot,
     publishCreated: (identity) => dependencies.journal.save({ kind: "active", claim, active, privateRoot: identity }) } });
 }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { execFile, spawn } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -174,6 +175,7 @@ async function startNativeGit(
   const { stdout: gitIdentity } = await runFile(configuration.gitExecutable, ["--version"]);
   const gitVersion = gitIdentity.trim().replace(/^git version /, "");
   const service = await configuredNativeGitBundleServer({
+    workflowCompiler: dimWorkflowCompiler,
     config: parseNativeGitBundleConfig({ ...configuration, gitVersion,
       projectRegistrars: [{ hostId: "host-a", username: "registrar-a",
         password: bundleSecrets.projectRegistrar }],

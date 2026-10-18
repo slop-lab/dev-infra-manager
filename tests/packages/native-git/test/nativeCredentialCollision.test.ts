@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -34,7 +35,7 @@ describe("native Git prepared credential boundaries", () => {
         projectRootImporters: [{ hostId: "host-a", username: "root-importer-a", password }]
       });
 
-      await expect(configuredNativeGitBundleServer({
+      await expect(configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
         config, stateDirectory, readinessToken, activationToken, expectedGenerationId: generationId
       })).rejects.toThrow(/credentials must be distinct/);
       expect(await readdir(stateDirectory)).toEqual([]);
@@ -55,7 +56,7 @@ describe("native Git prepared credential boundaries", () => {
         projectRootReadIssuers: [{ hostId: "host-a", username: "root-read-issuer-a", password }]
       });
 
-      await expect(configuredNativeGitBundleServer({
+      await expect(configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
         config, stateDirectory, readinessToken, activationToken, expectedGenerationId: generationId
       })).rejects.toThrow(/credentials must be distinct/);
       expect(await readdir(stateDirectory)).toEqual([]);
@@ -76,7 +77,7 @@ describe("native Git prepared credential boundaries", () => {
         workspaceWriteIssuers: [{ hostId: "host-a", username: "workspace-write-issuer-a", password }]
       });
 
-      await expect(configuredNativeGitBundleServer({
+      await expect(configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
         config, stateDirectory, readinessToken, activationToken, expectedGenerationId: generationId
       })).rejects.toThrow(/credentials must be distinct/);
       expect(await readdir(stateDirectory)).toEqual([]);
@@ -92,7 +93,7 @@ describe("native Git prepared credential boundaries", () => {
       hostId: "host-a", username: "root-read-issuer-a", password: Buffer.alloc(32, 44).toString("base64url")
     } as const;
     try {
-      const service = await configuredNativeGitBundleServer({
+      const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
         config: parseNativeGitBundleConfig({
           ...idleNativeConfig(), projectRegistrars: [registrar], projectRootReadIssuers: [issuer]
         }),
@@ -127,6 +128,7 @@ describe("native Git prepared credential boundaries", () => {
     // Given
     const stateDirectory = await mkdtemp(join(tmpdir(), "dim-native-credential-"));
     const options = {
+    workflowCompiler: dimWorkflowCompiler,
       config: parseNativeGitBundleConfig({ ...idleNativeConfig(), projectRegistrars: [registrar] }), stateDirectory,
       readinessToken, activationToken, expectedGenerationId: generationId
     } as const;

@@ -49,7 +49,9 @@
     "@slop-lab/dim-core": "workspace:0.10.0",
     "@slop-lab/dim-controller-proxy": "workspace:0.10.0",
     "yaml": "2.8.3",
-    "commander": "14.0.0"
+    "commander": "14.0.0",
+    "@slop-lab/dim-native-git": "workspace:0.10.0",
+    "@slop-lab/dim-plugin-ci-workflows": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

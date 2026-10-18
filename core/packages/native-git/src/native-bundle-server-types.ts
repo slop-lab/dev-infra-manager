@@ -16,7 +16,10 @@ import type {
 import type { OrdinaryTerminalProvenance } from "./ordinary-current-terminal-proof.js";
 import type { NativeInstalledPromotionHooks } from "./native-installed-promotion.js";
 
+import type { WorkflowCompiler } from "./workflowCompiler.js";
+
 export type NativeGitBundleServerOptions = {
+  readonly workflowCompiler: WorkflowCompiler;
   readonly config: NativeGitBundleConfig;
   readonly stateDirectory: string;
   readonly readinessToken: string;

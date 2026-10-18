@@ -1,3 +1,4 @@
+import { isCandidatePath } from "./nativeCandidatePath.js";
 import { UserError } from "@slop-lab/dim-core";
 import { nativeDescriptorDigest } from "./nativeOrdinaryAuthorityProtocol.js";
 import type {
@@ -111,7 +112,7 @@ export function parseNativeAttemptVerification(value: unknown): NativeAttemptVer
 
 export function parseNativeDescriptor(value: unknown): NativeOrdinaryDescriptor {
   const input = exactRecord(value, descriptorKeys);
-  const blob = exactRecord(input.configBlob, ["objectId", "sha256"]);
+  const blob = exactRecord(input.configBlob, ["path", "objectId", "sha256"]);
   const script = exactRecord(input.script, ["objectId", "sha256", "path"]);
   const argv = array(input.argv, "argv");
   if (input.evidenceClass !== "candidate-controlled" || JSON.stringify(argv) !== JSON.stringify(["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"])) {
@@ -124,7 +125,7 @@ export function parseNativeDescriptor(value: unknown): NativeOrdinaryDescriptor 
     policyRevision: revision(input.policyRevision, "policy revision"), requiredReviewRevision: revision(input.requiredReviewRevision, "review revision"),
     requiredJobSetRevision: revision(input.requiredJobSetRevision, "job-set revision"), admissionGeneration: generation(input.admissionGeneration, "admission generation"),
     jobName: identifier(input.jobName, "job name"), runnerBaseImage: image(input.runnerBaseImage), bounds: resourceBounds(input.bounds),
-    evidenceClass: "candidate-controlled", configBlob: { objectId: objectId(blob.objectId), sha256: digest(blob.sha256) },
+    evidenceClass: "candidate-controlled", configBlob: { path: scriptPath(blob.path), objectId: objectId(blob.objectId), sha256: digest(blob.sha256) },
     script: { objectId: objectId(script.objectId), sha256: digest(script.sha256), path: scriptPath(script.path) },
     argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"], jobImage: image(input.jobImage)
   };
@@ -174,9 +175,8 @@ function headRef(value: unknown): string {
 }
 
 function scriptPath(value: unknown): string {
-  const path = resourceString(value, /^\.dim\/ci\/jobs\/.+\.bash$/, "script path");
-  if (path.includes("\\") || path.split("/").some((part) => part === "" || part === "." || part === "..")) throw new UserError("script path is invalid");
-  return path;
+  if (typeof value !== "string" || !isCandidatePath(value)) throw new UserError("candidate path is invalid");
+  return value;
 }
 
 function array(value: unknown, label: string): readonly unknown[] {

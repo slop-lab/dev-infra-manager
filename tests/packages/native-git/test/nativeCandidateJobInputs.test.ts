@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -26,11 +27,11 @@ describe("native schema-4 candidate job inputs", () => {
     const refsBefore = await refs(fixture);
 
     // When
-    const result = await loadNativeCandidateJobInputs(fixture.config, fixture.input);
+    const result = await loadNativeCandidateJobInputs(fixture.config, fixture.input, dimWorkflowCompiler);
 
     // Then
     expect(result).toEqual({
-      configBlob: {
+      configBlob: { path: ".dim/ci/runner.yml",
         objectId: await objectId(fixture, ".dim/ci/runner.yml"),
         sha256: sha256(nativeRunnerYaml())
       },

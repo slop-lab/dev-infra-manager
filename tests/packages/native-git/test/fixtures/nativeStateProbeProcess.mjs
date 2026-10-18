@@ -1,4 +1,4 @@
-import { runNativeGitServiceCli } from "../../../../../core/packages/native-git/dist/serviceCli.js";
+import { runNativeGitServiceCli } from "../../../../../core/packages/managed/dist/nativeGitServiceCli.js";
 
 const [stateDirectory] = process.argv.slice(2);
 if (stateDirectory === undefined) throw new TypeError("native state probe fixture requires a state directory");

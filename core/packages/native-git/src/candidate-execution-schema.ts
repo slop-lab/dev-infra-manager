@@ -1,5 +1,6 @@
 import { isScalar, parseDocument, visit } from "yaml";
 import { z } from "zod";
+import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
@@ -8,10 +9,7 @@ const generation = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 const positiveInteger = z.string().regex(/^[1-9][0-9]*$/);
 const image = z.string().regex(/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/);
 const protectedRef = z.string().max(1024).refine((value) => safeHeadRef(value));
-const scriptPath = z.string().refine((value) => {
-  if (!value.startsWith(".dim/ci/jobs/") || !value.endsWith(".bash") || value.includes("\\")) return false;
-  return value.split("/").every((component) => component.length > 0 && component !== "." && component !== "..");
-});
+const scriptPath = z.string().refine(isCandidatePath);
 
 export const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;
 
@@ -89,14 +87,9 @@ const blobIdentitySchema = z.object(blobIdentityFields).strict().readonly();
 export const candidateOrdinaryExecutionDescriptorSchema = z.object({
   ...candidateOrdinaryExecutionDescriptorFields,
   evidenceClass: z.literal("candidate-controlled"),
-  configBlob: blobIdentitySchema,
+  configBlob: z.object({ ...blobIdentityFields, path: scriptPath }).strict().readonly(),
   script: z.object({ ...blobIdentityFields, path: scriptPath }).strict().readonly(),
-  argv: z.tuple([
-    z.literal(candidateArgv[0]),
-    z.literal(candidateArgv[1]),
-    z.literal(candidateArgv[2]),
-    z.literal(candidateArgv[3])
-  ]).readonly(),
+  argv: z.array(z.string()).refine(isCandidateArgv).readonly(),
   jobImage: image
 }).strict().readonly();
 

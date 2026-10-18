@@ -82,7 +82,7 @@ describe("authoritative QEMU execution descriptor", () => {
         requiredReviewRevision: envelope.review.requiredReviewRevision,
         requiredJobSetRevision: envelope.qualityRevision,
         evidenceClass: "candidate-controlled",
-        configBlob: { objectId: configObjectId, sha256: digest(matchingRunner()) },
+        configBlob: { path: ".dim/ci/runner.yml", objectId: configObjectId, sha256: digest(matchingRunner()) },
         script: {
           path: ".dim/ci/jobs/integration.bash",
           objectId: scriptObjectId,
@@ -114,7 +114,7 @@ describe("authoritative QEMU execution descriptor", () => {
       requiredReviewRevision: "review-1",
       requiredJobSetRevision: "jobs-1",
       evidenceClass: "candidate-controlled",
-      configBlob: { objectId: "4".repeat(40), sha256: `sha256:${"5".repeat(64)}` },
+      configBlob: { path: ".dim/ci/runner.yml", objectId: "4".repeat(40), sha256: `sha256:${"5".repeat(64)}` },
       script: {
         path: ".dim/ci/jobs/integration.bash",
         objectId: "6".repeat(40),
@@ -131,7 +131,9 @@ describe("authoritative QEMU execution descriptor", () => {
     const qemuDigest = qemuExecutionDescriptorDigest(qemu);
 
     // Then
-    expect(qemuDigest).toBe("sha256:adb79854c9584b42a7988554d7552ac79c977597511f200548ed254d35f37f6f");
+    expect(qemuExecutionDescriptorDigest({ ...qemu,
+      configBlob: { ...qemu.configBlob, path: "build/other-workflow.json" }
+    })).not.toBe(qemuDigest);
     expect(qemuDigest).not.toBe(ordinaryDigest);
   });
 

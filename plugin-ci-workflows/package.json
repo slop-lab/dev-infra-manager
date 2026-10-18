@@ -1,0 +1,31 @@
+{
+  "name": "@slop-lab/dim-plugin-ci-workflows",
+  "version": "0.10.0",
+  "description": "DIM candidate workflow language compiler",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../core/scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "dependencies": {
+    "yaml": "2.8.3",
+    "zod": "4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  }
+}

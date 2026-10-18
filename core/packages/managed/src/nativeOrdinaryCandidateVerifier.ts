@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { chmod, writeFile } from "node:fs/promises";
-import { isScalar, parseDocument, visit } from "yaml";
 import { UserError } from "@slop-lab/dim-core";
 import { parseNativeDescriptor } from "./nativeOrdinaryAuthorityModel.js";
 import { nativeDescriptorDigest, type NativeOrdinaryDescriptor } from "./nativeOrdinaryAuthorityProtocol.js";
@@ -18,11 +17,6 @@ export interface NativeCandidateReadAuthority {
   materializeTree(input: { readonly projectId: string; readonly repositoryId: string; readonly commitObjectId: string; readonly treeObjectId: string; readonly destination: string; readonly signal: AbortSignal }): Promise<{ readonly commitObjectId: string; readonly treeObjectId: string }>;
 }
 
-export type NativeCandidateJob = {
-  readonly script: string;
-  readonly argv: readonly string[];
-};
-
 export type NativeCandidateVerificationInput = {
   readonly authority: NativeCandidateReadAuthority;
   readonly descriptor: NativeOrdinaryDescriptor;
@@ -30,7 +24,6 @@ export type NativeCandidateVerificationInput = {
   readonly workspace: string;
   readonly scriptFile: string;
   readonly signal: AbortSignal;
-  readonly parseJob?: (bytes: Buffer, jobName: string) => NativeCandidateJob;
 };
 
 export async function verifyAndMaterializeCandidate(input: NativeCandidateVerificationInput): Promise<void> {
@@ -54,14 +47,10 @@ export async function verifyAndMaterializeCandidate(input: NativeCandidateVerifi
     throw new NativeHostVerificationError("candidate commit does not identify the descriptor tree");
   }
   const config = await input.authority.readBlob({
-    ...identity, treeObjectId: descriptor.candidateTree, path: ".dim/ci/runner.yml", maximumBytes: 64 * 1024,
+    ...identity, treeObjectId: descriptor.candidateTree, path: descriptor.configBlob.path, maximumBytes: 64 * 1024,
     signal: input.signal
   });
   assertBlob(config, descriptor.configBlob, 64 * 1024, "config");
-  const job = (input.parseJob ?? parseCandidateJob)(config.bytes, descriptor.jobName);
-  if (job.script !== descriptor.script.path || JSON.stringify(job.argv) !== JSON.stringify(descriptor.argv)) {
-    throw new NativeHostVerificationError("candidate config does not match the descriptor");
-  }
   const script = await input.authority.readBlob({
     ...identity, treeObjectId: descriptor.candidateTree, path: descriptor.script.path, maximumBytes: 1024 * 1024,
     signal: input.signal
@@ -88,72 +77,6 @@ function assertBlob(
     || blob.objectId !== expected.objectId || sha256(blob.bytes) !== expected.sha256) {
     throw new NativeHostVerificationError(`candidate ${label} blob does not match the descriptor`);
   }
-}
-
-function parseCandidateJob(bytes: Buffer, jobName: string): NativeCandidateJob {
-  if (bytes.length > 64 * 1024 || bytes.includes(0)) throw new NativeHostVerificationError("candidate config bytes are invalid");
-  let source: string;
-  try {
-    source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch (error) {
-    if (error instanceof TypeError) throw new NativeHostVerificationError("candidate config is not UTF-8", { cause: error });
-    throw error;
-  }
-  const document = parseDocument(source, { keepSourceTokens: true, merge: false, schema: "core", strict: true, uniqueKeys: true, version: "1.2" });
-  if (document.errors.length > 0 || document.warnings.length > 0) throw new NativeHostVerificationError("candidate config is not strict YAML");
-  visit(document, {
-    Alias() { throw new NativeHostVerificationError("candidate config contains an alias"); },
-    Node(_key, node) {
-      if (node.anchor !== undefined || node.tag !== undefined) throw new NativeHostVerificationError("candidate config contains YAML metadata");
-    },
-    Pair(_key, pair) {
-      if (!isScalar(pair.key) || typeof pair.key.value !== "string" || pair.key.value === "<<") {
-        throw new NativeHostVerificationError("candidate config contains an invalid mapping key");
-      }
-    }
-  });
-  return parseConfigValue(document.toJS({ maxAliasCount: 0 }), jobName);
-}
-
-function parseConfigValue(value: unknown, jobName: string): NativeCandidateJob {
-  const root = exactRecord(value, ["schemaVersion", "ordinary"]);
-  if (root.schemaVersion !== 3) throw new NativeHostVerificationError("candidate config schemaVersion must be 3");
-  const ordinary = exactRecord(root.ordinary, ["jobs"]);
-  const jobs = record(ordinary.jobs);
-  const names = Object.keys(jobs);
-  if (names.length < 1 || names.length > 64 || names.some((name) => !/^[a-z][a-z0-9-]{0,62}$/.test(name))) {
-    throw new NativeHostVerificationError("candidate job names are invalid");
-  }
-  let selected: NativeCandidateJob | undefined;
-  for (const name of names) {
-    const job = exactRecord(jobs[name], ["script", "argv"]);
-    if (typeof job.script !== "string" || !validScriptPath(job.script)
-      || !Array.isArray(job.argv) || JSON.stringify(job.argv) !== JSON.stringify(candidateArgv)) {
-      throw new NativeHostVerificationError("candidate job is invalid");
-    }
-    if (name === jobName) selected = { script: job.script, argv: candidateArgv };
-  }
-  if (selected === undefined) throw new NativeHostVerificationError("candidate job is missing");
-  return selected;
-}
-
-const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;
-function validScriptPath(value: string): boolean {
-  return value.startsWith(".dim/ci/jobs/") && value.endsWith(".bash") && !value.includes("\\")
-    && value.split("/").every((component) => component.length > 0 && component !== "." && component !== "..");
-}
-
-function exactRecord(value: unknown, keys: readonly string[]): Readonly<Record<string, unknown>> {
-  const input = record(value);
-  if (Object.keys(input).length !== keys.length || keys.some((key) => input[key] === undefined)) {
-    throw new NativeHostVerificationError("candidate config has invalid fields");
-  }
-  return input;
-}
-
-function record(value: unknown): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new NativeHostVerificationError("candidate config must contain mappings");
-  return Object.fromEntries(Object.keys(value).map((key) => [key, Reflect.get(value, key)]));
 }
 
 function sha256(bytes: Buffer): string {

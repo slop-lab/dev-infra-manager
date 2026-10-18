@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { execFile } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -141,7 +142,7 @@ describe("native Git Project registrar client", () => {
 
 async function startNativeGit() {
   const root = await temporaryRoot("dim-native-registrar-client-service-");
-  const service = await configuredNativeGitBundleServer({
+  const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
     config: parseNativeGitBundleConfig({ ...idleNativeConfig(), projectRegistrars: [registrar] }),
     stateDirectory: root,
     readinessToken: Buffer.alloc(32, 74).toString("base64url"),

@@ -19,7 +19,7 @@ export function execution(candidateConfig = configBytes): NativeHostExecution {
     expectedProtectedHead: "1".repeat(40), candidateCommit: "2".repeat(40), candidateTree: "3".repeat(40),
     policyRevision: "policy-1", requiredReviewRevision: "review-1", requiredJobSetRevision: "jobs-1",
     admissionGeneration: "generation-1", jobName: "source", evidenceClass: "candidate-controlled",
-    configBlob: { objectId: "4".repeat(40), sha256: digest(candidateConfig) },
+    configBlob: { path: ".dim/ci/runner.yml", objectId: "4".repeat(40), sha256: digest(candidateConfig) },
     script: { path: ".dim/ci/jobs/source.bash", objectId: "5".repeat(40), sha256: digest(scriptBytes) },
     argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"],
     jobImage, runnerBaseImage: runnerImage,

@@ -38,7 +38,7 @@ describe("native candidate ordinary execution descriptors", () => {
     expect(result.descriptor).toEqual({
       ...descriptorRequest,
       evidenceClass: "candidate-controlled",
-      configBlob: { objectId: configObjectId, sha256: configSha256 },
+      configBlob: { path: ".dim/ci/runner.yml", objectId: configObjectId, sha256: configSha256 },
       script: { path: ".dim/ci/jobs/source.bash", objectId: scriptObjectId, sha256: scriptSha256 },
       argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"],
       jobImage: jobBaseImage

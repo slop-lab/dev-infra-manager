@@ -18,7 +18,7 @@ const proposalRefPattern = /^refs\/heads\/proposals\/([A-Za-z0-9_-]{43})\/(.+)$/
 export type NativeProposalRefSnapshot = ReadonlyMap<string, string>;
 
 export async function readNativeProposalRefs(
-  runtime: AuthoritativeNativeCandidateRuntime,
+  runtime: Omit<AuthoritativeNativeCandidateRuntime, "workflowCompiler">,
   projectId: string,
   workspaceId?: string
 ): Promise<NativeProposalRefSnapshot> {

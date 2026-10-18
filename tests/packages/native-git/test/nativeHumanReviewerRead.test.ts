@@ -1,3 +1,4 @@
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -87,7 +88,7 @@ describe("installed imported-root human reviewer", () => {
     });
 
     // When
-    const startup = configuredNativeGitBundleServer({
+    const startup = configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
       config,
       stateDirectory: fixture.root,
       readinessToken: Buffer.alloc(32, 41).toString("base64url"),

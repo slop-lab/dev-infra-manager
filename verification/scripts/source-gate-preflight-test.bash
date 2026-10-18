@@ -34,7 +34,7 @@ for expected in \
   "untrusted temporary directory ancestor $fixture/missing-temp: expected a real directory" \
   "missing test artifact: core/packages/controller-proxy/dist/development-service-cli.js" \
   "missing test artifact: core/packages/managed/dist/nativeOrdinaryServiceCli.js" \
-  "missing test artifact: core/packages/native-git/dist/serviceCli.js" \
+  "missing test artifact: core/packages/managed/dist/nativeGitServiceCli.js" \
   "missing test artifact: core/packages/cli/dist/cli.js"
 do
   [[ "$bad_output" == *"$expected"* ]] || fail "aggregate report omitted: $expected"
@@ -62,7 +62,7 @@ touch \
   "$fixture/root/core/packages/managed/dist/nativeOrdinaryServiceCli.js" \
   "$fixture/root/core/packages/managed/dist/nativeOrdinaryBundleConfig.js" \
   "$fixture/root/core/packages/core/dist/package.json" \
-  "$fixture/root/core/packages/native-git/dist/serviceCli.js" \
+  "$fixture/root/core/packages/managed/dist/nativeGitServiceCli.js" \
   "$fixture/root/core/packages/native-git/dist/cli.js" \
   "$fixture/root/core/packages/native-git/dist/package.json" \
   "$fixture/root/core/packages/cli/dist/cli.js" \

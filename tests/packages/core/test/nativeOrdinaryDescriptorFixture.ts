@@ -39,7 +39,7 @@ export function descriptor(projectId: string, repositoryId: string, generation: 
     runnerBaseImage,
     bounds,
     evidenceClass: "candidate-controlled",
-    configBlob: { objectId: "4".repeat(40), sha256: `sha256:${"5".repeat(64)}` },
+    configBlob: { path: ".dim/ci/runner.yml", objectId: "4".repeat(40), sha256: `sha256:${"5".repeat(64)}` },
     script: { objectId: "6".repeat(40), sha256: `sha256:${"7".repeat(64)}`, path: ".dim/ci/jobs/source.bash" },
     argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"],
     jobImage: jobBaseImage

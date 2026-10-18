@@ -18,7 +18,7 @@ const descriptor = qemuExecutionDescriptorSchema.parse({
   projectId: "project-a", repositoryId: "root", protectedRef: "refs/heads/main",
   expectedProtectedHead: "3".repeat(40), candidateCommit: "4".repeat(40), candidateTree: "5".repeat(40),
   policyRevision: "policy-a", requiredReviewRevision: "review-a", requiredJobSetRevision: "jobs-a",
-  evidenceClass: "candidate-controlled", configBlob: { objectId: "6".repeat(40), sha256: `sha256:${"7".repeat(64)}` },
+  evidenceClass: "candidate-controlled", configBlob: { path: ".dim/ci/runner.yml", objectId: "6".repeat(40), sha256: `sha256:${"7".repeat(64)}` },
   script: { path: ".dim/ci/jobs/integration.bash", objectId: "8".repeat(40), sha256: `sha256:${"9".repeat(64)}` },
   argv: candidateArgv, jobImage: `registry.example/job@sha256:${"a".repeat(64)}`
 });

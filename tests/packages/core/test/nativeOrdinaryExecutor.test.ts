@@ -1,10 +1,11 @@
+import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js";
 import { lstat } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { executeNativeHostClaim, NativeHostCleanupError, NativeHostLaunchError, NativeHostVerificationError } from "../../../../core/packages/managed/src/nativeOrdinaryExecutor.js";
 import { NativeHostImageError } from "../../../../core/packages/managed/src/nativeOrdinaryExecutorDocker.js";
 import { nativeRunnerScript } from "../../../../core/packages/managed/src/nativeOrdinaryExecutorDocker.js";
 import { parseNativeHostResultRequest } from "../../../../core/packages/managed/src/nativeOrdinaryResultProtocol.js";
-import { authority, configBytes, dependencies, execution, ExecutorRunner, jobImage, runnerImage } from "./nativeOrdinaryExecutorFixture.js";
+import { authority, dependencies, execution, ExecutorRunner, jobImage, runnerImage } from "./nativeOrdinaryExecutorFixture.js";
 
 describe("native ordinary host claim executor", () => {
   it("verifies candidate bytes and runs exact argv without authority in the job", async () => {
@@ -244,6 +245,29 @@ describe("native ordinary host claim executor", () => {
     expect(runner.calls.some((call) => call.args[0] === "run")).toBe(false);
   });
 
+  it("reads compiler-owned configuration bytes without interpreting their language", async () => {
+    const runner = new ExecutorRunner();
+    const configuration = Buffer.from(JSON.stringify({ mode: "project-check" }));
+    const input = execution(configuration);
+    const descriptor = { ...input.claim.descriptor,
+      configBlob: { ...input.claim.descriptor.configBlob, path: "build/checks.json" } };
+    const reader = authority({}, configuration);
+    let readConfiguration = false;
+    const fixture = dependencies(runner, authority({ async readBlob(request) {
+      if (request.path === "build/checks.json") {
+        readConfiguration = true;
+        return reader.readBlob({ ...request, path: ".dim/ci/runner.yml" });
+      }
+      return reader.readBlob(request);
+    } }, configuration));
+
+    const completed = await executeNativeHostClaim(fixture, { ...input, claim: { ...input.claim,
+      descriptor, descriptorDigest: nativeDescriptorDigest(descriptor) } });
+
+    expect(completed.disposition).toBe("reported");
+    expect(readConfiguration).toBe(true);
+  });
+
   it("rejects a descriptor digest mismatch before reading candidate data", async () => {
     // Given
     const runner = new ExecutorRunner();
@@ -254,38 +278,6 @@ describe("native ordinary host claim executor", () => {
       ...input, claim: { ...input.claim, descriptorDigest: `sha256:${"f".repeat(64)}` }
     })).rejects.toBeInstanceOf(NativeHostVerificationError);
     expect(runner.calls.some((call) => call.args[0] === "run")).toBe(false);
-  });
-
-  it("rejects a malformed sibling job before Docker launch", async () => {
-    // Given
-    const malformedConfig = Buffer.concat([
-      configBytes,
-      Buffer.from(`    sibling:\n      image: mutable:latest\n      script: ../escape.bash\n      argv: [/bin/bash]\n`)
-    ]);
-    const runner = new ExecutorRunner();
-
-    // When / Then
-    await expect(executeNativeHostClaim(
-      dependencies(runner, authority({}, malformedConfig)),
-      execution(malformedConfig)
-    )).rejects.toBeInstanceOf(NativeHostVerificationError);
-    expect(runner.calls.some((call) => call.args[0] === "run")).toBe(false);
-  });
-
-  it.each([
-    ["candidate-selected image", Buffer.from(configBytes.toString("utf8").replace(
-      "      script:", `      image: registry.example/foreign@sha256:${"c".repeat(64)}\n      script:`
-    ))],
-    ["schema-2 candidate config", Buffer.from(configBytes.toString("utf8").replace("schemaVersion: 3", "schemaVersion: 2"))]
-  ])("rejects %s before image pull or Docker launch", async (_label, candidateConfig) => {
-    const runner = new ExecutorRunner();
-
-    await expect(executeNativeHostClaim(
-      dependencies(runner, authority({}, candidateConfig)),
-      execution(candidateConfig)
-    )).rejects.toBeInstanceOf(NativeHostVerificationError);
-
-    expect(runner.calls.some((call) => call.args[0] === "pull" || call.args[0] === "run")).toBe(false);
   });
 
   it("rejects a hidden protected ref before candidate reads", async () => {

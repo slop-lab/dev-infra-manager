@@ -17,11 +17,18 @@
       "types": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./service": {
+      "types": "./src/service.ts",
+      "import": "./dist/service.js"
+    },
+    "./workflow": {
+      "types": "./src/workflowCompiler.ts",
+      "import": "./dist/workflowCompiler.js"
     }
   },
   "bin": {
-    "dim-native-git": "./dist/cli.js",
-    "dim-service": "./dist/serviceCli.js"
+    "dim-native-git": "./dist/cli.js"
   },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",

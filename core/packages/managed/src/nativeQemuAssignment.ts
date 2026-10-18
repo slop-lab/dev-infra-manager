@@ -1,3 +1,4 @@
+import { isCandidatePath } from "./nativeCandidatePath.js";
 import { createHash } from "node:crypto";
 import type { NativeQemuConnection } from "./nativeQemuConnection.js";
 import { parseNativeQemuReviewEvent } from "./nativeQemuReviewEvent.js";
@@ -73,7 +74,7 @@ export type NativeQemuDescriptor = {
   readonly requiredReviewRevision: string;
   readonly requiredJobSetRevision: string;
   readonly evidenceClass: string;
-  readonly configBlob: { readonly objectId: string; readonly sha256: string };
+  readonly configBlob: { readonly path: string; readonly objectId: string; readonly sha256: string };
   readonly script: { readonly path: string; readonly objectId: string; readonly sha256: string };
   readonly argv: readonly string[];
   readonly jobImage: string;
@@ -82,14 +83,13 @@ export type NativeQemuDescriptor = {
 export function parseNativeQemuDescriptor(value: unknown): NativeQemuDescriptor {
   const descriptor = exact(value, descriptorFields);
   const bounds = exact(descriptor.bounds, ["cpu", "memoryBytes", "pids", "wallClockSeconds", "outputBytes"]);
-  const configBlob = exact(descriptor.configBlob, ["objectId", "sha256"]);
+  const configBlob = exact(descriptor.configBlob, ["path", "objectId", "sha256"]);
   const script = exact(descriptor.script, ["path", "objectId", "sha256"]);
   if (descriptor.schemaVersion !== 1 || descriptor.executionKind !== "qemu"
     || descriptor.evidenceClass !== "candidate-controlled" || !Array.isArray(descriptor.argv)
     || JSON.stringify(descriptor.argv) !== JSON.stringify(["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"])) invalid();
   const scriptPath = string(script.path);
-  if (!scriptPath.startsWith(".dim/ci/jobs/") || !scriptPath.endsWith(".bash") || scriptPath.includes("\\")
-    || !scriptPath.split("/").every((part) => part.length > 0 && part !== "." && part !== "..")) invalid();
+  if (!isCandidatePath(scriptPath)) invalid();
   return { ...descriptor, schemaVersion: 1, executionKind: "qemu",
     admissionGeneration: matching(descriptor.admissionGeneration, generationPattern),
     jobName: matching(descriptor.jobName, identifierPattern), runnerBaseImage: matching(descriptor.runnerBaseImage, imagePattern),
@@ -100,7 +100,7 @@ export function parseNativeQemuDescriptor(value: unknown): NativeQemuDescriptor 
     candidateCommit: objectId(descriptor.candidateCommit), candidateTree: objectId(descriptor.candidateTree),
     policyRevision: revision(descriptor.policyRevision), requiredReviewRevision: revision(descriptor.requiredReviewRevision),
     requiredJobSetRevision: revision(descriptor.requiredJobSetRevision), evidenceClass: "candidate-controlled",
-    configBlob: { objectId: objectId(configBlob.objectId), sha256: digest(configBlob.sha256) },
+    configBlob: { path: candidatePath(configBlob.path), objectId: objectId(configBlob.objectId), sha256: digest(configBlob.sha256) },
     script: { path: scriptPath, objectId: objectId(script.objectId), sha256: digest(script.sha256) },
     argv: descriptor.argv.map(string), jobImage: matching(descriptor.jobImage, imagePattern) };
 }
@@ -109,7 +109,7 @@ export function nativeQemuDescriptorDigest(descriptor: NativeQemuDescriptor): st
   const fields = [descriptor.projectId, descriptor.repositoryId, descriptor.protectedRef,
     descriptor.expectedProtectedHead, descriptor.candidateCommit, descriptor.candidateTree, descriptor.policyRevision,
     descriptor.requiredReviewRevision, descriptor.requiredJobSetRevision, descriptor.admissionGeneration,
-    descriptor.jobName, descriptor.evidenceClass, descriptor.configBlob.objectId, descriptor.configBlob.sha256,
+    descriptor.jobName, descriptor.evidenceClass, descriptor.configBlob.path, descriptor.configBlob.objectId, descriptor.configBlob.sha256,
     descriptor.script.path, descriptor.script.objectId, descriptor.script.sha256, ...descriptor.argv,
     descriptor.jobImage, descriptor.runnerBaseImage, descriptor.bounds.cpu, descriptor.bounds.memoryBytes,
     descriptor.bounds.pids, descriptor.bounds.wallClockSeconds, descriptor.bounds.outputBytes];
@@ -135,3 +135,9 @@ function revision(value: unknown): string { return matching(value, /^[A-Za-z0-9]
 function decimal(value: unknown): string { return matching(value, /^[1-9][0-9]*$/); }
 function invalid(): never { throw new NativeQemuAssignmentError("native QEMU assignment is invalid"); }
 export class NativeQemuAssignmentError extends Error { readonly name = "NativeQemuAssignmentError"; }
+
+function candidatePath(value: unknown): string {
+  const path = string(value);
+  if (!isCandidatePath(path)) invalid();
+  return path;
+}

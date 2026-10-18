@@ -73,7 +73,7 @@ describe("authoritative ordinary execution descriptor", () => {
         requiredReviewRevision: envelope.review.requiredReviewRevision,
         requiredJobSetRevision: envelope.qualityRevision,
         evidenceClass: "candidate-controlled",
-        configBlob: { objectId: configObjectId, sha256: digest(matchingRunner()) },
+        configBlob: { path: ".dim/ci/runner.yml", objectId: configObjectId, sha256: digest(matchingRunner()) },
         script: {
           path: ".dim/ci/jobs/source.bash",
           objectId: scriptObjectId,

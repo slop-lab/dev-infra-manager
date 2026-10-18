@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { idleNativeConfig } from "./bundleConfigFixture.js";
 
 const run = promisify(execFile);
-const serviceCli = resolve(import.meta.dirname, "../../../../core/packages/native-git/dist/serviceCli.js");
+const serviceCli = resolve(import.meta.dirname, "../../../../core/packages/managed/dist/nativeGitServiceCli.js");
 
 describe("native installed registrar preflight", () => {
   it("rejects a configured registrar before Docker mutation when the trusted Git version is wrong", async () => {

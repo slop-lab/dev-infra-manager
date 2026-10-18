@@ -22,7 +22,7 @@ export const qemuDescriptor: NativeQemuDescriptor = {
   protectedRef: "refs/heads/main", expectedProtectedHead: "1".repeat(40), candidateCommit: "2".repeat(40),
   candidateTree: "3".repeat(40), policyRevision: "policy-1", requiredReviewRevision: "review-1",
   requiredJobSetRevision: "jobs-1", evidenceClass: "candidate-controlled",
-  configBlob: { objectId: "4".repeat(40), sha256: digest(qemuConfig) },
+  configBlob: { path: ".dim/ci/runner.yml", objectId: "4".repeat(40), sha256: digest(qemuConfig) },
   script: { path: ".dim/ci/jobs/integration.bash", objectId: "5".repeat(40), sha256: digest(qemuScript) },
   argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"],
   jobImage: `job@sha256:${"4".repeat(64)}`

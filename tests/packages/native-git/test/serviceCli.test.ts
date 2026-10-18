@@ -3,19 +3,15 @@ import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { bundleSecrets, idleNativeConfig, idleOrdinaryConfig } from "./bundleConfigFixture.js";
 
 const run = promisify(execFile);
 const workspaceRoot = resolve(import.meta.dirname, "../../../..");
 const packageRoot = join(workspaceRoot, "core/packages/native-git");
-const serviceCli = join(packageRoot, "dist/serviceCli.js");
+const serviceCli = join(workspaceRoot, "core/packages/managed/dist/nativeGitServiceCli.js");
 const stateProbe = join(import.meta.dirname, "fixtures/nativeStateProbeProcess.mjs");
 const roots: string[] = [];
-
-beforeAll(async () => {
-  await run("pnpm", ["run", "build"], { cwd: packageRoot });
-});
 
 afterAll(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -323,7 +319,6 @@ describe("native Git image configuration preflight CLI", () => {
       const ordinary = idleOrdinaryConfig();
       return { ...ordinary, nativeGit: { ...ordinary.nativeGit, serviceId: "native-other" } };
     }, /invalid ordinary CI bundle configuration/],
-    ["missing hosts", () => ({ ...idleOrdinaryConfig(), hosts: [] }), /at least one host/],
     ["a short decoded host token", () => {
       const ordinary = idleOrdinaryConfig();
       return { ...ordinary, hosts: ordinary.hosts.map((host) => ({
@@ -389,12 +384,13 @@ describe("native Git image configuration preflight CLI", () => {
     expect(await stateTree(root)).toEqual(before);
   });
 
-  it("publishes dim-service as the built image preflight executable", async () => {
+  it("keeps the native Git authority package independent of service composition", async () => {
     // Given / When
     const packageJson: unknown = JSON.parse(await readFile(join(packageRoot, "dist/package.json"), "utf8"));
 
     // Then
-    expect(packageJson).toMatchObject({ bin: { "dim-native-git": "cli.js", "dim-service": "serviceCli.js" } });
+    expect(packageJson).toMatchObject({ bin: { "dim-native-git": "cli.js" } });
+    expect(Reflect.get(Object(packageJson), "bin")).not.toHaveProperty("dim-service");
   });
 
   it.each([
