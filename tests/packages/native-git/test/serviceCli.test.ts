@@ -87,14 +87,14 @@ describe("native Git image configuration preflight CLI", () => {
     ["a repository registration", {
       ...idleNativeConfig(),
       repositories: [{ projectId: "project-a", repositoryId: "root" }]
-    }, /repository registry must be empty/],
+    }, /invalid native Git bundle configuration/],
     ["a Project identity", {
       ...idleNativeConfig(),
       identities: [{
         role: "reader", username: "reader-a", password: bundleSecrets.registrar,
         projectId: "project-a", repositoryIds: ["root"]
       }]
-    }, /identity registry must be empty/],
+    }, /invalid native Git bundle configuration/],
     ["the wrong listener", { ...idleNativeConfig(), host: "127.0.0.1" }, /listener must be 0\.0\.0\.0:8080/],
     ["the wrong storage root", { ...idleNativeConfig(), storageRoot: "/tmp/native-git" }, /storage root/]
   ])("check-config rejects %s without disclosing credentials", async (_label, value, message) => {
