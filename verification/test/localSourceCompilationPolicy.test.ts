@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 describe("exact source plugin compilation", () => {
-  it("installs the source workspace before ordered builds and packaging", async () => {
+  it("installs the locked source workspace before recursive compilation and packaging", async () => {
     const fixture = await createSourceBuildFixture();
     fixtures.push(fixture);
     const result = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
@@ -27,10 +27,8 @@ describe("exact source plugin compilation", () => {
     expect(result.status).toBe(0);
     const pnpmInvocations = invocations.filter((invocation) => invocation.startsWith("pnpm "));
     expect(pnpmInvocations[0]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+ install --frozen-lockfile version=/);
-    expect(pnpmInvocations[1]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+\/core run build version=/);
-    expect(pnpmInvocations[2]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+\/plugin-dns-cloudflare run build version=/);
-    expect(pnpmInvocations[3]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+\/plugin-external-urls run build version=/);
-    expect(pnpmInvocations[4]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+\/plugin-host-mirrors run build version=/);
+    expect(pnpmInvocations).toHaveLength(2);
+    expect(pnpmInvocations[1]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+ --recursive --workspace-concurrency=1 run build version=/);
     expect(invocations.at(-1)).toMatch(/^node .*pack-local-packages\.mjs /);
     for (const repository of ["plugin-dns-cloudflare", "plugin-external-urls", "plugin-host-mirrors"]) {
       expect(await readFile(resolve(fixture.root, `output/${repository}.package.json`), "utf8")).toBe(fixturePackageManifest);

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const fixtureRoots: string[] = [];
-const packageVersion = `0.9.0-local-${"a".repeat(64)}`;
+const packageVersion = `0.10.0-local-${"a".repeat(64)}`;
 const imageRef = `dev-infra-project-workspace:${packageVersion}`;
 
 type Fixture = {
@@ -98,6 +98,10 @@ function runInstaller(fixture: Fixture, environment: Readonly<Record<string, str
     encoding: "utf8",
     env: {
       PATH: `${fixture.tools}:/usr/bin:/bin`,
+      HOME: resolve(fixture.root, "home"),
+      DIM_DATA_HOME: resolve(fixture.root, "installed/data"),
+      DIM_CONFIG_PATH: resolve(fixture.root, "installed/config"),
+      DIM_STATE_ROOT: resolve(fixture.root, "installed/state"),
       DIM_INVOCATIONS: fixture.log,
       DIM_OLD_FACADE_MUTATION: fixture.oldFacadeMutation,
       ...environment
@@ -119,7 +123,7 @@ describe("Project local install facade", () => {
     expect(invocations).not.toContain("installer install plugin");
     expect(invocations).not.toContain("controller restart");
     expect(invocations).not.toContain("old-dim");
-    expect(invocations.match(/^state /gm)).toHaveLength(2);
+    expect(invocations.split("\n")[0]).toBe(`state ${imageRef} ${imageRef}`);
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
