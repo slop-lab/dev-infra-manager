@@ -3,7 +3,7 @@ import { executionCredentialSchema, executionSourceCredentialsSchema, executionP
 export const executionServiceConfigSchema = z.object({ schemaVersion: z.literal(1),
   claimLeaseMilliseconds: z.number().int().min(1_000).max(3_600_000),
   nativeGit: executionSourceCredentialsSchema.extend({ endpoint: z.literal("http://native-git:8080") }).strict().readonly(),
-  credentials: z.object({ webhook: executionCredentialSchema, query: executionCredentialSchema }).strict().readonly(),
+  credentials: z.object({ webhook: executionCredentialSchema, query: executionCredentialSchema, operator: executionCredentialSchema }).strict().readonly(),
   workers: z.array(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/),
     token: executionCredentialSchema.unwrap().shape.password,
     slots: z.array(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/),

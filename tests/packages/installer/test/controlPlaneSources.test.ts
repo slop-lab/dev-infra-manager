@@ -80,7 +80,8 @@ describe("control-plane private source staging", () => {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
       ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
     });
-    expect(complete.allSecretValues).toHaveLength(10);
+    expect(complete.allSecretValues).toHaveLength(11);
+    expect(complete.allSecretValues).toContain(controlPlaneSecrets.operator);
   });
 
   it("rejects noncanonical, short, reused, and symlinked token sources", async () => {

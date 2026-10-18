@@ -37,8 +37,14 @@ export const executionSchema = z.object({ id: z.string().uuid(), event: executio
   workerId: id.optional(), slotId: id.optional(), requestId: z.string().uuid().optional(),
   leaseToken: z.string().min(32).max(128).optional(), leaseExpiresAt: z.number().int().positive().optional(),
   profile: executionProfileSchema.optional(), grant: executionGrantSchema.optional(), result: executionResultSchema.optional(),
+  retryOf: z.string().uuid().optional(), retryRequestId: z.string().uuid().optional(),
+  cancelRequestedAt: z.number().int().nonnegative().optional(),
   publication: z.enum(["pending", "accepted", "stale"])
 }).strict().superRefine((job, context) => {
+  if ((job.retryOf === undefined) !== (job.retryRequestId === undefined) || job.retryOf === job.id
+    || job.cancelRequestedAt !== undefined && !["recovering", "finished"].includes(job.phase)) {
+    context.addIssue({ code: "custom", message: "execution operator metadata is inconsistent" });
+  }
   const ownership = [job.workerId, job.slotId, job.requestId, job.leaseToken, job.leaseExpiresAt, job.profile];
   const queued = job.phase === "queued";
   let invalid = queued ? ownership.some((value) => value !== undefined) || job.grant !== undefined || job.result !== undefined

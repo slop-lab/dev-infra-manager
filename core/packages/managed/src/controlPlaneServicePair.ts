@@ -9,7 +9,7 @@ export function parseControlPlaneServicePair(nativeValue: unknown, ciValue: unkn
   assertPair(native.ci.webhook, ordinary.credentials.webhook);
   const credentials = [...native.projectRegistrars, ...native.projectRootImporters, ...native.projectRootReadIssuers,
     ...native.workspaceWriteIssuers, ...native.humanReviewers, ...native.hostPromoters,
-    ...Object.values(native.ci), ordinary.credentials.query,
+    ...Object.values(native.ci), ordinary.credentials.query, ordinary.credentials.operator,
     ...ordinary.workers.map((worker) => ({ username: worker.id, password: worker.token }))];
   const values = credentials.flatMap((entry) => [entry.username, entry.password]);
   if (new Set(values).size !== values.length) throw new Error("control-plane credentials must be distinct");

@@ -5,6 +5,7 @@ const token = (fill: number): string => Buffer.alloc(32, fill).toString("base64u
 
 export const controlPlaneSecrets = {
   query: token(1),
+  operator: token(19),
   grantIssuer: token(3),
   candidateReader: token(18),
   resultReporter: token(4),
@@ -63,7 +64,8 @@ export function ordinaryServiceConfig(): Readonly<Record<string, unknown>> {
     },
     credentials: {
       webhook: { username: "native-events", password: controlPlaneSecrets.webhook },
-      query: { username: "native-query", password: controlPlaneSecrets.query }
+      query: { username: "native-query", password: controlPlaneSecrets.query },
+      operator: { username: "ci-operator", password: controlPlaneSecrets.operator }
     },
     workers: [{ id: "host-a", token: controlPlaneSecrets.host, slots: [{ id: "ordinary", runtime: "sysbox", profile: {
       runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`,

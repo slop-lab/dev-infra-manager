@@ -21,7 +21,9 @@ Target: `0.10.0` internal development candidate; this is not a published release
 - Put workflow syntax in the selected workflow plugin. Git authority consumes
   normalized plans and owns proposals, review and atomic protected-ref updates;
   execution owns jobs, worker leases, capacity fencing and cleanup. Expose job
-  status and bounded logs through a dedicated query role and CLI commands.
+  status and bounded logs through a dedicated query role and CLI commands;
+  authorize cancellation and idempotent retries separately, retaining worker
+  cleanup fences and exact Git attempt authority.
 - Connect reviewer web to the installed human-review APIs for proposal discovery,
   diffs, approval and revocation. Generate private browser configuration from the
   reviewer role rather than maintain a parallel review backend.

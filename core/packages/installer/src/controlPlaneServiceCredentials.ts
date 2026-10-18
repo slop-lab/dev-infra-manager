@@ -52,7 +52,7 @@ export function serviceCredentialValues(
   if (ordinaryNative.endpoint !== "http://native-git:8080") {
     throw new ControlPlaneSourceError("CI native Git endpoint must be http://native-git:8080");
   }
-  const roles = exactRecord(ordinary.credentials, ["webhook", "query"], "CI credentials");
+  const roles = exactRecord(ordinary.credentials, ["webhook", "query", "operator"], "CI credentials");
   const nativeCredentials = sourceRoles.map((role) => {
     const selected = credential(nativeCi[role], `native Git CI ${role}`);
     assertPaired(selected, credential(ordinaryNative[role], `CI ${role}`));
@@ -60,7 +60,7 @@ export function serviceCredentialValues(
   });
   const nativeWebhook = credential({ username: webhook.username, password: webhook.password }, "native Git CI webhook");
   assertPaired(nativeWebhook, credential(roles.webhook, "CI webhook"));
-  const serviceCredentials = [...nativeCredentials, nativeWebhook, credential(roles.query, "CI query")];
+  const serviceCredentials = [...nativeCredentials, nativeWebhook, credential(roles.query, "CI query"), credential(roles.operator, "CI operator")];
   if (!Array.isArray(ordinary.workers)) {
     throw new ControlPlaneSourceError("CI service worker credentials must be an array");
   }

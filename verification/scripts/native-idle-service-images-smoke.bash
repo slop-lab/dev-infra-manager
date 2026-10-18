@@ -96,7 +96,7 @@ JS
 for container in "$native_container" "$ci_container"; do docker stop --time 15 "$container" >/dev/null; done
 for kind in native ci; do
   if [[ "$kind" == native ]]; then image="$native_image"; state="$native_state"; target=/var/lib/dim-native-git; format=8;
-  else image="$ci_image"; state="$ci_state"; target=/var/lib/dim-ordinary-ci; format=101; fi
+  else image="$ci_image"; state="$ci_state"; target=/var/lib/dim-ordinary-ci; format=102; fi
   compatibility="$(docker run --rm --read-only --network none "$image" compatibility --json)"
   inspected="$(docker run --rm --read-only --network none --tmpfs /tmp:rw,noexec,nosuid,nodev,size=32m \
     --mount "type=volume,src=$state,dst=$target,readonly" "$image" check-state --read-only "$target" --json)"

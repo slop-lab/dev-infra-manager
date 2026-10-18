@@ -67,6 +67,27 @@ export function configuredExecutionServer(input: {
       const execution = store.enqueue(body.event);
       return send(response, 202, { executionId: execution.id, eventId: execution.event.eventId, generationId: generation });
     }
+    const operatorRoute = /^\/v1\/operator\/(workers|jobs\/([0-9a-f-]{36})\/(cancel|retry))$/.exec(url.pathname);
+    if (operatorRoute !== null) {
+      if (!basic(request, config.credentials.operator.username, config.credentials.operator.password)) return unauthorized(response);
+      if (request.headers["x-dim-generation-id"] !== generation) return send(response, 409, { error: "CI operator generation is stale" });
+      if (request.method === "GET" && operatorRoute[1] === "workers") {
+        const occupied = store.occupiedSlots();
+        return send(response, 200, workers.map((worker) => ({ id: worker.id, slots: worker.slots.map((slot) => {
+          const job = occupied.find((job) => job.workerId === worker.id && job.slotId === slot.id);
+          return { id: slot.id, executionKind: slot.kind, state: job === undefined ? "idle" : job.phase === "recovering" ? "cleanup-required" : "busy",
+            ...(job === undefined ? {} : { job: executionSummary(job), leaseExpiresAt: job.leaseExpiresAt }) };
+        }) })));
+      }
+      const id = operatorRoute[2], action = operatorRoute[3];
+      if (request.method !== "POST" || id === undefined || action === undefined) return send(response, 404, {});
+      if (action === "cancel") {
+        z.object({}).strict().parse(await read(request));
+        return send(response, 200, executionSummary(store.cancel(id)));
+      }
+      const body = z.object({ requestId: z.string().uuid() }).strict().parse(await read(request));
+      return send(response, 200, executionSummary(store.retry(id, body.requestId)));
+    }
     const query = /^\/v1\/jobs(?:\/([0-9a-f-]{36}))?$/.exec(url.pathname);
     if (request.method === "GET" && query) {
       if (!basic(request, config.credentials.query.username, config.credentials.query.password)) return unauthorized(response);

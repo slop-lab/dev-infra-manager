@@ -137,6 +137,17 @@ bytes on their original streams and reports truncation. JSON includes result
 metadata and base64 prefixes. A cleaned result can still await Git publication;
 the list shows publication separately from execution outcome.
 
+`connect` also writes a separate owner-only `ci-operator.json` for trusted
+operations clients. The generation-bound operator API exposes configured worker
+slot occupancy at `GET /v1/operator/workers` and accepts
+`POST /v1/operator/jobs/EXECUTION_ID/cancel` with `{}` or `/retry` with
+`{"requestId":"UUID"}`. Replaying a retry request returns the same execution.
+Only the latest finished execution can be retried. Cancellation blocks renewals
+and keeps a running slot fenced until its worker confirms cleanup; a racing
+success is retained as diagnostics but cannot become accepted Git evidence.
+Slot occupancy does not imply worker liveness. Query credentials cannot mutate
+executions, and operator credentials cannot act as workers.
+
 ## Projects and workspaces
 
 Bootstrap an exact branch from an already-local repository using the reviewed

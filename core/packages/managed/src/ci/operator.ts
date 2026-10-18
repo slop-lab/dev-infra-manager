@@ -1,0 +1,36 @@
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
+import { z } from "zod";
+import { ciQueryConnectionSchema } from "./queryClient.js";
+import { executionSummarySchema } from "./query.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../nativeGitAdmissionHttpClient.js";
+
+export const ciOperatorConnectionSchema = ciQueryConnectionSchema.extend({ role: z.literal("operator") });
+export const ciWorkersSchema = z.array(z.object({ id: z.string(), slots: z.array(z.object({ id: z.string(),
+  executionKind: z.enum(["ordinary-sysbox", "qemu"]), state: z.enum(["idle", "busy", "cleanup-required"]),
+  job: executionSummarySchema.optional(), leaseExpiresAt: z.number().int().optional()
+}).strict()) }).strict()).max(256);
+export async function createCiOperatorClient(file: string) {
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let connection: z.infer<typeof ciOperatorConnectionSchema>;
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.uid !== process.geteuid?.() || stat.nlink !== 1 || (stat.mode & 0o777) !== 0o600 || stat.size > 16 * 1024) throw new Error("CI operator connection must be private");
+    connection = ciOperatorConnectionSchema.parse(JSON.parse(await handle.readFile("utf8")));
+  } finally { await handle.close(); }
+  const http = createNodeNativeGitAdmissionHttpClient();
+  async function request(path: string, body?: unknown): Promise<unknown> {
+    const result = await http.request({ endpoint: connection.endpoint, path, method: body === undefined ? "GET" : "POST",
+      generationId: connection.generationId, authorization: `Basic ${Buffer.from(`${connection.credential.username}:${connection.credential.password}`).toString("base64")}`,
+      signal: AbortSignal.timeout(10_000), ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    if (result.statusCode === 409) throw new Error("CI operation conflicts with the current generation or execution state");
+    if (result.statusCode !== 200 || result.contentType !== "application/json" || result.cacheControl !== "no-store") throw new Error("CI operator service unavailable");
+    return JSON.parse(result.body.toString("utf8"));
+  }
+  const id = (value: string) => z.string().uuid().parse(value);
+  return {
+    async workers() { return ciWorkersSchema.parse(await request("/v1/operator/workers")); },
+    async cancel(executionId: string) { return executionSummarySchema.parse(await request(`/v1/operator/jobs/${id(executionId)}/cancel`, {})); },
+    async retry(executionId: string, requestId: string) { return executionSummarySchema.parse(await request(`/v1/operator/jobs/${id(executionId)}/retry`, { requestId: id(requestId) })); }
+  };
+}

@@ -50,7 +50,7 @@ export function idleOrdinaryConfig() {
     nativeGit: { endpoint: "http://native-git:8080", grantIssuer: native.ci.grantIssuer,
       candidateReader: native.ci.candidateReader, resultReporter: native.ci.resultReporter },
     credentials: { webhook: { username: native.ci.webhook.username, password: native.ci.webhook.password },
-      query: { username: "ci-query", password: bundleSecrets.nativeQuery } },
+      query: { username: "ci-query", password: bundleSecrets.nativeQuery }, operator: { username: "ci-operator", password: token(59) } },
     workers: [{ id: "host-a", token: bundleSecrets.host, slots: [{ id: "primary", runtime: "sysbox",
       profile: { runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`,
         jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`,

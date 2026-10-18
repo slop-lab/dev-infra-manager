@@ -47,7 +47,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
   if (nativePort === ordinaryPort) throw new UserError("control-plane published ports must be distinct");
   const slots = initialWorkerSlots(options);
   const credential = (username: string): Credential => ({ username, password: randomBytes(32).toString("base64url") });
-  const roles = Object.fromEntries(["query", "grantIssuer", "candidateReader", "resultReporter", "webhook"]
+  const roles = Object.fromEntries(["query", "operator", "grantIssuer", "candidateReader", "resultReporter", "webhook"]
     .map((role) => [role, credential(`service-${role}`)])) as Record<string, Credential>;
   const hostRole = (role: string) => ({ hostId, ...credential(`${hostId}-${role}`) });
   const native = {
@@ -64,7 +64,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     schemaVersion: 1, claimLeaseMilliseconds: 60_000,
     nativeGit: { endpoint: "http://native-git:8080", grantIssuer: roles.grantIssuer,
       candidateReader: roles.candidateReader, resultReporter: roles.resultReporter },
-    credentials: { webhook: roles.webhook, query: roles.query },
+    credentials: { webhook: roles.webhook, query: roles.query, operator: roles.operator },
     workers: options.ciWorker === undefined ? [] : [{ id: options.ciWorker,
       token: randomBytes(32).toString("base64url"), slots }]
   };
@@ -167,6 +167,7 @@ export async function connectControlPlane(directoryInput: string, options: {
     await json(path.join(output, "importer.json"), importerConnection);
     await json(path.join(output, "host.json"), hostConnection);
     await json(path.join(output, "ci-query.json"), ciQueryConnection);
+    await json(path.join(output, "ci-operator.json"), { ...ciQueryConnection, role: "operator", credential: ordinary.credentials.operator });
     if (workerConfig !== undefined) await json(path.join(output, "worker.json"), workerConfig);
     await json(path.join(output, "reviewer.json"), { schemaVersion: 1, serviceId: "native-main", baseUrl: endpoint,
       reviewerId: reviewer.reviewerId, username: reviewer.username, password: reviewer.password, generationId });

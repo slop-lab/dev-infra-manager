@@ -29,23 +29,24 @@ export class ExecutionStore {
     }
     this.database = new DatabaseSync(path);
     const version = Number(this.database.prepare("PRAGMA user_version").get()?.user_version);
-    if (version !== 101 && (version !== 0 || this.database.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get() !== undefined)) {
+    if (version !== 102 && (version !== 0 || this.database.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get() !== undefined)) {
       this.database.close(); throw new Error("CI state format is unsupported; use a fresh CI state directory");
     }
     chmodSync(path, 0o600);
     this.database.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000");
     if (version === 0) this.database.exec(`BEGIN IMMEDIATE;
-      CREATE TABLE executions (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, generation_id TEXT NOT NULL, phase TEXT NOT NULL,
+      CREATE TABLE executions (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, generation_id TEXT NOT NULL, phase TEXT NOT NULL, retry_of TEXT,
         worker_id TEXT, slot_id TEXT, request_id TEXT, created_at INTEGER NOT NULL,
         execution_kind TEXT NOT NULL, publication TEXT NOT NULL, lease_expires_at INTEGER, body TEXT NOT NULL);
-      CREATE UNIQUE INDEX event_generation ON executions(event_id,generation_id);
+      CREATE UNIQUE INDEX event_generation ON executions(event_id,generation_id) WHERE retry_of IS NULL;
+      CREATE UNIQUE INDEX retry_request ON executions(retry_of,json_extract(body,'$.retryRequestId')) WHERE retry_of IS NOT NULL;
       CREATE UNIQUE INDEX occupied_slot ON executions(worker_id,slot_id) WHERE phase IN ('assigned','running','recovering');
       CREATE UNIQUE INDEX reservation_request ON executions(worker_id,slot_id,request_id) WHERE request_id IS NOT NULL;
       CREATE INDEX queued_jobs ON executions(execution_kind,created_at) WHERE phase='queued';
       CREATE INDEX pending_results ON executions(created_at) WHERE phase='finished' AND publication='pending';
       CREATE INDEX lease_expiry ON executions(lease_expires_at) WHERE phase IN ('assigned','running');
       CREATE TABLE metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      PRAGMA user_version=101; COMMIT;`);
+      PRAGMA user_version=102; COMMIT;`);
     for (const row of this.database.prepare("SELECT * FROM executions").iterate()) decode(row);
     this.transaction(() => {
       for (const row of this.database.prepare("SELECT * FROM executions WHERE phase IN ('queued','assigned','running')").all()) {
@@ -67,7 +68,7 @@ export class ExecutionStore {
   enqueue(input: ExecutionEvent): Execution {
     const event = executionEventSchema.parse(input);
     return this.transaction(() => {
-      const row = this.database.prepare("SELECT * FROM executions WHERE event_id=? AND generation_id=?").get(event.eventId, this.generationId);
+      const row = this.database.prepare("SELECT * FROM executions WHERE event_id=? AND generation_id=? AND retry_of IS NULL").get(event.eventId, this.generationId);
       if (row !== undefined) {
         const existing = decode(row);
         if (!isDeepStrictEqual(existing.event, event)) throw new ExecutionConflictError("event identity conflicts");
@@ -132,7 +133,8 @@ export class ExecutionStore {
         return execution;
       }
       if (!["assigned", "running", "recovering"].includes(execution.phase)) throw new ExecutionConflictError("execution is already closed");
-      const saved: Execution = { ...execution, phase: "finished", result };
+      const saved: Execution = { ...execution, phase: "finished", result,
+        ...(execution.cancelRequestedAt === undefined ? {} : { publication: "stale" as const }) };
       this.save(saved); return saved;
     });
   }
@@ -143,6 +145,33 @@ export class ExecutionStore {
       const saved: Execution = { ...execution, phase: "finished", publication: "stale" };
       this.save(saved); return saved;
     });
+  }
+  cancel(id: string): Execution {
+    return this.transaction(() => {
+      const job = this.get(id);
+      if (job.generationId !== this.generationId || job.phase === "finished") throw new ExecutionConflictError("execution is not cancellable");
+      const saved: Execution = { ...job, cancelRequestedAt: job.cancelRequestedAt ?? this.now(),
+        ...(job.phase === "queued" || job.grant === undefined ? { phase: "finished", publication: "stale" } : { phase: "recovering" }) };
+      this.save(saved); return saved;
+    });
+  }
+  retry(id: string, requestId: string): Execution {
+    return this.transaction(() => {
+      const replay = this.database.prepare("SELECT * FROM executions WHERE retry_of=? AND json_extract(body,'$.retryRequestId')=?").get(id, requestId);
+      if (replay !== undefined) return decode(replay);
+      const previous = this.get(id);
+      const latest = this.database.prepare("SELECT id FROM executions WHERE event_id=? AND generation_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1").get(previous.event.eventId, this.generationId);
+      if (previous.generationId !== this.generationId || previous.phase !== "finished" || latest?.id !== id) throw new ExecutionConflictError("retry requires the latest finished execution after owned cleanup");
+      const next: Execution = { id: randomUUID(), event: previous.event, generationId: this.generationId, phase: "queued",
+        publication: "pending", createdAt: this.now(), retryOf: id, retryRequestId: requestId };
+      parseExecution(next);
+      this.database.prepare("INSERT INTO executions(id,event_id,generation_id,phase,retry_of,created_at,execution_kind,publication,body) VALUES (?,?,?,'queued',?,?,?,'pending',?)")
+        .run(next.id, next.event.eventId, next.generationId, id, next.createdAt, next.event.executionKind, JSON.stringify(next));
+      return next;
+    });
+  }
+  occupiedSlots(): Execution[] {
+    return this.database.prepare("SELECT * FROM executions WHERE phase IN ('assigned','running','recovering')").all().map(decode);
   }
   reject(id: string): void { const execution = this.get(id); this.save({ ...execution, phase: "finished", publication: "stale" }); }
   published(id: string, publication: "accepted" | "stale"): void { this.save({ ...this.get(id), publication }); }
@@ -160,7 +189,7 @@ export class ExecutionStore {
   }
   recentSummaries(): ExecutionSummary[] {
     // SQLite removes large diagnostics and grants before rows cross into Node.
-    return this.database.prepare("SELECT id,event_id,generation_id,phase,worker_id,slot_id,request_id,created_at,execution_kind,publication,lease_expires_at,json_remove(body,'$.result.logs','$.grant','$.leaseToken','$.profile') AS body FROM executions ORDER BY created_at DESC,rowid DESC LIMIT 100")
+    return this.database.prepare("SELECT id,event_id,generation_id,phase,worker_id,slot_id,request_id,created_at,retry_of,execution_kind,publication,lease_expires_at,json_remove(body,'$.result.logs','$.grant','$.leaseToken','$.profile') AS body FROM executions ORDER BY created_at DESC,rowid DESC LIMIT 100")
       .all().map((row) => {
         const value = executionSummaryRowSchema.parse(JSON.parse(String(row.body)));
         assertIndexes(row, value); return executionSummary(value);
@@ -199,9 +228,9 @@ function decode(row: unknown): Execution {
   const value = parseExecution(JSON.parse(Reflect.get(row, "body")));
   assertIndexes(row, value); return value;
 }
-function assertIndexes(row: unknown, value: Pick<Execution, "id" | "event" | "generationId" | "phase" | "workerId" | "slotId" | "requestId" | "createdAt" | "publication" | "leaseExpiresAt">): void {
+function assertIndexes(row: unknown, value: Pick<Execution, "id" | "event" | "generationId" | "phase" | "workerId" | "slotId" | "requestId" | "createdAt" | "publication" | "leaseExpiresAt" | "retryOf">): void {
   const fields = { id: value.id, event_id: value.event.eventId, generation_id: value.generationId, phase: value.phase, worker_id: value.workerId ?? null,
     slot_id: value.slotId ?? null, request_id: value.requestId ?? null, created_at: value.createdAt, execution_kind: value.event.executionKind,
-    publication: value.publication, lease_expires_at: value.leaseExpiresAt ?? null };
+    publication: value.publication, lease_expires_at: value.leaseExpiresAt ?? null, retry_of: value.retryOf ?? null };
   if (Object.entries(fields).some(([key, expected]) => row === null || typeof row !== "object" || Reflect.get(row, key) !== expected)) throw new Error("CI execution indexes disagree with state");
 }
