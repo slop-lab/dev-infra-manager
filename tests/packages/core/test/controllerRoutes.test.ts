@@ -47,7 +47,7 @@ it("authenticates, discovers plugin routes, dispatches parameters, and resolves 
             containers: ["dev"],
             port: body.port,
             protocol: "tcp"
-          }, "container-dns");
+          });
           return { status: 201, body: { id: context.params.id, target } };
         }
       }]
@@ -87,8 +87,7 @@ it("authenticates, discovers plugin routes, dispatches parameters, and resolves 
     });
     expect(resolveTarget).toHaveBeenCalledWith(
       expect.objectContaining({ name: "work" }),
-      { containers: ["dev"], port: 8080, protocol: "tcp" },
-      "container-dns"
+      { containers: ["dev"], port: 8080, protocol: "tcp" }
     );
   });
 

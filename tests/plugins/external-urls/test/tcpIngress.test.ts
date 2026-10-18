@@ -36,7 +36,6 @@ describe("TCP external ingress", () => {
           domain: "127.0.0.1",
           listenHost: "127.0.0.1",
           listenPort,
-          upstreamMode: "container-ip"
         }
       }
     })]);
@@ -229,7 +228,6 @@ printf '%s\\n' '{"BackendState":"Running","Self":{"TailscaleIPs":["100.100.10.20
         publicHost: "100.100.10.20",
         listenHost: "100.100.10.20",
         listenPort: 49152,
-        upstreamMode: "container-ip"
       });
       expect(await readFile(calls, "utf8")).toBe("status --json\n");
     } finally {

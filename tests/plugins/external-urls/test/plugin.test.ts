@@ -40,6 +40,20 @@ describe("external URLs plugin", () => {
     expect(registered.host.extension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale")).toBeDefined();
   });
 
+  it("closes already opened listeners when another ingress cannot bind", async () => {
+    const occupied = http.createServer(); occupied.listen(0, "127.0.0.1"); await once(occupied, "listening");
+    close.push(() => new Promise((resolve) => occupied.close(() => resolve())));
+    const occupiedAddress = occupied.address(); if (!occupiedAddress || typeof occupiedAddress === "string") throw new Error("missing address");
+    const freePort = await availablePort();
+    const ingress = { description: "Partial registration", scheme: "http" as const, domain: "example.test", listenHost: "127.0.0.1" };
+    await expect(registerPlugins([createExternalUrlsPlugin({ ingresses: {
+      first: { ...ingress, listenPort: freePort },
+      unavailable: { ...ingress, domain: "other.test", listenPort: occupiedAddress.port }
+    } })])).rejects.toMatchObject({ code: "EADDRINUSE" });
+    const probe = http.createServer(); probe.listen(freePort, "127.0.0.1"); await once(probe, "listening");
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+  });
+
   it("reports ingress argument mistakes as actionable client errors", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-admin-"));
     await storeWorkspace(stateRoot, coreWorkspaceRecord("work-1", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
@@ -461,7 +475,6 @@ describe("external URLs plugin", () => {
           domain: "builder.tail.example.test",
           listenHost: "127.0.0.1",
           listenPort: hostProxyPort,
-          upstreamMode: "container-ip"
         },
         public: {
           description: "Public preview URL",
@@ -469,7 +482,6 @@ describe("external URLs plugin", () => {
           domain: "builder.tail.example.test",
           listenHost: "127.0.0.1",
           listenPort: controllerProxyPort,
-          upstreamMode: "container-ip"
         }
       }
     })]);
@@ -545,8 +557,7 @@ describe("external URLs plugin", () => {
     expect(body.urls[0]?.url).toBe("http://work-1--deep.builder.tail.example.test/");
     expect(resolveTarget).toHaveBeenCalledWith(
       expect.objectContaining({ name: "work-1" }),
-      { containers: ["dev"], port: 8080, protocol: "http" },
-      "container-ip"
+      { containers: ["dev"], port: 8080, protocol: "http" }
     );
     expect(await proxyRequest(
       hostProxyPort,
@@ -621,7 +632,7 @@ describe("external URLs plugin", () => {
           approvalRequired: true
         }
       }
-    })).toThrow(/same upstream mode, route policy, and approval requirement/);
+    })).toThrow(/same route policy and approval requirement/);
 
     expect(() => createExternalUrlsPlugin({
       ingresses: {

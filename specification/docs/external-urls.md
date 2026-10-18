@@ -35,9 +35,12 @@ The controller validates the core workspace UUID and Docker ownership before
 resolving a target. It starts or reuses an in-agent byte relay and routes to that
 owned agent's IP. The host gateway never accepts an arbitrary upstream host
 from the workspace request. HTTP requests, WebSocket upgrades and new TCP
-connections revalidate the current UUID before using a cached target. Discard
-or same-name replacement makes old routes unreachable without a controller
-restart or a discard callback.
+connections revalidate the current UUID and resolve its owned runtime before
+connecting. Container recreation restores its relay on the next flow without
+listing routes or restarting the controller. A missing runtime cannot send
+traffic to a foreign container that reused its IP. Existing flows stay pinned
+to their selected endpoint. Discard or same-name replacement makes old routes
+unreachable without a controller restart or a discard callback.
 
 ## Host configuration and route approval
 

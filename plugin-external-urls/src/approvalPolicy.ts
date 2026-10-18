@@ -7,7 +7,6 @@ export interface ApprovalPolicyIngress {
   readonly port?: number;
   readonly listenHost: string;
   readonly listenPort: number;
-  readonly upstreamMode?: "container-dns" | "container-ip";
   readonly routePolicy?: ExternalUrlRoutePolicyConfig;
   readonly approvalRequired?: boolean;
   readonly approvalExposure?: {
@@ -25,7 +24,6 @@ export function ingressPolicyRevision(name: string, ingress: ApprovalPolicyIngre
     port: ingress.port,
     listenHost: exposure.listenHost,
     listenPort: exposure.listenPort,
-    upstreamMode: ingress.upstreamMode ?? "container-ip",
     routePolicy: ingress.routePolicy ?? { driver: "workspace-prefix" },
     approvalRequired: ingress.approvalRequired === true
   })).digest("hex");

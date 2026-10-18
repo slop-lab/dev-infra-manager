@@ -164,7 +164,6 @@ function options(port: number) {
     listenHost: "127.0.0.1",
     listenPort: port,
     publicHost: "127.0.0.1",
-    upstreamMode: "container-ip" as const
   };
 }
 

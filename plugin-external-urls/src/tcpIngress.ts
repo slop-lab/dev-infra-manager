@@ -25,7 +25,6 @@ export interface TcpIngressOptions {
   readonly listenHost: string;
   readonly listenPort: number;
   readonly publicHost: string;
-  readonly upstreamMode: "container-dns" | "container-ip";
   readonly maxConnections?: number;
   readonly connectTimeoutMs?: number;
   readonly idleTimeoutMs?: number;
@@ -43,7 +42,6 @@ type TcpConnection = {
 
 export class TcpIngressListener {
   readonly name: string;
-  readonly upstreamMode: "container-dns" | "container-ip";
   readonly #authority: string;
   readonly #server: net.Server;
   readonly #ready: Promise<void>;
@@ -57,12 +55,12 @@ export class TcpIngressListener {
     readonly workspace: ControllerWorkspace;
     readonly upstream: ResolvedWorkspaceTarget;
     readonly enabled: boolean;
+    readonly resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined;
   } | undefined;
 
   constructor(options: TcpIngressOptions) {
     this.name = options.name;
     this.#authorizeWorkspace = options.authorizeWorkspace;
-    this.upstreamMode = options.upstreamMode;
     this.#maxConnections = options.maxConnections ?? DEFAULT_MAX_CONNECTIONS;
     this.#connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
     this.#idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
@@ -86,7 +84,9 @@ export class TcpIngressListener {
     request: TcpIngressRequest,
     upstream: ResolvedWorkspaceTarget,
     routeId = `${workspace.id}\u0000${JSON.stringify(request.target)}`,
-    approval: ExternalUrlApproval = "not-required"
+    approval: ExternalUrlApproval = "not-required",
+    _publicRouteId?: string,
+    resolve?: () => Promise<ResolvedWorkspaceTarget>
   ): Promise<TcpIngressProvision> {
     await this.#ready;
     if (request.path !== undefined) throw new UserError("TCP ingress requests do not accept a URL path");
@@ -101,7 +101,7 @@ export class TcpIngressListener {
     if (!acquired && JSON.stringify(this.#route?.upstream) !== JSON.stringify(upstream)) {
       this.#destroyConnections();
     }
-    this.#route = { claim, workspace, upstream, enabled: approval === "not-required" || approval === "approved" };
+    this.#route = { claim, workspace, upstream, resolve, enabled: approval === "not-required" || approval === "approved" };
     return {
       acquired,
       route: {
@@ -140,9 +140,13 @@ export class TcpIngressListener {
   async #forward(client: net.Socket): Promise<void> {
     client.once("error", () => {});
     const route = this.#route;
-    try { if (route) await this.#authorizeWorkspace?.(route.workspace); }
-    catch { client.destroy(); return; }
-    if (route === undefined || !route.enabled || this.#route !== route || client.destroyed) {
+    if (!route?.enabled || this.#connections.size >= this.#maxConnections) { client.destroy(); return; }
+    let target: ResolvedWorkspaceTarget | undefined;
+    try {
+      if (route) await this.#authorizeWorkspace?.(route.workspace);
+      target = route?.resolve ? await route.resolve() : route?.upstream;
+    } catch { client.destroy(); return; }
+    if (route === undefined || target === undefined || !route.enabled || this.#route !== route || client.destroyed) {
       client.destroy();
       return;
     }
@@ -150,7 +154,7 @@ export class TcpIngressListener {
       client.destroy();
       return;
     }
-    const upstream = net.connect(route.upstream.port, route.upstream.host);
+    const upstream = net.connect(target.port, target.host);
     const connection = { client, upstream };
     this.#connections.add(connection);
     const destroy = () => {

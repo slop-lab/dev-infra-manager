@@ -58,7 +58,7 @@ describe("optional plugin controller core workspace adapter", () => {
 
   it.each([false, true])("routes only through the owned agent IP with nested target=%s", async (nested) => {
     const f = await fixture();
-    const resolved = await f.controller.resolveTarget(f.record, { containers: nested ? ["app"] : [], port: 3000, protocol: "http" }, "container-dns");
+    const resolved = await f.controller.resolveTarget(f.record, { containers: nested ? ["app"] : [], port: 3000, protocol: "http" });
     expect(resolved).toMatchObject({ host: "172.18.0.2", port: 23456, protocol: "http" });
     expect(f.runner.relay).toMatchObject({ listenHost: "172.18.0.2", host: nested ? "172.19.0.2" : "127.0.0.1", port: 3000 });
     expect(f.runner.calls.filter((call) => call[1] === "exec").every((call) => call[4] === "owned-container-id")).toBe(true);
@@ -89,8 +89,8 @@ describe("optional plugin controller core workspace adapter", () => {
     const controller = new ControllerWorkspaces({ stateRoot: f.managed }, runner, f.core);
     try {
       const requested = { containers: [], port: address.port, protocol: "tcp" as const };
-      const first = await controller.resolveTarget(f.record, requested, "container-ip");
-      expect(await controller.resolveTarget(f.record, requested, "container-ip")).toEqual(first);
+      const first = await controller.resolveTarget(f.record, requested);
+      expect(await controller.resolveTarget(f.record, requested)).toEqual(first);
       const socket = createConnection({ host: first.host, port: first.port, allowHalfOpen: true });
       const chunks: Buffer[] = []; socket.on("data", (chunk) => chunks.push(chunk));
       const done = once(socket, "end");
@@ -104,17 +104,31 @@ describe("optional plugin controller core workspace adapter", () => {
     }
   });
 
+  it("rejects a UUID replaced while its runtime target was being resolved", async () => {
+    const f = await fixture();
+    const runner = new class extends RouteRunner {
+      override async run(command: string, args: string[]): Promise<CommandResult> {
+        const result = await super.run(command, args);
+        if (args.includes("node")) await f.store.write({ ...f.record, id: randomUUID() });
+        return result;
+      }
+    }(f.record);
+    const controller = new ControllerWorkspaces({ stateRoot: f.managed }, runner, f.core);
+    await expect(controller.resolveTarget(f.record, { containers: [], port: 80, protocol: "http" }))
+      .rejects.toThrow(/identity/);
+  });
+
   it("rejects foreign runtime ownership, nested depth two and stale identities before relay execution", async () => {
     const f = await fixture();
-    await expect(f.controller.resolveTarget(f.record, { containers: ["one", "two"], port: 80, protocol: "http" }, "container-ip"))
+    await expect(f.controller.resolveTarget(f.record, { containers: ["one", "two"], port: 80, protocol: "http" }))
       .rejects.toThrow(/zero or one/);
     expect(f.runner.calls).toEqual([]);
     f.runner.foreign = true;
-    await expect(f.controller.resolveTarget(f.record, { containers: [], port: 80, protocol: "http" }, "container-ip"))
+    await expect(f.controller.resolveTarget(f.record, { containers: [], port: 80, protocol: "http" }))
       .rejects.toThrow(/ownership/);
     expect(f.runner.relay).toBeUndefined();
     await f.store.write({ ...f.record, id: randomUUID() });
-    await expect(f.controller.resolveTarget(f.record, { containers: [], port: 80, protocol: "http" }, "container-ip"))
+    await expect(f.controller.resolveTarget(f.record, { containers: [], port: 80, protocol: "http" }))
       .rejects.toThrow(/identity/);
   });
 });

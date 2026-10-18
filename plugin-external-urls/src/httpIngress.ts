@@ -30,7 +30,6 @@ export interface HttpIngressOptions {
   readonly name: string;
   readonly listenHost: string;
   readonly listenPort: number;
-  readonly upstreamMode: "container-dns" | "container-ip";
   readonly scheme: "http" | "https";
   readonly domain: string;
   readonly port?: number;
@@ -40,7 +39,6 @@ export interface HttpIngressOptions {
 
 export class WorkspaceIngressListener {
   readonly name: string;
-  readonly upstreamMode: "container-dns" | "container-ip";
   readonly #registry: WorkspaceRouteRegistry;
   readonly #server: http.Server;
   readonly #ready: Promise<void>;
@@ -57,7 +55,6 @@ export class WorkspaceIngressListener {
     this.#authorizeWorkspace = options.authorizeWorkspace;
     this.#flows = registry.flows;
     this.name = options.name;
-    this.upstreamMode = options.upstreamMode;
     this.#scheme = options.scheme;
     this.#domain = options.domain;
     this.#port = options.port;
@@ -72,7 +69,6 @@ export class WorkspaceIngressListener {
           ingress: options.name,
           host: options.listenHost,
           port: options.listenPort,
-          upstreamMode: options.upstreamMode
         });
         resolve();
       });
@@ -85,7 +81,8 @@ export class WorkspaceIngressListener {
     upstream: ResolvedWorkspaceTarget,
     routeId = randomUUID(),
     approval: ExternalUrlApproval = "not-required",
-    publicRouteId?: string
+    publicRouteId?: string,
+    resolve?: () => Promise<ResolvedWorkspaceTarget>
   ) {
     await this.#ready;
     if (request.subdomain === undefined) throw new UserError("HTTP ingress requests require a subdomain");
@@ -106,6 +103,7 @@ export class WorkspaceIngressListener {
       claim,
       upstream,
       enabled: approval === "not-required" || approval === "approved",
+      ...(resolve ? { resolve } : {}),
       ...(this.#authorizeWorkspace ? { authorize: () => this.#authorizeWorkspace!(workspace) } : {}),
       beforeRebind: () => this.#flows.destroyClaim(claim)
     });
@@ -157,22 +155,25 @@ export class WorkspaceIngressListener {
     await closed;
   }
 
-  #target(request: IncomingMessage): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined } | undefined {
+  #target(request: IncomingMessage): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined; readonly resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined } | undefined {
     const hostname = (request.headers.host ?? "").split(":")[0]?.toLowerCase() ?? "";
     return this.#registry.target(hostname);
   }
 
   async #proxy(request: IncomingMessage, response: ServerResponse): Promise<void> {
     let selected = this.#target(request);
-    try { await selected?.authorize?.(); }
-    catch { selected = undefined; }
-    if (selected && this.#target(request)?.upstream !== selected.upstream) selected = undefined;
-    if (!selected) {
+    let target: ResolvedWorkspaceTarget | undefined;
+    try {
+      await selected?.authorize?.();
+      target = selected?.resolve ? await selected.resolve() : selected?.upstream;
+    } catch { selected = undefined; }
+    const current = this.#target(request);
+    if (selected && (current?.upstream !== selected.upstream || current?.resolve !== selected.resolve)) selected = undefined;
+    if (!selected || !target) {
       response.writeHead(404, { "content-type": "application/json" });
       response.end('{"error":"external route not found"}\n');
       return;
     }
-    const target = selected.upstream;
     const transport = target.protocol === "https" ? https : http;
     const upstreamRequest = transport.request({
       hostname: target.host,
@@ -217,14 +218,17 @@ export class WorkspaceIngressListener {
 
   async #upgrade(request: IncomingMessage, client: import("node:stream").Duplex, head: Buffer): Promise<void> {
     let selected = this.#target(request);
-    try { await selected?.authorize?.(); }
-    catch { selected = undefined; }
-    if (selected && this.#target(request)?.upstream !== selected.upstream) selected = undefined;
-    if (!selected) {
+    let target: ResolvedWorkspaceTarget | undefined;
+    try {
+      await selected?.authorize?.();
+      target = selected?.resolve ? await selected.resolve() : selected?.upstream;
+    } catch { selected = undefined; }
+    const current = this.#target(request);
+    if (selected && (current?.upstream !== selected.upstream || current?.resolve !== selected.resolve)) selected = undefined;
+    if (!selected || !target) {
       client.destroy();
       return;
     }
-    const target = selected.upstream;
     const upstream = target.protocol === "https"
       ? tls.connect(target.port, target.host)
       : net.connect(target.port, target.host);

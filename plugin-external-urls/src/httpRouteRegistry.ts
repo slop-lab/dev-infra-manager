@@ -4,6 +4,7 @@ import { HttpFlowTracker } from "./httpFlows.js";
 interface RegisteredRoute {
   upstream: ResolvedWorkspaceTarget;
   authorize: (() => Promise<void>) | undefined;
+  resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined;
   readonly claims: Map<string, boolean>;
 }
 
@@ -14,6 +15,7 @@ interface RouteProvision {
   readonly enabled: boolean;
   readonly beforeRebind: () => void;
   readonly authorize?: () => Promise<void>;
+  readonly resolve?: () => Promise<ResolvedWorkspaceTarget>;
 }
 
 export class WorkspaceRouteRegistry {
@@ -40,7 +42,7 @@ export class WorkspaceRouteRegistry {
       const existing = this.#routes.get(authority);
       if (existing === undefined) {
         this.#routes.set(authority, {
-          upstream: input.upstream, authorize: input.authorize,
+          upstream: input.upstream, authorize: input.authorize, resolve: input.resolve,
           claims: new Map([[input.claim, input.enabled]])
         });
         acquired = true;
@@ -49,6 +51,7 @@ export class WorkspaceRouteRegistry {
       acquired = !existing.claims.has(input.claim) || acquired;
       existing.upstream = input.upstream;
       existing.authorize = input.authorize;
+      existing.resolve = input.resolve;
       existing.claims.set(input.claim, input.enabled);
     }
     return acquired;
@@ -73,10 +76,10 @@ export class WorkspaceRouteRegistry {
     }
   }
 
-  target(host: string): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined } | undefined {
+  target(host: string): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined; readonly resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined } | undefined {
     const route = this.#routes.get(host.toLowerCase().replace(/\.$/, ""));
     if (route === undefined) return undefined;
     const claim = [...route.claims].find(([, enabled]) => enabled)?.[0];
-    return claim === undefined ? undefined : { upstream: route.upstream, claim, authorize: route.authorize };
+    return claim === undefined ? undefined : { upstream: route.upstream, claim, authorize: route.authorize, resolve: route.resolve };
   }
 }

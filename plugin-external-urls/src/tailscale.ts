@@ -10,7 +10,6 @@ export interface ExternalUrlIngressRuntime {
   readonly publicHost: string;
   readonly listenHost: string;
   readonly listenPort: number;
-  readonly upstreamMode: "container-ip";
 }
 
 export interface ExternalUrlIngressDriver {
@@ -43,7 +42,6 @@ export const tailscaleIngressDriver: ExternalUrlIngressDriver = {
       publicHost: address,
       listenHost: address,
       listenPort,
-      upstreamMode: "container-ip"
     };
   },
   async verify(argument) {

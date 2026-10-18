@@ -37,7 +37,6 @@ describe("Caddy ingress deployment", () => {
       domain: "dev.example.com",
       listenHost: "100.64.0.10",
       listenPort: 8443,
-      upstreamMode: "container-ip",
       dnsProvider: "cloudflare",
       dnsArgument: "{}",
       acmeEmail: "ops@example.com",

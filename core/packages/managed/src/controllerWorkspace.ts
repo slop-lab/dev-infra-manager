@@ -49,8 +49,7 @@ export class ControllerWorkspaces {
   async run<T>(workspace: ControllerWorkspace, operation: () => Promise<T>): Promise<T> {
     return this.store.withLock(workspace.name, async () => { await this.current(workspace); return operation(); });
   }
-  async resolveTarget(workspace: ControllerWorkspace, target: WorkspaceTarget,
-    _mode: "container-dns" | "container-ip"): Promise<ResolvedWorkspaceTarget> {
+  async resolveTarget(workspace: ControllerWorkspace, target: WorkspaceTarget): Promise<ResolvedWorkspaceTarget> {
     validateTarget(target);
     const record = await this.current(workspace);
     const inspected = await this.runtime.inspect(record);
@@ -76,6 +75,7 @@ export class ControllerWorkspaces {
     if (relay.exitCode !== 0) throw new UserError(`cannot start workspace route relay: ${relay.stderr.trim()}`);
     const response = object(JSON.parse(relay.stdout));
     if (!Number.isSafeInteger(response.port) || Number(response.port) < 1 || Number(response.port) > 65535) throw new UserError("workspace relay returned an invalid port");
+    await this.current(workspace);
     return { protocol: target.protocol, host: agentIp, port: Number(response.port), fingerprint };
   }
   private async current(workspace: ControllerWorkspace): Promise<WorkspaceRecord> {

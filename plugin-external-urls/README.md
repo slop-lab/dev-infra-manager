@@ -41,7 +41,7 @@ until a host administrator runs `dim external-url approve URL_ID`. Requests
 still succeed and return `pending`; `dim external-url revoke URL_ID` on the host
 removes reachability terminally. Workspace-scoped plugin grants can revoke only
 their own routes and cannot approve them. Revocation, route deletion, and
-same-target runtime rebinding close active HTTP streams, WebSocket upgrades,
+explicit route rebinding close active HTTP streams, WebSocket upgrades,
 and TCP flows before removing or replacing the exact route claim. A change to
 the stable external listener address or port returns approval to `pending`;
 managed Caddy's ephemeral loopback router does not.
@@ -75,9 +75,11 @@ controller grants continue to list only their own workspace and cannot invoke
 the host-wide action. Neither listing returns controller grants, provider
 arguments, or credentials.
 
-Targets may be the workspace root, one named child container, or a container
-inside that child. DIM resolves the target through the workspace runtime
-rather than accepting an arbitrary host address.
+Targets address workspace loopback (`containers: []`) or one container in its
+nested Docker engine (`containers: ["service-name"]`). The controller resolves
+an owned in-agent relay; requests cannot supply an arbitrary host address.
+Host sockets and credentials are never mounted into the workspace, and
+ordinary Git workspaces require no Project metadata.
 
 ## Tailscale TCP ingress
 
@@ -106,9 +108,9 @@ binary into a workspace. One authenticated workspace target owns the listener
 until its route is revoked; TCP requests do not accept URL paths. The listener
 allows at most 256 concurrent flows, limits upstream connection setup to 10
 seconds, and closes a flow after five idle minutes. Revocation, listener
-shutdown, and a same-owner target refresh destroy both socket directions. A
-refresh can therefore follow a recreated workspace address without allowing a
-different workspace or logical target to take over the listener.
+shutdown and explicit route rebinding destroy both socket directions. Each new
+connection resolves the current owned runtime. Existing connections remain
+pinned to their selected target until they end or are explicitly revoked.
 
 ## Caddy HTTPS
 
@@ -148,19 +150,16 @@ reject, or rewrite requested subdomains.
 
 The controller stores active routes under DIM state and reconciles them on
 restart. Each new HTTP request, WebSocket upgrade, and TCP connection checks the
-current core workspace UUID. Discard or same-name replacement makes cached
-routes unreachable immediately. DNS credentials remain in the
+current core workspace UUID and resolves its owned container and relay. A
+same-UUID container recreation recovers on the next connection without a route
+listing or controller restart. A missing or foreign runtime cannot receive
+traffic through a cached IP. Discard or same-name replacement makes routes
+unreachable immediately. DNS credentials remain in the
 host's mode-`0600` configuration and are never returned through workspace
 controller APIs.
 
 
 See the complete
-[External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md),
+[External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/specification/docs/external-urls.md),
 [feature example](https://github.com/slop-lab/dev-infra-manager/tree/main/examples/features/external-urls),
 and [source repository](https://github.com/slop-lab/dev-infra-manager).
-
-Targets address the workspace loopback service (`containers: []`) or one
-container in its nested Docker engine (`containers: ["service-name"]`). The
-controller validates the owned core container and routes through an in-agent
-relay at that container's IP. Host sockets and credentials are never mounted
-into the workspace. Ordinary Git workspaces require no Project metadata.

@@ -59,6 +59,28 @@ it("closes live HTTP streams and WebSocket flows before rebinding a route upstre
   expect(await websocketExchange(replacementWebSocket, "after-refresh")).toContain("second:after-refresh");
 });
 
+it("refreshes each new HTTP request and upgrade while existing flows retain their selected runtime", async () => {
+  const harness = await startHarness();
+  const existing = await openWebSocket(harness.ingressPort);
+  cleanup.push(async () => { existing.destroy(); });
+  expect(await websocketExchange(existing, "before")).toContain("first:before");
+  harness.replaceRuntime();
+  expect(await proxyRequest(harness.ingressPort)).toEqual({ status: 200, body: "second" });
+  expect(await websocketExchange(existing, "pinned")).toContain("first:pinned");
+  const replacement = await openWebSocket(harness.mirrorPort);
+  cleanup.push(async () => { replacement.destroy(); });
+  expect(await websocketExchange(replacement, "new")).toContain("second:new");
+  // The old endpoint is still live: a missing owned runtime cannot fall back to its cached IP.
+  harness.loseRuntime();
+  expect((await proxyRequest(harness.ingressPort)).status).toBe(404);
+  const denied = net.connect(harness.mirrorPort, "127.0.0.1");
+  denied.on("error", () => {}); await once(denied, "connect");
+  const closed = once(denied, "close");
+  denied.write("GET /socket HTTP/1.1\r\nHost: work--app.example.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n");
+  await within(closed, 1000);
+  expect(await websocketExchange(existing, "still-pinned")).toContain("first:still-pinned");
+});
+
 it("denies new HTTP and WebSocket traffic after workspace name and cached target IP reuse", async () => {
   const harness = await startHarness();
   expect(await proxyRequest(harness.ingressPort)).toEqual({ status: 200, body: "first" });
@@ -78,6 +100,8 @@ async function startHarness(): Promise<{
   readonly mirrorPort: number;
   readonly deleteRoute: () => Promise<Response>;
   readonly rebind: () => Promise<Response>;
+  readonly replaceRuntime: () => void;
+  readonly loseRuntime: () => void;
   readonly replaceWorkspace: () => Promise<void>;
 }> {
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-http-flow-"));
@@ -87,6 +111,7 @@ async function startHarness(): Promise<{
   await Promise.all([listen(first), listen(second)]);
   cleanup.push(() => Promise.all([close(first), close(second)]).then(() => {}));
   let targetPort = port(first);
+  let runtimeAvailable = true;
   const ingressPort = await availablePort();
   const mirrorPort = await availablePort();
   const registered = await registerPlugins([createExternalUrlsPlugin({ ingresses: {
@@ -113,12 +138,14 @@ async function startHarness(): Promise<{
     routes: registered.controllerRoutes,
     authenticate: async () => workspace,
     runWorkspaceRequest: async (_workspace, operation) => operation(),
-    resolveTarget: async () => ({
+    resolveTarget: async () => {
+      if (!runtimeAvailable) throw new Error("owned runtime is missing");
+      return ({
       protocol: "http",
       host: "127.0.0.1",
       port: targetPort,
       fingerprint: `target:${targetPort}`
-    })
+    }); }
   });
   await listen(controller);
   cleanup.push(() => close(controller));
@@ -137,6 +164,8 @@ async function startHarness(): Promise<{
   return {
     ingressPort,
     mirrorPort,
+    replaceRuntime: () => { targetPort = port(second); },
+    loseRuntime: () => { runtimeAvailable = false; },
     replaceWorkspace: async () => {
       await new WorkspaceStore(stateRoot).remove(workspace.name);
       await storeWorkspace(stateRoot, { ...workspace, id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" });

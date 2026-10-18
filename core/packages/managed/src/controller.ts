@@ -39,7 +39,7 @@ export interface ControllerRouteContext {
   readonly request: IncomingMessage;
   readonly stateRoot: string;
   readJson(maxBytes?: number): Promise<unknown>;
-  resolveTarget(target: WorkspaceTarget, mode: "container-dns" | "container-ip"): Promise<ResolvedWorkspaceTarget>;
+  resolveTarget(target: WorkspaceTarget): Promise<ResolvedWorkspaceTarget>;
 }
 
 export interface DimControllerRoute {
@@ -58,8 +58,7 @@ export interface ControllerRuntimeContext {
   listWorkspaces(): Promise<ControllerWorkspace[]>;
   resolveTarget(
     workspace: ControllerWorkspace,
-    target: WorkspaceTarget,
-    mode: "container-dns" | "container-ip"
+    target: WorkspaceTarget
   ): Promise<ResolvedWorkspaceTarget>;
   runWorkspaceRequest<T>(workspace: ControllerWorkspace, operation: () => Promise<T>): Promise<T>;
 }
@@ -71,8 +70,7 @@ export interface DimControllerOptions {
   authenticate(token: string): Promise<ControllerWorkspace | undefined>;
   resolveTarget(
     workspace: ControllerWorkspace,
-    target: WorkspaceTarget,
-    mode: "container-dns" | "container-ip"
+    target: WorkspaceTarget
   ): Promise<ResolvedWorkspaceTarget>;
   runWorkspaceRequest<T>(workspace: ControllerWorkspace, operation: () => Promise<T>): Promise<T>;
   maxBodyBytes?: number;
@@ -91,7 +89,7 @@ export function configuredDimController(
     hostInputProviders: plugins.hostInputProviders,
     authenticate: (token) => workspaces.authenticate(token),
     runWorkspaceRequest: (workspace, operation) => workspaces.run(workspace, operation),
-    resolveTarget: (workspace, target, mode) => workspaces.resolveTarget(workspace, target, mode)
+    resolveTarget: (workspace, target) => workspaces.resolveTarget(workspace, target)
   });
 }
 
@@ -105,7 +103,7 @@ export async function initializeControllerRoutes(
     stateRoot: lifecycle.stateRoot, runner,
     listWorkspaces: () => workspaces.list(),
     runWorkspaceRequest: (workspace, operation) => workspaces.run(workspace, operation),
-    resolveTarget: (workspace, target, mode) => workspaces.resolveTarget(workspace, target, mode)
+    resolveTarget: (workspace, target) => workspaces.resolveTarget(workspace, target)
   };
   const initialized = new Set<DimControllerRoute["initialize"]>();
   for (const route of plugins.controllerRoutes) {
@@ -200,7 +198,7 @@ async function handleAuthenticatedRequest(
       request,
       stateRoot: options.stateRoot,
       readJson: async (limit = options.maxBodyBytes ?? 16_384) => parseControllerJsonBody(body, limit),
-      resolveTarget: (target, mode) => options.resolveTarget(workspace, target, mode)
+      resolveTarget: (target) => options.resolveTarget(workspace, target)
     });
     if (!result) {
       response.writeHead(204).end();

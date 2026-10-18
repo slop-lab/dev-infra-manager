@@ -42,6 +42,9 @@ describe("workspace instance route authority", () => {
       } }
     })]);
     cleanup.push(() => plugins.dispose());
+    const replacementTarget = net.createServer((socket) => socket.on("data", (chunk) => socket.write(`replacement:${String(chunk)}`)));
+    await listen(replacementTarget); cleanup.push(() => close(replacementTarget));
+    let runtimeAvailable = true, targetPort = address(target).port;
     let authenticationObserved = () => {};
     const authenticationStarted = new Promise<void>((resolve) => { authenticationObserved = resolve; });
     let releaseAuthentication = () => {};
@@ -60,12 +63,14 @@ describe("workspace instance route authority", () => {
         return record;
       },
       runWorkspaceRequest: (workspace, operation) => authority.run(workspace, operation),
-      resolveTarget: async (_workspace, requested) => ({
+      resolveTarget: async (_workspace, requested) => {
+        if (!runtimeAvailable) throw new UserError("owned runtime disappeared");
+        return ({
         protocol: requested.protocol,
         host: "127.0.0.1",
-        port: address(target).port,
-        fingerprint: "target-generation"
-      })
+        port: targetPort,
+        fingerprint: `target:${targetPort}`
+      }); }
     });
     await listen(controller);
     cleanup.push(() => close(controller));
@@ -83,6 +88,11 @@ describe("workspace instance route authority", () => {
     await expect(exchange(listenPort, "stale")).rejects.toThrow();
     expect((await createRoute(endpoint, freshGrant)).status).toBe(201);
     await expect(exchange(listenPort, "fresh")).resolves.toBe("fresh");
+    runtimeAvailable = false;
+    // Core UUID stays current, but the cached endpoint could now belong to a foreign runtime.
+    await expect(exchange(listenPort, "must not use cached IP")).rejects.toThrow();
+    runtimeAvailable = true; targetPort = address(replacementTarget).port;
+    await expect(exchange(listenPort, "new connection")).resolves.toBe("replacement:new connection");
     // Cached target IP and port stay identical; UUID replacement must still deny a new connection.
     await state.remove(newRecord.name);
     await state.write({ ...newRecord, id: "cccccccc-cccc-cccc-cccc-cccccccccccc" });

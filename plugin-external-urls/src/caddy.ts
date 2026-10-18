@@ -3,7 +3,7 @@ import { parseRoutePolicy, type ExternalUrlRoutePolicyConfig } from "./routePoli
 
 export const CADDY_VERSION = "2.11.4";
 export const CADDY_INGRESS_DOCUMENTATION_URL =
-  "https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md"
+  "https://github.com/slop-lab/dev-infra-manager/blob/main/specification/docs/external-urls.md"
   + "#http-and-https-with-cloudflare-dns-and-caddy";
 
 export interface CaddyDeployment {
@@ -17,7 +17,6 @@ export interface CaddyIngressArgument {
   domain: string;
   listenHost: string;
   listenPort: number | "auto";
-  upstreamMode?: "container-ip" | "container-dns";
   dnsProvider: string;
   dnsArgument: string;
   acmeEmail?: string;
@@ -60,8 +59,8 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
   if (input.internalPort !== undefined) {
     throw caddyArgumentError("field 'internalPort' is managed by DIM and must not be configured");
   }
-  if (input.upstreamMode !== undefined && input.upstreamMode !== "container-ip" && input.upstreamMode !== "container-dns") {
-    throw caddyArgumentError("field 'upstreamMode' must be container-ip or container-dns");
+  if (input.upstreamMode !== undefined) {
+    throw caddyArgumentError("field 'upstreamMode' is unsupported; targets always use the owned workspace relay");
   }
   if (input.acmeEmail !== undefined && typeof input.acmeEmail !== "string") {
     throw caddyArgumentError("field 'acmeEmail' must be a string");

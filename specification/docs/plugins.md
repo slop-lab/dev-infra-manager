@@ -76,7 +76,9 @@ engine. The helper verifies core runtime ownership, pins the owned agent's
 container ID and IP, and runs the byte relay inside that agent. It supports no
 second nested-container level. External URL listeners recheck the current core
 UUID on every HTTP request, WebSocket upgrade and new TCP connection, so a
-cached IP cannot redirect an old route after workspace replacement.
+cached IP cannot redirect an old route after workspace replacement. Each new
+flow also resolves the currently owned runtime and restores its relay after
+container recreation; existing flows retain their selected endpoint.
 
 ## Named extensions and host inputs
 
