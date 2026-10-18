@@ -6,10 +6,14 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, ProcessRunner, workspaceRuntimeResources } from "../../core/packages/core/dist/workspace.js";
-import { ControllerWorkspaces } from "../../core/packages/managed/dist/controllerWorkspace.js";
-import { registerPlugins, createDimController } from "../../core/packages/managed/dist/index.js";
-import { createExternalUrlsPlugin } from "../../plugin-external-urls/dist/index.js";
+/** @type {typeof import("../../core/packages/core/src/workspace.js")} */
+const { WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, ProcessRunner, workspaceRuntimeResources } = await import(new URL("../../core/packages/core/dist/workspace.js", import.meta.url).href);
+/** @type {typeof import("../../core/packages/managed/src/controllerWorkspace.js")} */
+const { ControllerWorkspaces } = await import(new URL("../../core/packages/managed/dist/controllerWorkspace.js", import.meta.url).href);
+/** @type {typeof import("../../core/packages/managed/src/index.js")} */
+const { registerPlugins, createDimController } = await import(new URL("../../core/packages/managed/dist/index.js", import.meta.url).href);
+/** @type {typeof import("../../plugin-external-urls/src/index.js")} */
+const { createExternalUrlsPlugin } = await import(new URL("../../plugin-external-urls/dist/index.js", import.meta.url).href);
 
 const image = process.argv[2];
 if (!image) throw new Error("usage: node verification/scripts/controller-workspace-relay-smoke.mjs WORKSPACE_IMAGE");
@@ -22,7 +26,7 @@ const service = new WorkspaceService(store, runtime, async ({ destination }) => 
   return { url: "https://example.invalid/relay-smoke.git", ref: "refs/heads/main", commit: "a".repeat(40) };
 });
 const controller = new ControllerWorkspaces({ stateRoot: join(root, "managed") }, runner, store.root);
-/** @type {import("../../core/packages/core/dist/workspace.js").WorkspaceRecord | undefined} */
+/** @type {import("../../core/packages/core/src/workspace.js").WorkspaceRecord | undefined} */
 let record;
 /** @type {Awaited<ReturnType<typeof registerPlugins>> | undefined} */
 let plugin;
@@ -36,7 +40,7 @@ try {
   record = await service.create({ name: "relay-smoke", source: { url: "https://example.invalid/relay-smoke.git" }, image });
   const agent = await runtime.inspect(record); assert.ok(agent?.running);
   await startTarget(agent.id, "initial");
-  /** @type {import("../../core/packages/managed/dist/controller.js").WorkspaceTarget} */
+  /** @type {import("../../core/packages/managed/src/controller.js").WorkspaceTarget} */
   const target = { containers: [], port: 3456, protocol: "tcp" };
   const selected = { id: record.id, name: record.name };
   const first = await controller.resolveTarget(selected, target);
@@ -73,7 +77,7 @@ try {
     }); request.once("error", reject);
   });
   assert.equal(await (await gateway()).text(), "initial");
-  /** @type {import("../../core/packages/managed/dist/controller.js").WorkspaceTarget} */
+  /** @type {import("../../core/packages/managed/src/controller.js").WorkspaceTarget} */
   const httpTarget = { containers: [], port: 3457, protocol: "http" };
   const initialHttp = await controller.resolveTarget(selected, httpTarget);
   record = await service.stop(record.name);
@@ -150,7 +154,7 @@ function exchange(target, input) {
   });
 }
 
-/** @param {import("../../core/packages/core/dist/workspace.js").WorkspaceRecord} workspace */
+/** @param {import("../../core/packages/core/src/workspace.js").WorkspaceRecord} workspace */
 function workspaceNetwork(workspace) { return workspaceRuntimeResources(workspace).network; }
 async function availablePort() {
   const listener = createServer(); await listen(listener);

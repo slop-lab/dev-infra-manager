@@ -6,7 +6,8 @@
  * node base-workspace-ssh-smoke.mjs cleanup STATE_DIRECTORY
  */
 import { object, array, string, parseJson } from "./lib/json-values.mjs";
-import { parseWorkspaceRecord } from "../../core/packages/core/dist/workspace.js";
+/** @type {typeof import("../../core/packages/core/src/workspace.js")} */
+const { parseWorkspaceRecord } = await import(new URL("../../core/packages/core/dist/workspace.js", import.meta.url).href);
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
