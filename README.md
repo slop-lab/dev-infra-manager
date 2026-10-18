@@ -155,3 +155,17 @@ This check creates disposable Sysbox resources, exercises nested Docker and
 storage/resource lifecycle behavior, and cleans up its resources. Container
 runtime evidence does not establish VM/KVM support. VM workspaces and automatic tool-specific session continuation remain future
 product work; the architecture plan records their relation to the issue backup.
+
+Managed administration also follows the selected host:
+
+```bash
+dim --host devbox managed control-plane connect /srv/dim/deployment
+dim --host devbox managed project list --json
+dim --host devbox create dim://PROJECT dev
+```
+
+The remote host holds Project state and private role files. The client can have
+only the base CLI; optional code is loaded on the host that executes the
+operation. `dim host use devbox` selects that host for subsequent commands.
+The root `dim controller ...` entry point stays local for installer activation;
+use `dim --host devbox managed controller ...` for remote administration.

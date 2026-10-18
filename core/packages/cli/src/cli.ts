@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { Command, CommanderError } from "commander";
 import { UserError } from "@slop-lab/dim-core/workspace";
-import { HostContextError } from "./host-context.js";
+import { HostContextError, HostContextStore } from "./host-context.js";
 import { packageVersion } from "./package-version.js";
-import { HostTransportError } from "./host-transport.js";
+import { HostTransportError, streamHost } from "./host-transport.js";
 import { registerDevelopmentCommands } from "./development-commands.js";
 
 await main();
@@ -17,19 +17,38 @@ async function main(): Promise<void> {
       await runHostRequest(args[1]!);
       return;
     }
-    // Optional administration is loaded only when selected. The installer uses
-    // controller restart, so that facade integration remains directly reachable.
-    if (args[0] === "managed" || ["controller", "plugin", "ci", "external-url", "project", "host-input", "x"].includes(args[0] ?? "")) {
-      try {
-        import.meta.resolve("@slop-lab/dim-managed/cli");
-      } catch (error) {
-        if (error instanceof Error && "code" in error && error.code === "ERR_MODULE_NOT_FOUND") {
-          throw new UserError("Managed administration is not installed. Run 'dim installer install core --with-managed' to add it.");
+    // Managed administration follows the selected host. The root controller
+    // alias remains local for installer activation/recovery.
+    let managedArgs = args, selectedHost: string | undefined;
+    if (args[0] === "--host" && args[1]) {
+      selectedHost = args[1]; managedArgs = args.slice(2);
+    } else if (args[0]?.startsWith("--host=")) {
+      selectedHost = args[0].slice("--host=".length); managedArgs = args.slice(1);
+    }
+    const managedAliases = ["plugin", "ci", "external-url", "project", "host-input", "x"];
+    if (managedArgs[0] === "managed" || managedAliases.includes(managedArgs[0] ?? "")) {
+      const commandArgs = managedArgs[0] === "managed" ? managedArgs.slice(1) : managedArgs;
+      const host = await new HostContextStore().resolve(selectedHost);
+      if (host.ssh !== undefined) {
+        const abort = new AbortController();
+        const stop = () => abort.abort();
+        process.once("SIGINT", stop); process.once("SIGTERM", stop); process.once("SIGHUP", stop);
+        try {
+          process.exitCode = await streamHost(host, { operation: "managed.cli", input: { args: commandArgs } }, {
+            signal: abort.signal, terminal: Boolean(process.stdin.isTTY && process.stdout.isTTY)
+          });
+        } finally {
+          process.off("SIGINT", stop); process.off("SIGTERM", stop); process.off("SIGHUP", stop);
         }
-        throw error;
+      } else {
+        const { runManagedApplication } = await import("./managed-application.js");
+        await runManagedApplication(commandArgs);
       }
-      const { runManagedCli } = await import("@slop-lab/dim-managed/cli");
-      await runManagedCli(args[0] === "managed" ? args.slice(1) : args);
+      return;
+    }
+    if (args[0] === "controller") {
+      const { runManagedApplication } = await import("./managed-application.js");
+      await runManagedApplication(args);
       return;
     }
     const program = new Command()

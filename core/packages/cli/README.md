@@ -108,3 +108,17 @@ managed command reports how to add the component.
 ordinary development does not require either the managed component or those
 services. See the managed package's administration documentation for reviewed
 Project bootstrap and service configuration.
+
+Managed administration also follows the selected host:
+
+```bash
+dim --host devbox managed control-plane connect /srv/dim/deployment
+dim --host devbox managed project list --json
+dim --host devbox create dim://PROJECT dev
+```
+
+The remote host holds Project state and private role files. The client can have
+only the base CLI; optional code is loaded on the host that executes the
+operation. `dim host use devbox` selects that host for subsequent commands.
+The root `dim controller ...` entry point stays local for installer activation;
+use `dim --host devbox managed controller ...` for remote administration.

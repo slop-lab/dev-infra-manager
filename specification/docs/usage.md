@@ -126,3 +126,17 @@ these services.
 The [installer specification](../specs/14-installer-facade.md) defines facade
 installation and recovery. See [managed administration](../../core/packages/managed/docs/cli.md)
 for optional Project/review/CI operations and explicit service roles.
+
+Managed administration also follows the selected host:
+
+```bash
+dim --host devbox managed control-plane connect /srv/dim/deployment
+dim --host devbox managed project list --json
+dim --host devbox create dim://PROJECT dev
+```
+
+The remote host holds Project state and private role files. The client can have
+only the base CLI; optional code is loaded on the host that executes the
+operation. `dim host use devbox` selects that host for subsequent commands.
+The root `dim controller ...` entry point stays local for installer activation;
+use `dim --host devbox managed controller ...` for remote administration.

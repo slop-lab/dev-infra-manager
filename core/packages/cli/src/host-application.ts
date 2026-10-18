@@ -9,6 +9,17 @@ import { decodeHostRequest } from "./host-transport.js";
 
 /** All filesystem/runtime work happens here, on the host selected by the client. */
 export async function runHostRequest(encoded: string): Promise<void> {
+  const request = decodeHostRequest(encoded);
+  if (request.operation === "managed.cli") {
+    const args = request.input?.args;
+    if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string" || arg.includes("\0"))) {
+      throw new UserError("managed command must be an argument array");
+    }
+    // Managed long-running commands own their signal/cleanup policy.
+    const { runManagedApplication } = await import("./managed-application.js");
+    await runManagedApplication(args as string[]);
+    return;
+  }
   const abort = new AbortController();
   const stop = () => abort.abort();
   process.once("SIGINT", stop); process.once("SIGTERM", stop); process.once("SIGHUP", stop);

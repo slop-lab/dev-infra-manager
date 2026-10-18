@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,6 +50,50 @@ test("published base CLI works without managed services and gives an installatio
         return true;
       });
     }
+    // The client remains base-only; optional administration is installed only
+    // in the remote host graph and receives argument bytes through stdio RPC.
+    const remote = path.join(directory, "remote");
+    await cp(path.join(directory, "node_modules"), path.join(remote, "node_modules"), { recursive: true });
+    const managed = path.join(remote, "node_modules", "@slop-lab", "dim-managed");
+    await mkdir(managed, { recursive: true });
+    await writeFile(path.join(managed, "package.json"), JSON.stringify({
+      name: "@slop-lab/dim-managed", type: "module", exports: { "./cli": "./cli.js" }
+    }));
+    await writeFile(path.join(managed, "cli.js"), `export async function runManagedCli(args) {
+      console.log(JSON.stringify({ args, host: process.env.DIM_TEST_REMOTE_HOST }));
+    }`);
+    const bin = path.join(directory, "bin");
+    await mkdir(bin);
+    await writeFile(path.join(bin, "ssh"), `#!${process.execPath}
+const { spawnSync } = require("node:child_process");
+const command = process.argv.at(-1);
+const encoded = /__host ([A-Za-z0-9_-]+)/.exec(command)?.[1];
+if (!encoded) process.exit(97);
+const result = spawnSync(process.execPath, [process.env.DIM_TEST_REMOTE_CLI, "__host", encoded], {
+  stdio: "inherit", env: { ...process.env, DIM_TEST_REMOTE_HOST: "devbox" }
+});
+process.exit(result.status ?? 1);
+`, { mode: 0o700 });
+    const remoteOptions = { ...options, env: { ...options.env,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      DIM_TEST_REMOTE_CLI: path.join(remote, "node_modules", "@slop-lab", "dim-cli", "cli.js")
+    } };
+    await run(process.execPath, [executable, "host", "add", "devbox", "--ssh", "developer@devbox"], remoteOptions);
+    const arguments_ = ["project", "show", "a;$(printf injected)'\"", "--json"];
+    for (const selection of [["--host", "devbox"], ["--host=devbox"]]) {
+      const result = await run(process.execPath, [executable, ...selection, "managed", ...arguments_], remoteOptions);
+      assert.deepEqual(JSON.parse(result.stdout), { args: arguments_, host: "devbox" });
+    }
+    await run(process.execPath, [executable, "host", "use", "devbox"], remoteOptions);
+    const selected = await run(process.execPath, [executable, "managed", ...arguments_], remoteOptions);
+    assert.deepEqual(JSON.parse(selected.stdout), { args: arguments_, host: "devbox" });
+    const alias = await run(process.execPath, [executable, ...arguments_], remoteOptions);
+    assert.deepEqual(JSON.parse(alias.stdout), { args: arguments_, host: "devbox" });
+    await assert.rejects(run(process.execPath, [executable, "--host", "local", "managed", "--help"], remoteOptions),
+      (error: unknown) => error instanceof Error && "stderr" in error && /not installed on this host/.test(String(error.stderr)));
+    await assert.rejects(run(process.execPath, [executable, "controller", "restart"], remoteOptions),
+      (error: unknown) => error instanceof Error && "stderr" in error && /not installed on this host/.test(String(error.stderr)));
+
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
