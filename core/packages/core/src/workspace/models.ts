@@ -21,7 +21,7 @@ export interface WorkspaceRecord {
   id: string;
   name: string;
   source: AcquiredWorkspaceSource;
-  runtime: "container";
+  runtime: string;
   image: string;
   resources: WorkspaceResources;
   git: { name: string; email: string };

@@ -11,6 +11,11 @@ await main();
 async function main(): Promise<void> {
   try {
     const args = process.argv.slice(process.argv[2] === "--" ? 3 : 2);
+    if (args[0] === "__agent") {
+      if (args.length !== 2) throw new UserError("workspace bridge requires exactly one private configuration path");
+      const { runWorkspaceAgent } = await import("./workspace-agent.js");
+      await runWorkspaceAgent(args[1]!); return;
+    }
     if (args[0] === "__host") {
       if (args.length !== 2) throw new UserError("host mode requires exactly one encoded request");
       const { runHostRequest } = await import("./host-application.js");
@@ -56,6 +61,16 @@ async function main(): Promise<void> {
     registerDevelopmentCommands(program);
     program.command("managed").description("Optional managed Git, review, CI and host administration");
     program.command("controller").description("Manage the optional host controller");
+    // Unknown top-level commands are resolved on the selected host, where optional
+    // integrations are installed. A base-only remote client loads none of them.
+    if (managedArgs[0] && !managedArgs[0].startsWith("-")
+      && !program.commands.some((command) => command.name() === managedArgs[0] || command.aliases().includes(managedArgs[0]!))) {
+      const target = await new HostContextStore().resolve(selectedHost);
+      process.exitCode = await streamHost(target, { operation: "plugin.cli", input: { args: managedArgs } }, {
+        terminal: Boolean(process.stdin.isTTY && process.stdout.isTTY), stdin: process.stdin
+      });
+      return;
+    }
     program.addHelpText("after", `
 Start developing:
   dim create https://example.com/team/app.git dev

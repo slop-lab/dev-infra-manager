@@ -3,7 +3,7 @@ import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { randomBytes } from "node:crypto";
 import {
   ContainerWorkspaceRuntime, WorkspaceService, UserError, type CommandRunner, type CreateWorkspaceInput,
-  type StreamingCommandRunner, type WorkspaceRecord, type WorkspaceStore, workspaceRuntimeResources
+  type StreamingCommandRunner, type WorkspaceRecord, type WorkspaceStore, type WorkspaceRuntime
 } from "@slop-lab/dim-core/workspace";
 import { managedStateRoot } from "./lifecycleOptions.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
@@ -19,6 +19,7 @@ export interface ManagedWorkspaceHostContext {
   readonly runner: StreamingCommandRunner;
   readonly cleanupRunner?: CommandRunner;
   readonly signal?: AbortSignal;
+  readonly runtime?: WorkspaceRuntime;
 }
 
 /** Managed Git contributes acquisition and a scoped Git attachment; core owns the whole runtime lifecycle. */
@@ -37,16 +38,12 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput, contex
   const proof = await proveNativeProjectReadiness(connection, project, signal, {
     commit: project.rootCommit, tree: project.rootTree, allowFastForward: true
   });
-  const runtime = new ContainerWorkspaceRuntime(context.runner, context.cleanupRunner);
+  const runtime = context.runtime ?? new ContainerWorkspaceRuntime(context.runner, context.cleanupRunner);
   const seed = runtime.seed.bind(runtime);
   runtime.seed = async (record, directory) => {
     await seed(record, directory);
-    const network = workspaceRuntimeResources(record).network;
-    const inspected = await context.runner.run("docker", ["network", "inspect", network, "--format", "{{json .IPAM.Config}}"]);
-    if (inspected.exitCode !== 0) throw new UserError("cannot inspect owned workspace broker network");
-    const configurations: unknown = JSON.parse(inspected.stdout);
-    const gateway = Array.isArray(configurations) ? configurations.map((value) => value?.Gateway).find(privateAddress) : undefined;
-    if (typeof gateway !== "string") throw new UserError("managed workspace Git requires a private IPv4 Docker network gateway");
+    const gateway = await runtime.hostGateway?.(record);
+    if (!privateAddress(gateway)) throw new UserError("managed workspace Git requires a private IPv4 host service gateway");
     const attachment: NativeWorkspaceAttachment = { schemaVersion: 1, workspaceId: record.id, workspaceName: record.name,
       nativeWorkspaceId: randomBytes(32).toString("base64url"), projectName, projectId: project.projectId,
       protectedRef: proof.protectedRef, commit: proof.commit, tree: proof.tree,
@@ -64,8 +61,8 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput, contex
       ["git", "config", "--local", "credential.useHttpPath", "true"],
       ["git", "config", "--local", "remote.origin.push", `HEAD:refs/heads/proposals/${attachment.nativeWorkspaceId}/${proof.protectedRef.slice("refs/heads/".length)}`]
     ]) {
-      const result = await runtime.run(record, command, { signal });
-      if (result.exitCode !== 0) throw new UserError("cannot configure the scoped workspace Git origin");
+      const exitCode = await runtime.exec(record, command, { signal });
+      if (exitCode !== 0) throw new UserError("cannot configure the scoped workspace Git origin");
     }
   };
   const service = new WorkspaceService(context.store, runtime, async ({ destination }) => {

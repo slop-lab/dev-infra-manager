@@ -1,11 +1,13 @@
 import os from "node:os";
 import path from "node:path";
 import {
-  acquireWorkspaceSource, buildWorkspaceImage, checkWorkspaceHost, ContainerWorkspaceRuntime, ProcessRunner, UserError,
+  acquireWorkspaceSource, buildWorkspaceImage, checkWorkspaceHost, ProcessRunner, UserError,
   WorkspaceService, WorkspaceStore, type CreateWorkspaceInput
 } from "@slop-lab/dim-core/workspace";
 import { createWorkspaceOnHost, ensureWorkspaceIntegration } from "./workspace-composition.js";
 import { decodeHostRequest } from "./host-transport.js";
+import { composeWorkspaceRuntime, loadHostPlugins } from "./host-plugins.js";
+import { ensureWorkspaceAgent } from "./workspace-agent.js";
 
 /** All filesystem/runtime work happens here, on the host selected by the client. */
 export async function runHostRequest(encoded: string): Promise<void> {
@@ -31,6 +33,7 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
   if (process.platform !== "linux") throw new Error(`DIM runtime hosts require Linux; unsupported platform '${process.platform}'`);
   const request = decodeHostRequest(encoded);
   const input = request.input ?? {};
+  const expectedId = input.expectedId === undefined ? undefined : string(input.expectedId, "expectedId");
   const processRunner = new ProcessRunner();
   const runner = {
     run: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
@@ -39,13 +42,36 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
       processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal })
   };
   const store = new WorkspaceStore(path.resolve(process.env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")), { signal });
-  const context = { store, runner, cleanupRunner: processRunner, signal };
+  const composition = composeWorkspaceRuntime({ runner, cleanupRunner: processRunner, stateRoot: store.root });
+  const cleanupWorkspace = async (name: string, workspaceId?: string) => {
+    const cleanupSignal = AbortSignal.timeout(30_000);
+    const cleanupRunner = {
+      run: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
+        processRunner.run(command, args, { ...options, signal: options.signal ? AbortSignal.any([cleanupSignal, options.signal]) : cleanupSignal }),
+      runStreaming: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
+        processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([cleanupSignal, options.signal]) : cleanupSignal })
+    };
+    const cleanupRuntime = composeWorkspaceRuntime({ runner: cleanupRunner, cleanupRunner: processRunner, stateRoot: store.root });
+    const cleanup = new WorkspaceService(new WorkspaceStore(store.root, { signal: cleanupSignal }), cleanupRuntime.runtime,
+      async () => { throw new UserError("cleanup cannot acquire source"); });
+    await cleanup.discard(name, workspaceId);
+  };
+  const context = { store, runner, cleanupRunner: processRunner, signal, runtime: composition.runtime, cleanupWorkspace };
   const service = new WorkspaceService(
-    store, new ContainerWorkspaceRuntime(runner, processRunner),
+    store, composition.runtime,
     (input) => acquireWorkspaceSource({ ...input, runner, signal })
   );
+  const agentContext = { ...context, stateRoot: store.root, service };
   let result: unknown;
   switch (request.operation) {
+    case "plugins": result = (await loadHostPlugins()).map(({ name, commands, runtime }) => ({ name, commands: commands ?? [], ...(runtime ? { runtime: runtime.name } : {}) })); break;
+    case "plugin.cli": {
+      if (!Array.isArray(input.args) || !input.args.every((arg: unknown) => typeof arg === "string" && !arg.includes("\0"))) throw new UserError("plugin command must be an argument array");
+      const args = input.args as string[];
+      const plugin = (await loadHostPlugins()).find((plugin) => plugin.commands?.some(({ name }) => name === args[0]));
+      if (!plugin?.run) throw new UserError(`unknown command '${args[0] ?? ""}'; use 'dim plugins' to inspect installed host commands`);
+      await plugin.run(args, { ...context, stateRoot: store.root, service }); return;
+    }
     case "image.build": {
       result = await buildWorkspaceImage(runner, {
         ...process.env, ...(input.image === undefined ? {} : { DIM_WORKSPACE_IMAGE: string(input.image, "image") })
@@ -55,21 +81,34 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
     case "doctor": result = await checkWorkspaceHost(runner); break;
     case "list": result = await service.list(); break;
     case "show": result = await service.show(string(input.name, "name")); break;
-    case "create": result = await createWorkspaceOnHost(createInput(input), service, context); break;
-    case "start": {
-      const record = await service.start(string(input.name, "name"));
-      await ensureWorkspaceIntegration(record, context);
+    case "create": {
+      const creation = createInput(input);
+      if (creation.runtime !== undefined && creation.runtime !== "container") {
+        const defaultImage = await composition.defaultImage(creation.runtime);
+        if (!creation.image && !defaultImage) throw new UserError(`runtime '${creation.runtime}' requires an explicit --image`);
+        if (!creation.image && defaultImage) creation.image = defaultImage;
+      }
+      const record = await createWorkspaceOnHost(creation, service, context);
+      await ensureWorkspaceAgent(record, agentContext);
       result = record; break;
     }
-    case "stop": result = await service.stop(string(input.name, "name")); break;
-    case "restart": {
-      const record = await service.restart(string(input.name, "name"));
+    case "start": {
+      const record = await service.start(string(input.name, "name"), expectedId);
       await ensureWorkspaceIntegration(record, context);
+      await ensureWorkspaceAgent(record, agentContext);
+      result = record; break;
+    }
+    case "stop": result = await service.stop(string(input.name, "name"), expectedId); break;
+    case "restart": {
+      const record = await service.restart(string(input.name, "name"), expectedId);
+      await ensureWorkspaceIntegration(record, context);
+      await ensureWorkspaceAgent(record, agentContext);
       result = record; break;
     }
     case "recreate": {
-      const record = await service.recreate(string(input.name, "name"));
+      const record = await service.recreate(string(input.name, "name"), expectedId);
       await ensureWorkspaceIntegration(record, context);
+      await ensureWorkspaceAgent(record, agentContext);
       result = record; break;
     }
     case "resources": {
@@ -78,15 +117,16 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
         ...(resources.cpuCount === undefined ? {} : { cpuCount: string(resources.cpuCount, "cpuCount") }),
         ...(resources.memory === undefined ? {} : { memory: string(resources.memory, "memory") }),
         ...(resources.pidsLimit === undefined ? {} : { pidsLimit: string(resources.pidsLimit, "pidsLimit") })
-      });
+      }, expectedId);
       break;
     }
     case "discard":
-      await service.discard(string(input.name, "name")); result = { removed: true }; break;
+      await service.discard(string(input.name, "name"), expectedId); result = { removed: true }; break;
     case "exec": {
       if (!Array.isArray(input.command) || input.command.some((v) => typeof v !== "string")) throw new UserError("command must be an argument array");
       const name = string(input.name, "name");
       await ensureWorkspaceIntegration(await store.read(name), context);
+      await ensureWorkspaceAgent(await store.read(name), agentContext);
       process.exitCode = await service.exec(name, input.command as string[], {
         signal, stdin: process.stdin, ...(input.interactive === true ? { terminal: true } : {})
       });
@@ -113,6 +153,7 @@ function createInput(input: Record<string, unknown>): CreateWorkspaceInput {
     name: string(input.name, "name"),
     source: { url: string(source.url, "source.url"), ...(source.ref === undefined ? {} : { ref: string(source.ref, "source.ref") }) },
     ...(input.image === undefined ? {} : { image: string(input.image, "image") }),
+    ...(input.runtime === undefined ? {} : { runtime: string(input.runtime, "runtime") }),
     resources: {
       ...(resources.cpuCount === undefined ? {} : { cpuCount: string(resources.cpuCount, "cpuCount") }),
       ...(resources.memory === undefined ? {} : { memory: string(resources.memory, "memory") }),

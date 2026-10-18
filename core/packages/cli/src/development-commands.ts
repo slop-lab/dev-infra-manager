@@ -5,10 +5,11 @@ import { HostContextStore, type HostTarget } from "./host-context.js";
 import { callHost, streamHost } from "./host-transport.js";
 import { forwardWorkspace } from "./port-forward.js";
 
-interface OutputFlags { json?: boolean }
+interface OutputFlags { json?: boolean; expectId?: string }
 interface CreateFlags extends OutputFlags {
   ref?: string;
   image?: string;
+  runtime?: string;
   cpus?: string;
   memory?: string;
   pids?: string;
@@ -19,6 +20,10 @@ interface CreateFlags extends OutputFlags {
 export function registerDevelopmentCommands(program: Command): void {
   const hosts = new HostContextStore();
   registerHostContexts(program, hosts);
+  program.command("plugins").description("List optional commands and runtimes installed on the selected host")
+    .action(async (_flags: unknown, command: Command) => {
+      console.log(JSON.stringify(await callHost(await selectedHost(command, hosts), { operation: "plugins" }), null, 2));
+    });
   program.command("doctor")
     .description("Check development host readiness")
     .option("--json", "print JSON")
@@ -83,6 +88,7 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
     .argument("<name>")
     .option("--ref <ref>", "source branch, tag or commit")
     .option("--image <image>", "workspace image")
+    .option("--runtime <name>", "workspace runtime (container by default; optional providers come from plugins)")
     .option("--cpus <count>", "workspace CPU limit")
     .option("--memory <size>", "workspace memory limit")
     .option("--pids <count>", "workspace process limit")
@@ -99,6 +105,7 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
         name,
         source: { url: source, ...(flags.ref === undefined ? {} : { ref: flags.ref }) },
         ...(flags.image === undefined ? {} : { image: flags.image }),
+        ...(flags.runtime === undefined ? {} : { runtime: flags.runtime }),
         ...resourceInput(flags),
         ...(flags.gitUserName && flags.gitUserEmail ? { git: { name: flags.gitUserName, email: flags.gitUserEmail } } : {})
       } });
@@ -139,8 +146,9 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
       .description(operation === "recreate" ? "Replace a workspace container while preserving its checkout, home and Docker data" : `${capitalize(operation)} a workspace`)
       .argument("<name>")
       .option("--json", "print JSON")
+      .option("--expect-id <uuid>", "reject a workspace replaced since it was selected")
       .action(async (name: string, flags: OutputFlags, command: Command) => {
-        const record = await callHost<WorkspaceRecord>(await selectedHost(command, hosts), { operation, input: { name } });
+        const record = await callHost<WorkspaceRecord>(await selectedHost(command, hosts), { operation, input: { name, ...(flags.expectId === undefined ? {} : { expectedId: flags.expectId }) } });
         printAction(record, flags, `Workspace '${record.name}' is ${record.phase}`);
       });
   }
@@ -152,11 +160,12 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
     .option("--memory <size>", "workspace memory limit")
     .option("--pids <count>", "workspace process limit")
     .option("--json", "print JSON")
+    .option("--expect-id <uuid>", "reject a workspace replaced since it was selected")
     .action(async (name: string, flags: CreateFlags, command: Command) => {
       const resources = resourceInput(flags).resources;
       if (resources === undefined) throw new UserError("provide at least one resource limit");
       const outcome = await callHost<{ workspace: WorkspaceRecord; recreated: boolean }>(await selectedHost(command, hosts), {
-        operation: "resources", input: { name, resources }
+        operation: "resources", input: { name, resources, ...(flags.expectId === undefined ? {} : { expectedId: flags.expectId }) }
       });
       printAction(outcome, flags, `Updated resources for workspace '${outcome.workspace.name}'`
         + (outcome.recreated ? " (container recreated; persistent data preserved)" : ""));
@@ -167,6 +176,7 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
     .argument("<name>")
     .option("--yes", "confirm permanent deletion")
     .option("--json", "print JSON")
+    .option("--expect-id <uuid>", "reject a workspace replaced since it was selected")
     .action(async (name: string, flags: OutputFlags & { yes?: boolean }, command: Command) => {
       const target = await selectedHost(command, hosts);
       if (!flags.yes) {
@@ -177,7 +187,7 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
           if (!/^y(?:es)?$/i.test(answer.trim())) throw new UserError("operation was not confirmed");
         } finally { reader.close(); }
       }
-      const result = await callHost(target, { operation: "discard", input: { name } });
+      const result = await callHost(target, { operation: "discard", input: { name, ...(flags.expectId === undefined ? {} : { expectedId: flags.expectId }) } });
       printAction(result, flags, `Discarded workspace '${name}'`);
     });
 

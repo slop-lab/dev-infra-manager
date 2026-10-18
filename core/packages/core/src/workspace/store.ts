@@ -27,7 +27,7 @@ export function parseWorkspaceRecord(value: unknown): WorkspaceRecord {
     || fields.some((key) => !(key in record)) || record.schemaVersion !== 10) throw invalid();
   const source = object(record.source), resources = object(record.resources), git = object(record.git);
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(text(record.id))
-    || record.runtime !== "container" || typeof record.initialized !== "boolean"
+    || !/^[a-z][a-z0-9-]{0,31}$/.test(text(record.runtime)) || typeof record.initialized !== "boolean"
     || !["creating", "running", "stopped", "error", "discarding"].includes(text(record.phase))
     || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(text(source.commit))
     || Object.keys(source).sort().join() !== "commit,ref,url"
@@ -37,7 +37,7 @@ export function parseWorkspaceRecord(value: unknown): WorkspaceRecord {
   return {
     schemaVersion: 10, id: text(record.id), name: workspaceName(text(record.name)),
     source: { url: text(source.url), ref: text(source.ref), commit: text(source.commit) },
-    runtime: "container", image: text(record.image), initialized: record.initialized,
+    runtime: text(record.runtime), image: text(record.image), initialized: record.initialized,
     resources: validateResources({ cpuCount: text(resources.cpuCount), memory: text(resources.memory), pidsLimit: text(resources.pidsLimit) }),
     git: { name: text(git.name), email: text(git.email) },
     phase: record.phase as WorkspaceRecord["phase"], createdAt: text(record.createdAt), updatedAt: text(record.updatedAt),

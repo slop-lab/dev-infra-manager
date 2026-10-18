@@ -31,6 +31,8 @@ export * from "./nativeProjectDraftRootSnapshot.js";
 export * from "./nativeQemuRunnerImage.js";
 export * from "./nativeControlPlaneConnection.js";
 export * from "./plugin.js";
+export { workspacePluginRequest } from "./workspacePluginRequest.js";
+export type { WorkspaceHostPlugin } from "@slop-lab/dim-core/workspace";
 export * from "./hostInputs.js";
 export * from "./hostMirrorProvider.js";
 export * from "./pluginLoader.js";

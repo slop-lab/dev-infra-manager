@@ -32,6 +32,16 @@ async function fixture() {
 const create = { name: "dev", source: { url: "https://example.com/app.git" } };
 
 describe("workspace application lifecycle", () => {
+  it("persists an explicitly selected runtime without importing its implementation or changing lifecycle semantics", async () => {
+    const f = await fixture();
+    const record = await f.service.create({ ...create, runtime: "vm", image: "a".repeat(64) });
+    expect(record.runtime).toBe("vm");
+    expect(parseWorkspaceRecord(record)).toEqual(record);
+    await f.service.restart(record.name, record.id);
+    expect(f.calls).toEqual(["create", "start", "seed", "stop", "start"]);
+    await expect(f.service.create({ ...create, name: "bad", runtime: "../host" })).rejects.toThrow("invalid workspace runtime");
+    expect(f.acquisitions()).toBe(1);
+  });
   it("inspects an empty host without configuring a runtime or control plane", async () => {
     const f = await fixture();
     expect(await f.service.list()).toEqual([]); expect(f.calls).toEqual([]); expect(f.acquisitions()).toBe(0);

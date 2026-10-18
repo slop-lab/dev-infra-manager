@@ -22,13 +22,27 @@ export function workspaceRuntimeResources(record: Pick<WorkspaceRecord, "id">) {
     network: prefix,
     home: `${prefix}-home`,
     checkout: `${prefix}-checkout`,
-    docker: `${prefix}-docker`
+    docker: `${prefix}-docker`,
+    tmp: `${prefix}-tmp`
   };
 }
 
 /** Owns runtime resources only. The application owns records, Git acquisition and locks. */
 export class ContainerWorkspaceRuntime {
   constructor(private readonly runner: StreamingCommandRunner, private readonly cleanupRunner: CommandRunner = runner) {}
+
+  async hostGateway(record: WorkspaceRecord): Promise<string> {
+    await this.require(record);
+    const network = await this.inspectResource("network", workspaceRuntimeResources(record).network);
+    if (network === undefined) throw new UserError("workspace service network is missing");
+    assertOwned(network.Labels, record, "network");
+    for (const raw of array(object(network.IPAM).Config)) {
+      const gateway = object(raw).Gateway;
+      if (typeof gateway === "string" && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(gateway)
+        && gateway.split(".").every((part) => Number(part) <= 255)) return gateway;
+    }
+    throw new UserError("workspace service network has no IPv4 host gateway");
+  }
 
   async inspect(record: WorkspaceRecord): Promise<WorkspaceRuntimeInspection | undefined> {
     const resources = workspaceRuntimeResources(record);
@@ -37,14 +51,15 @@ export class ContainerWorkspaceRuntime {
     const config = object(container.Config);
     const host = object(container.HostConfig);
     assertOwned(config.Labels, record, "container");
-    if (config.Image !== record.image || host.Runtime !== "sysbox-runc" || host.Privileged !== false
+    if (config.Image !== record.image || host.Runtime !== "sysbox-runc" || host.Privileged !== false || host.OomScoreAdj !== 500
       || array(host.Devices).length !== 0 || array(host.CapAdd).length !== 0
       || array(host.SecurityOpt).length !== 0 || array(host.Binds).length !== 0
       || Object.keys(object(host.PortBindings)).length !== 0) {
       throw new UserError(`workspace '${record.name}' container configuration conflicts with its isolated runtime`);
     }
     const mounts = new Map<string, string>([
-      ["/home/dim", resources.home], ["/workspace", resources.checkout], ["/var/lib/docker", resources.docker]
+      ["/home/dim", resources.home], ["/workspace", resources.checkout], ["/var/lib/docker", resources.docker],
+      ["/mnt/dim-tmp", resources.tmp]
     ]);
     for (const raw of array(container.Mounts)) {
       const mount = object(raw);
@@ -79,19 +94,21 @@ export class ContainerWorkspaceRuntime {
     if (network !== undefined) assertOwned(network.Labels, record, "network");
     const existingContainer = await this.inspect(record);
     if (existingContainer !== undefined) return;
-    for (const role of ["home", "checkout", "docker"] as const) {
+    for (const role of ["home", "checkout", "docker", "tmp"] as const) {
       await this.ensureResource("volume", resources[role], record, role);
     }
     await this.ensureResource("network", resources.network, record, "network");
     await this.checked([
       "create", "--name", resources.container, "--network", resources.network,
       "--runtime", "sysbox-runc",
+      "--oom-score-adj", "500",
       ...resourceArguments(record.resources),
-      ...(["home", "checkout", "docker"] as const).flatMap((role) => [
-        "--mount", `type=volume,source=${resources[role]},target=${{ home: "/home/dim", checkout: "/workspace", docker: "/var/lib/docker" }[role]}`
+      ...(["home", "checkout", "docker", "tmp"] as const).flatMap((role) => [
+        "--mount", `type=volume,source=${resources[role]},target=${{ home: "/home/dim", checkout: "/workspace", docker: "/var/lib/docker", tmp: "/mnt/dim-tmp" }[role]}`
       ]),
       ...labelArguments(record, "container"),
       "--env", `DIM_GIT_USER_NAME=${record.git.name}`, "--env", `DIM_GIT_USER_EMAIL=${record.git.email}`,
+      "--env", "DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp",
       "--entrypoint", "/sbin/tini", "--", record.image,
       "--", "/usr/local/bin/dim-agent-entrypoint", "sleep", "infinity"
     ]);
@@ -194,7 +211,7 @@ export class ContainerWorkspaceRuntime {
     if (container !== undefined) await this.checked(["rm", "--force", container.id]);
     if (!options.keepData) {
       await this.removeResource("network", resources.network, record, "network");
-      for (const role of ["home", "checkout", "docker"] as const) {
+      for (const role of ["home", "checkout", "docker", "tmp"] as const) {
         await this.removeResource("volume", resources[role], record, role);
       }
     }

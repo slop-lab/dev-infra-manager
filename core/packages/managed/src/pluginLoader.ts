@@ -72,8 +72,12 @@ export async function loadInstalledPlugins(home = pluginHome()): Promise<{
     const module = await import(pathToFileURL(resolved).href) as {
       default?: DimPlugin;
       plugin?: DimPlugin;
+      hostPlugin?: unknown;
     };
     const plugin = module.default ?? module.plugin;
+    // Host-only integrations are consumed by the selected host CLI. Their
+    // installation must not make an optional controller load another runtime.
+    if (!plugin && module.hostPlugin !== undefined) continue;
     if (!plugin) {
       throw new UserError(`DIM plugin '${specifier}' must export default or named 'plugin'`);
     }

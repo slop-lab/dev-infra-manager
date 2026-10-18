@@ -18,6 +18,8 @@ export interface WorkspaceRuntime {
   seed(record: WorkspaceRecord, directory: string): Promise<void>;
   exec(record: WorkspaceRecord, command: string[], options?: RunOptions): Promise<number>;
   connect(record: WorkspaceRecord, port: number, options?: WorkspaceConnectOptions): Promise<number>;
+  /** Host address reachable from this guest; used only for scoped service bridges. */
+  hostGateway?(record: WorkspaceRecord): Promise<string>;
 }
 
 export interface WorkspaceConnectOptions extends Pick<RunOptions, "stdin" | "stdout" | "stderr" | "signal"> {
@@ -29,6 +31,7 @@ export interface CreateWorkspaceInput {
   name: string;
   source: WorkspaceSource;
   image?: string;
+  runtime?: string;
   resources?: Partial<WorkspaceResources>;
   git?: { name: string; email: string };
 }
@@ -55,6 +58,8 @@ export class WorkspaceService {
 
   async create(input: CreateWorkspaceInput): Promise<WorkspaceRecord> {
     const name = workspaceName(input.name);
+    const runtime = input.runtime ?? "container";
+    if (!/^[a-z][a-z0-9-]{0,31}$/.test(runtime)) throw new UserError("invalid workspace runtime name");
     const resources = validateResources({ cpuCount: "2", memory: "4g", pidsLimit: "2048", ...input.resources });
     return this.store.withLock(name, async () => {
       try { await this.store.read(name); throw new UserError(`workspace '${name}' already exists`); }
@@ -65,7 +70,7 @@ export class WorkspaceService {
         const source = await this.acquireSource({ source: input.source, destination: path.join(staging, "checkout") });
         const now = new Date().toISOString();
         let record: WorkspaceRecord = {
-          schemaVersion: 10, id: randomUUID(), name, source, runtime: "container",
+          schemaVersion: 10, id: randomUUID(), name, source, runtime,
           image: input.image ?? workspaceImageReference(process.env.DIM_WORKSPACE_IMAGE), resources,
           git: input.git ?? { name: "DIM developer", email: "developer@dim.local" },
           initialized: false, phase: "creating", createdAt: now, updatedAt: now
@@ -82,52 +87,52 @@ export class WorkspaceService {
     });
   }
 
-  start(name: string): Promise<WorkspaceRecord> {
+  start(name: string, expectedWorkspaceId?: string): Promise<WorkspaceRecord> {
     return this.change(name, "start", async (record) => {
       await this.runtime.start(record);
       return this.publish(record, { phase: "running" });
-    }, (record) => this.requireInitialized(record));
+    }, (record) => { this.requireInitialized(record); this.requireIdentity(record, expectedWorkspaceId); });
   }
 
-  stop(name: string): Promise<WorkspaceRecord> {
+  stop(name: string, expectedWorkspaceId?: string): Promise<WorkspaceRecord> {
     return this.change(name, "stop", async (record) => {
       await this.runtime.stop(record);
       return this.publish(record, { phase: "stopped" });
-    });
+    }, (record) => this.requireIdentity(record, expectedWorkspaceId));
   }
 
-  restart(name: string): Promise<WorkspaceRecord> {
+  restart(name: string, expectedWorkspaceId?: string): Promise<WorkspaceRecord> {
     return this.change(name, "restart", async (record) => {
       await this.runtime.stop(record);
       await this.runtime.start(record);
       return this.publish(record, { phase: "running" });
-    }, (record) => this.requireInitialized(record));
+    }, (record) => { this.requireInitialized(record); this.requireIdentity(record, expectedWorkspaceId); });
   }
 
-  recreate(name: string): Promise<WorkspaceRecord> {
+  recreate(name: string, expectedWorkspaceId?: string): Promise<WorkspaceRecord> {
     return this.change(name, "recreate", async (record) => {
       // Workspace identity/storage remain; the container is replaced. No source reset.
       await this.runtime.remove(record, { keepData: true });
       await this.runtime.create(record);
       await this.runtime.start(record);
       return this.publish(record, { phase: "running" });
-    }, (record) => this.requireInitialized(record));
+    }, (record) => { this.requireInitialized(record); this.requireIdentity(record, expectedWorkspaceId); });
   }
 
-  resources(name: string, changes: Partial<WorkspaceResources>): Promise<{ workspace: WorkspaceRecord; recreated: boolean }> {
+  resources(name: string, changes: Partial<WorkspaceResources>, expectedWorkspaceId?: string): Promise<{ workspace: WorkspaceRecord; recreated: boolean }> {
     let resources: WorkspaceResources;
     return this.change(name, "resources", async (record) => {
       const result = await this.runtime.updateResources(record, resources);
       return { workspace: await this.publish(record, { resources }), recreated: result.recreated };
-    }, (record) => { resources = validateResources({ ...record.resources, ...changes }); });
+    }, (record) => { this.requireIdentity(record, expectedWorkspaceId); resources = validateResources({ ...record.resources, ...changes }); });
   }
 
-  async discard(name: string): Promise<void> {
+  async discard(name: string, expectedWorkspaceId?: string): Promise<void> {
     await this.change(name, "discard", async (record) => {
       await this.publish(record, { phase: "discarding" });
       await this.runtime.remove(record, { keepData: false });
       await this.store.remove(name);
-    });
+    }, (record) => this.requireIdentity(record, expectedWorkspaceId));
   }
 
   async exec(name: string, command: string[], options: RunOptions = {}): Promise<number> {
@@ -163,6 +168,10 @@ export class WorkspaceService {
 
   private requireInitialized(record: WorkspaceRecord): void {
     if (!record.initialized) throw new UserError(`workspace '${record.name}' initialization did not complete; inspect its error before discarding and creating it again`);
+  }
+
+  private requireIdentity(record: WorkspaceRecord, expectedWorkspaceId?: string): void {
+    if (expectedWorkspaceId !== undefined && record.id !== expectedWorkspaceId) throw new UserError("workspace identity changed; the old session cannot control its replacement");
   }
 
   private async publish(record: WorkspaceRecord, changes: Partial<WorkspaceRecord>): Promise<WorkspaceRecord> {

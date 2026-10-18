@@ -23,6 +23,8 @@ initialize_user_root() {
 
 initialize_user_root /home/dim
 initialize_user_root /workspace
+initialize_user_root /mnt/dim-tmp
+chmod 0700 /mnt/dim-tmp
 mkdir -p /var/run
 rm -rf -- /var/run/docker/containerd
 rm -f -- /var/run/docker.pid /var/run/docker.sock
@@ -42,6 +44,13 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 docker info >/dev/null 2>&1 || { cat /var/log/dockerd.log >&2; exit 1; }
+
+# Session commands and SSH access are explicitly registered by the workspace user.
+if [[ -f /home/dim/.config/dim/ssh-enabled ]]; then
+  /usr/local/bin/dim-workspace-ssh start
+fi
+sudo -H -E -u dim env HOME=/home/dim sh -c \
+  'mkdir -p "$HOME/.local/state/dim"; exec /usr/local/bin/dim-workspace session resume >>"$HOME/.local/state/dim/session.log" 2>&1' &
 
 exec sudo -H -E -u dim env \
   HOME=/home/dim \

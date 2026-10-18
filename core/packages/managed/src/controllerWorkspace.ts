@@ -31,9 +31,10 @@ export class ControllerWorkspaces {
     this.runtime = new ContainerWorkspaceRuntime(runner);
   }
 
-  async ensureGrant(name: string): Promise<string> {
+  async ensureGrant(name: string, expectedWorkspaceId?: string): Promise<string> {
     return this.store.withLock(name, async () => {
       const record = await this.store.read(name);
+      if (expectedWorkspaceId !== undefined && record.id !== expectedWorkspaceId) throw new UserError("workspace plugin identity changed");
       if (!record.initialized || record.phase === "discarding") throw new UserError(`workspace '${name}' is unavailable for plugins`);
       return this.grants.ensure(record);
     });

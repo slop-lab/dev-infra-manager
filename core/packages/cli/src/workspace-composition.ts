@@ -1,6 +1,6 @@
 import {
   UserError, type CreateWorkspaceInput, type StreamingCommandRunner,
-  type WorkspaceRecord, type WorkspaceService, type WorkspaceStore
+  type WorkspaceRecord, type WorkspaceService, type WorkspaceStore, type WorkspaceRuntime
 } from "@slop-lab/dim-core/workspace";
 
 /** Optional features are composed on the selected host, outside the workspace kernel. */
@@ -9,6 +9,7 @@ export interface WorkspaceHostContext {
   readonly runner: StreamingCommandRunner;
   readonly cleanupRunner: StreamingCommandRunner;
   readonly signal: AbortSignal;
+  readonly runtime?: WorkspaceRuntime;
 }
 
 export async function createWorkspaceOnHost(
