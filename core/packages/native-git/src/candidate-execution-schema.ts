@@ -4,15 +4,13 @@ import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
 const revision = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/);
-const generation = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
+const generation = z.string().regex(/^[0-9a-f]{64}$/);
 const positiveInteger = z.string().regex(/^[1-9][0-9]*$/);
 const image = z.string().regex(/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/);
 const protectedRef = z.string().max(1024).refine((value) => safeHeadRef(value));
 const scriptPath = z.string().refine(isCandidatePath);
 
-export const ordinaryExecutionDescriptorRequestFields = {
-  admissionGeneration: generation,
-  jobName: identifier,
+export const executionProfileFields = {
   jobBaseImage: image,
   runnerBaseImage: image,
   bounds: z.object({
@@ -24,13 +22,11 @@ export const ordinaryExecutionDescriptorRequestFields = {
   }).strict().readonly()
 } as const;
 
-export const ordinaryExecutionDescriptorRequestSchema = z.object(ordinaryExecutionDescriptorRequestFields).strict().readonly();
-
-const candidateOrdinaryExecutionDescriptorFields = {
-  admissionGeneration: generation,
+const candidateExecutionDescriptorFields = {
+  generationId: generation,
   jobName: identifier,
   runnerBaseImage: image,
-  bounds: ordinaryExecutionDescriptorRequestFields.bounds,
+  bounds: executionProfileFields.bounds,
   projectId: identifier,
   repositoryId: identifier,
   protectedRef,
@@ -47,8 +43,8 @@ const blobIdentityFields = {
   sha256: z.string().regex(/^sha256:[0-9a-f]{64}$/)
 } as const;
 
-export const candidateOrdinaryExecutionDescriptorSchema = z.object({
-  ...candidateOrdinaryExecutionDescriptorFields,
+export const candidateExecutionDescriptorSchema = z.object({
+  ...candidateExecutionDescriptorFields,
   evidenceClass: z.literal("candidate-controlled"),
   configBlob: z.object({ ...blobIdentityFields, path: scriptPath }).strict().readonly(),
   script: z.object({ ...blobIdentityFields, path: scriptPath }).strict().readonly(),
@@ -56,8 +52,7 @@ export const candidateOrdinaryExecutionDescriptorSchema = z.object({
   jobImage: image
 }).strict().readonly();
 
-export type OrdinaryExecutionDescriptorRequest = z.infer<typeof ordinaryExecutionDescriptorRequestSchema>;
-export type CandidateOrdinaryExecutionDescriptor = z.infer<typeof candidateOrdinaryExecutionDescriptorSchema>;
+export type CandidateExecutionDescriptor = z.infer<typeof candidateExecutionDescriptorSchema>;
 export class CandidateExecutionError extends Error {
   readonly name = "CandidateExecutionError";
 }

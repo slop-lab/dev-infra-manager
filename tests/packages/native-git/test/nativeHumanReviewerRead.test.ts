@@ -55,7 +55,7 @@ describe("installed imported-root human reviewer", () => {
     })).toThrow(/distinct/);
     expect(() => parseNativeGitBundleConfig({
       ...valid,
-      humanReviewers: [{ ...humanReviewer, password: valid.ordinaryCi.query.password }]
+      humanReviewers: [{ ...humanReviewer, password: valid.ci.grantIssuer.password }]
     })).toThrow(/distinct/);
   });
 

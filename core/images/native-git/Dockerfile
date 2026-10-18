@@ -13,7 +13,8 @@ RUN apt-get update \
 
 COPY core/packages/native-git/dist ./node_modules/@slop-lab/dim-native-git
 COPY plugin-ci-workflows/dist ./node_modules/@slop-lab/dim-plugin-ci-workflows
-COPY core/packages/managed/dist/nativeGitServiceCli.js ./
+COPY core/packages/managed/dist/nativeGitServiceCli.js core/packages/managed/dist/controlPlaneServicePair.js ./
+COPY core/packages/managed/dist/ci/config.js ./ci/config.js
 COPY core/images/native-git/dim-service /usr/local/bin/dim-service
 
 RUN groupadd --gid 10001 dim-service \

@@ -148,9 +148,9 @@ describe("native Git prepared credential boundaries", () => {
       const changedConfig = parseNativeGitBundleConfig({
         ...idleNativeConfig(),
         projectRegistrars: [registrar],
-        ordinaryCi: {
-          ...idleNativeConfig().ordinaryCi,
-          query: { ...idleNativeConfig().ordinaryCi.query, password: rejectedWriterPassword }
+        ci: {
+          ...idleNativeConfig().ci,
+          grantIssuer: { ...idleNativeConfig().ci.grantIssuer, password: rejectedWriterPassword }
         }
       });
 

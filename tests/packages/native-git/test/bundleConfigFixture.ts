@@ -37,57 +37,26 @@ export function idleNativeConfig() {
     workspaceWriteIssuers: [],
     humanReviewers: [],
     hostPromoters: [],
-    ordinaryCi: {
-      endpoint: "http://ordinary-ci:8080",
-      serviceId: "ordinary-main",
-      query: { username: "native-query", password: bundleSecrets.nativeQuery },
-      identity: { username: "ordinary-identity", password: bundleSecrets.nativeIdentity },
-      attemptIssuer: { username: "ordinary-attempts", password: bundleSecrets.attemptIssuer },
-      candidateReader: { username: "ordinary-candidate-reader", password: bundleSecrets.candidateReader },
-      resultReporter: { username: "ordinary-results", password: bundleSecrets.resultReporter },
-      webhook: {
-    endpoint: "http://ordinary-ci:8080/v1/jobs",
-        username: "native-events",
-        password: bundleSecrets.webhook
-      }
+    ci: {
+      grantIssuer: { username: "ci-grants", password: bundleSecrets.attemptIssuer },
+      candidateReader: { username: "ci-candidate-reader", password: bundleSecrets.candidateReader },
+      resultReporter: { username: "ci-results", password: bundleSecrets.resultReporter },
+      webhook: { endpoint: "http://ordinary-ci:8080/v1/jobs", username: "native-events", password: bundleSecrets.webhook }
     }
   };
 }
 
 export function idleOrdinaryConfig() {
-  return {
-    schemaVersion: 5,
-    serviceId: "ordinary-main",
-    database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-    eligibilityLeaseMilliseconds: 300_000,
-    claimLeaseMilliseconds: 60_000,
-    nativeGit: {
-      endpoint: "http://native-git:8080",
-      serviceId: "native-main",
-      identity: { username: "ordinary-identity", password: bundleSecrets.nativeIdentity },
-      attemptIssuer: { username: "ordinary-attempts", password: bundleSecrets.attemptIssuer },
-      candidateReader: { username: "ordinary-candidate-reader", password: bundleSecrets.candidateReader },
-      resultReporter: { username: "ordinary-results", password: bundleSecrets.resultReporter }
-    },
-    credentials: {
-      webhook: { username: "native-events", password: bundleSecrets.webhook },
-      query: { username: "native-query", password: bundleSecrets.nativeQuery }
-    },
-    hosts: [{
-      hostId: "host-a",
-      hostToken: bundleSecrets.host,
-      capacities: [{
-        capacity: "primary",
-        runnerBaseImage: `registry.example/dim/ordinary-runner@sha256:${"c".repeat(64)}`,
-        jobBaseImage: `registry.example/dim/ordinary-job@sha256:${"d".repeat(64)}`,
-        bounds: {
-          cpu: "4",
-          memoryBytes: "8589934592",
-          pids: "2048",
-          wallClockSeconds: "3600",
-          outputBytes: "16777216"
-        }
-      }]
-    }]
+  const native = idleNativeConfig();
+  return { schemaVersion: 1, claimLeaseMilliseconds: 60_000,
+    nativeGit: { endpoint: "http://native-git:8080", grantIssuer: native.ci.grantIssuer,
+      candidateReader: native.ci.candidateReader, resultReporter: native.ci.resultReporter },
+    credentials: { webhook: { username: native.ci.webhook.username, password: native.ci.webhook.password },
+      query: { username: "ci-query", password: bundleSecrets.nativeQuery } },
+    workers: [{ id: "host-a", token: bundleSecrets.host, slots: [{ id: "primary", runtime: "sysbox",
+      profile: { runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`,
+        jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`,
+        bounds: { cpu: "4", memoryBytes: "8589934592", pids: "2048", wallClockSeconds: "3600", outputBytes: "16777216" } }
+    }] }]
   };
 }

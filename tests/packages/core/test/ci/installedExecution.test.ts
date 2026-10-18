@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -7,7 +7,7 @@ import { configuredExecutionServer } from "../../../../../core/packages/managed/
 import { executionWorkerClient } from "../../../../../core/packages/managed/src/ci/client.js";
 import { nativeGitExecutionSource, StaleExecutionSourceError } from "../../../../../core/packages/managed/src/ci/source.js";
 import { createNodeNativeGitAdmissionHttpClient } from "../../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
-import { parseNativeOrdinaryBundleConfig } from "../../../../../core/packages/managed/src/nativeOrdinaryBundleConfig.js";
+import { executionServiceConfigSchema } from "../../../../../core/packages/managed/src/ci/config.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes, reviewProposalRef } from "../../../native-git/test/nativeBundleReviewFixture.js";
 import { authoritativePolicy } from "../../../native-git/test/authoritativeNativeCandidateFixture.js";
 import { idleOrdinaryConfig, bundleSecrets } from "../../../native-git/test/bundleConfigFixture.js";
@@ -26,7 +26,7 @@ it("runs grant, candidate lease and durable result through installed services; p
       return node.request({ ...input, endpoint: ciOrigin });
     } }, undefined, undefined, {}, undefined, "jobs:\n  source:\n    script: .dim/ci/jobs/source.bash\n");
   const directory = await mkdtemp(join(tmpdir(), "dim-installed-execution-"));
-  const config = parseNativeOrdinaryBundleConfig(idleOrdinaryConfig());
+  const config = executionServiceConfigSchema.parse(idleOrdinaryConfig());
   const source = nativeGitExecutionSource(config.nativeGit, generationId, { request: (input) => node.request({ ...input, endpoint: native.service.origin }) });
   let publicationUnavailable = true;
   const ci = configuredExecutionServer({ config, stateDirectory: directory, readinessToken: "ready", activationToken: "activate",
@@ -43,7 +43,9 @@ it("runs grant, candidate lease and durable result through installed services; p
     // NativeGit's durable event dispatcher queues this automatically, without Project CI admission.
     await waitFor(() => ci.store.list().length === 1);
     const worker = executionWorkerClient({ endpoint: ciOrigin, workerId: "host-a", slotId: "primary", token: bundleSecrets.host, generationId });
-    const request = randomUUID(), claim = await worker.claim(request);
+    const request = randomUUID();
+    const [claim, replay] = await Promise.all([worker.claim(request), worker.claim(request)]);
+    expect(replay).toEqual(claim);
     expect(claim?.grant?.event.jobName).toBe("source");
     expect(await worker.claim(request)).toEqual(claim);
     if (claim?.grant === undefined) throw new Error("grant missing");
@@ -51,10 +53,20 @@ it("runs grant, candidate lease and durable result through installed services; p
     const remote = new URL("/v1/projects/project-a/repositories/root.git", native.service.origin);
     remote.username = credential.username; remote.password = credential.password;
     expect((await runGit("/usr/bin/git", ["ls-remote", remote.toString(), "refs/heads/main"])).stdout).toContain(claim.grant.descriptor.expectedProtectedHead);
-    const evidence = result(claim.grant);
+    const diagnostic = Buffer.alloc(64 * 1024, "x");
+    const output = { bytes: String(8 * 1024 * 1024), sha256: `sha256:${"a".repeat(64)}`, truncated: false };
+    const evidence = { ...result(claim.grant), stdout: output, stderr: output,
+      logs: { stdout: { base64: diagnostic.toString("base64"), truncated: true },
+        stderr: { base64: diagnostic.toString("base64"), truncated: true } } };
+
     await worker.report(claim, evidence);
     await worker.report(claim, evidence);
     expect(ci.store.get(claim.id).phase).toBe("finished");
+    expect((await worker.claim(request))?.result?.logs.stdout.base64).toBe(diagnostic.toString("base64"));
+    const query = config.credentials.query;
+    const jobs = await fetch(`${ciOrigin}/v1/jobs`, { headers: {
+      authorization: `Basic ${Buffer.from(`${query.username}:${query.password}`).toString("base64")}` } });
+    expect(JSON.stringify(await jobs.json())).toContain(diagnostic.toString("base64"));
     expect(ci.store.pendingResults()).toHaveLength(1);
     const envelope = (await publishedReviewEnvelopes(native.root))[0]!;
     expect((await post("/v1/projects/project-a/repositories/root/reviews/resolve", humanReviewerAuthorization,
@@ -65,6 +77,8 @@ it("runs grant, candidate lease and durable result through installed services; p
     expect((await post(promotionPath, hostPromoterAuthorization, { schemaVersion: 1 })).status).toBe(409);
     publicationUnavailable = false;
     await waitFor(() => ci.store.get(claim.id).publication === "accepted");
+    const stored = JSON.parse(await readFile(join(rootRepository(native.root), "dim-execution-evidence", `${claim.id}.json`), "utf8"));
+    expect(stored.logs).toBeUndefined();
     // A later grant invalidates a prior successful attempt until its own result arrives.
     const nextGrant = await source.authorize({ ...claim, id: randomUUID(), requestId: randomUUID() });
     await expect(source.publish(claim.grant, evidence)).rejects.toBeInstanceOf(StaleExecutionSourceError);

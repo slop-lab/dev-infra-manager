@@ -9,12 +9,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
 COPY core/packages/core/dist ./node_modules/@slop-lab/dim-core
 COPY core/packages/native-git/dist ./node_modules/@slop-lab/dim-native-git
 COPY core/packages/managed/dist/ci ./ci
-COPY core/packages/managed/dist/nativeCandidatePath.js \
-  core/packages/managed/dist/nativeGitAdmissionHttpClient.js \
-  core/packages/managed/dist/nativeOrdinaryAuthorityConfig.js \
-  core/packages/managed/dist/nativeOrdinaryAuthorityModel.js \
-  core/packages/managed/dist/nativeOrdinaryAuthorityProtocol.js \
-  core/packages/managed/dist/nativeOrdinaryBundleConfig.js \
+COPY core/packages/managed/dist/nativeGitAdmissionHttpClient.js \
   core/packages/managed/dist/nativeOrdinaryServiceCli.js \
   core/packages/managed/dist/nativeOrdinaryServiceReadiness.js ./
 COPY core/images/ordinary-ci/dim-service /usr/local/bin/dim-service

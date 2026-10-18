@@ -6,7 +6,7 @@ import { executionGrantSchema, executionGrantRequestSchema, executionResultSchem
   type ExecutionGrant, type ExecutionResult } from "./execution-protocol.js";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import { loadAuthoritativeExecutionReview, loadCurrentAuthoritativeExecutionInputs } from "./authoritative-execution-review-inputs.js";
-import { candidateOrdinaryExecutionDescriptorSchema } from "./candidate-execution-schema.js";
+import { candidateExecutionDescriptorSchema } from "./candidate-execution-schema.js";
 import { descriptorDigest } from "./candidate-execution.js";
 import { ownedReviewDirectory, readReviewJson as readStoredJson, writeImmutableReviewRecord } from "./review-record-storage.js";
 
@@ -31,11 +31,11 @@ export async function authorizeExecution(runtime: AuthoritativeNativeCandidateRu
   }
   const history = await grants(snapshot.target.repository);
   const attempt = history.filter((grant) => sameJob(grant, event)).reduce((max, grant) => Math.max(max, grant.attempt), 0) + 1;
-  const descriptor = candidateOrdinaryExecutionDescriptorSchema.parse({
+  const descriptor = candidateExecutionDescriptorSchema.parse({
     projectId: review.projectId, repositoryId: "root", protectedRef: review.protectedRef,
     expectedProtectedHead: review.expectedProtectedHead, candidateCommit: review.candidateCommit, candidateTree: review.candidateTree,
     policyRevision: review.policyRevision, requiredReviewRevision: review.requiredReviewRevision,
-    requiredJobSetRevision: snapshot.envelope.qualityRevision, admissionGeneration: runtime.expectedGenerationId,
+    requiredJobSetRevision: snapshot.envelope.qualityRevision, generationId: runtime.expectedGenerationId,
     jobName: job.name, evidenceClass: "candidate-controlled", configBlob: inputs.configBlob, script: job.script,
     argv: job.argv, runnerBaseImage: request.profile.runnerBaseImage, jobImage: request.profile.jobBaseImage,
     bounds: request.profile.bounds

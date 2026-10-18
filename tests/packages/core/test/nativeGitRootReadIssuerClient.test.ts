@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
 import {
   createNativeGitRootReadIssuerClient,
   createNodeNativeGitRootImporterClient,

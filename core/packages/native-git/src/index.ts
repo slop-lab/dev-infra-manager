@@ -2,7 +2,6 @@ export {
   NativeGitConfigError,
   nativeGitReviewPolicySchema,
   nativeGitServiceConfigSchema,
-  ordinaryCiDependencyConfigSchema,
   parseNativeGitServiceConfig,
   repositoryKey
 } from "./config.js";
@@ -10,24 +9,19 @@ export type {
   NativeGitIdentity,
   NativeGitRepository,
   NativeGitReviewPolicy,
-  NativeGitServiceConfig,
-  OrdinaryCiDependencyConfig
+  NativeGitServiceConfig
 } from "./config.js";
 export {
   NativeGitBundleConfigError,
-  parseNativeGitBundle,
-  parseNativeGitBundleConfig,
-  parseOrdinaryBundleConfig
+  parseNativeGitBundleConfig
 } from "./bundle-config.js";
-export type { NativeGitBundleConfig, OrdinaryBundleConfig } from "./bundle-config.js";
+export type { NativeGitBundleConfig } from "./bundle-config.js";
 export {
   initializeNativeGitBundleState,
   inspectNativeGitBundleState,
   NativeGitBundleStateError
 } from "./native-bundle-state.js";
 export type { NativeGitBundleState } from "./native-bundle-state.js";
-export { configuredNativeGitIdleServer, NativeGitIdleServiceError } from "./native-idle-service.js";
-export type { NativeGitIdleServiceOptions } from "./native-idle-service.js";
 export {
   configuredNativeGitBundleServer,
   NativeGitBundleServerError
@@ -50,10 +44,10 @@ export { NativeGitProjectRegistrarError } from "./native-project-registrar-http.
 export type { NativeGitProjectRegistrar } from "./native-project-registrar-http.js";
 export {
   CandidateExecutionError,
-  candidateOrdinaryExecutionDescriptorSchema
+  candidateExecutionDescriptorSchema
 } from "./candidate-execution-schema.js";
 export type {
-  CandidateOrdinaryExecutionDescriptor
+  CandidateExecutionDescriptor
 } from "./candidate-execution-schema.js";
 export type { WorkflowCompiler, WorkflowJob, NativeCandidateRequiredJob } from "./workflowCompiler.js";
 export { loadNativeCandidateJobInputs } from "./native-candidate-job-inputs.js";
@@ -70,13 +64,6 @@ export type {
   AuthoritativeNativeCandidateRuntime
 } from "./authoritative-native-candidate-job-inputs.js";
 export { descriptorDigest } from "./candidate-execution.js";
-export {
-  qemuExecutionDescriptorDigest,
-  qemuExecutionDescriptorSchema
-} from "./qemu-execution-descriptor.js";
-export type { QemuExecutionDescriptor } from "./qemu-execution-descriptor.js";
-export * from "./native-qemu-authority-http.js";
-export * from "./native-qemu-authority-state.js";
 export {
   createNodeAdmissionVerifierHttpClient,
   OrdinaryAdmissionVerifierError

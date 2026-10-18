@@ -6,10 +6,7 @@ export * from "./controller.js";
 export * from "./lifecycleOptions.js";
 export * from "./lifecycleState.js";
 export * from "./lifecycleTypes.js";
-export * from "./nativeOrdinaryBundleConfig.js";
 export * from "./nativeGitCandidateReadAuthority.js";
-export * from "./nativeRootCiHostConfig.js";
-export * from "./nativeRootCiHostService.js";
 export * from "./nativeGitProjectRegistrarClient.js";
 export * from "./nativeGitProjectRegistrarConnection.js";
 export * from "./nativeGitRootImporterClient.js";
@@ -31,19 +28,7 @@ export {
   type NativeProjectDraftRootReadInput
 } from "./nativeProjectDraftRootRead.js";
 export * from "./nativeProjectDraftRootSnapshot.js";
-export * from "./nativeQemuConnection.js";
-export * from "./nativeQemuHostRuntime.js";
-export * from "./nativeQemuHostClient.js";
-export * from "./nativeQemuHostExecutor.js";
-export * from "./nativeQemuHostJournal.js";
-export * from "./nativeQemuHostService.js";
-export * from "./nativeQemuAuthorityClient.js";
-export * from "./nativeQemuSchedulerConfig.js";
-export * from "./nativeQemuSchedulerService.js";
-export * from "./nativeQemuSchedulerImage.js";
 export * from "./nativeQemuRunnerImage.js";
-export * from "./nativeQemuOperator.js";
-export * from "./nativeQemuSchedulerStore.js";
 export * from "./nativeControlPlaneConnection.js";
 export * from "./plugin.js";
 export * from "./hostInputs.js";
@@ -60,3 +45,5 @@ export { UserError, MissingRecordError, isUserError, assertCondition, ProcessRun
 export type { CommandResult, CommandRunner, StreamingCommandRunner, TerminalSize, TerminalControl, RunOptions, LongOperationOptions } from "@slop-lab/dim-core";
 
 export * from "./controllerWorkspace.js";
+
+export { runCiWorker, executionWorkerConfigSchema } from "./ci/host.js";

@@ -30,7 +30,7 @@ describe("installed native human approval security", () => {
     const fixture = await nativeBundleReviewFixture("human-approval-denials");
     const { review } = await createBundleReview(fixture.service);
     const endpoint = `${fixture.service.origin}/v1/projects/project-a/repositories/root/reviews/${review.reviewId}/approvals`;
-    const ordinaryQuery = idleNativeConfig().ordinaryCi.query;
+    const ordinaryQuery = idleNativeConfig().ci.grantIssuer;
     const foreignAuthorization = basic(foreignHumanReviewer.username, foreignHumanReviewer.password);
     const request = { method: "POST", headers: { "x-dim-generation-id": generationId,
       "content-type": "application/json" }, body: JSON.stringify({ requestId: randomUUID() }) } as const;

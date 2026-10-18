@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { executionEventSchema } from "@slop-lab/dim-native-git/execution";
-import type { NativeOrdinaryAuthorityConfig } from "../nativeOrdinaryAuthorityConfig.js";
+import type { ExecutionServiceConfig } from "./config.js";
 import { ExecutionStore } from "./store.js";
 import { ExecutionConflictError, type WorkerIdentity } from "./execution.js";
 import { nativeGitExecutionSource, StaleExecutionSourceError, type ExecutionSource } from "./source.js";
@@ -13,16 +13,16 @@ const identity = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const ownership = z.object({ slotId: identity, leaseToken: z.string().min(32).max(128) });
 const claimRequest = z.object({ requestId: z.string().uuid(), slotId: identity }).strict();
 export function configuredExecutionServer(input: {
-  readonly config: NativeOrdinaryAuthorityConfig; readonly stateDirectory: string;
+  readonly config: ExecutionServiceConfig; readonly stateDirectory: string;
   readonly readinessToken: string; readonly activationToken: string; readonly expectedGenerationId: string;
   readonly source?: ExecutionSource; readonly now?: () => number;
 }) {
   const config = input.config;
   const generation = input.expectedGenerationId;
   const activation = createHash("sha256").update(input.activationToken).digest("hex");
-  const workers: WorkerIdentity[] = config.hosts.map((host) => ({ id: host.hostId, token: host.hostToken,
-    slots: host.capacities.map((slot) => ({ id: slot.capacity, kind: "ordinary-sysbox",
-      profile: { runnerBaseImage: slot.runnerBaseImage, jobBaseImage: slot.jobBaseImage, bounds: slot.bounds } })) }));
+  const workers: WorkerIdentity[] = config.workers.map((worker) => ({ id: worker.id, token: worker.token,
+    slots: worker.slots.map((slot) => ({ id: slot.id, kind: slot.runtime === "sysbox" ? "ordinary-sysbox" : "qemu",
+      profile: slot.profile })) }));
   const store = new ExecutionStore(join(input.stateDirectory, "executions.sqlite3"), generation,
     config.claimLeaseMilliseconds, input.now);
   const source = input.source ?? nativeGitExecutionSource(config.nativeGit, generation);
@@ -63,7 +63,6 @@ export function configuredExecutionServer(input: {
     if (request.method === "POST" && url.pathname === "/v1/jobs") {
       if (!basic(request, config.credentials.webhook.username, config.credentials.webhook.password)) return unauthorized(response);
       const body = z.object({ generationId: z.literal(generation), event: executionEventSchema }).strict().parse(await read(request));
-      if (body.event.executionKind !== "ordinary-sysbox") return send(response, 409, { error: "execution runtime is unavailable" });
       const execution = store.enqueue(body.event);
       return send(response, 202, { executionId: execution.id, eventId: execution.event.eventId, generationId: generation });
     }

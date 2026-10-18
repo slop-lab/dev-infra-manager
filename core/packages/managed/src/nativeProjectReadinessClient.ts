@@ -1,5 +1,5 @@
 import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
-import type { NativeGitAdmissionHttpClient } from "./nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import type { NativeProjectRecord } from "./nativeProjectPendingCodec.js";
 

@@ -35,12 +35,9 @@ const markerSchema = z.discriminatedUnion("state", [z.object({ ...markerBase, st
   retryAfter: z.number().int().positive()
 }).strict().readonly()]);
 
-type OrdinaryEvent = AuthoritativeNativeReviewEnvelope["events"][number] & {
-  readonly executionKind: "ordinary-sysbox";
-};
 export type AuthoritativeNativePendingDelivery = {
   readonly createdAt: string;
-  readonly event: OrdinaryEvent;
+  readonly event: AuthoritativeNativeReviewEnvelope["events"][number];
   readonly eventDigest: string;
   readonly policyDigest: string;
 };
@@ -49,6 +46,7 @@ export async function readPendingAuthoritativeNativeDeliveries(
   repository: string,
   limit: number,
   binding: AuthoritativeNativeDeliveryBinding,
+  generationId: string,
   now = Date.now()
 ): Promise<readonly AuthoritativeNativePendingDelivery[]> {
   if (!Number.isInteger(limit) || limit < 1 || limit > maximumEvents) {
@@ -57,8 +55,8 @@ export async function readPendingAuthoritativeNativeDeliveries(
   if (!await reviewStoreExists(repository)) return [];
   const paths = await initializeDeliveryStore(repository);
   const envelopes = await readAuthoritativeNativeReviewEnvelopes(repository);
-  const events = ordinaryEvents(envelopes);
-  const delivered = await readMarkers(paths.delivered, events, binding, now);
+  const events = executionEvents(envelopes);
+  const delivered = await readMarkers(paths.delivered, events, binding, generationId, now);
   return events.filter(({ event }) => !delivered.has(event.eventId)).slice(0, limit);
 }
 
@@ -70,7 +68,7 @@ export async function acknowledgeAuthoritativeNativeDelivery(
   faults: ReviewPublicationFaults = {}
 ): Promise<z.infer<typeof markerSchema>> {
   const paths = await initializeDeliveryStore(repository);
-  const stored = ordinaryEvents(await readAuthoritativeNativeReviewEnvelopes(repository))
+  const stored = executionEvents(await readAuthoritativeNativeReviewEnvelopes(repository))
     .find(({ event }) => event.eventId === delivery.event.eventId);
   if (stored === undefined || stored.eventDigest !== delivery.eventDigest) {
     throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery event does not match stored review");
@@ -129,6 +127,7 @@ async function readMarkers(
   directory: string,
   events: readonly AuthoritativeNativePendingDelivery[],
   binding: AuthoritativeNativeDeliveryBinding,
+  generationId: string,
   now: number
 ): Promise<ReadonlySet<string>> {
   const expected = new Map(events.map((delivery) => [delivery.event.eventId, delivery]));
@@ -149,20 +148,20 @@ async function readMarkers(
       throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker does not match its event");
     }
     if (marker.serviceId === binding.serviceId && marker.destinationDigest === binding.destinationDigest
-      && (marker.state === "superseded" ? marker.retryAfter > now : true)) {
+      && (marker.state === "superseded" ? marker.retryAfter > now : marker.generationId === generationId)) {
       delivered.add(eventId);
     }
   }
   return delivered;
 }
 
-function ordinaryEvents(
+function executionEvents(
   envelopes: readonly AuthoritativeNativeReviewEnvelope[]
 ): readonly AuthoritativeNativePendingDelivery[] {
-  return envelopes.flatMap(({ review, events, policyDigest }) => events.flatMap((event) => event.executionKind === "ordinary-sysbox"
-    ? [{ createdAt: review.createdAt, event: { ...event, executionKind: "ordinary-sysbox" as const }, policyDigest,
-      eventDigest: `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}` }]
-    : [])).sort((left, right) => left.createdAt.localeCompare(right.createdAt)
+  return envelopes.flatMap(({ review, events, policyDigest }) => events.map((event) => ({
+    createdAt: review.createdAt, event, policyDigest,
+    eventDigest: `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`
+  }))).sort((left, right) => left.createdAt.localeCompare(right.createdAt)
     || left.event.reviewId.localeCompare(right.event.reviewId)
     || left.event.jobName.localeCompare(right.event.jobName)
     || left.event.eventId.localeCompare(right.event.eventId));

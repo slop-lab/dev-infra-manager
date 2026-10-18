@@ -5,12 +5,11 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { tryAcquireKernelGuard, type StreamingCommandRunner } from "@slop-lab/dim-core";
-import { executionResultSchema } from "@slop-lab/dim-native-git/execution";
 import { createNativeGitCandidateReadAuthority } from "../nativeGitCandidateReadAuthority.js";
-import { NativeHostPrivateRoot, type NativeHostPrivateRootIdentity } from "../nativeOrdinaryExecutorRoot.js";
-import type { ExecutionAssignment, ExecutionResult } from "./execution.js";
-import { parseAssignment, type ExecutionWorkerClient } from "./client.js";
-import type { ExecutionBackend } from "./backends/sysbox.js";
+import { NativeHostPrivateRoot, type NativeHostPrivateRootIdentity } from "./private-root.js";
+import { executionResultSchema, type ExecutionAssignment, type ExecutionResult } from "./execution.js";
+import { ExecutionServiceUnavailableError, parseAssignment, type ExecutionWorkerClient } from "./client.js";
+import type { ExecutionBackend } from "./backend.js";
 
 type Journal = { requestId: string; assignment?: ExecutionAssignment;
   root?: NativeHostPrivateRootIdentity; result?: ExecutionResult };
@@ -28,7 +27,7 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
       let journal = await readJournal(journalPath);
       if (journal !== undefined) {
         if (journal.assignment === undefined) {
-          const assignment = await options.client.claim(journal.requestId, options.signal);
+          const assignment = await claim(journal.requestId);
           if (assignment === undefined) { await clear(); continue; }
           journal = { ...journal, assignment }; await writeJournal(journalPath, journal);
         }
@@ -37,7 +36,7 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
       } else {
         journal = { requestId: randomUUID() };
         await writeJournal(journalPath, journal);
-        const assignment = await options.client.claim(journal.requestId, options.signal);
+        const assignment = await claim(journal.requestId);
         if (assignment === undefined) { await clear(); await pause(); continue; }
         journal = { ...journal, assignment };
         await writeJournal(journalPath, journal);
@@ -50,6 +49,7 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
   async function execute(journal: Journal): Promise<void> {
     const assignment = journal.assignment!;
     const grant = assignment.grant!;
+    assertBackend(assignment);
     journal.root = { schemaVersion: 1, state: "planned", rootId: randomUUID() };
     await writeJournal(journalPath, journal);
     const root = new NativeHostPrivateRoot(options.directory, journal.root);
@@ -82,13 +82,14 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     if (!await root.cleanup(assignment.id)) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
     journal.result = result;
     await writeJournal(journalPath, journal);
-    await options.client.report(assignment, result, options.signal);
+    await retry(() => options.client.report(assignment, result, options.signal));
     await clear();
   }
   async function recover(journal: Journal): Promise<void> {
     const assignment = journal.assignment!;
+    assertBackend(assignment);
     if (journal.result !== undefined) {
-      await options.client.report(assignment, journal.result, options.signal);
+      await retry(() => options.client.report(assignment, journal.result!, options.signal));
     } else {
       if (assignment.grant !== undefined && !await options.backend.cleanup(options.runner, assignment.grant,
         journal.root === undefined ? options.directory : new NativeHostPrivateRoot(options.directory, journal.root).path)) {
@@ -97,9 +98,29 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
       if (journal.root !== undefined && !await new NativeHostPrivateRoot(options.directory, journal.root).cleanup(assignment.id)) {
         throw new Error("CI private root cleanup is uncertain; slot remains fenced");
       }
-      await options.client.recover(assignment, options.signal);
+      await retry(() => options.client.recover(assignment, options.signal));
     }
     await clear();
+  }
+  function assertBackend(assignment: ExecutionAssignment): void {
+    const grant = assignment.grant;
+    if (grant !== undefined && (grant.event.executionKind !== options.backend.kind || grant.executionId !== assignment.id
+      || grant.workerId !== assignment.workerId || grant.slotId !== assignment.slotId)) {
+      throw new Error("CI assignment does not match this worker backend");
+    }
+  }
+  function claim(requestId: string) { return retry(() => options.client.claim(requestId, options.signal)); }
+  async function retry<T>(operation: () => Promise<T>): Promise<T> {
+    let backoff = 250;
+    for (;;) {
+      options.signal.throwIfAborted();
+      try { return await operation(); }
+      catch (error) {
+        if (!(error instanceof ExecutionServiceUnavailableError)) throw error;
+        await delay(backoff, undefined, { signal: options.signal });
+        backoff = Math.min(5_000, backoff * 2);
+      }
+    }
   }
   async function clear() { await rm(journalPath, { force: true }); await syncDirectory(options.directory); }
   async function pause() { try { await delay(250, undefined, { signal: options.signal }); } catch { /* shutdown */ } }

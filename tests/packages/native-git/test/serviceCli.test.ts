@@ -115,12 +115,12 @@ describe("native Git image configuration preflight CLI", () => {
     ["usernames", { hostId: "controller-b", username: "project-registrar-a", password: bundleSecrets.unpaired }],
     ["passwords", { hostId: "controller-b", username: "project-registrar-b", password: bundleSecrets.projectRegistrar }],
     ["cross-role identifiers", {
-      hostId: idleNativeConfig().ordinaryCi.query.username,
+      hostId: idleNativeConfig().ci.grantIssuer.username,
       username: "project-registrar-b", password: bundleSecrets.unpaired
     }],
     ["cross-role secrets", {
       hostId: "controller-b", username: "project-registrar-b",
-      password: idleNativeConfig().ordinaryCi.query.password
+      password: idleNativeConfig().ci.grantIssuer.password
     }]
   ])("check-config rejects duplicate registrar %s", async (_label, secondRegistrar) => {
     // Given
@@ -149,7 +149,7 @@ describe("native Git image configuration preflight CLI", () => {
     }],
     ["service credentials", {
       hostId: "controller-b", username: "project-root-importer-b",
-      password: idleNativeConfig().ordinaryCi.query.password
+      password: idleNativeConfig().ci.grantIssuer.password
     }]
   ])("check-config rejects duplicate root importer %s", async (_label, secondImporter) => {
     // Given
@@ -228,7 +228,7 @@ describe("native Git image configuration preflight CLI", () => {
       hostId: "controller-b", username: "project-root-read-issuer-b", password: bundleSecrets.projectRootImporter
     }],
     ["service credentials", {
-      hostId: "controller-b", username: idleNativeConfig().ordinaryCi.query.username,
+      hostId: "controller-b", username: idleNativeConfig().ci.grantIssuer.username,
       password: bundleSecrets.unpaired
     }]
   ])("check-config rejects duplicate root read issuer %s", async (_label, secondIssuer) => {
@@ -270,7 +270,7 @@ describe("native Git image configuration preflight CLI", () => {
       hostId: "controller-b", username: "workspace-write-issuer-b", password: bundleSecrets.projectRootReadIssuer
     }],
     ["service credentials", {
-      hostId: "controller-b", username: idleNativeConfig().ordinaryCi.query.username, password: bundleSecrets.unpaired
+      hostId: "controller-b", username: idleNativeConfig().ci.grantIssuer.username, password: bundleSecrets.unpaired
     }]
   ])("check-config rejects duplicate workspace write issuer %s", async (_label, secondIssuer) => {
     const native = await fixtureFile("native.json", {
@@ -299,33 +299,30 @@ describe("native Git image configuration preflight CLI", () => {
   it.each([
     ["mismatched paired credentials", () => {
       const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, credentials: {
-        ...ordinary.credentials,
-        query: { username: "native-query", password: bundleSecrets.unpaired }
-      } };
-    }, /paired query credential/],
+      return { ...ordinary, nativeGit: { ...ordinary.nativeGit, grantIssuer: { ...ordinary.nativeGit.grantIssuer, password: bundleSecrets.unpaired } } };
+    }, /paired credentials/],
     ["shared role secrets", () => {
       const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, hosts: ordinary.hosts.map((host) => ({
-        ...host, hostToken: bundleSecrets.webhook
+      return { ...ordinary, workers: ordinary.workers.map((host) => ({
+        ...host, token: bundleSecrets.webhook
       })) };
-    }, /credentials must be globally distinct/],
-    ["an unknown ordinary field", () => ({ ...idleOrdinaryConfig(), obsolete: true }), /invalid ordinary CI bundle configuration/],
+    }, /invalid CI service configuration/],
+    ["an unknown ordinary field", () => ({ ...idleOrdinaryConfig(), obsolete: true }), /invalid CI service configuration/],
     ["the wrong native service origin", () => {
       const ordinary = idleOrdinaryConfig();
       return { ...ordinary, nativeGit: { ...ordinary.nativeGit, endpoint: "http://localhost:8080" } };
-    }, /invalid ordinary CI bundle configuration/],
+    }, /invalid CI service configuration/],
     ["the wrong reciprocal service ID", () => {
       const ordinary = idleOrdinaryConfig();
       return { ...ordinary, nativeGit: { ...ordinary.nativeGit, serviceId: "native-other" } };
-    }, /invalid ordinary CI bundle configuration/],
+    }, /invalid CI service configuration/],
     ["a short decoded host token", () => {
       const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, hosts: ordinary.hosts.map((host) => ({
+      return { ...ordinary, workers: ordinary.workers.map((host) => ({
         ...host,
-        hostToken: Buffer.alloc(31, 8).toString("base64url")
+        token: Buffer.alloc(31, 8).toString("base64url")
       })) };
-    }, /host token/]
+    }, /invalid CI service configuration/]
   ])("check-bundle-config rejects %s before state access", async (_label, ordinaryValue, message) => {
     // Given
     const native = await fixtureFile("native.json", idleNativeConfig());

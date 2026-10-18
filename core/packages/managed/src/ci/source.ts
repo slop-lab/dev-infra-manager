@@ -1,5 +1,5 @@
 import { createNodeNativeGitAdmissionHttpClient } from "../nativeGitAdmissionHttpClient.js";
-import type { NativeGitAdmissionHttpClient } from "../nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "../nativeGitAdmissionHttpClient.js";
 import { executionGrantSchema, executionResultSchema } from "@slop-lab/dim-native-git/execution";
 import type { ExecutionAssignment, ExecutionGrant, ExecutionResult } from "./execution.js";
 
@@ -10,7 +10,7 @@ export type ExecutionSource = {
   publish(grant: ExecutionGrant, result: ExecutionResult): Promise<void>;
 };
 export function nativeGitExecutionSource(config: {
-  readonly endpoint: string; readonly attemptIssuer: Credential; readonly candidateReader: Credential;
+  readonly endpoint: string; readonly grantIssuer: Credential; readonly candidateReader: Credential;
   readonly resultReporter: Credential;
 }, generationId: string, client: NativeGitAdmissionHttpClient = createNodeNativeGitAdmissionHttpClient()): ExecutionSource {
   async function post(path: string, body: unknown, credential: Credential): Promise<unknown> {
@@ -27,7 +27,7 @@ export function nativeGitExecutionSource(config: {
     async authorize(assignment) {
       return executionGrantSchema.parse(await post("/v1/execution-grants", { executionId: assignment.id,
         generationId, event: assignment.event, workerId: assignment.workerId, slotId: assignment.slotId,
-        profile: assignment.profile }, config.attemptIssuer));
+        profile: assignment.profile }, config.grantIssuer));
     },
     async candidate(grant) {
       const result = await post(`/v1/executions/${grant.event.projectId}/${grant.executionId}/read-lease`, {}, config.candidateReader);
@@ -38,7 +38,8 @@ export function nativeGitExecutionSource(config: {
       return result as { username: string; password: string; expiresAt: number };
     },
     async publish(grant, result) {
-      executionResultSchema.parse(await post(`/v1/executions/${grant.event.projectId}/${grant.executionId}/evidence`, result, config.resultReporter));
+      const { logs: _logs, ...evidence } = result;
+      executionResultSchema.parse(await post(`/v1/executions/${grant.event.projectId}/${grant.executionId}/evidence`, evidence, config.resultReporter));
     }
   };
 }

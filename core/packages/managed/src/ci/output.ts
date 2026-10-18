@@ -80,3 +80,10 @@ function channel(): Channel {
 function evidence(value: Channel): NativeBoundedOutput["stdoutEvidence"] {
   return { bytes: String(value.bytes), sha256: `sha256:${value.hash.digest("hex")}`, truncated: value.truncated };
 }
+
+export const diagnosticBytesPerStream = 64 * 1024;
+export function executionDiagnostics(captured: NativeBoundedOutput) {
+  const diagnostic = (bytes: Buffer) => ({ base64: bytes.subarray(0, diagnosticBytesPerStream).toString("base64"),
+    truncated: bytes.length > diagnosticBytesPerStream });
+  return { stdout: diagnostic(captured.stdout), stderr: diagnostic(captured.stderr) };
+}

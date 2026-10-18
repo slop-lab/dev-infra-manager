@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
 import {
   createNativeGitRootImporterClient,
   createNodeNativeGitRootImporterClient,

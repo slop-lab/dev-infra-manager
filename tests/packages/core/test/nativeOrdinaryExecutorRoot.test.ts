@@ -2,7 +2,7 @@ import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, syml
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { NativeHostPrivateRoot, type NativeHostPrivateRootIdentity } from "../../../../core/packages/managed/src/nativeOrdinaryExecutorRoot.js";
+import { NativeHostPrivateRoot, type NativeHostPrivateRootIdentity } from "../../../../core/packages/managed/src/ci/private-root.js";
 
 const roots: string[] = [];
 

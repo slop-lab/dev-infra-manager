@@ -27,8 +27,8 @@ export function createExecutionHttpService(input: Input) {
       const match = /^\/v1\/executions\/([a-z0-9][a-z0-9-]{0,63})\/([0-9a-f-]{36})\/(evidence|read-lease)$/.exec(url.pathname);
       if (!grantRoute && match === null) return false;
       if (request.method !== "POST" || url.search !== "") { sendNotFound(response); return true; }
-      const role = grantRoute ? input.config.ordinaryCi.attemptIssuer
-        : match?.[3] === "evidence" ? input.config.ordinaryCi.resultReporter : input.config.ordinaryCi.candidateReader;
+      const role = grantRoute ? input.config.ci.grantIssuer
+        : match?.[3] === "evidence" ? input.config.ci.resultReporter : input.config.ci.candidateReader;
       if (!nativeBasicAuthorized(request, role)) { sendJson(response, 401, { error: "unauthorized" }); return true; }
       if (!input.runtime.activated() || request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId) {
         sendJson(response, 409, { error: "execution generation is unavailable" }); return true;

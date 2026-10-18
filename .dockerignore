@@ -18,14 +18,10 @@ core/packages/managed/*
 !core/packages/managed/dist/
 core/packages/managed/dist/*
 !core/packages/managed/dist/nativeGitServiceCli.js
+!core/packages/managed/dist/controlPlaneServicePair.js
 !core/packages/managed/dist/ci/
 !core/packages/managed/dist/ci/**
-!core/packages/managed/dist/nativeCandidatePath.js
 !core/packages/managed/dist/nativeGitAdmissionHttpClient.js
-!core/packages/managed/dist/nativeOrdinaryAuthorityConfig.js
-!core/packages/managed/dist/nativeOrdinaryAuthorityModel.js
-!core/packages/managed/dist/nativeOrdinaryAuthorityProtocol.js
-!core/packages/managed/dist/nativeOrdinaryBundleConfig.js
 !core/packages/managed/dist/nativeOrdinaryServiceCli.js
 !core/packages/managed/dist/nativeOrdinaryServiceReadiness.js
 !core/packages/native-git/

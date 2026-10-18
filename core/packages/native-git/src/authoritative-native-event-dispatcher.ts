@@ -45,7 +45,7 @@ export async function createAuthoritativeNativeEventDispatcher(
   const timing = { minimum: options.minimumRetryMilliseconds ?? 250,
     maximum: options.maximumRetryMilliseconds ?? 30_000, idle: options.idleMilliseconds ?? 1_000,
     request: options.requestTimeoutMilliseconds ?? 5_000 };
-  const binding = authoritativeNativeDeliveryBinding("ordinary-main", options.webhook.endpoint);
+  const binding = authoritativeNativeDeliveryBinding("ci", options.webhook.endpoint);
   if (Object.values(timing).some((value) => !Number.isInteger(value) || value < 1 || value > 30_000)
     || timing.minimum > timing.maximum) {
     throw new AuthoritativeNativeEventDeliveryError("authoritative native delivery timing is invalid");
@@ -133,7 +133,7 @@ async function pendingDelivery(options: AuthoritativeNativeEventDispatcherOption
   binding: ReturnType<typeof authoritativeNativeDeliveryBinding>): Promise<Pending | undefined> {
   const candidates = await Promise.all(readNativeProjectRegistrations(options.state).map(async (registration) => {
     const repository = join(options.stateDirectory, registration.projectId, `${registration.rootRepositoryId}.git`);
-    const delivery = (await readPendingAuthoritativeNativeDeliveries(repository, 1, binding))[0];
+    const delivery = (await readPendingAuthoritativeNativeDeliveries(repository, 1, binding, options.generationId))[0];
     return delivery === undefined ? undefined : { repository, delivery };
   }));
   return candidates.filter((candidate): candidate is Pending => candidate !== undefined)
@@ -164,7 +164,7 @@ async function deliver(
     || acknowledged.eventId !== event.eventId) {
     throw new AuthoritativeNativeEventDeliveryError("ordinary receipt acknowledgement does not match delivery");
   }
-  return { serviceId: "ordinary-main", generationId: acknowledged.generationId,
+  return { serviceId: "ci", generationId: acknowledged.generationId,
     executionId: acknowledged.executionId };
 }
 

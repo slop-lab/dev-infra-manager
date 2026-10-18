@@ -60,7 +60,7 @@ describe("operator Project registrar transport", () => {
   it("attests only the configured host-bound registrar role", async () => {
     // Given
     const service = await start([registrar]);
-    const ordinaryQuery = idleNativeConfig().ordinaryCi.query;
+    const ordinaryQuery = idleNativeConfig().ci.grantIssuer;
 
     // When
     const identity = await request(service.origin, "GET", "/v1/operator-project-registrar-identity", registrar);

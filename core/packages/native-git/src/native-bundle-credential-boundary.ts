@@ -14,14 +14,7 @@ export function assertDistinctNativeBundleServerCredentials(
   options: Pick<NativeGitBundleServerOptions, "readinessToken" | "activationToken">
 ): void {
   const serviceCredentialValues = [
-    config.ordinaryCi.query,
-    config.ordinaryCi.identity,
-    config.ordinaryCi.attemptIssuer,
-    config.ordinaryCi.candidateReader,
-    config.ordinaryCi.resultReporter,
-    config.ordinaryCi.webhook,
-    ...(config.qemuCi === undefined ? [] : [config.qemuCi.query, config.qemuCi.eventIntake, config.qemuCi.identity,
-      config.qemuCi.attemptIssuer, config.qemuCi.candidateReader, config.qemuCi.resultReporter])
+    ...Object.values(config.ci)
   ].flatMap((credential) => [credential.username, credential.password]);
   const registrarCredentialValues = registrars.flatMap((registrar) => [
     registrar.username, registrar.password

@@ -2,7 +2,7 @@ import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttp
 import type {
   NativeGitAdmissionHttpClient,
   NativeGitAdmissionHttpResponse
-} from "./nativeGitAdmissionSource.js";
+} from "./nativeGitAdmissionHttpClient.js";
 import {
   loadNativeGitWorkspaceWriteIssuerConnection,
   parseNativeGitWorkspaceWriteIssuerConnection,

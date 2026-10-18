@@ -3,7 +3,7 @@ import type {
   NativeGitAdmissionHttpClient,
   NativeGitAdmissionHttpRequest,
   NativeGitAdmissionHttpResponse
-} from "./nativeGitAdmissionSource.js";
+} from "./nativeGitAdmissionHttpClient.js";
 import {
   loadNativeGitProjectRegistrarConnection,
   parseNativeGitProjectRegistrarConnection,

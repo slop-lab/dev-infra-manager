@@ -32,8 +32,7 @@ output.exports = {
 };
 output.exports["./host"] = { types: "./nativeWorkspaceHost.d.ts", import: "./nativeWorkspaceHost.js" };
 output.exports["./cli"] = { types: "./cli/managed-cli.d.ts", import: "./cli/managed-cli.js" };
-output.bin = { "dim-service": "nativeOrdinaryServiceCli.js",
-  "dim-native-qemu-service": "nativeQemuServiceCli.js" };
+output.bin = { "dim-service": "nativeOrdinaryServiceCli.js" };
 
 if ("private" in output) {
   throw new Error("The publish package.json must not contain private");
@@ -44,11 +43,6 @@ await writeFile(versionModulePath, `export const packageVersion = ${JSON.stringi
 await writeFile(new URL("../dist/cli/package-version.js", import.meta.url), `export const packageVersion = ${JSON.stringify(output.version)};\n`);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
-await cp(
-  new URL("../src/native-qemu-scheduler-assets", import.meta.url),
-  new URL("../dist/native-qemu-scheduler-assets", import.meta.url),
-  { recursive: true }
-);
 await cp(
   new URL("../src/native-qemu-runner-assets", import.meta.url),
   new URL("../dist/native-qemu-runner-assets", import.meta.url),

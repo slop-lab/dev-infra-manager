@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
-import { parseNativeOrdinaryBundleConfig } from "./nativeOrdinaryBundleConfig.js";
+import { executionServiceConfigSchema } from "./ci/config.js";
 import { inspectExecutionState } from "./ci/state.js";
 import { configuredExecutionServer } from "./ci/service.js";
 import { checkNativeOrdinaryServiceReadiness } from "./nativeOrdinaryServiceReadiness.js";
@@ -25,7 +25,7 @@ export async function runNativeOrdinaryServiceCli(
   dependencies: NativeOrdinaryServiceCliDependencies = {}
 ): Promise<void> {
   if (arguments_.length === 2 && arguments_[0] === "check-config") {
-    parseNativeOrdinaryBundleConfig(await readJson(arguments_[1]));
+    executionServiceConfigSchema.parse(await readJson(arguments_[1]));
     return;
   }
   if (arguments_.length === 2 && arguments_[0] === "compatibility" && arguments_[1] === "--json") {
@@ -40,7 +40,7 @@ export async function runNativeOrdinaryServiceCli(
   }
   if (arguments_.length === 3 && arguments_[0] === "serve" && arguments_[1] === configPath) {
     const expectedGenerationId = parseGenerationId(arguments_[2]);
-    const config = parseNativeOrdinaryBundleConfig(await readJson(configPath, 0o444));
+    const config = executionServiceConfigSchema.parse(await readJson(configPath, 0o444));
     const service = configuredExecutionServer({
       config,
       stateDirectory,

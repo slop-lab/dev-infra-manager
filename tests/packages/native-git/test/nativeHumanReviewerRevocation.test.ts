@@ -81,7 +81,7 @@ describe("installed native human approval self-revocation", () => {
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
     const request = { method: "POST", headers: jsonHeaders(humanReviewerAuthorization),
       body: JSON.stringify({ approvalId: approval.body.approvalId }) } as const;
-    const ordinaryQuery = idleNativeConfig().ordinaryCi.query;
+    const ordinaryQuery = idleNativeConfig().ci.grantIssuer;
 
     const denied = await Promise.all([
       fetch(`${endpoint}/revocations`, { ...request, headers: jsonHeaders(authorization) }),

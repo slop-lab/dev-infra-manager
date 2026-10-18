@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { sysboxBackend } from "../../../../../core/packages/managed/src/ci/backends/sysbox.js";
 import { executionDescriptorDigest } from "../../../../../core/packages/native-git/src/execution-protocol.js";
-import type { NativeCandidateReadAuthority } from "../../../../../core/packages/managed/src/nativeOrdinaryCandidateVerifier.js";
+import type { NativeCandidateReadAuthority } from "../../../../../core/packages/managed/src/ci/candidate.js";
 import { assignment, grant, hash } from "./executionFixture.js";
 import { ExecutorRunner } from "./sysboxFixture.js";
 const roots: string[] = [];

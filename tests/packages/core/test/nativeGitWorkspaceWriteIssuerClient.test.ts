@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
 import {
   createNativeGitWorkspaceWriteIssuerClient,
   createNodeNativeGitWorkspaceWriteIssuerClient,

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
 import {
   createNativeGitProjectRegistrarClient,
   createNodeNativeGitProjectRegistrarClient,
@@ -96,7 +96,7 @@ describe("native Git Project registrar client", () => {
     expect(await activate(service.origin)).toBe(200);
     const databasePath = join(service.root, "native-idle.sqlite3");
     const before = await readFile(databasePath);
-    const ordinaryQuery = idleNativeConfig().ordinaryCi.query;
+    const ordinaryQuery = idleNativeConfig().ci.grantIssuer;
     const foreign = await clientFor(service.origin, { hostId: "host-b" });
     const wrongRole = await clientFor(service.origin, { credential: ordinaryQuery });
     const wrongGeneration = await clientFor(service.origin, { generationId: "b".repeat(64) });

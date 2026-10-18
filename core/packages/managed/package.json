@@ -35,8 +35,7 @@
     }
   },
   "bin": {
-    "dim-service": "./dist/nativeOrdinaryServiceCli.js",
-    "dim-native-qemu-service": "./dist/nativeQemuServiceCli.js"
+    "dim-service": "./dist/nativeOrdinaryServiceCli.js"
   },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",

@@ -1,16 +1,16 @@
 import { z } from "zod";
-import { candidateOrdinaryExecutionDescriptorSchema, ordinaryExecutionDescriptorRequestFields } from "./candidate-execution-schema.js";
+import { candidateExecutionDescriptorSchema, executionProfileFields } from "./candidate-execution-schema.js";
 import { descriptorDigest } from "./candidate-execution.js";
 import { authoritativeNativeReviewEventSchema } from "./authoritative-native-review-schema.js";
 
-export const executionDescriptorSchema = candidateOrdinaryExecutionDescriptorSchema;
+export const executionDescriptorSchema = candidateExecutionDescriptorSchema;
 export const executionDescriptorDigest = descriptorDigest;
 export type ExecutionDescriptor = z.infer<typeof executionDescriptorSchema>;
 export const executionEventSchema = authoritativeNativeReviewEventSchema;
 export type ExecutionEvent = z.infer<typeof executionEventSchema>;
-export const executionProfileSchema = z.object({ runnerBaseImage: ordinaryExecutionDescriptorRequestFields.runnerBaseImage,
-  jobBaseImage: ordinaryExecutionDescriptorRequestFields.jobBaseImage,
-  bounds: ordinaryExecutionDescriptorRequestFields.bounds }).strict().readonly();
+export const executionProfileSchema = z.object({ runnerBaseImage: executionProfileFields.runnerBaseImage,
+  jobBaseImage: executionProfileFields.jobBaseImage,
+  bounds: executionProfileFields.bounds }).strict().readonly();
 export type ExecutionProfile = z.infer<typeof executionProfileSchema>;
 export const executionGrantRequestSchema = z.object({ executionId: z.string().uuid(),
   generationId: z.string().regex(/^[0-9a-f]{64}$/), event: executionEventSchema,
@@ -19,13 +19,13 @@ export const executionGrantRequestSchema = z.object({ executionId: z.string().uu
 export type ExecutionGrantRequest = z.infer<typeof executionGrantRequestSchema>;
 export const executionGrantSchema = executionGrantRequestSchema.unwrap().extend({
   attempt: z.number().int().positive(), issuedAt: z.string().datetime(),
-  descriptor: candidateOrdinaryExecutionDescriptorSchema,
+  descriptor: candidateExecutionDescriptorSchema,
   descriptorDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/)
 }).strict().readonly().superRefine((grant, context) => {
   const descriptor = grant.descriptor;
   if (grant.descriptorDigest !== descriptorDigest(descriptor)
     || descriptor.projectId !== grant.event.projectId || descriptor.jobName !== grant.event.jobName
-    || descriptor.admissionGeneration !== grant.generationId
+    || descriptor.generationId !== grant.generationId
     || descriptor.runnerBaseImage !== grant.profile.runnerBaseImage || descriptor.jobImage !== grant.profile.jobBaseImage
     || JSON.stringify(descriptor.bounds) !== JSON.stringify(grant.profile.bounds)) {
     context.addIssue({ code: "custom", message: "execution grant does not match its descriptor" });
@@ -52,3 +52,9 @@ export const executionResultSchema = z.object({ executionId: z.string().uuid(),
   }
 });
 export type ExecutionResult = z.infer<typeof executionResultSchema>;
+
+export const executionCredentialSchema = z.object({ username: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+  password: z.string().regex(/^[A-Za-z0-9_-]{43,}$/).refine((value) => Buffer.from(value, "base64url").toString("base64url") === value)
+}).strict().readonly();
+export const executionSourceCredentialsSchema = z.object({ grantIssuer: executionCredentialSchema,
+  candidateReader: executionCredentialSchema, resultReporter: executionCredentialSchema }).strict();

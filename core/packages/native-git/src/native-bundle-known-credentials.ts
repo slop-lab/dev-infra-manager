@@ -16,13 +16,6 @@ export function nativeBundleKnownCredentials(
     ...(excludedGroup === "workspace-write-issuers" ? [] : config.workspaceWriteIssuers),
     ...config.humanReviewers,
     ...config.hostPromoters,
-    config.ordinaryCi.query,
-    config.ordinaryCi.identity,
-    config.ordinaryCi.attemptIssuer,
-    config.ordinaryCi.candidateReader,
-    config.ordinaryCi.resultReporter,
-    config.ordinaryCi.webhook,
-    ...(config.qemuCi === undefined ? [] : [config.qemuCi.query, config.qemuCi.eventIntake, config.qemuCi.identity,
-      config.qemuCi.attemptIssuer, config.qemuCi.candidateReader, config.qemuCi.resultReporter])
+    ...Object.values(config.ci)
   ];
 }

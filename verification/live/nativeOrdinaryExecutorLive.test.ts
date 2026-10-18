@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sysboxBackend } from "../../core/packages/managed/src/ci/backends/sysbox.js";
-import type { NativeCandidateReadAuthority } from "../../core/packages/managed/src/nativeOrdinaryCandidateVerifier.js";
+import type { NativeCandidateReadAuthority } from "../../core/packages/managed/src/ci/candidate.js";
 import { executionDescriptorDigest } from "../../core/packages/native-git/src/execution-protocol.js";
 import { ProcessRunner } from "../../core/packages/core/src/runner.js";
 import { assignment, grant } from "../../tests/packages/core/test/ci/executionFixture.js";
@@ -23,7 +23,7 @@ describe("Sysbox execution backend with the real Docker daemon", () => {
     const root = await mkdtemp(join(tmpdir(), "dim-sysbox-live-"));
     const selected = grant(assignment());
     const config = Buffer.from("jobs:\n  source:\n    script: scripts/check.sh\n"), script = Buffer.from("printf 'native-live-output\\n'\n");
-    const descriptor = { ...selected.descriptor, runnerBaseImage: runnerImage, jobImage,
+    const descriptor = { ...selected.descriptor, runnerBaseImage: runnerImage, jobImage, bounds: { ...selected.descriptor.bounds, wallClockSeconds: "90" },
       configBlob: { ...selected.descriptor.configBlob, sha256: digest(config) },
       script: { ...selected.descriptor.script, sha256: digest(script) } };
     const authority: NativeCandidateReadAuthority = {
@@ -38,7 +38,7 @@ describe("Sysbox execution backend with the real Docker daemon", () => {
     try {
       const completed = await sysboxBackend.run({ runner, root, authority, signal: AbortSignal.timeout(110_000),
         grant: { ...selected, descriptor, descriptorDigest: executionDescriptorDigest(descriptor) } });
-      expect(completed.result).toBe("success"); expect(completed.cleanupComplete).toBe(true);
+      expect(completed.result, JSON.stringify({ completion: completed.completion, stdout: Buffer.from(completed.logs.stdout.base64, "base64").toString(), stderr: Buffer.from(completed.logs.stderr.base64, "base64").toString() })).toBe("success"); expect(completed.cleanupComplete).toBe(true);
       expect(completed.stdout.sha256).toBe(digest(Buffer.from("native-live-output\n")));
     } finally { await rm(root, { recursive: true, force: true }); }
   }, 120_000);

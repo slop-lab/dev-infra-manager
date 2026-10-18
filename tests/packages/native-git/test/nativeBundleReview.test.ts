@@ -95,7 +95,7 @@ describe("authoritative installed native review creation", () => {
     // Given
     const fixture = await nativeBundleReviewFixture("bundle-review-process-crash");
     await closeFinalizeService(fixture.service);
-    const childScript = `import { generationId, startFinalizeService, workspaceWriteIssuerAuthorization } from "./packages/native-git/test/nativeRootImportFinalizeFixture.ts";
+    const childScript = `import { generationId, startFinalizeService, workspaceWriteIssuerAuthorization } from "./packages/native-git/test/nativeRootImportFinalizeFixture.js";
 const root = process.env.DIM_TEST_ROOT;
 const workspaceId = process.env.DIM_TEST_WORKSPACE_ID;
 if (root === undefined || workspaceId === undefined) throw new TypeError("missing child fixture input");

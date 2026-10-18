@@ -1,11 +1,12 @@
+import { parseControlPlaneServicePair } from "./controlPlaneServicePair.js";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdir, open, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-core";
-import { parseNativeGitBundle, parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
+import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
 import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
-import type { NativeGitAdmissionHttpClient } from "./nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
 import { compileNativeRootBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
 import { parseNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import { parseNativeGitProjectRegistrarConnection } from "./nativeGitProjectRegistrarConnection.js";
@@ -35,7 +36,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
   const ordinaryPort = port(options.ordinaryCiPort ?? 8788);
   if (nativePort === ordinaryPort) throw new UserError("control-plane published ports must be distinct");
   const credential = (username: string): Credential => ({ username, password: randomBytes(32).toString("base64url") });
-  const roles = Object.fromEntries(["query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook"]
+  const roles = Object.fromEntries(["query", "grantIssuer", "candidateReader", "resultReporter", "webhook"]
     .map((role) => [role, credential(`service-${role}`)])) as Record<string, Credential>;
   const hostRole = (role: string) => ({ hostId, ...credential(`${hostId}-${role}`) });
   const native = {
@@ -45,17 +46,16 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     projectRootImporters: [hostRole("importer")], projectRootReadIssuers: [hostRole("reader")],
     workspaceWriteIssuers: [hostRole("writer")],
     humanReviewers: [{ reviewerId: "owner", ...credential("reviewer-owner") }], hostPromoters: [hostRole("promoter")],
-    ordinaryCi: { endpoint: "http://ordinary-ci:8080", serviceId: "ordinary-main", ...roles,
+    ci: { grantIssuer: roles.grantIssuer, candidateReader: roles.candidateReader, resultReporter: roles.resultReporter,
       webhook: { endpoint: "http://ordinary-ci:8080/v1/jobs", ...roles.webhook } }
   };
   const ordinary = {
-    schemaVersion: 5, serviceId: "ordinary-main", database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-    eligibilityLeaseMilliseconds: 300_000, claimLeaseMilliseconds: 60_000,
-    nativeGit: { endpoint: "http://native-git:8080", serviceId: "native-main",
-      identity: roles.identity, attemptIssuer: roles.attemptIssuer, candidateReader: roles.candidateReader, resultReporter: roles.resultReporter },
-    credentials: { webhook: roles.webhook, query: roles.query }, hosts: []
+    schemaVersion: 1, claimLeaseMilliseconds: 60_000,
+    nativeGit: { endpoint: "http://native-git:8080", grantIssuer: roles.grantIssuer,
+      candidateReader: roles.candidateReader, resultReporter: roles.resultReporter },
+    credentials: { webhook: roles.webhook, query: roles.query }, workers: []
   };
-  parseNativeGitBundle(native, ordinary);
+  parseControlPlaneServicePair(native, ordinary);
   const reviewPolicy = { schemaVersion: 1, rootAlias: "root",
     review: { requiredReviewerIds: ["owner"], requiredJobs: [] } };
   compileNativeRootBootstrapPolicy({ rootAlias: reviewPolicy.rootAlias, protectedRef: "refs/heads/main", review: reviewPolicy.review });

@@ -3,8 +3,6 @@ import { globalAgent } from "node:https";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNodeNativeGitAdmissionHttpClient }
   from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
-import { requestNativeGitCandidateLease }
-  from "../../../../core/packages/managed/src/nativeGitCandidateLeaseClient.js";
 import { nativeTlsServer, type NativeTlsFixture } from "./nativeTlsFixture.js";
 
 const fixtures: NativeTlsFixture[] = [];
@@ -17,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("native HTTPS transport", () => {
-  it("uses verified TLS for JSON and candidate-lease requests", async () => {
+  it("uses verified TLS for authenticated JSON requests", async () => {
     // Given
     const authorization = `Basic ${Buffer.from("reader:secret").toString("base64")}`;
     const tls = await nativeTlsServer((request, response) => {
@@ -37,14 +35,11 @@ describe("native HTTPS transport", () => {
     // When
     const response = await client.request({ endpoint: tls.origin, method: "GET", path: "/identity",
       authorization, signal: AbortSignal.timeout(5_000) });
-    const lease = await requestNativeGitCandidateLease({ endpoint: tls.origin,
-      credential: { username: "reader", password: "secret" }, selector: { requestId: "request-a" },
-      httpClient: client, signal: AbortSignal.timeout(5_000) });
+
 
     // Then
     expect(response).toMatchObject({ statusCode: 200, contentType: "application/json", cacheControl: "no-store" });
     expect(JSON.parse(response.body.toString("utf8"))).toEqual({ ok: true });
-    expect(lease).toEqual({ username: "lease-a", password: "lease-secret", expiresAt: 123 });
   });
 
   it("rejects unknown authorities and wrong hostnames", async () => {

@@ -1,0 +1,14 @@
+import { expect, it } from "vitest";
+import { qemuContainerArguments, qemuBackend } from "../../../../../core/packages/managed/src/ci/backends/qemu.js";
+import { assignment, grant, event } from "./executionFixture.js";
+it("routes QEMU through a bounded unprivileged KVM supervisor with public candidate mounts", () => {
+  const selected = assignment(), authorized = grant({ ...selected, event: event("integration", "qemu") });
+  const args = qemuContainerArguments({ grant: authorized, root: "/private/job" }, { uid: 1000, gid: 1000, kvmGroup: 108 });
+  const option = (name: string) => args[args.indexOf(name) + 1];
+  expect(qemuBackend.kind).toBe("qemu"); expect(option("--device")).toBe("/dev/kvm:/dev/kvm");
+  expect(option("--network")).toBe("none"); expect(option("--cap-drop")).toBe("ALL");
+  expect(option("--cpus")).toBe(authorized.profile.bounds.cpu);
+  expect(BigInt(option("--memory")!)).toBe(BigInt(authorized.profile.bounds.memoryBytes) + 256n * 1024n * 1024n);
+  expect(args).toContain(`type=image,src=${authorized.profile.jobBaseImage},dst=/run/dim/guest-root`);
+  expect(args.join(" ")).not.toMatch(/docker\.sock|--privileged|--env|password|credential/);
+});

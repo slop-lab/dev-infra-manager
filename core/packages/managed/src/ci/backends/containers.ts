@@ -22,7 +22,7 @@ export type NativeDockerPaths = {
 };
 
 export async function prepareNativeImages(runner: StreamingCommandRunner, claim: ExecutionGrant, signal: AbortSignal): Promise<void> {
-  await pullAndVerify(runner, claim.descriptor.runnerBaseImage, signal);
+  await prepareExecutionImage(runner, claim.descriptor.runnerBaseImage, signal);
 }
 
 export function nativeContainerArgs(claim: ExecutionGrant, paths: NativeDockerPaths, routing?: NativeHostImageRouting): string[] {
@@ -45,14 +45,14 @@ export function nativeContainerArgs(claim: ExecutionGrant, paths: NativeDockerPa
   ];
 }
 
-export async function cleanupNativeContainer(runner: StreamingCommandRunner, claim: ExecutionGrant): Promise<boolean> {
+export async function cleanupNativeContainer(runner: StreamingCommandRunner, claim: ExecutionGrant, kind = "sysbox"): Promise<boolean> {
   const format = ["{{.Id}}", ...labelKeys.map((key) => `{{index .Config.Labels \"${key}\"}}`)].join("|");
   const inspected = await runner.run("docker", ["container", "inspect", containerName(claim), "--format", format], {
     signal: AbortSignal.timeout(30_000)
   });
   if (inspected.exitCode !== 0) return isMissing(inspected.stderr, containerName(claim));
   const [id, ...labels] = inspected.stdout.trim().split("|");
-  const expected = ownershipLabels(claim).map((label) => label.slice(label.indexOf("=") + 1));
+  const expected = ownershipLabels(claim, kind).map((label) => label.slice(label.indexOf("=") + 1));
   if (id === undefined || !/^[0-9a-f]{64}$/.test(id) || labels.join("|") !== expected.join("|")) return false;
   const removed = await runner.run("docker", ["container", "rm", "--force", id], { signal: AbortSignal.timeout(30_000) });
   return removed.exitCode === 0 || isMissing(removed.stderr, id);
@@ -83,7 +83,7 @@ docker run --rm --network none --cpus "$DIM_JOB_CPUS" --memory "$DIM_JOB_MEMORY"
 `;
 }
 
-async function pullAndVerify(runner: StreamingCommandRunner, image: string, signal: AbortSignal): Promise<void> {
+export async function prepareExecutionImage(runner: StreamingCommandRunner, image: string, signal: AbortSignal): Promise<void> {
   const pulled = await runner.run("docker", ["pull", image], { signal });
   if (pulled.exitCode !== 0) throw new NativeHostImageError(image);
   const inspected = await runner.run("docker", ["image", "inspect", image, "--format", "{{json .RepoDigests}}"], { signal });
@@ -100,18 +100,18 @@ async function pullAndVerify(runner: StreamingCommandRunner, image: string, sign
   }
 }
 
-function ownershipLabels(claim: ExecutionGrant): readonly string[] {
-  const fields = ["true", "dim", claim.workerId, claim.slotId, claim.generationId, claim.executionId, claim.executionId, "native-ordinary-runner"];
+export function ownershipLabels(claim: ExecutionGrant, kind = "sysbox"): readonly string[] {
+  const fields = ["true", "dim", claim.workerId, claim.slotId, claim.generationId, claim.executionId, claim.executionId, kind];
   const hash = createHash("sha256").update("dim-native-ordinary-resource-v1", "ascii");
   for (const field of fields) hash.update(`${Buffer.byteLength(field)}:`, "ascii").update(field);
   return [
     "dim.managed=true", "dim.owner=dim", `dim.host=${claim.workerId}`, `dim.capacity=${claim.slotId}`,
     `dim.admission-generation=${claim.generationId}`, `dim.attempt=${claim.executionId}`,
-    `dim.resource=${claim.executionId}`, "dim.kind=native-ordinary-runner", `dim.digest=sha256:${hash.digest("hex")}`
+    `dim.resource=${claim.executionId}`, `dim.kind=${kind}`, `dim.digest=sha256:${hash.digest("hex")}`
   ];
 }
 
-function containerName(claim: ExecutionGrant): string {
+export function containerName(claim: ExecutionGrant): string {
   return `dim-native-ci-${createHash("sha256").update(claim.executionId).digest("hex").slice(0, 20)}`;
 }
 

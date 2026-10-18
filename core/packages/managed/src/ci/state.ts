@@ -29,6 +29,7 @@ export async function inspectExecutionState(directory: string): Promise<{ readon
 export function assertExecutionDatabase(database: DatabaseSync): void {
   if (database.prepare("PRAGMA user_version").get()?.user_version !== executionStateFormat
     || database.prepare("PRAGMA quick_check").get()?.quick_check !== "ok") throw new Error("CI state is invalid");
+  database.prepare("SELECT id,event_id,generation_id,phase,worker_id,slot_id,request_id,created_at,execution_kind,publication,lease_expires_at,body FROM executions LIMIT 0").all();
   const names = database.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()
     .map((row) => row.name);
   if (names.join(",") !== "executions,metadata") throw new Error("CI database schema is unsupported");

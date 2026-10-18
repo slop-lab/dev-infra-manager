@@ -1,6 +1,6 @@
 import { chmod, lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { NativeCandidateBlob } from "./nativeOrdinaryCandidateVerifier.js";
+import type { NativeCandidateBlob } from "./ci/candidate.js";
 import {
   effectiveUserId,
   type DisposableGit

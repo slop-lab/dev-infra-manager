@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import type { CandidateOrdinaryExecutionDescriptor } from "./candidate-execution-schema.js";
+import type { CandidateExecutionDescriptor } from "./candidate-execution-schema.js";
 
-const descriptorDomain = "dim-native-ordinary-execution-v1";
+const descriptorDomain = "dim-job-execution-v1";
 
-export function descriptorDigest(descriptor: CandidateOrdinaryExecutionDescriptor): string {
+export function descriptorDigest(descriptor: CandidateExecutionDescriptor): string {
   const fields = [
     descriptor.projectId,
     descriptor.repositoryId,
@@ -14,7 +14,7 @@ export function descriptorDigest(descriptor: CandidateOrdinaryExecutionDescripto
     descriptor.policyRevision,
     descriptor.requiredReviewRevision,
     descriptor.requiredJobSetRevision,
-    descriptor.admissionGeneration,
+    descriptor.generationId,
     descriptor.jobName,
     descriptor.evidenceClass,
     descriptor.configBlob.path,

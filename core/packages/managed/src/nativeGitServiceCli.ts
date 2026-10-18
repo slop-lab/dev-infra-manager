@@ -1,13 +1,13 @@
 #!/usr/bin/env node
+import { parseControlPlaneServicePair } from "./controlPlaneServicePair.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
-import { parseNativeGitBundle, parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
+import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-native-git/service";
 import { inspectNativeGitBundleState } from "@slop-lab/dim-native-git/service";
-import { configuredNativeGitIdleServer } from "@slop-lab/dim-native-git/service";
 import { assertGitVersion } from "@slop-lab/dim-native-git/service";
 import { checkNativeGitServiceReadiness } from "@slop-lab/dim-native-git/service";
 
@@ -37,12 +37,12 @@ export async function runNativeGitServiceCli(
   const command = arguments_[0];
   if (command === "check-config" && arguments_.length === 2) {
     const config = parseNativeGitBundleConfig(await readJson(arguments_[1]));
-    if (config.projectRegistrars.length !== 0) await assertGitVersion(config);
+    await assertGitVersion(config);
     return;
   }
   if (command === "check-bundle-config" && arguments_.length === 3) {
     const [native, ordinary] = await Promise.all([readJson(arguments_[1]), readJson(arguments_[2])]);
-    parseNativeGitBundle(native, ordinary);
+    parseControlPlaneServicePair(native, ordinary);
     return;
   }
   if (command === "compatibility" && arguments_.length === 2 && arguments_[1] === "--json") {
@@ -66,11 +66,6 @@ export async function runNativeGitServiceCli(
       activationToken: await readToken(activationTokenPath, "activation"),
       expectedGenerationId
     };
-    if (config.projectRegistrars.length === 0) {
-      const server = await configuredNativeGitIdleServer(options);
-      await listenUntilTermination(server);
-      return;
-    }
     const service = await configuredNativeGitBundleServer(options);
     try {
       await listenUntilTermination(service.server, () => service.close());

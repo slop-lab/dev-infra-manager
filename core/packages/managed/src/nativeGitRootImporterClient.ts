@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
-import type { NativeGitAdmissionHttpClient, NativeGitAdmissionHttpResponse } from "./nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient, NativeGitAdmissionHttpResponse } from "./nativeGitAdmissionHttpClient.js";
 import {
   loadNativeGitRootImporterConnection,
   parseNativeGitRootImporterConnection,

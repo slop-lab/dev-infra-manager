@@ -1,12 +1,29 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
-import type {
-  NativeGitAdmissionHttpClient,
-  NativeGitAdmissionHttpRequest,
-  NativeGitAdmissionHttpResponse
-} from "./nativeGitAdmissionSource.js";
+export type NativeGitAdmissionHttpRequest = {
+  readonly endpoint: string;
+  readonly method: "GET" | "POST";
+  readonly path: string;
+  readonly authorization: string;
+  readonly generationId?: string;
+  readonly body?: string;
+  readonly signal: AbortSignal;
+};
 
-const maximumResponseBytes = 64 * 1024;
+export type NativeGitAdmissionHttpResponse = {
+  readonly statusCode: number;
+  readonly contentType: string | undefined;
+  readonly cacheControl: string | undefined;
+  readonly body: Buffer;
+};
+
+export interface NativeGitAdmissionHttpClient {
+  request(input: NativeGitAdmissionHttpRequest): Promise<NativeGitAdmissionHttpResponse>;
+}
+
+
+
+const maximumResponseBytes = 512 * 1024;
 
 export function createNodeNativeGitAdmissionHttpClient(): NativeGitAdmissionHttpClient {
   return {

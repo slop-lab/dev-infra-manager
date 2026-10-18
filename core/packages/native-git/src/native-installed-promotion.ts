@@ -5,7 +5,6 @@ import { readAuthoritativeNativeReviewEnvelope } from "./authoritative-native-re
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import { resolveAuthoritativeNativeRootTarget } from "./authoritative-native-root-target.js";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
-import { currentQemuTerminalEvidence } from "./current-qemu-terminal-evidence.js";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
 import {
   nativeProjectRootPromotionEvidenceDigest,
@@ -88,7 +87,7 @@ export async function promoteInstalledNativeReview(
   }
   const jobs = [] as Array<NativeProjectRootPromotionEvidence["jobs"][number]>;
   for (const required of target.imported.policy.requiredJobs) {
-    if (required.kind === "ordinary-sysbox") {
+    {
       const event = envelope.events.find((event) => event.executionKind === required.kind && event.jobName === required.name);
       if (event === undefined) throw new NativeInstalledPromotionError("required execution event is missing");
       const evidence = await currentExecutionEvidence(context.runtime, target.repository, event);
@@ -98,10 +97,7 @@ export async function promoteInstalledNativeReview(
       }
       jobs.push({ executionKind: required.kind, jobName: required.name, evidenceClass: required.evidenceClass,
         evidenceDigest: evidence.digest });
-    } else {
-      if (context.config.qemuCi === undefined) throw new NativeInstalledPromotionError("QEMU evidence service is unavailable");
-      jobs.push({ executionKind: required.kind, jobName: required.name, evidenceClass: required.evidenceClass,
-        evidenceDigest: await currentQemuTerminalEvidence(context.config.qemuCi, target.repository, envelope, required.name) });
+
     }
   }
   jobs.sort((left, right) => left.executionKind.localeCompare(right.executionKind)

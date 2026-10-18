@@ -1,4 +1,4 @@
-import type { NativeCandidateReadAuthority } from "./nativeOrdinaryCandidateVerifier.js";
+import type { NativeCandidateReadAuthority } from "./ci/candidate.js";
 import {
   materializeVerifiedTree,
   readVerifiedBlob,

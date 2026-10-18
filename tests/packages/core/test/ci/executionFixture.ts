@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { executionGrantSchema, type ExecutionEvent, type ExecutionGrant, type ExecutionResult } from "../../../../../core/packages/native-git/src/execution-protocol.js";
+import { executionGrantSchema, type ExecutionEvent, type ExecutionGrant } from "../../../../../core/packages/native-git/src/execution-protocol.js";
 import { descriptorDigest } from "../../../../../core/packages/native-git/src/candidate-execution.js";
 import type { ExecutionAssignment, WorkerSlot } from "../../../../../core/packages/managed/src/ci/execution.js";
 export const generation = "a".repeat(64);
@@ -20,7 +20,7 @@ export function grant(assignment: ExecutionAssignment): ExecutionGrant {
   const descriptor = { projectId: source.projectId, repositoryId: "root" as const, protectedRef: source.protectedRef,
     expectedProtectedHead: source.expectedProtectedHead, candidateCommit: source.candidateCommit, candidateTree: source.candidateTree,
     policyRevision: source.policyRevision, requiredReviewRevision: source.requiredReviewRevision,
-    requiredJobSetRevision: source.qualityRevision, admissionGeneration: assignment.generationId, jobName: source.jobName,
+    requiredJobSetRevision: source.qualityRevision, generationId: assignment.generationId, jobName: source.jobName,
     evidenceClass: "candidate-controlled" as const,
     configBlob: { path: ".dim/ci/runner.yml", objectId: "4".repeat(40), sha256: `sha256:${hash("config")}` },
     script: { path: "scripts/check.sh", objectId: "5".repeat(40), sha256: `sha256:${hash("script")}` },
@@ -35,10 +35,10 @@ export function assignment(): ExecutionAssignment {
     publication: "pending", workerId: "worker-a", slotId: slot.id, profile: slot.profile, requestId: randomUUID(),
     leaseToken: "token".repeat(16), leaseExpiresAt: Date.now() + 60_000 };
 }
-export function result(grant: ExecutionGrant): ExecutionResult {
+export function result(grant: ExecutionGrant): import("../../../../../core/packages/managed/src/ci/execution.js").ExecutionResult {
   const now = new Date().toISOString();
   const empty = { bytes: "0", sha256: `sha256:${hash("")}`, truncated: false };
   return { executionId: grant.executionId, descriptorDigest: grant.descriptorDigest, cleanupComplete: true,
-    startedAt: now, finishedAt: now, result: "success", completion: { kind: "exited", exitCode: 0 }, stdout: empty, stderr: empty };
+    startedAt: now, finishedAt: now, result: "success", completion: { kind: "exited", exitCode: 0 }, stdout: empty, stderr: empty, logs: { stdout: { base64: "", truncated: false }, stderr: { base64: "", truncated: false } } };
 }
 export function hash(value: string) { return createHash("sha256").update(value).digest("hex"); }

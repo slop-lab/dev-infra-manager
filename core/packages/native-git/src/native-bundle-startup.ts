@@ -14,7 +14,6 @@ import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-
 import { recoverNativeRootImports } from "./native-root-import-recovery.js";
 import { assertGitVersion, type GitExecutableIdentity } from "./repository.js";
 import { recoverNativeProjectRootPromotions } from "./native-project-root-promotion-recovery.js";
-import { assertNativeQemuAuthorityStore } from "./native-qemu-authority-state.js";
 
 type NativeBundleRuntimeConfig = {
   readonly storageRoot: string;
@@ -42,8 +41,6 @@ export async function initializeNativeBundleRuntime(
   const activationTokenDigest = activationTokenSha256(options.activationToken);
   const activated = exactActivationIsBound(state, options.expectedGenerationId, activationTokenDigest);
   const registrations = readNativeProjectRegistrationsFromDatabase(state.database);
-  await Promise.all(registrations.map(({ projectId, rootRepositoryId }) => assertNativeQemuAuthorityStore(
-    join(options.stateDirectory, projectId, `${rootRepositoryId}.git`))));
   const gitIdentity = await assertGitVersion(runtimeConfig);
   await recoverNativeProjectRootPromotions({ gitExecutable: config.gitExecutable, state,
     stateDirectory: options.stateDirectory });
