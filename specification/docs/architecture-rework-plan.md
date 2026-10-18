@@ -233,8 +233,8 @@ only if it creates a real deployment, optional-dependency or ownership boundary.
 Test behavior at the owner of the behavior: state transitions and persistence,
 transport/terminal cancellation, resource and ownership rules, real Git/ref races,
 install/update failure recovery, and scoped agent access. Keep a small number of
-end-to-end journeys that cross the actual components. Remove source-string and
-function-count assertions. Runtime-specific deployment pins must not turn an
+end-to-end journeys that cross the actual components. Remove assertions that only pin implementation spelling, function counts or
+retired topology; check ownership and user behavior directly. Runtime-specific deployment pins must not turn an
 otherwise generic Git integration fixture into a test of the host's exact Git
 version.
 
@@ -326,3 +326,47 @@ Persistent VM workspaces and the larger LLM/router service remain separate
 product work; their requirements are represented in the issue map without
 claiming implementation. No KVM device is available on this host, so actual
 QEMU guest execution requires the separate disposable KVM verification host.
+
+- Retire unused duplicate installation and runner verification paths, parallel
+  Project state APIs and CI host/capacity connection formats: `b00968dd`,
+  `300fb8fc`, `9de05739`. Configured credential principals are distinct from host
+  scope; host IDs are no longer alternative authentication names.
+- Atomic record publication uses exclusive, unique temporary files; concurrent
+  writers cannot corrupt or remove each other's payload: `439ce4fd`.
+- Existing workspaces retain their own authority when the active connection
+  changes; managed host selection follows the same argument rules as base
+  commands: `522850cd`.
+- Developer prerequisites no longer require root or a fictional exact Git
+  version; isolated gates explicitly run the privileged fixture profile:
+  `1ccd9365`. Configuration parsing has a lightweight package entry independent
+  of the Git server/SQLite runtime: `ef8889ea`.
+- Initial CI worker setup generates reviewed slots/profiles and service
+  credentials from prepare options, then generation-bound private worker
+  configuration at connect: `3a9498eb`. Actual Git/CI HTTP acceptance and token/
+  generation rejection are covered by `a4fe3302`.
+
+## Completion audit map
+
+This audit concerns the requested responsibility and usability rework. The issue
+backup remains input to later product work; mapping an issue does not close it.
+Hardware-specific mechanics and first-time host provisioning are separate from
+ordinary developer checks.
+
+| Requirement | Authoritative implementation and verification |
+| --- | --- |
+| Optional control plane and light base | `dim-core` production dependency graph; base/managed actual tarball profiles in `verification/scripts/local-bundle-profiles-smoke.mjs`; base-only CLI transport tests |
+| Comfortable local/SSH development | Core workspace application and CLI host transport; `base-workspace-runtime-smoke.mts` and `base-workspace-ssh-smoke.mjs`; CLI command/stream/cancellation tests |
+| One owner for workspace data and lifecycle | Core workspace store/runtime; workspace service, ownership, recreation and atomic-write tests; managed attachment delegates to the same runtime |
+| Existing workspace survives a different active control plane | Scoped attachment refresh plus `controlPlaneSetup.test.ts` real HTTP/Git reconnect cases; explicit foreign connection overrides remain errors |
+| Natural optional installation and use | Exact facade component closure, private prepare/connect output, configured initial CI worker; setup tests, actual generation-bound worker HTTP checks and installer transaction tests |
+| Workflow syntax outside core and Git authority | Selected workflow compiler package; native Git consumes normalized plans; workflow/plugin tests and actual packed dependency closure |
+| One execution lifecycle | Shared durable aggregate/store/service/worker for both backends; lease, cleanup, retry, generation, query and installed-Git/CI integration tests |
+| Practical host/secret boundary | Private workspace storage/network ownership, scoped source broker and service roles; actual Sysbox/SSH relay tests, Git authority tests and published-route ownership tests |
+| No fictional compatibility obligations | Removed parallel Project state APIs, retired CI host/capacity format and host-ID credential aliases; current parser/role denial tests; only installer facade compatibility retained |
+| Reviewable work and preserved issues | Intermediate development commits; unchanged exported JSON/comments/attachment and checksum manifest; all 32 issues mapped above |
+
+The ordinary source gate builds the full package graph, then runs type and
+behavior checks. Its disposable container separately runs privileged QEMU
+process/filesystem fixtures. Generic developer checks require supported tools,
+not an arbitrary exact Git version or root ownership capabilities. Actual KVM
+VM execution is reported separately and is not implied by root fixture results.

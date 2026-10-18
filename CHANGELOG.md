@@ -13,7 +13,9 @@ is implied by these source changes.
   across recreation, with explicit resource limits and owned cleanup.
 - Install managed Git, human review, shared CI and service plugins only when
   selected. Keep the `@slop-lab/dim-installer` facade, exact component graphs
-  and transactional install/activation recovery. Source installs retain the
+  and transactional install/activation recovery. Prepare initial CI capacity
+  and connect generation-bound worker configuration without hand-writing
+  credentials. Source installs retain the
   matching installer and select it through mise for subsequent operations.
 - Use the same workspace lifecycle for ordinary and managed Git sources.
   Remove the separate trusted outer container, duplicate host/workspace state,
