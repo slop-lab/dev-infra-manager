@@ -13,12 +13,14 @@ is implied by these source changes.
   across recreation, with explicit resource limits and owned cleanup.
 - Install managed Git, human review, shared CI and service plugins only when
   selected. Keep the `@slop-lab/dim-installer` facade, exact component graphs
-  and transactional install/activation recovery.
+  and transactional install/activation recovery. Source installs retain the
+  matching installer and select it through mise for subsequent operations.
 - Use the same workspace lifecycle for ordinary and managed Git sources.
   Remove the separate trusted outer container, duplicate host/workspace state,
   unused controller RPC/session paths and predecessor compatibility machinery.
 - Separate workflow compilation, Git authority and execution responsibilities.
-  Candidate scripts never gain host, review or protected-ref authority.
+  Candidate scripts never gain host, review or protected-ref authority. Inspect
+  CI jobs and bounded diagnostics through a separate read-only query role.
 - Make reviewer web use the installed authority's proposal, diff and human
   decision APIs. Protect optional published-service connections with current
   workspace UUID/ownership checks, including discard and display-name reuse.

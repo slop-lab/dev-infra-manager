@@ -22,6 +22,10 @@ and the base workspace image from one source identity and lockfile. Installation
 uses those artifacts without rebuilding them, validates base workspace state,
 and selects only the base CLI dependency graph. It does not activate a fresh
 managed controller. Existing explicitly installed integrations are retained.
+The matching installer is retained under the DIM data directory. With mise,
+installation links and selects that exact source facade globally, so later
+installer commands use the same implementation. Without mise, add the printed
+facade directory to PATH.
 Preparation rejects dirty source by default; use a reviewed clean commit.
 
 A source host bootstrap is available for a disposable Ubuntu VM in

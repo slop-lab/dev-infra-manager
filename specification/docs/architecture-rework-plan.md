@@ -309,10 +309,20 @@ that an arbitrary large codebase has no possible further improvements.
   retaining facade deployment syntax and transaction behavior: `b6fc02d6`.
   Installer behavior suites passed 302 tests, with one existing skipped case.
 
-The remaining execution consolidation is active work: QEMU shares the same
-queue/worker, legacy configuration and proof authorities are removed, and final
-runtime/image checks follow the matched build. Plugin request targets are being
-revalidated across same-UUID runtime recreation. The unused controller-proxy
-package and source-bundle closure are under final review. Persistent VM
-workspaces and the larger LLM/router service remain separate product work;
-their requirements are represented in the issue map without claiming implementation.
+- One durable execution aggregate, indexed queue, backend interface and worker
+  now serve Sysbox and QEMU: `52b969d3`. Generation-bound intake, current lease
+  fencing, result recovery and bounded diagnostics replace parallel authorities.
+- Remove unused controller proxy and close source artifact dependency graphs:
+  `41e476e5`. Workflow compilation is included in actual source archives.
+- Revalidate published targets per connection and restore stored routes lazily
+  across stopped/recreated workspaces: `5cadde78`, `6cdf5b8a`, `10f56545`.
+  Real Sysbox HTTP/TCP, ownership and bidirectional half-close checks passed.
+- Remove standalone legacy Git registries and policy fallback: `1aecbb66`.
+  Current imported policy and Git object/ref checks retain explicit authority.
+- Add operator job summaries and bounded binary logs with a dedicated query role:
+  `6534d25d`. Saved connection setup remains usable while CI is offline.
+
+Persistent VM workspaces and the larger LLM/router service remain separate
+product work; their requirements are represented in the issue map without
+claiming implementation. No KVM device is available on this host, so actual
+QEMU guest execution requires the separate disposable KVM verification host.

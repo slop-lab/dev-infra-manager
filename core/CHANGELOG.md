@@ -15,10 +15,12 @@ Target: `0.10.0` internal development candidate; this is not a published release
 - Keep the installer facade and exact component dependency selection. Optional
   control-plane preparation generates private service/role configuration;
   connection checks bind clients to the installed generation. Installation and
-  activation failures retain transactional recovery.
+  activation failures retain transactional recovery. Source installation keeps
+  the matching facade selected through mise.
 - Put workflow syntax in the selected workflow plugin. Git authority consumes
   normalized plans and owns proposals, review and atomic protected-ref updates;
-  execution owns jobs, worker leases, capacity fencing and cleanup.
+  execution owns jobs, worker leases, capacity fencing and cleanup. Expose job
+  status and bounded logs through a dedicated query role and CLI commands.
 - Connect reviewer web to the installed human-review APIs for proposal discovery,
   diffs, approval and revocation. Generate private browser configuration from the
   reviewer role rather than maintain a parallel review backend.

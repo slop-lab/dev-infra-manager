@@ -1,7 +1,7 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
@@ -116,9 +116,9 @@ describe("target installer selection", () => {
     const invocations = await readFile(fixture.log, "utf8");
 
     // Then
-    expect(installation.status).toBe(1);
+    expect(installation.status, installation.stderr).toBe(1);
     expect(installation.stderr).toMatch(
-      /workspace state.*work-1\.json.*unsupported predecessor state.*prior pinned release.*export.*recreate.*no state was changed/is
+      /workspace state.*work-1\.json.*unsupported workspace state.*export.*currently installed DIM version.*recreat.*no state was changed/is
     );
     expect(installation.stderr).not.toContain("do-not-print");
     expect(invocations).toMatch(/^mise exec -- npm install --prefix .*dim-target-installer\./m);
@@ -132,38 +132,44 @@ describe("target installer selection", () => {
       .some((entry) => entry.startsWith("dim-target-installer."))).toBe(false);
   }, 120_000);
 
-  it("rejects strict predecessor host state before local plugin activation", async () => {
-    // Given
+  it("keeps the matching source facade selected by mise after temporary staging is removed", async (context) => {
+    const located = spawnSync("which", ["mise"], { encoding: "utf8" });
+    if (located.status !== 0) { context.skip(); return; }
     const fixture = await createFixture();
-    const hostPath = resolve(fixture.root, "state/host.json");
-    const hostBytes = `${JSON.stringify({
-      schemaVersion: 1,
-      phase: "stopped",
-      resumeWorkspaces: [],
-      resumeCiRunners: [],
-      resumeManagedContainers: [],
-      updatedAt: "before-install"
-    }, null, 2)}\n`;
-    await writeFile(fixture.environment.DIM_CONFIG_PATH ?? "", '{"schemaVersion":1,"workspaceBackend":"sysbox"}\n');
-    await writeFile(hostPath, hostBytes);
-    const bundleBefore = await bundleBytes(fixture.bundle);
-
-    // When
-    const installation = run("/usr/bin/bash", [resolve(fixture.root, "scripts/install-source-build.bash")], fixture.environment);
-    const invocations = await readFile(fixture.log, "utf8");
-
-    // Then
-    expect(installation.status).toBe(1);
-    expect(installation.stderr).toMatch(
-      /host lifecycle state.*host\.json.*unsupported predecessor state.*prior pinned release.*complete recovery.*no state was changed/is
-    );
-    expect(await readFile(hostPath, "utf8")).toBe(hostBytes);
-    await expect(readFile(`${hostPath}.schema-1.bak`, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await bundleBytes(fixture.bundle)).toEqual(bundleBefore);
-    expect(invocations.match(/^state$/gm)).toHaveLength(1);
-    expect(invocations).not.toContain("installer enable-plugin");
-    expect(invocations).not.toContain("mise exec -- dim");
-    expect(invocations).not.toContain("npm install --global");
+    const tools = resolve(fixture.root, "tools");
+    await writeFile(resolve(tools, "mise"), `#!/usr/bin/bash
+{ printf 'mise'; printf ' %s' "$@"; printf '\\n'; } >>"$DIM_INVOCATIONS"
+exec "$DIM_TEST_REAL_MISE" "$@"
+`);
+    const environment = { ...fixture.environment,
+      PATH: `${dirname(process.execPath)}:${tools}:${process.env.PATH ?? ""}`,
+      MISE_DATA_DIR: resolve(fixture.root, "mise-data"),
+      MISE_CACHE_DIR: resolve(fixture.root, "mise-cache"),
+      MISE_CONFIG_DIR: resolve(fixture.root, "mise-config"),
+      MISE_GLOBAL_CONFIG_FILE: resolve(fixture.root, "mise-config/config.toml"),
+      MISE_TRUSTED_CONFIG_PATHS: fixture.root,
+      DIM_TEST_REAL_MISE: located.stdout.trim()
+    };
+    const install = () => spawnSync("/usr/bin/bash", [resolve(fixture.root, "scripts/install-source-build.bash")], {
+      cwd: fixture.root, env: environment, encoding: "utf8", timeout: 120_000
+    });
+    for (let repeat = 0; repeat < 2; repeat += 1) {
+      const installed = install();
+      expect(installed.status, installed.stderr).toBe(0);
+    }
+    expect((await readdir(environment.TMPDIR ?? ""))
+      .some((entry) => entry.startsWith("dim-target-installer."))).toBe(false);
+    const followup = spawnSync(located.stdout.trim(), ["exec", "--", "dim", "installer", "install", "core",
+      "--local-packages", fixture.bundle, "--with-managed", "--no-local-bin"], {
+      cwd: fixture.root, env: environment, encoding: "utf8", timeout: 120_000
+    });
+    expect(followup.status, followup.stderr).toBe(0);
+    const version = spawnSync(located.stdout.trim(), ["exec", "--", "dim", "--version"], {
+      cwd: fixture.root, env: environment, encoding: "utf8"
+    });
+    expect(version.status, version.stderr).toBe(0);
+    expect(version.stdout).toMatch(/DIM CLI (\S+) \(via DIM installer \1\)/);
+    expect(await readFile(environment.MISE_GLOBAL_CONFIG_FILE, "utf8")).toContain("npm:@slop-lab/dim-installer");
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   }, 120_000);
 });

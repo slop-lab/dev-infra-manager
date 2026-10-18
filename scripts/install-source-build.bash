@@ -57,9 +57,45 @@ validate_preparation
 
 installer_tarballs=("$package_root"/slop-lab-dim-installer-*.tgz)
 test "${#installer_tarballs[@]}" -eq 1 && test -f "${installer_tarballs[0]}" && test ! -L "${installer_tarballs[0]}"
+installer_sha256="$(sha256sum "${installer_tarballs[0]}" | cut -d ' ' -f 1)"
+facade_parent="${DIM_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/dim}/installers"
+facade_parent="$(realpath -m -s -- "$facade_parent")"
+facade_root="$facade_parent/$installer_sha256"
+if [[ -e "$facade_parent" || -L "$facade_parent" ]]; then
+  [[ ! -L "$facade_parent" && -d "$facade_parent" && "$(stat -c %u "$facade_parent")" == "$(id -u)" ]] || {
+    echo "source installer directory must be owned and must not be a symlink: $facade_parent" >&2; exit 1;
+  }
+fi
+validate_facade() {
+[[ ! -L "$facade_root" && -d "$facade_root" &&
+  "$(stat -c %u "$facade_root")" == "$(id -u)" &&
+  -f "$facade_root/.dim-source-installer" && ! -L "$facade_root/.dim-source-installer" &&
+  "$(<"$facade_root/.dim-source-installer")" == "$installer_sha256" ]] || {
+  echo "refusing an unsafe or foreign source installer: $facade_root" >&2; exit 1;
+}
+facade="$facade_root/node_modules/.bin/dim"
+resolved_facade="$(readlink -f -- "$facade")"
+[[ -x "$resolved_facade" && "$resolved_facade" == "$facade_root/"* ]] || {
+  echo "source installer has no owned executable facade: $facade_root" >&2; exit 1;
+}
+}
+if [[ -e "$facade_root" || -L "$facade_root" ]]; then
+  validate_facade
+fi
+coordinate="npm:@slop-lab/dim-installer@${package_version}-installer-${installer_sha256:0:16}"
+if command -v mise >/dev/null 2>&1; then
+  existing_mise_path="$(mise where "$coordinate" 2>/dev/null || true)"
+  if [[ -n "$existing_mise_path" && ( -e "$existing_mise_path" || -L "$existing_mise_path" ) ]]; then
+    [[ "$(readlink -f -- "$existing_mise_path")" == "$(realpath -m -- "$facade_root")" ]] || {
+      echo "mise source version already belongs to another installation: $coordinate" >&2; exit 1;
+    }
+  fi
+fi
+facade_stage=""
 staged_installer="$(mktemp -d "${TMPDIR:-/tmp}/dim-target-installer.XXXXXX")"
 cleanup() {
   find "$staged_installer" -depth -delete 2>/dev/null || true
+  [[ -z "$facade_stage" ]] || rm -rf -- "$facade_stage"
 }
 trap cleanup EXIT
 
@@ -81,5 +117,40 @@ fi
 
 
 validate_preparation
-echo "[host] local package bundle installed"
+
+# Keep the matching installer after this transaction. An older mise facade can
+# launch the new CLI, but cannot interpret its new private service configuration.
+mkdir -p -m 0700 -- "$facade_parent"
+[[ ! -L "$facade_parent" && -d "$facade_parent" && "$(stat -c %u "$facade_parent")" == "$(id -u)" ]] || {
+  echo "source installer directory must be owned and must not be a symlink: $facade_parent" >&2; exit 1;
+}
+if [[ ! -e "$facade_root" && ! -L "$facade_root" ]]; then
+  facade_stage="$(mktemp -d "$facade_parent/.install.XXXXXX")"
+  cp -a -- "$staged_installer/." "$facade_stage/"
+  printf '%s\n' "$installer_sha256" >"$facade_stage/.dim-source-installer"
+  mv -T --no-clobber -- "$facade_stage" "$facade_root"
+  [[ ! -e "$facade_stage" ]] || { echo "source installer target appeared during installation; preserved: $facade_root" >&2; exit 1; }
+  facade_stage=""
+fi
+validate_facade
+if command -v mise >/dev/null 2>&1; then
+  coordinate="npm:@slop-lab/dim-installer@${package_version}-installer-${installer_sha256:0:16}"
+  existing_mise_path="$(mise where "$coordinate" 2>/dev/null || true)"
+  if [[ -n "$existing_mise_path" && ( -e "$existing_mise_path" || -L "$existing_mise_path" ) ]]; then
+    [[ "$(readlink -f -- "$existing_mise_path")" == "$facade_root" ]] || {
+      echo "mise source version already belongs to another installation: $coordinate" >&2; exit 1;
+    }
+  else
+    mise link "$coordinate" "$facade_root"
+  fi
+  mise use --raw --global "$coordinate"
+  dim_command=(mise exec -- "$facade")
+  echo "[host] selected matching source installer with mise"
+else
+  dim_command=("$facade")
+  echo "[host] source installer: $facade"
+  echo "Add $facade_root/node_modules/.bin to PATH to use this matching facade."
+fi
+validate_preparation
+echo "[host] local package bundle and matching installer installed"
 "${dim_command[@]}" --version

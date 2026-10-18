@@ -237,17 +237,18 @@ outside that bundle, then use that target facade for `installer install core` an
 target-package state compatibility preflight before runtime promotion. An
 existing standalone or mise-managed facade cannot retroactively provide a
 candidate check and MUST NOT perform this install operation. Mise may supply
-Node.js and npm while executing the staged facade's absolute path. When mise is
-unavailable, the assembled-development path may update its global facade only
-after target validation and runtime promotion succeed. A compatibility refusal
+Node.js and npm while executing the staged facade's absolute path. After successful
+assembled-development installation, retain the matching facade under a digest-named
+DIM data directory and select it through `mise link` and `mise use --raw --global`.
+Without mise, report its persistent executable directory for PATH configuration. A compatibility refusal
 must therefore precede facade, config, runtime, plugin, or image mutation and
 must preserve prepared bundle bytes and readiness. The existing preparation-
 image readiness checks and their ordering remain unchanged.
 
-The staged facade invokes local core installation with controller restart
-deferred, activates the exact bundled plugin set including the required host
-mirror provider, and then performs one explicit controller restart. It must not
-start the promoted controller between core promotion and plugin activation.
+The assembled-development path installs the base graph by default. `--with-managed`
+adds the optional managed library graph without activating plugins or a controller.
+The reviewed-root preparation path separately defers controller restart until its
+explicit plugin selection has been activated.
 
 `build-local-workspace-image` remains an image-only convenience path for the
 current working tree and does not create prepared package readiness.

@@ -31,8 +31,8 @@ just install-local
 
 The preparation builds the package bundle and base workspace image. The install
 selects the base CLI and its dependencies; optional managed packages in the same
-bundle are not automatically installed. It uses an existing mise installer
-facade when configured and does not replace it with a direct CLI symlink.
+bundle are not automatically installed. It retains the matching source installer and selects it through mise when
+available. Without mise, it prints the persistent facade path to add to PATH.
 See the [source installation workflow](specification/docs/usage.md#install-development-sources) for
 artifact provenance and prerequisites.
 
