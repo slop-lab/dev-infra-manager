@@ -69,7 +69,8 @@ provider-specific tools; do not assume that `origin` is GitHub.
 ## Pre-stable compatibility
 
 DIM has not had a stable release. Current releases are pre-stable `0.x`
-versions, and backward compatibility is not a project requirement yet.
+versions. The published `@slop-lab/dim-installer` facade is the retained
+compatibility boundary; other backward compatibility is not a requirement.
 
 - Do not preserve old CLI, API, configuration, state, or internal extension
   contracts solely for backward compatibility.

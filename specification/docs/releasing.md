@@ -22,7 +22,7 @@ Cross-package and Project-level outcomes belong in the root `CHANGELOG.md`.
 
 The release candidate is one clean root-monorepo commit and tree. Production
 packages, plugins, centralized tests, verification, specifications, workflows,
-and reviewed root `.dim` lifecycle inputs all come from that tree. Do not build
+and explicit repository development scripts all come from that tree. Do not build
 a release from an assembled directory, sibling checkout, or uncommitted state.
 
 Record:
@@ -199,12 +199,11 @@ does not test a newly fixed workflow. Dispatch a new run on the corrected ref.
 
 ### Remaining verification and publication boundaries
 
-After successful GitHub runs, retain the exact-candidate fresh Ubuntu bootstrap
-results and complete the configured
-[two-node operations gate](../../verification/native-multi-host-operations.md).
-Neither source CI, same-host KVM mechanics, nor that operations marker proves
-independent-host acceptance. The fault/replay/reboot, traffic/guest authority,
-interactive human approval, and checked promotion phases above remain separate.
+After successful source/integration runs, retain exact-candidate fresh Ubuntu
+bootstrap results and actual runtime evidence. Same-host Sysbox/KVM mechanics
+are distinct from independently administered multi-host acceptance. Validate
+fault/replay/reboot behavior, traffic/guest authority and protected promotion
+through the current services; a retired operations marker is not acceptance.
 Update a protected QEMU host launcher only through trusted operator review and
 deployment; do not change root-owned staged files from an agent to make a
 verification run appear successful. Report guest stages and the outer
