@@ -58,7 +58,44 @@ UI deployments.
 
 ## CI capacity
 
-One execution service and worker protocol handle Sysbox and QEMU slots:
+One execution service and worker protocol handle Sysbox and QEMU slots. For an
+initial local Sysbox worker, add its identity, slot count and reviewed images when
+preparing a fresh deployment:
+
+```bash
+dim managed control-plane prepare "$HOME/dim-control-plane" \
+  --native-git-image 'registry.example/dim-native-git@sha256:REVIEWED_DIGEST' \
+  --ordinary-ci-image 'registry.example/dim-ordinary-ci@sha256:REVIEWED_DIGEST' \
+  --ci-worker local-ci --ci-sysbox-slots 1 \
+  --ci-runner-image 'registry.example/sysbox-runner@sha256:REVIEWED_DIGEST' \
+  --ci-job-image 'registry.example/job-environment@sha256:REVIEWED_DIGEST'
+dim installer install control-plane --config "$HOME/dim-control-plane/install.json"
+dim managed control-plane connect "$HOME/dim-control-plane"
+dim managed ci worker "$HOME/dim-control-plane/connections/worker.json"
+```
+
+Preparing generates the service's matching worker token and slots. Connecting
+writes an owner-only `worker.json` bound to the live generation and prints the
+exact worker command. It starts no process. Without explicit worker/slot options,
+the prepared service has no capacity and no worker file is emitted.
+
+The Sysbox runner image must provide Docker's `dockerd-entrypoint.sh` and client;
+the separate job image provides Bash and the Project's development tools.
+The common Sysbox profile bounds each slot to 1 CPU, 2 GiB memory, 512 PIDs,
+15 minutes and 1 MiB output. Use `--ci-sysbox-profile FILE` instead of runner/job
+image flags to supply an explicit profile with different reviewed bounds.
+QEMU capacity requires `--ci-qemu-slots COUNT --ci-qemu-profile FILE` and a capable
+KVM host; it does not fall back to emulation. Both runtimes may share this worker.
+
+For a different worker host, copy only its generated `worker.json` with mode
+0600. Keep deployment role files on the control-plane host. Establish authenticated
+SSH forwards on the worker host matching the file's loopback Git/CI endpoints;
+`connect --ci-worker-state-directory /absolute/worker/path` chooses its private
+state path before copying. The default state path is `worker-state` beneath the
+prepared deployment directory. Reconnect after a service generation update and
+replace the worker file before restarting the worker.
+
+For an explicitly configured worker, run:
 
 ```bash
 dim managed ci worker /absolute/operator/worker.json

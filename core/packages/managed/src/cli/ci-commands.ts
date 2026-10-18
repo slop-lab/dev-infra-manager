@@ -5,8 +5,6 @@ import { ProcessRunner } from "@slop-lab/dim-core";
 import { loadInstalledPlugins, resolvePluginHome } from "../pluginLoader.js";
 import { resolveHostMirrorProvider } from "../hostMirrorProvider.js";
 import { lifecycleOptions } from "../lifecycleOptions.js";
-import { runCiWorker } from "../ci/host.js";
-import { buildNativeQemuRunnerImage } from "../nativeQemuRunnerImage.js";
 export function registerCiCommands(program: Command): void {
   const ci = program.command("ci").description("Run isolated candidate jobs");
   ci.command("jobs").description("List the 100 most recent CI executions")
@@ -37,6 +35,7 @@ export function registerCiCommands(program: Command): void {
       const loaded = await loadInstalledPlugins(await resolvePluginHome());
       try {
         const provider = resolveHostMirrorProvider(loaded.registered.host);
+        const { runCiWorker } = await import("../ci/host.js");
         await runCiWorker(config, stop.signal, { lifecycle: { ...lifecycleOptions(),
           ...(provider === undefined ? {} : { hostMirrorProvider: provider }) } });
       }
@@ -44,6 +43,7 @@ export function registerCiCommands(program: Command): void {
     });
   ci.command("qemu-image").description("Build the trusted KVM supervisor and fixed guest launcher")
     .argument("<image>").action(async (image: string) => {
+      const { buildNativeQemuRunnerImage } = await import("../nativeQemuRunnerImage.js");
       await buildNativeQemuRunnerImage(new ProcessRunner(), image); console.log(image);
     });
 }

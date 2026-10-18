@@ -24,6 +24,23 @@ slots. The second slot hosts the shared execution service for both Sysbox and
 QEMU. Configure private service workers/slots with trusted images and bounds;
 an empty worker list is a valid idle deployment.
 
+For fresh setup, `dim managed control-plane prepare` accepts `--ci-worker ID`,
+`--ci-sysbox-slots COUNT` and digest-pinned `--ci-runner-image`/`--ci-job-image`.
+It generates matching service credentials and stable slot IDs. The common
+Sysbox profile uses 1 CPU, 2 GiB memory, 512 PIDs, 900 seconds and 1 MiB output;
+`--ci-sysbox-profile FILE` supplies an explicit reviewed profile instead.
+`--ci-qemu-slots COUNT --ci-qemu-profile FILE` configures the QEMU backend.
+The profile schema below is shared with the service; setup adds no relaxed form.
+
+After installation, `control-plane connect` writes a mode-0600 `worker.json`
+for a single configured initial worker using the attested generation, token,
+slot IDs and endpoints. `--ci-worker-state-directory` selects an absolute path
+on the worker host. Starting capacity remains explicit with
+`dim managed ci worker FILE`. A copied worker file needs authenticated SSH
+forwards for its loopback endpoints; deployment master role files stay on the
+control-plane host. Setup does not mutate an existing deployment, enroll a
+remote worker or automatically start capacity.
+
 Each slot selects `runtime: "sysbox"` or `"qemu"` and a profile containing
 `runnerBaseImage`, `jobBaseImage` and positive string bounds `cpu`,
 `memoryBytes`, `pids`, `wallClockSeconds`, `outputBytes`. Both images are reviewed

@@ -1,7 +1,7 @@
+import { executionWorkerConfigSchema } from "./workerConfig.js";
 import { constants } from "node:fs";
 import { open, stat } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
-import { z } from "zod";
+import { join } from "node:path";
 import { ProcessRunner, UserError, type StreamingCommandRunner } from "@slop-lab/dim-core";
 import { executionWorkerClient } from "./client.js";
 import { runExecutionWorker } from "./worker.js";
@@ -10,20 +10,6 @@ import { lifecycleOptions } from "../lifecycleOptions.js";
 import type { LifecycleOptions } from "../lifecycleTypes.js";
 import { CONTROL_NETWORK, DOCKER_HUB_DIRECT_HOSTNAMES, ensureRegistryCache, sysboxRegistryDaemonConfig } from "../registryCache.js";
 import { qemuBackend } from "./backends/qemu.js";
-const origin = z.string().refine((value) => {
-  try {
-    const url = new URL(value);
-    return url.origin === value && url.username === "" && url.password === ""
-      && (url.protocol === "https:" || url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname));
-  } catch { return false; }
-});
-const identifier = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
-export const executionWorkerConfigSchema = z.object({ schemaVersion: z.literal(1), workerId: identifier,
-  generationId: z.string().regex(/^[0-9a-f]{64}$/), stateDirectory: z.string().refine(isAbsolute),
-  gitExecutable: z.string().refine(isAbsolute), endpoint: origin, nativeGitEndpoint: origin,
-  token: z.string().regex(/^[A-Za-z0-9_-]{43,}$/), slots: z.array(z.object({ id: identifier,
-    runtime: z.enum(["sysbox", "qemu"]) }).strict().readonly()).min(1).readonly()
-}).strict().readonly().refine((config) => new Set(config.slots.map((slot) => slot.id)).size === config.slots.length);
 export async function runCiWorker(path: string, signal: AbortSignal, options: { runner?: StreamingCommandRunner; lifecycle?: LifecycleOptions } = {}): Promise<void> {
   const runner = options.runner ?? new ProcessRunner();
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);

@@ -1,3 +1,5 @@
+import { executionWorkerConfigSchema } from "./ci/workerConfig.js";
+import { executionProfileSchema, type ExecutionProfile } from "@slop-lab/dim-native-git/execution";
 import { ciQueryConnectionSchema } from "./ci/queryClient.js";
 import { parseControlPlaneServicePair } from "./controlPlaneServicePair.js";
 import { randomBytes } from "node:crypto";
@@ -23,6 +25,13 @@ export interface PrepareControlPlaneOptions {
   readonly hostId?: string;
   readonly nativeGitPort?: number;
   readonly ordinaryCiPort?: number;
+  readonly ciWorker?: string;
+  readonly ciSysboxSlots?: number;
+  readonly ciQemuSlots?: number;
+  readonly ciRunnerImage?: string;
+  readonly ciJobImage?: string;
+  readonly ciSysboxProfile?: unknown;
+  readonly ciQemuProfile?: unknown;
 }
 
 /** Reviewed deployment material belongs to the service composition, not the installer. */
@@ -36,6 +45,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
   const nativePort = port(options.nativeGitPort ?? 8787);
   const ordinaryPort = port(options.ordinaryCiPort ?? 8788);
   if (nativePort === ordinaryPort) throw new UserError("control-plane published ports must be distinct");
+  const slots = initialWorkerSlots(options);
   const credential = (username: string): Credential => ({ username, password: randomBytes(32).toString("base64url") });
   const roles = Object.fromEntries(["query", "grantIssuer", "candidateReader", "resultReporter", "webhook"]
     .map((role) => [role, credential(`service-${role}`)])) as Record<string, Credential>;
@@ -54,7 +64,9 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     schemaVersion: 1, claimLeaseMilliseconds: 60_000,
     nativeGit: { endpoint: "http://native-git:8080", grantIssuer: roles.grantIssuer,
       candidateReader: roles.candidateReader, resultReporter: roles.resultReporter },
-    credentials: { webhook: roles.webhook, query: roles.query }, workers: []
+    credentials: { webhook: roles.webhook, query: roles.query },
+    workers: options.ciWorker === undefined ? [] : [{ id: options.ciWorker,
+      token: randomBytes(32).toString("base64url"), slots }]
   };
   parseControlPlaneServicePair(native, ordinary);
   const reviewPolicy = { schemaVersion: 1, rootAlias: "root",
@@ -78,8 +90,8 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
 
 /** Bind client credentials to the generation attested by the live deployed service. */
 export async function connectControlPlane(directoryInput: string, options: {
-  readonly endpoint?: string; readonly ciEndpoint?: string; readonly outputDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
-} = {}): Promise<{ directory: string; generationId: string; hostId: string }> {
+  readonly endpoint?: string; readonly ciEndpoint?: string; readonly outputDirectory?: string; readonly ciWorkerStateDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
+} = {}): Promise<{ directory: string; generationId: string; hostId: string; ciWorkerCount: number; workerConfigFile?: string }> {
   const directory = path.resolve(directoryInput);
   const native = parseNativeGitBundleConfig(await privateJson(path.join(directory, "native-git.json")));
   const install = await privateJson(path.join(directory, "install.json")) as { nativeGit?: { publish?: { host?: unknown; port?: unknown } }; ordinaryCi?: { publish?: { host?: unknown; port?: unknown } } };
@@ -143,17 +155,25 @@ export async function connectControlPlane(directoryInput: string, options: {
   const ciQueryConnection = ciQueryConnectionSchema.parse({ schemaVersion: 1, role: "query", generationId,
     endpoint: options.ciEndpoint ?? `http://127.0.0.1:${port(ciPublish.port)}`, credential: ordinary.credentials.query });
   const output = path.resolve(options.outputDirectory ?? path.join(directory, "connections"));
+  const worker = ordinary.workers.length === 1 ? ordinary.workers[0] : undefined;
+  if (worker === undefined && options.ciWorkerStateDirectory !== undefined) throw new UserError("no CI worker was prepared");
+  const workerConfig = worker === undefined ? undefined : executionWorkerConfigSchema.parse({ schemaVersion: 1,
+    workerId: worker.id, token: worker.token, generationId, gitExecutable: "/usr/bin/git",
+    endpoint: ciQueryConnection.endpoint, nativeGitEndpoint: endpoint,
+    stateDirectory: options.ciWorkerStateDirectory ?? path.join(directory, "worker-state"),
+    slots: worker.slots.map(({ id, runtime }) => ({ id, runtime })) });
   await privateDirectory(output, async () => {
     await json(path.join(output, "registrar.json"), registrarConnection);
     await json(path.join(output, "importer.json"), importerConnection);
     await json(path.join(output, "host.json"), hostConnection);
     await json(path.join(output, "ci-query.json"), ciQueryConnection);
+    if (workerConfig !== undefined) await json(path.join(output, "worker.json"), workerConfig);
     await json(path.join(output, "reviewer.json"), { schemaVersion: 1, serviceId: "native-main", baseUrl: endpoint,
       reviewerId: reviewer.reviewerId, username: reviewer.username, password: reviewer.password, generationId });
     await json(path.join(output, "promoter.json"), { schemaVersion: 1, serviceId: "native-main", endpoint,
       role: "host-promoter", hostId, generationId, credential: promoterCredential });
   });
-  return { directory: output, generationId, hostId };
+  return { directory: output, generationId, hostId, ciWorkerCount: ordinary.workers.length, ...(workerConfig === undefined ? {} : { workerConfigFile: path.join(output, "worker.json") }) };
 }
 
 async function privateDirectory(directory: string, write: () => Promise<void>): Promise<void> {
@@ -177,4 +197,35 @@ async function privateJson(file: string): Promise<unknown> {
 function port(value: number): number {
   if (!Number.isInteger(value) || value < 1 || value > 65535) throw new UserError("published port must be an integer from 1 through 65535");
   return value;
+}
+
+function initialWorkerSlots(options: PrepareControlPlaneOptions): { id: string; runtime: "sysbox" | "qemu"; profile: ExecutionProfile }[] {
+  const sysbox = options.ciSysboxSlots ?? 0, qemu = options.ciQemuSlots ?? 0;
+  if (![sysbox, qemu].every((count) => Number.isSafeInteger(count) && count >= 0 && count <= 64) || sysbox + qemu > 64) {
+    throw new UserError("CI slot counts must be nonnegative integers with at most 64 total slots");
+  }
+  const configured = sysbox + qemu > 0 || [options.ciRunnerImage, options.ciJobImage,
+    options.ciSysboxProfile, options.ciQemuProfile].some((value) => value !== undefined);
+  if (options.ciWorker === undefined) {
+    if (configured) throw new UserError("CI capacity requires --ci-worker");
+    return [];
+  }
+  if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(options.ciWorker) || sysbox + qemu === 0) {
+    throw new UserError("CI worker requires a valid ID and at least one explicit slot");
+  }
+  if (options.ciSysboxProfile !== undefined && (options.ciRunnerImage !== undefined || options.ciJobImage !== undefined)) {
+    throw new UserError("choose a Sysbox profile file or runner/job images");
+  }
+  if (sysbox === 0 && [options.ciSysboxProfile, options.ciRunnerImage, options.ciJobImage].some((value) => value !== undefined)
+    || qemu === 0 && options.ciQemuProfile !== undefined) throw new UserError("runtime profiles require matching CI slots");
+  const sysboxProfile = options.ciSysboxProfile ?? { runnerBaseImage: options.ciRunnerImage,
+    jobBaseImage: options.ciJobImage,
+    bounds: { cpu: "1", memoryBytes: "2147483648", pids: "512", wallClockSeconds: "900", outputBytes: "1048576" } };
+  return ([{ runtime: "sysbox", count: sysbox, profile: sysboxProfile },
+    { runtime: "qemu", count: qemu, profile: options.ciQemuProfile }] as const).flatMap(({ runtime, count, profile }) => {
+    if (count === 0) return [];
+    const parsed = executionProfileSchema.safeParse(profile);
+    if (!parsed.success) throw new UserError(`${runtime} CI slots require a valid reviewed profile with digest-pinned runner/job images and positive bounds`);
+    return Array.from({ length: count }, (_, index) => ({ id: `${runtime}-${index + 1}`, runtime, profile: parsed.data }));
+  });
 }

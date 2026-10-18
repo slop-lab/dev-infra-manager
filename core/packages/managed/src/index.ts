@@ -46,4 +46,4 @@ export type { CommandResult, CommandRunner, StreamingCommandRunner, TerminalSize
 
 export * from "./controllerWorkspace.js";
 
-export { runCiWorker, executionWorkerConfigSchema } from "./ci/host.js";
+export { executionWorkerConfigSchema } from "./ci/workerConfig.js";
