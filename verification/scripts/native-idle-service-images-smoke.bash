@@ -76,7 +76,8 @@ import { readFile } from 'node:fs/promises';
 const config = JSON.parse(await readFile(`${process.argv[2]}/ci/service.json`, 'utf8'));
 const credential = config.credentials.query;
 const response = await fetch(`${process.argv[3]}/v1/jobs`, {
-  headers: { authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}` }
+  headers: { authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}`,
+    'X-Dim-Generation-Id': await readFile(`${process.argv[2]}/generation`, 'utf8') }
 });
 assert.equal(response.status, 503, 'business operations must require exact generation activation');
 JS
@@ -87,7 +88,8 @@ import { readFile } from 'node:fs/promises';
 const config = JSON.parse(await readFile(`${process.argv[2]}/ci/service.json`, 'utf8'));
 const credential = config.credentials.query;
 const response = await fetch(`${process.argv[3]}/v1/jobs`, {
-  headers: { authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}` }
+  headers: { authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}`,
+    'X-Dim-Generation-Id': await readFile(`${process.argv[2]}/generation`, 'utf8') }
 });
 assert.equal(response.status, 200); assert.deepEqual(await response.json(), []);
 JS

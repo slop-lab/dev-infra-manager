@@ -125,6 +125,7 @@ export function configuredExecutionServer(input: {
   async function publishResults(): Promise<void> {
     while (!shutdown.signal.aborted) {
       for (const job of store.pendingResults()) {
+        if (shutdown.signal.aborted) return;
         try {
           if (job.grant === undefined || job.result === undefined) throw new Error("finished execution lacks evidence");
           await source.publish(job.grant, job.result);
