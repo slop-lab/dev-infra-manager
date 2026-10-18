@@ -1,9 +1,10 @@
+import { vi } from "vitest";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { LifecycleState } from "@slop-lab/dim-managed";
 import { ExternalUrlStore } from "../../../../plugin-external-urls/src/routeStore.js";
 import {
   adminAction,
@@ -26,8 +27,9 @@ afterEach(async () => Promise.all(cleanup.splice(0).reverse().map((operation) =>
 it("returns an approved route to pending when its direct listener becomes publicly bound", async () => {
   // Given: an approved route whose direct ingress is bound only to loopback.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-http-policy-drift-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-  await new LifecycleState(stateRoot).claimWorkspace(workspaceRecord(workspace));
+  await new WorkspaceStore(stateRoot).write(workspaceRecord(workspace));
   const upstream = http.createServer((_request, response) => response.end("policy-target"));
   await listen(upstream);
   cleanup.push(() => closeServer(upstream));
@@ -59,8 +61,9 @@ it("returns an approved route to pending when its direct listener becomes public
 it("regenerates a pending HTTP route when its advertised public port changes", async () => {
   // Given: an approved route advertised without an explicit public port.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-http-port-drift-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-  await new LifecycleState(stateRoot).claimWorkspace(workspaceRecord(workspace));
+  await new WorkspaceStore(stateRoot).write(workspaceRecord(workspace));
   const upstream = http.createServer((_request, response) => response.end("port-target"));
   await listen(upstream);
   cleanup.push(() => closeServer(upstream));
@@ -116,8 +119,9 @@ it("regenerates a pending HTTP route when its advertised public port changes", a
 it("regenerates a pending managed-Caddy route from stable public exposure instead of its router port", async () => {
   // Given: an approved route behind a loopback router with a distinct stable HTTPS-style public socket.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-caddy-port-drift-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-  await new LifecycleState(stateRoot).claimWorkspace(workspaceRecord(workspace));
+  await new WorkspaceStore(stateRoot).write(workspaceRecord(workspace));
   const upstream = http.createServer((_request, response) => response.end("caddy-target"));
   await listen(upstream);
   cleanup.push(() => closeServer(upstream));

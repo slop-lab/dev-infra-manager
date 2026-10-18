@@ -1,3 +1,6 @@
+import type { WorkspaceRecord } from "@slop-lab/dim-core/workspace";
+import { vi } from "vitest";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { once } from "node:events";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
@@ -7,18 +10,16 @@ import { afterEach, expect, it } from "vitest";
 import {
   configuredDimAdminController,
   createDimController,
-  LifecycleState,
   registerPlugins,
   type ControllerWorkspace,
   type LifecycleOptions,
-  type WorkspaceRecord
 } from "@slop-lab/dim-managed";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
-import { nativeWorkspaceFixture } from "../../../packages/core/test/nativeLifecycleFixture.js";
+import { workspaceRecord as coreWorkspaceRecord } from "../../../support/workspaceFixture.js";
 
 const workspaces = [
-  { id: "A".repeat(43), name: "work-a", projectId: "project-a-id", projectName: "alpha" },
-  { id: "B".repeat(43), name: "work-b", projectId: "project-b-id", projectName: "beta" }
+  { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work-a", projectId: "project-a-id", projectName: "alpha" },
+  { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", name: "work-b", projectId: "project-b-id", projectName: "beta" }
 ] satisfies readonly ControllerWorkspace[];
 
 const close: Array<() => Promise<void>> = [];
@@ -26,9 +27,10 @@ afterEach(async () => Promise.all(close.splice(0).map((item) => item())).then(()
 
 it("lists every current workspace route only through the bounded host admin action", async () => {
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-host-url-list-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   close.push(() => rm(stateRoot, { recursive: true, force: true }));
-  const state = new LifecycleState(stateRoot);
-  await Promise.all(workspaces.map((workspace) => state.claimWorkspace(workspaceRecord(workspace))));
+  const state = new WorkspaceStore(stateRoot);
+  await Promise.all(workspaces.map((workspace) => state.write(workspaceRecord(workspace))));
   const registered = await registerPlugins([createExternalUrlsPlugin({
     ingresses: {
       public: {
@@ -101,12 +103,13 @@ it("lists every current workspace route only through the bounded host admin acti
   const body = await response.json() as { urls: Array<Record<string, unknown>> };
   expect(body.urls).toHaveLength(2);
   expect(body.urls.map(({ project, workspace }) => ({ project, workspace }))).toEqual([
-    { project: "alpha", workspace: "work-a" },
-    { project: "beta", workspace: "work-b" }
+    { project: undefined, workspace: "work-a" },
+    { project: undefined, workspace: "work-b" }
   ]);
   for (const entry of body.urls) {
     expect(entry.approval).toBe("not-required");
     expect(entry).not.toHaveProperty("projectId");
+    expect(entry).not.toHaveProperty("project");
     expect(entry).not.toHaveProperty("workspaceId");
     expect(entry).not.toHaveProperty("route");
     expect(entry).not.toHaveProperty("policyRevision");
@@ -116,10 +119,11 @@ it("lists every current workspace route only through the bounded host admin acti
 
 it("rejects a host route inventory above its fixed response bound", async () => {
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-host-url-limit-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   close.push(() => rm(stateRoot, { recursive: true, force: true }));
   const workspace = workspaces[0];
   if (workspace === undefined) throw new Error("missing workspace fixture");
-  await new LifecycleState(stateRoot).claimWorkspace(workspaceRecord(workspace));
+  await new WorkspaceStore(stateRoot).write(workspaceRecord(workspace));
   const directory = path.join(
     stateRoot,
     "plugins",
@@ -157,15 +161,7 @@ it("rejects a host route inventory above its fixed response bound", async () => 
 });
 
 function workspaceRecord(workspace: ControllerWorkspace): WorkspaceRecord {
-  return nativeWorkspaceFixture({
-    workspaceId: workspace.id,
-    name: workspace.name,
-    projectId: workspace.projectId,
-    projectName: workspace.projectName,
-    composeProjectName: `dim-${workspace.name}`,
-    containerName: `dim-ws-${workspace.name}`,
-    dockerVolumeName: `dim-ws-${workspace.name}-docker`
-  });
+  return coreWorkspaceRecord(workspace.name, { id: workspace.id });
 }
 
 async function availablePort(): Promise<number> {

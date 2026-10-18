@@ -35,6 +35,7 @@ export interface HttpIngressOptions {
   readonly domain: string;
   readonly port?: number;
   readonly routePolicy?: ExternalUrlRoutePolicyConfig;
+  readonly authorizeWorkspace?: (workspace: ControllerWorkspace) => Promise<void>;
 }
 
 export class WorkspaceIngressListener {
@@ -48,10 +49,12 @@ export class WorkspaceIngressListener {
   readonly #port: number | undefined;
   readonly #routePolicy: ExternalUrlRoutePolicyConfig | undefined;
   readonly #flows: HttpFlowTracker;
+  readonly #authorizeWorkspace: ((workspace: ControllerWorkspace) => Promise<void>) | undefined;
   readonly #flowOwner = Symbol("external-url-listener");
 
   constructor(registry: WorkspaceRouteRegistry, options: HttpIngressOptions, logger: DimPluginLogger) {
     this.#registry = registry;
+    this.#authorizeWorkspace = options.authorizeWorkspace;
     this.#flows = registry.flows;
     this.name = options.name;
     this.upstreamMode = options.upstreamMode;
@@ -59,8 +62,8 @@ export class WorkspaceIngressListener {
     this.#domain = options.domain;
     this.#port = options.port;
     this.#routePolicy = options.routePolicy;
-    this.#server = http.createServer((request, response) => this.#proxy(request, response));
-    this.#server.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
+    this.#server = http.createServer((request, response) => { void this.#proxy(request, response).catch(() => response.destroy()); });
+    this.#server.on("upgrade", (request, socket, head) => { void this.#upgrade(request, socket, head).catch(() => socket.destroy()); });
     this.#ready = new Promise((resolve, reject) => {
       this.#server.once("error", reject);
       this.#server.listen(options.listenPort, options.listenHost, () => {
@@ -103,6 +106,7 @@ export class WorkspaceIngressListener {
       claim,
       upstream,
       enabled: approval === "not-required" || approval === "approved",
+      ...(this.#authorizeWorkspace ? { authorize: () => this.#authorizeWorkspace!(workspace) } : {}),
       beforeRebind: () => this.#flows.destroyClaim(claim)
     });
     const publicAuthority = `${authority}${this.#port === undefined ? "" : `:${this.#port}`}`;
@@ -153,13 +157,16 @@ export class WorkspaceIngressListener {
     await closed;
   }
 
-  #target(request: IncomingMessage): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string } | undefined {
+  #target(request: IncomingMessage): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined } | undefined {
     const hostname = (request.headers.host ?? "").split(":")[0]?.toLowerCase() ?? "";
     return this.#registry.target(hostname);
   }
 
-  #proxy(request: IncomingMessage, response: ServerResponse): void {
-    const selected = this.#target(request);
+  async #proxy(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    let selected = this.#target(request);
+    try { await selected?.authorize?.(); }
+    catch { selected = undefined; }
+    if (selected && this.#target(request)?.upstream !== selected.upstream) selected = undefined;
     if (!selected) {
       response.writeHead(404, { "content-type": "application/json" });
       response.end('{"error":"external route not found"}\n');
@@ -208,8 +215,11 @@ export class WorkspaceIngressListener {
     request.pipe(upstreamRequest);
   }
 
-  #upgrade(request: IncomingMessage, client: import("node:stream").Duplex, head: Buffer): void {
-    const selected = this.#target(request);
+  async #upgrade(request: IncomingMessage, client: import("node:stream").Duplex, head: Buffer): Promise<void> {
+    let selected = this.#target(request);
+    try { await selected?.authorize?.(); }
+    catch { selected = undefined; }
+    if (selected && this.#target(request)?.upstream !== selected.upstream) selected = undefined;
     if (!selected) {
       client.destroy();
       return;

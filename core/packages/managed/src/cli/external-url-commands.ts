@@ -142,10 +142,8 @@ externalUrl.command("list")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: WorkspaceControllerFlags) => {
     const workspaceEnvironment = (process.env.DIM_CONTROLLER_SOCKET !== undefined
-      || process.env.DIM_CONTROLLER_API !== undefined
-      || process.env.DIM_AGENT_CONTROLLER_SOCKET !== undefined)
-      && (process.env.DIM_CONTROLLER_TOKEN !== undefined
-        || process.env.DIM_AGENT_CONTROLLER_TOKEN !== undefined);
+      || process.env.DIM_CONTROLLER_API !== undefined)
+      && process.env.DIM_CONTROLLER_TOKEN !== undefined;
     if (flags.workspace !== undefined || workspaceEnvironment) {
       print(await externalUrlControllerRequest("/api/urls", {}, flags.workspace), flags);
       return;
@@ -161,10 +159,8 @@ externalUrl.command("revoke")
   .option("--workspace <name>", "use a host-side workspace grant")
   .action(async (id: string, flags: WorkspaceControllerFlags) => {
     const workspaceEnvironment = (process.env.DIM_CONTROLLER_SOCKET !== undefined
-      || process.env.DIM_CONTROLLER_API !== undefined
-      || process.env.DIM_AGENT_CONTROLLER_SOCKET !== undefined)
-      && (process.env.DIM_CONTROLLER_TOKEN !== undefined
-        || process.env.DIM_AGENT_CONTROLLER_TOKEN !== undefined);
+      || process.env.DIM_CONTROLLER_API !== undefined)
+      && process.env.DIM_CONTROLLER_TOKEN !== undefined;
     if (flags.workspace !== undefined || workspaceEnvironment) {
       await externalUrlControllerRequest(`/api/urls/${encodeURIComponent(id)}`, { method: "DELETE" }, flags.workspace);
       return;

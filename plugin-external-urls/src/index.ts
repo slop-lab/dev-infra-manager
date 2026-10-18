@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import {
   DIM_PLUGIN_API_VERSION,
+  requireControllerWorkspace,
   UserError,
   type AdminRouteContext,
   type ControllerRouteContext,
@@ -12,7 +13,6 @@ import {
   type DimPlugin,
   type DimPluginHost,
   type ResolvedWorkspaceTarget,
-  type WorkspaceDiscardContext,
   type WorkspaceTarget
 } from "@slop-lab/dim-managed";
 import {
@@ -141,9 +141,6 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
           };
         }
       });
-      host.registerWorkspaceDiscardHook({
-        beforeDiscard: (context) => mutations.run(() => removeWorkspaceRoutes(context, ingresses))
-      });
       for (const [name, ingress] of Object.entries(options.ingresses)) {
         ingresses.set(name, {
           options: ingress,
@@ -151,6 +148,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
           listener: ingress.scheme === "tcp"
             ? new TcpIngressListener({
                 name,
+                authorizeWorkspace: async (workspace) => { await requireControllerWorkspace(workspace); },
                 listenHost: ingress.listenHost,
                 listenPort: ingress.listenPort,
                 publicHost: ingress.domain,
@@ -158,6 +156,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
               })
             : new WorkspaceIngressListener(registry, {
                 name,
+                authorizeWorkspace: async (workspace) => { await requireControllerWorkspace(workspace); },
                 listenHost: ingress.listenHost,
                 listenPort: ingress.listenPort,
                 upstreamMode: ingress.upstreamMode ?? "container-ip",
@@ -208,15 +207,14 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
           scheme: ingress.scheme
         })),
         target: {
-          containers: "zero, one, or two nested container/service names",
-          maxDepth: 2
+          containers: "zero or one workspace container name",
+          maxDepth: 1
         }
       };
       host.registerControllerRoute({
         method: "GET",
         path: "/urls",
         summary: "List external URLs for this workspace",
-        audiences: ["workspace", "agent"],
         discovery,
         initialize,
         handle: (context) => mutations.run(() => listUrls(context, ingresses))
@@ -225,7 +223,6 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         method: "POST",
         path: "/urls",
         summary: "Create an external URL using a host-configured ingress",
-        audiences: ["workspace", "agent"],
         discovery,
         handle: (context) => mutations.run(() => createUrl(context, ingresses))
       });
@@ -233,14 +230,12 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         method: "DELETE",
         path: "/urls",
         summary: "Revoke every external URL for this workspace",
-        audiences: ["workspace", "agent"],
         handle: (context) => mutations.run(() => deleteWorkspaceUrls(context, ingresses))
       });
       host.registerControllerRoute({
         method: "DELETE",
         path: "/urls/:id",
         summary: "Revoke an external URL",
-        audiences: ["workspace", "agent"],
         handle: (context) => mutations.run(() => deleteUrl(context, ingresses))
       });
 
@@ -955,16 +950,13 @@ async function deleteWorkspaceUrls(
 ) {
   await removeWorkspaceRoutes({
     workspaceId: context.workspace.id,
-    workspaceName: context.workspace.name,
-    projectId: context.workspace.projectId,
-    projectName: context.workspace.projectName,
     stateRoot: context.stateRoot
   }, ingresses);
   return { status: 204 };
 }
 
 async function removeWorkspaceRoutes(
-  context: WorkspaceDiscardContext,
+  context: { readonly workspaceId: string; readonly stateRoot: string },
   ingresses: ReadonlyMap<string, ConfiguredIngress>
 ): Promise<void> {
   const store = new ExternalUrlStore(context.stateRoot);
@@ -1003,8 +995,8 @@ function validateRequest(value: unknown, scheme: ExternalUrlIngressOptions["sche
   }
   const target = input.target as Record<string, unknown>;
   const containers = target.containers ?? [];
-  if (!Array.isArray(containers) || containers.length > 2 || !containers.every((name) => typeof name === "string")) {
-    throw new UserError("target.containers must contain zero, one, or two names");
+  if (!Array.isArray(containers) || containers.length > 1 || !containers.every((name) => typeof name === "string")) {
+    throw new UserError("target.containers must contain zero or one workspace container name");
   }
   if (!Number.isInteger(target.port) || (target.port as number) < 1 || (target.port as number) > 65_535) {
     throw new UserError("target.port must be an integer between 1 and 65535");

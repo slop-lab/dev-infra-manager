@@ -1,3 +1,5 @@
+import type { WorkspaceRecord } from "@slop-lab/dim-core/workspace";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { RecordingRunner } from "../../../support/recordingRunner.js";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -9,13 +11,11 @@ import { afterEach, expect, it } from "vitest";
 import {
   configuredDimAdminController,
   createDimController,
-  LifecycleState,
   registerPlugins,
-  type WorkspaceRecord,
   type LifecycleOptions
 } from "@slop-lab/dim-managed";
 import { vi } from "vitest";
-import { workspaceRecord } from "../../../packages/core/test/hostLifecycleFixture.js";
+import { workspaceRecord } from "../../../support/workspaceFixture.js";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
 import { ExternalUrlStore } from "../../../../plugin-external-urls/src/routeStore.js";
 
@@ -25,9 +25,10 @@ afterEach(async () => Promise.all(cleanup.splice(0).reverse().map((operation) =>
 it("gates an approval-required TCP listener until host approval and disconnects it on revocation", async () => {
   // Given: a real TCP target and an approval-required TCP ingress owned by one current workspace.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-tcp-approval-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-  const record = workspaceRecord("work", "ready");
-  await new LifecycleState(stateRoot).claimWorkspace(record);
+  const record = workspaceRecord("work");
+  await new WorkspaceStore(stateRoot).write(record);
   const target = net.createServer((socket) => socket.pipe(socket));
   await listen(target);
   cleanup.push(() => closeServer(target));
@@ -80,9 +81,10 @@ it("gates an approval-required TCP listener until host approval and disconnects 
 it("regenerates a pending TCP route when its public authority changes", async () => {
   // Given: an approved TCP route on its original public domain and listener port.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-tcp-policy-drift-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-  const record = workspaceRecord("work", "ready");
-  await new LifecycleState(stateRoot).claimWorkspace(record);
+  const record = workspaceRecord("work");
+  await new WorkspaceStore(stateRoot).write(record);
   const target = net.createServer((socket) => socket.pipe(socket));
   await listen(target);
   cleanup.push(() => closeServer(target));
@@ -97,7 +99,7 @@ it("regenerates a pending TCP route when its public authority changes", async ()
   const created = route(await (await requestUrl(first.controller, "tcp")).json());
   expect((await adminAction(first.adminBase, "url-approve", created.id)).status).toBe(200);
   expect(await exchange(firstPort, "first")).toBe("first");
-  const before = (await new ExternalUrlStore(stateRoot).list(record.workspaceId))[0];
+  const before = (await new ExternalUrlStore(stateRoot).list(record.id))[0];
   if (before === undefined) throw new Error("missing stored TCP route before drift");
   await first.close();
 
@@ -113,7 +115,7 @@ it("regenerates a pending TCP route when its public authority changes", async ()
     failInitializationResolution: true
   });
   cleanup.push(() => restarted.close());
-  const afterFailure = (await new ExternalUrlStore(stateRoot).list(record.workspaceId))[0];
+  const afterFailure = (await new ExternalUrlStore(stateRoot).list(record.id))[0];
   if (afterFailure === undefined) throw new Error("missing stored TCP route after failed reconciliation");
 
   // Then: denial persists with the old revision and tuple, keeping retry eligibility.
@@ -126,7 +128,7 @@ it("regenerates a pending TCP route when its public authority changes", async ()
 
   // When: the next controller request resolves the target successfully.
   const returned = route(await (await requestUrl(restarted.controller, "tcp")).json());
-  const stored = (await new ExternalUrlStore(stateRoot).list(record.workspaceId))[0];
+  const stored = (await new ExternalUrlStore(stateRoot).list(record.id))[0];
   const inventory = route(await (await fetch(`${restarted.adminBase}/url-list`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -203,10 +205,8 @@ async function startApprovalTcpPlugin(options: ApprovalTcpPluginOptions) {
     } }
   })]);
   const workspace = {
-    id: options.record.workspaceId,
-    name: options.record.name,
-    projectId: options.record.projectId,
-    projectName: options.record.projectName
+    id: options.record.id,
+    name: options.record.name
   };
   const resolveTarget = async () => ({
     protocol: "tcp" as const,

@@ -1,3 +1,5 @@
+import { workspaceRecord as coreWorkspaceRecord } from "../../../support/workspaceFixture.js";
+import { storeWorkspace } from "./support/workspaceFixture.js";
 import { RecordingRunner } from "../../../support/recordingRunner.js";
 import { once } from "node:events";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -19,6 +21,7 @@ describe("TCP external ingress", () => {
   it("forwards raw TCP only after an authenticated scoped target claim", async () => {
     // Given: a raw TCP target and a host-owned TCP ingress.
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-tcp-ingress-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
     const target = net.createServer((socket) => socket.pipe(socket));
     await listen(target);
@@ -38,7 +41,7 @@ describe("TCP external ingress", () => {
       }
     })]);
     cleanup.push(() => registered.dispose());
-    const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };
+    const workspace = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work", projectId: "project", projectName: "project" };
     const controller = createDimController({
       stateRoot,
       runWorkspaceRequest: async (_workspace, operation) => operation(),
@@ -83,6 +86,7 @@ describe("TCP external ingress", () => {
   it("rejects a second target and a second owner of the same listener", async () => {
     // Given: one claimed TCP ingress.
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-tcp-collision-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
     const listenPort = await availablePort();
     const options = {
@@ -98,7 +102,7 @@ describe("TCP external ingress", () => {
     };
     const registered = await registerPlugins([createExternalUrlsPlugin(options)]);
     cleanup.push(() => registered.dispose());
-    const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };
+    const workspace = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work", projectId: "project", projectName: "project" };
     const controller = createDimController({
       stateRoot,
       runWorkspaceRequest: async (_workspace, operation) => operation(),
@@ -133,12 +137,13 @@ describe("TCP external ingress", () => {
   it("reconciles a persisted claim after controller restart", async () => {
     // Given: a persisted route created by the first plugin instance.
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-tcp-restart-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
     const listenPort = await availablePort();
     const options = { ingresses: { tcp: {
       description: "TCP", scheme: "tcp" as const, domain: "127.0.0.1", listenHost: "127.0.0.1", listenPort
     } } };
-    const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };
+    const workspace = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work", projectId: "project", projectName: "project" };
     const first = await registerPlugins([createExternalUrlsPlugin(options)]);
     const controller = createDimController({
       stateRoot,

@@ -1,3 +1,5 @@
+import { workspaceRecord as coreWorkspaceRecord } from "../../../support/workspaceFixture.js";
+import { storeWorkspace } from "./support/workspaceFixture.js";
 import { RecordingRunner } from "../../../support/recordingRunner.js";
 import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -29,18 +31,18 @@ describe("external URLs plugin", () => {
     await Promise.all(close.splice(0).map((item) => item()));
   });
 
-  it("marks every workspace URL route safe for the scoped agent controller", async () => {
+  it("registers scoped workspace URL routes and installed ingress drivers", async () => {
     const registered = await registerPlugins([createExternalUrlsPlugin({ ingresses: {} })]);
     close.push(() => registered.dispose());
     expect(registered.controllerRoutes).toHaveLength(4);
-    expect(registered.controllerRoutes.every((route) =>
-      route.audiences.includes("workspace") && route.audiences.includes("agent")))
-      .toBe(true);
+    expect(registered.controllerRoutes.map((route) => `${route.method} ${route.path}`))
+      .toEqual(["GET /urls", "POST /urls", "DELETE /urls", "DELETE /urls/:id"]);
     expect(registered.host.extension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale")).toBeDefined();
   });
 
   it("reports ingress argument mistakes as actionable client errors", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-admin-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work-1", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     process.env.DIM_EXTERNAL_URL_CONFIG = path.join(stateRoot, "external-urls.json");
     const driver: ExternalUrlDnsProviderDriver = {
@@ -149,6 +151,7 @@ describe("external URLs plugin", () => {
 
   it("automatically reconciles managed Caddy without storing its router port", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-caddy-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work-1", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     const configPath = path.join(stateRoot, "external-urls.json");
     process.env.DIM_EXTERNAL_URL_CONFIG = configPath;
@@ -228,9 +231,10 @@ describe("external URLs plugin", () => {
 
   it("isolates a stored route reconciliation failure from the remaining routes", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-reconcile-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work-1", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     const workspace = {
-      id: "project-id:work-1",
+      id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       name: "work-1",
       projectId: "project-id",
       projectName: "project"
@@ -314,6 +318,7 @@ describe("external URLs plugin", () => {
 
   it("reconciles a persisted route to a recreated workspace upstream before listing it", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-recreated-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work-1", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     const firstUpstream = http.createServer((_request, response) => response.end("first generation"));
     firstUpstream.listen(0, "127.0.0.1");
@@ -343,7 +348,7 @@ describe("external URLs plugin", () => {
     close.push(() => registered.dispose());
     let currentPort = firstAddress.port;
     const workspace = {
-      id: "project-id:work-1",
+      id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       name: "work-1",
       projectId: "project-id",
       projectName: "project"
@@ -403,6 +408,7 @@ describe("external URLs plugin", () => {
 
   it("starts normally without a configured ingress", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-empty-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work-1", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     const registered = await registerPlugins([createExternalUrlsPlugin({ ingresses: {} })]);
     close.push(() => registered.dispose());
@@ -410,7 +416,7 @@ describe("external URLs plugin", () => {
       stateRoot,
       runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: registered.controllerRoutes,
-      authenticate: async () => ({ id: "id", name: "work-1", projectId: "pid", projectName: "project" }),
+      authenticate: async () => ({ id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work-1", projectId: "pid", projectName: "project" }),
       resolveTarget: async () => {
         throw new Error("an empty ingress configuration must not resolve targets");
       }
@@ -433,6 +439,7 @@ describe("external URLs plugin", () => {
 
   it("discovers host ingresses and proxies controller-selected nested targets", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work-1", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     let upstreamHeaders: http.IncomingHttpHeaders | undefined;
     const upstream = http.createServer((request, response) => {
@@ -479,7 +486,7 @@ describe("external URLs plugin", () => {
       stateRoot,
       runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: registered.controllerRoutes,
-      authenticate: async () => ({ id: "id", name: "work-1", projectId: "pid", projectName: "project" }),
+      authenticate: async () => ({ id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work-1", projectId: "pid", projectName: "project" }),
       resolveTarget
     });
     controller.listen(0, "127.0.0.1");
@@ -531,7 +538,7 @@ describe("external URLs plugin", () => {
       body: JSON.stringify({
         ingress: "tailnet",
         subdomain: "work-1--deep",
-        target: { containers: ["dev", "deep"], port: 8080 }
+        target: { containers: ["dev"], port: 8080 }
       })
     });
     expect(created.status).toBe(201);
@@ -539,7 +546,7 @@ describe("external URLs plugin", () => {
     expect(body.urls[0]?.url).toBe("http://work-1--deep.builder.tail.example.test/");
     expect(resolveTarget).toHaveBeenCalledWith(
       expect.objectContaining({ name: "work-1" }),
-      { containers: ["dev", "deep"], port: 8080, protocol: "http" },
+      { containers: ["dev"], port: 8080, protocol: "http" },
       "container-ip"
     );
     expect(await proxyRequest(
@@ -558,7 +565,7 @@ describe("external URLs plugin", () => {
       body: JSON.stringify({
         ingress: "public",
         subdomain: "work-1--deep",
-        target: { containers: ["dev", "deep"], port: 8080 }
+        target: { containers: ["dev"], port: 8080 }
       })
     });
     expect(secondFrontend.status).toBe(400);

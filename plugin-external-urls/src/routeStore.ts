@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { LifecycleState, UserError, type WorkspaceTarget } from "@slop-lab/dim-managed";
+import { ControllerWorkspaces, UserError, type WorkspaceTarget } from "@slop-lab/dim-managed";
 
 const HOST_URL_LIST_LIMIT = 1_000;
 
@@ -66,9 +66,9 @@ export class ExternalUrlStore {
   }
 
   async current(id: string): Promise<StoredUrl | undefined> {
-    const workspaces = await new LifecycleState(this.stateRoot).listWorkspaces();
+    const workspaces = await new ControllerWorkspaces({ stateRoot: this.stateRoot }).list();
     for (const workspace of workspaces) {
-      const entry = (await this.list(workspace.workspaceId)).find((candidate) => candidate.id === id);
+      const entry = (await this.list(workspace.id)).find((candidate) => candidate.id === id);
       if (entry !== undefined) return entry;
     }
     return undefined;
@@ -112,11 +112,11 @@ export class ExternalUrlStore {
 
 export async function hostUrlList(stateRoot: string): Promise<{ readonly urls: readonly Record<string, unknown>[] }> {
   const store = new ExternalUrlStore(stateRoot);
-  const workspaces = await new LifecycleState(stateRoot).listWorkspaces();
+  const workspaces = await new ControllerWorkspaces({ stateRoot }).list();
   const urls: Record<string, unknown>[] = [];
   for (const workspace of workspaces.sort((left, right) =>
-    left.projectName.localeCompare(right.projectName) || left.name.localeCompare(right.name))) {
-    const entries = await store.list(workspace.workspaceId, HOST_URL_LIST_LIMIT - urls.length);
+    (left.projectName ?? "").localeCompare(right.projectName ?? "") || left.name.localeCompare(right.name))) {
+    const entries = await store.list(workspace.id, HOST_URL_LIST_LIMIT - urls.length);
     urls.push(...entries.map((entry) => hostEntry(entry, workspace.projectName, workspace.name)));
   }
   return { urls };
@@ -147,10 +147,10 @@ function hostEntry(
     policyRevision: _policyRevision,
     ...entry
   }: StoredUrl,
-  project: string,
+  project: string | undefined,
   workspace: string
 ): Record<string, unknown> {
-  return { project, workspace, ...entry };
+  return { ...(project === undefined ? {} : { project }), workspace, ...entry };
 }
 
 function storedUrl(value: unknown): StoredUrl {

@@ -1,70 +1,64 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, open, readFile, rm } from "node:fs/promises";
 import path from "node:path";
-import type { WorkspaceRecord } from "./lifecycleTypes.js";
 import { validateLifecycleName } from "@slop-lab/dim-core";
-import { validateWorkspaceId } from "./workspaceRecord.js";
+import { MissingRecordError, UserError, type WorkspaceRecord } from "@slop-lab/dim-core/workspace";
 
-type GrantAudience = "workspace" | "agent" | "native-git";
+type Identity = Pick<WorkspaceRecord, "name" | "id">;
+const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
+/** Optional plugin grants are host-owned and bound to the core workspace UUID. */
 export class WorkspaceGrantStore {
   constructor(private readonly root: string) {}
 
-  async ensure(record: WorkspaceRecord, audience: GrantAudience): Promise<string> {
-    const target = this.pathFor(record.name, record.workspaceId, audience);
+  async ensure(record: Identity): Promise<string> {
+    const target = this.pathFor(record);
     await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
-    try {
-      return (await readFile(target, "utf8")).trim();
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    try { return await this.read(record); }
+    catch (error) { if (!missing(error)) throw error; }
+    const token = `${Buffer.from(record.name).toString("base64url")}.${record.id}.${randomBytes(32).toString("base64url")}`;
+    let handle;
+    try { handle = await open(target, "wx", 0o600); }
+    catch (error) { if (isCode(error, "EEXIST")) return this.read(record); throw error; }
+    try { await handle.writeFile(`${token}\n`, "utf8"); }
+    finally { await handle.close(); }
+    return token;
+  }
+
+  async read(record: Identity): Promise<string> {
+    const token = (await readFile(this.pathFor(record), "utf8")).trim();
+    if (!this.identity(token) || !token.startsWith(`${Buffer.from(record.name).toString("base64url")}.${record.id}.`)) {
+      throw new UserError("workspace plugin grant is invalid");
     }
-    const encodedName = Buffer.from(record.name).toString("base64url");
-    const token = `${encodedName}.${record.workspaceId}.${randomBytes(32).toString("base64url")}`;
+    return token;
+  }
+
+  async authenticate(token: string, readWorkspace: (name: string) => Promise<WorkspaceRecord>): Promise<WorkspaceRecord | undefined> {
+    const identity = this.identity(token);
+    if (!identity) return undefined;
     try {
-      const handle = await open(target, "wx", 0o600);
-      await handle.writeFile(`${token}\n`, "utf8");
-      await handle.close();
-      return token;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") return (await readFile(target, "utf8")).trim();
-      throw error;
-    }
+      const expected = Buffer.from(await this.read(identity)), actual = Buffer.from(token);
+      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return undefined;
+      const record = await readWorkspace(identity.name);
+      return record.id === identity.id && record.phase !== "discarding" && record.initialized ? record : undefined;
+    } catch (error) { if (missing(error) || error instanceof MissingRecordError) return undefined; throw error; }
   }
 
-  async read(record: Pick<WorkspaceRecord, "name" | "workspaceId">, audience: GrantAudience): Promise<string> {
-    return (await readFile(this.pathFor(record.name, record.workspaceId, audience), "utf8")).trim();
+  async remove(record: Identity): Promise<void> { await rm(this.pathFor(record), { force: true }); }
+
+  private identity(token: string): Identity | undefined {
+    const [encodedName, id, secret, ...extra] = token.split(".");
+    if (!encodedName || !id || !secret || extra.length || !uuid.test(id) || !/^[A-Za-z0-9_-]{43}$/.test(secret)) return undefined;
+    const name = Buffer.from(encodedName, "base64url").toString("utf8");
+    if (Buffer.from(name).toString("base64url") !== encodedName) return undefined;
+    try { return { name: validateLifecycleName(name, "workspace"), id }; } catch { return undefined; }
   }
 
-  async authenticate(
-    token: string,
-    audience: GrantAudience,
-    readWorkspace: (name: string) => Promise<WorkspaceRecord>
-  ): Promise<WorkspaceRecord | undefined> {
-    const parts = token.split(".");
-    if (parts.length !== 3) return undefined;
-    const [encodedName, workspaceId] = parts;
-    if (encodedName === undefined || workspaceId === undefined) return undefined;
-    try {
-      const name = validateLifecycleName(Buffer.from(encodedName, "base64url").toString("utf8"), "workspace");
-      validateWorkspaceId(workspaceId, `workspace '${name}'`);
-      const expected = (await readFile(this.pathFor(name, workspaceId, audience), "utf8")).trim();
-      const actualBuffer = Buffer.from(token);
-      const expectedBuffer = Buffer.from(expected);
-      if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return undefined;
-      const record = await readWorkspace(name);
-      return record.workspaceId === workspaceId && record.phase !== "discarding" ? record : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  async remove(record: Pick<WorkspaceRecord, "name" | "workspaceId">, audience: GrantAudience): Promise<void> {
-    await rm(this.pathFor(record.name, record.workspaceId, audience), { force: true });
-  }
-
-  private pathFor(name: string, workspaceId: string, audience: GrantAudience): string {
-    validateLifecycleName(name, "workspace");
-    validateWorkspaceId(workspaceId, `workspace '${name}'`);
-    return path.join(this.root, `${audience}-grants`, `${name}.${workspaceId}`);
+  private pathFor(record: Identity): string {
+    validateLifecycleName(record.name, "workspace");
+    if (!uuid.test(record.id)) throw new UserError("invalid workspace plugin grant identity");
+    return path.join(this.root, "workspace-grants", `${record.name}.${record.id}`);
   }
 }
+function isCode(error: unknown, code: string): boolean { return error instanceof Error && "code" in error && error.code === code; }
+function missing(error: unknown): boolean { return isCode(error, "ENOENT"); }

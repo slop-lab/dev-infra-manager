@@ -3,12 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { createDimController, registerPlugins, UserError } from "@slop-lab/dim-managed";
-import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createDimController, registerPlugins, UserError, ControllerWorkspaces } from "@slop-lab/dim-managed";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
+import type { WorkspaceRecord } from "@slop-lab/dim-core/workspace";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
-import { nativeWorkspaceFixture } from "../../../packages/core/test/nativeLifecycleFixture.js";
+import { workspaceRecord as coreWorkspaceRecord } from "../../../support/workspaceFixture.js";
 
 describe("workspace instance route authority", () => {
   const cleanup: Array<() => Promise<void>> = [];
@@ -21,11 +21,13 @@ describe("workspace instance route authority", () => {
     // Given
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-route-authority-"));
     cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-    const oldRecord = workspaceRecord("A".repeat(43));
-    const newRecord = workspaceRecord("B".repeat(43));
-    const state = new LifecycleState(stateRoot);
-    await state.claimWorkspace(oldRecord);
-    const staleGrant = await state.ensureWorkspaceGrant(oldRecord.name);
+    vi.stubEnv("DIM_STATE_ROOT", stateRoot);
+    const oldRecord = workspaceRecord("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    const newRecord = workspaceRecord("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    const state = new WorkspaceStore(stateRoot);
+    await state.write(oldRecord);
+    const authority = new ControllerWorkspaces({ stateRoot }, undefined, stateRoot);
+    const staleGrant = await authority.ensureGrant(oldRecord.name);
     const target = net.createServer((socket) => socket.pipe(socket));
     await listen(target);
     cleanup.push(() => close(target));
@@ -49,31 +51,15 @@ describe("workspace instance route authority", () => {
       stateRoot,
       routes: plugins.controllerRoutes,
       authenticate: async (token) => {
-        const record = await state.authenticateWorkspaceGrant(token);
+        const record = await authority.authenticate(token);
         if (gateFirstAuthentication) {
           gateFirstAuthentication = false;
           authenticationObserved();
           await authenticationReleased;
         }
-        return record && {
-          id: record.workspaceId,
-          name: record.name,
-          projectId: record.projectId,
-          projectName: record.projectName
-        };
+        return record;
       },
-      runWorkspaceRequest: async (workspace, operation) => {
-        const release = await state.acquireWorkspaceAuthorityLock(workspace.name);
-        try {
-          const record = await state.readWorkspace(workspace.name);
-          if (record.workspaceId !== workspace.id || record.phase === "discarding") {
-            throw new UserError("workspace authority is no longer active");
-          }
-          return await operation();
-        } finally {
-          await release();
-        }
-      },
+      runWorkspaceRequest: (workspace, operation) => authority.run(workspace, operation),
       resolveTarget: async (_workspace, requested) => ({
         protocol: requested.protocol,
         host: "127.0.0.1",
@@ -88,9 +74,8 @@ describe("workspace instance route authority", () => {
     // When: authentication observes the old instance before same-name replacement.
     const staleRequest = createRoute(endpoint, staleGrant);
     await authenticationStarted;
-    await state.removeWorkspaceGrant(oldRecord);
-    await state.writeWorkspace(newRecord);
-    const freshGrant = await state.ensureWorkspaceGrant(newRecord.name);
+    await state.write(newRecord);
+    const freshGrant = await authority.ensureGrant(newRecord.name);
     releaseAuthentication();
 
     // Then: stale dispatch cannot persist a route, while current authority can.
@@ -98,6 +83,10 @@ describe("workspace instance route authority", () => {
     await expect(exchange(listenPort, "stale")).rejects.toThrow();
     expect((await createRoute(endpoint, freshGrant)).status).toBe(201);
     await expect(exchange(listenPort, "fresh")).resolves.toBe("fresh");
+    // Cached target IP and port stay identical; UUID replacement must still deny a new connection.
+    await state.remove(newRecord.name);
+    await state.write({ ...newRecord, id: "cccccccc-cccc-cccc-cccc-cccccccccccc" });
+    await expect(exchange(listenPort, "must not reach reused target")).rejects.toThrow();
   });
 });
 
@@ -110,7 +99,7 @@ function createRoute(endpoint: string, grant: string): Promise<Response> {
 }
 
 function workspaceRecord(workspaceId: string): WorkspaceRecord {
-  return nativeWorkspaceFixture({ workspaceId });
+  return coreWorkspaceRecord("work-a", { id: workspaceId });
 }
 
 async function availablePort(): Promise<number> {

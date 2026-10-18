@@ -39,7 +39,7 @@ dim external-url ingress add http \
 Add `--require-approval` when each requested route must remain unreachable
 until a host administrator runs `dim external-url approve URL_ID`. Requests
 still succeed and return `pending`; `dim external-url revoke URL_ID` on the host
-removes reachability terminally. Workspace and agent grants can revoke only
+removes reachability terminally. Workspace-scoped plugin grants can revoke only
 their own routes and cannot approve them. Revocation, route deletion, and
 same-target runtime rebinding close active HTTP streams, WebSocket upgrades,
 and TCP flows before removing or replacing the exact route claim. A change to
@@ -68,9 +68,9 @@ permalink. Raw TCP routes remain `tcp://ADDRESS:PORT` routes and return no
 permalink.
 
 On the host, omit `--workspace` to list routes for every current workspace.
-That inventory includes Project and workspace names plus each route's approval
+That inventory includes workspace names and optional native Project names plus each route's approval
 state, is capped at 1,000 routes,
-and is available only through DIM's host-admin socket. Workspace and agent
+and is available only through DIM's host-admin socket. Workspace-scoped
 controller grants continue to list only their own workspace and cannot invoke
 the host-wide action. Neither listing returns controller grants, provider
 arguments, or credentials.
@@ -147,15 +147,20 @@ may instead use a fail-closed HTTP(S) or Unix-socket webhook to approve,
 reject, or rewrite requested subdomains.
 
 The controller stores active routes under DIM state and reconciles them on
-restart. Workspace discard revokes its routes. DNS credentials remain in the
+restart. Each new HTTP request, WebSocket upgrade, and TCP connection checks the
+current core workspace UUID. Discard or same-name replacement makes cached
+routes unreachable immediately. DNS credentials remain in the
 host's mode-`0600` configuration and are never returned through workspace
 controller APIs.
 
-For child development containers, expose only selected URL operations through
-[`@slop-lab/dim-controller-proxy`](https://www.npmjs.com/package/@slop-lab/dim-controller-proxy);
-never mount the original controller grant.
 
 See the complete
 [External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md),
 [feature example](https://github.com/slop-lab/dev-infra-manager/tree/main/examples/features/external-urls),
 and [source repository](https://github.com/slop-lab/dev-infra-manager).
+
+Targets address the workspace loopback service (`containers: []`) or one
+container in its nested Docker engine (`containers: ["service-name"]`). The
+controller validates the owned core container and routes through an in-agent
+relay at that container's IP. Host sockets and credentials are never mounted
+into the workspace. Ordinary Git workspaces require no Project metadata.

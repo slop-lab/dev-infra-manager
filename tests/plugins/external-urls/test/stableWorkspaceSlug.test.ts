@@ -1,9 +1,10 @@
+import { vi } from "vitest";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { LifecycleState } from "@slop-lab/dim-managed";
 import { workspaceServiceSubdomain } from "@slop-lab/dim-contracts-external-url";
 import {
   adminAction,
@@ -25,14 +26,15 @@ afterEach(async () => Promise.all(cleanup.splice(0).reverse().map((operation) =>
 it("keeps the opencode slug stable and workspace scoped", async () => {
   // Given: two workspaces using one approval-required ingress and one bound target.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-stable-workspace-slug-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
   const firstWorkspace = { ...workspace, name: "work.foo" };
   const secondWorkspace = { ...foreign, name: "work_foo" };
   const firstSubdomain = workspaceServiceSubdomain(firstWorkspace.name, "opencode");
   const secondSubdomain = workspaceServiceSubdomain(secondWorkspace.name, "opencode");
-  const state = new LifecycleState(stateRoot);
-  await state.claimWorkspace(workspaceRecord(firstWorkspace));
-  await state.claimWorkspace(workspaceRecord(secondWorkspace));
+  const state = new WorkspaceStore(stateRoot);
+  await state.write(workspaceRecord(firstWorkspace));
+  await state.write(workspaceRecord(secondWorkspace));
   const upstream = http.createServer((_request, response) => response.end("opencode-target"));
   await listen(upstream);
   cleanup.push(() => closeServer(upstream));

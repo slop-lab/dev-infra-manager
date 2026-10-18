@@ -1,4 +1,4 @@
-import { LifecycleState, lifecycleOptions, MissingRecordError, UserError } from "@slop-lab/dim-managed";
+import { ControllerWorkspaces, lifecycleOptions, MissingRecordError, UserError, ProcessRunner } from "@slop-lab/dim-managed";
 import { ensureManagedController } from "./managed-controller.js";
 import { adminErrorDetail, unixHttpRequest } from "./controller-transport.js";
 
@@ -8,10 +8,6 @@ export async function externalUrlControllerRequest(
   workspace?: string
 ): Promise<unknown> {
   return controllerRequest(pathname, init, workspace);
-}
-
-export class WorkspaceControllerGrantNotFoundError extends UserError {
-  readonly name = "WorkspaceControllerGrantNotFoundError";
 }
 
 export class ControllerRequestError extends UserError {
@@ -84,25 +80,26 @@ export async function controllerRequest(
   init: RequestInit = {},
   workspace?: string
 ): Promise<unknown> {
-  let socketPath = process.env.DIM_CONTROLLER_SOCKET ?? process.env.DIM_AGENT_CONTROLLER_SOCKET;
+  let socketPath = process.env.DIM_CONTROLLER_SOCKET;
   let api = process.env.DIM_CONTROLLER_API;
-  let token = process.env.DIM_CONTROLLER_TOKEN ?? process.env.DIM_AGENT_CONTROLLER_TOKEN;
+  let token = process.env.DIM_CONTROLLER_TOKEN;
   if (workspace) {
     const options = lifecycleOptions();
     socketPath ??= options.controllerSocketPath;
     try {
-      token = await new LifecycleState(options.stateRoot).readWorkspaceGrant(workspace);
+      token = await new ControllerWorkspaces(options, new ProcessRunner()).ensureGrant(workspace);
+      if (socketPath === options.controllerSocketPath) await ensureManagedController(options);
     } catch (error) {
       if (error instanceof MissingRecordError
         || (error instanceof Error && "code" in error && error.code === "ENOENT")) {
-        throw new WorkspaceControllerGrantNotFoundError(`workspace '${workspace}' has no controller grant`);
+        throw new UserError(`workspace '${workspace}' not found on this host`);
       }
       throw error;
     }
   }
   if ((!socketPath && !api) || !token) {
     throw new UserError(
-      "DIM_CONTROLLER_SOCKET/TOKEN or DIM_AGENT_CONTROLLER_SOCKET/TOKEN are required inside a workspace; use --workspace on the host"
+      "DIM_CONTROLLER_SOCKET/TOKEN are required; use --workspace on the host"
     );
   }
   if (socketPath) {

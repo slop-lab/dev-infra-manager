@@ -1,9 +1,10 @@
+import { vi } from "vitest";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { LifecycleState } from "@slop-lab/dim-managed";
 import {
   adminAction,
   availablePort,
@@ -26,8 +27,9 @@ afterEach(async () => Promise.all(cleanup.splice(0).reverse().map((operation) =>
 it("keeps an approval-required HTTP route pending until host approval and preserves exact approval across restart", async () => {
   // Given: a current workspace, an approval-required ingress, and a real HTTP target.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-http-approval-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-  await new LifecycleState(stateRoot).claimWorkspace(workspaceRecord(workspace));
+  await new WorkspaceStore(stateRoot).write(workspaceRecord(workspace));
   const upstream = http.createServer((_request, response) => response.end("approved-target"));
   await listen(upstream);
   cleanup.push(() => closeServer(upstream));
@@ -103,6 +105,6 @@ it("keeps an approval-required HTTP route pending until host approval and preser
 
   const successor = routeResponse(await (await requestUrl(restarted.controllerBase, "workspace-grant")).json());
 
-  await new LifecycleState(stateRoot).writeWorkspace(workspaceRecord({ ...workspace, id: foreign.id }));
+  await new WorkspaceStore(stateRoot).write(workspaceRecord({ ...workspace, id: foreign.id }));
   expect((await adminAction(restarted.adminBase, "url-approve", successor.id)).status).toBe(400);
 });

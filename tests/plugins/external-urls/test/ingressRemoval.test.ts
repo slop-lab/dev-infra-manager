@@ -1,3 +1,5 @@
+import { workspaceRecord as coreWorkspaceRecord } from "../../../support/workspaceFixture.js";
+import { storeWorkspace } from "./support/workspaceFixture.js";
 import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
@@ -13,7 +15,7 @@ import {
 } from "@slop-lab/dim-managed";
 import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../../../plugin-external-urls/src/index.js";
 
-const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };
+const workspace = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work", projectId: "project", projectName: "project" };
 
 describe("external URL ingress removal", () => {
   const cleanup: Array<() => Promise<void>> = [];
@@ -28,6 +30,7 @@ describe("external URL ingress removal", () => {
   it("closes the listener and prevents persisted routes from resurrecting after re-add", async () => {
     // Given: a live HTTP ingress with a persisted workspace route.
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-ingress-remove-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
     cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
     const configPath = path.join(stateRoot, "external-urls.json");
     process.env.DIM_EXTERNAL_URL_CONFIG = configPath;

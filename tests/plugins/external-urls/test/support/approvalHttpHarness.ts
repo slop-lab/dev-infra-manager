@@ -8,15 +8,15 @@ import {
   registerPlugins,
   type ControllerWorkspace,
   type LifecycleOptions,
-  type WorkspaceRecord
 } from "@slop-lab/dim-managed";
 import { vi } from "vitest";
 import { createExternalUrlsPlugin } from "../../../../../plugin-external-urls/src/index.js";
 import type { ExternalUrlRoutePolicyConfig } from "../../../../../plugin-external-urls/src/routePolicy.js";
-import { nativeWorkspaceFixture } from "../../../../packages/core/test/nativeLifecycleFixture.js";
+import { workspaceRecord as coreWorkspaceRecord } from "../../../../support/workspaceFixture.js";
+import type { WorkspaceRecord } from "@slop-lab/dim-core/workspace";
 
-export const workspace = { id: "A".repeat(43), name: "work", projectId: "project-id", projectName: "project" };
-export const foreign = { id: "B".repeat(43), name: "foreign", projectId: "project-id", projectName: "project" };
+export const workspace = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work", projectId: "project-id", projectName: "project" };
+export const foreign = { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", name: "foreign", projectId: "project-id", projectName: "project" };
 
 interface ApprovalHttpPluginOptions {
   readonly stateRoot: string;
@@ -212,9 +212,5 @@ export function serverPort(server: http.Server): number {
 }
 
 export function workspaceRecord(value: ControllerWorkspace): WorkspaceRecord {
-  return nativeWorkspaceFixture({
-    workspaceId: value.id, name: value.name, projectId: value.projectId, projectName: value.projectName,
-    composeProjectName: `dim-${value.name}`, containerName: `dim-ws-${value.name}`, networkName: "dim-control",
-    dockerVolumeName: `dim-ws-${value.name}-docker`
-  });
+  return coreWorkspaceRecord(value.name, { id: value.id });
 }

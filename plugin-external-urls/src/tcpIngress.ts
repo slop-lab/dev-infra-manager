@@ -29,6 +29,7 @@ export interface TcpIngressOptions {
   readonly maxConnections?: number;
   readonly connectTimeoutMs?: number;
   readonly idleTimeoutMs?: number;
+  readonly authorizeWorkspace?: (workspace: ControllerWorkspace) => Promise<void>;
 }
 
 const DEFAULT_MAX_CONNECTIONS = 256;
@@ -50,14 +51,17 @@ export class TcpIngressListener {
   readonly #maxConnections: number;
   readonly #connectTimeoutMs: number;
   readonly #idleTimeoutMs: number;
+  readonly #authorizeWorkspace: ((workspace: ControllerWorkspace) => Promise<void>) | undefined;
   #route: {
     readonly claim: string;
+    readonly workspace: ControllerWorkspace;
     readonly upstream: ResolvedWorkspaceTarget;
     readonly enabled: boolean;
   } | undefined;
 
   constructor(options: TcpIngressOptions) {
     this.name = options.name;
+    this.#authorizeWorkspace = options.authorizeWorkspace;
     this.upstreamMode = options.upstreamMode;
     this.#maxConnections = options.maxConnections ?? DEFAULT_MAX_CONNECTIONS;
     this.#connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
@@ -97,7 +101,7 @@ export class TcpIngressListener {
     if (!acquired && JSON.stringify(this.#route?.upstream) !== JSON.stringify(upstream)) {
       this.#destroyConnections();
     }
-    this.#route = { claim, upstream, enabled: approval === "not-required" || approval === "approved" };
+    this.#route = { claim, workspace, upstream, enabled: approval === "not-required" || approval === "approved" };
     return {
       acquired,
       route: {
@@ -133,9 +137,12 @@ export class TcpIngressListener {
     await closed;
   }
 
-  #forward(client: net.Socket): void {
+  async #forward(client: net.Socket): Promise<void> {
+    client.once("error", () => {});
     const route = this.#route;
-    if (route === undefined || !route.enabled) {
+    try { if (route) await this.#authorizeWorkspace?.(route.workspace); }
+    catch { client.destroy(); return; }
+    if (route === undefined || !route.enabled || this.#route !== route || client.destroyed) {
       client.destroy();
       return;
     }

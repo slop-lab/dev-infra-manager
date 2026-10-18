@@ -2,7 +2,6 @@ export * from "./doctor.js";
 export * from "./aptCache.js";
 export * from "./adminController.js";
 export * from "./controller.js";
-export * from "./commandSessions.js";
 
 export * from "./lifecycleOptions.js";
 export * from "./lifecycleState.js";
@@ -40,7 +39,6 @@ export * from "./nativeProjectDraftStore.js";
 export * from "./nativeProjectPendingCodec.js";
 export * from "./nativeProjectPendingStore.js";
 export * from "./nativeProjectReadinessClient.js";
-export * from "./nativeWorkspaceGitBroker.js";
 export {
   issueNativeProjectDraftRootReadLease,
   NativeProjectDraftRootReadError,
@@ -65,22 +63,15 @@ export * from "./nativeOrdinaryExecutor.js";
 export * from "./plugin.js";
 export * from "./hostInputs.js";
 export * from "./hostMirrorProvider.js";
-export * from "./hostLifecycle.js";
-export * from "./hostRuntimeTransitions.js";
 export * from "./pluginLoader.js";
-export * from "./projectRuntimeCgroups.js";
 
-export * from "./managed-stateCompatibility.js";
 export * from "./repositorySet.js";
 
-export * from "./runtimeBackends.js";
 
 export * from "./userConfig.js";
-export * from "./workspaceLifecycle.js";
-export * from "./workspaceImage.js";
 
-export * from "./workspaceEnvironment.js";
 
 export { UserError, MissingRecordError, isUserError, assertCondition, ProcessRunner, preflightStateCompatibility } from "@slop-lab/dim-core";
 export type { CommandResult, CommandRunner, StreamingCommandRunner, TerminalSize, TerminalControl, RunOptions, LongOperationOptions } from "@slop-lab/dim-core";
-export * from "./workspaceImageReference.js";
+
+export * from "./controllerWorkspace.js";

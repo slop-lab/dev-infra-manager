@@ -23,9 +23,7 @@ describe("plugin contract", () => {
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
       apiVersion: DIM_PLUGIN_API_VERSION,
       registerControllerRoute: expect.any(Function),
-      registerWorkspaceDiscardHook: expect.any(Function),
       registerHostInputProvider: expect.any(Function),
-      registerWorkspaceCapability: expect.any(Function),
       registerExtension: expect.any(Function),
       extension: expect.any(Function)
     }));
@@ -39,21 +37,6 @@ describe("plugin contract", () => {
     })).rejects.toThrow(/unsupported DIM plugin API/);
   });
 
-  it("rejects controller routes without an explicit audience", async () => {
-    await expect(registerPlugin({
-      name: "missing-audience",
-      apiVersion: DIM_PLUGIN_API_VERSION,
-      register(host) {
-        host.registerControllerRoute({
-          method: "GET",
-          path: "/unsafe",
-          summary: "unsafe",
-          handle: async () => undefined
-        } as never);
-      }
-    })).rejects.toThrow(/without valid audiences/);
-  });
-
   it("collects capabilities and disposes plugins in reverse order", async () => {
     const disposed: string[] = [];
     const registered = await registerPlugins([
@@ -65,7 +48,6 @@ describe("plugin contract", () => {
             method: "GET",
             path: "/first",
             summary: "first route",
-            audiences: ["workspace"],
             handle: async () => ({ body: { ok: true } })
           });
           return () => { disposed.push("first"); };
@@ -79,7 +61,6 @@ describe("plugin contract", () => {
             method: "POST",
             path: "/second/:id",
             summary: "second route",
-            audiences: ["agent"],
             handle: async () => ({ status: 204 })
           });
           return () => { disposed.push("second"); };
@@ -96,31 +77,7 @@ describe("plugin contract", () => {
     expect(disposed).toEqual(["second", "first"]);
   });
 
-  it("collects generic workspace discard hooks in plugin order", async () => {
-    // Given: two plugins that own workspace-scoped host resources.
-    const first = { beforeDiscard: vi.fn() };
-    const second = { beforeDiscard: vi.fn() };
-
-    // When: both plugins register their lifecycle hooks.
-    const registered = await registerPlugins([
-      {
-        name: "first-hook",
-        apiVersion: DIM_PLUGIN_API_VERSION,
-        register(host) { host.registerWorkspaceDiscardHook(first); }
-      },
-      {
-        name: "second-hook",
-        apiVersion: DIM_PLUGIN_API_VERSION,
-        register(host) { host.registerWorkspaceDiscardHook(second); }
-      }
-    ]);
-
-    // Then: authoritative lifecycle callers can invoke every registered hook.
-    expect(registered.workspaceDiscardHooks).toEqual([first, second]);
-    await registered.dispose();
-  });
-
-  it("rejects duplicate capability names", async () => {
+  it("rejects duplicate controller route paths", async () => {
     await expect(registerPlugins([
       {
         name: "one",
@@ -130,7 +87,6 @@ describe("plugin contract", () => {
             method: "GET",
             path: "/same",
             summary: "same",
-            audiences: ["workspace"],
             handle: async () => {}
           });
         }
@@ -143,7 +99,6 @@ describe("plugin contract", () => {
             method: "GET",
             path: "/same",
             summary: "same again",
-            audiences: ["workspace"],
             handle: async () => {}
           });
         }
@@ -164,7 +119,6 @@ describe("plugin contract", () => {
       method: "GET",
       path: "/late",
       summary: "late",
-      audiences: ["workspace"],
       handle: async () => {}
     })).toThrow(/after startup/);
     await registered.dispose();
@@ -187,19 +141,6 @@ describe("plugin contract", () => {
         }
       }
     ])).rejects.toThrow(/already registered/);
-  });
-
-  it("registers workspace capability providers by exact name", async () => {
-    const provider = { provision: vi.fn(async () => ({ capabilities: ["SYS_ADMIN"] })) };
-    const registered = await registerPlugin({
-      name: "capability-plugin",
-      apiVersion: DIM_PLUGIN_API_VERSION,
-      register(host) { host.registerWorkspaceCapability("writable-cgroup", provider); }
-    });
-    expect(registered.workspaceCapabilityProviders.get("writable-cgroup")).toEqual({
-      plugin: "capability-plugin", provider
-    });
-    await registered.dispose();
   });
 
   it("registers one host-owned mirror provider with immutable service images", async () => {

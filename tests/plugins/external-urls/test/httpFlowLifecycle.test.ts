@@ -1,3 +1,6 @@
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
+import { workspaceRecord } from "../../../support/workspaceFixture.js";
+import { storeWorkspace } from "./support/workspaceFixture.js";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
@@ -56,11 +59,26 @@ it("closes live HTTP streams and WebSocket flows before rebinding a route upstre
   expect(await websocketExchange(replacementWebSocket, "after-refresh")).toContain("second:after-refresh");
 });
 
+it("denies new HTTP and WebSocket traffic after workspace name and cached target IP reuse", async () => {
+  const harness = await startHarness();
+  expect(await proxyRequest(harness.ingressPort)).toEqual({ status: 200, body: "first" });
+  await harness.replaceWorkspace();
+  expect(await proxyRequest(harness.ingressPort)).toEqual({ status: 404, body: '{"error":"external route not found"}\n' });
+  const socket = net.connect(harness.mirrorPort, "127.0.0.1");
+  const received: Buffer[] = []; socket.on("data", (chunk) => received.push(chunk)); socket.on("error", () => {});
+  await once(socket, "connect");
+  const closed = once(socket, "close");
+  socket.write("GET /socket HTTP/1.1\r\nHost: work--app.example.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n");
+  await within(closed, 1000);
+  expect(Buffer.concat(received).toString()).not.toContain("101 Switching Protocols");
+});
+
 async function startHarness(): Promise<{
   readonly ingressPort: number;
   readonly mirrorPort: number;
   readonly deleteRoute: () => Promise<Response>;
   readonly rebind: () => Promise<Response>;
+  readonly replaceWorkspace: () => Promise<void>;
 }> {
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-http-flow-"));
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
@@ -88,7 +106,8 @@ async function startHarness(): Promise<{
     }
   } })]);
   cleanup.push(() => registered.dispose());
-  const workspace = { id: "workspace-id", name: "work", projectId: "project-id", projectName: "project" };
+  const workspace = workspaceRecord("work");
+  await storeWorkspace(stateRoot, workspace);
   const controller = createDimController({
     stateRoot,
     routes: registered.controllerRoutes,
@@ -118,6 +137,10 @@ async function startHarness(): Promise<{
   return {
     ingressPort,
     mirrorPort,
+    replaceWorkspace: async () => {
+      await new WorkspaceStore(stateRoot).remove(workspace.name);
+      await storeWorkspace(stateRoot, { ...workspace, id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" });
+    },
     deleteRoute: () => fetch(`${base}/${id}`, { method: "DELETE", headers }),
     rebind: () => {
       targetPort = port(second);

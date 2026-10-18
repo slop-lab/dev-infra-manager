@@ -1,10 +1,11 @@
+import { vi } from "vitest";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { LifecycleState } from "@slop-lab/dim-managed";
 import { WorkspaceRouteRegistry } from "../../../../plugin-external-urls/src/httpRouteRegistry.js";
 import {
   adminAction,
@@ -31,8 +32,9 @@ describe.each([
   it("gates slug and permalink together through approval and revocation", async () => {
     // Given: an approval-required hostname ingress and a real HTTP target.
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-permalink-approval-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
     cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-    await new LifecycleState(stateRoot).claimWorkspace(workspaceRecord(workspace));
+    await new WorkspaceStore(stateRoot).write(workspaceRecord(workspace));
     const upstream = http.createServer((_request, response) => response.end("same-approved-target"));
     await listen(upstream);
     cleanup.push(() => closeServer(upstream));
@@ -83,10 +85,11 @@ describe.each([
 it("keeps dual authorities exclusive when another workspace resolves to the same target", async () => {
   // Given: one pending route and a policy that selects the same slug for every workspace.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-permalink-exclusive-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-  const state = new LifecycleState(stateRoot);
-  await state.claimWorkspace(workspaceRecord(workspace));
-  await state.claimWorkspace(workspaceRecord(foreign));
+  const state = new WorkspaceStore(stateRoot);
+  await state.write(workspaceRecord(workspace));
+  await state.write(workspaceRecord(foreign));
   const upstream = http.createServer((_request, response) => response.end("exclusive-target"));
   await listen(upstream);
   cleanup.push(() => closeServer(upstream));
@@ -121,9 +124,10 @@ it("keeps dual authorities exclusive when another workspace resolves to the same
 it("keeps the permalink stable across same-instance slug policy changes and denies it after recreation", async () => {
   // Given: an approved route whose policy rewrites its requested slug.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-permalink-lifecycle-"));
+  vi.stubEnv("DIM_STATE_ROOT", stateRoot);
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-  const state = new LifecycleState(stateRoot);
-  await state.claimWorkspace(workspaceRecord(workspace));
+  const state = new WorkspaceStore(stateRoot);
+  await state.write(workspaceRecord(workspace));
   const upstream = http.createServer((_request, response) => response.end("instance-target"));
   await listen(upstream);
   cleanup.push(() => closeServer(upstream));
@@ -166,8 +170,8 @@ it("keeps the permalink stable across same-instance slug policy changes and deni
   await restarted.close();
 
   // When: that workspace is discarded and recreated under the same name with a fresh instance ID.
-  await state.removeWorkspace(workspace.name);
-  await state.claimWorkspace(workspaceRecord({ ...workspace, id: foreign.id }));
+  await state.remove(workspace.name);
+  await state.write(workspaceRecord({ ...workspace, id: foreign.id }));
   const recreated = await startApprovalHttpPlugin({
     stateRoot,
     ingressPort,

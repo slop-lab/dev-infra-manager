@@ -1,3 +1,5 @@
+import { workspaceRecord as coreWorkspaceRecord } from "../../../support/workspaceFixture.js";
+import { storeWorkspace } from "./support/workspaceFixture.js";
 import { once } from "node:events";
 import { mkdtemp, readdir, rm, rmdir, symlink, unlink } from "node:fs/promises";
 import net from "node:net";
@@ -7,7 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createDimController, registerPlugins } from "@slop-lab/dim-managed";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
 
-const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };
+const workspace = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work", projectId: "project", projectName: "project" };
 
 describe("TCP external URL API semantics", () => {
   const cleanup: Array<() => Promise<void>> = [];
@@ -102,6 +104,7 @@ async function startHarness(
   fingerprint: () => string = () => "leaf-generation-1"
 ): Promise<{ readonly base: string; readonly listenPort: number; readonly stateRoot: string }> {
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-tcp-api-"));
+    await storeWorkspace(stateRoot, coreWorkspaceRecord("work", { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
   const target = net.createServer((socket) => socket.pipe(socket));
   await listen(target);
@@ -143,7 +146,7 @@ function createUrl(base: string, extra: Readonly<Record<string, string>> = {}): 
     headers: { authorization: "Bearer valid", "content-type": "application/json" },
     body: JSON.stringify({
       ingress: "tcp",
-      target: { containers: ["parent", "leaf"], port: 22, protocol: "tcp" },
+      target: { containers: ["leaf"], port: 22, protocol: "tcp" },
       ...extra
     })
   });

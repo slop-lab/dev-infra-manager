@@ -6,8 +6,9 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
-import { workspaceRecord } from "../../core/test/hostLifecycleFixture.js";
+import { ControllerWorkspaces } from "../../../../core/packages/managed/src/controllerWorkspace.js";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
+import { workspaceRecord } from "../../../support/workspaceFixture.js";
 import { runPublishedCli } from "./publishedCliFixture.js";
 
 const allUrls = {
@@ -60,10 +61,10 @@ test("published list with --workspace remains scoped to that workspace grant", a
     response.writeHead(404).end();
   });
   context.after(fixture.close);
-  const state = new LifecycleState(fixture.stateRoot);
-  const record = workspaceRecord("work-a", "ready");
-  await state.claimWorkspace(record);
-  const grant = await state.ensureWorkspaceGrant(record.name);
+  const state = new WorkspaceStore(fixture.stateRoot);
+  const record = workspaceRecord("work-a");
+  await state.write(record);
+  const grant = await new ControllerWorkspaces({ stateRoot: fixture.stateRoot }, undefined, fixture.stateRoot).ensureGrant(record.name);
   fixture.environment.DIM_CONTROLLER_SOCKET = fixture.socketPath;
 
   const result = await runPublishedCli(
@@ -133,16 +134,15 @@ async function createHostFixture(
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
     DIM_STATE_ROOT: stateRoot,
+    DIM_MANAGED_STATE_ROOT: stateRoot,
     XDG_CONFIG_HOME: configHome,
     XDG_RUNTIME_DIR: runtimeRoot,
     DIM_CONTROLLER_SOCKET: socketPath,
-    DIM_AGENT_CONTROLLER_SOCKET: socketPath,
     DIM_ADMIN_CONTROLLER_SOCKET: socketPath
   };
   for (const name of [
     "DIM_CONTROLLER_API",
     "DIM_CONTROLLER_TOKEN",
-    "DIM_AGENT_CONTROLLER_TOKEN"
   ]) delete environment[name];
   return {
     environment,
