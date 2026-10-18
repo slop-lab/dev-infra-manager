@@ -2,7 +2,7 @@ import { UserError, type ResolvedWorkspaceTarget } from "@slop-lab/dim-managed";
 import { HttpFlowTracker } from "./httpFlows.js";
 
 interface RegisteredRoute {
-  upstream: ResolvedWorkspaceTarget;
+  upstream: ResolvedWorkspaceTarget | undefined;
   authorize: (() => Promise<void>) | undefined;
   resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined;
   readonly claims: Map<string, boolean>;
@@ -11,7 +11,7 @@ interface RegisteredRoute {
 interface RouteProvision {
   readonly authorities: readonly string[];
   readonly claim: string;
-  readonly upstream: ResolvedWorkspaceTarget;
+  readonly upstream: ResolvedWorkspaceTarget | undefined;
   readonly enabled: boolean;
   readonly beforeRebind: () => void;
   readonly authorize?: () => Promise<void>;
@@ -76,7 +76,7 @@ export class WorkspaceRouteRegistry {
     }
   }
 
-  target(host: string): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined; readonly resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined } | undefined {
+  target(host: string): { readonly upstream: ResolvedWorkspaceTarget | undefined; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined; readonly resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined } | undefined {
     const route = this.#routes.get(host.toLowerCase().replace(/\.$/, ""));
     if (route === undefined) return undefined;
     const claim = [...route.claims].find(([, enabled]) => enabled)?.[0];

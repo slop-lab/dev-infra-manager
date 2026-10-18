@@ -90,13 +90,13 @@ it("regenerates a pending HTTP route when its advertised public port changes", a
   const afterFailure = (await new ExternalUrlStore(stateRoot).list(workspace.id))[0];
   if (afterFailure === undefined) throw new Error("missing stored route after failed reconciliation");
 
-  // Then: denial is durable, but the old revision remains so a later request retries reconciliation.
+  // Then: public metadata advances without a runtime, while approval remains pending.
   expect(afterFailure).toMatchObject({
     approval: "pending",
-    policyRevision: before.policyRevision,
-    url: before.url,
-    route: { authority: before.route.authority, url: before.route.url }
+    url: `http://work--app.example.test:${publicPort}/`,
+    route: { authority: before.route.authority, url: `http://work--app.example.test:${publicPort}/` }
   });
+  expect(afterFailure.policyRevision).not.toBe(before.policyRevision);
 
   // When: the next controller request resolves the target successfully.
   const returned = routeResponse(await (await requestUrl(restarted.controllerBase, "workspace-grant")).json());

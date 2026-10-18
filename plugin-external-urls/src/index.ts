@@ -94,7 +94,7 @@ interface IngressListener {
   provision(
     workspace: ControllerWorkspace,
     request: NormalizedRequest,
-    upstream: ResolvedWorkspaceTarget,
+    upstream: ResolvedWorkspaceTarget | undefined,
     routeId?: string,
     approval?: ExternalUrlApproval,
     publicRouteId?: string,
@@ -780,7 +780,7 @@ function parseHttpIngressArgument(driver: string, argument: string): {
 }
 
 const INGRESS_DOCUMENTATION_URL =
-  "https://github.com/slop-lab/dev-infra-manager/blob/main/specification/docs/external-urls.md#named-ingresses";
+  "https://github.com/slop-lab/dev-infra-manager/blob/main/specification/docs/external-urls.md#host-configuration-and-route-approval";
 
 function httpIngressArgumentError(detail: string): UserError {
   return new UserError(`http ingress arguments ${detail}. See ${INGRESS_DOCUMENTATION_URL}`);
@@ -820,7 +820,11 @@ async function reconcileStoredRoute(
   if (approvalChanged) {
     await store.put(current);
   }
-  const upstream = await context.resolveTarget(current.target);
+  // Restore the approved route identity even when its runtime is currently
+  // stopped or absent. Every new flow must resolve current ownership before
+  // connecting; no cached or placeholder address is used for deferred routes.
+  let upstream: ResolvedWorkspaceTarget | undefined;
+  try { upstream = await context.resolveTarget(current.target); } catch { upstream = undefined; }
   const reconciled = await ingress.listener.provision(
     context.workspace,
     storedRequest(current),

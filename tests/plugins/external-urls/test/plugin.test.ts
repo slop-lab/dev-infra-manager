@@ -129,12 +129,12 @@ describe("external URLs plugin", () => {
 
     const missingDomain = await request("http", ["--listen-host", "0.0.0.0", "--listen-port", "auto"]);
     expect(missingDomain.status).toBe(400);
-    expect((await missingDomain.json() as { error: string }).error).toContain("docs/external-urls.md#named-ingresses");
+    expect((await missingDomain.json() as { error: string }).error).toContain("docs/external-urls.md#host-configuration-and-route-approval");
 
     const caddyHttp = await request("http", [], "caddy");
     expect(caddyHttp.status).toBe(400);
     expect((await caddyHttp.json() as { error: string }).error).toContain(
-      "docs/external-urls.md#http-and-https-with-cloudflare-dns-and-caddy"
+      "docs/external-urls.md#https-and-dns-drivers"
     );
 
     const missingDnsProvider = await request(

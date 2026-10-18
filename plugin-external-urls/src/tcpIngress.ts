@@ -53,7 +53,7 @@ export class TcpIngressListener {
   #route: {
     readonly claim: string;
     readonly workspace: ControllerWorkspace;
-    readonly upstream: ResolvedWorkspaceTarget;
+    readonly upstream: ResolvedWorkspaceTarget | undefined;
     readonly enabled: boolean;
     readonly resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined;
   } | undefined;
@@ -82,15 +82,16 @@ export class TcpIngressListener {
   async provision(
     workspace: ControllerWorkspace,
     request: TcpIngressRequest,
-    upstream: ResolvedWorkspaceTarget,
+    upstream: ResolvedWorkspaceTarget | undefined,
     routeId = `${workspace.id}\u0000${JSON.stringify(request.target)}`,
     approval: ExternalUrlApproval = "not-required",
     _publicRouteId?: string,
     resolve?: () => Promise<ResolvedWorkspaceTarget>
   ): Promise<TcpIngressProvision> {
     await this.#ready;
+    if (!upstream && !resolve) throw new UserError("external route requires an authoritative target resolver");
     if (request.path !== undefined) throw new UserError("TCP ingress requests do not accept a URL path");
-    if (request.target.protocol !== "tcp" || upstream.protocol !== "tcp") {
+    if (request.target.protocol !== "tcp" || upstream !== undefined && upstream.protocol !== "tcp") {
       throw new UserError("TCP ingresses require target.protocol 'tcp'");
     }
     const claim = routeId;

@@ -118,13 +118,13 @@ it("regenerates a pending TCP route when its public authority changes", async ()
   const afterFailure = (await new ExternalUrlStore(stateRoot).list(record.id))[0];
   if (afterFailure === undefined) throw new Error("missing stored TCP route after failed reconciliation");
 
-  // Then: denial persists with the old revision and tuple, keeping retry eligibility.
+  // Then: the new public authority is restored, but requires fresh approval.
   expect(afterFailure).toMatchObject({
     approval: "pending",
-    policyRevision: before.policyRevision,
-    url: before.url,
-    route: { authority: before.route.authority, url: before.route.url }
+    url: `tcp://new.example.test:${secondPort}`,
+    route: { authority: `new.example.test:${secondPort}`, url: `tcp://new.example.test:${secondPort}` }
   });
+  expect(afterFailure.policyRevision).not.toBe(before.policyRevision);
 
   // When: the next controller request resolves the target successfully.
   const returned = route(await (await requestUrl(restarted.controller, "tcp")).json());

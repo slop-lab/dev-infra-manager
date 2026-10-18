@@ -152,8 +152,10 @@ reject, or rewrite requested subdomains.
 
 The controller stores active routes under DIM state and reconciles them on
 restart. Each new HTTP request, WebSocket upgrade, and TCP connection checks the
-current core workspace UUID and resolves its owned container and relay. A
-same-UUID container recreation recovers on the next connection without a route
+current core workspace UUID and resolves its owned container and relay.
+Saved routes also restore while their runtime is stopped or absent, and become
+usable when that same workspace returns. A same-UUID container recreation
+recovers on the next connection without a route
 listing or controller restart. A missing or foreign runtime cannot receive
 traffic through a cached IP. Discard or same-name replacement makes routes
 unreachable immediately. DNS credentials remain in the

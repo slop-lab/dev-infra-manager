@@ -4,7 +4,7 @@ import { parseRoutePolicy, type ExternalUrlRoutePolicyConfig } from "./routePoli
 export const CADDY_VERSION = "2.11.4";
 export const CADDY_INGRESS_DOCUMENTATION_URL =
   "https://github.com/slop-lab/dev-infra-manager/blob/main/specification/docs/external-urls.md"
-  + "#http-and-https-with-cloudflare-dns-and-caddy";
+  + "#https-and-dns-drivers";
 
 export interface CaddyDeployment {
   dockerfile: string;

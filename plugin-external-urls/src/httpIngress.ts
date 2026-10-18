@@ -78,13 +78,14 @@ export class WorkspaceIngressListener {
   async provision(
     workspace: ControllerWorkspace,
     request: HttpIngressRequest,
-    upstream: ResolvedWorkspaceTarget,
+    upstream: ResolvedWorkspaceTarget | undefined,
     routeId = randomUUID(),
     approval: ExternalUrlApproval = "not-required",
     publicRouteId?: string,
     resolve?: () => Promise<ResolvedWorkspaceTarget>
   ) {
     await this.#ready;
+    if (!upstream && !resolve) throw new UserError("external route requires an authoritative target resolver");
     if (request.subdomain === undefined) throw new UserError("HTTP ingress requests require a subdomain");
     const subdomain = await applyRoutePolicy(this.#routePolicy, {
       workspace: { id: workspace.id, name: workspace.name },
@@ -155,7 +156,7 @@ export class WorkspaceIngressListener {
     await closed;
   }
 
-  #target(request: IncomingMessage): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined; readonly resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined } | undefined {
+  #target(request: IncomingMessage): { readonly upstream: ResolvedWorkspaceTarget | undefined; readonly claim: string; readonly authorize: (() => Promise<void>) | undefined; readonly resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined } | undefined {
     const hostname = (request.headers.host ?? "").split(":")[0]?.toLowerCase() ?? "";
     return this.#registry.target(hostname);
   }

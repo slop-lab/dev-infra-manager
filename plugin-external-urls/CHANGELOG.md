@@ -9,4 +9,5 @@ Target: `0.10.0` internal development candidate.
   verifies workspace identity and runtime ownership, recovers after container
   recreation, and denies stale routes after discard or IP reuse. Workspace
   grants and provider credentials stay on the trusted host. TCP flows preserve
-  independent half-close directions, including delayed binary responses.
+  independent half-close directions, including delayed binary responses. Saved
+  routes recover when a stopped workspace returns after controller startup.

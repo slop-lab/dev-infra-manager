@@ -36,9 +36,10 @@ try {
   assert.deepEqual(await Promise.all([exchange(first, bytes), exchange(first, Buffer.from("concurrent request"))]), [bytes, Buffer.from("concurrent request")]);
   const token = await controller.ensureGrant(record.name);
   const ingressPort = await availablePort(), tcpIngressPort = await availablePort();
-  plugin = await registerPlugins([createExternalUrlsPlugin({ ingresses: { smoke: {
+  const pluginOptions = { ingresses: { smoke: {
     description: "Disposable ownership smoke", scheme: "http", domain: "smoke.test", listenHost: "127.0.0.1", listenPort: ingressPort
-  }, raw: { description: "Disposable half-close smoke", scheme: "tcp", domain: "127.0.0.1", listenHost: "127.0.0.1", listenPort: tcpIngressPort } } })]);
+  }, raw: { description: "Disposable half-close smoke", scheme: "tcp", domain: "127.0.0.1", listenHost: "127.0.0.1", listenPort: tcpIngressPort } } };
+  plugin = await registerPlugins([createExternalUrlsPlugin(pluginOptions)]);
   api = createDimController({ stateRoot: join(root, "managed"), routes: plugin.controllerRoutes,
     authenticate: (grant) => controller.authenticate(grant), runWorkspaceRequest: (workspace, operation) => controller.run(workspace, operation),
     resolveTarget: (workspace, requested) => controller.resolveTarget(workspace, requested) });
@@ -62,6 +63,22 @@ try {
   assert.equal(await (await gateway()).text(), "initial");
   const httpTarget = { containers: [], port: 3457, protocol: "http" };
   const initialHttp = await controller.resolveTarget(selected, httpTarget);
+  record = await service.stop(record.name);
+  await new Promise((resolve) => { api.close(resolve); api.closeAllConnections(); }); api = undefined;
+  await plugin.dispose();
+  plugin = await registerPlugins([createExternalUrlsPlugin(pluginOptions)]);
+  const initialize = plugin.controllerRoutes.find((route) => route.initialize)?.initialize;
+  assert.ok(initialize);
+  await initialize({ stateRoot: join(root, "managed"), runner, listWorkspaces: () => controller.list(),
+    runWorkspaceRequest: (workspace, operation) => controller.run(workspace, operation),
+    resolveTarget: (workspace, requested) => controller.resolveTarget(workspace, requested) });
+  assert.equal((await gateway()).status, 404);
+  record = await service.start(record.name);
+  const restarted = await runtime.inspect(record); assert.ok(restarted?.running);
+  await startTarget(restarted.id, "restarted");
+  const restored = await gateway(); assert.equal(restored.status, 200); assert.equal(await restored.text(), "restarted");
+  assert.deepEqual(await exchange({ host: "127.0.0.1", port: tcpIngressPort }, bytes), bytes);
+  console.log("PASS controller restart while workspace stopped restores HTTP/TCP lazily after start");
   record = await service.recreate(record.name);
   assert.equal(record.id, selected.id);
   const recreated = await runtime.inspect(record); assert.ok(recreated?.running); assert.notEqual(recreated.id, agent.id);
