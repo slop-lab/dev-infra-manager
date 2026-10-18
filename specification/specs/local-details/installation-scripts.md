@@ -37,18 +37,16 @@ Behavior:
 12. Restart Docker.
 13. Restart Sysbox so AppArmor changes take effect and stale in-memory
     container registrations are cleared.
-14. Record the selected backend as `workspaceBackend` in the invoking user's
-    DIM configuration.
-15. Add the invoking non-root user to the `docker` group.
-16. Explain that the user must log in again or run `newgrp docker` once
+14. Add the invoking non-root user to the `docker` group.
+15. Explain that the user must log in again or run `newgrp docker` once
     before the current session can use Docker without `sudo`.
-17. Do not enable systemd user linger. The operator explicitly runs
+16. Do not enable systemd user linger. The operator explicitly runs
     `sudo loginctl enable-linger "$USER"`; `doctor` reports disabled linger
     without changing it.
 
-Unsupported Sysbox architectures must fail. Installation records `sysbox` in
-DIM user configuration. From a source checkout, the operator runs
-`just run-cli doctor` afterward.
+Unsupported Sysbox architectures fail. The base runtime uses Sysbox directly;
+host installation creates no unused backend-selection configuration. From a
+source checkout, run `just run-cli doctor` afterward.
 
 The optional second argument `docker-ce` selects the exact Docker CE package
 tuple used by the fresh-VM bootstrap instead of the Ubuntu Docker packages.
@@ -79,7 +77,7 @@ and requires a real readable/writable KVM device, without TCG substitution.
 Provisioning device access alone MUST NOT be reported as a functional KVM test.
 Group changes MUST stop with exit `3` for an explicit new login and identical
 rerun. An owner-only resume marker MUST bind the phase, role, source, version,
-operator, and bootstrap-created configuration; foreign or changed state MUST
+operator, and bootstrap-created Docker configuration; foreign or changed state MUST
 fail closed.
 
 After host prerequisites, the bootstrap MUST reuse reviewed `prepare-local`

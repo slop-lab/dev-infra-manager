@@ -20,17 +20,17 @@ dim_docker_config_identity() {
 }
 
 dim_marker_content() {
-  local phase="$1" config_sha256="$2" docker_config_sha256="$3"
-  printf 'schema=1\nphase=%s\nrole=%s\nsource-sha=%s\nversion=%s\noperator-uid=%s\nconfig-sha256=%s\ndocker-config-sha256=%s\n' \
-    "$phase" "$role" "$source_sha" "$expected_version" "$operator_uid" "$config_sha256" "$docker_config_sha256"
+  local phase="$1" docker_config_sha256="$2"
+  printf 'schema=2\nphase=%s\nrole=%s\nsource-sha=%s\nversion=%s\noperator-uid=%s\ndocker-config-sha256=%s\n' \
+    "$phase" "$role" "$source_sha" "$expected_version" "$operator_uid" "$docker_config_sha256"
 }
 
 dim_write_marker() {
-  local phase="$1" config_sha256="$2" docker_config_sha256="$3" temporary
+  local phase="$1" docker_config_sha256="$2" temporary
   mkdir -p -m 0700 "$resume_marker_root"
   [[ ! -L "$resume_marker_root" && "$(stat -c '%u:%a' "$resume_marker_root")" == "$operator_uid:700" ]] || { echo "unsafe bootstrap resume marker directory" >&2; return 2; }
   temporary="$(mktemp "$resume_marker_root/.ubuntu-vm.XXXXXX")"
-  dim_marker_content "$phase" "$config_sha256" "$docker_config_sha256" >"$temporary"
+  dim_marker_content "$phase" "$docker_config_sha256" >"$temporary"
   chmod 0600 "$temporary"
   mv -T "$temporary" "$resume_marker"
 }
@@ -39,10 +39,9 @@ dim_open_bootstrap_state() {
   resume=0
   if [[ -e "$resume_marker" || -L "$resume_marker" ]]; then
     [[ ! -L "$resume_marker" && -f "$resume_marker" && "$(stat -c '%u:%a' "$resume_marker")" == "$operator_uid:600" ]] || { echo "unsafe bootstrap resume marker" >&2; return 2; }
-    marker_config_sha256="$(awk -F= '$1=="config-sha256" {print $2}' "$resume_marker")"
     marker_docker_config_sha256="$(awk -F= '$1=="docker-config-sha256" {print $2}' "$resume_marker")"
-    [[ "$marker_config_sha256" =~ ^[0-9a-f]{64}$ && ( "$marker_docker_config_sha256" == absent || "$marker_docker_config_sha256" =~ ^[0-9a-f]{64}$ ) &&
-      "$(<"$resume_marker")" == "$(dim_marker_content awaiting-login "$marker_config_sha256" "$marker_docker_config_sha256")" ]] || {
+    [[ ( "$marker_docker_config_sha256" == absent || "$marker_docker_config_sha256" =~ ^[0-9a-f]{64}$ ) &&
+      "$(<"$resume_marker")" == "$(dim_marker_content awaiting-login "$marker_docker_config_sha256")" ]] || {
       echo "bootstrap resume marker does not match this role, source, version, owner, or phase" >&2; return 2;
     }
     resume=1
@@ -55,14 +54,11 @@ dim_open_bootstrap_state() {
       "$HOME/.local/lib/dim-candidates" "$candidate_facade" "$repo_root/.local/prepared-local.state" "$repo_root/.local/dim-packages"; do
       [[ ! -e "$path" && ! -L "$path" ]] || { echo "refusing pre-existing host or DIM state: $path" >&2; return 2; }
     done
-    dim_write_marker installing none none
+    dim_write_marker installing none
     return
   fi
-  config_path="$dim_config_root/config.json"
-  [[ ! -L "$config_path" && -f "$config_path" && "$(stat -c '%u:%a' "$config_path")" == "$operator_uid:600" ]] || { echo "resume requires bootstrap-created owner-only DIM backend config" >&2; return 2; }
-  [[ "$(sha256sum "$config_path" | cut -d ' ' -f 1)" == "$marker_config_sha256" ]] || { echo "DIM backend config changed after bootstrap provisioning" >&2; return 2; }
   [[ "$(dim_docker_config_identity 2>/dev/null || printf unsafe)" == "$marker_docker_config_sha256" ]] || { echo "Docker daemon configuration changed after bootstrap provisioning" >&2; return 2; }
-  for path in "$dim_state_root" "$dim_data_root" "$HOME/.local/lib/dim-candidates" "$candidate_facade" "$repo_root/.local/prepared-local.state" "$repo_root/.local/dim-packages"; do
+  for path in "$dim_config_root" "$dim_state_root" "$dim_data_root" "$HOME/.local/lib/dim-candidates" "$candidate_facade" "$repo_root/.local/prepared-local.state" "$repo_root/.local/dim-packages"; do
     [[ ! -e "$path" && ! -L "$path" ]] || { echo "resume found non-bootstrap DIM state: $path" >&2; return 2; }
   done
 }

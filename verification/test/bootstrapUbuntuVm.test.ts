@@ -66,6 +66,29 @@ describe("Ubuntu VM role bootstrap", () => {
     expect((await readFile(value.log, "utf8")).match(/^host\.bash/gm)).toHaveLength(1);
   });
 
+  it("rejects foreign DIM configuration introduced during the login pause", async () => {
+    const value = await fixture("operator");
+    expect(run(value, executeArgs).status).toBe(3);
+    await mkdir(resolve(value.home, ".config/dim"), { recursive: true });
+    await writeFile(resolve(value.home, ".config/dim/foreign.json"), "{}\n");
+
+    const result = run(value, executeArgs, { DIM_TEST_GROUPS: "operator docker" });
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("resume found non-bootstrap DIM state");
+  });
+
+  it("rejects Docker daemon changes during the login pause", async () => {
+    const value = await fixture("operator");
+    expect(run(value, executeArgs).status).toBe(3);
+    await writeFile(resolve(value.root, "daemon.json"), "{}\n");
+
+    const result = run(value, executeArgs, { DIM_TEST_GROUPS: "operator docker" });
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("Docker daemon configuration changed");
+  });
+
   it("installs ordinary role source and promotes its exact installer facade", async () => {
     // Given
     const value = await fixture();

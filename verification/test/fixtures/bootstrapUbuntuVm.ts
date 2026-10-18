@@ -51,7 +51,7 @@ export async function fixture(groups = "operator docker kvm"): Promise<Fixture> 
   const helperBody = 'printf "%s\\n" "$(basename "$0") $*" >>"$DIM_TEST_LOG"\n';
   for (const name of ["host", "tools", "kvm"] as const) {
     const configBody = name === "host"
-      ? 'mkdir -p "$HOME/.config/dim"\nprintf \'{"schemaVersion":1,"workspaceBackend":"sysbox"}\\n\' >"$HOME/.config/dim/config.json"\nchmod 0600 "$HOME/.config/dim/config.json"\nprintf \'{"runtimes":{"sysbox-runc":{}}}\n\' >"$DIM_TEST_DAEMON_CONFIG"\nchmod 0644 "$DIM_TEST_DAEMON_CONFIG"\n'
+      ? 'printf \'{"runtimes":{"sysbox-runc":{}}}\n\' >"$DIM_TEST_DAEMON_CONFIG"\nchmod 0644 "$DIM_TEST_DAEMON_CONFIG"\n'
       : "";
     await executable(resolve(helpers, `${name}.bash`), `${helperBody}${configBody}`);
   }
@@ -74,6 +74,16 @@ export async function fixture(groups = "operator docker kvm"): Promise<Fixture> 
    *) exit 1 ;;
  esac
  `);
+  // The fixture's sudo does not elevate. Model only the root ownership of
+  // daemon.json that the real privileged installer creates.
+  await executable(resolve(tools, "stat"), `
+if [[ "$*" == "-c %u:%a $DIM_TEST_DAEMON_CONFIG" ]]; then
+  mode="$(/usr/bin/stat -c %a "$DIM_TEST_DAEMON_CONFIG")"
+  printf '0:%s\\n' "$mode"
+else
+  exec /usr/bin/stat "$@"
+fi
+`);
   await executable(resolve(tools, "sudo"), 'exec "$@"\n');
   await executable(resolve(tools, "git"), `
  case "$*" in

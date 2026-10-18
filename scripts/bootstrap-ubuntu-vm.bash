@@ -131,17 +131,12 @@ if [[ "$resume" -eq 0 ]]; then
   if [[ "$role" == control-qemu ]]; then
     bash "$kvm_installer" "$operator"
   fi
-  config_path="$dim_config_root/config.json"
-  [[ ! -L "$config_path" && -f "$config_path" && "$(stat -c '%u:%a' "$config_path")" == "$operator_uid:600" ]] || {
-    echo "host installer did not create the expected owner-only DIM backend config" >&2
-    exit 2
-  }
   [[ ! -e "$docker_systemd_overrides" && ! -L "$docker_systemd_overrides" ]] || {
     echo "host installer introduced unsupported Docker systemd overrides" >&2
     exit 2
   }
   provisioned_docker_config_sha256="$(dim_docker_config_identity)" || { echo "host installer produced unsafe Docker daemon configuration" >&2; exit 2; }
-  dim_write_marker awaiting-login "$(sha256sum "$config_path" | cut -d ' ' -f 1)" "$provisioned_docker_config_sha256"
+  dim_write_marker awaiting-login "$provisioned_docker_config_sha256"
 fi
 
 required_groups=(docker)
@@ -171,7 +166,7 @@ just install-local
 bash "$facade_installer" "$repo_root/.local/dim-packages" "$bundle_version" "$source_sha"
 expected_version_output="DIM CLI $bundle_version (via DIM installer $bundle_version)"
 [[ "$("$HOME/.local/bin/dim" --version)" == "$expected_version_output" ]] || { echo "installed DIM facade is not bound to bundle $bundle_version" >&2; exit 1; }
-dim_write_marker complete "$(sha256sum "$config_path" | cut -d ' ' -f 1)" "$(dim_docker_config_identity)"
+dim_write_marker complete "$(dim_docker_config_identity)"
 cat <<EOF
 Bootstrap complete for role $role.
 Candidate facade: $HOME/.local/bin/dim

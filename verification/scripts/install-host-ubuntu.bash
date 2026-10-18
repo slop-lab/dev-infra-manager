@@ -132,26 +132,11 @@ Then run:
 EOF
 }
 
-configure_dim_backend() {
-  local target_home
-  if [[ -n "$install_user" ]]; then
-    target_home="$(getent passwd "$install_user" | cut -d: -f6)"
-    if [[ -z "$target_home" ]]; then
-      echo "Unable to resolve home directory for '$install_user'" >&2
-      exit 1
-    fi
-    sudo -u "$install_user" env HOME="$target_home" \
-      bash "$script_dir/configure-user-backend.bash" "$backend"
-  else
-    bash "$script_dir/configure-user-backend.bash" "$backend"
-  fi
-}
 
 confirm_install
 install_common_packages
 sudo bash "$script_dir/install-rootlesskit-apparmor-profile-ubuntu.bash"
 install_selected_backend
-configure_dim_backend
 configure_install_user
 if [[ -z "$install_user" ]]; then
   echo "Host install complete. Run: just run-cli doctor"
