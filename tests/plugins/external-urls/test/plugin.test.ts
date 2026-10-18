@@ -206,8 +206,7 @@ describe("external URLs plugin", () => {
       runStreaming: vi.fn(async () => 0)
     };
     await initializeControllerRoutes({
-      stateRoot,
-      defaultWorkspaceBackend: "sysbox"
+      stateRoot
     } as LifecycleOptions, registered, streamingRunner);
 
     expect(ensure).toHaveBeenCalledOnce();

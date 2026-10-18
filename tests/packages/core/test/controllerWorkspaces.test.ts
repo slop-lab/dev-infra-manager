@@ -1,3 +1,4 @@
+import type { CommandResult } from "@slop-lab/dim-core";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { once } from "node:events";
@@ -5,7 +6,7 @@ import { createServer, createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ProcessRunner, WorkspaceStore, workspaceRuntimeResources, type CommandResult, type StreamingCommandRunner, type WorkspaceRecord } from "@slop-lab/dim-core/workspace";
+import { ProcessRunner, WorkspaceStore, workspaceRuntimeResources, type StreamingCommandRunner, type WorkspaceRecord } from "@slop-lab/dim-core/workspace";
 import { ControllerWorkspaces } from "../../../../core/packages/managed/src/controllerWorkspace.js";
 import { WorkspaceGrantStore } from "../../../../core/packages/managed/src/workspaceGrantStore.js";
 import { writeNativeWorkspaceAttachment } from "../../../../core/packages/managed/src/nativeWorkspaceAttachment.js";
