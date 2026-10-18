@@ -180,7 +180,7 @@ test("invalid and destructive arguments fail before contacting a remote host", a
   });
 });
 
-test("malformed hidden host requests and unavailable workspaces report actionable errors", async () => {
+test("host errors preserve user versus unexpected failure status and report once", async () => {
   await withFixture(async (fixture) => {
     const malformed = await run(["__host", "invalid!"], fixture);
     assert.equal(malformed.status, 2);
@@ -189,6 +189,14 @@ test("malformed hidden host requests and unavailable workspaces report actionabl
     assert.equal(unknown.status, 2);
     assert.match(unknown.stderr, /workspace 'missing' not found/);
     assert.equal(unknown.stderr.split("not found").length, 2);
+    const blockedState = path.join(fixture.root, "not-a-directory");
+    await writeFile(blockedState, "keep");
+    fixture.env.DIM_STATE_ROOT = blockedState;
+    const unavailable = await run(["ls", "--json"], fixture);
+    assert.equal(unavailable.status, 1);
+    assert.equal(unavailable.stdout, "");
+    assert.equal(unavailable.stderr.split("ENOTDIR").length, 2);
+    assert.equal(await readFile(blockedState, "utf8"), "keep");
   });
 });
 

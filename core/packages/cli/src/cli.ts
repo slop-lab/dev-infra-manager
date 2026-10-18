@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { Command, CommanderError } from "commander";
+import { UserError } from "@slop-lab/dim-core/workspace";
+import { HostContextError } from "./host-context.js";
 import { packageVersion } from "./package-version.js";
 import { HostTransportError } from "./host-transport.js";
 import { registerDevelopmentCommands } from "./development-commands.js";
@@ -10,7 +12,7 @@ async function main(): Promise<void> {
   try {
     const args = process.argv.slice(process.argv[2] === "--" ? 3 : 2);
     if (args[0] === "__host") {
-      if (args.length !== 2) throw new Error("host mode requires exactly one encoded request");
+      if (args.length !== 2) throw new UserError("host mode requires exactly one encoded request");
       const { runHostRequest } = await import("./host-application.js");
       await runHostRequest(args[1]!);
       return;
@@ -22,7 +24,7 @@ async function main(): Promise<void> {
         import.meta.resolve("@slop-lab/dim-managed/cli");
       } catch (error) {
         if (error instanceof Error && "code" in error && error.code === "ERR_MODULE_NOT_FOUND") {
-          throw new Error("Managed administration is not installed. Run 'dim installer install core --with-managed' to add it.");
+          throw new UserError("Managed administration is not installed. Run 'dim installer install core --with-managed' to add it.");
         }
         throw error;
       }
@@ -60,6 +62,6 @@ ${process.env.DIM_INVOKED_VIA_INSTALLER === "1" ? "\nInstaller: dim installer in
       process.exitCode = error.exitCode; return;
     }
     console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 2;
+    process.exitCode = error instanceof UserError || error instanceof HostContextError ? 2 : 1;
   }
 }
