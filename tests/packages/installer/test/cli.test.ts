@@ -612,8 +612,8 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const packages = [
       { name: "@slop-lab/dim-core", version: "0.9.0", file: "core.tgz", requires: {} },
       { name: "@slop-lab/dim-cli", version: "0.9.0", file: "cli.tgz", requires: { "@slop-lab/dim-core": "0.9.0" } },
-      { name: "@slop-lab/dim-managed", version: "0.9.0", file: "managed.tgz", requires: { "@slop-lab/dim-core": "0.9.0", "@slop-lab/dim-controller-proxy": "0.9.0" } },
-      { name: "@slop-lab/dim-controller-proxy", version: "0.9.0", file: "proxy.tgz", requires: { "@slop-lab/dim-contracts-external-url": "0.9.0" } },
+      { name: "@slop-lab/dim-managed", version: "0.9.0", file: "managed.tgz", requires: { "@slop-lab/dim-core": "0.9.0", "@slop-lab/dim-native-git": "0.9.0" } },
+      { name: "@slop-lab/dim-native-git", version: "0.9.0", file: "native-git.tgz", requires: { "@slop-lab/dim-contracts-external-url": "0.9.0" } },
       { name: "@slop-lab/dim-contracts-external-url", version: "0.9.0", file: "contract.tgz", requires: {} },
       { name: "@slop-lab/dim-plugin-host-mirrors", version: "0.9.0", file: "mirrors.tgz", requires: { "@slop-lab/dim-managed": "0.9.0" } },
       { name: "@slop-lab/dim-installer", version: "0.9.0", file: "installer.tgz", requires: {} }
@@ -633,7 +633,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(config.cli.executable).toBe(join(dataHome, "runtime/current/node_modules/.bin/dim"));
     const args = JSON.parse(await readFile(npmArgs, "utf8"));
     expect(args).toEqual(expect.arrayContaining([join(bundle, "core.tgz"), join(bundle, "cli.tgz")]));
-    for (const file of ["managed.tgz", "proxy.tgz", "contract.tgz", "mirrors.tgz", "installer.tgz"]) expect(args).not.toContain(join(bundle, file));
+    for (const file of ["managed.tgz", "native-git.tgz", "contract.tgz", "mirrors.tgz", "installer.tgz"]) expect(args).not.toContain(join(bundle, file));
   });
 
   it("selects managed and its matched local dependencies only with the managed profile", async () => {
@@ -641,7 +641,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const result = await runCli(["installer", "install", "core", "--local-packages", bundle, "--no-local-bin", "--with-managed"], tsxPath!, env, root);
     expect(result.code, result.stderr).toBe(0);
     const args = JSON.parse(await readFile(npmArgs, "utf8"));
-    for (const file of ["core.tgz", "cli.tgz", "managed.tgz", "proxy.tgz", "contract.tgz"]) expect(args).toContain(join(bundle, file));
+    for (const file of ["core.tgz", "cli.tgz", "managed.tgz", "native-git.tgz", "contract.tgz"]) expect(args).toContain(join(bundle, file));
     expect(args).not.toContain(join(bundle, "mirrors.tgz"));
     expect(JSON.parse(await readFile(join(dataHome, "runtime/current/plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: [] });
   });

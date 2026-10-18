@@ -95,7 +95,8 @@ GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$sou
   core \
   plugin-dns-cloudflare \
   plugin-external-urls \
-  plugin-host-mirrors
+  plugin-host-mirrors \
+  plugin-ci-workflows
 tar -xf "$source_archive" -C "$source_root"
 
 cat >"$source_root/package.json" <<'EOF'
@@ -107,13 +108,13 @@ packages:
   - core/packages/managed
   - core/packages/cli
   - core/packages/installer
-  - core/packages/controller-proxy
   - core/packages/native-git
   - core/packages/web
   - core/packages/contracts/*
   - plugin-dns-cloudflare
   - plugin-external-urls
   - plugin-host-mirrors
+  - plugin-ci-workflows
 linkWorkspacePackages: true
 EOF
 
@@ -137,10 +138,7 @@ echo "[source] install production build dependencies"
 pnpm --dir "$source_root" install --frozen-lockfile
 
 echo "[source] build production packages"
-pnpm --dir "$source_root/core" run build
-pnpm --dir "$source_root/plugin-dns-cloudflare" run build
-pnpm --dir "$source_root/plugin-external-urls" run build
-pnpm --dir "$source_root/plugin-host-mirrors" run build
+pnpm --dir "$source_root" --recursive --workspace-concurrency=1 run build
 
 echo "[source] create install bundle"
 node "$repo_root/scripts/pack-local-packages.mjs" "$source_root" "$output_stage"

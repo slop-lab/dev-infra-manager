@@ -38,7 +38,3 @@ core/packages/native-git/dist/*
 plugin-ci-workflows/*
 !plugin-ci-workflows/dist/
 !plugin-ci-workflows/dist/**
-!core/packages/controller-proxy/
-core/packages/controller-proxy/*
-!core/packages/controller-proxy/dist/
-!core/packages/controller-proxy/dist/**

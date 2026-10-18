@@ -48,7 +48,7 @@ plugin-install:
 headscale-tailnet-tcp:
     cd .. && bash verification/scripts/headscale-tailnet-tcp-smoke.bash
 
-# Verify pinned workspace-user setup plus generic development-service exposure.
+# Verify pinned user tools and authenticated loopback development services.
 workspace-user-setup:
     cd .. && bash verification/scripts/workspace-user-setup-smoke.bash
     cd .. && bash verification/scripts/codex-user-setup-smoke.bash
@@ -60,7 +60,6 @@ workspace-user-setup:
 package-packs:
     cd .. && pnpm --filter @slop-lab/dim-core run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
-    cd .. && pnpm --filter @slop-lab/dim-controller-proxy run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-native-git run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-web run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
@@ -130,3 +129,7 @@ isolation:
 # Run generated workspace isolation checks with Vitest's JSON reporter.
 isolation-json:
     cd .. && pnpm --dir tests exec vitest run packages/core/test/workspaceService.test.ts --reporter=json
+
+# Install exact source artifacts into temporary prefixes and verify optional profiles.
+local-bundle-profiles bundle:
+    cd .. && node verification/scripts/local-bundle-profiles-smoke.mjs "{{bundle}}"

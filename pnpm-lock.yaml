@@ -39,21 +39,6 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
-  core/packages/controller-proxy:
-    dependencies:
-      "@slop-lab/dim-contracts-external-url":
-        specifier: 0.10.0
-        version: link:../contracts/external-url
-    devDependencies:
-      "@types/node":
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
   core/packages/core:
     devDependencies:
       "@types/node":
@@ -204,9 +189,6 @@ importers:
       "@slop-lab/dim-plugin-ci-workflows":
         specifier: workspace:0.10.0
         version: link:../../../plugin-ci-workflows
-      "@slop-lab/dim-controller-proxy":
-        specifier: workspace:0.10.0
-        version: link:../controller-proxy
       "@slop-lab/dim-core":
         specifier: workspace:0.10.0
         version: link:../core

@@ -36,7 +36,6 @@ check-source-native:
     bash verification/scripts/source-gate-preflight-test.bash
     just typecheck
     pnpm --filter @slop-lab/dim-contracts-external-url run build
-    pnpm --filter @slop-lab/dim-controller-proxy run build
     pnpm --filter @slop-lab/dim-core run build
     pnpm --filter @slop-lab/dim-managed run build
     pnpm --filter @slop-lab/dim-native-git run build

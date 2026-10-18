@@ -96,8 +96,9 @@ dim_publish_example_packages() {
 
   dim_publish_to_local_registry \
     "$work_dir"/*dim-contracts-external-url*.tgz \
-    "$work_dir"/*dim-controller-proxy*.tgz \
     "$work_dir"/*dim-managed*.tgz \
+    "$work_dir"/*dim-native-git*.tgz \
+    "$work_dir"/*plugin-ci-workflows*.tgz \
     "$work_dir"/*dim-core*.tgz \
     "$work_dir"/*plugin-dns-cloudflare*.tgz \
     "$work_dir"/*plugin-external-urls*.tgz \

@@ -3,9 +3,7 @@ set -euo pipefail
 
 readonly EXPECTED_OPENCODE_VERSION="1.18.31"
 readonly DEFAULT_PORT="4096"
-readonly DEFAULT_INGRESS="https-ts"
 readonly SERVER_USERNAME="opencode"
-readonly EXPOSE_TIMEOUT_SECONDS="25"
 
 fail() {
   printf 'opencode-web: %s\n' "$*" >&2
@@ -16,7 +14,7 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command not found on PATH: $1"
 }
 
-for command_name in curl dim-development-service flock jq node nohup opencode timeout; do
+for command_name in curl flock jq node nohup opencode; do
   require_command "$command_name"
 done
 
@@ -58,14 +56,6 @@ cors_arguments=()
 for cors_origin in "${cors_origins[@]}"; do
   cors_arguments+=(--cors "$cors_origin")
 done
-ingress="${OPENCODE_WEB_INGRESS:-$DEFAULT_INGRESS}"
-[[ -n "$ingress" && "$ingress" != *$'\n'* && "$ingress" != *$'\r'* ]] || \
-  fail 'OPENCODE_WEB_INGRESS must be non-empty and single-line'
-opencode_web_url_socket="${OPENCODE_WEB_URL_SOCKET:-}"
-[[ -n "$opencode_web_url_socket" ]] || fail 'OPENCODE_WEB_URL_SOCKET is required'
-[[ -S "$opencode_web_url_socket" ]] || \
-  fail "OpenCode Web URL socket not found: $opencode_web_url_socket"
-
 installed_version="$(opencode --version)"
 [[ "$installed_version" = "$EXPECTED_OPENCODE_VERSION" ]] || \
   fail "expected opencode $EXPECTED_OPENCODE_VERSION; run workspace-user-setup.bash first (found $installed_version)"
@@ -292,13 +282,8 @@ if [[ -z "${server_pid:-}" ]]; then
   chmod 0600 "$pid_file"
 fi
 
-external_url="$(DIM_DEVELOPMENT_URL_SOCKET="$opencode_web_url_socket" \
-  timeout --kill-after=2s "${EXPOSE_TIMEOUT_SECONDS}s" \
-  dim-development-service expose --name opencode-web --port "$port" \
-    --ingress "$ingress" --require-scheme https)" || fail 'could not expose OpenCode Web'
-[[ "$external_url" =~ ^https://[^[:space:]]+$ ]] || fail 'external URL response did not contain a valid HTTPS URL'
-
 launch_complete=true
-printf 'url: %s\nusername: %s\ncredentials: %s\n' "$external_url" "$SERVER_USERNAME" "$credentials_file"
+printf 'url: %s\nusername: %s\ncredentials: %s\n' "http://127.0.0.1:$port" "$SERVER_USERNAME" "$credentials_file"
 printf 'opencode-web: process %s; credentials %s; log %s\n' \
   "$server_pid" "$credentials_file" "$log_file" >&2
+printf 'Forward from the client with: dim forward WORKSPACE %s:%s\n' "$port" "$port" >&2

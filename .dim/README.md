@@ -17,6 +17,12 @@ them. Tool installation is an explicit separate task using the existing
 user-home installer. `shell` and `web` run inside this same untrusted workspace;
 use `dim forward` for a selected service port.
 
+To use OpenCode Web, run `tool-setup` without a tool argument, then `web`.
+It starts an authenticated server on workspace loopback port 4096 and prints
+the private credential file location. From the client, run
+`dim forward dev 4096:4096` and open `http://127.0.0.1:4096`. Read the credential
+file inside the workspace when signing in. No plugin or controller is needed.
+
 `ci/runner.yml` and its scripts define candidate-controlled CI jobs. `repos.yml`
 is the optional native Project root policy. Neither file grants host authority
 or causes automatic development setup.

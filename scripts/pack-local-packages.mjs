@@ -10,7 +10,6 @@ const packageDirectories = [
   "core/packages/native-git/dist",
   "plugin-ci-workflows/dist",
   "core/packages/contracts/external-url/dist",
-  "core/packages/controller-proxy/dist",
   "plugin-dns-cloudflare/dist",
   "plugin-external-urls/dist",
   "plugin-host-mirrors/dist",

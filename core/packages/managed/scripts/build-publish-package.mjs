@@ -19,7 +19,6 @@ output.version = publishPackageVersion(source.version);
 output.dependencies = {
   ...output.dependencies,
   "@slop-lab/dim-core": output.version,
-  "@slop-lab/dim-controller-proxy": output.version,
   "@slop-lab/dim-native-git": output.version,
   "@slop-lab/dim-plugin-ci-workflows": output.version
 };

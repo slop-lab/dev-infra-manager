@@ -129,8 +129,6 @@ fi
 if $require_artifacts; then
   artifacts=(
     "core/packages/contracts/external-url/dist/index.js"
-    "core/packages/controller-proxy/dist/index.js"
-    "core/packages/controller-proxy/dist/development-service-cli.js"
     "core/packages/core/dist/index.js"
     "core/packages/managed/dist/index.js"
     "core/packages/managed/dist/nativeOrdinaryServiceCli.js"

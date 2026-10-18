@@ -39,10 +39,11 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
+pnpm --dir core/packages/native-git/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir plugin-ci-workflows/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/managed/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/core/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir core/packages/controller-proxy/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir plugin-dns-cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir plugin-host-mirrors/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/cli/dist pack --pack-destination "$source_dir" --json >/dev/null
@@ -51,11 +52,10 @@ core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-core*.tgz' -p
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-installer*.tgz' -print -quit)"
 contracts_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"
-controller_proxy_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-controller-proxy*.tgz' -print -quit)"
 cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*plugin-dns-cloudflare*.tgz' -print -quit)"
 host_mirrors_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*plugin-host-mirrors*.tgz' -print -quit)"
 test -n "$core_tarball" && test -n "$cli_tarball" && test -n "$install_tarball"
-test -n "$contracts_tarball" && test -n "$controller_proxy_tarball"
+test -n "$contracts_tarball"
 test -n "$cloudflare_tarball" && test -n "$host_mirrors_tarball"
 
 cp "$repo_root/verification/scripts/lib/local-npm-registry.bash" "$source_dir/local-npm-registry.bash"
@@ -82,9 +82,10 @@ dim_start_local_npm_registry /work
 echo "[container] publish local tarballs to the local registry"
 dim_publish_to_local_registry \
   /work/*dim-managed*.tgz \
+  /work/*dim-native-git*.tgz \
+  /work/*plugin-ci-workflows*.tgz \
   /work/*dim-core*.tgz \
   /work/*dim-contracts-external-url*.tgz \
-  /work/*dim-controller-proxy*.tgz \
   /work/*plugin-dns-cloudflare*.tgz \
   /work/*plugin-host-mirrors*.tgz \
   /work/*dim-cli*.tgz \

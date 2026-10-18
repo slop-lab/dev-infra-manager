@@ -32,7 +32,6 @@ for expected in \
   "Node.js v25.1.0 is unsupported; expected major 24 or 26" \
   "pnpm 11.0.0 is unsupported; expected exactly 10.13.1" \
   "untrusted temporary directory ancestor $fixture/missing-temp: expected a real directory" \
-  "missing test artifact: core/packages/controller-proxy/dist/development-service-cli.js" \
   "missing test artifact: core/packages/managed/dist/nativeOrdinaryServiceCli.js" \
   "missing test artifact: core/packages/managed/dist/nativeGitServiceCli.js" \
   "missing test artifact: core/packages/cli/dist/cli.js"
@@ -47,7 +46,6 @@ write_tool node "v24.19.0"
 write_tool pnpm "10.13.1"
 mkdir -p \
   "$fixture/root/core/packages/contracts/external-url/dist" \
-  "$fixture/root/core/packages/controller-proxy/dist" \
   "$fixture/root/core/packages/core/dist" \
   "$fixture/root/core/packages/managed/dist" \
   "$fixture/root/core/packages/native-git/dist" \
@@ -55,8 +53,6 @@ mkdir -p \
   "$fixture/temp"
 touch \
   "$fixture/root/core/packages/contracts/external-url/dist/index.js" \
-  "$fixture/root/core/packages/controller-proxy/dist/index.js" \
-  "$fixture/root/core/packages/controller-proxy/dist/development-service-cli.js" \
   "$fixture/root/core/packages/core/dist/index.js" \
   "$fixture/root/core/packages/managed/dist/index.js" \
   "$fixture/root/core/packages/managed/dist/nativeOrdinaryServiceCli.js" \
@@ -103,7 +99,6 @@ required_steps=(
   "bash verification/scripts/source-gate-preflight-test.bash"
   "just typecheck"
   "pnpm --filter @slop-lab/dim-contracts-external-url run build"
-  "pnpm --filter @slop-lab/dim-controller-proxy run build"
   "pnpm --filter @slop-lab/dim-core run build"
   "pnpm --filter @slop-lab/dim-native-git run build"
   "pnpm --filter @slop-lab/dim-cli run build"

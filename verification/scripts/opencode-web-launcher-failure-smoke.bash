@@ -5,7 +5,6 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
 launcher="$repo_root/scripts/opencode-web.bash"
 work_dir="$(mktemp -d /tmp/dim-opencode-web-failures.XXXXXX)"
-socket_pid=""
 orphan_pid=""
 
 cleanup() {
@@ -16,8 +15,6 @@ cleanup() {
   done
   [[ -z "$orphan_pid" ]] || kill "$orphan_pid" 2>/dev/null || true
   [[ -z "$orphan_pid" ]] || wait "$orphan_pid" 2>/dev/null || true
-  [[ -z "$socket_pid" ]] || kill "$socket_pid" 2>/dev/null || true
-  [[ -z "$socket_pid" ]] || wait "$socket_pid" 2>/dev/null || true
   rm -rf -- "$work_dir"
 }
 trap cleanup EXIT
@@ -45,17 +42,7 @@ done
 [[ "${MOCK_OPENCODE_FAIL:-0}" != 1 ]] || exit 73
 exec node "$MOCK_OPENCODE_SERVER" "$hostname" "$port"
 EOF
-cat >"$work_dir/tools/dim-development-service" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-[[ -z "${MOCK_HELPER_PID_FILE:-}" ]] || printf '%s\n' "$$" >"$MOCK_HELPER_PID_FILE"
-case "${MOCK_EXPOSE_MODE:-valid}" in
-  valid) printf '%s\n' 'https://opencode.example.test' ;;
-  stall) sleep 60 ;;
-  *) exit 64 ;;
-esac
-EOF
-chmod 0700 "$work_dir/tools/opencode" "$work_dir/tools/dim-development-service"
+chmod 0700 "$work_dir/tools/opencode"
 
 cat >"$work_dir/opencode-server.mjs" <<'EOF'
 import http from "node:http";
@@ -72,33 +59,13 @@ http.createServer((request, response) => {
   response.end('{"healthy":true}');
 }).listen(Number.parseInt(portText, 10), hostname);
 EOF
-cat >"$work_dir/socket.mjs" <<'EOF'
-import fs from "node:fs";
-import http from "node:http";
-const socket = process.argv[2];
-try { fs.unlinkSync(socket); } catch (error) { if (error.code !== "ENOENT") throw error; }
-http.createServer((_request, response) => response.writeHead(404).end()).listen(socket);
-EOF
-
 available_port() {
   node -e 'const server=require("node:net").createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close()})'
 }
 
-socket="$work_dir/development.sock"
-node "$work_dir/socket.mjs" "$socket" &
-socket_pid=$!
-for attempt in $(seq 1 100); do
-  [[ -S "$socket" ]] && break
-  [[ "$attempt" -lt 100 ]] || { printf 'development socket did not become ready\n' >&2; exit 1; }
-  sleep 0.02
-done
-
 common_env=(
   PATH="$work_dir/tools:$PATH"
   MOCK_OPENCODE_SERVER="$work_dir/opencode-server.mjs"
-  MOCK_HELPER_PID_FILE="$work_dir/helper.pid"
-  DIM_DEVELOPMENT_URL_SOCKET="$work_dir/generic-development.sock"
-  OPENCODE_WEB_URL_SOCKET="$socket"
   OPENCODE_WEB_CORS_ORIGINS='[]'
 )
 
@@ -157,21 +124,5 @@ fi
 grep -Fq 'before the readiness deadline' "$work_dir/readiness.stderr"
 [[ ! -e "$readiness_home/.local/state/opencode-web/server.pid" ]]
 ! curl --silent --max-time 1 "http://127.0.0.1:$readiness_port/global/health" >/dev/null
-
-helper_home="$work_dir/helper-home"
-mkdir -p "$helper_home"
-helper_port="$(available_port)"
-helper_started="$(date +%s)"
-if timeout 35 env "${common_env[@]}" HOME="$helper_home" OPENCODE_WEB_PORT="$helper_port" \
-  MOCK_EXPOSE_MODE=stall bash "$launcher" >/dev/null 2>"$work_dir/helper.stderr"; then
-  printf 'launcher accepted a stalled development-service helper\n' >&2
-  exit 1
-fi
-[[ "$(( $(date +%s) - helper_started ))" -lt 35 ]]
-grep -Fq 'could not expose OpenCode Web' "$work_dir/helper.stderr"
-[[ ! -e "$helper_home/.local/state/opencode-web/server.pid" ]]
-! curl --silent --max-time 1 "http://127.0.0.1:$helper_port/global/health" >/dev/null
-helper_pid="$(cat "$work_dir/helper.pid")"
-! kill -0 "$helper_pid" 2>/dev/null
 
 printf '%s\n' opencode-web-launcher-failure-smoke-ok
