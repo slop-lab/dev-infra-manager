@@ -1,30 +1,36 @@
-# Native root and workspace lifecycle
+# Workspace lifecycle
 
-**Kind: Contract**
+A base workspace has a host-generated immutable UUID, a user-facing name,
+committed source identity, image, resource budget, Git author, timestamps,
+initialization result and lifecycle phase. The current record schema is 10.
+The exact parser validates the complete record before resource access. Managed
+Project/workspace records belong to a separate state namespace and parser.
 
-**PROJECT-NATIVE-ROOT-001:** A Project is one stable native ID, one root
-repository ID, one protected branch ref, one exact imported commit/tree, and
-one versioned review policy. Bootstrap stages immutable reviewed input. Create
-publishes pending state, obtains fresh proof, validates the protected snapshot
-and proposal-only transport, then atomically publishes schema-6 ready state.
+Creation serializes mutation, acquires a committed source snapshot, records
+creation intent, creates owned runtime resources, starts the agent and private
+Docker, and seeds the checkout once. A successful record is initialized and
+running. A failed creation retains an error record for diagnosis and explicit
+discard; start/restart/recreate do not turn an uninitialized checkout into a
+ready workspace.
 
-Ready does not imply deployed CI, a CI result, human approval, or promotion.
-List/show are bounded local queries. Exact replay converges without timestamp
-or identity churn.
+Start, stop and restart preserve checkout, home and nested Docker data.
+Recreate replaces the container while keeping the same workspace identity and
+volumes. It does not reset source or overwrite local work. Resources are
+validated before mutation, verified against the runtime and recorded after
+success. Removing a limit can require keep-data recreation, which is reported
+to the caller.
 
-**WORKSPACE-NATIVE-001:** A workspace requires a ready Project and stores strict
-schema-9 `source.kind: "native"` state. It receives an immutable protected-root
-snapshot and a scoped broker grant. The broker mints short-lived credentials
-only for exact Git smart-HTTP operations and never returns them to the client.
+List and show observe the runtime without rewriting persisted lifecycle state.
+They distinguish running, stopped, missing and unavailable observations.
+Command execution requires an initialized running workspace. Transport
+cancellation terminates the host command process group; it is not a promise to
+terminate arbitrary detached processes inside the workspace.
 
-The workspace writer may create or fast-forward its own proposal refs. Direct
-protected updates, protected deletion, force, tags, another workspace's
-namespace, or another Project fail without ref mutation. Setup may replay the
-recorded immutable snapshot without fresh proof. Start, restart, and update
-obtain fresh proof while preserving mutable checkout data.
+Discard records intent and deletes only exact owned runtime resources. The
+record is removed after cleanup succeeds. Interrupted or failed cleanup remains
+retryable. Missing data on an initialized record is an error; DIM never replaces
+it with a fresh empty volume during start or recreation.
 
-**STATE-NATIVE-CUTOVER-001:** Historical provider-backed Project/workspace
-records and runner records are rejection-only fixtures. Native lifecycle does
-not read them as current state, migrate them, adopt their resources, or delete
-them. Operators export data with the pinned prior release and create fresh
-native identities.
+There is no implicit migration from previous workspace formats. User-data
+preservation requires an explicit export/import design, not adoption of old
+runtime authority or reuse of a name.

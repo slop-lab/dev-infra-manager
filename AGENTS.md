@@ -2,31 +2,37 @@
 
 ## Project overview
 
-`dev-infra-manager` (DIM) provides Linux host infrastructure for persistent,
-isolated, review-gated AI development workspaces. It manages Project-scoped
-Git repositories, protected refs, workspace lifecycle, nested container
-backends, constrained controller capabilities, and optional isolated CI
-runners.
+`dev-infra-manager` (DIM) provides persistent development workspaces on local
+or SSH-selected Linux hosts. The base product creates an isolated workspace
+from an ordinary Git repository and owns its lifecycle, data and runtime
+resources. Managed Git, review, CI and the host controller are optional
+integrations owned by `core/packages/managed` and related packages.
 
-The coding agent and containers it starts are untrusted. DIM owns the boundary
-around them; it does not own agent reasoning, project-specific development
-environments, product code, or general orchestration policy.
+The coding agent and containers it starts are untrusted. DIM owns their host
+boundary; it does not own agent reasoning, project-specific tools or product
+code. The CLI owns presentation and transport. Workspace application logic and
+runtime adapters execute on the selected host without a required daemon.
 
 ## Goals
 
-- Let agents work persistently, run nested containers, and push proposed
-  changes without exposing host control sockets or raw runtime secrets.
-- Keep protected refs and secret-bearing environments behind human review.
-- Let each Project define its repositories, development containers, tasks, and
-  agent process through reviewed repository code.
-- Keep workspace runtime, resource, Git, plugin, and CI execution boundaries
-  explicit and independently configurable where practical.
-- Provide reproducible host, container, and disposable-QEMU verification for
-  supported environments.
+- Make ordinary local and remote development comfortable without requiring a
+  managed Project, control plane or repository-specific lifecycle definition.
+- Preserve checkout, home and nested-container data across sessions and
+  container recreation; discard only exact owned resources explicitly.
+- Keep host control sockets, host files and operator credentials outside the
+  agent container. Use practical runtime containment without claiming a strong
+  hostile-tenant security boundary.
+- Keep transport, runtime, source acquisition, state and optional services
+  independent. Repository workflow interpretation belongs to its integration.
+- Where managed Git or secret-bearing services are selected, keep protected
+  refs, promotion authority and raw service credentials behind their explicit
+  trusted boundaries.
+- Verify important behavior with meaningful tests and disposable runtime
+  checks, rather than preserving obsolete contracts through fixture volume.
 
-Changes to secret access, trusted/untrusted boundaries, protected refs,
-runtime-backend assumptions, resource enforcement, or deployment authority
-require especially careful review against `specs/`.
+Changes to host access, data ownership, optional secret access, protected refs,
+resource enforcement or deployment authority require careful review against
+`specification/specs/` and the owning managed package's design documents.
 
 ## Pull requests
 

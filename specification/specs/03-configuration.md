@@ -1,3 +1,7 @@
+> Scope: optional managed integration. Base workspace behavior is defined in
+> [the specification index](README.md); this document does not require managed
+> services for ordinary development.
+
 # Configuration
 
 **Kind: Contract**

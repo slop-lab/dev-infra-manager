@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { PassThrough, Readable } from "node:stream";
-import { readdir, readFile, readlink } from "node:fs/promises";
+import { readdir, readlink } from "node:fs/promises";
 import type { CommandResult, RunOptions, StreamingCommandRunner, TerminalControl, TerminalSize } from "./types.js";
 
 const TERMINATE_GRACE_MILLISECONDS = 1_000;

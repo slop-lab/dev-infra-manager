@@ -1,114 +1,30 @@
-# System Goals
+# System goals
 
-## Purpose
+DIM provides persistent development workspaces on Linux hosts. A developer can
+use the local host or select a remote host over SSH, create a workspace from an
+ordinary Git URL or host-local repository, run commands and nested containers,
+and resume the same checkout and home directory across sessions.
 
-`dev-infra-manager` provides persistent, comfortable development workspaces
-for coding agents on Linux. A workspace keeps its checkout and installed tools
-across sessions, supports services and nested container workloads, and lets an
-agent resume work without rebuilding the development environment for every
-session.
+The base product does not require Project registration, a managed Git service,
+a host controller daemon, a workflow definition, or a reviewed `.dim` directory.
+Host transport and workspace runtime are separate responsibilities. SSH chooses
+where DIM operates; the container runtime chooses where development code runs.
 
-Developer convenience and review-gated isolation are co-equal goals. DIM must
-support fast iteration and reproducible development while keeping host control
-sockets, raw Project secrets, protected refs, and trusted operations outside
-the agent's authority.
+The host owns workspace identities, lifecycle records and runtime resources.
+The client presents commands and transports requests. Repository code owns its
+build, tool setup and development processes. Optional packages may provide
+managed Git, review, CI, external URLs and shared services without making those
+features prerequisites for ordinary development.
 
-The system must let an untrusted agent:
+Isolation is practical containment for development, not a guarantee against a
+kernel exploit or a compromised administrator. Agent code receives neither the
+host Docker socket nor automatic access to operator credentials. Ordinary Git
+credentials used by the host to acquire source are not copied into the agent.
 
-- Execute commands in a persistent workspace that is removed only when
-  explicitly discarded.
-- Read and write files in that workspace.
-- Retain Project-approved development tools and configuration across workspace
-  stop and start cycles.
-- Run nested container workloads through an approved runtime backend.
-- Repeat Project-defined development tasks from reviewed repository code.
-- Request reproducible verification in a separate checkout outside mutable
-  workspace state.
-- Push proposed changes to a managed Git host.
-- Request reviewed changes to be promoted through a managed pull request flow.
-- Keep code that can affect secret-bearing environments in separate,
-  Project-selected repositories with stricter review policy when appropriate.
+Workspaces persist until explicitly discarded. Lifecycle failures preserve
+recoverable data and report incomplete state. A runtime resource with uncertain
+ownership must not be adopted or removed merely because its name matches.
 
-The system must prevent that agent from:
-
-- Receiving raw secret material.
-- Reading or writing secret-bearing runtime files directly.
-- Updating approved Git refs through direct push.
-- Controlling secret-bearing containers directly.
-- Using the host Docker socket as its nested container mechanism.
-
-## Global Invariants
-
-- Agent containers inside workspace roots are untrusted.
-- Nested containers created by agents are untrusted.
-- Secret-bearing containers are trusted only when built and deployed from reviewed source.
-- Raw product/runtime secrets and native service role credentials must never
-  be injected into agent containers. Agents use a credential-free workspace
-  Git relay whose host broker grants only that workspace's proposal namespace;
-  neither endpoint permits protected-ref or secret-bearing runtime mutation.
-- Secret-bearing runtime deployment must use the configured approved Git ref.
-- Protected Git refs must reject ordinary direct pushes, force pushes,
-  deletion, and every other unreviewed direct update through managed Git
-  policy. Only the host-side checked promotion operation in
-  `TRUST-PROMOTION-001` and
-  `TRUST-PROMOTION-CAS-001` may atomically update the expected old object ID to
-  the exact reviewed candidate.
-- Immutable native review promotion through that checked compare-and-swap
-  operation is the only normal path that updates protected refs.
-- Runtime backend selection and storage backend selection must be independent.
-- `directory` storage does not enforce `diskBytes` and must be treated as a compatibility backend.
-- `doctor` must check the workspace runtime backend recorded during host installation.
-- Workspaces persist until explicitly discarded.
-
-## Non-Goals
-
-The project does not own:
-
-- Agent reasoning.
-- Agent runtime process implementation.
-- MCP or other tool protocol details.
-- Internet access policy.
-- Human collaboration UI.
-- Automatic provider-specific GitHub synchronization.
-- Model request audit logs.
-- Project-specific product code.
-
-## Future Direction
-
-General development tool setup and configuration that works independently of a
-Project is a future plugin direction. The current product requires each
-reviewed Project to define its development container, tasks, agent process, and
-tool setup. Existing plugin APIs provide named extensions and constrained host
-capabilities, but they do not yet provide this general tool-management layer.
-
-## Compatibility Goals
-
-DIM has no stable release. Backward compatibility across pre-stable `0.x`
-versions is not required. Contract changes should prefer a clear final design
-over aliases, shims, dual formats, or implicit migrations, while updating the
-implementation, tests, examples, specifications, and documentation together.
-
-## Review Scope
-
-DIM distinguishes two human-review dimensions. Infrastructure security review
-asks whether a change can expose secrets, update protected refs, reach host or
-runtime control planes, or elevate a trusted capability. DIM's goal of keeping
-that review surface small applies only to this security-sensitive authority
-closure. It does not reduce product review.
-
-Product and QA review asks whether changed requirements, implementation, test
-definitions, and observed results preserve the behavior maintainers intend.
-Product maintainers remain responsible for that review for every promoted
-candidate, including candidate-controlled CI definitions and scripts. A green
-job is evidence that the selected tests ran successfully in the recorded
-environment; it is not blanket proof of product correctness.
-
-Changes that affect these topics are global changes:
-
-- Secret access.
-- Trusted/untrusted boundary.
-- Protected ref behavior.
-- Runtime backend trust assumptions.
-- Storage quota enforcement.
-- Trusted Project lifecycle deployment authority.
-- Config compatibility.
+Only the installer facade is a preserved public compatibility boundary. Other
+pre-stable contracts may change intentionally, with source, documentation and
+meaningful verification updated together.

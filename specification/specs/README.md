@@ -1,21 +1,22 @@
 # Specification index
 
-DIM's current product contract is root-only and native-only.
+The base product is an ordinary Git workspace on a local or SSH-selected host.
+Managed Git, review and CI are optional integrations. The architecture is being
+reworked according to the [implementation plan](../docs/architecture-rework-plan.md).
 
-| Document | Kind | Scope |
-| --- | --- | --- |
-| [System goals](00-system-goals.md) | Intent | Product outcomes |
-| [Threat model](01-threat-model.md) | Intent | Assets and adversaries |
-| [Trust boundaries](02-boundaries-and-trust.md) | Contract | Authority isolation |
-| [Configuration](03-configuration.md) | Contract | Native selection, runtime, CI, cutover |
-| [Capability matrix](04-trust-lifecycle-capability-matrix.md) | Contract | Lifecycle and authority transitions |
-| [Runtime backends](05-runtime-backends.md) | Profile | Current Sysbox backend |
-| [CLI](10-cli-contract.md) | Contract | Root-only public commands |
-| [Doctor](11-doctor-checks.md) | Verification | Host diagnostics |
-| [Verification](12-verification.md) | Verification | Native gates and evidence classes |
-| [Lifecycle](13-repo-workspace-lifecycle.md) | Contract | Root and workspace state |
-| [Installer](14-installer-facade.md) | Contract | Native service installation |
+| Document | Scope |
+| --- | --- |
+| [System goals](00-system-goals.md) | Base product outcomes |
+| [Threat model](01-threat-model.md) | Practical development isolation |
+| [Boundaries](02-boundaries-and-trust.md) | Client, host and agent ownership |
+| [Runtime](05-runtime-backends.md) | Supported container runtime and future adapters |
+| [CLI](10-cli-contract.md) | Default development commands |
+| [Doctor](11-doctor-checks.md) | Base host inspection |
+| [Lifecycle](13-repo-workspace-lifecycle.md) | Workspace data and runtime transitions |
+| [Installer](14-installer-facade.md) | Preserved installer facade |
 
-Historical decision records and local details explain implementation evolution.
-They do not restore removed provider, repository CRUD, Project purge, or
-Project-scoped runner APIs.
+The configuration, capability matrix and native verification documents numbered
+03, 04 and 12 describe the optional managed integration. They do not impose a
+native Project, CI or controller on base workspaces. Managed-specific lifecycle,
+CLI and trust details live under `core/packages/managed/docs/`. Historical
+decisions and candidate VM profiles are design context, not stable contracts.
