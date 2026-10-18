@@ -28,6 +28,7 @@ output.exports = {
     import: "./index.js"
   }
 };
+output.exports["./workspace"] = { types: "./workspace.d.ts", import: "./workspace.js" };
 output.bin = { "dim-service": "nativeOrdinaryServiceCli.js",
   "dim-native-qemu-service": "nativeQemuServiceCli.js" };
 

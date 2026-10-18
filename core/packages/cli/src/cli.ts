@@ -1,68 +1,58 @@
 #!/usr/bin/env node
 import { Command, CommanderError } from "commander";
-import { UserError } from "@slop-lab/dim-core";
-import { installerFacadeHelpText } from "./cli-runtime.js";
-import { registerCiCommands } from "./ci-commands.js";
-import { registerControllerCommands } from "./controller-commands.js";
-import { registerDoctorAndPluginCommands } from "./doctor-plugin-commands.js";
-import { registerExternalUrlCommands } from "./external-url-commands.js";
-import { registerHostIntegrationCommands } from "./host-integration-commands.js";
 import { packageVersion } from "./package-version.js";
-import { registerProjectCommands } from "./project-commands.js";
-import { registerWorkspaceCommands } from "./workspace-commands.js";
-import { registerWorkspaceExecutionCommands } from "./workspace-execution-commands.js";
-import { registerWorkspaceImageCommands } from "./workspace-image-commands.js";
-import { registerWorkspaceLifecycleCommands } from "./workspace-lifecycle-commands.js";
+import { HostTransportError } from "./host-transport.js";
+import { registerDevelopmentCommands } from "./development-commands.js";
 
-const program = new Command();
-
-program
-  .name("dim")
-  .description("Isolated, persistent development workspaces")
-  .version(packageVersion)
-  .showSuggestionAfterError()
-  .configureHelp({ sortSubcommands: true, sortOptions: true })
-  .addHelpText("afterAll", installerFacadeHelpText(program));
-
-registerProjectCommands(program);
-registerCiCommands(program);
-const workspace = program.command("workspace").description("Manage persistent development workspaces");
-for (const parent of [program, workspace]) {
-  registerWorkspaceCommands(parent);
-  registerWorkspaceExecutionCommands(parent);
-  registerWorkspaceLifecycleCommands(parent);
-}
-registerWorkspaceImageCommands(workspace);
-registerDoctorAndPluginCommands(program);
-registerExternalUrlCommands(program);
-registerControllerCommands(program);
-registerHostIntegrationCommands(program);
-
-program.exitOverride();
-
-main();
+await main();
 
 async function main(): Promise<void> {
   try {
-    if (process.platform !== "linux") {
-      throw new UserError(`DIM requires a Linux host; unsupported platform '${process.platform}'`);
+    const args = process.argv.slice(process.argv[2] === "--" ? 3 : 2);
+    if (args[0] === "__host") {
+      if (args.length !== 2) throw new Error("host mode requires exactly one encoded request");
+      const { runHostRequest } = await import("./host-application.js");
+      await runHostRequest(args[1]!);
+      return;
     }
-    const argv = process.argv[2] === "--"
-      ? [process.argv[0] ?? "node", process.argv[1] ?? "dim", ...process.argv.slice(3)]
-      : process.argv;
-    await program.parseAsync(argv);
+    // Optional administration is loaded only when selected. The installer uses
+    // controller restart, so that facade integration remains directly reachable.
+    if (args[0] === "managed" || ["controller", "doctor", "plugin", "ci", "external-url", "project", "host-input", "x"].includes(args[0] ?? "")) {
+      const { runManagedCli } = await import("./managed-cli.js");
+      await runManagedCli(args[0] === "managed" ? args.slice(1) : args);
+      return;
+    }
+    const program = new Command()
+      .name("dim")
+      .description("Persistent, isolated local and remote development workspaces")
+      .version(packageVersion)
+      .option("--host <name>", "use a configured development host")
+      .showSuggestionAfterError()
+      .configureHelp({ sortSubcommands: true, sortOptions: true });
+    registerDevelopmentCommands(program);
+    program.command("managed").description("Optional managed Git, review, CI and host administration");
+    program.command("doctor").description("Check host runtime readiness");
+    program.command("controller").description("Manage the optional host controller");
+    program.addHelpText("after", `
+Start developing:
+  dim create https://example.com/team/app.git dev
+  dim ls
+  dim shell dev
+
+Use 'dim host --help' for SSH hosts and 'dim managed --help' for managed services.
+${process.env.DIM_INVOKED_VIA_INSTALLER === "1" ? "\nInstaller: dim installer install core|plugin|control-plane" : ""}`);
+    program.exitOverride();
+    await program.parseAsync(args, { from: "user" });
   } catch (error) {
     if (error instanceof CommanderError) {
       if (error.code === "commander.helpDisplayed" || error.code === "commander.version") return;
-      process.exitCode = error.exitCode || 2;
-      return;
+      process.exitCode = error.exitCode || 2; return;
     }
-    if (error instanceof UserError) {
-      console.error(error.message);
-      process.exitCode = 2;
-      return;
+    if (error instanceof HostTransportError) {
+      if (!error.reported) console.error(error.message);
+      process.exitCode = error.exitCode; return;
     }
-    console.error(error);
-    process.exitCode = 1;
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 2;
   }
 }

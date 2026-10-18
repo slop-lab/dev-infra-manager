@@ -1,149 +1,149 @@
 # dev-infra-manager
 
-DIM provides persistent, isolated Linux workspaces backed by one native Git
-control plane. A Project has one reviewed root repository, one protected root
-ref, workspace-scoped proposal authority, optional global ordinary Sysbox and
-native QEMU capacity, human review, and checked compare-and-swap promotion.
+DIM provides persistent, isolated development workspaces on Linux hosts. Start
+from an ordinary Git URL or a repository on the selected host; a DIM control
+plane and `.dim` configuration are not prerequisites. Checkout, home and the
+workspace's private Docker data persist across restarts and recreation.
 
-DIM does not embed or manage a forge, issue tracker, or Actions service. It
-does not expose repository CRUD, Project removal/purge, or Project-scoped
-runner APIs. Forge-specific tooling used to contribute to this repository is
-development tooling, not a DIM runtime dependency.
+The default runtime is an unprivileged Sysbox container with its own Docker
+engine. The workspace does not receive the host Docker socket or a writable
+bind of the host checkout. These are practical development isolation boundaries,
+not a claim that arbitrary hostile workloads cannot escape the host kernel.
 
-## Trust path
+Managed Git, proposal/review workflows, CI and development URL integrations are
+optional. Their implementation is being separated from the base workspace path;
+see the [architecture rework plan](specification/docs/architecture-rework-plan.md)
+for the remaining work and the exported issue backlog.
 
-```text
-reviewed root -> native Project -> persistent workspace -> proposal ref
-       -> candidate-controlled ordinary/QEMU evidence -> human approval
-       -> checked protected-ref compare-and-swap
-```
+## Install and start
 
-Project and workspace readiness do not depend on CI availability. Ordinary and
-QEMU jobs are optional quality evidence selected by the protected root policy.
-Their success proves only that candidate-selected tests ran under the recorded
-operator bounds. It is not independent verification and cannot replace human
-approval or the final compare-and-swap.
-
-## Install
-
-DIM is pre-stable and part of the host trust boundary. Pin and review one exact
-release or complete source commit.
-
-`0.10.0` is currently an internal-development target and is not yet available
-from the public registry. The exact coordinates below describe the matched
-candidate set; use them only from reviewed source preparation or after a
-separate public release is completed.
-
-For a fresh Ubuntu 24.04 amd64 VM, use the reviewed source
-[role bootstrap](verification/bootstrap-ubuntu-vm.md). It prepares Docker,
-Sysbox, pinned build tools, and a durable local DIM facade without requiring
-registry publication. Select `ordinary` or `control-qemu`; TLS, private native
-configuration, lingering, and worker activation remain explicit operator steps.
+DIM is pre-stable. Use an exact reviewed release or complete source commit.
+The source on `development` can include changes beyond the published `0.10.0`
+packages; use the [local source workflow](specification/docs/releasing.md) to
+install this development version.
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
-dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
-dim doctor
+dim installer install core
 ```
 
-Install the native Git and ordinary-CI service bundle from one caller-owned,
-absolute, mode-`0600` configuration:
+A runtime host needs Linux, Docker and `sysbox-runc`. For a new disposable Ubuntu
+VM, the [role bootstrap](verification/bootstrap-ubuntu-vm.md) installs host
+prerequisites. Installing the CLI does not grant Docker access or replace a
+host runtime installation.
+
+Build the workspace image on the selected host, then start developing:
 
 ```bash
+dim image build
+dim create https://example.com/team/app.git dev
+dim ls
+dim shell dev
+dim exec dev -- docker compose up -d
+```
+
+Use a real repository URL in place of the example. To seed from a repository
+already on the host, use its path. Local source acquisition copies committed
+Git content into private storage; it does not copy dirty or untracked files or
+write into the original checkout. A portable origin is retained for ordinary
+fetch/push. Git credentials and host SSH agents are not forwarded into the
+workspace.
+
+No Project registration, protected-ref policy or scheduler is required for this
+path. A source branch can be selected with `--ref`. Updating a user's working
+checkout is an ordinary explicit Git operation; DIM does not reset user changes
+during startup.
+
+## Remote hosts
+
+```bash
+dim host add devbox --ssh developer@devbox
+dim host use devbox
+dim image build
+dim create https://example.com/team/app.git dev
+dim shell dev
+```
+
+Install DIM and the runtime prerequisites on `devbox` first. The client uses the
+existing SSH connection to invoke the host's DIM runtime. Workspace files,
+state and Docker operations belong to that host. There is no public host-admin
+HTTP endpoint to configure. `--host local` selects the local host for one command.
+Paths passed as sources are paths on the selected host.
+
+The host-side entry point requires Linux. The client transport does not require
+a local Linux runtime; support for particular client platforms still needs
+platform-specific verification.
+
+## Lifecycle and data
+
+```bash
+dim stop dev
+dim start dev
+dim restart dev
+dim recreate dev
+dim resources dev --cpus 4 --memory 8g --pids 2048
+dim show dev --json
+```
+
+`recreate` replaces the container and preserves checkout, home and nested Docker
+data. Existing initialized storage must be present and owned by that workspace;
+missing storage is an error, not permission to create an empty replacement.
+Resource limits accept `unlimited`. Removing an existing limit may replace the
+container because Docker cannot clear every limit in place; the command reports
+that replacement and retains the data.
+
+`dim run dev` opens a shell. `dim run dev exec COMMAND...` and
+`dim run dev custom COMMAND...` run ordinary commands inside the workspace.
+Project-specific setup and tool integration are being separated from the base
+runtime; the default path does not execute host-side `.dim` hooks.
+
+```bash
+# Permanently removes checkout, home and private Docker data.
+dim discard dev --yes
+```
+
+`dim workspace ...` offers the same workspace commands as the root CLI. Ordinary
+read-only listing does not start a controller, install plugins or provision
+caches. Interrupted initialization and runtime failures remain visible in state
+for diagnosis and explicit cleanup.
+
+## Optional managed services
+
+The installer facade retains its namespace:
+
+```bash
+dim installer install plugin PACKAGE@EXACT_VERSION
 dim installer install control-plane --config /absolute/operator/install.json
 ```
 
-Native ordinary and QEMU execution are separately deployed global host
-services. They are not created per Project:
+Managed Git/review/CI operations remain available under `dim managed ...` while
+the optional feature boundary is extracted. The installer integration also keeps
+`dim controller restart` directly reachable. The normal workspace path uses no
+managed-Git role files and does not load its service implementation.
+
+The current advanced control-plane installer configuration remains supported;
+a simpler managed install/connect profile is planned. The reviewer web service
+is a separate optional package. DIM does not embed an issue tracker.
+
+## Development and verification
 
 ```bash
-dim ci native-root host run /absolute/operator/ordinary-host.json
-dim ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.10.0
-dim ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.10.0
-dim ci native-qemu scheduler run /absolute/operator/qemu-scheduler.json
-dim ci native-qemu host run qemu-a /absolute/operator/qemu-host.json
+pnpm install --frozen-lockfile
+just typecheck
+just test
+just build-packages
 ```
 
-The ordinary host requires `sysbox-runc` and the enabled exact-version host
-mirror plugin installed above; it reconciles the owned pull-through cache and
-control network before serving capacity. The QEMU host requires a real,
-accessible `/dev/kvm`; TCG is never accepted as KVM evidence.
-
-## Create a native Project
-
-Bootstrap only from an already-local reviewed repository and one full branch
-ref. Registrar and importer roles are distinct private files.
+Tests are under `tests/`; deployment and cross-component checks are under
+`verification/`. The source gate and fresh VM bootstrap describe their own
+host requirements. Targeted runtime verification with an already built image:
 
 ```bash
-dim project bootstrap-native-root demo \
-  --project-id demo-root \
-  --source-repository "$PWD/project-root" \
-  --source-ref refs/heads/main \
-  --registrar-connection /absolute/operator/registrar.json \
-  --importer-connection /absolute/operator/importer.json \
-  --json
-
-export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/absolute/operator/control-plane.json
-export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
-dim project create demo --json
-dim project list --json
-dim project show demo --json
+pnpm --dir tests exec tsx ../verification/scripts/base-workspace-runtime-smoke.mts IMAGE
 ```
 
-`create` publishes `ready` only after live native proof, protected-root
-snapshot validation, proposal-only writer authority, and local workspace
-runtime prerequisites. It never starts CI or creates approval.
-
-## Use a workspace
-
-```bash
-dim workspace create demo work-1
-dim workspace show work-1 --json
-dim workspace run work-1 shell
-dim workspace run work-1 exec -- git status
-dim workspace exec work-1 -- git log -1 --oneline
-dim workspace stop work-1
-dim workspace start work-1
-dim workspace restart work-1
-dim workspace update work-1
-dim workspace discard work-1 --yes
-```
-
-The workspace receives a protected-root snapshot and a brokered Git endpoint.
-Its writer can create or fast-forward only its own proposal namespace. Direct
-protected writes, deletes, force pushes, tags, foreign workspace namespaces,
-and foreign Projects are denied.
-
-## Existing installations
-
-DIM does not migrate, reinterpret, adopt, delete, or rename predecessor
-Project, repository, runner, container, volume, or remote state. Before
-installing this native-only product, use the pinned prior release to stop its
-services and export required user data. Validate the export outside DIM state,
-then create fresh native state and restore only declared user data.
-
-Do not delete existing forge containers, volumes, remotes, or credentials as a
-side effect of native installation. Their explicit operator disposal is a
-separate action after export and validation.
-
-## Verification
-
-```bash
-just check-source-native
-just verify native-idle-service-images
-just verify control-plane-install-live
-just verify native-basic-lifecycle
-just verify native-ordinary-guest-mechanics
-just verify native-qemu-guest-mechanics-kvm
-```
-
-The last two commands prove same-host execution mechanics. They do not satisfy
-independent-host or human release acceptance. The disposable KVM guest
-aggregate is `verification/scripts/kvm-guest-verification-smoke.bash`; it emits
-per-phase `PASS`, `FAIL`, or `BLOCKED` records and reserves exit `125` for
-uncertain cleanup. Missing hardware is unavailable, never a pass.
-
-See [the documentation index](specification/docs/README.md), the
-[CLI contract](specification/specs/10-cli-contract.md), and the
-[verification contract](specification/specs/12-verification.md).
+This check creates disposable Sysbox resources, exercises nested Docker and
+storage/resource lifecycle behavior, and cleans up its resources. Container
+runtime evidence does not establish VM/KVM support. VM workspaces, managed
+session resume and a complete optional-feature extraction remain tracked in
+the architecture plan rather than being claimed as finished.

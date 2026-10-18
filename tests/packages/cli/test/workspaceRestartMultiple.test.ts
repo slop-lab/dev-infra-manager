@@ -116,7 +116,7 @@ async function runRestart(
   await once(server, "listening");
   try {
     const args = ["workspace", "restart", ...names, ...(json ? ["--json"] : [])];
-    const result = await runPublishedCli(args, {
+    const result = await runPublishedCli(["managed", ...args], {
       ...process.env,
       DIM_STATE_ROOT: stateRoot,
       XDG_CONFIG_HOME: configHome,

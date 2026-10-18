@@ -199,7 +199,7 @@ async function readRequestJson(request: IncomingMessage): Promise<unknown> {
 
 function runCli(arguments_: readonly string[]): Promise<{ readonly code: number | null; readonly stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--import", "tsx", cli, ...arguments_], {
+    const child = spawn(process.execPath, ["--import", "tsx", cli, "managed", ...arguments_], {
       env: process.env,
       stdio: ["ignore", "ignore", "pipe"]
     });

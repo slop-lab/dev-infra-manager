@@ -89,7 +89,7 @@ async function runWorkspaceCreate(scenario: WorkspaceCreateScenario): Promise<Wo
   try {
     const args = ["workspace", "create", "project", "candidate"];
     if (scenario.obsoleteRepositoryRef !== undefined) args.push("--repo-ref", scenario.obsoleteRepositoryRef);
-    const result = await runPublishedCli(args, {
+    const result = await runPublishedCli(["managed", ...args], {
       ...process.env,
       DIM_STATE_ROOT: stateRoot,
       XDG_CONFIG_HOME: configHome,

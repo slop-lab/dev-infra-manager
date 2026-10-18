@@ -214,7 +214,7 @@ exit 97
 }
 
 function run(args: readonly string[], env: NodeJS.ProcessEnv = process.env) {
-  return spawnSync(process.execPath, [cli, ...args], {
+  return spawnSync(process.execPath, [cli, "managed", ...args], {
     cwd: packageDirectory,
     encoding: "utf8",
     env

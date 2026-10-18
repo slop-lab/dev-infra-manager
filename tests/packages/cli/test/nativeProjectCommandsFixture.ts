@@ -170,8 +170,11 @@ async function startNativeGit(
   servingActivationToken: string,
   port = 0
 ) {
+  const configuration = idleNativeConfig();
+  const { stdout: gitIdentity } = await runFile(configuration.gitExecutable, ["--version"]);
+  const gitVersion = gitIdentity.trim().replace(/^git version /, "");
   const service = await configuredNativeGitBundleServer({
-    config: parseNativeGitBundleConfig({ ...idleNativeConfig(),
+    config: parseNativeGitBundleConfig({ ...configuration, gitVersion,
       projectRegistrars: [{ hostId: "host-a", username: "registrar-a",
         password: bundleSecrets.projectRegistrar }],
       projectRootImporters: [importer],

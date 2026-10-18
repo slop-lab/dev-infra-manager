@@ -151,7 +151,7 @@ async function runCommand(args: readonly string[], controllerError: string): Pro
   server.listen(socketPath);
   await once(server, "listening");
   try {
-    const result = await runPublishedCli(args, {
+    const result = await runPublishedCli(["managed", ...args], {
       ...process.env,
       DIM_STATE_ROOT: stateRoot,
       XDG_CONFIG_HOME: configHome,

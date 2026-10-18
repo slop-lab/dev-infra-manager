@@ -10,7 +10,12 @@
   },
   "homepage": "https://github.com/slop-lab/dev-infra-manager#readme",
   "bugs": "https://github.com/slop-lab/dev-infra-manager/issues",
-  "keywords": ["containers", "development", "isolation", "workspace"],
+  "keywords": [
+    "containers",
+    "development",
+    "isolation",
+    "workspace"
+  ],
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -19,6 +24,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./workspace": {
+      "types": "./src/workspace.ts",
+      "import": "./dist/workspace.js"
     }
   },
   "bin": {

@@ -457,7 +457,7 @@ async function runCli(
   args: readonly string[],
   env: NodeJS.ProcessEnv
 ): Promise<{ readonly code: number | null; readonly stdout: string; readonly stderr: string }> {
-  const child = spawn(process.execPath, [cli, ...args], {
+  const child = spawn(process.execPath, [cli, "managed", ...args], {
     cwd: packageDirectory,
     env,
     stdio: ["ignore", "pipe", "pipe"]

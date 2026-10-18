@@ -5,9 +5,16 @@
 Target: `0.10.0` internal-development candidate. The matched source package set
 is not a published release.
 
-- Expose common workspace commands directly under `dim`, including `dim ls`,
-  creation, inspection, resource updates, lifecycle actions, and execution. The
-  workspace command group shares the same command definitions and behavior.
+- Develop from ordinary local/remote Git sources without native Git, CI or a
+  control plane. Base workspace lifecycle is shared by local and SSH clients,
+  uses one unprivileged Sysbox container, and preserves checkout, home and private
+  Docker data across recreation. Root/workspace commands share definitions;
+  resource limits accept `unlimited` and report when a container is replaced.
+  Managed administration is loaded separately. Source acquisition does not share
+  the host checkout, Git object store or host credentials with the workspace.
+
+The managed integration below is optional; its historical native-only rules do
+not apply to the base workspace path.
 
 - Select a recommended core-managed workspace environment when the immutable
   root has no custom lifecycle files. Setup now requires a host-side

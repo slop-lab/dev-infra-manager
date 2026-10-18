@@ -3,126 +3,75 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { preflightStateCompatibility } from "../../../../core/packages/core/src/stateCompatibility.js";
-import { workspaceRecord } from "./hostLifecycleFixture.js";
+import { WorkspaceStore } from "../../../../core/packages/core/src/workspace/store.js";
+import type { WorkspaceRecord } from "../../../../core/packages/core/src/workspace/models.js";
 
 const roots: string[] = [];
-
+afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "dim-state-compatibility-"));
-  roots.push(root);
-  return root;
+  const root = await mkdtemp(join(tmpdir(), "dim-base-state-")); roots.push(root); return root;
+}
+function currentWorkspace(): WorkspaceRecord {
+  return {
+    schemaVersion: 10, id: "11111111-1111-4111-8111-111111111111", name: "dev",
+    source: { url: "https://example.test/app.git", ref: "refs/heads/main", commit: "a".repeat(40) },
+    runtime: "container", image: "dim-workspace:test", initialized: true,
+    resources: { cpuCount: "2", memory: "4g", pidsLimit: "2048" },
+    git: { name: "Developer", email: "developer@example.test" }, phase: "running",
+    createdAt: "2026-10-18T00:00:00.000Z", updatedAt: "2026-10-18T00:00:00.000Z"
+  };
 }
 
-async function writeJson(target: string, value: unknown): Promise<void> {
-  await mkdir(join(target, ".."), { recursive: true });
-  await writeFile(target, `${JSON.stringify(value)}\n`);
-}
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
-
-describe("installation state compatibility preflight", () => {
-  it("accepts missing state without creating the default state root", async () => {
-    // Given
+describe("base installation state preflight", () => {
+  it("accepts an uninitialized host without creating directories", async () => {
     const home = await temporaryRoot();
     const stateRoot = join(home, ".local", "state", "dim");
-
-    // When
-    const result = await preflightStateCompatibility({ HOME: home });
-
-    // Then
-    expect(result).toEqual({ stateRoot, warnings: [] });
-    await expect(readdir(join(home, ".local"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await preflightStateCompatibility({ HOME: home })).toEqual({ stateRoot, warnings: [] });
+    expect(await readdir(home)).toEqual([]);
   });
 
-  it("accepts current known families and ignores plugin-private state", async () => {
-    // Given
+  it("accepts actual current workspace store records while leaving optional feature state alone", async () => {
     const stateRoot = await temporaryRoot();
-    await writeJson(join(stateRoot, "host.json"), {
-      schemaVersion: 2,
-      phase: "ready",
-      resumeWorkspaces: [],
-      updatedAt: "now"
-    });
-    await writeJson(join(stateRoot, "workspaces", "work-1.json"), workspaceRecord("work-1", "ready"));
-    await writeJson(join(stateRoot, "plugins", "future-plugin", "private.json"), { schemaVersion: 999 });
-
-    // When
-    const result = await preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
-
-    // Then
-    expect(result).toEqual({ stateRoot, warnings: [] });
+    await new WorkspaceStore(stateRoot).write(currentWorkspace());
+    await writeFile(join(stateRoot, "host.json"), "managed-host-state-owned-elsewhere\n");
+    await mkdir(join(stateRoot, "projects"));
+    await writeFile(join(stateRoot, "projects", "managed.json"), "not-base-state\n");
+    await mkdir(join(stateRoot, "plugins"));
+    expect(await preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot })).toEqual({ stateRoot, warnings: [] });
+    expect((await new WorkspaceStore(stateRoot).read("dev")).source.commit).toBe("a".repeat(40));
   });
 
-  it("rejects the exact historical host record without changing its bytes", async () => {
-    // Given
+  it.each([
+    { ...currentWorkspace(), schemaVersion: 9 },
+    { ...currentWorkspace(), initialized: "yes" },
+    { ...currentWorkspace(), source: { ...currentWorkspace().source, commit: "invalid" } },
+    { ...currentWorkspace(), name: "other-name" }
+  ])("rejects unsupported or malformed workspace records without mutation", async (record) => {
     const stateRoot = await temporaryRoot();
-    const target = join(stateRoot, "host.json");
-    const bytes = `${JSON.stringify({
-      schemaVersion: 1,
-      phase: "stopped",
-      resumeWorkspaces: ["work-1"],
-      resumeCiRunners: [{ project: "example", name: "capacity" }],
-      resumeManagedContainers: [],
-      updatedAt: "before-upgrade"
-    }, null, 2)}\n`;
+    await mkdir(join(stateRoot, "workspaces"));
+    const target = join(stateRoot, "workspaces", "dev.json");
+    const bytes = `${JSON.stringify(record)}\n`;
     await writeFile(target, bytes);
-
-    // When
-    const result = preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
-
-    // Then
-    await expect(result).rejects.toThrow(/host lifecycle.*prior pinned release.*export.*recreate/is);
+    await expect(preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot })).rejects.toThrow(/workspace.*dev\.json.*no state was changed/);
     expect(await readFile(target, "utf8")).toBe(bytes);
-    expect(await readdir(stateRoot)).toEqual(["host.json"]);
-  });
-
-  it("rejects unsupported workspace state with path and recovery guidance without mutation", async () => {
-    // Given
-    const stateRoot = await temporaryRoot();
-    const target = join(stateRoot, "workspaces", "work-1.json");
-    const bytes = `${JSON.stringify({ ...workspaceRecord("work-1", "ready"), schemaVersion: 7 })}\n`;
-    await writeJson(target, JSON.parse(bytes));
-    const before = await readFile(target);
-
-    // When
-    const preflight = preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
-
-    // Then
-    await expect(preflight).rejects.toThrow(/workspace.*work-1\.json.*prior pinned release.*export.*recreate/is);
-    expect(await readFile(target)).toEqual(before);
     expect(await readdir(stateRoot)).toEqual(["workspaces"]);
   });
 
-  it("rejects malformed project JSON without disclosing its contents", async () => {
-    // Given
+  it("rejects malformed JSON without disclosing its contents", async () => {
     const stateRoot = await temporaryRoot();
-    const target = join(stateRoot, "projects", "secret.json");
-    await mkdir(join(stateRoot, "projects"));
-    await writeFile(target, "{not-json:super-secret-token\n");
-
-    // When
+    await mkdir(join(stateRoot, "workspaces"));
+    await writeFile(join(stateRoot, "workspaces", "dev.json"), "{secret-private-token\n");
     const preflight = preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
-
-    // Then
-    await expect(preflight).rejects.toThrow(/project.*secret\.json.*valid JSON/is);
-    await expect(preflight).rejects.not.toThrow(/super-secret-token/);
+    await expect(preflight).rejects.toThrow(/not valid JSON/);
+    await expect(preflight).rejects.not.toThrow(/secret-private-token/);
   });
 
-  it("rejects symlinked known state files at the untrusted boundary", async () => {
-    // Given
+  it("rejects symlinked workspace state before following the target", async () => {
     const stateRoot = await temporaryRoot();
     const external = join(stateRoot, "external.json");
-    const target = join(stateRoot, "workspaces", "work-1.json");
-    await writeFile(external, `${JSON.stringify(workspaceRecord("work-1", "ready"))}\n`);
+    await writeFile(external, `${JSON.stringify(currentWorkspace())}\n`);
     await mkdir(join(stateRoot, "workspaces"));
-    await symlink(external, target);
-
-    // When
-    const preflight = preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
-
-    // Then
-    await expect(preflight).rejects.toThrow(/workspace.*regular file.*symlink/is);
+    await symlink(external, join(stateRoot, "workspaces", "dev.json"));
+    await expect(preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot })).rejects.toThrow(/regular file.*symlink/);
   });
 });
