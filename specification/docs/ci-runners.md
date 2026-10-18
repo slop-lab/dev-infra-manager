@@ -1,3 +1,5 @@
+> Scope: optional managed CI. Base workspaces need no CI services.
+
 # Global native CI
 
 Ordinary and QEMU execution are global host services:

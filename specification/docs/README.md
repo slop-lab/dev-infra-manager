@@ -1,26 +1,23 @@
 # Documentation
 
-Start with:
+Start with [usage](usage.md) for ordinary local or remote development.
 
-1. [Overview](overview.md)
-2. [Configuration](configuration.md)
-3. [Native Project and workspace lifecycle](project-workspaces.md)
-4. [Global native CI](ci-runners.md)
-5. [Adoption and cutover](adoption.md)
-6. [Architecture](architecture.md)
+| Guide | Scope |
+| --- | --- |
+| [Overview](overview.md) | Product and responsibility summary |
+| [Usage](usage.md) | Install, create, resume and select a host |
+| [Configuration](configuration.md) | Base settings and optional integration settings |
+| [Workspace images](runtime-images.md) | Build and select the matching image |
+| [Resource isolation](resource-isolation.md) | Limits, persistence and runtime observations |
+| [Architecture](architecture.md) | Package and execution ownership |
+| [Rework plan](architecture-rework-plan.md) | Implementation sequence and backed-up issues |
+| [Adoption](adoption.md) | Data preservation across incompatible versions |
 
-The normative contracts are indexed in [`../specs/README.md`](../specs/README.md).
+Optional managed capabilities have their own [package guide](../../core/packages/managed/README.md),
+[Project lifecycle](project-workspaces.md), [CI](ci-runners.md),
+[plugins](plugins.md) and [External URLs](external-urls.md). They do not turn a
+control plane or a managed Project into a prerequisite for development.
 
-DIM's runtime is native-only. Forge-specific contribution helpers are outside
-the product boundary. Use the index above for active operator journeys and
-the normative specification index for contracts.
-
-## Glossary
-
-- **Project**: one native identity rooted in one protected reviewed Git ref.
-- **Workspace**: persistent agent execution with a protected-root snapshot and
-  workspace-scoped proposal authority.
-- **Ordinary job**: candidate-controlled bounded Sysbox execution.
-- **QEMU job**: candidate-controlled bounded real-KVM guest execution.
-- **Ready**: native Project/workspace prerequisites are live; CI is not implied.
-- **Promotion**: human-approved checked compare-and-swap of the protected ref.
+The [specification index](../specs/README.md) distinguishes base contracts from
+optional integration policies. Only the installer facade has a preserved
+compatibility boundary; historical decisions are design context.

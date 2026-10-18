@@ -1,19 +1,15 @@
 # DIM Plugins
 
-DIM has a versioned, instance-scoped plugin host. The root-only native Git
-service is not a provider plugin, and plugins cannot add repository CRUD,
-Project removal, Project-scoped runners, or a provider fallback. Plugins are
-reserved for reviewed host-specific capabilities. Plugins can register typed
-routes and narrowly scoped host-input providers on the authenticated DIM
-controller API; see
-[External workspace URLs](external-urls.md).
+The base workspace application has no mandatory plugin host. Optional services
+compose their own extensions through explicit interfaces; workflow syntax is
+owned by `plugin-ci-workflows`, while Git authority and job runtimes consume
+compiled inputs.
 
-Plugins may also register a named workspace capability provider. Users request
-that exact name with `dim workspace create --require-capability NAME` or
-`--recommend-capability NAME`. Required requests fail closed when no provider
-is installed or provisioning fails; recommended requests remain visible as
-unavailable. `dim workspace show --json` and the read-only Project manifest
-report the effective status and provider.
+The optional managed controller also has an instance-scoped capability plugin
+host. Reviewed plugins may register typed routes, extensions, constrained host
+inputs and named workspace capabilities. These controller APIs belong to
+`@slop-lab/dim-managed`; they are not base workspace APIs. Commands in the
+remaining examples use the managed command group.
 
 ## Named extensions
 

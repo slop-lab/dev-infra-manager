@@ -1,3 +1,6 @@
+> Scope: optional managed URL integration. It is separate from local workspace
+> port forwarding and is not needed for ordinary development.
+
 # External workspace URLs
 
 The external URL plugin extends three controller endpoints. Host configuration
