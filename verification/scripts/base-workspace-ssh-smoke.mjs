@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { connect } from "node:net";
 import { fileURLToPath } from "node:url";
 
 const [mode, directory, image] = process.argv.slice(2);
@@ -21,7 +22,9 @@ const repository = fileURLToPath(new URL("../..", import.meta.url));
 async function run(file, args, options = {}) {
   const child = spawn(file, args, { env: options.env ?? process.env, stdio: ["pipe", "pipe", "pipe"] });
   let stdout = "", stderr = "";
-  child.stdout.setEncoding("utf8").on("data", (chunk) => { stdout += chunk; });
+  const binary = [];
+  if (options.binary) child.stdout.on("data", (chunk) => binary.push(chunk));
+  else child.stdout.setEncoding("utf8").on("data", (chunk) => { stdout += chunk; });
   child.stderr.setEncoding("utf8").on("data", (chunk) => { stderr += chunk; });
   child.stdin.on("error", (error) => { if (error.code !== "EPIPE") throw error; });
   child.stdin.end(options.input ?? "");
@@ -32,7 +35,7 @@ async function run(file, args, options = {}) {
       child.once("close", (status) => resolve(status ?? 128));
     });
     if (options.allowFailure !== true && code !== 0) throw new Error(`${file} ${args[0]} failed (${code}): ${stderr || stdout}`);
-    return { code, stdout, stderr };
+    return { code, stdout: options.binary ? Buffer.concat(binary) : stdout, stderr };
   } finally { clearTimeout(timer); }
 }
 const docker = (args, options) => run("docker", args, options);
@@ -128,6 +131,7 @@ async function verify(state) {
     assert.equal((await cli(["exec", state.name, "--", "cat", "local.txt"])).stdout, "preserved");
     assert.equal((await cli(["exec", state.name, "--", "cat", "/home/dim/remote-smoke.txt"])).stdout, "home-preserved");
     const prefix = `dim-workspace-${createHash("sha256").update(record.id).digest("hex").slice(0, 24)}`;
+    await verifyConnections(state, env, cli, prefix);
     const runtime = JSON.parse((await docker(["container", "inspect", prefix])).stdout)[0];
     assert.equal(runtime.HostConfig.Runtime, "sysbox-runc");
     assert.equal(runtime.HostConfig.Privileged, false);
@@ -139,6 +143,79 @@ async function verify(state) {
     assert.deepEqual(JSON.parse((await cli(["ls", "--json"])).stdout), []);
     console.log("remote discard: passed");
   } finally { await cleanup(state); }
+}
+
+async function verifyConnections(state, env, cli, prefix) {
+  const payload = Buffer.from(Array.from({ length: 65_536 }, (_, i) => i % 256));
+  const server = `require("node:net").createServer({allowHalfOpen:true}, socket => {
+    const chunks=[]; socket.on("data",chunk=>chunks.push(chunk));
+    socket.on("end",()=>socket.end(Buffer.concat(chunks)));
+    socket.on("error",()=>socket.destroy());
+  }).listen(3000,"127.0.0.1")`;
+  await docker(["exec", "--detach", "--user", "dim", prefix, "node", "-e", server]);
+  let direct;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    direct = await cli(["connect", state.name, "3000"], { input: payload, binary: true, allowFailure: true, timeout: 10_000 });
+    if (direct.code === 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(direct.code, 0, direct.stderr);
+  assert.deepEqual(direct.stdout, payload, "SSH stdio connection altered binary data or lost half-close output");
+  const child = spawn(process.execPath, [path.join(repository, "core/packages/cli/dist/cli.js"),
+    "forward", state.name, "0:3000"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  let diagnostic = "";
+  const closed = new Promise((resolve, reject) => {
+    child.once("error", reject); child.once("close", (code) => resolve(code));
+  });
+  const deadline = setTimeout(() => child.kill("SIGKILL"), 30_000);
+  let idle;
+  try {
+    const port = await new Promise((resolve, reject) => {
+      child.stderr.setEncoding("utf8").on("data", (chunk) => {
+        diagnostic += chunk;
+        const match = /Forwarding 127\.0\.0\.1:(\d+)/.exec(diagnostic);
+        if (match) resolve(Number(match[1]));
+      });
+      child.once("close", () => reject(new Error(`forward exited before listening: ${diagnostic}`)));
+      child.once("error", reject);
+    });
+    const exchange = () => new Promise((resolve, reject) => {
+      const socket = connect({ host: "127.0.0.1", port });
+      const chunks=[];
+      socket.setTimeout(10_000, () => socket.destroy(new Error("forward response timed out")));
+      socket.once("error", reject);
+      socket.once("connect", () => socket.end(payload));
+      socket.on("data", (chunk) => chunks.push(chunk));
+      socket.once("end", () => resolve(Buffer.concat(chunks)));
+    });
+    const replies = await Promise.all([exchange(), exchange()]);
+    replies.forEach((reply) => assert.deepEqual(reply, payload));
+    // Hold an upstream connection open while cancelling the listener. Its host
+    // transport and in-workspace bridge must both terminate without a client EOF.
+    idle = connect({ host: "127.0.0.1", port });
+    idle.on("error", () => {});
+    await new Promise((resolve) => idle.once("connect", resolve));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    child.kill("SIGTERM");
+    assert.equal(await closed, 143, diagnostic);
+  } finally {
+    clearTimeout(deadline);
+    idle?.destroy();
+    if (child.exitCode === null) { child.kill("SIGKILL"); await closed; }
+  }
+  const countBridge = `const fs=require("node:fs");let n=0;
+    for(const id of fs.readdirSync("/proc")){if(!/^\\d+$/.test(id)||Number(id)===process.pid)continue;
+      try{const a=fs.readFileSync("/proc/"+id+"/cmdline","utf8").split("\\0");
+      if(a[1]==="-e"&&a[2]?.includes("workspace connection failed"))n++;}catch{}}
+    console.log(n)`;
+  let remaining = -1;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    remaining = Number((await docker(["exec", "--user", "dim", prefix, "node", "-e", countBridge])).stdout.trim());
+    if (remaining === 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(remaining, 0, "cancelled forward left a bridge process inside the workspace");
+  console.log("SSH binary connect, concurrent loopback forwards, half-close and cancellation cleanup: passed");
 }
 
 async function cleanup(state) {
