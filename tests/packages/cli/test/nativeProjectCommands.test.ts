@@ -180,8 +180,8 @@ test("native selectors and legacy state collisions fail closed before mutation",
   assert.deepEqual(await readFile(databasePath), databaseBefore);
   assert.equal(await remoteHead(fixture), remoteBefore);
   await assert.rejects(stat(join(fixture.stateRoot, "services", "gitea.json")), { code: "ENOENT" });
-  assert.match(empty.stderr, /native control-plane connection file selector must not be empty/);
-  assert.match(emptyImporter.stderr, /DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE is required/);
+  assert.match(empty.stderr, /DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE must not be empty/);
+  assert.match(emptyImporter.stderr, /DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE must not be empty/);
   assert.match(predecessorSelector.stderr, /DIM_GITEA_CONNECTION_FILE is unsupported by the native-only DIM CLI/);
   assert.match(repository.stderr, /unknown command 'repo'/);
 });

@@ -25,9 +25,12 @@ test("workspace image build uses shipped context without controller or backend c
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "Built workspace image 'dev-infra-project-workspace:0.10.0' on 'local'\n");
+    const coreMetadata = JSON.parse(await readFile(new URL("../../../../core/packages/core/dist/package.json", import.meta.url), "utf8")) as { version: string };
+    const image = `dev-infra-project-workspace:${coreMetadata.version}`;
+    assert.equal(result.stdout, `Built workspace image '${image}' on 'local'\n`);
     const log = await readFile(fixture.commandLog, "utf8");
-    assert.match(log, /^docker buildx build --load --build-arg DIM_UID=\d+ --build-arg DIM_GID=\d+ --tag dev-infra-project-workspace:0\.10\.0 --file Dockerfile \.\n$/);
+    const escapedImage = image.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(log, new RegExp(`^docker buildx build --load --build-arg DIM_UID=\\d+ --build-arg DIM_GID=\\d+ --tag ${escapedImage} --file Dockerfile \\.\\n$`));
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }

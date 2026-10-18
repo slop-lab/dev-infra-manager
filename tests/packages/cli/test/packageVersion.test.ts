@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -26,7 +28,10 @@ test("local published CLI reports its package metadata version", () => {
   const version = "0.10.0-local-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef-dirty";
 
   // When
+  const sharedArtifacts = ["package.json", "package-version.js"].map((file) => path.join(packageDirectory, "dist", file));
+  const before = sharedArtifacts.map((file) => readFileSync(file));
   const fixture = buildPublishedCli({ ...process.env, DIM_LOCAL_BUILD_VERSION: version });
+  assert.deepEqual(sharedArtifacts.map((file) => readFileSync(file)), before);
 
   // Then
   assert.equal(fixture.metadataVersion, version);
