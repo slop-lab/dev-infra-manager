@@ -131,7 +131,7 @@ describe("first control-plane installation", () => {
     // Given: native pulls successfully but the ordinary pull fails with hostile daemon output.
     const input = await installFixture();
     const runner = new ProbeFailureRunner({
-      kind: "pull", image: "ordinary-ci", output: `hostile-${controlPlaneSecrets.identity}`
+      kind: "pull", image: "ordinary-ci", output: `hostile-${controlPlaneSecrets.grantIssuer}`
     });
 
     // When: image pulling stops before metadata or configuration probes.
@@ -149,7 +149,7 @@ describe("first control-plane installation", () => {
       pulledRefs: [`registry.example/dim/native-git@sha256:${"a".repeat(64)}`],
       incompletePullRef: `registry.example/dim/ordinary-ci@sha256:${"b".repeat(64)}`
     });
-    expect(JSON.stringify(error)).not.toContain(controlPlaneSecrets.identity);
+    expect(JSON.stringify(error)).not.toContain(controlPlaneSecrets.grantIssuer);
   });
 
   it("rejects existing owned Docker resources before pulling images", async () => {

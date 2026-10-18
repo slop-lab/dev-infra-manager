@@ -17,8 +17,7 @@ export function serviceCredentialValues(
   const native = exactRecord(nativeValue, [
     "schemaVersion", "serviceId", "host", "port", "storageRoot", "gitExecutable", "gitVersion",
     "repositories", "identities", "projectRegistrars", "projectRootImporters", "projectRootReadIssuers",
-    "workspaceWriteIssuers", "humanReviewers", "hostPromoters", "ordinaryCi",
-    ...(nativeValue !== null && typeof nativeValue === "object" && Object.hasOwn(nativeValue, "qemuCi") ? ["qemuCi"] : [])
+    "workspaceWriteIssuers", "humanReviewers", "hostPromoters", "ci"
   ], "native Git service config");
   if (native.schemaVersion !== 7 || native.serviceId !== "native-main" || native.host !== "0.0.0.0"
     || native.port !== 8080 || native.storageRoot !== "/var/lib/dim-native-git"
@@ -39,94 +38,63 @@ export function serviceCredentialValues(
   assertDistinct(humanReviewers.map((entry) => entry.reviewerId));
   assertDistinct(hostPromoters.map((entry) => entry.hostId));
 
-  const nativeOrdinary = exactRecord(native.ordinaryCi, [
-    "endpoint", "serviceId", "query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook"
-  ], "native Git ordinary CI config");
-  const nativeRoles = ["query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook"] as const;
-  const nativeCredentials = nativeRoles.map((role) => credential(nativeOrdinary[role], `native Git ${role}`));
-  const qemuCredentials = native.qemuCi === undefined ? [] : qemuCredentialValues(native.qemuCi);
-  const ordinary = exactRecord(ordinaryValue, [
-    "schemaVersion", "serviceId", "database", "eligibilityLeaseMilliseconds", "claimLeaseMilliseconds",
-    "nativeGit", "credentials", "hosts"
-  ], "ordinary CI service config");
-  if (ordinary.schemaVersion !== 5 || ordinary.serviceId !== "ordinary-main"
-    || ordinary.database !== "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3") {
-    throw new ControlPlaneSourceError("ordinary CI service config is not a bundle schema-5 config");
+  const sourceRoles = ["grantIssuer", "candidateReader", "resultReporter"] as const;
+  const nativeCi = exactRecord(native.ci, [...sourceRoles, "webhook"], "native Git CI config");
+  const webhook = exactRecord(nativeCi.webhook, ["endpoint", "username", "password"], "native Git CI webhook");
+  if (webhook.endpoint !== "http://ordinary-ci:8080/v1/jobs") {
+    throw new ControlPlaneSourceError("native Git CI webhook endpoint must be http://ordinary-ci:8080/v1/jobs");
+  }
+  const ordinary = exactRecord(ordinaryValue,
+    ["schemaVersion", "claimLeaseMilliseconds", "nativeGit", "credentials", "workers"], "CI service config");
+  if (ordinary.schemaVersion !== 1) {
+    throw new ControlPlaneSourceError("CI service config is not a bundle schema-1 config");
   }
   const ordinaryNative = exactRecord(ordinary.nativeGit,
-    ["endpoint", "serviceId", "identity", "attemptIssuer", "candidateReader", "resultReporter"],
-    "ordinary CI native Git config");
-  const roles = exactRecord(ordinary.credentials, ["webhook", "query"], "ordinary CI credentials");
-  const ordinaryCredentials = [
-    credential(roles.webhook, "ordinary CI webhook"), credential(roles.query, "ordinary CI query"),
-    credential(ordinaryNative.identity, "ordinary CI identity"),
-    credential(ordinaryNative.attemptIssuer, "ordinary CI attempt issuer"),
-    credential(ordinaryNative.candidateReader, "ordinary CI candidate reader"),
-    credential(ordinaryNative.resultReporter, "ordinary CI result reporter")
-  ];
-  assertPaired(nativeCredentials, ordinaryCredentials);
-  if (!Array.isArray(ordinary.hosts)) {
-    throw new ControlPlaneSourceError("ordinary CI service config host credentials must be an array");
+    ["endpoint", ...sourceRoles], "CI native Git config");
+  if (ordinaryNative.endpoint !== "http://native-git:8080") {
+    throw new ControlPlaneSourceError("CI native Git endpoint must be http://native-git:8080");
   }
-  const hosts = ordinary.hosts.map((host, index) => {
-    const value = exactRecord(host, ["hostId", "hostToken", "capacities"], `ordinary CI host ${index}`);
-    if (typeof value.hostId !== "string" || !identifierPattern.test(value.hostId) || !isToken(value.hostToken)) {
-      throw new ControlPlaneSourceError(`ordinary CI host ${index} identity or token is invalid`);
+  const roles = exactRecord(ordinary.credentials, ["webhook", "query"], "CI credentials");
+  const nativeCredentials = sourceRoles.map((role) => {
+    const selected = credential(nativeCi[role], `native Git CI ${role}`);
+    assertPaired(selected, credential(ordinaryNative[role], `CI ${role}`));
+    return selected;
+  });
+  const nativeWebhook = credential({ username: webhook.username, password: webhook.password }, "native Git CI webhook");
+  assertPaired(nativeWebhook, credential(roles.webhook, "CI webhook"));
+  const serviceCredentials = [...nativeCredentials, nativeWebhook, credential(roles.query, "CI query")];
+  if (!Array.isArray(ordinary.workers)) {
+    throw new ControlPlaneSourceError("CI service worker credentials must be an array");
+  }
+  const workers = ordinary.workers.map((worker, index) => {
+    const value = exactRecord(worker, ["id", "token", "slots"], `CI worker ${index}`);
+    if (typeof value.id !== "string" || !identifierPattern.test(value.id) || !isToken(value.token)
+      || !Array.isArray(value.slots)) {
+      throw new ControlPlaneSourceError(`CI worker ${index} identity, token or slots are invalid`);
     }
-    return { hostId: value.hostId, hostToken: value.hostToken };
+    return { id: value.id, token: value.token };
   });
   const hostBoundCredentials = [
     ...projectRegistrars, ...projectRootImporters, ...projectRootReadIssuers, ...workspaceWriteIssuers, ...hostPromoters
   ];
-  if (hostBoundCredentials.some((entry) => hosts.some((host) =>
-    host.hostId === entry.username || host.hostId === entry.password))) {
-    throw new ControlPlaneSourceError("control-plane credential and token values must be distinct");
-  }
-  const credentialValues = [
-    ...nativeCredentials.map((entry) => entry.password),
-    ...qemuCredentials.map((entry) => entry.password),
-    ...hosts.map((entry) => entry.hostToken),
-    ...hostBoundCredentials.map((entry) => entry.password),
-    ...humanReviewers.map((entry) => entry.password)
-  ];
+  const allCredentials = [...serviceCredentials, ...hostBoundCredentials, ...humanReviewers];
+  const credentialValues = [...allCredentials.map((entry) => entry.password), ...workers.map((entry) => entry.token)];
   const roleValues = [
-    ...nativeCredentials.flatMap((entry) => [entry.username, entry.password]),
-    ...qemuCredentials.flatMap((entry) => [entry.username, entry.password]),
-    ...hosts.map((entry) => entry.hostToken),
-    ...projectRegistrars.flatMap((entry) => [entry.username, entry.password]),
-    ...projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
-    ...projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
-    ...workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
-    ...humanReviewers.flatMap((entry) => [entry.username, entry.password]),
-    ...hostPromoters.flatMap((entry) => [entry.username, entry.password])
+    ...allCredentials.flatMap((entry) => [entry.username, entry.password]),
+    ...workers.flatMap((entry) => [entry.id, entry.token])
   ];
   assertDistinct(roleValues);
   const scopeIds = [...hostBoundCredentials.map((entry) => entry.hostId), ...humanReviewers.map((entry) => entry.reviewerId)];
-  if ([...credentialValues, ...nativeCredentials.map((entry) => entry.username), ...qemuCredentials.map((entry) => entry.username)].some((secret) => scopeIds.includes(secret))) {
+  if (allCredentials.flatMap((entry) => [entry.username, entry.password]).concat(workers.map((entry) => entry.token))
+    .some((value) => scopeIds.includes(value))) {
     throw new ControlPlaneSourceError("control-plane credential and token values must be distinct");
   }
+  // Scope IDs may intentionally identify the same host across roles or workers.
   return { credentialValues, roleValues: [...new Set([...roleValues, ...scopeIds])] };
 }
 
 type HostCredential = Credential & { readonly hostId: string };
 type ReviewerCredential = Credential & { readonly reviewerId: string };
-
-function qemuCredentialValues(value: unknown): readonly Credential[] {
-  const roles = ["query", "eventIntake", "identity", "attemptIssuer", "candidateReader", "resultReporter"] as const;
-  const input = exactRecord(value, ["endpoint", "serviceId", ...roles], "native Git QEMU CI config");
-  if (input.serviceId !== "qemu-main" || typeof input.endpoint !== "string") {
-    throw new ControlPlaneSourceError("native Git QEMU CI service identity is invalid");
-  }
-  let endpoint: URL;
-  try { endpoint = new URL(input.endpoint); }
-  catch { throw new ControlPlaneSourceError("native Git QEMU CI endpoint is invalid"); }
-  if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.origin !== input.endpoint
-    || endpoint.username !== "" || endpoint.password !== "") {
-    throw new ControlPlaneSourceError("native Git QEMU CI endpoint must be an HTTP(S) origin");
-  }
-  return roles.map((role) => credential(exactRecord(input[role], ["username", "password"],
-    `native Git QEMU ${role}`), `native Git QEMU ${role}`));
-}
 
 function reviewerCredentials(value: unknown): readonly ReviewerCredential[] {
   if (!Array.isArray(value)) throw new ControlPlaneSourceError("native Git human reviewers must be an array");
@@ -155,22 +123,16 @@ function hostCredentials(value: unknown, label: string): readonly HostCredential
 }
 
 function credential(value: unknown, label: string): Credential {
-  const input = exactRecord(value, value !== null && typeof value === "object" && Object.hasOwn(value, "endpoint")
-    ? ["endpoint", "username", "password"] : ["username", "password"], label);
-  if (typeof input.username !== "string" || !isToken(input.password)) {
+  const input = exactRecord(value, ["username", "password"], label);
+  if (typeof input.username !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.username) || !isToken(input.password)) {
     throw new ControlPlaneSourceError(`${label} credential is invalid`);
   }
   return { username: input.username, password: input.password };
 }
 
-function assertPaired(native: readonly Credential[], ordinary: readonly Credential[]): void {
-  const pairs = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]] as const;
-  for (const [nativeIndex, ordinaryIndex] of pairs) {
-    const left = native[nativeIndex];
-    const right = ordinary[ordinaryIndex];
-    if (left === undefined || right === undefined || left.username !== right.username || left.password !== right.password) {
-      throw new ControlPlaneSourceError("native Git and ordinary CI paired credentials must match");
-    }
+function assertPaired(native: Credential, worker: Credential): void {
+  if (native.username !== worker.username || native.password !== worker.password) {
+    throw new ControlPlaneSourceError("native Git and CI paired credentials must match");
   }
 }
 

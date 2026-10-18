@@ -5,8 +5,7 @@ const token = (fill: number): string => Buffer.alloc(32, fill).toString("base64u
 
 export const controlPlaneSecrets = {
   query: token(1),
-  identity: token(2),
-  attemptIssuer: token(3),
+  grantIssuer: token(3),
   candidateReader: token(18),
   resultReporter: token(4),
   webhook: token(5),
@@ -41,12 +40,8 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
     workspaceWriteIssuers: [],
     humanReviewers: [],
     hostPromoters: [],
-    ordinaryCi: {
-      endpoint: "http://ordinary-ci:8080",
-      serviceId: "ordinary-main",
-      query: { username: "native-query", password: controlPlaneSecrets.query },
-      identity: { username: "ordinary-identity", password: controlPlaneSecrets.identity },
-      attemptIssuer: { username: "ordinary-attempts", password: controlPlaneSecrets.attemptIssuer },
+    ci: {
+      grantIssuer: { username: "ci-grants", password: controlPlaneSecrets.grantIssuer },
       candidateReader: { username: "ordinary-candidate-reader", password: controlPlaneSecrets.candidateReader },
       resultReporter: { username: "ordinary-results", password: controlPlaneSecrets.resultReporter },
       webhook: {
@@ -60,16 +55,11 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
 
 export function ordinaryServiceConfig(): Readonly<Record<string, unknown>> {
   return {
-    schemaVersion: 5,
-    serviceId: "ordinary-main",
-    database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-    eligibilityLeaseMilliseconds: 300_000,
+    schemaVersion: 1,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
-      serviceId: "native-main",
-      identity: { username: "ordinary-identity", password: controlPlaneSecrets.identity },
-      attemptIssuer: { username: "ordinary-attempts", password: controlPlaneSecrets.attemptIssuer },
+      grantIssuer: { username: "ci-grants", password: controlPlaneSecrets.grantIssuer },
       candidateReader: { username: "ordinary-candidate-reader", password: controlPlaneSecrets.candidateReader },
       resultReporter: { username: "ordinary-results", password: controlPlaneSecrets.resultReporter }
     },
@@ -77,7 +67,11 @@ export function ordinaryServiceConfig(): Readonly<Record<string, unknown>> {
       webhook: { username: "native-events", password: controlPlaneSecrets.webhook },
       query: { username: "native-query", password: controlPlaneSecrets.query }
     },
-    hosts: [{ hostId: "host-a", hostToken: controlPlaneSecrets.host, capacities: [] }]
+    workers: [{ id: "host-a", token: controlPlaneSecrets.host, slots: [{ id: "ordinary", runtime: "sysbox", profile: {
+      runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`,
+      jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`,
+      bounds: { cpu: "1", memoryBytes: "1073741824", pids: "256", wallClockSeconds: "60", outputBytes: "1048576" }
+    } }] }]
   };
 }
 

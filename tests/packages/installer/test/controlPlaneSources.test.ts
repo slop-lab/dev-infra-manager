@@ -30,42 +30,39 @@ async function fixture() {
 }
 
 describe("control-plane private source staging", () => {
-  it("includes optional QEMU roles in secret redaction and cross-role collision checks", async () => {
+  it.each(["grantIssuer", "candidateReader", "resultReporter", "webhook"])(
+    "requires matching %s credentials across the service boundary", async (role) => {
+      const input = await fixture();
+      const native = nativeServiceConfig();
+      const ci = native.ci as Record<string, unknown>;
+      const selected = ci[role] as Record<string, unknown>;
+      await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...native, ci: {
+        ...ci, [role]: { ...selected, password: Buffer.alloc(32, 80).toString("base64url") }
+      } })}\n`);
+      await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/paired/);
+    });
+
+  it("includes runtime-independent worker credentials in redaction and activation fences", async () => {
     const input = await fixture();
-    const roles = ["query", "eventIntake", "identity", "attemptIssuer", "candidateReader", "resultReporter"];
-    const qemuCi = { endpoint: "http://192.0.2.1:8082", serviceId: "qemu-main",
-      ...Object.fromEntries(roles.map((role, index) => [role, {
-        username: `qemu-${role}`, password: Buffer.alloc(32, 80 + index).toString("base64url")
-      }])) };
-    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), qemuCi })}\n`);
     const sources = await readControlPlaneSources(input.parsed);
-    const qemuSecret = Buffer.alloc(32, 80).toString("base64url");
-    expect(sources.credentialValues).toContain(qemuSecret);
-    expect(sources.roleValues).toContain("qemu-query");
+    expect(sources.credentialValues).toContain(controlPlaneSecrets.host);
+    expect(sources.roleValues).toContain("host-a");
     expect(() => completeControlPlaneSourcePreflight(sources, {
-      nativeGit: Buffer.from(`${qemuSecret}\n`),
+      nativeGit: Buffer.from(`${controlPlaneSecrets.host}\n`),
       ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
     })).toThrow(/distinct/);
-    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), qemuCi: {
-      ...qemuCi, query: { username: "qemu-query", password: controlPlaneSecrets.query }
-    } })}\n`);
+    const ordinary = ordinaryServiceConfig();
+    const workers = ordinary.workers as Array<Record<string, unknown>>;
+    await writePrivate(input.paths.ordinaryConfig, `${JSON.stringify({ ...ordinary, workers: [
+      { ...workers[0], id: "native-query" }
+    ] })}\n`);
     await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/distinct/);
   });
 
-  it.each([
-    { endpoint: "file:///tmp/qemu", serviceId: "qemu-main" },
-    { endpoint: "http://127.0.0.1:8082", serviceId: "ordinary-main" },
-    { endpoint: "http://user:secret@127.0.0.1:8082", serviceId: "qemu-main" }
-  ])("rejects invalid optional QEMU wiring", async (qemuCi) => {
+  it.each(["ordinaryCi", "qemuCi"])("rejects the obsolete separate %s service role shape", async (role) => {
     const input = await fixture();
-    const roles = ["query", "eventIntake", "identity", "attemptIssuer", "candidateReader", "resultReporter"];
-    const credentials = Object.fromEntries(roles.map((role, index) => [role, {
-      username: `qemu-${role}`, password: Buffer.alloc(32, 80 + index).toString("base64url")
-    }]));
-    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), qemuCi: {
-      ...credentials, ...qemuCi
-    } })}\n`);
-    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/QEMU/);
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), [role]: {} })}\n`);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/fields/);
   });
 
   it("reads four stable private sources and records their exact digests", async () => {
@@ -83,7 +80,7 @@ describe("control-plane private source staging", () => {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
       ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
     });
-    expect(complete.allSecretValues).toHaveLength(11);
+    expect(complete.allSecretValues).toHaveLength(10);
   });
 
   it("rejects noncanonical, short, reused, and symlinked token sources", async () => {
@@ -140,7 +137,7 @@ describe("control-plane private source staging", () => {
     })}\n`);
     const before = await readFile(input.paths.ordinaryConfig);
 
-    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/schema-5/);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/schema-1/);
     expect(await readFile(input.paths.ordinaryConfig)).toEqual(before);
   });
 
