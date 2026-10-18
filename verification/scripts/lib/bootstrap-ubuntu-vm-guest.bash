@@ -193,11 +193,11 @@ docker run --rm --runtime=sysbox-runc \
   alpine:3.22.2@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412 true
 REMOTE
   if [[ "$role" == control-qemu ]]; then
-    printf 'fresh-ubuntu phase=control-plane-install role=%s source=%s\n' "$role" "$SOURCE_SHA"
+    printf 'fresh-ubuntu phase=service-images-and-installer-artifacts role=%s source=%s\n' "$role" "$SOURCE_SHA"
     timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" \
-      'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench && pnpm install --frozen-lockfile && just verify control-plane-install-live' \
-      >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-control-plane-install.log" 2>&1
-    printf 'PASS fresh-ubuntu control-plane-install source=%s\n' "$SOURCE_SHA"
+      'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench && pnpm install --frozen-lockfile && just build-packages && just verify native-idle-service-images && just verify installer-artifacts' \
+      >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-service-images-and-installer-artifacts.log" 2>&1
+    printf 'PASS fresh-ubuntu service-images-and-installer-artifacts source=%s\n' "$SOURCE_SHA"
     printf 'fresh-ubuntu phase=native-basic-lifecycle role=%s source=%s\n' "$role" "$SOURCE_SHA"
     timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" \
       'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench && just verify native-basic-lifecycle' \

@@ -78,7 +78,7 @@ for node_major in 24 26; do
     bash -lc 'just check-source-native && just verify package-packs && pnpm audit --prod'
 done
 just verify native-idle-service-images
-just verify control-plane-install-live
+just verify installer-artifacts
 ```
 
 Review every package dry-run listing and confirm it contains its README,

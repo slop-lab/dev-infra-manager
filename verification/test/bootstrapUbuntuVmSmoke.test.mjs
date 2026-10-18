@@ -44,8 +44,8 @@ test("defines a pinned, bounded two-role fresh Ubuntu acceptance profile", async
   assert.match(guestHelper, /first bootstrap login must exit 3/);
   assert.match(guestHelper, /0\\\.10\\\.0-local-\[0-9a-f\]\{64\}/);
   assert.match(guestHelper, /docker run --rm --runtime=sysbox-runc/);
-  assert.match(guestHelper, /just verify control-plane-install-live/);
-  assert.match(guestHelper, /pnpm install --frozen-lockfile && just verify control-plane-install-live/);
+  assert.match(guestHelper, /just verify native-idle-service-images && just verify installer-artifacts/);
+  assert.match(guestHelper, /pnpm install --frozen-lockfile && just build-packages/);
   assert.match(guestHelper, /just verify native-basic-lifecycle/);
   assert.match(sourceHelper, /schemaVersion/);
   assert.match(sourceHelper, /sourceSha/);

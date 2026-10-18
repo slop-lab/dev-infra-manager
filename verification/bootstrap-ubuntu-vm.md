@@ -171,8 +171,8 @@ preseeded ephemeral SSH host keys, and a UID-1001 `dim` operator with
 guest-local passwordless sudo. The first SSH login must finish the bootstrap
 with status 3; a new SSH login performs the resume. Each guest proves the
 installed `0.10.0-local-<64 lowercase hex>` facade and a real Sysbox container.
-The control/QEMU guest additionally runs the existing
-`just verify control-plane-install-live` and
+The control/QEMU guest additionally checks the current service images,
+installs matched tarballs into isolated prefixes with `just verify installer-artifacts`, and runs
 `just verify native-basic-lifecycle` gates. It does not create persistent
 operator TLS material, native global-role credentials, worker deployments, or
 a generic multi-host bridge; the gates own and clean their disposable fixtures.

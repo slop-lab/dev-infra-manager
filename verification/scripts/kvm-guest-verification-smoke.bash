@@ -50,8 +50,8 @@ installed_services() {
   cd "$repo_root"
   local detail_log="$DIM_VERIFICATION_LOG_ROOT/installed-services-detail.log" status
   umask 077
-  if { just verify native-idle-service-images && just verify control-plane-install-live; } >"$detail_log" 2>&1; then
-    printf 'native installed services verified; details=%s\n' "$detail_log"
+  if { just verify native-idle-service-images && just verify installer-artifacts; } >"$detail_log" 2>&1; then
+    printf 'service images and isolated installer artifacts verified; details=%s\n' "$detail_log"
   else
     status=$?
     tail -c 16384 -- "$detail_log" >&2

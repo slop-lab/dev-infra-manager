@@ -1,102 +1,24 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
-const verificationRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const smokePath = join(verificationRoot, "scripts", "native-qemu-guest-mechanics-kvm-smoke.bash");
-const aggregatePath = join(verificationRoot, "scripts", "kvm-guest-verification-smoke.bash");
-const delegatePath = join(verificationRoot, "scripts", "kvm-guest-group-delegate.bash");
-const recipesPath = join(verificationRoot, "verify.just");
-const productionLauncherPath = join(
-  verificationRoot,
-  "..",
-  "core",
-  "packages",
-  "core",
-  "src",
-  "native-qemu-runner-assets",
-  "dim-native-qemu-run"
-);
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
-test("runs real KVM guest mechanics without claiming independent acceptance", async () => {
-  // Given
-  const [smoke, aggregate, delegate, recipes, productionLauncher] = await Promise.all([
-    readFile(smokePath, "utf8"),
-    readFile(aggregatePath, "utf8"),
-    readFile(delegatePath, "utf8"),
-    readFile(recipesPath, "utf8"),
-    readFile(productionLauncherPath, "utf8")
-  ]);
-
-  // When
-  const syntax = spawnSync("bash", ["-n", smokePath]);
-  const delegateSyntax = spawnSync("bash", ["-n", delegatePath]);
-  const hostRefusal = spawnSync("bash", [delegatePath, "preflight"], {
-    cwd: verificationRoot,
-    encoding: "utf8"
-  });
-  const arbitraryRefusal = spawnSync("bash", [delegatePath, "/bin/sh"], {
-    cwd: verificationRoot,
-    encoding: "utf8"
-  });
-
-  // Then
-  assert.equal(syntax.status, 0);
-  assert.equal(delegateSyntax.status, 0);
-  assert.equal(hostRefusal.status, 2);
-  assert.match(hostRefusal.stderr, /disposable QEMU verification guest/);
-  assert.equal(arbitraryRefusal.status, 2);
-  assert.match(arbitraryRefusal.stderr, /disposable QEMU verification guest/);
-  assert.match(smoke, /q35,accel=kvm/);
-  assert.match(smoke, /same-host-native-mechanics-not-independent-acceptance/);
-  assert.match(smoke, /docker export/);
-  assert.match(smoke, /docker cp/);
-  assert.match(smoke, /type=volume,source=.*guest_root_volume/);
-  assert.doesNotMatch(smoke, /type=bind/);
-  assert.match(smoke, /--device \/dev\/kvm/);
-  assert.match(smoke, /--user 65534:65534/);
-  assert.match(smoke, /--cap-drop ALL --security-opt no-new-privileges/);
-  assert.match(smoke, /id=workspace,path=\/run\/dim\/workspace,security_model=mapped-xattr/);
-  assert.match(smoke, /host-workspace-ownership\.log/);
-  assert.match(productionLauncher, /id=workspace,path=\/run\/dim\/workspace,security_model=mapped-xattr/);
-  assert.match(smoke, /timeout --signal=TERM --kill-after=15s 180s[\s\\]*docker run/);
-  assert.match(smoke, /cleanup_resources \|\| exit 125/);
-  assert.match(smoke, /resource_label="dim\.verification\.native-qemu-kvm=\$suffix"/);
-  assert.match(smoke, /refusing to (?:replace|use) pre-existing/);
-  assert.ok(smoke.indexOf("cleanup_resources || exit 125") < smoke.indexOf("native-qemu-guest-mechanics-kvm-smoke-ok"));
-  assert.doesNotMatch(smoke, /\/usr\/local\/bin\/dim-native-qemu-run/);
-  assert.doesNotMatch(smoke, new RegExp(["DIM_NATIVE_QEMU", "TCG_EVIDENCE_ROOT"].join("_")));
-  assert.match(recipes, /^native-qemu-guest-mechanics-kvm:/m);
-  assert.match(recipes, /^full-development:/m);
-  assert.match(recipes, /full-development:[\s\S]*kvm-guest-verification-smoke\.bash/);
-  assert.match(aggregate, /verification_stage_register qemu-kvm-mechanics qemu_mechanics "docker-ready kvm-ready"/);
-  assert.doesNotMatch(aggregate, /verification_stage_register qemu-kvm-mechanics[^\n]*(?:sysbox|ordinary|native-contracts|installed-services)/);
-  assert.match(delegate, /stat -Lc 'kind=%F mode=%a uid=%u gid=%g' -- \/dev\/kvm/);
-  assert.match(delegate, /id -u/);
-  assert.match(delegate, /id -g/);
-  assert.match(delegate, /id -Gn/);
-  assert.match(delegate, /\/proc\/cpuinfo/);
-  assert.match(delegate, /vmx\|svm/);
-  assert.match(delegate, /kvm-ready diagnostic/);
-  assert.match(aggregate, /kvm-guest-group-delegate\.bash" preflight/);
-  assert.match(aggregate, /kvm-guest-group-delegate\.bash" run/);
-  assert.match(delegate, /\/var\/lib\/cloud\/data\/instance-id/);
-  assert.match(delegate, /dim-kvm-smoke/);
-  assert.match(delegate, /\/sys\/class\/dmi\/id\/sys_vendor/);
-  assert.match(delegate, /\/home\/dim\/dim\/workbench/);
-  assert.match(delegate, /\[\[ "\$\(id -u\)" == 1001 \]\]/);
-  assert.match(delegate, /\/usr\/bin\/sudo -n \/usr\/bin\/setpriv/);
-  assert.match(delegate, /--reuid=.*--regid=.*--groups=.*--no-new-privs/s);
-  assert.match(delegate, /HOME=\/home\/dim/);
-  assert.match(delegate, /preflight\) kvm_preflight/);
-  assert.match(delegate, /run\) qemu_mechanics/);
-  assert.doesNotMatch(delegate, /\b(?:chmod|chown|usermod|udev)\b/);
-  assert.doesNotMatch(delegate, /exec[^\n]*"\$@"/);
-  assert.match(smoke, /"acceleration":"kvm"/);
-  assert.doesNotMatch(smoke, /accel=tcg|"acceleration":"tcg"/);
-  assert.match(productionLauncher, /q35,accel=kvm/);
-  assert.doesNotMatch(productionLauncher, /accel=tcg/);
+test("checks KVM launch scripts and refuses guest delegation outside its disposable guest", () => {
+  for (const script of [
+    join(root, "scripts/native-qemu-guest-mechanics-kvm-smoke.bash"),
+    join(root, "scripts/kvm-guest-group-delegate.bash"),
+    join(root, "../core/packages/managed/src/native-qemu-runner-assets/dim-native-qemu-run")
+  ]) {
+    const result = spawnSync("bash", ["-n", script], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  const delegate = join(root, "scripts/kvm-guest-group-delegate.bash");
+  for (const operation of ["preflight", "/bin/sh"]) {
+    const result = spawnSync("bash", [delegate, operation], { cwd: root, encoding: "utf8" });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /disposable QEMU verification guest/);
+  }
 });

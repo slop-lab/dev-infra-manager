@@ -33,7 +33,7 @@ afterEach(async () => {
 });
 
 describe("local source installation", () => {
-  it("reinstalls an aggregate-identified CLI through a real existing facade", async () => {
+  it("reinstalls a matched built CLI through a real existing facade", async () => {
     // Given
     const root = await mkdtemp(resolve(tmpdir(), "dim-local-source-installer-"));
     fixtureRoots.push(root);
@@ -48,18 +48,18 @@ describe("local source installation", () => {
 
     const environment = {
       ...process.env,
+      MISE_SKIP_RESHIM: "1",
       HOME: home,
       XDG_CONFIG_HOME: configHome,
       XDG_DATA_HOME: resolve(root, "data"),
       DIM_CONFIG_PATH: resolve(configHome, "dim", "config.json"),
       DIM_DATA_HOME: dataHome,
-      DIM_INSTALL_PREFIX: installPrefix
+      DIM_INSTALL_PREFIX: installPrefix,
+      DIM_STATE_ROOT: resolve(root, "state")
     };
     await mkdir(resolve(environment.DIM_CONFIG_PATH, ".."), { recursive: true });
-    await writeFile(environment.DIM_CONFIG_PATH, '{"schemaVersion":1,"workspaceBackend":"sysbox"}\n');
-    const packed = run("/usr/bin/bash", [
-      resolve(workspaceRoot, "verification/scripts/pack-local-packages.bash"),
-      bundle
+    const packed = run(process.execPath, [
+      resolve(workspaceRoot, "scripts/pack-local-packages.mjs"), workspaceRoot, bundle
     ], environment);
     expect(packed.status, packed.stderr).toBe(0);
 
@@ -67,7 +67,8 @@ describe("local source installation", () => {
     const installer = manifest.packages.find((entry) => entry.name === "@slop-lab/dim-installer");
     expect(installer).toBeDefined();
     const aggregateVersion = installer?.version ?? "";
-    expect(aggregateVersion).toMatch(/^0\.10\.0-local-[0-9a-f]{64}(?:-dirty)?$/);
+    const builtInstaller = JSON.parse(await readFile(resolve(workspaceRoot, "core/packages/installer/dist/package.json"), "utf8")) as { version: string };
+    expect(aggregateVersion).toBe(builtInstaller.version);
     expect(new Set(manifest.packages.map((entry) => entry.version))).toEqual(new Set([aggregateVersion]));
 
     const installedFacade = run("npm", [
@@ -116,15 +117,15 @@ describe("local source installation", () => {
       .map((directory) => mkdir(directory, { recursive: true })));
     const environment = {
       ...process.env,
+      MISE_SKIP_RESHIM: "1",
       HOME: home,
       DIM_CONFIG_PATH: configPath,
       DIM_DATA_HOME: dataHome,
       DIM_INSTALL_PREFIX: installPrefix,
       DIM_STATE_ROOT: stateRoot
     };
-    const packed = run("/usr/bin/bash", [
-      resolve(workspaceRoot, "verification/scripts/pack-local-packages.bash"),
-      bundle
+    const packed = run(process.execPath, [
+      resolve(workspaceRoot, "scripts/pack-local-packages.mjs"), workspaceRoot, bundle
     ], environment);
     expect(packed.status, packed.stderr).toBe(0);
     const manifest = JSON.parse(await readFile(resolve(bundle, "packages.json"), "utf8")) as PackageManifest;

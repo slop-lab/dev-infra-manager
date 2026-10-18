@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run test --no-file-parallelism"
+    "test": "vitest run test --no-file-parallelism --exclude 'test/qemu*.test.ts' --exclude 'test/kvm*.test.ts'",
+    "test:qemu-service": "node -e 'if (process.getuid?.() !== 0) { console.error(\"QEMU service fixtures require a disposable root environment; see verification/README.md\"); process.exit(2); }' && vitest run test/qemu*.test.ts test/kvm*.test.ts test/bootstrapInstallerSafety.test.ts --no-file-parallelism"
   },
   "engines": {
     "node": "^24.0.0 || ^26.0.0",

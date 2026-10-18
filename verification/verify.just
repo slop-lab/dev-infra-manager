@@ -59,6 +59,8 @@ workspace-user-setup:
 # Verify every publishable package through the same dry-run used before release.
 package-packs:
     cd .. && pnpm --filter @slop-lab/dim-core run pack:dry-run
+    cd .. && pnpm --filter @slop-lab/dim-managed run pack:dry-run
+    cd .. && bash core/scripts/pnpm-pack-dry-run.bash plugin-ci-workflows/dist
     cd .. && pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-native-git run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-web run pack:dry-run
@@ -97,9 +99,9 @@ sysbox-ci-runner-image:
 native-idle-service-images:
 	cd .. && bash verification/scripts/native-idle-service-images-smoke.bash
 
-# Exercise the packaged installer facade and exported API across the idle bundle lifecycle; clean-host acceptance remains separate.
-control-plane-install-live:
-	cd .. && bash verification/scripts/control-plane-install-live-smoke.bash
+# Install matched built tarballs through the real facade into disposable prefixes.
+installer-artifacts:
+    cd .. && pnpm --dir verification exec vitest run test/localSourceInstaller.test.ts test/targetInstallerSelection.test.ts --no-file-parallelism
 
 # Verify forge detection without relying on a live GitHub or Gitea instance.
 pull-request-skill:
