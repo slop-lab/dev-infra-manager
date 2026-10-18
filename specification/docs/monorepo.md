@@ -15,7 +15,9 @@ that shared source identity. There is no required sibling checkout.
 | `tests/` | Centralized behavior tests and fixtures |
 | `verification/` | Disposable cross-component, packaging and physical runtime checks |
 | `specification/` | Current architecture, usage and design records |
-| `.dim/`, `agent/` | Explicit repository development tools and optional host verification helpers |
+| `.dim/` | DIM-recognized Project configuration (`repos.yml`, `ci/runner.yml`) |
+| `scripts/`, `agent/` | Explicit repository development tools and CI job payloads |
+| `verification/qemu/` | Explicit host-run QEMU verification tools |
 
 The base dependency graph is CLI → workspace core. Managed code is loaded only
 when its operation/source is selected. A workflow plugin compiles configuration

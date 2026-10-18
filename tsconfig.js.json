@@ -40,7 +40,10 @@
       "@slop-lab/dim-native-git/execution": [
         "core/packages/native-git/src/execution-protocol.ts"
       ]
-    }
+    },
+    "typeRoots": [
+      "./tests/node_modules/@types"
+    ]
   },
   "include": [
     "**/*.js",
