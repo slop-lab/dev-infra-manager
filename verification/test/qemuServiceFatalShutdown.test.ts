@@ -2,7 +2,7 @@ import { link, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "no
 import { createConnection, createServer, type Server } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { socketLeasePath } from "../../.dim/qemu-service-artifacts.mjs";
+import { socketLeasePath } from "../qemu/qemu-service-artifacts.mjs";
 import { http, launchRecords, readEvents, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
 
 const foreignServers: Server[] = [];

@@ -86,7 +86,7 @@ if ! command -v cloud-localds >/dev/null && ! command -v genisoimage >/dev/null;
 fi
 test -r /dev/kvm && test -w /dev/kvm || { echo "/dev/kvm is not accessible" >&2; exit 2; }
 repo_root="${DIM_QEMU_SOURCE_ROOT:-/workspace}"
-test -d "$repo_root/.dim" || { echo "DIM_QEMU_SOURCE_ROOT is not an assembled Project worktree" >&2; exit 2; }
+test -d "$repo_root/verification/qemu" || { echo "DIM_QEMU_SOURCE_ROOT is not a DIM source repository" >&2; exit 2; }
 cache="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
 guest_cpus="${DIM_KVM_SMOKE_CPUS:-4}"
 guest_memory_mb="${DIM_KVM_SMOKE_MEMORY_MB:-4096}"

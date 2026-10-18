@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { http, readEvents, startService, waitForObservation } from "./qemuServiceTestSupport.js";
 
-const serviceScript = resolve(import.meta.dirname, "../../.dim/qemu-service.mjs");
+const serviceScript = resolve(import.meta.dirname, "../qemu/qemu-service.mjs");
 const roots: string[] = [];
 const processes: ChildProcess[] = [];
 afterEach(async () => {

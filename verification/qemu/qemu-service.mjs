@@ -1,3 +1,4 @@
+// @ts-check
 import { spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import http from "node:http";
@@ -11,21 +12,28 @@ import { snapshotInputs } from "./qemu-snapshot.mjs";
 
 const sourceRoot = await realpath(process.env.DIM_QEMU_SOURCE_ROOT ?? "/workspace");
 const socketPath = process.env.DIM_QEMU_SERVICE_SOCKET ?? "/tmp/dim-qemu-verification/service.sock";
-const launcher = process.env.DIM_QEMU_LAUNCHER ?? "/workspace/.dim/qemu-verify.bash";
+const launcher = process.env.DIM_QEMU_LAUNCHER ?? "/workspace/verification/qemu/qemu-verify.bash";
 const serviceDirectory = path.dirname(socketPath);
 const pidPath = path.join(serviceDirectory, "service.pid");
 const ownerPath = path.join(serviceDirectory, "service-owner.json");
 const leasePath = socketLeasePath(socketPath);
 const runsRoot = path.join(serviceDirectory, "runs");
-const invokingUid = numericIdentity("DIM_QEMU_INVOKING_UID", process.getuid());
-const invokingGid = numericIdentity("DIM_QEMU_INVOKING_GID", process.getgid());
+const invokingUid = numericIdentity("DIM_QEMU_INVOKING_UID", process.getuid?.());
+const invokingGid = numericIdentity("DIM_QEMU_INVOKING_GID", process.getgid?.());
+/** @type {import("./qemu-types.js").Run | undefined} */
 let activeRun;
+/** @type {import("./qemu-types.js").Run | undefined} */
 let latestRun;
 let serviceState = "starting";
+/** @type {Promise<void> | undefined} */
 let shutdownPromise;
+/** @type {Promise<void> | undefined} */
 let fatalShutdownPromise;
+/** @type {import("./qemu-types.js").ArtifactIdentity | undefined} */
 let ownerIdentity;
+/** @type {import("./qemu-types.js").ArtifactIdentity | undefined} */
 let socketIdentity;
+/** @type {Set<import("./qemu-types.js").EventFollower>} */
 const eventFollowers = new Set();
 
 const server = http.createServer((request, response) => {
@@ -42,6 +50,7 @@ ownerIdentity = startup?.ownerIdentity;
 socketIdentity = startup?.socketIdentity;
 if (startup) serviceState = "accepting";
 
+/** @param {import("node:http").IncomingMessage} request @param {import("node:http").ServerResponse} response */
 async function handle(request, response) {
   if (serviceState === "starting") {
     return sendJson(response, 503, { error: "QEMU verification is starting" });
@@ -110,9 +119,14 @@ async function handle(request, response) {
   return sendJson(response, 404, { error: "not found" });
 }
 
+/** @param {import("node:http").IncomingMessage} request @param {import("node:http").ServerResponse} response */
 function claimRun(request, response) {
+  /** @type {((reason:import("./qemu-types.js").FinalizationReason)=>void) | undefined} */
   let resolveFinalization;
+  /** @type {Promise<import("./qemu-types.js").FinalizationReason>} */
   const finalizationRequested = new Promise((resolve) => { resolveFinalization = resolve; });
+  if (resolveFinalization === undefined) throw new Error("finalization resolver was not initialized");
+  /** @type {import("./qemu-types.js").Run} */
   const run = {
     abort: new AbortController(), cancelled: false,
     child: undefined, childClosed: undefined, closeResult: undefined,
@@ -127,7 +141,9 @@ function claimRun(request, response) {
   return run;
 }
 
+/** @param {import("./qemu-types.js").Run} run */
 async function prepareRun(run) {
+  if (!run.request) throw new Error("run request is unavailable");
   const body = await readJson(run.request, run.abort.signal);
   const requestInputs = parseInputs(body.inputs ?? [], path);
   if (body.verbose !== undefined && typeof body.verbose !== "boolean") throw new Error("verbose must be a boolean");
@@ -153,6 +169,7 @@ async function prepareRun(run) {
   });
 }
 
+/** @param {string} name @param {number | undefined} fallback */
 function numericIdentity(name, fallback) {
   const value = process.env[name] ?? String(fallback);
   if (!/^(0|[1-9][0-9]*)$/.test(value) || !Number.isSafeInteger(Number(value))) {
@@ -161,6 +178,7 @@ function numericIdentity(name, fallback) {
   return Number(value);
 }
 
+/** @param {import("./qemu-types.js").Run} run @param {import("./qemu-types.js").Input[]} inputs */
 function start(run, inputs) {
   run.abort.signal.throwIfAborted();
   if (serviceState !== "accepting" || activeRun !== run || run.finalizationRequested) throw new Error("QEMU verification is stopping");
@@ -173,6 +191,7 @@ function start(run, inputs) {
   });
   run.child = child;
   run.groupPid = child.pid;
+  /** @param {string | Uint8Array} chunk */
   const append = (chunk) => {
     run.output += String(chunk);
     if (run.output.length > 8 * 1024 * 1024) run.output = run.output.slice(-8 * 1024 * 1024);
@@ -186,7 +205,7 @@ function start(run, inputs) {
     append(`failed to start QEMU verification: ${error.message}\n`);
     if (!run.preserveEvidence) void requestRunFinalization(run, "closed").catch(beginFatalShutdown);
   });
-  run.childClosed = new Promise((resolve) => {
+  run.childClosed = new Promise(/** @param {(value?:void)=>void} resolve */ (resolve) => {
     child.once("exit", (exitCode, signal) => {
       run.closeResult = { exitCode, signal };
       if (!run.preserveEvidence) void requestRunFinalization(run, "closed").catch(beginFatalShutdown);
@@ -198,6 +217,7 @@ function start(run, inputs) {
   });
 }
 
+/** @param {import("./qemu-types.js").Run} run @param {import("./qemu-types.js").FinalizationReason} reason */
 function releaseRun(run, reason) {
   if (activeRun === run) activeRun = undefined;
   if (reason === "rejected" && latestRun === run) latestRun = undefined;
@@ -219,6 +239,7 @@ function beginShutdown() {
   return shutdownPromise;
 }
 
+/** @param {unknown} error @returns {Promise<never | void>} */
 function beginFatalShutdown(error) {
   reportFailure(error);
   if (fatalShutdownPromise) return fatalShutdownPromise;
@@ -242,10 +263,12 @@ function beginFatalShutdown(error) {
   return fatalShutdownPromise;
 }
 
+/** @param {Error} error */
 function handleRuntimeServerError(error) {
   void beginFatalShutdown(error);
 }
 
+/** @param {import("./qemu-types.js").Run | undefined} run */
 async function shutdown(run) {
   if (run) {
     await requestRunFinalization(run, "cancelled");
@@ -254,6 +277,7 @@ async function shutdown(run) {
   serviceState = "stopped";
 }
 
+/** @param {unknown} error */
 function reportFailure(error) {
   process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
   process.exitCode = 1;

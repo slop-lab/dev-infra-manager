@@ -1,3 +1,4 @@
+// @ts-check
 import { chmod, rm } from "node:fs/promises";
 import {
   captureSocketIdentity,
@@ -14,8 +15,10 @@ import { activatePreparedRuns, discardPreparedRuns, prepareServiceFilesystem } f
 
 export { socketLeasePath };
 
+/** @param {import("node:http").Server} server */
 export async function closeServiceListener(server) {
   if (!server.listening) return;
+  /** @type {Promise<void>} */
   const closed = new Promise((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
   });
@@ -23,7 +26,9 @@ export async function closeServiceListener(server) {
   await closed;
 }
 
+/** @param {import("./qemu-types.js").ListenerState} state */
 export async function closeServiceListenerPreservingSocket(state) {
+  if (state.socketIdentity === undefined) { state.server.unref(); throw new Error("service socket identity is unavailable"); }
   let protectedSocket;
   try { protectedSocket = await safeguardReplacedSocket(state.socketPath, state.socketIdentity); }
   catch (error) { state.server.unref(); throw error; }
@@ -32,6 +37,7 @@ export async function closeServiceListenerPreservingSocket(state) {
   else await restoreSocketFromLease(state.socketPath, state.socketIdentity);
 }
 
+/** @param {import("./qemu-types.js").CleanupState} state */
 async function cleanupServiceFilesystem(state) {
   if (!state.socketIdentity) {
     if (state.server.listening) state.server.unref();
@@ -47,18 +53,24 @@ async function cleanupServiceFilesystem(state) {
     preserveSocket: protectedSocket !== undefined, socket: state.socketIdentity, socketPath: state.socketPath });
 }
 
+/** @param {import("./qemu-types.js").CleanupState} state */
 export async function shutdownService(state) {
   await cleanupServiceFilesystem({ ...state, removeRunsRoot: true });
 }
 
+/** @param {import("./qemu-types.js").ServiceConfig} config */
 export async function initializeService(config) {
+  /** @type {import("./qemu-types.js").ServiceConfig & import("./qemu-types.js").CleanupState & {preparedRunsRoot:string | undefined}} */
   const state = { ...config, ownerIdentity: undefined, preparedRunsRoot: undefined,
     removeRunsRoot: false, socketIdentity: undefined };
+  /** @type {Error | undefined} */
   let initializationError;
+  /** @param {Error} error */
   const onInitializationError = (error) => { initializationError = error; };
   try {
     state.preparedRunsRoot = await prepareServiceFilesystem(config);
-    await new Promise((resolve, reject) => {
+    await new Promise(/** @param {(value?:void)=>void} resolve */ (resolve, reject) => {
+      /** @param {Error} error */
       const onStartupError = (error) => reject(error);
       config.server.once("error", onStartupError);
       config.server.listen(config.socketPath, () => {

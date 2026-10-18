@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { waitForObservation } from "./qemuServiceTestSupport.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
-const serviceScript = resolve(workspaceRoot, ".dim/qemu-service.mjs");
+const serviceScript = resolve(workspaceRoot, "verification/qemu/qemu-service.mjs");
 const roots: string[] = [];
 const children: ChildProcess[] = [];
 
@@ -50,7 +50,7 @@ describe("QEMU startup admission gate", () => {
     await writeFile(loader, `import { pathToFileURL } from "node:url";
 export async function resolve(specifier,context,nextResolve){if(specifier.endsWith("qemu-service-filesystem.mjs")&&!specifier.includes("?real"))return{shortCircuit:true,url:pathToFileURL(process.env.DIM_TEST_WRAPPER).href};return nextResolve(specifier,context)}`);
     await writeFile(wrapper, `import fs from "node:fs";
-import * as real from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, ".dim/qemu-service-filesystem.mjs")).href}?real`)};
+import * as real from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, "verification/qemu/qemu-service-filesystem.mjs")).href}?real`)};
 export const prepareServiceFilesystem=real.prepareServiceFilesystem,discardPreparedRuns=real.discardPreparedRuns;
 export async function activatePreparedRuns(...args){await fs.promises.writeFile(process.env.DIM_TEST_BLOCKED,"blocked\\n");if(!fs.existsSync(process.env.DIM_TEST_RELEASE))await new Promise(resolveRelease=>{const watcher=fs.watch(process.env.DIM_TEST_ROOT,(_event,name)=>{if(name==="activation-release"){watcher.close();resolveRelease()}})});const result=await real.activatePreparedRuns(...args);await fs.promises.writeFile(process.env.DIM_TEST_ACTIVATED,"activated\\n");return result}`);
     const child = spawn(process.execPath, ["--experimental-loader", loader, serviceScript], {

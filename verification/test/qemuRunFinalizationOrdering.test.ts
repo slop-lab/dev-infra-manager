@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalizeRun, markRunFatal } from "../../.dim/qemu-run-finalization.mjs";
+import { finalizeRun, markRunFatal } from "../qemu/qemu-run-finalization.mjs";
 
 function runState() {
   return {

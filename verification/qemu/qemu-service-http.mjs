@@ -1,10 +1,13 @@
+// @ts-check
+import { isRecord } from "./qemu-values.mjs";
+/** @param {unknown} value @param {Pick<typeof import("node:path"), "isAbsolute">} path @returns {import("./qemu-types.js").Input[]} */
 export function parseInputs(value, path) {
   if (!Array.isArray(value) || value.length > 16) {
     throw new Error("inputs must be an array of at most 16 entries");
   }
   const names = new Set();
   return value.map((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    if (!isRecord(entry)) {
       throw new Error("each input must be an object");
     }
     const { name, path: requested } = entry;
@@ -20,24 +23,29 @@ export function parseInputs(value, path) {
   });
 }
 
+/** @param {import("node:http").IncomingMessage} request @param {AbortSignal} signal @returns {Promise<Record<string,unknown>>} */
 export async function readJson(request, signal) {
+  /** @type {Buffer[]} */
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     signal.throwIfAborted();
+    if (!Buffer.isBuffer(chunk)) throw new Error("request body must contain bytes");
     size += chunk.length;
     if (size > 65_536) throw new Error("request body is too large");
     chunks.push(chunk);
   }
   signal.throwIfAborted();
   if (size === 0) return {};
+  /** @type {unknown} */
   const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error("request body must be an object");
   }
   return value;
 }
 
+/** @param {import("node:http").ServerResponse} response @param {number} status @param {unknown} value */
 export function sendJson(response, status, value) {
   if (response.headersSent) return response.end();
   const body = `${JSON.stringify(value)}\n`;

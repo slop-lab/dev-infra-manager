@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
-import { createEventFollower } from "../../.dim/qemu-event-followers.mjs";
+import { createEventFollower } from "../qemu/qemu-event-followers.mjs";
 
 class BackpressuredResponse extends EventEmitter {
   readonly writes: Buffer[] = [];

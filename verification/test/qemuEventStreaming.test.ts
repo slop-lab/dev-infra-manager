@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { startService } from "./qemuServiceTestSupport.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
-const clientScript = resolve(workspaceRoot, ".dim/qemu-client.mjs");
+const clientScript = resolve(workspaceRoot, "verification/qemu/qemu-client.mjs");
 const servers: Server[] = [];
 const roots: string[] = [];
 

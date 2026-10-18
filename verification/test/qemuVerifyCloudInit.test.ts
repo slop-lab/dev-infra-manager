@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-const qemuVerify = resolve(import.meta.dirname, "../../.dim/qemu-verify.bash");
+const qemuVerify = resolve(import.meta.dirname, "../qemu/qemu-verify.bash");
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {

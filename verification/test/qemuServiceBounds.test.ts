@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { http, readEvents, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
-import { socketLeasePath } from "../../.dim/qemu-service-artifacts.mjs";
+import { socketLeasePath } from "../qemu/qemu-service-artifacts.mjs";
 
 const followers: ClientRequest[] = [];
 

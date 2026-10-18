@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { createOwnerRecord } from "../../.dim/qemu-service-owner.mjs";
-import { captureSocketIdentity, createSocketLease, publishOwner } from "../../.dim/qemu-service-artifacts.mjs";
+import { createOwnerRecord } from "../qemu/qemu-service-owner.mjs";
+import { captureSocketIdentity, createSocketLease, publishOwner } from "../qemu/qemu-service-artifacts.mjs";
 import { createServer, type Server } from "node:net";
 
-const ownerModule = pathToFileURL(resolve(import.meta.dirname, "../../.dim/qemu-service-owner.mjs")).href;
-const artifactModule = pathToFileURL(resolve(import.meta.dirname, "../../.dim/qemu-service-artifacts.mjs")).href;
+const ownerModule = pathToFileURL(resolve(import.meta.dirname, "../qemu/qemu-service-owner.mjs")).href;
+const artifactModule = pathToFileURL(resolve(import.meta.dirname, "../qemu/qemu-service-artifacts.mjs")).href;
 const roots: string[] = [];
 const servers: Server[] = [];
 

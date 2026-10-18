@@ -1,3 +1,4 @@
+// @ts-check
 import { constants } from "node:fs";
 import {
   lstat,
@@ -14,6 +15,7 @@ const directoryFlags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_
 const descendantFlags = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 const typeMask = BigInt(constants.S_IFMT);
 
+/** @param {{inputs:import("./qemu-types.js").Input[], inputsRoot:string, sourceRoot:string, signal:AbortSignal}} options */
 export async function snapshotInputs({ inputs, inputsRoot, sourceRoot, signal }) {
   const snapshots = [];
   for (const input of inputs) {
@@ -41,6 +43,7 @@ export async function snapshotInputs({ inputs, inputsRoot, sourceRoot, signal })
   return snapshots;
 }
 
+/** @param {import("node:fs/promises").FileHandle} source @param {import("node:fs/promises").FileHandle} destination @param {string} inputName @param {AbortSignal} signal */
 async function copyDirectory(source, destination, inputName, signal) {
   const sourceDirectory = fdPath(source.fd);
   const destinationDirectory = fdPath(destination.fd);
@@ -75,6 +78,7 @@ async function copyDirectory(source, destination, inputName, signal) {
   }
 }
 
+/** @param {import("node:fs/promises").FileHandle} source @param {string} destinationPath @param {string} inputName @param {AbortSignal} signal */
 async function copyChildDirectory(source, destinationPath, inputName, signal) {
   await mkdir(destinationPath, { mode: 0o700 });
   const destination = await open(destinationPath, directoryFlags);
@@ -86,6 +90,7 @@ async function copyChildDirectory(source, destinationPath, inputName, signal) {
   }
 }
 
+/** @param {import("node:fs/promises").FileHandle} source @param {string} destinationPath @param {import("node:fs").BigIntStats} metadata @param {AbortSignal} signal */
 async function copyRegularFile(source, destinationPath, metadata, signal) {
   const destination = await open(
     destinationPath,
@@ -111,6 +116,7 @@ async function copyRegularFile(source, destinationPath, metadata, signal) {
   }
 }
 
+/** @param {string} sourcePath @param {string} destinationPath @param {import("node:fs").BigIntStats} before @param {string} inputName @param {AbortSignal} signal */
 async function copySymbolicLink(sourcePath, destinationPath, before, inputName, signal) {
   const target = await readlink(sourcePath);
   const after = await lstat(sourcePath, { bigint: true });
@@ -121,19 +127,23 @@ async function copySymbolicLink(sourcePath, destinationPath, before, inputName, 
   await symlink(target, destinationPath);
 }
 
+/** @param {import("node:fs").BigIntStats} left @param {import("node:fs").BigIntStats} right */
 function sameIdentity(left, right) {
   return left.dev === right.dev && left.ino === right.ino &&
     (left.mode & typeMask) === (right.mode & typeMask);
 }
 
+/** @param {number} descriptor */
 function fdPath(descriptor) {
   return `/proc/self/fd/${descriptor}`;
 }
 
+/** @param {string} candidate @param {string} root */
 function isWithin(candidate, root) {
   return candidate === root || candidate.startsWith(root.endsWith("/") ? root : `${root}/`);
 }
 
+/** @param {string} inputName */
 function unsupported(inputName) {
   return new Error(`input '${inputName}' contains an unsupported entry type`);
 }

@@ -1,20 +1,25 @@
+// @ts-check
+import { errorCode } from "./qemu-values.mjs";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, rename, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 
+/** @param {import("node:fs").BigIntStats} left @param {import("node:fs").BigIntStats} right */
 function sameIdentity(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
+/** @param {string} path */
 async function inspectPath(path) {
   try {
     return await lstat(path, { bigint: true });
   } catch (error) {
-    if (error?.code === "ENOENT") return undefined;
+    if (errorCode(error) === "ENOENT") return undefined;
     throw error;
   }
 }
 
+/** @param {string} serviceDirectory */
 async function assertServiceDirectory(serviceDirectory) {
   let handle;
   try {
@@ -35,6 +40,7 @@ async function assertServiceDirectory(serviceDirectory) {
   }
 }
 
+/** @param {import("./qemu-types.js").ServicePaths} paths */
 export async function prepareServiceFilesystem(paths) {
   await assertServiceDirectory(paths.serviceDirectory);
   for (const path of [paths.pidPath, paths.ownerPath, paths.socketPath, paths.leasePath]) {
@@ -45,6 +51,7 @@ export async function prepareServiceFilesystem(paths) {
   return preparedRunsRoot;
 }
 
+/** @param {string} runsRoot @param {string} preparedRunsRoot @param {{rename: typeof rename, rm: typeof rm}} operations */
 export async function activatePreparedRuns(runsRoot, preparedRunsRoot, operations = { rename, rm }) {
   const replacedRunsRoot = `${runsRoot}.replaced-${process.pid}-${randomUUID()}`;
   let replaced = false;
@@ -53,7 +60,7 @@ export async function activatePreparedRuns(runsRoot, preparedRunsRoot, operation
       await operations.rename(runsRoot, replacedRunsRoot);
       replaced = true;
     } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
+      if (errorCode(error) !== "ENOENT") throw error;
     }
     await operations.rename(preparedRunsRoot, runsRoot);
   } catch (error) {
@@ -69,6 +76,7 @@ export async function activatePreparedRuns(runsRoot, preparedRunsRoot, operation
   if (replaced) await operations.rm(replacedRunsRoot, { recursive: true });
 }
 
+/** @param {string} preparedRunsRoot */
 export async function discardPreparedRuns(preparedRunsRoot) {
   await rm(preparedRunsRoot, { recursive: true, force: true });
 }

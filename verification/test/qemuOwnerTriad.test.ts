@@ -4,13 +4,13 @@ import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createOwnerRecord, inspectOwner, ownerFingerprint } from "../../.dim/qemu-service-owner.mjs";
+import { createOwnerRecord, inspectOwner, ownerFingerprint } from "../qemu/qemu-service-owner.mjs";
 import {
   captureSocketIdentity, createSocketLease, publishOwner, socketLeasePath,
-} from "../../.dim/qemu-service-artifacts.mjs";
+} from "../qemu/qemu-service-artifacts.mjs";
 import { startService, waitForExit } from "./qemuServiceTestSupport.js";
 
-const ownerScript = resolve(import.meta.dirname, "../../.dim/qemu-service-owner.mjs");
+const ownerScript = resolve(import.meta.dirname, "../qemu/qemu-service-owner.mjs");
 const roots: string[] = [];
 const servers: Server[] = [];
 

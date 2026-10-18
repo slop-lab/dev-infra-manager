@@ -10,7 +10,7 @@ import { spawnPreloadScript } from "./qemuServiceFixtureScripts.js";
 import { waitForObservation } from "./qemuServiceTestSupport.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
-const serviceScript = resolve(workspaceRoot, ".dim/qemu-service.mjs");
+const serviceScript = resolve(workspaceRoot, "verification/qemu/qemu-service.mjs");
 const roots: string[] = [];
 const processes: ChildProcess[] = [];
 const servers: Server[] = [];
@@ -171,7 +171,7 @@ export async function resolve(specifier, context, nextResolve) {
 }
 `);
     await writeFile(ownerWrapper, `import fs from "node:fs";
-import * as artifacts from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, ".dim/qemu-service-artifacts.mjs")).href}?real`)};
+import * as artifacts from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, "verification/qemu/qemu-service-artifacts.mjs")).href}?real`)};
 export const captureSocketIdentity = artifacts.captureSocketIdentity;
 export const createSocketLease = artifacts.createSocketLease;
 export const identity = artifacts.identity;

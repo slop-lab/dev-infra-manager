@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { startService } from "./qemuServiceTestSupport.js";
-import { publishOwner, socketLeasePath } from "../../.dim/qemu-service-artifacts.mjs";
+import { publishOwner, socketLeasePath } from "../qemu/qemu-service-artifacts.mjs";
 
 describe("QEMU structured service ownership", () => {
   it("rejects an invalid record before creating publication artifacts", async () => {

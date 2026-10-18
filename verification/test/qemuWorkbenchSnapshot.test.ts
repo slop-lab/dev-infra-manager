@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-const launcher = resolve(import.meta.dirname, "../../.dim/qemu-verify.bash");
+const launcher = resolve(import.meta.dirname, "../qemu/qemu-verify.bash");
 const roots: string[] = [];
 
 afterEach(async () => {

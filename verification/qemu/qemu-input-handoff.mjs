@@ -1,13 +1,16 @@
+// @ts-check
 import { chmod, chown, lchown, lstat, opendir } from "node:fs/promises";
 import path from "node:path";
 import { snapshotInputs } from "./qemu-snapshot.mjs";
 
+/** @param {{handoffRoot:string, inputs:import("./qemu-types.js").Input[], snapshotRoot:string, signal:AbortSignal, uid:number, gid:number}} options */
 export async function createInputHandoff({ handoffRoot, inputs, snapshotRoot, signal, uid, gid }) {
   const snapshots = await snapshotInputs({ inputs, inputsRoot: handoffRoot, sourceRoot: snapshotRoot, signal });
   await assignTree(handoffRoot, uid, gid, signal);
   return snapshots;
 }
 
+/** @param {string} directoryPath @param {number} uid @param {number} gid @param {AbortSignal} signal */
 async function assignTree(directoryPath, uid, gid, signal) {
   for await (const entry of await opendir(directoryPath)) {
     signal.throwIfAborted();

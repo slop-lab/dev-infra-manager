@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, readdir } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { socketLeasePath } from "../../.dim/qemu-service-artifacts.mjs";
+import { socketLeasePath } from "../qemu/qemu-service-artifacts.mjs";
 import { http, readEvents, spawnRecords, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
 
 const unsupportedServers: Server[] = [];

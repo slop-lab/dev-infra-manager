@@ -1,15 +1,20 @@
+// @ts-check
+import { errorCode } from "./qemu-values.mjs";
+/** @param {number} milliseconds @returns {Promise<void>} */
 const delay = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 
+/** @param {number} groupPid */
 function groupIsLive(groupPid) {
   try {
     process.kill(-groupPid, 0);
     return true;
   } catch (error) {
-    if (error?.code === "ESRCH") return false;
+    if (errorCode(error) === "ESRCH") return false;
     throw error;
   }
 }
 
+/** @param {import("./qemu-types.js").ProcessGroupRun} run */
 export function stopProcessGroup(run) {
   if (run.stopPromise) return run.stopPromise;
   run.stopPromise = (async () => {
@@ -17,7 +22,7 @@ export function stopProcessGroup(run) {
     try {
       process.kill(-run.groupPid, "SIGTERM");
     } catch (error) {
-      if (error?.code !== "ESRCH") throw error;
+      if (errorCode(error) !== "ESRCH") throw error;
     }
     const termDeadline = Date.now() + 4_000;
     while (groupIsLive(run.groupPid) && Date.now() < termDeadline) await delay(50);
@@ -25,7 +30,7 @@ export function stopProcessGroup(run) {
       try {
         process.kill(-run.groupPid, "SIGKILL");
       } catch (error) {
-        if (error?.code !== "ESRCH") throw error;
+        if (errorCode(error) !== "ESRCH") throw error;
       }
     }
     const killDeadline = Date.now() + 1_000;

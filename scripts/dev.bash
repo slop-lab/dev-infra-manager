@@ -33,5 +33,5 @@ case "$task" in
   shell)
     exec bash "$@"
     ;;
-  *) echo 'usage: bash .dim/dev.bash [setup|check|tool-setup [opencode|codex]|agent [opencode|codex] [ARGS...]|web|shell]' >&2; exit 2 ;;
+  *) echo 'usage: bash scripts/dev.bash [setup|check|tool-setup [opencode|codex]|agent [opencode|codex] [ARGS...]|web|shell]' >&2; exit 2 ;;
 esac

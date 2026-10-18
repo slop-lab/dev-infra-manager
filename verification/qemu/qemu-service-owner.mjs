@@ -1,3 +1,5 @@
+// @ts-check
+import { errorCode } from "./qemu-values.mjs";
 import { constants } from "node:fs";
 import { open, readFile, realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -6,11 +8,13 @@ import { parseOwnerFingerprint, parseOwnerRecord } from "./qemu-owner-record.mjs
 
 export { parseOwnerRecord } from "./qemu-owner-record.mjs";
 
+/** @param {string} path */
 async function fileIdentity(path) {
   const canonicalPath = await realpath(path);
   return { ...identity(await stat(canonicalPath, { bigint: true })), path: canonicalPath };
 }
 
+/** @param {number} pid */
 async function processIdentity(pid) {
   const proc = `/proc/${pid}`;
   const [statText, command, executable, cwd, pidNamespaceStats] = await Promise.all([
@@ -23,14 +27,18 @@ async function processIdentity(pid) {
   const end = command.at(-1) === 0 ? -1 : undefined;
   const argv = command.subarray(0, end).toString().split("\0");
   const fields = statText.slice(statText.lastIndexOf(")") + 2).split(" ");
+  const startTicks = fields[19];
+  if (startTicks === undefined) throw new Error("invalid process stat record");
   return { argv, cwd, executable, pid: String(pid),
-    pidNamespace: identity(pidNamespaceStats), startTicks: fields[19] };
+    pidNamespace: identity(pidNamespaceStats), startTicks };
 }
 
+/** @param {import("./qemu-types.js").FileIdentity} left @param {import("./qemu-types.js").FileIdentity} right */
 function sameFile(left, right) {
   return left.path === right.path && sameIdentity(left, right);
 }
 
+/** @param {Omit<import("./qemu-types.js").OwnerRecord,"schema"|"socket">} record @param {Omit<import("./qemu-types.js").OwnerRecord,"schema"|"socket">} actual */
 function sameProcess(record, actual) {
   return record.pid === actual.pid && record.startTicks === actual.startTicks
     && sameIdentity(record.pidNamespace, actual.pidNamespace)
@@ -38,12 +46,13 @@ function sameProcess(record, actual) {
     && sameFile(record.executable, actual.executable) && sameFile(record.cwd, actual.cwd);
 }
 
+/** @param {string} ownerPath @param {string} socketPath @param {string} expectedCwd @returns {Promise<import("./qemu-types.js").InspectedOwner>} */
 export async function inspectOwner(ownerPath, socketPath, expectedCwd) {
   let ownerHandle;
   try {
     ownerHandle = await open(ownerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
+    if (errorCode(error) !== "ENOENT") throw error;
     const [socketStats, leaseStats] = await Promise.all([
       pathState(socketPath), pathState(socketLeasePath(socketPath)),
     ]);
@@ -69,7 +78,7 @@ export async function inspectOwner(ownerPath, socketPath, expectedCwd) {
       if (!sameProcess(record, actual)) throw new Error("service process identity mismatch");
       return { ...result, state: "live" };
     } catch (error) {
-      if (error?.code === "ENOENT") return { ...result, state: "dead" };
+      if (errorCode(error) === "ENOENT") return { ...result, state: "dead" };
       throw error;
     }
   } finally {
@@ -77,6 +86,7 @@ export async function inspectOwner(ownerPath, socketPath, expectedCwd) {
   }
 }
 
+/** @param {string} socketPath @returns {Promise<import("./qemu-types.js").OwnerRecord>} */
 export async function createOwnerRecord(socketPath) {
   const current = await processIdentity(process.pid);
   const [socketStats, leaseStats] = await Promise.all([
@@ -89,6 +99,7 @@ export async function createOwnerRecord(socketPath) {
   return { ...current, schema: 2, socket: identity(socketStats) };
 }
 
+/** @param {import("./qemu-types.js").InspectedOwner} inspected */
 export function ownerFingerprint(inspected) {
   return {
     state: inspected.state,
@@ -99,8 +110,10 @@ export function ownerFingerprint(inspected) {
   };
 }
 
+/** @param {number} milliseconds @returns {Promise<void>} */
 const sleep = (milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
 
+/** @param {Exclude<import("./qemu-types.js").InspectedOwner,{state:"absent"}>} inspected @param {string} ownerPath @param {string} socketPath @returns {Promise<{state:"absent"|"dead"|"live"}>} */
 async function inspectRetirementProgress(inspected, ownerPath, socketPath) {
   const leaseStats = await pathState(socketLeasePath(socketPath));
   if (!leaseStats) {
@@ -130,7 +143,7 @@ async function inspectRetirementProgress(inspected, ownerPath, socketPath) {
     if (!sameProcess(inspected.record, actual)) throw new Error("service process identity mismatch");
     return { state: "live" };
   } catch (error) {
-    if (error?.code === "ENOENT") {
+    if (errorCode(error) === "ENOENT") {
       if (ownerStats && socketStats) return { state: "dead" };
       throw new Error("ambiguous service ownership artifacts");
     }
@@ -138,6 +151,7 @@ async function inspectRetirementProgress(inspected, ownerPath, socketPath) {
   }
 }
 
+/** @param {import("./qemu-types.js").InspectedOwner} inspected @param {string} ownerPath @param {string} socketPath @param {number} timeoutMs */
 async function retireInspected(inspected, ownerPath, socketPath, timeoutMs) {
   if (inspected.state === "absent") return;
   if (inspected.state === "live") {
@@ -159,15 +173,17 @@ async function retireInspected(inspected, ownerPath, socketPath, timeoutMs) {
   await removeOwnedArtifacts({ owner: inspected.owner, ownerPath, socket: inspected.socket, socketPath });
 }
 
+/** @param {string} ownerPath @param {string} socketPath @param {string} expectedCwd @param {number} timeoutMs */
 export async function retireOwner(ownerPath, socketPath, expectedCwd, timeoutMs) {
   await retireInspected(await inspectOwner(ownerPath, socketPath, expectedCwd), ownerPath, socketPath, timeoutMs);
 }
 
+/** @param {string} ownerPath @param {string} socketPath @param {string} expectedCwd @param {number} timeoutMs @param {unknown} expected */
 export async function retireExact(ownerPath, socketPath, expectedCwd, timeoutMs, expected) {
   const parsedExpected = parseOwnerFingerprint(expected);
   const inspected = await inspectOwner(ownerPath, socketPath, expectedCwd);
   const actual = ownerFingerprint(inspected);
-  if (actual.pid !== parsedExpected.pid || actual.startTicks !== parsedExpected.startTicks
+  if (actual.owner === null || actual.socket === null || actual.pid !== parsedExpected.pid || actual.startTicks !== parsedExpected.startTicks
     || !sameIdentity(actual.owner, parsedExpected.owner) || !sameIdentity(actual.socket, parsedExpected.socket)) {
     throw new Error("service owner fingerprint mismatch");
   }
@@ -176,17 +192,18 @@ export async function retireExact(ownerPath, socketPath, expectedCwd, timeoutMs,
 
 async function main() {
   const [command, ownerPath, socketPath, cwd, argument, fingerprint] = process.argv.slice(2);
+  if (ownerPath === undefined || socketPath === undefined || cwd === undefined) throw new Error("invalid owner command arguments");
   if (command === "inspect" && process.argv.length === 6) {
     process.stdout.write(`${JSON.stringify(ownerFingerprint(await inspectOwner(ownerPath, socketPath, cwd)))}\n`);
     return;
   }
   if ((command === "retire" || command === "retire-exact")
-    && /^(0|[1-9][0-9]*)$/.test(argument) && Number.isSafeInteger(Number(argument))) {
+    && argument !== undefined && /^(0|[1-9][0-9]*)$/.test(argument) && Number.isSafeInteger(Number(argument))) {
     if (command === "retire" && process.argv.length === 7) {
       await retireOwner(ownerPath, socketPath, cwd, Number(argument));
       return;
     }
-    if (command === "retire-exact" && process.argv.length === 8) {
+    if (command === "retire-exact" && process.argv.length === 8 && fingerprint !== undefined) {
       await retireExact(ownerPath, socketPath, cwd, Number(argument), JSON.parse(fingerprint));
       return;
     }

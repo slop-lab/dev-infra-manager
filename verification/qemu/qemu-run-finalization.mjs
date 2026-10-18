@@ -1,7 +1,10 @@
+// @ts-check
 import { rm } from "node:fs/promises";
 import { stopProcessGroup } from "./qemu-process-group.mjs";
 
+/** @param {Pick<import("./qemu-types.js").Run,"completion"|"finalizationRequested"|"resolveFinalization">} run @param {import("./qemu-types.js").FinalizationReason} reason */
 export function requestRunFinalization(run, reason) {
+  if (run.completion === undefined) throw new Error("run completion is unavailable");
   if (!run.finalizationRequested) {
     run.finalizationRequested = true;
     run.resolveFinalization(reason);
@@ -9,6 +12,12 @@ export function requestRunFinalization(run, reason) {
   return run.completion;
 }
 
+/**
+ * @template {import("./qemu-types.js").FinalizableRun} TRun
+ * @param {TRun} run
+ * @param {import("./qemu-types.js").FinalizationReason} reason
+ * @param {{releaseRun(run:TRun,reason:import("./qemu-types.js").FinalizationReason):void,removeSnapshot?:typeof rm}} options
+ */
 export async function finalizeRun(run, reason, { releaseRun, removeSnapshot = rm }) {
   try {
     if (run.work) {
@@ -42,6 +51,7 @@ export async function finalizeRun(run, reason, { releaseRun, removeSnapshot = rm
   }
 }
 
+/** @param {import("./qemu-types.js").FatalRun | undefined} run */
 export function markRunFatal(run) {
   if (!run) return;
   run.preserveEvidence = true;
@@ -50,6 +60,7 @@ export function markRunFatal(run) {
   run.response?.destroy();
 }
 
+/** @param {import("./qemu-types.js").QuiesceRun | undefined} run */
 export async function quiesceRunPreservingEvidence(run) {
   markRunFatal(run);
   if (!run) return;

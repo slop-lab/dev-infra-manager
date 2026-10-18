@@ -1,26 +1,32 @@
+// @ts-check
+import { errorCode } from "./qemu-values.mjs";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { link, lstat, open, rename, rm } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { parseOwnerRecord } from "./qemu-owner-record.mjs";
 
+/** @param {Pick<import("node:fs").BigIntStats, "dev" | "ino">} stats */
 export function identity(stats) {
   return { device: stats.dev.toString(), inode: stats.ino.toString() };
 }
 
+/** @param {import("./qemu-types.js").ArtifactIdentity} left @param {import("./qemu-types.js").ArtifactIdentity} right */
 export function sameIdentity(left, right) {
   return left.device === right.device && left.inode === right.inode;
 }
 
+/** @param {string} path */
 export async function pathState(path) {
   try {
     return await lstat(path, { bigint: true });
   } catch (error) {
-    if (error?.code === "ENOENT") return undefined;
+    if (errorCode(error) === "ENOENT") return undefined;
     throw error;
   }
 }
 
+/** @param {string} path */
 async function syncContainingDirectory(path) {
   const directory = await open(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
   try {
@@ -30,16 +36,19 @@ async function syncContainingDirectory(path) {
   }
 }
 
+/** @param {string} socketPath */
 export function socketLeasePath(socketPath) {
   return resolve(dirname(socketPath), `.${basename(socketPath)}.lease`);
 }
 
+/** @param {string} socketPath */
 export async function captureSocketIdentity(socketPath) {
   const socketStats = await lstat(socketPath, { bigint: true });
   if (!socketStats.isSocket()) throw new Error("service socket is not a socket");
   return identity(socketStats);
 }
 
+/** @param {string} socketPath @param {import("./qemu-types.js").ArtifactIdentity} expected */
 export async function createSocketLease(socketPath, expected) {
   await link(socketPath, socketLeasePath(socketPath));
   const lease = identity(await lstat(socketLeasePath(socketPath), { bigint: true }));
@@ -47,6 +56,7 @@ export async function createSocketLease(socketPath, expected) {
   await syncContainingDirectory(socketPath);
 }
 
+/** @param {string} path @param {import("./qemu-types.js").ArtifactIdentity} expected */
 export async function removeIfOwned(path, expected) {
   const stats = await pathState(path);
   if (!stats) return true;
@@ -55,7 +65,7 @@ export async function removeIfOwned(path, expected) {
   try {
     await rename(path, quarantined);
   } catch (error) {
-    if (error?.code === "ENOENT") return true;
+    if (errorCode(error) === "ENOENT") return true;
     throw error;
   }
   const moved = identity(await lstat(quarantined, { bigint: true }));
@@ -70,6 +80,7 @@ export async function removeIfOwned(path, expected) {
   return true;
 }
 
+/** @param {string} ownerPath @param {unknown} record */
 export async function publishOwner(ownerPath, record) {
   parseOwnerRecord(record);
   const temporary = resolve(dirname(ownerPath), `.${basename(ownerPath)}.${process.pid}.${randomUUID()}`);
@@ -116,6 +127,7 @@ export async function publishOwner(ownerPath, record) {
   return temporaryIdentity;
 }
 
+/** @param {string} socketPath @param {import("./qemu-types.js").ArtifactIdentity} expected */
 export async function requireSocketLease(socketPath, expected) {
   const lease = await pathState(socketLeasePath(socketPath));
   if (!lease || !lease.isSocket() || !sameIdentity(identity(lease), expected)) {
@@ -123,12 +135,14 @@ export async function requireSocketLease(socketPath, expected) {
   }
 }
 
+/** @param {string} socketPath @param {import("./qemu-types.js").ArtifactIdentity} expected */
 export async function restoreSocketFromLease(socketPath, expected) {
   await requireSocketLease(socketPath, expected);
   await link(socketLeasePath(socketPath), socketPath);
   await syncContainingDirectory(socketPath);
 }
 
+/** @param {{ownerPath:string, socketPath:string, owner:import("./qemu-types.js").ArtifactIdentity | undefined, socket:import("./qemu-types.js").ArtifactIdentity, preserveSocket?:boolean}} options */
 export async function removeOwnedArtifacts({ ownerPath, socketPath, owner, socket, preserveSocket = false }) {
   await requireSocketLease(socketPath, socket);
   if (!preserveSocket && !await removeIfOwned(socketPath, socket)) {
@@ -143,6 +157,7 @@ export async function removeOwnedArtifacts({ ownerPath, socketPath, owner, socke
   }
 }
 
+/** @param {string} socketPath @param {import("./qemu-types.js").ArtifactIdentity} expected */
 export async function safeguardReplacedSocket(socketPath, expected) {
   await requireSocketLease(socketPath, expected);
   const current = await pathState(socketPath);
@@ -153,7 +168,7 @@ export async function safeguardReplacedSocket(socketPath, expected) {
   try {
     await link(socketPath, protectedPath);
   } catch (error) {
-    if (error?.code === "EEXIST") {
+    if (errorCode(error) === "EEXIST") {
       throw new Error(`refusing to safeguard replaced socket because protected path exists: ${protectedPath}`, { cause: error });
     }
     throw error;
@@ -165,13 +180,14 @@ export async function safeguardReplacedSocket(socketPath, expected) {
   return protectedPath;
 }
 
+/** @param {string | undefined} protectedPath @param {string} socketPath */
 export async function restoreReplacedSocket(protectedPath, socketPath) {
   if (!protectedPath) return;
   const expected = identity(await lstat(protectedPath, { bigint: true }));
   try {
     await link(protectedPath, socketPath);
   } catch (error) {
-    if (error?.code === "EEXIST") {
+    if (errorCode(error) === "EEXIST") {
       throw new Error(`refusing to restore replaced socket because destination exists: ${socketPath}; preserved: ${protectedPath}`, { cause: error });
     }
     throw error;

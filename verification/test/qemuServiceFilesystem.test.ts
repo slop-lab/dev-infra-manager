@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-const filesystemModule = "../../.dim/qemu-service-filesystem.mjs";
+const filesystemModule = "../qemu/qemu-service-filesystem.mjs";
 const roots: string[] = [];
 
 async function fixture() {

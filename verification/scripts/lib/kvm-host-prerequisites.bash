@@ -69,7 +69,7 @@ qemu_host_preflight() {
   fi
 
   [[ -r "$launcher" ]] || qemu_preflight_error "protected QEMU verification launcher is not readable: $launcher"
-  for file in "$client" "${root_modules[@]/#/$repository_root/.dim/}"; do
+  for file in "$client" "${root_modules[@]/#/$repository_root/verification/qemu/}"; do
     [[ -r "$file" ]] || qemu_preflight_error "protected QEMU verification component is not readable: $file"
   done
 

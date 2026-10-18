@@ -2,13 +2,14 @@
 set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-launcher="${DIM_QEMU_TRUSTED_LAUNCHER:-$repository_root/.dim/qemu-verify.bash}"
-service="$repository_root/.dim/qemu-service.mjs"
-owner="$repository_root/.dim/qemu-service-owner.mjs"
-client="$repository_root/.dim/qemu-client.mjs"
+launcher="${DIM_QEMU_TRUSTED_LAUNCHER:-$repository_root/verification/qemu/qemu-verify.bash}"
+service="$repository_root/verification/qemu/qemu-service.mjs"
+owner="$repository_root/verification/qemu/qemu-service-owner.mjs"
+client="$repository_root/verification/qemu/qemu-client.mjs"
 root_modules=(
   qemu-event-followers.mjs
   qemu-input-handoff.mjs
+  qemu-values.mjs
   qemu-owner-record.mjs
   qemu-process-group.mjs
   qemu-run-finalization.mjs
@@ -266,7 +267,7 @@ sudo_keepalive_pid=$!
 run_sudo_once /usr/bin/install -d -o root -g root -m 0555 "$service_dir/modules"
 for module in "${root_modules[@]}"; do
   run_sudo_once /usr/bin/install -o root -g root -m 0444 \
-    "$repository_root/.dim/$module" "$service_dir/modules/$module"
+    "$repository_root/verification/qemu/$module" "$service_dir/modules/$module"
 done
 service="$service_dir/modules/qemu-service.mjs"
 owner="$service_dir/modules/qemu-service-owner.mjs"

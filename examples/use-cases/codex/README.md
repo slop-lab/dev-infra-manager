@@ -5,8 +5,8 @@ Codex tool selection into its persistent home:
 
 ```bash
 dim create /path/on/selected/host/to/dev-infra-manager development
-dim exec development -- bash .dim/dev.bash tool-setup codex
-dim exec development -- bash .dim/dev.bash agent codex
+dim exec development -- bash scripts/dev.bash tool-setup codex
+dim exec development -- bash scripts/dev.bash agent codex
 ```
 
 The user-home installer pins the tool version, checks its installation and

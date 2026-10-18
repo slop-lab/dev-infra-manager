@@ -1,6 +1,9 @@
+// @ts-check
 const maximumPendingBytes = 8 * 1024 * 1024;
 
+/** @param {import("./qemu-types.js").EventResponse} response @param {()=>void} onOverflow @returns {import("./qemu-types.js").EventFollower} */
 export function createEventFollower(response, onOverflow) {
+  /** @type {Buffer[]} */
   const pending = [];
   let pendingBytes = 0;
   let draining = false;
@@ -24,6 +27,7 @@ export function createEventFollower(response, onOverflow) {
     draining = false;
     while (pending.length > 0) {
       const chunk = pending.shift();
+      if (chunk === undefined) break;
       pendingBytes -= chunk.length;
       if (!response.write(chunk)) {
         draining = true;

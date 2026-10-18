@@ -8,7 +8,7 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 const smokePath = resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash");
 const roots: string[] = [];
 const stagedModules = [
-  "qemu-event-followers.mjs", "qemu-input-handoff.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
+  "qemu-event-followers.mjs", "qemu-input-handoff.mjs", "qemu-values.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
   "qemu-service-artifacts.mjs", "qemu-service-filesystem.mjs", "qemu-service-http.mjs", "qemu-service-owner.mjs",
   "qemu-service-startup.mjs", "qemu-service.mjs", "qemu-snapshot.mjs",
 ] as const;
@@ -35,7 +35,7 @@ async function fixture(options: FixtureOptions = {}): Promise<Fixture> {
   await chmod(root, 0o755);
   const tools = resolve(root, "tools");
   const projectRoot = resolve(root, "project");
-  const projectDim = resolve(projectRoot, ".dim");
+  const projectQemu = resolve(projectRoot, "verification/qemu");
   const serviceDirectory = resolve(root, "service");
   const sudoRecord = resolve(root, "sudo.log");
   const sudoRevoked = resolve(root, "sudo-revoked");
@@ -49,9 +49,9 @@ async function fixture(options: FixtureOptions = {}): Promise<Fixture> {
   for (const command of ["qemu-system-x86_64", "qemu-img", "cloud-localds"] as const) {
     await writeFile(resolve(tools, command), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
   }
-  await mkdir(projectDim, { recursive: true });
+  await mkdir(projectQemu, { recursive: true });
   await Promise.all([...stagedModules, "qemu-client.mjs"].map(async (module) => {
-    await copyFile(resolve(workspaceRoot, ".dim", module), resolve(projectDim, module));
+    await copyFile(resolve(workspaceRoot, "verification/qemu", module), resolve(projectQemu, module));
   }));
   await writeFile(clientRecord, "");
   await chmod(clientRecord, 0o666);
@@ -65,7 +65,7 @@ fi
 [[ ! -e ${JSON.stringify(sudoRevoked)} ]] || exit 1
 for argument in "$@"; do
   if [[ "$argument" == qemu-service && ${options.mutateCheckoutBeforeServiceLaunch ? "true" : "false"} == true ]]; then
-    printf 'throw new Error("mutable checkout module executed")\n' >${JSON.stringify(resolve(projectDim, "qemu-event-followers.mjs"))}
+    printf 'throw new Error("mutable checkout module executed")\n' >${JSON.stringify(resolve(projectQemu, "qemu-event-followers.mjs"))}
   fi
 done
 exec "$@"
@@ -112,7 +112,7 @@ process.exitCode = 1;
     .replace(/^source .*kvm-host-prerequisites.*$/m,
       `source ${JSON.stringify(resolve(workspaceRoot, "verification/scripts/lib/kvm-host-prerequisites.bash"))}`)
     .replace(/^client=.*$/m,
-      `client=${JSON.stringify(options.clientMode === undefined || options.clientMode === "normal" ? resolve(projectDim, "qemu-client.mjs") : client)}`)
+      `client=${JSON.stringify(options.clientMode === undefined || options.clientMode === "normal" ? resolve(projectQemu, "qemu-client.mjs") : client)}`)
     .replace(/^invoking_uid=.*$/m, "invoking_uid=1000")
     .replace(/^invoking_gid=.*$/m, "invoking_gid=1000")
     .replace(/^sudo_command=.*$/m, `sudo_command=${JSON.stringify(resolve(tools, "sudo"))}`)
@@ -145,7 +145,7 @@ afterEach(async () => {
 
 describe("KVM host-install smoke privilege boundary", () => {
   it("extracts host-owned inputs as the fixed guest user rather than preserving the host UID", async () => {
-    const script = await readFile(resolve(workspaceRoot, ".dim/qemu-verify.bash"), "utf8");
+    const script = await readFile(resolve(workspaceRoot, "verification/qemu/qemu-verify.bash"), "utf8");
     expect(script).toContain("sudo install -d -o dim -g dim -m 0700 /mnt/dim-inputs");
     expect(script).toContain("tar -C /mnt/dim-inputs --strip-components=1 --no-same-owner -xzf -");
     expect(script).not.toContain("sudo tar -C /mnt -xzf -");
@@ -189,7 +189,7 @@ describe("KVM host-install smoke privilege boundary", () => {
       .filter((call) => call.includes("qemu-service") && !call.includes("/usr/bin/install"));
     expect(rootModuleCalls.some((call) => call.includes(`${fixtureValue.serviceDirectory}/modules/qemu-service.mjs`))).toBe(true);
     expect(rootModuleCalls.some((call) => call.includes(`${fixtureValue.serviceDirectory}/modules/qemu-service-owner.mjs`))).toBe(true);
-    expect(rootModuleCalls.every((call) => !call.includes(`${fixtureValue.projectRoot}/.dim/qemu-`))).toBe(true);
+    expect(rootModuleCalls.every((call) => !call.includes(`${fixtureValue.projectRoot}/verification/qemu/qemu-`))).toBe(true);
     const stagedDestinations = sudoCalls.split("\n")
       .filter((call) => call.includes("/usr/bin/install") && call.includes("/modules/qemu-"))
       .map((call) => call.trim().split("/").at(-1));

@@ -9,7 +9,7 @@ const smokeSource = resolve(workspaceRoot, "verification/scripts/kvm-host-instal
 const prerequisites = resolve(workspaceRoot, "verification/scripts/lib/kvm-host-prerequisites.bash");
 const roots: string[] = [];
 const modules = [
-  "qemu-event-followers.mjs", "qemu-input-handoff.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
+  "qemu-event-followers.mjs", "qemu-input-handoff.mjs", "qemu-values.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
   "qemu-service-artifacts.mjs", "qemu-service-filesystem.mjs", "qemu-service-http.mjs", "qemu-service-owner.mjs",
   "qemu-service-startup.mjs", "qemu-service.mjs", "qemu-snapshot.mjs",
 ] as const;
@@ -27,18 +27,18 @@ async function preflightFixture(): Promise<PreflightFixture> {
   roots.push(root);
   await chmod(root, 0o755);
   const projectRoot = resolve(root, "project");
-  const projectDim = resolve(projectRoot, ".dim");
+  const projectQemu = resolve(projectRoot, "verification/qemu");
   const tools = resolve(root, "tools");
   const smoke = resolve(root, "kvm-host-install-smoke.bash");
   const sudo = resolve(tools, "sudo");
   const serviceDirectory = resolve(root, "service");
-  await mkdir(projectDim, { recursive: true });
+  await mkdir(projectQemu, { recursive: true });
   await mkdir(tools);
   for (const command of ["qemu-system-x86_64", "qemu-img", "cloud-localds"] as const) {
     await writeFile(resolve(tools, command), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
   }
   await Promise.all([...modules, "qemu-client.mjs"].map((module) =>
-    copyFile(resolve(workspaceRoot, ".dim", module), resolve(projectDim, module))));
+    copyFile(resolve(workspaceRoot, "verification/qemu", module), resolve(projectQemu, module))));
   await writeFile(resolve(root, "launcher.bash"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
   await writeFile(sudo, "#!/usr/bin/env bash\nexit 1\n", { mode: 0o700 });
   const source = await readFile(smokeSource, "utf8");
