@@ -8,13 +8,15 @@ import { writeNativeWorkspaceAttachment, type NativeWorkspaceAttachment } from "
 /** Reconnect only the host credential reference; the workspace's Git identity and snapshot stay pinned. */
 export async function refreshNativeWorkspaceConnection(attachment: NativeWorkspaceAttachment, signal: AbortSignal,
   environment: NodeJS.ProcessEnv = process.env): Promise<NativeWorkspaceAttachment> {
-  const connectionFile = await selectedControlPlaneHostFile(environment);
+  const connectionFile = await selectedControlPlaneHostFile(environment, attachment.connectionFile);
   if (connectionFile === attachment.connectionFile) return attachment;
   try {
     const previous = await loadNativeControlPlaneConnection(attachment.connectionFile);
     const selected = await loadNativeControlPlaneConnection(connectionFile);
     if (selected.hostId !== previous.hostId || selected.nativeGit.serviceId !== previous.nativeGit.serviceId
       || selected.nativeGit.transport !== previous.nativeGit.transport || selected.nativeGit.endpoint !== previous.nativeGit.endpoint) {
+      // The active control plane is a default for new work, not authority to retarget existing workspaces.
+      if (environment.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE === undefined) return attachment;
       throw new UserError("the selected connection belongs to another control-plane authority");
     }
     const project = await new NativeProjectPendingStore(attachment.managedStateRoot).read(attachment.projectName, selected.hostId);

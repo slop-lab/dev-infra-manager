@@ -97,8 +97,10 @@ reviewer UI and browser authentication. On the next workspace start, restart,
 recreate or shell/exec, an existing native attachment can adopt the newly
 selected connection after fresh proof of its original authority, Project, ref
 and review policy. Its checkout, grant and proposal namespace stay unchanged.
-Selecting another authority or changing the pinned policy fails without
-rewriting the attachment.
+An active selection for another authority applies to new workspaces; existing
+workspaces retain their original connection. An explicit
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` override to another authority, or a
+change to the pinned policy, fails without rewriting the attachment.
 
 Install the separate optional web package, then start the reviewer UI without
 copying credentials from service JSON:

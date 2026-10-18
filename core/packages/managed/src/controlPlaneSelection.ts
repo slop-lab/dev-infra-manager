@@ -30,19 +30,20 @@ export async function saveControlPlaneSelection(
   await atomicWrite(selectionFile(environment), { schemaVersion: 1, hostConnectionFile, importerConnectionFile });
 }
 
-export async function selectedControlPlaneHostFile(environment: NodeJS.ProcessEnv = process.env): Promise<string> {
-  return selectFile("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "hostConnectionFile", environment);
+export async function selectedControlPlaneHostFile(environment: NodeJS.ProcessEnv = process.env, fallback?: string): Promise<string> {
+  return selectFile("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "hostConnectionFile", environment, fallback);
 }
 export async function selectedControlPlaneImporterFile(environment: NodeJS.ProcessEnv = process.env): Promise<string> {
   return selectFile("DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE", "importerConnectionFile", environment);
 }
-async function selectFile(key: string, field: "hostConnectionFile" | "importerConnectionFile", environment: NodeJS.ProcessEnv): Promise<string> {
+async function selectFile(key: string, field: "hostConnectionFile" | "importerConnectionFile", environment: NodeJS.ProcessEnv, fallback?: string): Promise<string> {
   const override = environment[key];
   if (override !== undefined) {
     if (!override) throw new UserError(`${key} must not be empty`);
     return path.resolve(override);
   }
   const selected = await readSelection(environment);
+  if (!selected && fallback !== undefined) return fallback;
   if (!selected) throw new UserError("no native control plane selected on this host; run 'dim managed control-plane connect SETUP'");
   return selected[field];
 }

@@ -120,5 +120,8 @@ dim --host devbox create dim://PROJECT dev
 The remote host holds Project state and private role files. The client can have
 only the base CLI; optional code is loaded on the host that executes the
 operation. `dim host use devbox` selects that host for subsequent commands.
-The root `dim controller ...` entry point stays local for installer activation;
-use `dim --host devbox managed controller ...` for remote administration.
+The global `--host` option can appear before or after the managed command.
+Arguments after `--` are passed literally.
+The root `dim controller ...` entry point stays local for installer activation,
+including with a `--host` override; use
+`dim --host devbox managed controller ...` for remote administration.

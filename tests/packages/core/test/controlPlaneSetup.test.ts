@@ -12,7 +12,7 @@ import { writeNativeWorkspaceAttachment, readNativeWorkspaceAttachment, nativeWo
 import { createRequire } from "node:module";
 const { Command } = createRequire(new URL("../../../../core/packages/managed/package.json", import.meta.url))("commander") as { Command: new () => Parameters<typeof registerControlPlaneCommands>[0] };
 import { registerControlPlaneCommands } from "../../../../core/packages/managed/src/cli/control-plane-commands.js";
-import { selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../../../../core/packages/managed/src/controlPlaneSelection.js";
+import { saveControlPlaneSelection, selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../../../../core/packages/managed/src/controlPlaneSelection.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { configuredNativeGitBundleServer, parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
 import { prepareControlPlane, connectControlPlane } from "../../../../core/packages/managed/src/controlPlaneSetup.js";
@@ -169,6 +169,18 @@ describe("optional control-plane setup", () => {
         await expect(refreshNativeWorkspaceConnection(refreshed, AbortSignal.timeout(5000), {
           DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: foreign
         })).rejects.toThrow(/another control-plane authority/);
+        expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
+        // An ambient switch is a default for new workspaces. It must not block
+        // the original workspace, whose broker and credentials remain usable.
+        const ambient = { DIM_MANAGED_STATE_ROOT: path.join(root, "selection-state") };
+        expect(await refreshNativeWorkspaceConnection(refreshed, AbortSignal.timeout(5000), ambient)).toEqual(refreshed);
+        const foreignImporter = path.join(root, "foreign-importer.json");
+        const importer = JSON.parse(await readFile(path.join(reconnected.directory, "importer.json"), "utf8"));
+        importer.endpoint = foreignConnection.nativeGit.endpoint;
+        await writeFile(foreignImporter, JSON.stringify(importer), { mode: 0o600 });
+        await saveControlPlaneSelection({ hostConnectionFile: foreign, importerConnectionFile: foreignImporter }, ambient);
+        expect(await selectedControlPlaneHostFile(ambient)).toBe(foreign);
+        expect(await refreshNativeWorkspaceConnection(refreshed, AbortSignal.timeout(5000), ambient)).toEqual(refreshed);
         expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
         expect((await fetch(brokerUrl, { headers })).status).toBe(200);
       } finally {

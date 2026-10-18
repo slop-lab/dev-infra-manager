@@ -55,6 +55,45 @@ test("host commands select SSH context, support one-command overrides, and remov
   });
 });
 
+test("managed host selection accepts global options before or after commands and preserves literal arguments", async () => {
+  await withFixture(async (fixture) => {
+    await configureRemote(fixture);
+    for (const args of [
+      ["--host", "devbox", "managed", "project", "list"],
+      ["managed", "--host", "devbox", "project", "list"],
+      ["managed", "project", "list", "--host=devbox"],
+      ["project", "list", "--host", "devbox"]
+    ]) {
+      const result = await run(args, fixture);
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(await request(fixture), { operation: "managed.cli", input: { args: ["project", "list"] } });
+    }
+    const literal = ["project", "show", "--", "--host", "literal"];
+    assert.equal((await run(["managed", "--host", "devbox", ...literal], fixture)).status, 0);
+    assert.deepEqual(await request(fixture), { operation: "managed.cli", input: { args: literal } });
+    for (const args of [["managed", "--host"], ["managed", "--host="]]) {
+      const result = await run(args, fixture);
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /argument missing/);
+    }
+  });
+});
+
+test("root controller remains local with explicit or selected SSH host contexts", async () => {
+  await withFixture(async (fixture) => {
+    await configureRemote(fixture);
+    await new HostContextStore(path.join(fixture.root, "config")).use("devbox");
+    for (const args of [["controller", "--help"], ["--host", "local", "controller", "--help"],
+      ["controller", "--host", "devbox", "--help"]]) {
+      const result = await run(args, fixture);
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /controller.*\[command\]/);
+      assert.match(result.stdout, /restart/);
+    }
+    await assert.rejects(readFile(path.join(fixture.root, "request.json")), { code: "ENOENT" });
+  });
+});
+
 test("remote create sends source and resources to the selected host without resolving client paths", async () => {
   await withFixture(async (fixture) => {
     await configureRemote(fixture);

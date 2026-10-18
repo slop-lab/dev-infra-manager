@@ -19,12 +19,7 @@ async function main(): Promise<void> {
     }
     // Managed administration follows the selected host. The root controller
     // alias remains local for installer activation/recovery.
-    let managedArgs = args, selectedHost: string | undefined;
-    if (args[0] === "--host" && args[1]) {
-      selectedHost = args[1]; managedArgs = args.slice(2);
-    } else if (args[0]?.startsWith("--host=")) {
-      selectedHost = args[0].slice("--host=".length); managedArgs = args.slice(1);
-    }
+    const { args: managedArgs, host: selectedHost } = hostArguments(args);
     const managedAliases = ["plugin", "ci", "external-url", "project", "host-input", "x"];
     if (managedArgs[0] === "managed" || managedAliases.includes(managedArgs[0] ?? "")) {
       const commandArgs = managedArgs[0] === "managed" ? managedArgs.slice(1) : managedArgs;
@@ -46,9 +41,9 @@ async function main(): Promise<void> {
       }
       return;
     }
-    if (args[0] === "controller") {
+    if (managedArgs[0] === "controller") {
       const { runManagedApplication } = await import("./managed-application.js");
-      await runManagedApplication(args);
+      await runManagedApplication(managedArgs);
       return;
     }
     const program = new Command()
@@ -83,4 +78,23 @@ ${process.env.DIM_INVOKED_VIA_INSTALLER === "1" ? "\nInstaller: dim installer in
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = error instanceof UserError || error instanceof HostContextError ? 2 : 1;
   }
+}
+
+/** Match Commander global options without consuming command arguments after `--`. */
+function hostArguments(args: string[]): { args: string[]; host?: string } {
+  const remaining: string[] = [];
+  let host: string | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === "--") { remaining.push(...args.slice(index)); break; }
+    if (argument === "--host") {
+      const value = args[++index];
+      if (value === undefined || value.startsWith("-")) throw new UserError("option '--host <name>' argument missing");
+      host = value;
+    } else if (argument.startsWith("--host=")) {
+      host = argument.slice("--host=".length);
+      if (!host) throw new UserError("option '--host <name>' argument missing");
+    } else remaining.push(argument);
+  }
+  return { args: remaining, ...(host === undefined ? {} : { host }) };
 }
