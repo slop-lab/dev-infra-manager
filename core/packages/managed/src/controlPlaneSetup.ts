@@ -100,14 +100,14 @@ export async function connectControlPlane(directoryInput: string, options: {
     hostId, generationId: "0".repeat(64), credential: importerCredential });
   const client = options.client ?? createNodeNativeGitAdmissionHttpClient();
   const signal = options.signal ?? AbortSignal.timeout(10_000);
-  const attest = async (role: string, credential: Credential): Promise<Record<string, unknown>> => {
+  const attest = async (role: string, credential: Credential, scope: { hostId: string } | { reviewerId: string } = { hostId }): Promise<Record<string, unknown>> => {
     const response = await client.request({ endpoint, method: "GET", path: `/v1/${role}-identity`,
       authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`, signal });
     if (response.statusCode !== 200 || response.contentType !== "application/json" || response.cacheControl !== "no-store") throw new UserError(`control-plane ${role} identity could not be verified`);
     let identity: Record<string, unknown>;
     try { identity = JSON.parse(response.body.toString("utf8")); } catch { throw new UserError("control-plane returned an invalid identity"); }
     if (identity === null || identity.schemaVersion !== 1 || identity.serviceId !== "native-main"
-      || identity.role !== role || identity.hostId !== hostId) throw new UserError("control-plane identity conflicts with prepared credentials");
+      || identity.role !== role || Object.entries(scope).some(([key, value]) => identity[key] !== value)) throw new UserError("control-plane identity conflicts with prepared credentials");
     return identity;
   };
   const identity = await attest("operator-root-importer", importerCredential);
@@ -119,6 +119,13 @@ export async function connectControlPlane(directoryInput: string, options: {
     ["operator-workspace-write-issuer", selected(native.workspaceWriteIssuers)]
   ] as const) {
     const attested = await attest(role, credential);
+    if (attested.generationId !== generationId) throw new UserError("control-plane generation changed while connecting");
+  }
+  const reviewer = native.humanReviewers[0];
+  const promoterCredential = selected(native.hostPromoters);
+  if (reviewer === undefined) throw new UserError("prepared service has no human reviewer");
+  for (const attested of [await attest("human-reviewer", reviewer, { reviewerId: reviewer.reviewerId }),
+    await attest("host-promoter", promoterCredential)]) {
     if (attested.generationId !== generationId) throw new UserError("control-plane generation changed while connecting");
   }
   const importerConnection = parseNativeGitRootImporterConnection({ schemaVersion: 1, endpoint, serviceId: "native-main",
@@ -134,6 +141,10 @@ export async function connectControlPlane(directoryInput: string, options: {
     await json(path.join(output, "registrar.json"), registrarConnection);
     await json(path.join(output, "importer.json"), importerConnection);
     await json(path.join(output, "host.json"), hostConnection);
+    await json(path.join(output, "reviewer.json"), { schemaVersion: 1, serviceId: "native-main", baseUrl: endpoint,
+      reviewerId: reviewer.reviewerId, username: reviewer.username, password: reviewer.password, generationId });
+    await json(path.join(output, "promoter.json"), { schemaVersion: 1, serviceId: "native-main", endpoint,
+      role: "host-promoter", hostId, generationId, credential: promoterCredential });
   });
   return { directory: output, generationId, hostId };
 }

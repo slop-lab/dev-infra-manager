@@ -41,7 +41,8 @@ Edit the reviewed policy and configure real worker capacities before requiring
 CI. Preparation installs nothing and sends no credentials over the network.
 
 `connect` verifies live service role identities and the exact generation before
-writing `connections/host.json`, `registrar.json` and `importer.json`. It does
+writing `connections/host.json`, `registrar.json`, `importer.json`,
+`reviewer.json` and `promoter.json`. It does
 not select a backend, start a host controller or install a UI. The initial host
 connection supports Projects whose policies require no CI. Use the generated
 connections to import an ordinary local repository:
@@ -67,3 +68,16 @@ select those new connection files. Existing connections are preserved. Keep
 operator configurations and credentials on trusted hosts; workspace containers
 receive only their scoped Git capabilities. The separate web package owns any
 reviewer UI and browser authentication.
+
+Start the optional reviewer UI without copying credentials from service JSON:
+
+```bash
+dim-reviewer-web init "$HOME/dim-control-plane/connections/reviewer.json" \
+  --project example --output "$HOME/dim-reviewer.json"
+dim-reviewer-web serve "$HOME/dim-reviewer.json"
+```
+
+The web package generates its own browser login; raw operator and service role
+credentials stay server-side. The generated reviewer connection pins the exact
+installed generation, so a service replacement requires reconnecting and
+updating the UI configuration.

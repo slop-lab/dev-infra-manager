@@ -60,6 +60,12 @@ describe("optional control-plane setup", () => {
       const host = await loadNativeControlPlaneConnection(path.join(connected.directory, "host.json"));
       expect(host).toMatchObject({ hostId: "operator", nativeGit: { endpoint, generationId: "c".repeat(64) } });
       expect(host.ordinaryCi).toBeUndefined();
+      const reviewer = JSON.parse(await readFile(path.join(connected.directory, "reviewer.json"), "utf8"));
+      expect(reviewer).toMatchObject({ schemaVersion: 1, serviceId: "native-main", baseUrl: endpoint,
+        reviewerId: "owner", username: "reviewer-owner", generationId: connected.generationId });
+      expect((await stat(path.join(connected.directory, "reviewer.json"))).mode & 0o777).toBe(0o600);
+      expect(JSON.parse(await readFile(path.join(connected.directory, "promoter.json"), "utf8")))
+        .toMatchObject({ role: "host-promoter", hostId: "operator", generationId: connected.generationId });
       expect(await loadNativeGitProjectRegistrarConnection(path.join(connected.directory, "registrar.json"))).toMatchObject({ hostId: "operator", endpoint });
       await (await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json"))).attest(AbortSignal.timeout(5000));
       const activation = await fetch(`${endpoint}/v1/activation`, { method: "POST",
