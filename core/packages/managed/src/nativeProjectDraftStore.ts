@@ -56,7 +56,7 @@ export class NativeProjectDraftStore {
     await assertPrivateDraftDirectory(this.root);
     const release = await this.#state.acquireProjectLock(input.name);
     try {
-      await this.#refuseGiteaProject(input.name);
+      await this.#assertProjectNameAvailable(input.name);
       const existing = await this.read(input.name);
       if (existing !== undefined) {
         const source = await inspectPrivateBundle(input.bundlePath);
@@ -91,7 +91,7 @@ export class NativeProjectDraftStore {
     await assertPrivateDraftDirectory(this.root);
     const release = await this.#state.acquireProjectLock(name);
     try {
-      await this.#refuseGiteaProject(name);
+      await this.#assertProjectNameAvailable(name);
       const current = await this.read(name);
       if (current === undefined) throw new NativeProjectDraftStoreError("native Project draft does not exist");
       if (current.phase === "root-imported") {
@@ -140,14 +140,14 @@ export class NativeProjectDraftStore {
     }
   }
 
-  async #refuseGiteaProject(name: string): Promise<void> {
+  async #assertProjectNameAvailable(name: string): Promise<void> {
     try {
       await lstat(this.#state.projectPath(name));
     } catch (error) {
       if (errorCode(error) === "ENOENT") return;
-      throw new NativeProjectDraftStoreError("same-name Gitea Project node cannot be inspected", { cause: error });
+      throw new NativeProjectDraftStoreError("same-name Project record cannot be inspected", { cause: error });
     }
-    throw new NativeProjectDraftStoreError("same-name Gitea Project node already exists");
+    throw new NativeProjectDraftStoreError("same-name Project record already exists");
   }
 }
 

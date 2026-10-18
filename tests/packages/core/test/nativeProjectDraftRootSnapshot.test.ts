@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  LifecycleState,
   materializeNativeProjectDraftRootSnapshot
 } from "../../../../core/packages/managed/src/index.js";
 import {
@@ -59,7 +58,6 @@ describe("native Project draft root snapshots", () => {
     expect(await readdir(temporaryRoot)).toEqual([]);
     expect(await readdir(join(fixture.root, "assets", "native-project-roots", "project-a")))
       .toEqual([fixture.draft.expectedCommit]);
-    expect(await new LifecycleState(fixture.root).listProjects()).toEqual([]);
   });
 
   it("withholds the original imported draft snapshot after an unattested promotion", async () => {

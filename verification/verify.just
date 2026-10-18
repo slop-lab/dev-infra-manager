@@ -91,10 +91,6 @@ cache-routing-docker:
     cd .. && bash verification/scripts/registry-cache-routing-smoke.bash --docker-only
     cd .. && bash verification/scripts/registry-cache-routing-nested-smoke.bash --docker-only
 
-# Build the managed Sysbox runner image and prove Project tools, including Node.js, are absent.
-sysbox-ci-runner-image:
-    cd .. && bash verification/scripts/sysbox-ci-runner-image-smoke.bash
-
 # Build and probe the two native control-plane idle service images without runtime authority.
 native-idle-service-images:
 	cd .. && bash verification/scripts/native-idle-service-images-smoke.bash

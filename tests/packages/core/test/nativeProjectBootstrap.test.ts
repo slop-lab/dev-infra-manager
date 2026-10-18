@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { bootstrapNativeProjectRoot, NativeProjectBootstrapError,
   NativeProjectDraftStore } from "../../../../core/packages/managed/src/index.js";
-import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot,
   activateFinalizeServiceForGeneration, activationTokenB, closeFinalizeService, generationB,
@@ -75,7 +74,6 @@ describe("trusted native Project bootstrap", () => {
     expect(await new NativeProjectDraftStore(root).read("acme")).toEqual(imported);
     expect((await run("/usr/bin/git", ["--git-dir", rootRepository(state), "rev-parse",
       "refs/heads/main"])).stdout.trim()).toBe(imported.expectedCommit);
-    expect(await new LifecycleState(root).listProjects()).toEqual([]);
     const transport = await fetch(`${service.origin}/v1/projects/project-a/repositories/root.git/info/refs?service=git-upload-pack`);
     expect(transport.status).toBe(401);
     expect(await bootstrapNativeProjectRoot(input)).toEqual(imported);

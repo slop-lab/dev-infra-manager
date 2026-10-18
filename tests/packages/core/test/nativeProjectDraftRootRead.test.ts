@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { issueNativeProjectDraftRootReadLease, LifecycleState,
+import { issueNativeProjectDraftRootReadLease,
   NativeProjectDraftRootReadError } from "../../../../core/packages/managed/src/index.js";
 import { generationId, importer, rootReadIssuer,
   activateFinalizeServiceForGeneration, activationTokenB, closeFinalizeService, generationB,
@@ -42,7 +42,6 @@ describe("trusted native Project draft root read", () => {
     await expect(runGitAuthenticated(["-C", clone, "push", repositoryUrl,
       "HEAD:refs/heads/proposals/host/change"], lease.username, lease.password)).rejects.toThrow();
     expect(await readFile(fixture.recordPath)).toEqual(draftBefore);
-    expect(await new LifecycleState(fixture.root).listProjects()).toEqual([]);
   });
 
   it("uses active generation B to prove and fetch an unchanged generation-A draft", async () => {
@@ -123,7 +122,6 @@ describe("trusted native Project draft root read", () => {
       await expect(issue(fixture)).rejects.toBeInstanceOf(NativeProjectDraftRootReadError);
 
       expect(await readFile(fixture.recordPath)).toEqual(before);
-      expect(await new LifecycleState(fixture.root).listProjects()).toEqual([]);
     }
   );
 

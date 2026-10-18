@@ -299,11 +299,10 @@ describe("Project lock ownership", () => {
     await loser.release();
   });
 
-  it("bounds same-process contention while independent Project and hook locks coexist", async () => {
-    // Given: the independent Project and hook lock identities are acquired in order.
+  it("bounds same-process contention while independent Project locks coexist", async () => {
+    // Given: the independent Project lock identities are acquired in order.
     const state = new LifecycleState(root);
     const releaseProject = await state.acquireProjectLock("project");
-    const releaseHook = await state.acquireQemuProjectHookPublicationLock("project-id");
     const releaseWorkspace = await state.acquireProjectLock("work-1");
     const clock = advancingClock(0);
 
@@ -317,7 +316,6 @@ describe("Project lock ownership", () => {
     // Then: it times out while all distinct lock identities remain independently releasable.
     await expect(duplicate).rejects.toThrow(/timed out waiting for Project 'work-1' reconciliation lock/);
     await releaseWorkspace();
-    await releaseHook();
     await releaseProject();
   });
 });

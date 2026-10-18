@@ -92,7 +92,6 @@ describe("native Project admission-pending store", () => {
     expect((await stat(projectPath)).nlink).toBe(1);
     expect((await stat(join(fixture.root, "projects"))).mode & 0o777).toBe(0o700);
     expect(await readFile(fixture.draftPath)).toEqual(draftBefore);
-    await expect(new LifecycleState(fixture.root).readProject(fixture.claim.name)).rejects.toThrow();
   });
 
   it("converges a same-inode two-link publication residue on exact replay", async () => {
@@ -305,8 +304,6 @@ describe("native Project admission-pending store", () => {
       gitNamespace: "dim-acme", giteaOrganizationId: 41, phase: "ready", repositories: [],
       createdAt: "now", updatedAt: "now" })}\n`);
     await writeFile(projectPath, giteaBytes, { mode: 0o600 });
-    await expect(new LifecycleState(collision.root).readProject("acme"))
-      .rejects.toThrow("use the prior pinned release to export needed data");
     expect(await readFile(projectPath)).toEqual(giteaBytes);
 
     // When / Then
