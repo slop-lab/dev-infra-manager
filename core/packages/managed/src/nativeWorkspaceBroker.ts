@@ -6,7 +6,7 @@ import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection
 import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
 import { proveNativeProjectReadiness } from "./nativeProjectReadinessClient.js";
 import { createNativeGitWorkspaceWriteIssuerClient } from "./nativeGitWorkspaceWriteIssuerClient.js";
-import { nativeWorkspaceBrokerHealth, type NativeWorkspaceAttachment } from "./nativeWorkspaceAttachment.js";
+import { nativeWorkspaceAttachmentFile, nativeWorkspaceBrokerHealth, readNativeWorkspaceAttachment, type NativeWorkspaceAttachment } from "./nativeWorkspaceAttachment.js";
 
 /** A scoped Git endpoint. It has no lifecycle, plugin, host-input or administrative routes. */
 export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachment): Server {
@@ -33,7 +33,13 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
         && ((endpoint === "/git-upload-pack" && request.headers["content-type"] === "application/x-git-upload-pack-request")
           || (endpoint === "/git-receive-pack" && request.headers["content-type"] === "application/x-git-receive-pack-request"));
       if (!discovery && !protocol) { response.writeHead(404).end(); return; }
-      const connection = await loadNativeControlPlaneConnection(attachment.connectionFile);
+      // A verified reconnect updates only this private host-side reference. The running
+      // broker retains its original UUID, scope and workspace credential.
+      const current = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(attachment.managedStateRoot, attachment.workspaceId));
+      if (Object.entries(attachment).some(([key, value]) => key !== "connectionFile" && current[key as keyof NativeWorkspaceAttachment] !== value)) {
+        response.writeHead(409).end(); return;
+      }
+      const connection = await loadNativeControlPlaneConnection(current.connectionFile);
       const project = await new NativeProjectPendingStore(attachment.managedStateRoot).read(attachment.projectName, connection.hostId);
       if (project?.phase !== "ready" || project.projectId !== attachment.projectId
         || project.protectedRef !== attachment.protectedRef) { response.writeHead(409).end(); return; }

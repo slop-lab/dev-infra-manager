@@ -3,6 +3,12 @@ import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { randomBytes } from "node:crypto";
+import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
+import { workspaceRecord } from "../../../support/workspaceFixture.js";
+import { createNativeWorkspaceBroker } from "../../../../core/packages/managed/src/nativeWorkspaceBroker.js";
+import { refreshNativeWorkspaceConnection } from "../../../../core/packages/managed/src/nativeWorkspaceConnection.js";
+import { writeNativeWorkspaceAttachment, readNativeWorkspaceAttachment, nativeWorkspaceAttachmentFile, type NativeWorkspaceAttachment } from "../../../../core/packages/managed/src/nativeWorkspaceAttachment.js";
 import { createRequire } from "node:module";
 const { Command } = createRequire(new URL("../../../../core/packages/managed/package.json", import.meta.url))("commander") as { Command: new () => Parameters<typeof registerControlPlaneCommands>[0] };
 import { registerControlPlaneCommands } from "../../../../core/packages/managed/src/cli/control-plane-commands.js";
@@ -41,7 +47,7 @@ describe("optional control-plane setup", () => {
     expect((await stat(directory)).mode & 0o777).toBe(0o700);
     const config = await readControlPlaneConfig(result.configFile, ["127.0.0.1"]);
     const sources = await readControlPlaneSources(config);
-    expect(JSON.parse(sources.ordinaryCi.config.bytes.toString()).hosts).toEqual([]);
+    expect(JSON.parse(sources.ordinaryCi.config.bytes.toString()).workers).toEqual([]);
     expect(JSON.parse(sources.nativeGit.config.bytes.toString()).projectRegistrars).toHaveLength(1);
     for (const file of ["install.json", "native-git.json", "ordinary-ci.json", "native-git-readiness.token", "ordinary-ci-readiness.token"]) {
       expect((await stat(path.join(directory, file))).mode & 0o777).toBe(0o600);
@@ -55,7 +61,7 @@ describe("optional control-plane setup", () => {
     const { root, directory } = await fixture();
     const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
     native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
-    const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
+    let service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
       config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-state"),
       readinessToken: Buffer.alloc(32, 47).toString("base64url"), activationToken: Buffer.alloc(32, 48).toString("base64url"),
       expectedGenerationId: "c".repeat(64) });
@@ -109,6 +115,62 @@ describe("optional control-plane setup", () => {
       await store.admit("example", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), AbortSignal.timeout(10000));
       expect((await store.ready("example", host, AbortSignal.timeout(10000))).phase).toBe("ready");
       await expect(connectControlPlane(directory, { endpoint })).rejects.toThrow(/refusing to replace/);
+      // An already running broker must adopt only a proved credential refresh,
+      // preserving its Git grant, proposal namespace and mutable checkout.
+      const project = await store.read("example", "operator");
+      if (!project || project.phase !== "ready") throw new Error("Project not ready");
+      const workspace = workspaceRecord("persistent", { source: { url: "dim://example", ref: project.protectedRef, commit: project.rootCommit } });
+      const workspaceStore = new WorkspaceStore(path.join(root, "core-workspaces")); await workspaceStore.write(workspace);
+      const attachment: NativeWorkspaceAttachment = { schemaVersion: 1, workspaceId: workspace.id, workspaceName: workspace.name,
+        nativeWorkspaceId: randomBytes(32).toString("base64url"), grant: randomBytes(32).toString("base64url"),
+        projectName: "example", projectId: project.projectId, protectedRef: project.protectedRef, commit: project.rootCommit, tree: project.rootTree,
+        policyRevision: project.reviewPolicy.policyRevision, requiredReviewRevision: project.reviewPolicy.requiredReviewRevision,
+        requiredJobSetRevision: project.reviewPolicy.requiredJobSetRevision, connectionFile: path.join(connected.directory, "host.json"),
+        workspaceStateRoot: workspaceStore.root, managedStateRoot: hostState, gateway: "127.0.0.1", port: 19419 };
+      await writeNativeWorkspaceAttachment(attachment);
+      const broker = createNativeWorkspaceBroker(attachment);
+      await new Promise<void>((resolve) => broker.listen(0, "127.0.0.1", resolve));
+      try {
+        const address = broker.address(); if (!address || typeof address === "string") throw new Error("missing broker address");
+        const brokerUrl = `http://127.0.0.1:${address.port}/v1/projects/example/repositories/root.git/info/refs?service=git-upload-pack`;
+        const headers = { authorization: `Basic ${Buffer.from(`dim:${attachment.grant}`).toString("base64")}` };
+        expect((await fetch(brokerUrl, { headers })).status).toBe(200);
+        await service.close();
+        const nextGeneration = "d".repeat(64);
+        const nextActivationToken = Buffer.alloc(32, 49).toString("base64url");
+        service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
+          config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-state"),
+          readinessToken: Buffer.alloc(32, 47).toString("base64url"), activationToken: nextActivationToken,
+          expectedGenerationId: nextGeneration });
+        expect(await service.listen("127.0.0.1", Number(new URL(endpoint).port))).toBe(endpoint);
+        const reactivated = await fetch(`${endpoint}/v1/activation`, { method: "POST",
+          headers: { authorization: `Bearer ${nextActivationToken}`, "content-type": "application/json" },
+          body: JSON.stringify({ schemaVersion: 1, generationId: nextGeneration }) });
+        expect(reactivated.status).toBe(200);
+        expect((await fetch(brokerUrl, { headers })).status).toBe(502);
+        const reconnected = await connectControlPlane(directory, { endpoint, outputDirectory: path.join(root, "reconnected") });
+        const environment = { DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: path.join(reconnected.directory, "host.json") };
+        const refreshed = await refreshNativeWorkspaceConnection(attachment, AbortSignal.timeout(5000), environment);
+        expect(refreshed).toEqual({ ...attachment, connectionFile: environment.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE });
+        expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
+        expect((await fetch(brokerUrl, { headers })).status).toBe(200);
+        for (const changedScope of [{ projectId: "another" }, { protectedRef: "refs/heads/other" }, { policyRevision: "changed" }]) {
+          await expect(refreshNativeWorkspaceConnection({ ...attachment, ...changedScope }, AbortSignal.timeout(5000), environment))
+            .rejects.toThrow(/cannot reconnect/);
+          expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
+        }
+        const foreign = path.join(root, "foreign.json");
+        const foreignConnection = JSON.parse(await readFile(refreshed.connectionFile, "utf8"));
+        foreignConnection.nativeGit.endpoint = "http://127.0.0.1:1";
+        await writeFile(foreign, JSON.stringify(foreignConnection), { mode: 0o600 });
+        await expect(refreshNativeWorkspaceConnection(refreshed, AbortSignal.timeout(5000), {
+          DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: foreign
+        })).rejects.toThrow(/another control-plane authority/);
+        expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
+        expect((await fetch(brokerUrl, { headers })).status).toBe(200);
+      } finally {
+        await new Promise<void>((resolve, reject) => { broker.close((error) => error ? reject(error) : resolve()); broker.closeAllConnections(); });
+      }
     } finally { await service.close(); }
   });
 

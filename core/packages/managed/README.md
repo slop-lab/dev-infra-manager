@@ -92,7 +92,12 @@ installed generation, reconnect with `--output-directory NEW_DIRECTORY` and
 the new connection becomes active on this host. Existing files are preserved. Keep
 operator configurations and credentials on trusted hosts; workspace containers
 receive only their scoped Git capabilities. The separate web package owns any
-reviewer UI and browser authentication.
+reviewer UI and browser authentication. On the next workspace start, restart,
+recreate or shell/exec, an existing native attachment can adopt the newly
+selected connection after fresh proof of its original authority, Project, ref
+and review policy. Its checkout, grant and proposal namespace stay unchanged.
+Selecting another authority or changing the pinned policy fails without
+rewriting the attachment.
 
 Install the separate optional web package, then start the reviewer UI without
 copying credentials from service JSON:

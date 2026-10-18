@@ -1,149 +1,86 @@
 # Example: External URLs
 
-> **Archived predecessor example.** Retained for historical source comparison;
-> it is not exercised by the native-only verification recipes.
+Expose a service from an ordinary Git workspace through an optional host-owned
+HTTP ingress. This example needs no native Project or control plane. Run the
+DIM commands on the host that owns the workspace; neither a controller socket
+nor a host Docker socket is mounted into it.
 
-This Project exposes services from two nested levels without publishing a
-Docker port on the host:
+For a temporary tunnel, use `dim forward WORKSPACE 3000:3000` instead. The URL
+plugin is useful when the host should retain a named route with explicit
+approval.
 
-```text
-workspace container
-└── dev (Project Docker daemon, HTTP :8080)
-    └── deep (dev's private Docker daemon, HTTP :5678)
-```
+## Start a service
 
-The short scripts beside this README contain the repetitive Git and DIM
-commands. Read them before running them; they are intentionally small. Both
-server images are pinned by digest.
-
-## Try it
-
-Wildcard DNS for `*.host.tail.test` must resolve to this host. Then run:
+Create a workspace from your own Git source, or use an existing workspace:
 
 ```bash
-dim installer install plugin \
-  '@slop-lab/dim-plugin-dns-cloudflare@0.9.0' \
-  '@slop-lab/dim-plugin-external-urls@0.9.0'
-dim plugin list
-dim doctor
-bash create-repository.bash
-bash register-project.bash
+dim image build
+dim create "$SOURCE" external-dev
+dim exec external-dev -- node --input-type=commonjs -e \
+  'require("node:http").createServer((req,res)=>res.end("hello-from-workspace\n")).listen(3000,"127.0.0.1")'
+```
+
+Keep that command running. In a second host terminal, install the reviewed
+optional component and plugin, then configure a loopback-only ingress:
+
+```bash
+dim installer install core --with-managed
+dim installer install plugin '@slop-lab/dim-plugin-external-urls@0.10.0'
 bash configure-ingress.bash
-dim workspace create external external-dev --profile development
 bash request-urls.bash external-dev
 ```
 
-DIM starts its managed host controller automatically. The last command uses
-`dim workspace exec` to run the image-provided `dim-development-service
-request-url` helper in `external-dev`, and prints pending JSON records for
-`dev` and `deep`. The helper derives only that workspace's controller socket
-and grant from its environment and accepts no workspace or public-authority
-selector. The request supplies no URL names; the controller assigns the first
-available workspace-qualified names (`0`, then `1`). Neither nested service
-receives a DIM controller socket, workspace grant, host Docker socket, or host
-runtime secret.
+The configuration script creates an HTTP ingress named `local-http` for
+`dev.test:8080`, listening only on host `127.0.0.1`, and requires host approval.
+The request script uses the host CLI's scoped workspace grant to request
+`external-dev--app.dev.test`. It does not run an administration helper inside
+the container. The controller starts on demand; if its plugin configuration
+changed while it was already running, run `dim controller restart` first.
 
-Before the first ingress is configured, the plugin starts normally and
-`dim plugin list` succeeds. Inspecting it does not create an empty
-configuration file; `configure-ingress.bash` creates the first real config.
+## Approve and use the route
 
-The ingress fixes the public domain and listener in host configuration and
-requires separate host approval. Workspace-scoped requests select only the
-ingress and a container path:
-
-```text
-dev:  containers=[dev],      port=8080
-deep: containers=[dev,deep], port=5678
-```
-
-Requests cannot choose another workspace, domain, listener, hostname, IP, or
-upstream.
-Repeating `--container` walks from the workspace container through each
-nested runtime.
-
-Inspect the pending inventory on the host and record each route's `id`, `url`,
-and `approval` fields:
+Inspect the request's JSON output and copy its route ID:
 
 ```bash
-dim external-url list --json
+dim external-url list --workspace external-dev --json
+curl --resolve external-dev--app.dev.test:8080:127.0.0.1 \
+  --silent --output /dev/null --write-out '%{http_code}\n' \
+  http://external-dev--app.dev.test:8080/
+dim external-url approve URL_ID
+curl --resolve external-dev--app.dev.test:8080:127.0.0.1 \
+  --fail http://external-dev--app.dev.test:8080/
 ```
 
-Before approval, both returned URLs respond with `404`. Approve the exact route
-IDs as host administrator, then the same URLs serve `hello-from-dev` and
-`hello-from-deep`:
+The first request returns 404 while approval is pending. After host approval it
+returns `hello-from-workspace`. Approval is a host-admin operation; a scoped
+workspace token cannot approve routes.
+
+The route selects workspace loopback port 3000. To target one container in the
+workspace's nested Docker engine, request a route with `--container NAME`.
+Deeper container paths are not supported. The controller verifies core runtime
+ownership and uses an in-agent relay; requests cannot supply an arbitrary host
+upstream address.
+
+## Cleanup and verification
 
 ```bash
-curl --silent --output /dev/null --write-out '%{http_code}\n' DEV_URL
-dim external-url approve DEV_URL_ID
-dim external-url approve DEEP_URL_ID
-curl --fail --silent --show-error DEV_URL
-curl --fail --silent --show-error DEEP_URL
+dim external-url revoke URL_ID --workspace external-dev
+dim discard external-dev --yes
 ```
 
-Approval is deliberately absent from the authenticated workspace API. A
-workspace grant can request, list, and revoke only its own routes; it cannot
-approve one or use the host-admin API.
+Revocation closes existing flows. Discard or same-name replacement also denies
+new HTTP requests, WebSocket upgrades and TCP connections through core UUID
+checks, without a controller restart. Restarting a workspace preserves its
+identity; deleting it and reusing the name creates a different identity.
 
-Discarding the workspace revokes both routes. Repeating either request after
-discard returns `404`:
+The live plugin tests cover pending approval, revocation and identity reuse.
+The actual container relay smoke checks concurrent binary streams, half-close,
+relay reuse, ownership fencing and discard cleanup:
 
 ```bash
-dim workspace discard external-dev --yes
-curl --silent --output /dev/null --write-out '%{http_code}\n' DEV_URL
+node verification/scripts/controller-workspace-relay-smoke.mjs WORKSPACE_IMAGE
 ```
 
-## HTTPS
-
-For a public wildcard domain, plain HTTP can use DIM's built-in router on port
-8080 while Caddy binds a selected external HTTPS address and forwards through
-a driver-managed loopback router:
-
-```bash
-dim external-url dns-provider add cloudflare \
-  --name cloudflare-main \
-  --credential "$CF_API_TOKEN"
-
-dim external-url ingress add http --name public-http \
-  --description "Public HTTP development URL" \
-  --scheme http \
-  --domain remote.example.com --public-port 8080 \
-  --listen-host 0.0.0.0 --listen-port 8080
-
-dim external-url ingress add caddy --name public-https \
-  --description "Public HTTPS development URL" \
-  --scheme https \
-  --domain remote.example.com --listen-host 100.64.0.10 --listen-port 8443 \
-  --dns-provider cloudflare-main \
-  --dns-argument '{"zone":"example.com","value":"203.0.113.10","proxied":false}'
-```
-
-The ingress change restarts the managed controller. It reconciles
-`*.remote.example.com`, generates controller-owned Caddy runtime state, and
-starts the Caddy container automatically. Verify the resulting ingress:
-
-```bash
-dim external-url ingress verify public-https
-```
-
-Use a zone-scoped Cloudflare API Token with `Zone.Zone:Read` and
-`Zone.DNS:Edit`, not a Global API Key. The host must accept TCP 8080 and
-TCP/UDP 8443. Full configuration and security
-details are in [External workspace URLs](../../../specification/docs/external-urls.md).
-
-## Verification
-
-The smoke test builds and installs the local packages, loads the plugin before
-any config exists, and then runs this example's actual
-`configure-ingress.bash` and `request-urls.bash` scripts. It starts the same
-workspace/dev/deep layout, proves pending routes return `404`, proves a
-workspace-scoped caller cannot approve them, approves them through host
-administration, and reaches both expected bodies from a separate client
-network through wildcard DNS. It then discards the workspace and proves both
-routes return `404`. The smoke also checks loopback-only ingress isolation,
-generated Caddy configuration, and Cloudflare-style DNS creation and cleanup
-without using a real DNS account:
-
-```bash
-just verify example current-installed auto external-urls
-just verify example sysbox use external-urls
-```
+Run that command from the repository root after building matched packages and a
+Sysbox workspace image. Public HTTPS/DNS configuration is documented in
+[External workspace URLs](../../../specification/docs/external-urls.md).

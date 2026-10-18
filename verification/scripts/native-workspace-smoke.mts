@@ -16,6 +16,7 @@ const { bootstrapNativeProjectRoot } = await load("core/packages/managed/dist/na
 const { NativeProjectPendingStore } = await load("core/packages/managed/dist/nativeProjectPendingStore.js");
 const { createNodeNativeGitRootImporterClient } = await load("core/packages/managed/dist/nativeGitRootImporterClient.js");
 const { loadNativeControlPlaneConnection } = await load("core/packages/managed/dist/nativeControlPlaneConnection.js");
+const { saveControlPlaneSelection } = await load("core/packages/managed/dist/controlPlaneSelection.js");
 const { createManagedWorkspace, ensureManagedWorkspace } = await load("core/packages/managed/dist/nativeWorkspaceHost.js");
 const { readNativeWorkspaceAttachment, nativeWorkspaceAttachmentFile } = await load("core/packages/managed/dist/nativeWorkspaceAttachment.js");
 
@@ -115,6 +116,32 @@ try {
   const second = await runtime.run(record, ["sh", "-c", "printf 'second proposal\\n' >> README.md && git add README.md && git commit -m second"]);
   assert.equal(second.exitCode, 0, second.stderr);
   await git(["push", "origin"]);
+  const beforeReconnect = (await git(["rev-parse", "HEAD"])).stdout.trim();
+  await service.close();
+  const nextGeneration = "d".repeat(64);
+  const nextActivationToken = Buffer.alloc(32, 73).toString("base64url");
+  service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
+    config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-service"),
+    readinessToken: Buffer.alloc(32, 72).toString("base64url"), activationToken: nextActivationToken, expectedGenerationId: nextGeneration });
+  assert.equal(await service.listen("127.0.0.1", Number(new URL(endpoint).port)), endpoint);
+  const reactivated = await fetch(`${endpoint}/v1/activation`, { method: "POST",
+    headers: { authorization: `Bearer ${nextActivationToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ schemaVersion: 1, generationId: nextGeneration }) });
+  assert.equal(reactivated.status, 200);
+  await git(["fetch", "origin"], false);
+  const reconnected = await connectControlPlane(operator, { endpoint, outputDirectory: path.join(root, "reconnected") });
+  await saveControlPlaneSelection({ hostConnectionFile: path.join(reconnected.directory, "host.json"),
+    importerConnectionFile: path.join(reconnected.directory, "importer.json") });
+  delete process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE;
+  await ensureManagedWorkspace(await store.read(name), { runner, store });
+  const refreshed = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managedRoot, record.id));
+  assert.deepEqual(refreshed, { ...attachment, connectionFile: path.join(reconnected.directory, "host.json") });
+  await git(["fetch", "origin"]);
+  assert.equal((await git(["rev-parse", "HEAD"])).stdout.trim(), beforeReconnect);
+  const third = await runtime.run(record, ["sh", "-c", "printf 'reconnected proposal\\n' >> README.md && git add README.md && git commit -m reconnected"]);
+  assert.equal(third.exitCode, 0, third.stderr);
+  await git(["push", "origin"]);
+  console.log("generation reconnect keeps the checkout, scoped grant and proposal namespace usable: passed");
   console.log("human approval and checked promotion preserve the persistent workspace's scoped Git access: passed");
   console.log("single Sysbox workspace, core record, scoped broker, real proposal push and protected/foreign denials: passed");
   const networkBefore = (await runner.run("docker", ["network", "inspect", resources.network, "--format", "{{.Id}}"])).stdout.trim();

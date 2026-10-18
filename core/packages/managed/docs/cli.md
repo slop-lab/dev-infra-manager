@@ -37,6 +37,12 @@ dim managed control-plane connect "$HOME/dim-control-plane"
 reviewer and promoter connections, and selects the host/importer files on this
 host. Project and `dim://` workspace commands then need no environment exports.
 Use `--output-directory NEW_DIRECTORY` when connecting a new service generation.
+Existing native workspaces adopt that connection on their next start, restart,
+recreate or shell/exec only after proving the same control-plane authority,
+Project, protected ref and review policy. Their checkout and Git identity stay
+unchanged. A connection to another authority cannot retarget an existing
+workspace.
+
 The generated files contain credentials; retain their owner-only permissions.
 
 Selection belongs to the executing host. For `dim --host REMOTE create dim://demo

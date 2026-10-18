@@ -1,3 +1,4 @@
+import { refreshNativeWorkspaceConnection } from "./nativeWorkspaceConnection.js";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { randomBytes } from "node:crypto";
 import {
@@ -94,7 +95,8 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput, contex
 export async function ensureManagedWorkspace(record: WorkspaceRecord, context: ManagedWorkspaceHostContext): Promise<void> {
   const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managedStateRoot(process.env), record.id));
   if (attachment.workspaceName !== record.name || attachment.workspaceStateRoot !== context.store.root) throw new UserError("managed workspace attachment conflicts with the selected host");
-  await ensureNativeWorkspaceBroker(attachment, context.signal);
+  const refreshed = await refreshNativeWorkspaceConnection(attachment, context.signal ?? AbortSignal.timeout(10_000));
+  await ensureNativeWorkspaceBroker(refreshed, context.signal);
 }
 function privateAddress(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d+\.\d+\.\d+\.\d+$/.test(value)) return false;
