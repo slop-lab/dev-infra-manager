@@ -67,17 +67,20 @@ writing `connections/host.json`, `registrar.json`, `importer.json`,
 `reviewer.json` and `promoter.json`. It does
 not select a backend, start a host controller or install a UI. The initial host
 connection supports Projects whose policies require no CI. Use the generated
-connections to import an ordinary local repository:
+connections to import an ordinary local repository. The connect command saves
+the active host/importer paths privately in managed state; Project commands and
+`dim create dim://PROJECT NAME` need no environment exports. Explicit
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` and
+`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE` overrides take precedence. For an SSH
+workspace host, connect on that host so its own filesystem owns the selection.
 
 ```bash
-export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE="$HOME/dim-control-plane/connections/host.json"
-export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE="$HOME/dim-control-plane/connections/importer.json"
 dim managed project bootstrap-native-root example \
   --project-id example \
   --source-repository /absolute/path/to/repository \
   --source-ref refs/heads/main \
   --registrar-connection "$HOME/dim-control-plane/connections/registrar.json" \
-  --importer-connection "$DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE" \
+  --importer-connection "$HOME/dim-control-plane/connections/importer.json" \
   --review-policy "$HOME/dim-control-plane/review-policy.json"
 dim managed project create example
 ```
@@ -86,7 +89,7 @@ These commands run on the trusted managed host. For a remote service, use an
 SSH loopback forward and `connect --endpoint http://127.0.0.1:LOCAL_PORT`;
 bootstrap connections currently require loopback HTTP. After changing the
 installed generation, reconnect with `--output-directory NEW_DIRECTORY` and
-select those new connection files. Existing connections are preserved. Keep
+the new connection becomes active on this host. Existing files are preserved. Keep
 operator configurations and credentials on trusted hosts; workspace containers
 receive only their scoped Git capabilities. The separate web package owns any
 reviewer UI and browser authentication.

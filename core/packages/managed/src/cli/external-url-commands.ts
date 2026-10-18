@@ -110,13 +110,14 @@ externalUrl.command("request")
   .description("Create an external URL for a target in the current workspace")
   .requiredOption("--ingress <name>")
   .option("--subdomain <name>", "relative subdomain; defaults to the next workspace-prefixed index")
-  .option("--container <name>", "nested container path; repeat up to twice", collect, [])
+  .option("--container <name>", "one container in the workspace Docker engine", collect, [])
   .requiredOption("--port <port>")
   .option("--protocol <protocol>", "target protocol", "http")
   .option("--path <path>", "external URL path")
   .option("--workspace <name>", "use a host-side workspace grant")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: ExternalUrlCreateFlags) => {
+    if (flags.container.length > 1) throw new UserError("--container accepts one workspace container name");
     if (flags.protocol !== "http" && flags.protocol !== "https" && flags.protocol !== "tcp") {
       throw new UserError("--protocol must be http, https, or tcp");
     }

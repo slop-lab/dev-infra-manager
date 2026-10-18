@@ -2,7 +2,11 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRequire } from "node:module";
+const { Command } = createRequire(new URL("../../../../core/packages/managed/package.json", import.meta.url))("commander") as { Command: new () => Parameters<typeof registerControlPlaneCommands>[0] };
+import { registerControlPlaneCommands } from "../../../../core/packages/managed/src/cli/control-plane-commands.js";
+import { selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../../../../core/packages/managed/src/controlPlaneSelection.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
 import { configuredNativeGitBundleServer, parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
 import { prepareControlPlane, connectControlPlane } from "../../../../core/packages/managed/src/controlPlaneSetup.js";
@@ -16,6 +20,8 @@ import { loadNativeGitProjectRegistrarConnection } from "../../../../core/packag
 
 const roots: string[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   for (const directory of roots.splice(0)) {
     execFileSync("/usr/bin/chmod", ["-R", "u+rwX", directory]);
     await rm(directory, { recursive: true, force: true });
@@ -57,6 +63,20 @@ describe("optional control-plane setup", () => {
       const endpoint = await service.listen("127.0.0.1", 0);
       const connected = await connectControlPlane(directory, { endpoint });
       expect(connected.generationId).toBe("c".repeat(64));
+      const selectedState = path.join(root, "selected-host-state");
+      vi.stubEnv("DIM_MANAGED_STATE_ROOT", selectedState);
+      vi.stubEnv("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", undefined);
+      vi.stubEnv("DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE", undefined);
+      const output = path.join(root, "cli-connections");
+      const printed = vi.spyOn(console, "log").mockImplementation(() => {});
+      const program = new Command(); registerControlPlaneCommands(program);
+      await program.parseAsync(["control-plane", "connect", directory, "--endpoint", endpoint,
+        "--output-directory", output], { from: "user" });
+      expect(await selectedControlPlaneHostFile()).toBe(path.join(output, "host.json"));
+      expect(await selectedControlPlaneImporterFile()).toBe(path.join(output, "importer.json"));
+      expect((await stat(path.join(selectedState, "active-control-plane.json"))).mode & 0o777).toBe(0o600);
+      expect(printed.mock.calls.flat().join("\n")).toContain("Selected this control plane");
+      printed.mockRestore();
       const host = await loadNativeControlPlaneConnection(path.join(connected.directory, "host.json"));
       expect(host).toMatchObject({ hostId: "operator", nativeGit: { endpoint, generationId: "c".repeat(64) } });
       expect(host.ordinaryCi).toBeUndefined();

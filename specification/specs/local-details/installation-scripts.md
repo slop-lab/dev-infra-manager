@@ -326,23 +326,22 @@ installer into a temporary prefix, runs `dim installer install plugin` against t
 packed plugin tarball, and confirms `dim plugin list` (a `dim-cli` command,
 run directly against the packed CLI) reports it enabled.
 
-## Example External URL Smoke
+## Core workspace controller relay smoke
 
-Script:
-
-```text
-verification/scripts/external-url-example-smoke.bash
+```sh
+node verification/scripts/controller-workspace-relay-smoke.mjs WORKSPACE_IMAGE
 ```
 
-`just verify example current-installed auto external-urls`. Requires Docker. Executes
-[examples/features/external-urls/README.md](../../examples/features/external-urls/README.md)
-against real containers: builds local packages and the workspace image,
-starts a project-root container, starts the nested `dev` Compose service and
-its own `deep` nested container, runs a host DIM controller and reverse proxy,
-provides wildcard DNS with dnsmasq, uses `dim external-url` to discover the
-plugin ingresses and create URLs for both nesting depths, fetches both
-sentinels from a separate curl container, and revokes the routes. The doc and
-script must change together.
+Requires matched built packages, Docker and Sysbox. Creates a disposable core
+workspace from the supplied image, resolves an owned in-agent loopback relay,
+and verifies concurrent binary transfers with half-close responses, relay reuse,
+UUID fencing and discard cleanup. Host sockets are not mounted into the agent.
+The script cleans its owned workspace and state on success or failure.
+
+Centralized External URLs tests separately verify live HTTP/TCP/WebSocket
+routing, approval, ingress removal, route rebinding, and denial after workspace
+name or cached IP reuse. The retired Project-root plus nested-agent example is
+not a supported verification path.
 
 ## Multi-Repository Project Example Smoke
 

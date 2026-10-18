@@ -1,6 +1,5 @@
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { randomBytes } from "node:crypto";
-import path from "node:path";
 import {
   ContainerWorkspaceRuntime, WorkspaceService, UserError, type CommandRunner, type CreateWorkspaceInput,
   type StreamingCommandRunner, type WorkspaceRecord, type WorkspaceStore, workspaceRuntimeResources

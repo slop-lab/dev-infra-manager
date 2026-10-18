@@ -1,172 +1,111 @@
-# DIM Plugins
+# DIM plugins
 
-The base workspace application has no mandatory plugin host. Optional services
-compose their own extensions through explicit interfaces; workflow syntax is
-owned by `plugin-ci-workflows`, while Git authority and job runtimes consume
-compiled inputs.
+Ordinary Git workspaces, local/SSH host selection, shell execution and loopback
+forwarding run without plugins or a control plane. Optional managed services
+compose extensions for their own responsibilities. Workflow syntax belongs to
+`@slop-lab/dim-plugin-ci-workflows`; Git authority and CI runtimes consume its
+compiled job plans through an explicit compiler interface.
 
-The optional managed controller also has an instance-scoped capability plugin
-host. Reviewed plugins may register typed routes, extensions, constrained host
-inputs and named workspace capabilities. These controller APIs belong to
-`@slop-lab/dim-managed`; they are not base workspace APIs. Commands in the
-remaining examples use the managed command group.
+The optional controller plugin host belongs to `@slop-lab/dim-managed`. It owns
+external URL drivers, scoped workspace routes, host administration routes and
+host-input providers. It does not own workspace lifecycle or inject a controller
+socket, host runtime socket or raw host credential into a workspace.
 
-## Named extensions
+## Installation and registration
 
-Plugins can provide implementation objects to other plugins without creating
-a package dependency:
+Install the optional managed component and exact reviewed plugin versions:
+
+```sh
+dim installer install core --with-managed
+dim installer install plugin '@slop-lab/dim-plugin-external-urls@0.10.0'
+dim plugin list
+```
+
+The installer records enabled packages in the host plugin configuration. Merely
+being present as a dependency does not register a controller plugin. Discovery
+accepts explicit package names, including private registry packages; there is
+no naming-prefix convention. Installing managed support alone does not enable
+all plugins or start a controller. Plugin commands start the optional controller
+when needed. After changing an already running controller's configuration, use
+`dim controller restart`.
+
+A controller plugin exports a `DimPlugin` with the current API version:
 
 ```ts
-host.registerExtension("example.storage", "company-driver", driver);
-```
+import { DIM_PLUGIN_API_VERSION, type DimPlugin } from "@slop-lab/dim-managed";
 
-A consumer resolves it from the same controller instance:
-
-```ts
-const driver = host.extension("example.storage", configuredDriverName);
-```
-
-Extension kind/name pairs are unique and use lowercase dotted or hyphenated
-names. Registration remains explicit and instance-scoped: installing a package
-does not activate it unless it is also listed in `plugins.json`. The External
-URL system uses this mechanism for DNS provider drivers.
-
-## Host mirror provider
-
-DIM workspaces require exactly one enabled host mirror provider. The supported
-provider is `@slop-lab/dim-plugin-host-mirrors`, installed at the same exact
-version as DIM:
-
-```bash
-dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
-```
-
-The reviewed plugin source selects one digest-pinned Docker Hub cache image and
-one digest-pinned APT cache image. Core runs those images as DIM-owned
-containers without publishing host ports, configures every workspace Docker
-daemon and APT client through their stable control-network aliases, and fails
-workspace reconciliation if the provider is absent or conflicting. The plugin
-does not install packages into the host operating system.
-
-Projects and workspaces have no mirror-provider, image, package, version, or
-endpoint setting. Named workspace capabilities cannot override the reserved
-`DIM_REGISTRY_CACHE_ENDPOINT` or `DIM_APT_CACHE_ENDPOINT` environment entries.
-Changing provider bytes or image pins therefore requires host installation and
-review, not a Project commit or agent request.
-
-On a clean host, the installer activates this exact same-version plugin in the
-core installation transaction before the controller's first readiness check.
-An interactive host operator may accept the displayed exact coordinate; a
-non-interactive install must supply it explicitly. Declining or omitting that
-selection does not weaken controller startup and does not install a runtime.
-
-Plugin discovery does not depend on a naming convention. Scoped, unscoped, and
-private-registry package names are accepted. For example:
-
-```text
-@example/dim-plugin
-@company/internal-dim-integration
-dim-plugin-audit
-```
-
-## Host-input providers
-
-A plugin may register a provider that returns one string for an authenticated
-workspace request:
-
-```ts
-host.registerHostInputProvider("company.developer-setting", {
-  async resolve(request, context) {
-    // request.key is required; request.parameters is an optional string.
-    // context identifies the authenticated Project and workspace.
-    return readAllowedSetting(request.key, context);
-  }
-});
-```
-
-Providers decide which keys and optional parameter strings they accept. DIM
-does not cache results; `.dim/setup.sh` normally requests them again on every
-workspace start. The built-in `builtin.git-author` provider exposes only
-`name` and `email`, corresponding to the host's effective Git `user.name` and
-`user.email`.
-
-The managed controller runs providers on the host. Its authenticated Unix
-socket is mounted into the trusted project-root container, not into nested
-Compose services.
-
-It exports a versioned `DimPlugin`:
-
-```ts
-import {
-  DIM_PLUGIN_API_VERSION,
-  type DimPlugin
-} from "@slop-lab/dim-core";
-
-const plugin: DimPlugin = {
-  name: "@example/dim-plugin",
+export const plugin: DimPlugin = {
+  name: "company.workspace-tools",
   apiVersion: DIM_PLUGIN_API_VERSION,
   register(host) {
     host.registerControllerRoute({
       method: "GET",
       path: "/example",
-      summary: "Example plugin route",
-      audiences: ["workspace"],
-      async handle() {
-        return { body: { ok: true } };
+      summary: "Describe the selected workspace",
+      async handle(context) {
+        return { body: { workspace: context.workspace.name } };
       }
     });
   }
 };
-
-export default plugin;
 ```
 
-Every scoped controller route must declare one or both audiences. `workspace`
-is available only through the trusted workspace grant. `agent` is a separate
-security review decision and exposes the route through the agent socket with a
-distinct grant. Missing or unknown audiences reject plugin startup. Host-admin
-routes use `registerAdminRoute` and cannot be exposed by this field.
+Registration happens once per controller instance. Method/path pairs and named
+extensions are unique. Registration after startup is rejected. A plugin may
+return a disposer; shutdown invokes registered disposers in reverse order.
 
-Install and explicitly enable a plugin package with:
+## Workspace routes and host administration
 
-```bash
-npx '@slop-lab/dim-installer@0.10.0' installer install plugin '@example/dim-plugin@1.2.3'
-dim plugin list
+The controller has one workspace-scoped Unix socket and a separate host-admin
+Unix socket. Commands such as `dim external-url list --workspace NAME` obtain a
+private grant on the host and use the workspace socket. The controller reads
+the actual core `WorkspaceStore`, whose records use immutable UUIDs. Tokens
+stop authenticating after discard or same-name replacement. Dispatch holds the
+workspace lock and checks that the selected UUID remains current.
+
+Workspace route context contains the real UUID and name. `projectId` and
+`projectName` exist only when a matching native Git attachment supplies them;
+ordinary Git workspaces have no invented Project. Host admin routes can manage
+plugin configuration and host inventories, but are not reachable with a scoped
+workspace token. There is no agent listener or route-audience matrix.
+
+A plugin resolves targets through the controller helper rather than choosing a
+host address. `containers: []` selects a service on workspace loopback;
+`containers: ["name"]` selects one container inside that workspace's Docker
+engine. The helper verifies core runtime ownership, pins the owned agent's
+container ID and IP, and runs the byte relay inside that agent. It supports no
+second nested-container level. External URL listeners recheck the current core
+UUID on every HTTP request, WebSocket upgrade and new TCP connection, so a
+cached IP cannot redirect an old route after workspace replacement.
+
+## Named extensions and host inputs
+
+Plugins can share explicitly registered implementation objects:
+
+```ts
+host.registerExtension("company.storage", "reviewed-driver", driver);
+const selected = host.extension("company.storage", configuredName);
 ```
 
-If a plugin prevents controller startup, disable it without importing it, then
-enable it after correction or remove it entirely:
+External URLs use this mechanism for DNS and ingress drivers. Extension
+registration is local to the controller instance and creates no package-name
+compatibility convention.
 
-```bash
-dim installer disable-plugin '@example/dim-plugin'
-dim installer enable-plugin '@example/dim-plugin'
-dim installer remove-plugin '@example/dim-plugin'
-```
+A host-input provider implements `resolve(request, context)` and returns one
+string for keys it explicitly accepts. Context includes the workspace name and
+optional native Project metadata. The built-in `builtin.git-author` accepts
+only `name` and `email`, read from the host's effective Git configuration. DIM
+does not cache provider results or run repository setup hooks to request them.
 
-The installer maintains one npm project under
-`$XDG_DATA_HOME/dim/runtime/current` (falling back to
-`~/.local/share/dim/runtime/current`) for the CLI, core, and plugins. It installs
-exact plugin dependencies there and atomically records enabled package names in
-the adjacent `plugins.json`. `DIM_PLUGIN_HOME` exists only as an explicit test
-or portable-runtime override; normal installation has no separate plugin home.
-Tarball inputs are copied to `runtime/sources`, so deleting the original local
-build artifact does not break a later CLI replacement.
+There are no workspace capability-provider or discard-hook registration APIs.
+Core owns workspace execution and isolation. Plugins own their explicit
+operations and resource cleanup; external URL delete/revoke closes its flows,
+and per-connection identity checks enforce discard without lifecycle callbacks.
 
-The package name recorded by the installer and the plugin's diagnostic `name`
-field need not follow the same prefix. Resolution always uses the exact
-installed package name from `plugins.json`; no `plugin-*` pattern scan occurs.
+## Optional mirrors
 
-Only packages listed in the manifest are imported, and their plugin API version
-is validated. Registration is atomic from the caller's perspective: duplicate
-names and initialization failures abort startup, and completed registrations
-are disposed in reverse order. A plugin may return an async disposer from
-`register`. Each controller owns its route and extension registry instances;
-there is no global capability singleton. `GET /api` discovers registered plugin routes
-for an authenticated workspace.
-
-Plugin packages declare the exact supported `@slop-lab/dim-core` as a peer
-dependency. npm therefore rejects an incompatible CLI/core/plugin graph during
-installation, while `DIM_PLUGIN_API_VERSION` remains the runtime protocol check.
-Behavioral compatibility still requires integration tests for the pinned
-combination; semver and peer resolution cannot prove behavior.
+Base workspaces and native root CI use direct image access by default. A host
+may explicitly enable `@slop-lab/dim-plugin-host-mirrors`. An enabled provider
+selects reviewed cache images and CI mirror routing; provider failure stops
+that selected path rather than silently changing routing. The mirror plugin is
+not required by ordinary workspaces, controller startup or native Git.

@@ -1,39 +1,57 @@
 # Managed administration CLI
 
-`dim managed` administers the optional managed Git, review and CI component
-provided by `@slop-lab/dim-managed`. This component uses one reviewed native
-Git root; ordinary Git workspaces do not need it. It does not
-embed Gitea, expose repository CRUD, remove Projects, or create Project-scoped
-CI runners.
+`dim managed` provides optional native Git, Project review and CI administration.
+Ordinary Git workspaces use the base CLI and do not need this package. Native
+Projects attach to the same workspace runtime and lifecycle through `dim://`
+sources.
 
-## Requirements
+## Installation
 
-- Linux with a systemd user manager
-- Node.js 24 or 26
-- Git, Docker with Compose v2 and Buildx, and `sysbox-runc`
-- real, accessible `/dev/kvm` for optional native QEMU capacity
-
-Pin the CLI to the same reviewed version as the installer and plugins. The
-recommended installation is through `@slop-lab/dim-installer`:
+Install the reviewed version of the optional component alongside the CLI:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
-dim installer install core --with-managed \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
-dim managed doctor
+dim installer install core --with-managed
+dim doctor
 ```
+
+Linux, Git, Docker and `sysbox-runc` are required for workspaces. Optional
+control-plane services use Docker Compose and a systemd user manager. QEMU CI
+requires accessible `/dev/kvm`. Mirror, DNS and external URL plugins are optional;
+installing managed administration does not enable them or install a controller.
 
 ## Native control plane
 
-Install the empty native Git and ordinary-CI service bundle from one absolute,
-owner-only configuration file:
+Prepare private operator configuration from exact reviewed image digests, review
+it, install the services, then connect to their live generation:
 
 ```bash
-dim installer install control-plane --config /absolute/operator/install.json
+dim managed control-plane prepare "$HOME/dim-control-plane" \
+  --native-git-image 'registry.example/dim-native-git@sha256:REVIEWED_DIGEST' \
+  --ordinary-ci-image 'registry.example/dim-ordinary-ci@sha256:REVIEWED_DIGEST'
+dim installer install control-plane --config "$HOME/dim-control-plane/install.json"
+dim managed control-plane connect "$HOME/dim-control-plane"
 ```
 
-The installer does not create Projects, approvals, execution capacity, or a
-reviewer UI. Start global ordinary and QEMU capacity separately:
+`connect` attests each service role, writes private host, registrar, importer,
+reviewer and promoter connections, and selects the host/importer files on this
+host. Project and `dim://` workspace commands then need no environment exports.
+Use `--output-directory NEW_DIRECTORY` when connecting a new service generation.
+The generated files contain credentials; retain their owner-only permissions.
+
+Selection belongs to the executing host. For `dim --host REMOTE create dim://demo
+work-1`, run control-plane setup and connect on that remote host first. The local
+client does not transfer its control-plane credentials. Explicit
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` and
+`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE` override the saved selection for an
+individual process; their service, host and generation must agree.
+
+The installer creates services, not Projects, approvals, CI capacity or reviewer
+UI deployments.
+
+## CI capacity
+
+Start global ordinary and QEMU capacity separately:
 
 ```bash
 dim managed ci native-root host run /absolute/operator/ordinary-host.json
@@ -52,80 +70,77 @@ capacity. QEMU execution requires KVM; there is no TCG or ordinary fallback.
 
 ## Projects and workspaces
 
-Bootstrap one exact branch from an already-local reviewed repository through
-separate registrar and importer roles:
+Bootstrap an exact branch from an already-local reviewed repository through the
+separate registrar and importer roles, then publish Project readiness:
 
 ```bash
 dim managed project bootstrap-native-root demo \
   --project-id demo-root \
   --source-repository "$PWD/project-root" \
   --source-ref refs/heads/main \
-  --registrar-connection /absolute/operator/registrar.json \
-  --importer-connection /absolute/operator/importer.json \
+  --registrar-connection "$HOME/dim-control-plane/connections/registrar.json" \
+  --importer-connection "$HOME/dim-control-plane/connections/importer.json" \
   --json
-
-export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/absolute/operator/control-plane.json
-export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
 dim managed project create demo --json
 dim managed project list --json
 dim managed project show demo --json
 ```
 
-`project create` publishes readiness only after fresh native service proof and
-protected-root materialization. It neither runs CI nor creates approval.
+Project creation proves protected-root materialization and readiness. It does
+not run CI or create approval. Create and operate its workspace with the base
+commands:
 
 ```bash
-dim managed workspace image build
-dim managed workspace image status --json
-dim managed create demo work-1
-dim managed ls --json
-dim managed show work-1 --json
-dim managed run work-1 shell
-dim managed run work-1 exec -- git status
-dim managed exec work-1 -- git log -1 --oneline
-dim managed resources work-1 --cpus 4 --memory 8g --pids 4096
-dim managed stop work-1
-dim managed start work-1
-dim managed restart work-1
-dim managed update work-1
-dim managed setup work-1
-dim managed discard work-1 --yes
+dim image build
+dim create dim://demo work-1
+dim ls --json
+dim show work-1 --json
+dim shell work-1
+dim exec work-1 -- git status
+dim resources work-1 --cpus 4 --memory 8g --pids 4096
+dim stop work-1
+dim start work-1
+dim recreate work-1
+dim discard work-1 --yes
 ```
 
-`dim managed ls` (or `dim managed list`) lists workspaces. Common workspace operations are
-available directly under `dim managed`; the `dim managed workspace` group exposes the same
-commands for discoverability, plus local workspace image management. Both
-forms use the same options and execution path.
+Each native attachment pins a protected-root snapshot and receives a brokered
+Git endpoint for its own proposal namespace. Protected writes, deletes, force
+pushes, tags, foreign workspace namespaces and foreign Projects are rejected.
+Container recreation preserves workspace data. The base lifecycle owns both
+ordinary Git and native Project workspaces; there is no separate managed
+workspace creation, setup, image or host-global lifecycle command.
 
-Each workspace receives one immutable protected-root snapshot and a brokered
-native Git endpoint. Its writer may create or fast-forward only its own
-proposal namespace. Protected writes, deletes, force pushes, tags, foreign
-workspace namespaces, and foreign Projects are rejected before mutation.
+## Reviewer UI
 
-## Host lifecycle
+The web package is an optional separate installation. Use its connection-bound
+configuration rather than copying service credentials into browser code:
 
 ```bash
-dim managed host status --json
-dim managed host shutdown
-dim managed host start
+mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
+dim-reviewer-web init "$HOME/dim-control-plane/connections/reviewer.json" \
+  --project demo-root --output "$HOME/dim-reviewer.json" --port 8789
+dim-reviewer-web serve "$HOME/dim-reviewer.json"
 ```
 
-`shutdown` preserves managed volumes and leaves the controller available.
-`start` restores only the runtimes selected by the durable host lifecycle
-record. There are no `host stop` or `host restart` commands.
+Review approval and protected-ref promotion remain separate authority roles.
 
-## State compatibility
+## Host state
 
-Managed Project and workspace state defaults to `~/.local/state/dim/managed`,
-separate from ordinary workspaces. `DIM_MANAGED_STATE_ROOT` selects another
-managed state directory. An explicitly supplied `DIM_STATE_ROOT` remains a
-shared override when no managed-specific selection is present. Controller
-sockets also use their own `dim/managed` runtime directory.
+Ordinary and native-attached workspace records share the base store under
+`~/.local/state/dim`. `DIM_STATE_ROOT` selects another base store. Managed Project
+records, pending imports, plugin configuration and the active control-plane
+selection default to `~/.local/state/dim/managed`; `DIM_MANAGED_STATE_ROOT`
+selects another managed directory. An explicit `DIM_STATE_ROOT` also supplies
+the managed location when no managed-specific override is present.
 
-DIM is pre-stable. Current Project schema 6 and workspace schema 9 are strict.
-Predecessor provider, repository, runner, and workspace state is rejected and
-never adopted, migrated, renamed, or deleted. Use the pinned prior release to
-export needed data, then create fresh native state.
+Optional plugin administration uses `dim managed controller` and its host-owned
+Unix sockets. Workspace-scoped requests use core workspace UUID grants and do
+not expose a controller socket or runtime credentials inside containers.
 
-See the repository's native [CLI contract](../../../../specification/specs/10-cli-contract.md)
-and [workspace guide](../../../../specification/docs/project-workspaces.md).
+DIM is pre-stable. Obsolete configuration and state are rejected instead of
+being silently adopted. Export required data with the prior pinned version
+before starting fresh.
+
+See the [workspace guide](../../../../specification/docs/project-workspaces.md)
+and [plugin guide](../../../../specification/docs/plugins.md).
