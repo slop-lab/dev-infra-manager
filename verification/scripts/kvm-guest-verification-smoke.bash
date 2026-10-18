@@ -42,13 +42,8 @@ native_contracts() {
   pnpm --filter @slop-lab/dim-core run build
   pnpm --filter @slop-lab/dim-native-git run build
   pnpm --filter @slop-lab/dim-cli run build
-  pnpm --dir verification exec vitest run \
-    test/nativeCutoverCleanHost.test.mjs \
-    test/nativeCutoverPolicyMatrix.test.mjs \
-    test/nativeCutoverQemuPreflight.test.mjs \
-    test/nativeBasicExample.test.mjs \
-    test/nativeBasicLifecycleSmoke.test.mjs \
-    test/candidateSourceWorkflow.test.ts
+  pnpm --dir tests exec vitest run packages/core/test/workspaceService.test.ts packages/core/test/nativeWorkspaceBroker.test.ts
+  pnpm --dir verification exec vitest run test/nativeBasicExample.test.mjs test/candidateSourceWorkflow.test.ts
 }
 
 installed_services() {

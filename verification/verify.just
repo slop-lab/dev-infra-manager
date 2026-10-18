@@ -4,10 +4,6 @@ set shell := ["bash", "-uc"]
 environments-kvm verbose="":
     cd .. && bash verification/scripts/kvm-host-install-smoke.bash "{{verbose}}"
 
-# Installs DIM in a clean VM and proves an agent container can launch QEMU through the protected socket.
-agent-control-kvm verbose="":
-    cd .. && bash verification/scripts/qemu-agent-control-smoke.bash "{{verbose}}"
-
 # Real KVM guest mechanics on the current host. This is not independent-host or human release acceptance.
 native-qemu-guest-mechanics-kvm:
     @[[ "$(uname -m)" == x86_64 ]] || { echo "native-qemu-guest-mechanics-kvm requires x86-64" >&2; exit 2; }
@@ -54,10 +50,8 @@ headscale-tailnet-tcp:
 
 # Verify pinned workspace-user setup plus generic development-service exposure.
 workspace-user-setup:
-    cd .. && bash verification/scripts/project-tool-tasks-smoke.bash
     cd .. && bash verification/scripts/workspace-user-setup-smoke.bash
     cd .. && bash verification/scripts/codex-user-setup-smoke.bash
-    cd .. && bash verification/scripts/workspace-user-setup-remote-bootstrap-smoke.bash
     cd .. && bash verification/scripts/opencode-web-launcher-smoke.bash
     cd .. && bash verification/scripts/opencode-web-launcher-failure-smoke.bash
     cd .. && bash verification/scripts/opencode-web-real-runtime-smoke.bash
@@ -131,8 +125,8 @@ mise-install-smoke:
 
 # Run generated workspace isolation checks without Docker or workspace creation.
 isolation:
-    cd .. && pnpm --dir tests exec vitest run packages/core/test/lifecycleContainer.test.ts
+    cd .. && pnpm --dir tests exec vitest run packages/core/test/workspaceService.test.ts
 
 # Run generated workspace isolation checks with Vitest's JSON reporter.
 isolation-json:
-    cd .. && pnpm --dir tests exec vitest run packages/core/test/lifecycleContainer.test.ts --reporter=json
+    cd .. && pnpm --dir tests exec vitest run packages/core/test/workspaceService.test.ts --reporter=json

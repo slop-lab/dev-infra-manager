@@ -138,12 +138,18 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   };
   fixtures.push(fixture);
   await new Promise<void>((resolveReady, rejectReady) => {
+    const deadline = setTimeout(() => {
+      watcher.close();
+      rejectReady(new Error(`QEMU fixture did not publish readiness: ${fixture.stderr()}`));
+    }, 3_000);
     watcher.on("change", (_event, filename) => {
       if (filename?.toString() !== "service.pid" && filename?.toString() !== "service-owner.json") return;
+      clearTimeout(deadline);
       watcher.close();
       resolveReady();
     });
     child.once("exit", (code) => {
+      clearTimeout(deadline);
       watcher.close();
       rejectReady(new TypeError(`QEMU service exited ${code}: ${Buffer.concat(stderr).toString("utf8")}`));
     });

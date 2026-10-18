@@ -101,7 +101,6 @@ recipe="$(awk '/^check-source-native:/{capture=1} capture{print} capture && /^$/
 required_steps=(
   "bash verification/scripts/source-gate-preflight.bash"
   "bash verification/scripts/source-gate-preflight-test.bash"
-  "bash verification/scripts/repository-materialization-smoke.bash"
   "just typecheck"
   "pnpm --filter @slop-lab/dim-contracts-external-url run build"
   "pnpm --filter @slop-lab/dim-controller-proxy run build"

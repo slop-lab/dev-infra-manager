@@ -1,61 +1,22 @@
-# Codex in a Project-owned agent workspace
+# Codex in a development workspace
 
-> **Archived predecessor example.** This is not a current native-only operator
-> journey; use [`native-basic-root`](../../projects/native-basic-root/README.md).
-
-This use case selects Codex for the existing
-[`full-development-flow`](../../projects/full-development-flow/README.md)
-Project. It changes only the reviewed user-tool selection. The generic agent
-image, outer `agent-dind`, inner agent, persistent home, secure daemon, and
-`ssh-proxy` task remain unchanged.
-
-Copy [`project-tool.conf`](project-tool.conf) to
-`repos/root/.dim/project-tool.conf` before creating the example repositories:
+Create a workspace from this repository, then explicitly install the reviewed
+Codex tool selection into its persistent home:
 
 ```bash
-cp examples/use-cases/codex/project-tool.conf \
-  examples/projects/full-development-flow/repos/root/.dim/project-tool.conf
+dim create /path/on/selected/host/to/dev-infra-manager development
+dim exec development -- bash .dim/dev.bash tool-setup codex
+dim exec development -- bash .dim/dev.bash agent codex
 ```
 
-Review and commit that Project change, then follow the full-development-flow
-creation steps. Install the development helper from one immutable reviewed
-development commit exactly as that example documents:
+The user-home installer pins the tool version, checks its installation and
+writes its tool manifest. It does not start Codex or perform authentication.
+Credentials belong to the workspace user and should be supplied deliberately;
+host operator Git, DIM administration and deployment secrets stay outside the
+workspace. No coding-agent package is baked into the base runtime image.
 
-```bash
-dim workspace run full-dev tool-setup \
-  <workspace-user-setup.bash
-dim workspace run full-dev agent --help
-```
-
-The helper installs exactly `@openai/codex@0.156.1` under
-`$HOME/.local`, verifies the installed package version, and writes the same v1
-tool manifest and `$HOME/.local/libexec/dim-project-tool-launch` used by the
-OpenCode selection. It neither starts Codex nor performs authentication, and
-it does not create or modify `$HOME/.codex/auth.json` or
-`$HOME/.codex/config.toml`. Existing persistent-home credentials remain a user
-concern. Rerun `tool-setup` explicitly to reconcile the reviewed selection;
-workspace lifecycle never installs or upgrades the tool.
-
-The downloaded `workspace-user-setup.bash.sha256` must be verified before the
-helper is streamed. The checksum and helper must come from the same full
-development commit. No coding-agent package is baked into an image.
-
-For Remote SSH on the DIM host, use the full-development-flow `ProxyCommand`
-unchanged:
-
-```sshconfig
-Host full-dev-agent
-    HostName full-dev-agent
-    User dim-agent
-    RequestTTY no
-    ProxyCommand dim workspace run full-dev ssh-proxy
-```
-
-Verify each recreated workspace's host-key fingerprint as described by the
-base example. For a client on another machine, use its
-[`host-name-*` host-scoped SSH configuration](../../projects/full-development-flow/README.md#connect-with-openssh)
-with a fixed DIM host and workspace. Select `host-name-full-dev` in Codex
-Remote SSH after independently checking both the DIM host key and the agent
-host-key fingerprint. No Codex-specific port forwarding or DIM privilege is
-needed; Codex is only an OpenSSH client use case, and DIM core and the proxy
-protocol remain unaware of it.
+`dim exec` runs in the same Sysbox workspace as repository development and
+nested Docker. Home and checkout survive stop/start and recreate. There is no
+parallel agent daemon, automatic Project hook or SSH proxy requirement. For
+ordinary remote hosts and service forwarding, see
+[basic-development](../../projects/basic-development/README.md).

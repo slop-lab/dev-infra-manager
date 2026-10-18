@@ -3,7 +3,6 @@
 (^|/)\.gitea/.* @dim-dim/Owners
 ^project/.* @dim-dim/Owners
 ^scripts/.* @dim-dim/Owners
-^agent/.* @dim-dim/Owners
 ^images/.* @dim-dim/Owners
 ^core/.* @dim-dim/Owners
 ^verification/.* @dim-dim/Owners

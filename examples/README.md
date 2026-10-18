@@ -1,22 +1,15 @@
 # Examples
 
-DIM ships one current adoption example:
+- [Ordinary remote development](projects/basic-development/README.md) uses the
+  base Git workspace, explicit development commands and local forwarding.
+- [Native Project](projects/native-basic-root/README.md) adds proposal Git,
+  human review and candidate-controlled ordinary or QEMU jobs.
+- [Codex](use-cases/codex/README.md) installs the reviewed coding tool explicitly
+  into a workspace's persistent home.
+- Optional feature examples live under `features/` with their owning
+  integration. They do not change the base workspace lifecycle.
 
-- [`projects/native-basic-root`](projects/native-basic-root/README.md) is a
-  reviewed single-root native Project with candidate-controlled ordinary and
-  QEMU jobs. It uses no forge service, provider webhook, repository CRUD, or
-  Project-scoped runner.
-
-Other directories are retained only as predecessor source material for
-operator export and historical comparison. They are not runnable by the
-native-only verification recipes and do not define supported commands.
-
-The current fixture is checked structurally with:
-
-```bash
-pnpm --dir verification exec vitest run test/nativeBasicExample.test.mjs
-```
-
-End-to-end mechanics run only on a disposable host with installed native
-services, `sysbox-runc`, and real KVM. See
-[`verification/scripts/kvm-guest-verification-smoke.bash`](../verification/scripts/kvm-guest-verification-smoke.bash).
+The native Project fixture has source checks in
+`verification/test/nativeBasicExample.test.mjs`. Real Git, runtime, service and
+CI verification require their declared disposable host prerequisites; source
+structure checks alone do not establish runtime or multi-host acceptance.

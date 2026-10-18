@@ -3,26 +3,23 @@ set -euo pipefail
 backend="sysbox"
 verbose=false
 probe=false
-agent_control=false
 cache_routing=false
 for arg in "$@"; do
   case "$arg" in
     "") ;;
     -v|--verbose) verbose=true ;;
     --probe) probe=true ;;
-    --agent-control) agent_control=true ;;
     --cache-routing) cache_routing=true ;;
     *)
-      echo "usage: $0 [-v|--verbose] [--probe | --agent-control | --cache-routing]" >&2
+      echo "usage: $0 [-v|--verbose] [--probe | --cache-routing]" >&2
       exit 2
       ;;
   esac
 done
 mode_count=0
 [[ "$probe" == false ]] || ((mode_count += 1))
-[[ "$agent_control" == false ]] || ((mode_count += 1))
 [[ "$cache_routing" == false ]] || ((mode_count += 1))
-[[ "$mode_count" -le 1 ]] || { echo "--probe, --agent-control, and --cache-routing are mutually exclusive" >&2; exit 2; }
+[[ "$mode_count" -le 1 ]] || { echo "--probe and --cache-routing are mutually exclusive" >&2; exit 2; }
 if [[ "$probe" == true ]]; then
   [[ "$verbose" == false ]] || { echo "--probe does not accept --verbose" >&2; exit 2; }
   command -v qemu-system-x86_64 >/dev/null || { echo "missing QEMU control probe dependency: qemu-system-x86_64" >&2; exit 2; }
@@ -329,20 +326,12 @@ run_step "build local backend smoke image" ssh "${ssh_args[@]}" dim@127.0.0.1 '
   sudo tar -C "$smoke_root" -cf - busybox |
     sudo docker import --change '\''ENTRYPOINT ["/busybox"]'\'' - dim-backend-smoke:local >/dev/null
 '
-run_step "verify stored backend" ssh "${ssh_args[@]}" dim@127.0.0.1 \
-  "test \"\$(jq -r .workspaceBackend ~/.config/dim/config.json)\" = '$backend'"
 if [[ -n "$registry_mirror" ]]; then
   run_step "verify nested guest registry mirror" ssh "${ssh_args[@]}" dim@127.0.0.1 \
     "sudo docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -Fq '$registry_mirror'"
 fi
 run_step "run Sysbox workload" ssh "${ssh_args[@]}" dim@127.0.0.1 \
   "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc dim-backend-smoke:local true"
-if [[ "$agent_control" == true ]]; then
-  run_step "verify agent control of protected QEMU process" \
-    ssh "${ssh_args[@]}" dim@127.0.0.1 \
-    "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_TEST_REGISTRY_MIRROR_ADDRESS=10.0.2.2 DIM_SELF_EXPECT_AGENT_UID=1001 DIM_SELF_VERIFY_AGENT=1 DIM_SELF_STOP_AFTER_QEMU_PROBE=1 JUST_UNSTABLE=1 just verify self-development"
-  exit 0
-fi
 run_step "run independent guest verification stages" \
   ssh "${ssh_args[@]}" dim@127.0.0.1 \
     "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_KVM_SKIP_TRUSTED_WORKSPACE='${DIM_KVM_SKIP_TRUSTED_WORKSPACE:-0}' bash verification/scripts/kvm-guest-verification-smoke.bash"

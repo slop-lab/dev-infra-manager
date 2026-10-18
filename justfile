@@ -34,7 +34,6 @@ check-source-container:
 check-source-native:
     bash verification/scripts/source-gate-preflight.bash
     bash verification/scripts/source-gate-preflight-test.bash
-    bash verification/scripts/repository-materialization-smoke.bash
     just typecheck
     pnpm --filter @slop-lab/dim-contracts-external-url run build
     pnpm --filter @slop-lab/dim-controller-proxy run build
