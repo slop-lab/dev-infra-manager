@@ -135,7 +135,6 @@ if $require_artifacts; then
     "core/packages/managed/dist/index.js"
     "core/packages/managed/dist/nativeOrdinaryServiceCli.js"
     "core/packages/managed/dist/nativeOrdinaryBundleConfig.js"
-    "core/packages/managed/dist/nativeOrdinaryIdleService.js"
     "core/packages/core/dist/package.json"
     "core/packages/native-git/dist/serviceCli.js"
     "core/packages/native-git/dist/cli.js"

@@ -6,7 +6,7 @@ import {
   type NativeGitAttemptIssuerHttpResponse
 } from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
 import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
-import { descriptor as descriptorValue } from "./nativeOrdinaryAuthorityFixture.js";
+import { descriptor as descriptorValue } from "./nativeOrdinaryDescriptorFixture.js";
 import { reservationContext, schema2Event } from "./nativeRootReservationClaimFixture.js";
 
 const originalReceipt = "00000000-0000-4000-8000-000000000101";

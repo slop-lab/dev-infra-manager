@@ -1,6 +1,5 @@
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { DatabaseSync } from "node:sqlite";
 
 export const webhookAuthorization = `Basic ${Buffer.from(
   "native-events:webhook-secret-000000000000000000000"
@@ -75,68 +74,6 @@ export function createCentralFixture(): CentralFixture {
   }
 }
 
-export type AckLossProxy = {
-  readonly server: Server;
-  readonly bodies: readonly string[];
-  readonly upstreamResponses: readonly string[];
-  listen(port: number): Promise<void>;
-  waitForRequestCount(count: number): Promise<void>;
-  waitForResponseCount(count: number): Promise<void>;
-};
-
-export function createAckLossProxy(target: string): AckLossProxy {
-  const bodies: string[] = [];
-  const upstreamResponses: string[] = [];
-  const waiters = new Map<number, () => void>();
-  const responseWaiters = new Map<number, () => void>();
-  let loseResponse = true;
-  const server = createServer((request, response) => void forward(request, response));
-  return {
-    server,
-    bodies,
-    upstreamResponses,
-    async listen(port) {
-      server.listen(port, "127.0.0.1");
-      await once(server, "listening");
-    },
-    waitForRequestCount(count) {
-      if (bodies.length >= count) return Promise.resolve();
-      return new Promise((resolve) => waiters.set(count, resolve));
-    },
-    waitForResponseCount(count) {
-      if (upstreamResponses.length >= count) return Promise.resolve();
-      return new Promise((resolve) => responseWaiters.set(count, resolve));
-    }
-  };
-
-  async function forward(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    const body = await readBody(request);
-    bodies.push(body);
-    resolveWaiters(waiters, bodies.length);
-    const upstream = await fetch(`${target}/v1/native-events`, {
-      method: "POST",
-      headers: {
-        Authorization: request.headers.authorization ?? "",
-        "Content-Type": request.headers["content-type"] ?? ""
-      },
-      body
-    });
-    const bytes = Buffer.from(await upstream.arrayBuffer());
-    upstreamResponses.push(`${upstream.status} ${bytes.toString("utf8")}`);
-    resolveWaiters(responseWaiters, upstreamResponses.length);
-    if (loseResponse) {
-      loseResponse = false;
-      request.socket.destroy();
-      return;
-    }
-    response.writeHead(upstream.status, {
-      "Content-Type": upstream.headers.get("content-type") ?? "",
-      "Cache-Control": upstream.headers.get("cache-control") ?? ""
-    });
-    response.end(bytes);
-  }
-}
-
 export async function reservePort(server: Server): Promise<number> {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -154,20 +91,6 @@ export async function closeServer(server: Server): Promise<void> {
   await once(server, "close");
 }
 
-export function authorityDatabaseCounts(file: string): Readonly<Record<string, number>> {
-  const database = new DatabaseSync(file, { readOnly: true });
-  try {
-    return {
-      inbox: sqliteCount(database, "native_event_inbox"),
-      demands: sqliteCount(database, "demands"),
-      eventFences: sqliteCount(database, "native_event_replay_fences"),
-      reviewJobFences: sqliteCount(database, "review_job_replay_fences")
-    };
-  } finally {
-    database.close();
-  }
-}
-
 async function readBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -181,12 +104,4 @@ function resolveWaiters(waiters: Map<number, () => void>, count: number): void {
       resolve();
     }
   }
-}
-
-function sqliteCount(database: DatabaseSync, table: string): number {
-  const row = database.prepare(`SELECT COUNT(*) AS total FROM ${table}`).get();
-  if (typeof row !== "object" || row === null || Array.isArray(row)) throw new Error("expected SQLite row");
-  const total = Reflect.get(row, "total");
-  if (typeof total !== "number") throw new Error("expected SQLite count");
-  return total;
 }

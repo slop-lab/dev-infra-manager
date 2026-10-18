@@ -61,7 +61,6 @@ touch \
   "$fixture/root/core/packages/managed/dist/index.js" \
   "$fixture/root/core/packages/managed/dist/nativeOrdinaryServiceCli.js" \
   "$fixture/root/core/packages/managed/dist/nativeOrdinaryBundleConfig.js" \
-  "$fixture/root/core/packages/managed/dist/nativeOrdinaryIdleService.js" \
   "$fixture/root/core/packages/core/dist/package.json" \
   "$fixture/root/core/packages/native-git/dist/serviceCli.js" \
   "$fixture/root/core/packages/native-git/dist/cli.js" \

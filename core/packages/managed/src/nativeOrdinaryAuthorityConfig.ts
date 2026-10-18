@@ -1,6 +1,5 @@
 import { UserError } from "@slop-lab/dim-core";
 import type { NativeGitAdmissionConfig } from "./nativeGitAdmissionSource.js";
-import type { NativeGitResultReporterConfig } from "./nativeGitResultReporter.js";
 import { resourceBounds, type NativeCapacityPolicy } from "./nativeOrdinaryAuthorityModel.js";
 
 export type NativeOrdinaryCredential = {
@@ -14,7 +13,8 @@ export type NativeOrdinaryAuthorityConfig = {
   readonly database: string;
   readonly eligibilityLeaseMilliseconds: number;
   readonly claimLeaseMilliseconds: number;
-  readonly nativeGit: NativeGitAdmissionConfig & NativeGitResultReporterConfig & {
+  readonly nativeGit: NativeGitAdmissionConfig & {
+    readonly resultReporter: NativeOrdinaryCredential;
     readonly candidateReader: NativeOrdinaryCredential;
   };
   readonly credentials: {

@@ -52,7 +52,7 @@ it("selects persistent workspace runtime backends", () => {
     const options = lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") });
   expect(workspaceRuntimePlan("sysbox", options)).toMatchObject({
       dockerRuntime: "runc",
-      image: "dev-infra-project-workspace:0.10.0",
+      image: "dev-infra-managed-workspace:0.10.0",
       privileged: true,
       engine: "docker",
       env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }

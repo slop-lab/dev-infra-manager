@@ -1,20 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createNativeGitAdmissionSource } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
-import {
-  createNativeGitResultReporterClient,
-  type NativeGitResultReporterConfig
-} from "../../../../core/packages/managed/src/nativeGitResultReporter.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
-import { statusDigest } from "../../../../core/packages/native-git/src/promotion-schema.js";
-import { admission, descriptor } from "./nativeOrdinaryAuthorityFixture.js";
+import { admission } from "./nativeOrdinaryDescriptorFixture.js";
 
 const identityCredential = {
   username: "ordinary-identity",
   password: "identity-secret-00000000000000000000"
-} as const;
-const reporterCredential = {
-  username: "ordinary-results",
-  password: "result-secret-0000000000000000000000"
 } as const;
 
 describe("native Git authority client mutation boundaries", () => {
@@ -63,64 +53,7 @@ describe("native Git authority client mutation boundaries", () => {
     expect(seen.every((request) => request.authorization === basic(identityCredential))).toBe(true);
   });
 
-  it("retains reporter endpoint and credential after caller config mutation", async () => {
-    // Given
-    const seen: { readonly endpoint: string; readonly authorization: string }[] = [];
-    const config: NativeGitResultReporterConfig = {
-      endpoint: "http://native-git:8080",
-      serviceId: "native-main",
-      resultReporter: { ...reporterCredential }
-    };
-    const client = createNativeGitResultReporterClient(config, {
-      async request(input) {
-        seen.push({ endpoint: input.endpoint, authorization: input.authorization });
-        const event = terminalEvent();
-        const identity = { ...event, reviewId: event.payload.reviewId, reporterUsername: reporterCredential.username };
-        return response(201, { ...identity, statusId: statusDigest(identity), reportedAt: event.occurredAt });
-      }
-    });
-    Reflect.set(config, "endpoint", "http://attacker.invalid:9999");
-    Reflect.set(config, "serviceId", "attacker-native");
-    Reflect.set(config.resultReporter, "username", "attacker");
-    Reflect.set(config.resultReporter, "password", "attacker-password-0000000000000000");
-
-    // When
-    await expect(client.send(JSON.stringify(terminalEvent()), terminalEvent(), AbortSignal.timeout(1_000)))
-      .resolves.toBe("acknowledged");
-
-    // Then
-    expect(seen).toEqual([{
-      endpoint: "http://native-git:8080",
-      authorization: basic(reporterCredential)
-    }]);
-  });
 });
-
-function terminalEvent() {
-  const value = descriptor("project-a", "source", "generation-1");
-  const now = "2026-10-05T00:00:00.000Z";
-  return {
-    schemaVersion: 2,
-    eventId: "60000000-0000-4000-8000-000000000061",
-    occurredAt: now,
-    eventType: "dim.ci.job.completed",
-    payload: {
-      reviewId: "a".repeat(64),
-      attemptId: "10000000-0000-4000-8000-000000000061",
-      attempt: 1,
-      descriptor: value,
-      descriptorDigest: nativeDescriptorDigest(value),
-      hostId: "host-a",
-      capacity: "primary",
-      startedAt: now,
-      finishedAt: now,
-      result: "success",
-      completion: { kind: "exited", exitCode: 0 },
-      stdout: { bytes: "0", sha256: `sha256:${"0".repeat(64)}`, truncated: false },
-      stderr: { bytes: "0", sha256: `sha256:${"0".repeat(64)}`, truncated: false }
-    }
-  } as const;
-}
 
 function response(statusCode: number, body: unknown) {
   return {

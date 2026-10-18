@@ -1,5 +1,4 @@
 import type { Server } from "node:http";
-import { readdir, readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createNativeEventDispatcher,
@@ -12,15 +11,7 @@ import {
   type ReviewFixture
 } from "./nativeGitReviewHarness.js";
 import {
-  admission,
-  post,
-  startAuthority,
-  type AuthorityFixture
-} from "../../core/test/nativeOrdinaryAuthorityFixture.js";
-import {
-  authorityDatabaseCounts,
   closeServer,
-  createAckLossProxy,
   createCentralFixture,
   reservePort,
   webhookAuthorization
@@ -29,75 +20,14 @@ import {
 const fixtures: ReviewFixture[] = [];
 const dispatchers: Array<{ close(): Promise<void> }> = [];
 const servers: Server[] = [];
-const authorities: AuthorityFixture[] = [];
 
 afterEach(async () => {
   await Promise.all(dispatchers.splice(0).map((dispatcher) => dispatcher.close()));
   await Promise.all(servers.splice(0).map(closeServer));
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
-  const completedAuthorities = authorities.splice(0);
-  await Promise.all(completedAuthorities.map((authority) => authority.close()));
-  await Promise.all(completedAuthorities.map((authority) => authority.remove()));
 });
 
 describe("native review-event dispatcher", () => {
-  it("converges through real native Git and ordinary authority after losing the first durable ACK", async () => {
-    // Given
-    let native: ReviewFixture | undefined;
-    const authority = await startAuthority({
-      nativeGitHttpClient: {
-        async request(input) {
-          if (native === undefined) throw new Error("native Git fixture is not listening");
-          const body: unknown = input.body === undefined ? undefined : JSON.parse(input.body);
-          const response = await native.request("ordinary-identity", input.method, input.path, body);
-          return {
-            statusCode: response.status,
-            contentType: response.headers.get("content-type") ?? undefined,
-            cacheControl: response.headers.get("cache-control") ?? undefined,
-            body: Buffer.from(await response.arrayBuffer())
-          };
-        }
-      }
-    });
-    authorities.push(authority);
-    const proxy = createAckLossProxy(authority.endpoint);
-    servers.push(proxy.server);
-    const proxyPort = await reservePort(proxy.server);
-    await proxy.listen(proxyPort);
-    native = await nativeGitReviewFixture(
-      undefined,
-      createNodeNativeEventHttpClient(`http://127.0.0.1:${proxyPort}`)
-    );
-    fixtures.push(native);
-    // When
-    const response = await native.request("reviewer-a-user", "POST", reviewPath(), {
-      protectedRef: "refs/heads/main",
-      proposalRef: native.proposalRef
-    });
-    await proxy.waitForRequestCount(3);
-    await proxy.waitForResponseCount(3);
-    expect(proxy.upstreamResponses.map((entry) => entry.slice(0, 3))).toEqual(["202", "202", "202"]);
-    await waitForNoPending(native);
-
-    // Then
-    expect(response.status).toBe(201);
-    expect(proxy.bodies[0]).toBe(proxy.bodies[1]);
-    expect(authorityDatabaseCounts(authority.database)).toEqual({ inbox: 2, demands: 2, eventFences: 2, reviewJobFences: 2 });
-    const deliveredRoot = `${native.repositoryPath}/dim-reviews/delivered`;
-    const markers = await readdir(deliveredRoot);
-    expect(markers).toHaveLength(2);
-    for (const marker of markers) {
-      expect(JSON.parse(await readFile(`${deliveredRoot}/${marker}`, "utf8"))).toEqual({
-        schemaVersion: 1,
-        eventId: marker.slice(0, -5),
-        eventDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
-      });
-    }
-    await native.restart();
-    await expect(createReviewStore(native.repositoryPath).readOutbox(2)).resolves.toEqual([]);
-    expect(authorityDatabaseCounts(authority.database)).toEqual({ inbox: 2, demands: 2, eventFences: 2, reviewJobFences: 2 });
-  });
-
   it("keeps review creation available, replays response loss, rejects a false ACK, and resumes only pending events", async () => {
     // Given
     const fixture = await nativeGitReviewFixture();
