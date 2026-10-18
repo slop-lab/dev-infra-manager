@@ -32,6 +32,7 @@ export function serviceCredentialValues(
   const workspaceWriteIssuers = hostCredentials(native.workspaceWriteIssuers, "native Git workspace write issuer");
   const humanReviewers = reviewerCredentials(native.humanReviewers);
   const hostPromoters = hostCredentials(native.hostPromoters, "native Git host promoter");
+  assertDistinct(projectRegistrars.map((entry) => entry.hostId));
   assertDistinct(projectRootImporters.map((entry) => entry.hostId));
   assertDistinct(projectRootReadIssuers.map((entry) => entry.hostId));
   assertDistinct(workspaceWriteIssuers.map((entry) => entry.hostId));
@@ -64,8 +65,8 @@ export function serviceCredentialValues(
     credential(ordinaryNative.resultReporter, "ordinary CI result reporter")
   ];
   assertPaired(nativeCredentials, ordinaryCredentials);
-  if (!Array.isArray(ordinary.hosts) || ordinary.hosts.length === 0) {
-    throw new ControlPlaneSourceError("ordinary CI service config must contain host credentials");
+  if (!Array.isArray(ordinary.hosts)) {
+    throw new ControlPlaneSourceError("ordinary CI service config host credentials must be an array");
   }
   const hosts = ordinary.hosts.map((host, index) => {
     const value = exactRecord(host, ["hostId", "hostToken", "capacities"], `ordinary CI host ${index}`);
@@ -92,15 +93,19 @@ export function serviceCredentialValues(
     ...nativeCredentials.flatMap((entry) => [entry.username, entry.password]),
     ...qemuCredentials.flatMap((entry) => [entry.username, entry.password]),
     ...hosts.map((entry) => entry.hostToken),
-    ...projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
+    ...projectRegistrars.flatMap((entry) => [entry.username, entry.password]),
     ...projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
     ...projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
     ...workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
-    ...humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password]),
-    ...hostPromoters.flatMap((entry) => [entry.hostId, entry.username, entry.password])
+    ...humanReviewers.flatMap((entry) => [entry.username, entry.password]),
+    ...hostPromoters.flatMap((entry) => [entry.username, entry.password])
   ];
   assertDistinct(roleValues);
-  return { credentialValues, roleValues };
+  const scopeIds = [...hostBoundCredentials.map((entry) => entry.hostId), ...humanReviewers.map((entry) => entry.reviewerId)];
+  if ([...credentialValues, ...nativeCredentials.map((entry) => entry.username), ...qemuCredentials.map((entry) => entry.username)].some((secret) => scopeIds.includes(secret))) {
+    throw new ControlPlaneSourceError("control-plane credential and token values must be distinct");
+  }
+  return { credentialValues, roleValues: [...new Set([...roleValues, ...scopeIds])] };
 }
 
 type HostCredential = Credential & { readonly hostId: string };

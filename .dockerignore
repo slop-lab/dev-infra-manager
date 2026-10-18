@@ -19,6 +19,8 @@ core/packages/core/*
 core/packages/managed/*
 !core/packages/managed/dist/
 core/packages/managed/dist/*
+!core/packages/managed/dist/nativeGitServiceCli.js
+!core/packages/managed/dist/nativeCandidatePath.js
 !core/packages/managed/dist/nativeGitAdmissionHttpClient.js
 !core/packages/managed/dist/nativeGitAdmissionSource.js
 !core/packages/managed/dist/nativeGitCandidateLeaseClient.js
@@ -80,6 +82,11 @@ core/packages/native-git/*
 !core/packages/native-git/dist/
 core/packages/native-git/dist/*
 !core/packages/native-git/dist/*.js
+!core/packages/native-git/dist/package.json
+!plugin-ci-workflows/
+plugin-ci-workflows/*
+!plugin-ci-workflows/dist/
+!plugin-ci-workflows/dist/**
 !core/packages/controller-proxy/
 core/packages/controller-proxy/*
 !core/packages/controller-proxy/dist/

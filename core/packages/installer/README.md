@@ -93,6 +93,11 @@ exact version; ranges and `latest` are not accepted.
 
 ## Native control plane
 
+For generated private configuration and first-Project connections, use
+`dim managed control-plane prepare` and `connect` from the optional managed
+package; see its README. A control-plane-only deployment host still needs only
+the installer facade and reviewed configuration files.
+
 The native Git schema-7 source may include its optional `qemuCi` dependency
 for a separately deployed native QEMU scheduler. The installer validates its
 service identity and HTTP(S) origin, includes all six role credentials in
@@ -142,7 +147,7 @@ explicit operator action.
 
 Plugin coordinates must be exact versions. Local tarballs are copied into
 installer-owned storage so replacement does not depend on the original path.
-Installed plugins share the runtime's exact `@slop-lab/dim-core` and are
+Installed plugins share the runtime's exact `@slop-lab/dim-managed` and are
 validated before activation.
 
 Installer configuration is stored below

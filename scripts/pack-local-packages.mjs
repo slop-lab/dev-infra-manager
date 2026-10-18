@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 const packageDirectories = [
   "core/packages/core/dist",
   "core/packages/managed/dist",
+  "core/packages/native-git/dist",
+  "plugin-ci-workflows/dist",
   "core/packages/contracts/external-url/dist",
   "core/packages/controller-proxy/dist",
   "plugin-dns-cloudflare/dist",

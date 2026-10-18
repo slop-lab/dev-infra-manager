@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /usr/local/lib/dim/serviceCli.js "$@"
+exec /usr/local/lib/dim/nativeGitServiceCli.js "$@"

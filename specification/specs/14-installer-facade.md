@@ -239,6 +239,14 @@ External URLs and host mirror plugins, then explicitly activates their
 controller after plugin installation. It does not implicitly build a managed
 workspace image or deploy a control plane.
 
+Optional managed tooling may prepare private control-plane source files and
+generation-bound host connections. Service configuration generation belongs to
+that composition; it must not add service activation to base installation.
+A new control plane may have no registered CI hosts or capacities. Deployment
+still uses the facade command and the same image, isolation and transaction
+checks. An initial host may hold multiple scoped operator roles with distinct
+credentials; repeated host IDs across roles are not credential reuse.
+
 Plugins install into a temporary sibling copy of the same `runtime/current`
 npm project and replace `current` only after npm and activation-manifest
 validation succeed. Plugin packages

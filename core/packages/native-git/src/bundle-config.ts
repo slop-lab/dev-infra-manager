@@ -123,7 +123,7 @@ const ordinaryBundleConfigSchema = z.object({
     webhook: credential,
     query: credential
   }).strict().readonly(),
-  hosts: z.array(host).min(1).readonly()
+  hosts: z.array(host).readonly()
 }).strict().readonly();
 
 export type NativeGitBundleConfig = z.infer<typeof nativeBundleConfigSchema>;
@@ -155,28 +155,37 @@ export function parseNativeGitBundleConfig(input: unknown): NativeGitBundleConfi
     ...(config.qemuCi === undefined ? [] : [config.qemuCi.query, config.qemuCi.eventIntake, config.qemuCi.identity,
       config.qemuCi.attemptIssuer, config.qemuCi.candidateReader, config.qemuCi.resultReporter])
   ], [
-    ...config.projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
+    ...config.projectRegistrars.flatMap((entry) => [entry.username, entry.password]),
     ...config.projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
     ...config.projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
     ...config.workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
-    ...config.humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password]),
+    ...config.humanReviewers.flatMap((entry) => [entry.username, entry.password]),
     ...config.hostPromoters.flatMap((entry) => [entry.username, entry.password])
   ]);
+  assertDistinctValues(config.projectRegistrars.map((entry) => entry.hostId));
   assertDistinctValues(config.projectRootImporters.map((entry) => entry.hostId));
   assertDistinctValues(config.projectRootReadIssuers.map((entry) => entry.hostId));
   assertDistinctValues(config.workspaceWriteIssuers.map((entry) => entry.hostId));
   assertDistinctValues(config.humanReviewers.map((entry) => entry.reviewerId));
   assertDistinctValues(config.hostPromoters.map((entry) => entry.hostId));
+  const hostRoles = [...config.projectRegistrars, ...config.projectRootImporters, ...config.projectRootReadIssuers,
+    ...config.workspaceWriteIssuers, ...config.hostPromoters];
+  const scopeIds = [...hostRoles.map((entry) => entry.hostId), ...config.humanReviewers.map((entry) => entry.reviewerId)];
+  const serviceRoles = [config.ordinaryCi.query, config.ordinaryCi.identity, config.ordinaryCi.attemptIssuer,
+    config.ordinaryCi.candidateReader, config.ordinaryCi.resultReporter, config.ordinaryCi.webhook,
+    ...(config.qemuCi === undefined ? [] : [config.qemuCi.query, config.qemuCi.eventIntake, config.qemuCi.identity,
+      config.qemuCi.attemptIssuer, config.qemuCi.candidateReader, config.qemuCi.resultReporter])];
+  if ([...serviceRoles.flatMap((entry) => [entry.username, entry.password]),
+    ...hostRoles.map((entry) => entry.password), ...config.humanReviewers.map((entry) => entry.password)]
+    .some((value) => scopeIds.includes(value))) {
+    throw new NativeGitBundleConfigError("bundle credentials must be globally distinct");
+  }
   return config;
 }
 
 export function parseOrdinaryBundleConfig(input: unknown): OrdinaryBundleConfig {
   const result = ordinaryBundleConfigSchema.safeParse(input);
   if (!result.success) {
-    const hosts = typeof input === "object" && input !== null ? Reflect.get(input, "hosts") : undefined;
-    if (Array.isArray(hosts) && hosts.length === 0) {
-      throw new NativeGitBundleConfigError("ordinary CI bundle requires at least one host");
-    }
     if (result.error.issues.some((issue) => issue.path.at(-1) === "hostToken")) {
       throw new NativeGitBundleConfigError("ordinary CI bundle host token is invalid");
     }
@@ -226,11 +235,11 @@ export function parseNativeGitBundle(
   assertPairedCredential("candidate reader", native.ordinaryCi.candidateReader, ordinary.nativeGit.candidateReader);
   assertPairedCredential("result reporter", native.ordinaryCi.resultReporter, ordinary.nativeGit.resultReporter);
   assertDistinctValues([
-    ...native.projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
+    ...native.projectRegistrars.flatMap((entry) => [entry.username, entry.password]),
     ...native.projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
     ...native.projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
     ...native.workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
-    ...native.humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password]),
+    ...native.humanReviewers.flatMap((entry) => [entry.username, entry.password]),
     ...native.hostPromoters.flatMap((entry) => [entry.username, entry.password]),
     ...ordinary.hosts.map((entry) => entry.hostToken)
   ]);

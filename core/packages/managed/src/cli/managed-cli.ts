@@ -2,6 +2,7 @@
 import { Command, CommanderError } from "commander";
 import { UserError } from "@slop-lab/dim-managed";
 import { installerFacadeHelpText } from "./cli-runtime.js";
+import { registerControlPlaneCommands } from "./control-plane-commands.js";
 import { registerCiCommands } from "./ci-commands.js";
 import { registerControllerCommands } from "./controller-commands.js";
 import { registerDoctorAndPluginCommands } from "./doctor-plugin-commands.js";
@@ -24,6 +25,7 @@ program
   .configureHelp({ sortSubcommands: true, sortOptions: true })
   .addHelpText("afterAll", installerFacadeHelpText(program));
 
+registerControlPlaneCommands(program);
 registerProjectCommands(program);
 registerCiCommands(program);
 const workspace = program.command("workspace").description("Manage persistent development workspaces");

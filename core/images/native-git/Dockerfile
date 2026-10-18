@@ -11,14 +11,16 @@ RUN apt-get update \
   && test "$(git --version)" = "git version 2.39.5" \
   && rm -rf /var/lib/apt/lists/*
 
-COPY core/packages/native-git/dist/*.js ./
+COPY core/packages/native-git/dist ./node_modules/@slop-lab/dim-native-git
+COPY plugin-ci-workflows/dist ./node_modules/@slop-lab/dim-plugin-ci-workflows
+COPY core/packages/managed/dist/nativeGitServiceCli.js ./
 COPY core/images/native-git/dim-service /usr/local/bin/dim-service
 
 RUN groupadd --gid 10001 dim-service \
   && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin dim-service \
   && install -d -o 10001 -g 10001 -m 0750 /var/lib/dim-native-git \
   && chmod 0444 /usr/local/lib/dim/*.js /usr/local/lib/dim/package.json /usr/local/lib/dim/package-lock.json \
-  && chmod 0555 /usr/local/lib/dim/serviceCli.js \
+  && chmod 0555 /usr/local/lib/dim/nativeGitServiceCli.js \
   && chmod 0555 /usr/local/bin/dim-service
 
 ENV HOME=/nonexistent \

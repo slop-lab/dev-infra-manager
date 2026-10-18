@@ -5,6 +5,7 @@ WORKDIR /usr/local/lib/dim
 COPY core/images/ordinary-ci/package.json ./
 COPY core/packages/core/dist ./node_modules/@slop-lab/dim-core
 COPY core/packages/managed/dist/nativeGitAdmissionHttpClient.js \
+  core/packages/managed/dist/nativeCandidatePath.js \
   core/packages/managed/dist/nativeGitAdmissionSource.js \
   core/packages/managed/dist/nativeGitCandidateLeaseClient.js \
   core/packages/managed/dist/nativeGitAttemptIssuerClient.js \

@@ -1,0 +1,111 @@
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
+import { configuredNativeGitBundleServer, parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/service";
+import { prepareControlPlane, connectControlPlane } from "../../../../core/packages/managed/src/controlPlaneSetup.js";
+import { readControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
+import { readControlPlaneSources } from "../../../../core/packages/installer/src/controlPlaneSources.js";
+import { loadNativeControlPlaneConnection } from "../../../../core/packages/managed/src/nativeControlPlaneConnection.js";
+import { createNodeNativeGitRootImporterClient } from "../../../../core/packages/managed/src/nativeGitRootImporterClient.js";
+import { bootstrapNativeProjectRoot } from "../../../../core/packages/managed/src/nativeProjectBootstrap.js";
+import { NativeProjectPendingStore } from "../../../../core/packages/managed/src/nativeProjectPendingStore.js";
+import { loadNativeGitProjectRegistrarConnection } from "../../../../core/packages/managed/src/nativeGitProjectRegistrarConnection.js";
+
+const roots: string[] = [];
+afterEach(async () => {
+  for (const directory of roots.splice(0)) {
+    execFileSync("/usr/bin/chmod", ["-R", "u+rwX", directory]);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+async function fixture() {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dim-control-plane-setup-")); roots.push(root);
+  const directory = path.join(root, "operator");
+  const result = await prepareControlPlane({ directory, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
+    ordinaryCiImage: `registry.example/ordinary@sha256:${"b".repeat(64)}` });
+  return { root, directory, result };
+}
+
+describe("optional control-plane setup", () => {
+  it("creates installer-valid private service sources without allocating a worker or exposing role secrets", async () => {
+    const { directory, result } = await fixture();
+    expect((await stat(directory)).mode & 0o777).toBe(0o700);
+    const config = await readControlPlaneConfig(result.configFile, ["127.0.0.1"]);
+    const sources = await readControlPlaneSources(config);
+    expect(JSON.parse(sources.ordinaryCi.config.bytes.toString()).hosts).toEqual([]);
+    expect(JSON.parse(sources.nativeGit.config.bytes.toString()).projectRegistrars).toHaveLength(1);
+    for (const file of ["install.json", "native-git.json", "ordinary-ci.json", "native-git-readiness.token", "ordinary-ci-readiness.token"]) {
+      expect((await stat(path.join(directory, file))).mode & 0o777).toBe(0o600);
+    }
+    expect(sources.credentialValues.every((secret) => !JSON.stringify(result).includes(secret))).toBe(true);
+    await expect(prepareControlPlane({ directory, nativeGitImage: config.nativeGit.image, ordinaryCiImage: config.ordinaryCi.image }))
+      .rejects.toThrow(/refusing to replace/);
+  });
+
+  it("binds generated bootstrap and host connections to a real native service generation", async () => {
+    const { root, directory } = await fixture();
+    const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
+    native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
+    const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
+      config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-state"),
+      readinessToken: Buffer.alloc(32, 47).toString("base64url"), activationToken: Buffer.alloc(32, 48).toString("base64url"),
+      expectedGenerationId: "c".repeat(64) });
+    try {
+      const endpoint = await service.listen("127.0.0.1", 0);
+      const connected = await connectControlPlane(directory, { endpoint });
+      expect(connected.generationId).toBe("c".repeat(64));
+      const host = await loadNativeControlPlaneConnection(path.join(connected.directory, "host.json"));
+      expect(host).toMatchObject({ hostId: "operator", nativeGit: { endpoint, generationId: "c".repeat(64) } });
+      expect(host.ordinaryCi).toBeUndefined();
+      expect(await loadNativeGitProjectRegistrarConnection(path.join(connected.directory, "registrar.json"))).toMatchObject({ hostId: "operator", endpoint });
+      await (await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json"))).attest(AbortSignal.timeout(5000));
+      const activation = await fetch(`${endpoint}/v1/activation`, { method: "POST",
+        headers: { authorization: `Bearer ${Buffer.alloc(32, 48).toString("base64url")}`, "content-type": "application/json" },
+        body: JSON.stringify({ schemaVersion: 1, generationId: connected.generationId }) });
+      expect(activation.status).toBe(200);
+      const source = path.join(root, "source");
+      execFileSync("/usr/bin/git", ["init", "--initial-branch=main", source]);
+      await writeFile(path.join(source, "README.md"), "first managed Project\n");
+      execFileSync("/usr/bin/git", ["-C", source, "add", "."]);
+      execFileSync("/usr/bin/git", ["-C", source, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "initial"]);
+      const hostState = path.join(root, "host-state");
+      await mkdir(hostState, { mode: 0o700 });
+      const draft = await bootstrapNativeProjectRoot({ name: "example", projectId: "example", stateRoot: hostState,
+        scratchRoot: hostState, sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main",
+        registrarConnectionFile: path.join(connected.directory, "registrar.json"), importerConnectionFile: path.join(connected.directory, "importer.json"),
+        policySource: { kind: "manifest-free", rootAlias: "root", review: { requiredReviewerIds: ["owner"], requiredJobs: [] } },
+        signal: AbortSignal.timeout(10000) });
+      expect(draft.phase).toBe("root-imported");
+      const store = new NativeProjectPendingStore(hostState);
+      await store.admit("example", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), AbortSignal.timeout(10000));
+      expect((await store.ready("example", host, AbortSignal.timeout(10000))).phase).toBe("ready");
+      await expect(connectControlPlane(directory, { endpoint })).rejects.toThrow(/refusing to replace/);
+    } finally { await service.close(); }
+  });
+
+  it("rejects unpinned images and non-loopback credential destinations before mutation or requests", async () => {
+    const { root, directory } = await fixture();
+    await expect(prepareControlPlane({ directory: path.join(root, "invalid"), nativeGitImage: "native:latest", ordinaryCiImage: "ordinary:latest" }))
+      .rejects.toThrow(/sha256/);
+    await expect(stat(path.join(root, "invalid"))).rejects.toMatchObject({ code: "ENOENT" });
+    const client = { request: async () => { throw new Error("credentials must never be sent"); } };
+    await expect(connectControlPlane(directory, { endpoint: "http://remote.example:8787", client })).rejects.toThrow(/invalid/);
+    await expect(stat(path.join(directory, "connections"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not publish client files when a role attests another generation", async () => {
+    const { directory } = await fixture();
+    const client = { request: async (input: { path: string }) => {
+      const role = input.path.slice(4, -9);
+      return { statusCode: 200, contentType: "application/json", cacheControl: "no-store", body: Buffer.from(JSON.stringify({
+        schemaVersion: 1, serviceId: "native-main", role, hostId: "operator",
+        generationId: (role === "operator-workspace-write-issuer" ? "b" : "a").repeat(64)
+      })) };
+    } };
+    await expect(connectControlPlane(directory, { client })).rejects.toThrow(/generation changed/);
+    await expect(stat(path.join(directory, "connections"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
