@@ -81,10 +81,9 @@ bash scripts/install-source-build.bash
 bash scripts/install-source-build.bash --with-managed
 ```
 
-The latter explicitly installs the managed component and bundled DNS, External
-URLs and host mirror plugins, then activates their controller. For manual local
-plugin installation, install core with `--with-managed` first so plugins can use
-its matched component peers.
+The latter installs the optional managed library. Plugins and host services
+remain explicit operator choices. For manual local plugin installation, install
+core with `--with-managed` first so plugins can use its matched component peers.
 
 `--no-local-bin` keeps `dim` behind the mise/facade path. `--local-bin` manages
 one symlink below the selected prefix. The installer refuses to overwrite any

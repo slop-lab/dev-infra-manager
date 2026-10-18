@@ -234,9 +234,8 @@ The local-bundle-only `--defer-controller-restart` option suppresses restart of
 an existing active controller while a reviewed source installer installs its
 selected plugins. Other install sources must reject that option. The default
 source installation selects only the base workspace tools. Its explicit
-`--with-managed` profile selects the managed component and bundled DNS,
-External URLs and host mirror plugins, then explicitly activates their
-controller after plugin installation. It does not implicitly build a managed
+`--with-managed` profile selects the managed component as a library. It must
+not implicitly select plugins or activate a controller. It does not implicitly build a managed
 workspace image or deploy a control plane.
 
 Optional managed tooling may prepare private control-plane source files and

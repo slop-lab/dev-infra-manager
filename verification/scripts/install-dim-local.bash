@@ -41,23 +41,10 @@ fi
 "${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
 core_options=(--local-packages "$package_root" --no-local-bin)
-if [[ "$with_managed" -eq 1 ]]; then core_options+=(--with-managed --defer-controller-restart); fi
+if [[ "$with_managed" -eq 1 ]]; then core_options+=(--with-managed); fi
 "${dim_command[@]}" installer install core "${core_options[@]}"
 if [[ "$uses_mise" -eq 0 ]]; then
   npm install --global --prefix "$install_prefix" "${installer_tarballs[0]}"
   dim_command=("$install_prefix/bin/dim")
-fi
-if [[ "$with_managed" -eq 1 ]]; then
-  plugin_archives=()
-  for plugin in dns-cloudflare external-urls host-mirrors; do
-    matches=("$package_root"/slop-lab-dim-plugin-"$plugin"-*.tgz)
-    [[ "${#matches[@]}" -eq 1 && -f "${matches[0]}" && ! -L "${matches[0]}" ]] || {
-      echo "local bundle must contain one regular $plugin plugin archive" >&2
-      exit 1
-    }
-    plugin_archives+=("${matches[0]}")
-  done
-  "${dim_command[@]}" installer install plugin "${plugin_archives[@]}"
-  "${dim_command[@]}" controller restart
 fi
 echo "Installed the local DIM CLI"

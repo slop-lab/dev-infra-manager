@@ -80,7 +80,6 @@ cat >"$prefix/node_modules/.bin/dim" <<'SCRIPT'
 #!/usr/bin/bash
 { printf 'target-dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
 if [[ "\${DIM_PREFLIGHT_FAILURE:-0}" == 1 && "$1 $2 $3" == "installer install core" ]]; then exit 47; fi
-if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$1 $2 $3" == "installer install plugin" ]]; then exit 42; fi
 SCRIPT
 chmod +x "$prefix/node_modules/.bin/dim"
 `);
@@ -124,27 +123,14 @@ describe("Project local install facade", () => {
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("installs only the explicit managed profile's prepared plugins after core", async () => {
+  it("selects the managed library without activating optional plugins or services", async () => {
     const fixture = await createFixture();
     const result = runInstaller(fixture, {}, ["--with-managed"]);
     const invocations = await readFile(fixture.log, "utf8");
     expect(result.status, result.stderr).toBe(0);
-    expect(invocations).toContain("--with-managed --defer-controller-restart");
-    for (const plugin of ["dns-cloudflare", "external-urls", "host-mirrors"]) expect(invocations).toContain(`slop-lab-dim-plugin-${plugin}-local.tgz`);
-    expect(invocations).not.toContain("unrelated-plugin-local.tgz");
-    expect(invocations.indexOf(" installer install core ")).toBeLessThan(invocations.indexOf(" installer install plugin "));
-    expect(invocations.indexOf("target-dim controller restart")).toBeGreaterThan(invocations.indexOf("target-dim installer install plugin"));
-  });
-
-  it("propagates prepared plugin activation failure", async () => {
-    // Given
-    const fixture = await createFixture();
-
-    // When
-    const result = runInstaller(fixture, { DIM_PLUGIN_FAILURE: "1" }, ["--with-managed"]);
-
-    // Then
-    expect(result.status).toBe(42);
+    expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin --with-managed$/m);
+    expect(invocations).not.toContain("installer install plugin");
+    expect(invocations).not.toContain("controller restart");
   });
 
   it("preserves prepared and installed bytes when target compatibility refuses", async () => {

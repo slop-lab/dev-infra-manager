@@ -75,25 +75,11 @@ fi
 echo "[host] install package bundle"
 core_options=(--local-packages "$package_root" --no-local-bin)
 if [[ "$with_managed" -eq 1 ]]; then
-  core_options+=(--with-managed --defer-controller-restart)
+  core_options+=(--with-managed)
 fi
 "${dim_command[@]}" installer install core "${core_options[@]}"
 
-if [[ "$with_managed" -eq 1 ]]; then
-  plugin_archives=()
-  for plugin in dns-cloudflare external-urls host-mirrors; do
-    matches=("$package_root"/slop-lab-dim-plugin-"$plugin"-*.tgz)
-    [[ "${#matches[@]}" -eq 1 && -f "${matches[0]}" && ! -L "${matches[0]}" ]] || {
-      echo "prepared bundle must contain one regular $plugin plugin archive" >&2
-      exit 1
-    }
-    plugin_archives+=("${matches[0]}")
-  done
-  "${dim_command[@]}" installer install plugin "${plugin_archives[@]}"
-  "${dim_command[@]}" controller restart
-fi
 
 validate_preparation
 echo "[host] local package bundle installed"
-if [[ "$with_managed" -eq 1 ]]; then echo "[host] managed controller activated with DNS, External URLs and host mirror plugins"; fi
 "${dim_command[@]}" --version
