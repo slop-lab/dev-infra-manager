@@ -80,7 +80,6 @@ agent:
     just check-source
     just verify plugin-install
     just verify package-packs
-    just verify project-runtime-cgroups
     just verify pull-request-skill
     just verify agent-docker
 
@@ -109,26 +108,6 @@ native-idle-service-images:
 control-plane-install-live:
 	cd .. && bash verification/scripts/control-plane-install-live-smoke.bash
 
-# Real installed multi-node dual-kind happy-path smoke; this is not VERIFICATION-NATIVE-CUTOVER-001 acceptance.
-native-cutover-clean-host-smoke config:
-	cd .. && bash verification/scripts/native-cutover-clean-host.bash "{{config}}"
-
-# Validate the operator-prepared two-node operations profile without starting its services or jobs.
-native-multi-host-operations-preflight config:
-	cd .. && bash verification/scripts/native-multi-host-operations.bash --preflight-only "{{config}}"
-
-# Run the operator-prepared two-node ordinary Sysbox and QEMU KVM operations profile without approval or promotion.
-native-multi-host-operations config:
-	cd .. && bash verification/scripts/native-multi-host-operations.bash "{{config}}"
-
-# Real installed four-policy happy-path matrix; fault, authority, traffic, recovery, and independent-host execution remain deferred.
-native-cutover-policy-matrix config:
-	cd .. && bash verification/scripts/native-cutover-policy-matrix.bash "{{config}}"
-
-# Verify the systemd, cgroupfs, and unsupported Project runtime cgroup contracts.
-project-runtime-cgroups:
-    cd .. && bash verification/scripts/project-runtime-cgroups-example-smoke.bash
-
 # Verify forge detection without relying on a live GitHub or Gitea instance.
 pull-request-skill:
     cd .. && bash verification/scripts/pull-request-skill-smoke.bash
@@ -137,15 +116,14 @@ pull-request-skill:
 container phases="":
     just verify workspace-runtime
 
-# DIM-owned workspace runtime integration supported inside the Sysbox-isolated managed CI runner.
+# Exercise the production single-container runtime with owned disposable storage.
 workspace-runtime:
-    docker info >/dev/null
-    docker compose version >/dev/null
-    cd .. && bash verification/scripts/container-integration-preflight.bash
-    just build-workspace-image
     just build-local-workspace-image
-    cd .. && bash verification/scripts/container-inner-docker-smoke.bash
-    cd .. && bash verification/scripts/container-packed-project-smoke.bash
+    cd .. && image_version="$(bash verification/scripts/local-build-version.bash)" && node --import ./tests/node_modules/tsx/dist/loader.mjs verification/scripts/base-workspace-runtime-smoke.mts "dev-infra-project-workspace:$image_version"
+
+# Exercise optional workspace capabilities through the bounded base transport.
+controller-workspace-relay-smoke image:
+    cd .. && node verification/scripts/controller-workspace-relay-smoke.mjs "{{image}}"
 
 # Requires Docker and network access; exercises `mise use --raw --global npm:@slop-lab/dim-installer` in a disposable container.
 mise-install-smoke:

@@ -79,14 +79,7 @@ describe("canonical non-root SSH practical authority", () => {
     expect(compose).toContain("/tmp/dim-qemu-verification:/run/dim/qemu-verification:ro");
   });
 
-  it("serializes setup-producing and discard lifecycle entry points", async () => {
-    const [creation, ...lockedSources] = await Promise.all([
-      "workspaceCreation.ts", "nativeWorkspaceCreation.ts", "workspaceSetup.ts", "workspaceDiscard.ts"
-    ]
-      .map((name) => readFile(resolve(workspaceRoot, "core/packages/managed/src", name), "utf8")));
-    expect(creation).toContain("createNativeWorkspace");
-    for (const source of lockedSources) expect(source).toContain("acquireWorkspaceSetupLock");
-  });
+
 });
 
 describe("full-development non-root SSH practical authority", () => {

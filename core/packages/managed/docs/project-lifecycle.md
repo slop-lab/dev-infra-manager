@@ -1,34 +1,25 @@
-> Scope: optional managed integration. This document describes the previous managed
-> architecture and is scoped to that integration, not base workspace behavior.
-> The base workspace contract is in `specification/specs/`.
+# Native Project and workspace lifecycle
 
-# Native root and workspace lifecycle
+A Project identifies one native root repository, protected ref, imported
+commit/tree and versioned review policy. Bootstrap stages reviewed input;
+admission and readiness prove the service generation, snapshot and proposal
+transport. Ready does not imply CI results, human approval or promotion.
+Project files, connections and pending/ready records belong to the optional
+managed integration.
 
-**Kind: Contract**
+A workspace is a core UUID with persistent home, checkout and Docker storage.
+For `dim://PROJECT`, managed source acquisition obtains the ready protected
+snapshot and a separate native attachment. There is one core lifecycle and no
+managed workspace state format or independent outer runtime.
 
-**PROJECT-NATIVE-ROOT-001:** A Project is one stable native ID, one root
-repository ID, one protected branch ref, one exact imported commit/tree, and
-one versioned review policy. Bootstrap stages immutable reviewed input. Create
-publishes pending state, obtains fresh proof, validates the protected snapshot
-and proposal-only transport, then atomically publishes schema-6 ready state.
+The workspace can read its selected Project and create or fast-forward its own
+proposal refs. Direct protected updates, deletion, forced updates, tags and
+another workspace's proposal namespace are denied by native Git. Operator
+credentials stay on the host; the checkout receives a scoped broker grant.
+Human review and checked protected-ref compare-and-swap remain service-side.
 
-Ready does not imply deployed CI, a CI result, human approval, or promotion.
-List/show are bounded local queries. Exact replay converges without timestamp
-or identity churn.
-
-**WORKSPACE-NATIVE-001:** A workspace requires a ready Project and stores strict
-schema-9 `source.kind: "native"` state. It receives an immutable protected-root
-snapshot and a scoped broker grant. The broker mints short-lived credentials
-only for exact Git smart-HTTP operations and never returns them to the client.
-
-The workspace writer may create or fast-forward its own proposal refs. Direct
-protected updates, protected deletion, force, tags, another workspace's
-namespace, or another Project fail without ref mutation. Setup may replay the
-recorded immutable snapshot without fresh proof. Start, restart, and update
-obtain fresh proof while preserving mutable checkout data.
-
-**STATE-NATIVE-CUTOVER-001:** Historical provider-backed Project/workspace
-records and runner records are rejection-only fixtures. Native lifecycle does
-not read them as current state, migrate them, adopt their resources, or delete
-them. Operators export data with the pinned prior release and create fresh
-native identities.
+The broker checks current core identity and phase for each request. Stopped or
+uninitialized workspaces cannot use Git transport; discard and name reuse
+invalidate the old attachment. Start/recreate preserve mutable user data.
+Verified protected fast-forwards keep the existing scoped Git capability
+usable. They do not reset local files. Review-policy changes fail closed.

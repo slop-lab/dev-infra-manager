@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import {
   loadNativeControlPlaneConnection,
   NativeControlPlaneConnectionError,
@@ -59,10 +58,6 @@ describe("native control-plane host connection", () => {
     // Then
     expect(connection).toEqual(valid);
     expect(parseNativeControlPlaneConnection(valid)).toEqual(valid);
-    const options = lifecycleOptionsForBackend("sysbox", {
-      HOME: "/home/dim", DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: path
-    });
-    expect(options.nativeControlPlaneConnection).toEqual({ file: path });
   });
 
   it("rejects foreign authorities and candidate-selected resources", () => {

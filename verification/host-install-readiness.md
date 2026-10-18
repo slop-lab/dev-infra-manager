@@ -1,297 +1,112 @@
 # Host installation and real-use readiness
 
-## Scope
+Verify one exact source candidate. Source checks, disposable runtime checks,
+real SSH transport and optional service/CI checks establish different facts.
+Keep run logs outside tracked documentation and report unavailable hardware or
+uncertain cleanup as such. Earlier candidate results do not verify a changed
+installation.
 
-Use this checklist to reproduce host readiness against one clean exact source
-candidate. Source tests, same-host mechanics, two-node operations, and full
-independent-host/human release acceptance are separate evidence classes. Retain
-run-specific logs outside tracked documentation; do not transfer earlier
-candidate results to the current installation.
+## Base remote development
 
-There are only two environment contracts:
+The base path needs a Linux Docker host with registered `sysbox-runc` and
+working cgroup resource enforcement, plus a supported Node.js 24/26 runtime.
+It needs no controller, native Git, mirror plugin, CI worker or KVM device.
+For a fresh Ubuntu VM, use the reviewed [role bootstrap](bootstrap-ubuntu-vm.md),
+including its rootlesskit AppArmor setup and new-login handling.
 
-- No custom lifecycle files: DIM supplies the recommended environment.
-- Reviewed `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/docker-compose.yml`, or
-  `.dim/teardown.sh`: the Project supplies real custom lifecycle behavior and
-  need not follow the common agent/DinD topology.
-
-There is no minimal preset or general environment-selector format.
-`.dim/environment.yml` and persisted `environment: minimal` state are rejected,
-not silently converted. Rejection does not rewrite existing state or delete
-user data.
-
-Basic workspace use does not require QEMU, native CI, or package publication.
-Gitea-free use additionally requires the native Git deployment and explicit
-review-policy provisioning described below.
-
-## P0: install and use the current basic workspace on a capable host
-
-### Fresh Ubuntu VM convenience path
-
-For a new Ubuntu 24.04 amd64 VM, follow
-[the role bootstrap](bootstrap-ubuntu-vm.md). Choose `ordinary` or
-`control-qemu`, review its read-only plan, and execute from one clean reviewed
-commit. It installs pinned tools and the local candidate without public package
-publication. Exit `3` requires a new login and identical rerun. TLS, private
-native configuration, lingering, and service activation remain operator-owned.
-Run the documented disposable fresh-VM acceptance profile for both roles.
-Record guest phase outcomes and the final outer launcher status separately;
-an outer failure must not be relabelled success because its guest stages pass.
-Review and deploy protected host launcher code through the trusted operator
-workflow, never by replacing root-owned staged files from an agent.
-
-### Source and QEMU prerequisites are separate profiles
-
-Run the source gate without installing its pinned toolchain on the host:
+Build and install the exact source candidate without publishing packages:
 
 ```bash
-bash verification/scripts/source-gate-container.bash
-DIM_SOURCE_NODE_MAJOR=26 bash verification/scripts/source-gate-container.bash
+just prepare-local
+just install-local
+dim image build
+dim create https://example.com/team/app.git dev
+dim exec dev -- sh
+dim resources dev --cpus 4 --memory 8g --pids 4096
+dim stop dev
+dim start dev
+dim recreate dev
+dim discard dev --yes
 ```
 
-The complete source suite uses an integration fixture pinned to
-`/usr/bin/git` 2.43.0, Node.js 24/26, and pnpm 10.13.1. It also includes
-root-owned ownership fixtures. `just check-source` builds and runs that suite
-in its pinned disposable container, without mounting the checkout writable or
-passing the host Docker socket. It needs no host pnpm, Git downgrade, or sudo.
-The current worktree is copied without generated state or conventional
-credentials; submit only reviewed source without other secret-bearing files.
-Network access remains available for installer tests. The gate uses its exact
-built image ID and retains the complete recursive source suite. Real Docker
-executor checks remain under `just verify native-ordinary-executor-live` and
-require Sysbox plus explicit digest-pinned fixture images; missing capability
-is unavailable, not success.
+Create a disposable repository containing a committed file. Verify that local
+edits, home files and a nested Docker image survive stop/start and recreate.
+Inspect the runtime: one unprivileged Sysbox container, three UUID-owned
+volumes and its private bridge; no host bind or Docker/control socket. Verify
+resource readback and discard cleanup using only owned fixture resources.
 
-Use `just check-source-native` only inside an already pinned environment.
-A PATH Git shim does not satisfy its absolute fixture binary contract. Its
-preflight aggregates toolchain, temporary-directory ancestry, ownership
-capability, and optional distribution-artifact errors. Both paths build test
-dependencies before testing. Use `just typecheck` for compiler-only feedback
-on an ordinary supported Node.js host.
+`just verify workspace-runtime` runs the production source/runtime adapter
+against a locally built image, including nested Docker, retained storage,
+resource updates and missing-volume rejection. The real SSH fixture is
+`verification/scripts/base-workspace-ssh-smoke.mjs`; its setup/run/cleanup
+phases use a disposable trusted SSH host with a loopback-only published port,
+a temporary key and client configuration. Only that trusted admin host
+receives the Docker socket. The development workspace does not.
 
-Prepare QEMU separately on the reviewed amd64 Ubuntu host, with explicit
-confirmation of package, Node, and group changes:
+For an operator-owned remote host, configure `dim host add NAME --ssh SSH_TARGET`,
+select it with `dim host use NAME`, then run the same root commands. Git source
+paths refer to the selected host. Verify stdin, stdout, stderr and nonzero exit
+codes, and verify that the workspace resources exist on the selected host.
+See the [CLI reference](../core/packages/cli/README.md) for forwarding and host
+configuration.
+
+## Optional managed Git and review
+
+Install the optional library deliberately:
 
 ```bash
-bash verification/scripts/install-kvm-verify-deps-ubuntu.bash
-newgrp kvm
+just install-local --with-managed
+# Published matched artifacts use:
+# dim installer install core --with-managed
 ```
 
-Inside the refreshed normal-user shell:
+This does not install plugins or start a controller. Prepare service
+configuration with reviewed digest-pinned native Git and ordinary CI images:
 
 ```bash
-export DIM_QEMU_NODE_EXECUTABLE=/usr/local/lib/dim-qemu-node-24.19.0/bin/node
-sudo -v
-bash verification/scripts/kvm-host-install-smoke.bash --preflight-only
-just verify environments-kvm
+dim managed control-plane prepare /absolute/private/operator \
+  --native-git-image registry.example/native@sha256:EXACT_DIGEST \
+  --ordinary-ci-image registry.example/ci@sha256:EXACT_DIGEST
 ```
 
-The installer verifies a fixed checksum for Node.js 24.19.0, installs it under
-a dedicated root-owned path, and leaves `/usr/local/bin/node` and user-managed
-Node trees untouched. It configures persistent KVM group membership, not
-world-writable device permissions. Physical KVM availability and operator sudo
-approval still require the actual host; this procedure does not claim they
-were exercised by a source-only container run.
+Review the generated private files, then follow the printed facade install and
+connect commands. Connect attests the live service generation and writes role
+connections for the host, registrar, importer, reviewer and promoter. Keep
+these files outside workspaces and logs. Bootstrap a reviewed root repository,
+admit it, prove readiness, and create `dim create dim://PROJECT dev` on the
+selected host. Use the generated reviewer connection to initialize the
+optional review web UI; do not copy private service JSON into an agent.
 
-The QEMU gate instead runs as the normal host operator. Its preflight reports
-trusted-interpreter, non-root user, sudo authorization, setpriv, KVM access, and
-QEMU/dependency problems together without starting a service. Select a genuine
-reviewed Node.js 24/26 executable under a root-owned, non-writable directory
-tree with `DIM_QEMU_NODE_EXECUTABLE`; do not change ownership of a mise/nvm/home
-installation to bypass this boundary. Operator-run `sudo -v` may establish
-cached authorization for the later narrowly scoped `sudo -n` commands. A
-permanent blanket `NOPASSWD` rule is not required.
+`just verify native-basic-lifecycle` builds matched optional packages and
+a disposable slim workspace image. It exercises real Git bootstrap,
+admission/readiness, proposal push, protected/foreign write denial, human
+approval and checked promotion, then continued Git access in the same
+workspace and shared stop/start/recreate/discard. It does not establish
+independent CI or multi-host acceptance.
 
-The native full-development gate records each stage as `PASS`, `FAIL`, or
-`BLOCKED`, followed by an aggregate summary and private evidence-log path:
+Optional plugin authority can be checked with `just verify
+controller-workspace-relay-smoke IMAGE` against a matched build. This uses the
+current core workspace and bounded relay rather than an obsolete privileged
+outer workspace or automatically trusted repository hook.
 
-```bash
-just verify full-development
-```
+## Source and optional execution checks
 
-Source, Docker, Sysbox, and real-KVM prerequisites are separate. Native
-contracts, installed idle services, ordinary Sysbox mechanics, and QEMU KVM
-mechanics are independent siblings after only their declared prerequisites.
-An ordinary or contract failure therefore does not suppress the real-KVM
-mechanics stage, but the aggregate still exits nonzero. Missing hardware is
-unavailable, never a pass. Signal cancellation or uncertain cleanup stops
-scheduling, blocks every remaining stage with the reason, and returns the
-fatal status (`125` for cleanup uncertainty). Nested aggregators preserve the
-parent-owned evidence directory during internal reentry. Exercise the runner's
-generic fault-injection contract without KVM or Docker with:
+Use `just check-source` for the pinned disposable source environment and
+`DIM_SOURCE_NODE_MAJOR=26 bash verification/scripts/source-gate-container.bash`
+for the alternate Node major. The source container does not receive the host
+Docker socket. Use `just typecheck` for compiler feedback without physical
+runtime claims.
 
-```bash
-just verify verification-stage-runner
-```
+Installed control-plane image checks, ordinary Sysbox CI execution and real
+QEMU/KVM execution are separate optional checks. Use their current recipes in
+[verify.just](verify.just), review their explicit image/device prerequisites,
+and retain each actual outcome. A source-only or same-host result does not
+prove independent worker isolation, host reboot recovery or multi-host
+operations. Previous schema-9/two-runtime cutover and competing CI matrix
+scripts were retired; their historical acceptance markers are not current
+evidence.
 
-1. **Prepare the host.** Use a disposable Linux host or retained VM with a
-   systemd user manager, reachable Docker 29, registered `sysbox-runc`, working
-   cgroup enforcement, and Docker Buildx. Review the host installer before
-   changing host packages. Leave host memory/CPU headroom beyond the workspace
-   budgets, especially when optional CI supervisors run concurrently. KVM is
-   optional for this basic journey.
-2. **Build one immutable candidate.** Use a clean checkout of the commit
-   containing this document, not an old prepared bundle or a dirty archive:
-
-   ```bash
-   CANDIDATE_SHA="$(git rev-parse HEAD)"
-   DIM_SOURCE_ROOT_COMMIT="$CANDIDATE_SHA" just prepare-local
-   just install-local
-   DIM_CLI="${XDG_DATA_HOME:-$HOME/.local/share}/dim/runtime/current/node_modules/.bin/dim"
-   "$DIM_CLI" --version
-   "$DIM_CLI" doctor
-   "$DIM_CLI" workspace image status
-   ```
-
-   Preparation creates a matched package/image candidate. Installation consumes
-   it, activates the local plugin set, and restarts the controller through the
-   target installer. Retain `.local/prepared-local.state`, package hashes,
-   image ID, installed version, and doctor output. If transferring to another
-   node, transfer the identical prepared artifacts and verify those identities.
-   Do not include VM disks, SSH private keys, or operator secrets in public
-   evidence or package transfers.
-   Public npm publication is not required for this trial.
-   `install-local` deliberately uses `--no-local-bin`; it does not promise a
-   fresh host has a bare `dim` on `PATH`. Use the installed runtime path above
-   for later example commands, or an already reviewed facade/symlink. Node.js
-   24 or 26 must be on `PATH`; with mise-managed tools, activate that environment
-   or invoke the path through `mise exec --`.
-3. **Execute the installed no-`.dim` journey.** Follow the
-   [recommended-default example](../examples/projects/recommended-default/README.md).
-   Its `project create --root ...` example uses the existing managed-Git path;
-   it is not evidence of Gitea-free adoption. Check real `create`, `run shell`,
-   `run exec`, `run custom`, and `workspace exec`, plus Git fetch and proposal
-   push from the agent. Verify nested Docker actually starts.
-4. **Exercise persistence and failures.** Write checkout/home data and create
-   private-Docker data; stop/start, restart the controller, and replace the
-   agent image without losing it. Advance the reviewed root and verify mutable
-   HEAD/files remain unchanged until explicit user Git operations. Check setup
-   retry, error/stopped write denial, resource-update rollback, custom-mode
-   transition refusal, and discard of only owned resources.
-5. **Measure the boundary.** Verify actual Sysbox runtime/UID behavior, absence
-   of host/Project Docker sockets and raw credentials, and real CPU, memory,
-   swap, and PID enforcement. The recorded combined budget is partitioned
-   25% outer / 75% agent; argument inspection alone is not kernel enforcement.
-6. **Install an agent tool explicitly if needed.** Provider installation and
-   login are not automatic. Execute the reviewed tool setup helper and provider
-   commands in the agent, without adding `.dim` solely to launch a tool. Test
-   normal interactive and redirected command input with the chosen tool.
-
-The raw-container script
-`verification/scripts/recommended-workspace-sysbox-smoke.bash` supplies a
-component gate. It does not replace steps 3-6 or constitute the full installed
-DIM CLI journey.
-
-### Diagnose both nested Docker paths before the full journey
-
-On the target host, use the **exact installed workspace image reference** from
-`dim workspace image status` and a digest-pinned probe image already present in
-that host's Docker image store. The diagnostic refuses a missing image instead
-of pulling or mutating host Docker storage:
-
-```bash
-docker image inspect 'alpine@sha256:REPLACE_WITH_HOST_CACHED_DIGEST'
-bash verification/scripts/native-workspace-nested-docker-diagnostic.bash \
-  'dev-infra-project-workspace:REPLACE_WITH_EXACT_PREPARED_VERSION' \
-  'alpine@sha256:REPLACE_WITH_HOST_CACHED_DIGEST'
-```
-
-It runs the trusted outer runc lane and the recommended Sysbox agent lane
-independently in disposable, ownership-labelled containers/volumes. Both must
-load the same exported image from the host cache and actually run an inner
-container. It records each lane's driver, backing filesystem, image store,
-cgroup settings, runtime data root, failure stage, and the daemon's error; a
-failure in one lane does not hide the other. `PASS` means nested image execution
-worked for that lane, `FAIL` reports the stage/error, `IMAGE_UNAVAILABLE` means
-the exact images need provisioning, and `UNAVAILABLE` means the runtime or host
-Docker was absent. The aggregate exits nonzero unless both lanes pass. It does
-not repair or delete an existing Docker data root.
-
-The runc lane now explicitly uses the production
-`DIM_DOCKERD_FLAGS=--feature containerd-snapshotter=false` profile and a named
-volume at `/var/lib/dim/workspace-data`; expect classic `overlay2` there. The
-Sysbox lane keeps the agent's own daemon profile. A run with
-`overlayfs`/containerd does not prove the production runc profile. The standalone
-`container-inner-docker-smoke.bash` uses a dedicated nested Docker data root,
-not the outer writable overlay layer, and does not force an unsupported
-`overlayfs` driver. Record the actual driver and backing filesystem in each lane.
-
-After the diagnostic, run the full standalone smoke without treating the
-diagnostic as a replacement:
-
-```bash
-DIM_CONTAINER_TEST_IMAGE='alpine@sha256:REPLACE_WITH_HOST_CACHED_DIGEST' \
-  bash verification/scripts/container-inner-docker-smoke.bash
-```
-
-This gate additionally checks network access, immutable-root replacement,
-cached inner-image execution, and data ownership persistence. Its success
-marker is emitted only after owned cleanup succeeds.
-
-Inspect each lane's failure stage and cgroup configuration separately from its
-storage errors. Similar messages from different hosts do not establish a common
-cause. Preserve the outputs and inspect fresh disposable volumes and the
-reported storage backing before changing any daemon setting.
-
-## P1: integrations needed by the chosen real-use profile
-
-- **Resource and development-URL helpers:** the recommended agent currently
-  receives neither `DIM_AGENT_CONTROLLER_SOCKET` nor
-  `DIM_DEVELOPMENT_URL_SOCKET`. Installed helper binaries are not evidence that
-  these interfaces are wired into the default environment. Connect and test
-  narrow agent-audience proxies before promising assigned-resource discovery
-  or in-agent development-URL requests. Do not mount an admin socket/token as a
-  shortcut. A host-side development-URL workflow requires configured ingress
-  and approval separately.
-- **Backups and mode changes:** recommended `discard --keep-volume` is refused
-  before mutation. A supported export/restore or identity-safe volume handoff
-  is additional work if that workflow is required; until then retain the
-  workspace or explicitly back up needed data before discard.
-- **Gitea-free adoption:** provision the native Git/ordinary service bundle,
-  separate private operator role files, serving-generation connection files,
-  and TLS where remote HTTPS is used. Bootstrap a no-`.dim` repository with
-  an explicit external `--review-policy`, then execute the P0 workspace journey
-  through native Git. No implicit empty review policy or automatic approval is
-  permitted.
-
-## P2: native CI and full cutover acceptance
-
-These are not prerequisites for a basic workspace:
-
-1. Install the current exact candidate on both independent nodes and run
-   the fixed host and runner-image KVM readiness probes. Prove normal completion,
-   cancellation failure, timeout failure, and owned cleanup; a QMP capability
-   probe is not a completed CI job.
-   The repository QEMU gate additionally needs a non-root invoking user,
-   cached `sudo -n` authorization for the narrowly staged root service, an
-   absolute canonical non-symlink root-owned mode-`0755` Node.js 24 or 26
-   interpreter under root-owned non-writable ancestors, and `/usr/bin/setpriv`.
-   Prime normal operator authorization with `sudo -v`; a permanent blanket
-   `NOPASSWD` rule is not required. Select a reviewed system/vendor Node
-   installation with `DIM_QEMU_NODE_EXECUTABLE`; never trust a mise, nvm, or
-   home-directory Node tree by changing its ownership. Run `--preflight-only`
-   first to report all host deficiencies without creating service state. Run
-   the gate as that user, never as root. Test both a normal run and an actual
-   `--input NAME=PATH`
-   run, including guest reads as UID 1001; local staging/readability tests are
-   not a substitute for the guest test.
-2. Provision global ordinary/QEMU service role files, units, immutable images,
-   registry and transport trust, and the four Project policy fixtures. Verify
-   Docker `type=image` support on the execution host; a bootstrap run does not
-   provision those operator inputs.
-3. Run both the native dual-kind smoke and empty/ordinary/QEMU/dual policy
-   matrix using [the native host runbook](native-cutover-host.md). Keep the
-   interactive exact-commit human approval and checked promotion step intact.
-4. Complete the independent full-gate phases: failure/stale/wrong-kind and
-   replay denials, process/host crash and reboot recovery, guest-authority
-   inspection, effective traffic inspection, interactive human approval, and
-   checked promotion. Neither `SMOKE-PASSED` nor `MATRIX-PASSED` satisfies
-   `VERIFICATION-NATIVE-CUTOVER-001`.
-
-## Separate release/publication work
-
-Public package publication, canonical-source publication, tags, signed release
-artifacts, Node.js 24/26 matrix, and independent release workflows follow
-[the releasing contract](../specification/docs/releasing.md). They are separate
-from trying an exact locally packed candidate on a host. None is authorized or
-reported as completed by this readiness checklist.
+Before treating a candidate as ready, inspect actual cleanup, protected-ref
+state, secret-bearing configuration permissions and the final command exit
+status. Do not declare success from an intermediate log line when the outer
+verification failed.

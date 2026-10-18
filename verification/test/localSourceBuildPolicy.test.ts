@@ -355,9 +355,7 @@ describe("local source build policy", () => {
     const installation = await readFile(resolve(projectRoot, "scripts/install-source-build.bash"), "utf8");
     const recipes = await readFile(resolve(projectRoot, "justfile"), "utf8");
     const imageConsumers = await Promise.all([
-      "container-sysbox-isolation-smoke.bash",
-      "container-inner-docker-smoke.bash",
-      "external-url-example-smoke.bash"
+      "container-sysbox-isolation-smoke.bash"
     ].map((script) => readFile(resolve(workspaceRoot, "verification/scripts", script), "utf8")));
 
     // Then
@@ -371,9 +369,9 @@ describe("local source build policy", () => {
     expect(installation).not.toMatch(/(?:systemctl|dim)\s+(?:restart|controller restart)/);
     expect(recipes).toContain(`build-local-workspace-image:\n    image_version="$(bash verification/scripts/local-build-version.bash)"`);
     expect(recipes).toContain("prepare-local:\n    bash scripts/prepare-source-build.bash");
-    expect(recipes).toContain("install-local:\n    bash scripts/install-source-build.bash");
+    expect(recipes).toContain("install-local *args:\n    bash scripts/install-source-build.bash {{args}}");
     expect(recipes).toContain("restart-controller:");
-    expect(recipes.indexOf("install-local:")).toBeLessThan(recipes.indexOf("restart-controller:"));
+    expect(recipes.indexOf("install-local *args:")).toBeLessThan(recipes.indexOf("restart-controller:"));
     expect(imageConsumers.every((script) => script.includes('local_version="$(bash "$script_dir/local-build-version.bash")"'))).toBe(true);
     expect(imageConsumers.every((script) => script.includes("dev-infra-project-workspace:$local_version"))).toBe(true);
     expect(imageConsumers.every((script) => !script.includes("require('./core/package.json').version"))).toBe(true);
@@ -750,7 +748,7 @@ describe("local source build policy", () => {
     expect(invocations).not.toContain("docker build");
   });
 
-  it("installs a prepared bundle and restarts after plugin activation", async () => {
+  it("installs a prepared base bundle without activating optional services", async () => {
     // Given
     const fixture = await createFixture();
     expect(runScript(fixture, "prepare-source-build.bash").status).toBe(0);
@@ -765,9 +763,8 @@ describe("local source build policy", () => {
     expect(result.status).toBe(0);
     expect(invocations).toContain("dim installer install core");
     expect(invocations).toContain("dim --version");
-    expect(invocations).toContain("dim controller restart");
-    expect(invocations.indexOf("dim installer enable-plugin"))
-      .toBeLessThan(invocations.indexOf("dim controller restart"));
+    expect(invocations).not.toContain("dim controller restart");
+    expect(invocations).not.toContain("dim installer enable-plugin");
     expect(invocations).toContain(
       `state dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)} dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)}`
     );
@@ -795,9 +792,8 @@ describe("local source build policy", () => {
     expect(invocations.match(new RegExp(`lock ${lockPath}`, "g"))).toHaveLength(1);
     expect(invocations.match(/^state /gm)).toHaveLength(2);
     expect(invocations).toContain("dim installer install core");
-    expect(invocations).toContain("dim controller restart");
-    expect(invocations.indexOf("dim installer enable-plugin"))
-      .toBeLessThan(invocations.indexOf("dim controller restart"));
+    expect(invocations).not.toContain("dim controller restart");
+    expect(invocations).not.toContain("dim installer enable-plugin");
     expect(invocations).not.toMatch(/^pack /m);
     expect(invocations).not.toContain("docker build");
   });

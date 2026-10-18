@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const setupPath = resolve(workspaceRoot, ".dim/setup.sh");
 const teardownPath = resolve(workspaceRoot, ".dim/teardown.sh");
-const dockerfilePath = resolve(workspaceRoot, "core/images/project-workspace/Dockerfile");
+const dockerfilePath = resolve(workspaceRoot, "core/packages/core/src/workspace-image-assets/Dockerfile");
 
 describe("QEMU root command authority", () => {
   it("pins the Alpine Node interpreter independently of PATH", async () => {

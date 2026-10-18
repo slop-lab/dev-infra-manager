@@ -1,42 +1,33 @@
-> Scope: optional managed Project workspace runtime, separate from the base
-> single-container workspace. Commands below require `dim managed`.
+# Managed Git on the base workspace runtime
 
-# Workspace Runtime Backend
+Managed Git adds a source adapter to the base workspace service. `dim create
+dim://PROJECT NAME` uses the selected host, proves that the Project is ready,
+and seeds its protected snapshot into the same unprivileged Sysbox container
+used for ordinary Git URLs. `dim ls`, `show`, `exec`, `stop`, `start`, `restart`,
+`recreate`, `resources` and `discard` operate on that one core workspace record.
 
-DIM supports Sysbox as its only workspace backend. The host installer records
-`workspaceBackend: "sysbox"`, and each workspace record and managed-container
-label carries the same value. Obsolete backend configuration and state are
-rejected rather than migrated.
+The runtime owns one container, one private bridge and three named volumes:
+home, checkout and nested Docker data. Recreate preserves the volumes and
+bridge identity. Discard removes owned storage and the bridge. Start and
+recreate preserve local edits; they do not clone or reset the checkout again.
 
-The trusted Project workspace and its Docker daemon run in a privileged
-container using Docker's ordinary runc runtime. The untrusted agent runs in a
-separate unprivileged `sysbox-runc` container with private rootless Docker.
-Thus runc remains a host implementation dependency but is not a selectable
-workspace backend.
+Managed state is a separate attachment keyed by the core workspace UUID. It
+records the native Git identity, selected Project, protected snapshot, review
+policy revisions and private broker connection. Native fields do not change
+the core record or introduce another lifecycle manager.
 
-`DIM_WORKSPACE_IMAGE`, `DIM_WORKSPACE_RUNTIME`, and
-`DIM_WORKSPACE_PRIVILEGED` are advanced trusted-infrastructure overrides; they
-do not change the recorded Sysbox backend.
+The host-side broker listens on the workspace's private bridge gateway. The
+checkout receives only a scoped broker credential. The broker obtains short
+Git leases using operator credentials kept outside the workspace. It exposes
+exact Git smart-HTTP requests for one Project, and validates the current core
+UUID and running, initialized state on each request. Discard or name reuse
+revokes the old attachment. A later start or exec restores a missing broker.
 
-Recommended CPU, memory, and PID values are one combined budget. DIM assigns
-the integer floor of 25 percent to trusted runc infrastructure and the exact
-remainder to the Sysbox agent. The minimum is 1 CPU, 1 GiB memory, and 256 PIDs;
-each container's swap limit equals its memory limit. Resource updates verify
-exact readback before state publication and roll back every attempted change on
-failure, reporting an uncertain state if rollback cannot be proved.
+A reviewed protected fast-forward keeps the workspace's Git access usable;
+it does not reset its persistent checkout. Policy changes require a fresh
+workspace attachment. Project `.dim` files are ordinary repository content:
+DIM does not automatically execute setup, entrypoint or teardown hooks. Run
+selected development tasks explicitly through `dim exec`.
 
-Custom Project-owned services share the outer-workspace budget unless Compose
-adds stricter child limits. Their nested Docker state is persisted in DIM's
-outer managed `/var/lib/docker` engine volume. Custom `discard --keep-volume
---yes` retains that volume for same-name recreation and signals custom Project
-teardown to retain intended nested named data. Recommended mode instead owns
-separate home, checkout, and private-Docker volumes: its `--keep-volume` request
-is rejected before any mutation. Leave the recommended workspace intact or
-copy needed data before ordinary full discard. External volumes remain
-Project-owned outside either store.
-
-KVM is optional and independent of Sysbox readiness. When available and
-approved at workspace creation, DIM forwards `/dev/kvm` and its numeric group.
-
-Projects receive `DIM_WORKSPACE_BACKEND=sysbox` and
-`DIM_NESTED_ENGINE=docker`.
+See [the base API](../../core/README.md) and the
+[CLI reference](../../cli/README.md) for runtime and remote-host behavior.

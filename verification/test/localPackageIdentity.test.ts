@@ -207,25 +207,5 @@ describe("local package identity", () => {
     expect(result.stdout.trim()).toBe(`0.8.0-local-${aggregateIdentity(commit)}`);
   });
 
-  it("builds release and aggregate-local workspace images before local-tag consumers", async () => {
-    // Given
-    const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
-    const workspaceRuntime = recipes.slice(
-      recipes.indexOf("workspace-runtime:"),
-      recipes.indexOf("# Requires Docker and network access")
-    );
 
-    // When
-    const releaseBuild = workspaceRuntime.indexOf("just build-workspace-image");
-    const localBuild = workspaceRuntime.indexOf("just build-local-workspace-image");
-    const localTagConsumer = workspaceRuntime.indexOf("container-inner-docker-smoke.bash");
-
-    // Then
-    expect(releaseBuild).toBeGreaterThan(-1);
-    expect(localBuild).toBeGreaterThan(releaseBuild);
-    expect(localBuild).toBeLessThan(localTagConsumer);
-    expect(workspaceRuntime).toContain(
-      "    just build-workspace-image\n    just build-local-workspace-image\n    cd .. && bash verification/scripts/container-inner-docker-smoke.bash"
-    );
-  });
 });

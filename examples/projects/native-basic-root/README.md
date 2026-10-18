@@ -5,25 +5,26 @@ candidate-controlled execution kinds. Copy it into a new Git repository,
 commit it on `main`, then use distinct caller-owned role files:
 
 ```bash
-dim project bootstrap-native-root native-basic \
+dim managed project bootstrap-native-root native-basic \
   --project-id native-basic-root \
   --source-repository "$PWD" \
   --source-ref refs/heads/main \
-  --registrar-connection /absolute/operator/registrar.json \
-  --importer-connection /absolute/operator/importer.json \
+  --registrar-connection /absolute/operator/connections/registrar.json \
+  --importer-connection /absolute/operator/connections/importer.json \
   --json
 
-export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/absolute/operator/control-plane.json
-export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
-dim project create native-basic --json
-dim project list --json
-dim project show native-basic --json
-dim workspace create native-basic native-basic-work
-dim workspace show native-basic-work --json
+export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/absolute/operator/connections/host.json
+export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/connections/importer.json
+dim managed project create native-basic --json
+dim managed project list --json
+dim managed project show native-basic --json
+dim create dim://native-basic native-basic-work
+dim show native-basic-work --json
 ```
 
-The role files are generated from the installed service configuration by the
-operator. They are mode `0600`, remain outside the repository and workspace,
+Generate initial host and bootstrap role files with
+`dim managed control-plane prepare` and `dim managed control-plane connect`.
+Configure the real CI host capacities required by this example separately. They are mode `0600`, remain outside the repository and workspace,
 and use distinct registrar, importer, root-read, workspace-write, reviewer,
 promoter, ordinary host, and QEMU host credentials.
 

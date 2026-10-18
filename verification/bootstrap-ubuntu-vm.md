@@ -146,8 +146,8 @@ The bootstrap does not create TLS material, secrets, native connection JSON,
 worker configuration, systemd worker units, user lingering, or native CI
 services. It does not publish packages, create tags, or start a release. After
 the candidate facade reports the expected version, continue with
-[`native-multi-host-operations.md`](native-multi-host-operations.md) to create
-operator-owned configuration and deliberately start the required services.
+[host readiness](host-install-readiness.md) for ordinary remote development
+and optional operator-owned service setup.
 
 Run both roles against the exact candidate using the acceptance profile below.
 Retain guest phase logs and the outer invocation's final status separately;

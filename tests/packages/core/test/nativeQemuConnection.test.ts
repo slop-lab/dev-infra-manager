@@ -2,7 +2,6 @@ import { chmod, chown, link, mkdtemp, rm, symlink, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import { loadNativeQemuConnection, NativeQemuConnectionError,
   parseNativeQemuConnection } from "../../../../core/packages/managed/src/index.js";
 
@@ -100,11 +99,4 @@ describe("native QEMU host connection preflight", () => {
     await expect(loadNativeQemuConnection(oversized, "host-a")).rejects.toThrow(NativeQemuConnectionError);
   });
 
-  it("rejects the obsolete Gitea selector before native QEMU fallback after a valid file is parsed", async () => {
-    const path = await connectionFile();
-    expect(await loadNativeQemuConnection(path, "host-a")).toEqual(valid);
-    expect(() => lifecycleOptionsForBackend("sysbox", { HOME: "/home/dim",
-      DIM_NATIVE_QEMU_CONNECTION_FILE: path, DIM_GITEA_CONNECTION_FILE: "/not-used" }))
-      .toThrow(/DIM_GITEA_CONNECTION_FILE is not supported by the native-only lifecycle/);
-  });
 });
