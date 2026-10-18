@@ -39,6 +39,7 @@ check-source-native:
     pnpm --filter @slop-lab/dim-contracts-external-url run build
     pnpm --filter @slop-lab/dim-controller-proxy run build
     pnpm --filter @slop-lab/dim-core run build
+    pnpm --filter @slop-lab/dim-managed run build
     pnpm --filter @slop-lab/dim-native-git run build
     pnpm --filter @slop-lab/dim-cli run build
     bash verification/scripts/source-gate-preflight.bash --require-artifacts
@@ -49,20 +50,16 @@ check-source-native:
 prepare-local:
     bash scripts/prepare-source-build.bash
 
-# Install the prepared local package set, enable plugins, and restart the controller.
-install-local:
-    bash scripts/install-source-build.bash
+# Install the base workspace tools; --with-managed also selects managed integrations.
+install-local *args:
+    bash scripts/install-source-build.bash {{args}}
 
 # Restart the managed controller with the currently installed DIM package set.
 restart-controller:
     if command -v mise >/dev/null 2>&1; then mise exec -- dim controller restart; else "${DIM_INSTALL_PREFIX:-$HOME/.local}/bin/dim" controller restart; fi
 
-# Install local DIM packages before restarting the managed control plane.
-install-local-control-plane: install-local
-
-# Builds image dependencies and core first, then runs the local dim CLI from source (no install needed).
+# Build the base core, then run the local CLI from source without installation.
 run-cli *args:
-    pnpm --filter @slop-lab/dim-controller-proxy run build
     pnpm --filter @slop-lab/dim-core run build
     pnpm --dir tests exec tsx ../core/packages/cli/src/cli.ts {{ args }}
 

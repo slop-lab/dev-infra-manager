@@ -80,7 +80,7 @@ cat >"$prefix/node_modules/.bin/dim" <<'SCRIPT'
 #!/usr/bin/bash
 { printf 'target-dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
 if [[ "\${DIM_PREFLIGHT_FAILURE:-0}" == 1 && "$1 $2 $3" == "installer install core" ]]; then exit 47; fi
-if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$1 $2" == "installer enable-plugin" ]]; then exit 42; fi
+if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$1 $2 $3" == "installer install plugin" ]]; then exit 42; fi
 SCRIPT
 chmod +x "$prefix/node_modules/.bin/dim"
 `);
@@ -94,8 +94,8 @@ chmod +x "$prefix/node_modules/.bin/dim"
   return { root, tools, log, oldFacadeMutation };
 }
 
-function runInstaller(fixture: Fixture, environment: Readonly<Record<string, string>> = {}) {
-  return spawnSync("/usr/bin/bash", [resolve(fixture.root, "scripts/install-source-build.bash")], {
+function runInstaller(fixture: Fixture, environment: Readonly<Record<string, string>> = {}, arguments_: readonly string[] = []) {
+  return spawnSync("/usr/bin/bash", [resolve(fixture.root, "scripts/install-source-build.bash"), ...arguments_], {
     encoding: "utf8",
     env: {
       PATH: `${fixture.tools}:/usr/bin:/bin`,
@@ -111,28 +111,29 @@ afterEach(async () => {
 });
 
 describe("Project local install facade", () => {
-  it("enables only the intended prepared plugins after installing the CLI", async () => {
-    // Given
+  it("installs the prepared base CLI without activating optional plugins or controller", async () => {
     const fixture = await createFixture();
-
-    // When
     const result = runInstaller(fixture);
     const invocations = await readFile(fixture.log, "utf8");
-
-    // Then
     expect(result.status, result.stderr).toBe(0);
-    expect(invocations).toMatch(/^npm install --prefix \/tmp\/dim-target-installer\.[^ ]+ --no-save --no-fund --no-audit /m);
-    expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin --defer-controller-restart$/m);
-    expect(invocations).toContain("target-dim installer enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls @slop-lab/dim-plugin-host-mirrors");
-    expect(invocations.indexOf("target-dim controller restart")).toBeGreaterThan(
-      invocations.indexOf("target-dim installer enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls @slop-lab/dim-plugin-host-mirrors")
-    );
+    expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin$/m);
+    expect(invocations).not.toContain("installer install plugin");
+    expect(invocations).not.toContain("controller restart");
     expect(invocations).not.toContain("old-dim");
-    expect(invocations).not.toContain("unrelated-plugin-local.tgz");
-    expect(invocations.indexOf(" installer install core ")).toBeLessThan(invocations.indexOf(" installer enable-plugin "));
     expect(invocations.match(/^state /gm)).toHaveLength(2);
-    expect(invocations).toContain(`state ${imageRef} ${imageRef}`);
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("installs only the explicit managed profile's prepared plugins after core", async () => {
+    const fixture = await createFixture();
+    const result = runInstaller(fixture, {}, ["--with-managed"]);
+    const invocations = await readFile(fixture.log, "utf8");
+    expect(result.status, result.stderr).toBe(0);
+    expect(invocations).toContain("--with-managed --defer-controller-restart");
+    for (const plugin of ["dns-cloudflare", "external-urls", "host-mirrors"]) expect(invocations).toContain(`slop-lab-dim-plugin-${plugin}-local.tgz`);
+    expect(invocations).not.toContain("unrelated-plugin-local.tgz");
+    expect(invocations.indexOf(" installer install core ")).toBeLessThan(invocations.indexOf(" installer install plugin "));
+    expect(invocations.indexOf("target-dim controller restart")).toBeGreaterThan(invocations.indexOf("target-dim installer install plugin"));
   });
 
   it("propagates prepared plugin activation failure", async () => {
@@ -140,7 +141,7 @@ describe("Project local install facade", () => {
     const fixture = await createFixture();
 
     // When
-    const result = runInstaller(fixture, { DIM_PLUGIN_FAILURE: "1" });
+    const result = runInstaller(fixture, { DIM_PLUGIN_FAILURE: "1" }, ["--with-managed"]);
 
     // Then
     expect(result.status).toBe(42);
@@ -180,7 +181,7 @@ describe("Project local install facade", () => {
     expect(result.status).toBe(47);
     expect(invocations).toMatch(/^target-dim installer install core /m);
     expect(invocations).not.toContain("old-dim");
-    expect(invocations).not.toContain("installer enable-plugin");
+    expect(invocations).not.toContain("installer install plugin");
     expect(await Promise.all(protectedPaths.map((path) => readFile(path)))).toEqual(before);
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   });

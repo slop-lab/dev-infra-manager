@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$#" -ne 0 ]]; then
-  echo "Usage: bash scripts/install-source-build.bash" >&2
+with_managed=0
+if [[ "$#" -eq 1 && "$1" == --with-managed ]]; then
+  with_managed=1
+elif [[ "$#" -ne 0 ]]; then
+  echo "Usage: bash scripts/install-source-build.bash [--with-managed]" >&2
   exit 2
 fi
 
@@ -70,14 +73,27 @@ fi
 "${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
 echo "[host] install package bundle"
-"${dim_command[@]}" installer install core --local-packages "$package_root" --no-local-bin --defer-controller-restart
+core_options=(--local-packages "$package_root" --no-local-bin)
+if [[ "$with_managed" -eq 1 ]]; then
+  core_options+=(--with-managed --defer-controller-restart)
+fi
+"${dim_command[@]}" installer install core "${core_options[@]}"
 
-"${dim_command[@]}" installer enable-plugin \
-  @slop-lab/dim-plugin-dns-cloudflare \
-  @slop-lab/dim-plugin-external-urls \
-  @slop-lab/dim-plugin-host-mirrors
-"${dim_command[@]}" controller restart
+if [[ "$with_managed" -eq 1 ]]; then
+  plugin_archives=()
+  for plugin in dns-cloudflare external-urls host-mirrors; do
+    matches=("$package_root"/slop-lab-dim-plugin-"$plugin"-*.tgz)
+    [[ "${#matches[@]}" -eq 1 && -f "${matches[0]}" && ! -L "${matches[0]}" ]] || {
+      echo "prepared bundle must contain one regular $plugin plugin archive" >&2
+      exit 1
+    }
+    plugin_archives+=("${matches[0]}")
+  done
+  "${dim_command[@]}" installer install plugin "${plugin_archives[@]}"
+  "${dim_command[@]}" controller restart
+fi
 
 validate_preparation
-echo "[host] local package bundle installed and controller restarted with activated plugins"
+echo "[host] local package bundle installed"
+if [[ "$with_managed" -eq 1 ]]; then echo "[host] managed controller activated with DNS, External URLs and host mirror plugins"; fi
 "${dim_command[@]}" --version

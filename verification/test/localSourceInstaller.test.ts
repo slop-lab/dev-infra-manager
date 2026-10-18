@@ -96,7 +96,8 @@ describe("local source installation", () => {
       await readFile(resolve(dataHome, "runtime", "current", "package.json"), "utf8")
     ) as { readonly dependencies: Readonly<Record<string, string>> };
     expect(runtimeManifest.dependencies["@slop-lab/dim-installer"]).toBeUndefined();
-    for (const entry of manifest.packages.filter(({ name }) => name !== "@slop-lab/dim-installer")) {
+    expect(Object.keys(runtimeManifest.dependencies).sort()).toEqual(["@slop-lab/dim-cli", "@slop-lab/dim-core"]);
+    for (const entry of manifest.packages.filter(({ name }) => ["@slop-lab/dim-cli", "@slop-lab/dim-core"].includes(name))) {
       expect(runtimeManifest.dependencies[entry.name]).toContain(entry.file);
     }
   }, 120_000);
@@ -160,7 +161,7 @@ describe("local source installation", () => {
     // Then
     expect(installation.status).toBe(1);
     expect(installation.stderr).toMatch(
-      /workspace state.*work-1\.json.*unsupported predecessor state.*prior pinned release.*export.*recreate.*no state was changed/is
+      /workspace state.*work-1\.json.*unsupported workspace state.*export.*recreat.*no state was changed/is
     );
     expect(installation.stderr).not.toContain("do-not-print");
     expect(await Promise.all([

@@ -16,12 +16,12 @@ image_build_ref="${DIM_LOCAL_IMAGE_BUILD_REF:?DIM_LOCAL_IMAGE_BUILD_REF is requi
 
 docker buildx version >/dev/null
 
-echo "[host] build trusted workspace image"
+echo "[host] build isolated development workspace image"
 docker buildx build \
   --quiet \
   --load \
   --build-arg "DIM_UID=$(id -u)" \
   --build-arg "DIM_GID=$(id -g)" \
   --tag "$image_build_ref" \
-  --file "$source_root/core/images/project-workspace/Dockerfile" \
-  "$source_root" >/dev/null
+  --file "$source_root/core/packages/core/src/workspace-image-assets/Dockerfile" \
+  "$source_root/core/packages/core/src/workspace-image-assets" >/dev/null

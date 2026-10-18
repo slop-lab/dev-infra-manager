@@ -21,7 +21,7 @@ import { printFacadeHelp, printInstallCoreHelp, printInstallerHelp, printInstall
 import { installerVersion } from "./installerVersion.js";
 import { withInstallerProgress } from "./installProgress.js";
 import { installControlPlaneCommand, recoverControlPlaneCommand } from "./controlPlaneCommand.js";
-import { readPackageJson } from "./runtimeFiles.js";
+import { readManifest, readPackageJson } from "./runtimeFiles.js";
 
 const HOST_MIRROR_PLUGIN = "@slop-lab/dim-plugin-host-mirrors";
 const MANAGED_COMPONENT = "@slop-lab/dim-managed";
@@ -113,20 +113,21 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
   const binDirectory = parsed.values.prefix
     ? path.join(path.resolve(parsed.values.prefix), "bin")
     : defaultBinDirectory();
-  const bundle = parsed.values["local-packages"]
-    ? await readLocalPackageBundle(parsed.values["local-packages"])
-    : undefined;
-  if (parsed.values["defer-controller-restart"] && bundle === undefined) {
+  const localDirectory = parsed.values["local-packages"];
+  if (parsed.values["defer-controller-restart"] && localDirectory === undefined) {
     throw new Error("--defer-controller-restart requires --local-packages");
   }
-  if (bundle !== undefined && parsed.values["host-mirror-plugin"] !== undefined) {
+  if (localDirectory !== undefined && parsed.values["host-mirror-plugin"] !== undefined) {
     throw new Error("--host-mirror-plugin cannot be used with --local-packages");
   }
-  if (bundle !== undefined && parsed.values["with-managed"] && !bundle.packageNames.includes(MANAGED_COMPONENT)) {
-    throw new Error(`the local package bundle does not contain ${MANAGED_COMPONENT}`);
-  }
   const version = await installerVersion();
-  const packages = bundle ?? await selectCorePackages(version, parsed.values["with-managed"] === true);
+  const packages = await selectCorePackages(version, parsed.values["with-managed"] === true);
+  const enabledPlugins = localDirectory === undefined ? [] : (await readManifest(
+    path.join(defaultDataHome(), "runtime/current/plugins.json")
+  )).plugins;
+  const bundle = localDirectory === undefined ? undefined : await readLocalPackageBundle(
+    localDirectory, [...packages.packageNames, ...enabledPlugins]
+  );
   const plugins = bundle === undefined
     ? await selectHostMirrorPlugin(
       version,

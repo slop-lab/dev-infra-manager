@@ -651,36 +651,69 @@ describe("@slop-lab/dim-installer", () => {
   });
 
   describe("readLocalPackageBundle", () => {
-    it("selects every locally built package except the installer", async () => {
+    async function bundleFixture() {
       const root = await tempDir("dim-local-bundle-");
-      await writeFile(join(root, "core.tgz"), "core contents");
-      await writeFile(join(root, "cli.tgz"), "cli contents");
-      await writeFile(join(root, "installer.tgz"), "installer contents");
-      await writeFile(join(root, "packages.json"), JSON.stringify({
-        schemaVersion: 1,
-        packages: [
-          { name: "@slop-lab/dim-core", file: "core.tgz" },
-          { name: "@slop-lab/dim-cli", file: "cli.tgz" },
-          { name: "@slop-lab/dim-installer", file: "installer.tgz" }
-        ]
-      }));
+      const version = "0.10.0-local-test";
+      const entries = [
+        { name: "@slop-lab/dim-core", file: "core.tgz", version, requires: {} },
+        { name: "@slop-lab/dim-cli", file: "cli.tgz", version, requires: { "@slop-lab/dim-core": version } },
+        { name: "@slop-lab/dim-contracts-external-url", file: "contract.tgz", version, requires: {} },
+        { name: "@slop-lab/dim-controller-proxy", file: "proxy.tgz", version, requires: { "@slop-lab/dim-contracts-external-url": version } },
+        { name: "@slop-lab/dim-managed", file: "managed.tgz", version, requires: { "@slop-lab/dim-core": version, "@slop-lab/dim-controller-proxy": version } },
+        { name: "@slop-lab/dim-plugin-host-mirrors", file: "mirrors.tgz", version, requires: { "@slop-lab/dim-managed": version } },
+        { name: "@slop-lab/dim-installer", file: "installer.tgz", version, requires: {} }
+      ];
+      await Promise.all(entries.map(({ file }) => writeFile(join(root, file), "fixture archive")));
+      const publish = async (packages = entries) => writeFile(join(root, "packages.json"), JSON.stringify({ schemaVersion: 1, packages }));
+      await publish();
+      return { root, entries, publish };
+    }
 
-      const bundle = await readLocalPackageBundle(root);
-      expect(bundle).toEqual({
+    it("selects only the base CLI and required core artifacts", async () => {
+      const { root } = await bundleFixture();
+      expect(await readLocalPackageBundle(root)).toEqual({
+        version: "0.10.0-local-test",
         packageSpecifiers: [join(root, "core.tgz"), join(root, "cli.tgz")],
         packageNames: ["@slop-lab/dim-core", "@slop-lab/dim-cli"]
       });
+    });
+
+    it("includes the complete managed dependency closure without unrelated plugins or installer", async () => {
+      const { root } = await bundleFixture();
+      const selected = await readLocalPackageBundle(root, ["@slop-lab/dim-managed"]);
+      expect(selected.packageNames).toEqual([
+        "@slop-lab/dim-core", "@slop-lab/dim-cli", "@slop-lab/dim-contracts-external-url",
+        "@slop-lab/dim-controller-proxy", "@slop-lab/dim-managed"
+      ]);
+      expect(selected.packageSpecifiers).not.toContain(join(root, "mirrors.tgz"));
+      expect(selected.packageSpecifiers).not.toContain(join(root, "installer.tgz"));
+    });
+
+    it("resolves an enabled plugin's required component peers from the bundle", async () => {
+      const { root } = await bundleFixture();
+      expect((await readLocalPackageBundle(root, ["@slop-lab/dim-plugin-host-mirrors"])).packageNames).toEqual([
+        "@slop-lab/dim-core", "@slop-lab/dim-cli", "@slop-lab/dim-contracts-external-url",
+        "@slop-lab/dim-controller-proxy", "@slop-lab/dim-managed", "@slop-lab/dim-plugin-host-mirrors"
+      ]);
+    });
+
+    it("rejects selected missing or version-mismatched dependencies instead of falling back to a registry", async () => {
+      const { root, entries, publish } = await bundleFixture();
+      await publish(entries.filter(({ name }) => name !== "@slop-lab/dim-controller-proxy"));
+      await expect(readLocalPackageBundle(root, ["@slop-lab/dim-managed"])).rejects.toThrow(/requires missing bundle package/);
+      await expect(readLocalPackageBundle(root)).resolves.toMatchObject({ packageNames: ["@slop-lab/dim-core", "@slop-lab/dim-cli"] });
+      await publish(entries.map((entry) => entry.name === "@slop-lab/dim-controller-proxy" ? { ...entry, version: "0.9.0" } : entry));
+      await expect(readLocalPackageBundle(root, ["@slop-lab/dim-managed"])).rejects.toThrow(/requires .*but the bundle contains/);
+      await expect(readLocalPackageBundle(root, ["missing-plugin"])).rejects.toThrow(/does not contain required package 'missing-plugin'/);
     });
 
     it("rejects bundles without the CLI or with unsafe filenames", async () => {
       const root = await tempDir("dim-invalid-local-bundle-");
       await writeFile(join(root, "packages.json"), JSON.stringify({ schemaVersion: 1, packages: [] }));
       await expect(readLocalPackageBundle(root)).rejects.toThrow(/does not contain/);
-
-      await writeFile(join(root, "packages.json"), JSON.stringify({
-        schemaVersion: 1,
-        packages: [{ name: "@slop-lab/dim-cli", version: "0.9.0", file: "../cli.tgz" }]
-      }));
+      await writeFile(join(root, "packages.json"), JSON.stringify({ schemaVersion: 1, packages: [
+        { name: "@slop-lab/dim-cli", version: "0.9.0", file: "../cli.tgz", requires: {} }
+      ] }));
       await expect(readLocalPackageBundle(root)).rejects.toThrow(/invalid local package filename/);
     });
   });

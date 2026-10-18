@@ -24,7 +24,7 @@ The target facade owns:
 
 ```bash
 dim installer                         # interactive installer (TTY only), always
-dim installer install core [--host-mirror-plugin PACKAGE@EXACT_VERSION] [options]
+dim installer install core [--with-managed] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [options]
 dim installer install control-plane --config FILE
 dim installer recover control-plane --roll-forward --generation GENERATION
 dim installer install plugin PACKAGE@EXACT_VERSION...
@@ -112,7 +112,8 @@ to fall back to.
 
 ## Install modes
 
-Both modes install the DIM runtime—CLI, core, and enabled plugins—into one
+Both modes install the selected DIM runtime—CLI/core plus optional managed
+components and enabled plugins—into one
 private stable directory outside `PATH`:
 
 ```text
@@ -123,8 +124,9 @@ The installer prepares each replacement in a temporary sibling directory,
 verifies its executable, and runs the staged target core package's read-only
 state-compatibility preflight before promoting it to `current`. The preflight
 uses `DIM_STATE_ROOT`, or the ordinary user-home default when it is unset, and
-checks every existing core-owned host, Project, workspace, and CI-runner record
-with that target package's parsers. It must use no currently installed CLI or
+checks existing standalone workspace records with the target package's current
+parser. Optional managed host, Project, CI and plugin state belongs to its owning
+integration and is outside the base installation preflight. It must use no currently installed CLI or
 mutable source checkout, create no lifecycle object, lock, or state directory,
 and perform no Docker, Git, or network operation. Plugin-private and otherwise
 unknown state families are outside this contract and are ignored.
@@ -138,29 +140,40 @@ must not print state contents. Refusal must leave the current runtime, facade,
 user config, plugin activation, image state, and all state bytes unchanged;
 temporary package staging is not installed state and must be removed.
 
-The sole compatibility exception is a strict historical host schema-1 record
-accepted by the target's existing schema-1 converter. The preflight only warns
-that controller startup will perform the already-specified schema-1 to schema-2
-migration; installation itself must not migrate it. No workspace, Project,
-runner, or other state receives an automatic conversion, deletion, or
-delete-and-recreate path.
+No historical record receives an automatic conversion, deletion, or
+recreation during installation. Unsupported standalone workspace state must be
+exported using the currently installed version before explicit recreation.
 
-For a registry installation on a host where the required host mirror plugin is
-not already enabled, non-interactive `installer install core` must require
-`--host-mirror-plugin @slop-lab/dim-plugin-host-mirrors@<installer-version>` and
-reject every other package or version before npm or installed-state mutation.
-With a TTY, omission must offer that same exact coordinate as a positive,
-default-yes host-operator choice; declining must leave installed state
-unchanged. This is installer facade host policy, not a Project, workspace,
-capability-provider, or agent prompt. The installer must not select another
-provider or silently install an unreviewed plugin.
+Base `installer install core` requires no control plane, configured container
+backend, mirror plugin or controller. Fresh TTY and non-TTY installations must
+not prompt for or implicitly install an optional integration.
 
-The selected plugin must join the core and CLI in the same staged npm graph and
+`--with-managed` selects `@slop-lab/dim-managed` at exactly the installer's
+version for registry installation. It joins CLI/core as a runtime dependency,
+not a plugin activation entry, and does not deploy a control plane or start a
+controller. A previously selected managed component remains selected and is
+updated to the matched version during later core installation.
+
+`--host-mirror-plugin` remains an optional explicit selection. Its only accepted
+coordinate is `@slop-lab/dim-plugin-host-mirrors@<installer-version>`; another
+package or version must be rejected before npm or installed-state mutation.
+A previously enabled host-mirror plugin remains selected at that matched
+version. This is trusted host-operator input; Project or agent input must not
+select host installation dependencies.
+
+A selected plugin must join the core and CLI in the same staged npm graph and
 be recorded in staged `plugins.json` before promotion. After a successful
-preflight, the installer promotes the staged runtime and
-invokes the promoted CLI's `controller restart` subcommand exactly once. That
-subcommand's controller readiness check is part of the installation
-transaction. If restart/readiness or later configuration fails, the installer
+preflight, the installer promotes the staged runtime. Package installation must
+not create or start a controller service. Before promotion it determines whether
+this exact managed installation has an active controller. A same-UID,
+non-zombie process must match the owned runtime and `controller serve` PID-file
+arguments; a systemd probe may inspect only an already installed same-UID unit
+that refers to that runtime, in the corresponding default host context. A stale
+PID or another installation must not select restart. Detection must require no
+backend configuration or core/managed module import.
+
+When that controller is active, the promoted CLI's `controller restart` runs
+once and its readiness check is part of the installation transaction. If restart/readiness or later configuration fails, the installer
 must stop a target that already reached readiness before removing its runtime,
 then restore the previous `current` directory and restart the prior controller
 when one existed. Non-systemd shutdown must be a self-termination request over
@@ -198,23 +211,44 @@ installer version. Interactive yes/no questions must phrase the recommended
 mode positively and use `Y` as their displayed default, so repeatedly answering
 `y` or pressing Enter preserves the environment-specific recommended mode.
 
-`installer install core --local-packages PATH` must accept a schema-1 `packages.json`
-bundle produced by the repository package script. It installs every tarball
-except `@slop-lab/dim-installer` in one npm transaction and records the version
-reported by the installed CLI. The normal direct/proxied selection still
-applies; manifest versions do not select filesystem paths. The local-bundle-only
-`--defer-controller-restart` option suppresses the core promotion restart so a
-reviewed source installer can activate required plugins first. Other install
-sources must reject that option. The source installer must perform exactly one
-explicit controller restart after plugin activation before reporting success.
+`installer install core --local-packages PATH` accepts the generated schema-1
+`packages.json` artifact graph. Each package entry declares its package name,
+exact version, sibling `.tgz` filename and `requires` map of internal package
+names to exact versions. The base roots are CLI and core. `--with-managed`, an
+already selected managed component and already enabled plugins add roots. The
+installer includes only their transitive required dependencies, including
+non-optional component peers. Merely including an optional component or plugin
+archive in the bundle must not install or enable it. A selected dependency
+missing from the bundle or bound to another version must fail before npm;
+there is no registry fallback for a required bundle artifact. The installer
+facade itself must not be installed as a runtime dependency.
+
+All selected tarballs join one npm transaction. The installed CLI must report
+the exact version declared by its selected artifact. The normal direct/proxied
+selection still applies; manifest versions do not select filesystem paths.
+Local artifact metadata is generated from the matched production packages;
+unsupported manifests must be regenerated rather than interpreted through a
+legacy format.
+
+The local-bundle-only `--defer-controller-restart` option suppresses restart of
+an existing active controller while a reviewed source installer installs its
+selected plugins. Other install sources must reject that option. The default
+source installation selects only the base workspace tools. Its explicit
+`--with-managed` profile selects the managed component and bundled DNS,
+External URLs and host mirror plugins, then explicitly activates their
+controller after plugin installation. It does not implicitly build a managed
+workspace image or deploy a control plane.
 
 Plugins install into a temporary sibling copy of the same `runtime/current`
 npm project and replace `current` only after npm and activation-manifest
 validation succeed. Plugin packages
-must declare the exact compatible `@slop-lab/dim-core` as a peer dependency so
+must declare the exact compatible `@slop-lab/dim-managed` as a peer dependency so
 npm rejects an incompatible host before activation. CLI replacement reinstalls
 the enabled plugin set in staging and must succeed as one dependency graph
-before promotion. `plugins.json` lives in `runtime/current`; no independent
+before promotion. Plugin installation restarts a controller only when that
+installation was already active, with the same readiness and rollback
+obligations; otherwise it is a package operation without service activation.
+`plugins.json` lives in `runtime/current`; no independent
 plugin installation root or persisted `pluginHome` setting exists.
 Local plugin tarballs are copied into `runtime/sources` before installation;
 the runtime must not depend on the caller's source path remaining available.
@@ -243,7 +277,8 @@ byte-identical output to unset when unset.
 ## Plugin installation
 
 `dim installer install plugin` requires an installed CLI because plugins join its npm
-project and npm must validate their core peer dependency against that runtime.
+project and npm must validate their managed-component peer dependency against
+that runtime.
 `installer enable-plugin`, `installer disable-plugin`, and `installer remove-plugin` provide recovery without
 hand-editing the managed npm project or activation manifest.
 

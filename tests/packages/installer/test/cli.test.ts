@@ -602,43 +602,63 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stdout).toContain("bypass the installer facade");
   });
 
-  it("installs a local package bundle behind the facade without creating a PATH symlink", async () => {
+  async function localBundleFixture() {
     const root = await tempDir("dim-cli-local-bundle-");
     const { env, configPath, dataHome } = await baseEnv(root);
-    const bin = join(root, "bin");
-    const bundle = join(root, "bundle");
-    const npmArgs = join(root, "npm-args.json");
+    const bin = join(root, "bin"), bundle = join(root, "bundle"), npmArgs = join(root, "npm-args.json");
     await mkdir(bin, { recursive: true });
     await mkdir(bundle, { recursive: true });
     await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
-    await writeFile(join(bundle, "core.tgz"), "core");
-    await writeFile(join(bundle, "cli.tgz"), "cli");
-    await writeFile(join(bundle, "installer.tgz"), "installer");
-    await writeFile(join(bundle, "packages.json"), JSON.stringify({
-      schemaVersion: 1,
-      packages: [
-        { name: "@slop-lab/dim-core", version: "0.9.0", file: "core.tgz" },
-        { name: "@slop-lab/dim-cli", version: "0.9.0", file: "cli.tgz" },
-        { name: "@slop-lab/dim-installer", version: "0.9.0", file: "installer.tgz" }
-      ]
-    }));
+    const packages = [
+      { name: "@slop-lab/dim-core", version: "0.9.0", file: "core.tgz", requires: {} },
+      { name: "@slop-lab/dim-cli", version: "0.9.0", file: "cli.tgz", requires: { "@slop-lab/dim-core": "0.9.0" } },
+      { name: "@slop-lab/dim-managed", version: "0.9.0", file: "managed.tgz", requires: { "@slop-lab/dim-core": "0.9.0", "@slop-lab/dim-controller-proxy": "0.9.0" } },
+      { name: "@slop-lab/dim-controller-proxy", version: "0.9.0", file: "proxy.tgz", requires: { "@slop-lab/dim-contracts-external-url": "0.9.0" } },
+      { name: "@slop-lab/dim-contracts-external-url", version: "0.9.0", file: "contract.tgz", requires: {} },
+      { name: "@slop-lab/dim-plugin-host-mirrors", version: "0.9.0", file: "mirrors.tgz", requires: { "@slop-lab/dim-managed": "0.9.0" } },
+      { name: "@slop-lab/dim-installer", version: "0.9.0", file: "installer.tgz", requires: {} }
+    ];
+    await Promise.all(packages.map(({ file }) => writeFile(join(bundle, file), "fixture archive")));
+    await writeFile(join(bundle, "packages.json"), JSON.stringify({ schemaVersion: 1, packages }));
+    return { root, env: { ...env, PATH: `${bin}:${env.PATH}` }, configPath, dataHome, bundle, npmArgs };
+  }
 
-    const result = await runCli(
-      ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"],
-      tsxPath!,
-      { ...env, PATH: `${bin}:${env.PATH}` },
-      root
-    );
-    expect(result.code).toBe(0);
+  it("installs only the base local package dependency closure behind the facade", async () => {
+    const { root, env, configPath, dataHome, bundle, npmArgs } = await localBundleFixture();
+    const result = await runCli(["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], tsxPath!, env, root);
+    expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).toContain("Installed local DIM CLI 0.9.0");
     const config = JSON.parse(await readFile(configPath, "utf8"));
     expect(config.cli).toMatchObject({ mode: "proxied", version: "0.9.0" });
-    expect(config.cli.executable).toBe(join(dataHome, "runtime", "current", "node_modules", ".bin", "dim"));
-    expect(JSON.parse(await readFile(npmArgs, "utf8"))).toEqual(expect.arrayContaining([
-      join(bundle, "core.tgz"),
-      join(bundle, "cli.tgz")
-    ]));
-    expect(JSON.parse(await readFile(npmArgs, "utf8"))).not.toContain(join(bundle, "installer.tgz"));
+    expect(config.cli.executable).toBe(join(dataHome, "runtime/current/node_modules/.bin/dim"));
+    const args = JSON.parse(await readFile(npmArgs, "utf8"));
+    expect(args).toEqual(expect.arrayContaining([join(bundle, "core.tgz"), join(bundle, "cli.tgz")]));
+    for (const file of ["managed.tgz", "proxy.tgz", "contract.tgz", "mirrors.tgz", "installer.tgz"]) expect(args).not.toContain(join(bundle, file));
+  });
+
+  it("selects managed and its matched local dependencies only with the managed profile", async () => {
+    const { root, env, bundle, npmArgs, dataHome } = await localBundleFixture();
+    const result = await runCli(["installer", "install", "core", "--local-packages", bundle, "--no-local-bin", "--with-managed"], tsxPath!, env, root);
+    expect(result.code, result.stderr).toBe(0);
+    const args = JSON.parse(await readFile(npmArgs, "utf8"));
+    for (const file of ["core.tgz", "cli.tgz", "managed.tgz", "proxy.tgz", "contract.tgz"]) expect(args).toContain(join(bundle, file));
+    expect(args).not.toContain(join(bundle, "mirrors.tgz"));
+    expect(JSON.parse(await readFile(join(dataHome, "runtime/current/plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: [] });
+  });
+
+  it("upgrades enabled local plugins and their required component peers from the matched bundle", async () => {
+    const { root, env, bundle, npmArgs, dataHome } = await localBundleFixture();
+    const current = join(dataHome, "runtime/current");
+    await mkdir(current, { recursive: true });
+    await writeFile(join(current, "package.json"), JSON.stringify({ dependencies: { "@slop-lab/dim-plugin-host-mirrors": "0.8.0" } }));
+    await writeFile(join(current, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: ["@slop-lab/dim-plugin-host-mirrors"] }));
+    const result = await runCli(["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], tsxPath!, env, root);
+    expect(result.code, result.stderr).toBe(0);
+    const args = JSON.parse(await readFile(npmArgs, "utf8"));
+    expect(args).toContain(join(bundle, "mirrors.tgz"));
+    expect(args).toContain(join(bundle, "managed.tgz"));
+    expect(args).not.toContain("@slop-lab/dim-plugin-host-mirrors@0.8.0");
+    expect(JSON.parse(await readFile(join(current, "plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: ["@slop-lab/dim-plugin-host-mirrors"] });
   });
 
   it("proxies unrecognized args, cwd, and facade env vars through to the configured CLI", async () => {

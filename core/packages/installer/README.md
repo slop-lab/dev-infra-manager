@@ -67,8 +67,24 @@ dim installer install core --with-managed
 This installs `@slop-lab/dim-managed` at the installer's exact version alongside
 the CLI. It is a component, not an enabled plugin, and does not deploy a control
 plane. An installed managed component is retained and updated to the matched
-version on later core installations. Local package bundles include the
-components declared by their `packages.json` manifest.
+version on later core installations. Local package bundles declare the exact
+dependency graph in `packages.json`; base installation selects only CLI/core
+and their required dependencies. `--with-managed` selects the managed component
+and its required dependencies. Previously enabled plugins remain selected and
+use matched bundle artifacts. Missing or mismatched selected dependencies fail
+before package installation instead of falling back to a registry.
+
+Repository source installation uses the same optional profiles:
+
+```bash
+bash scripts/install-source-build.bash
+bash scripts/install-source-build.bash --with-managed
+```
+
+The latter explicitly installs the managed component and bundled DNS, External
+URLs and host mirror plugins, then activates their controller. For manual local
+plugin installation, install core with `--with-managed` first so plugins can use
+its matched component peers.
 
 `--no-local-bin` keeps `dim` behind the mise/facade path. `--local-bin` manages
 one symlink below the selected prefix. The installer refuses to overwrite any

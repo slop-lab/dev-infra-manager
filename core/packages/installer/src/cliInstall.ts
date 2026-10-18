@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, realpath, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   cliExecutable,
@@ -40,10 +40,7 @@ export interface CliInstallOptions {
   readonly plugins?: readonly CliPluginSelection[];
 }
 
-export interface LocalPackageBundle {
-  readonly packageSpecifiers: readonly string[];
-  readonly packageNames: readonly string[];
-}
+export { readLocalPackageBundle, type LocalPackageBundle } from "./localPackageBundle.js";
 
 export interface InstalledCli {
   readonly executable: string;
@@ -154,35 +151,6 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   }
 }
 
-export async function readLocalPackageBundle(directory: string): Promise<LocalPackageBundle> {
-  const bundleDirectory = path.resolve(directory);
-  const manifestPath = path.join(bundleDirectory, "packages.json");
-  const raw: unknown = JSON.parse(await readFile(manifestPath, "utf8"));
-  if (!isRecord(raw) || raw.schemaVersion !== 1 || !Array.isArray(raw.packages)) {
-    throw new Error(`invalid local package bundle manifest: ${manifestPath}`);
-  }
-  const packages = raw.packages.filter((entry) => isRecord(entry) && entry.name !== "@slop-lab/dim-installer");
-  if (!packages.some((entry) => isRecord(entry) && entry.name === "@slop-lab/dim-cli")) {
-    throw new Error("local package bundle does not contain @slop-lab/dim-cli");
-  }
-  const names = new Set<string>();
-  const packageSpecifiers: string[] = [];
-  for (const entry of packages) {
-    if (!isRecord(entry) || typeof entry.name !== "string" || typeof entry.file !== "string") {
-      throw new Error(`invalid local package entry in ${manifestPath}`);
-    }
-    if (names.has(entry.name)) throw new Error(`duplicate local package '${entry.name}'`);
-    names.add(entry.name);
-    if (path.basename(entry.file) !== entry.file || !entry.file.endsWith(".tgz")) {
-      throw new Error(`invalid local package filename '${entry.file}'`);
-    }
-    const tarball = path.join(bundleDirectory, entry.file);
-    await access(tarball, constants.R_OK);
-    packageSpecifiers.push(tarball);
-  }
-  return { packageSpecifiers, packageNames: [...names] };
-}
-
 export async function validateConfiguredCli(cli: DimCliConfig, facadePath: string | undefined): Promise<string> {
   const executable = path.resolve(cli.executable);
   try {
@@ -220,10 +188,6 @@ async function cleanupRuntimeSiblings(managedRoot: string): Promise<void> {
   await Promise.all(entries
     .filter((entry) => entry.isDirectory() && entry.name !== "current" && entry.name !== "sources")
     .map((entry) => rm(path.join(managedRoot, entry.name), { recursive: true, force: true })));
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function errorCode(error: unknown): string | undefined {
