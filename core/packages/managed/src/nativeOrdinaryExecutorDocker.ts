@@ -1,12 +1,18 @@
 import { createHash } from "node:crypto";
 import type { NativeHostClaim } from "./nativeOrdinaryClaimProtocol.js";
-import { CONTROL_NETWORK, DOCKER_HUB_DIRECT_HOSTNAMES, sysboxRegistryDaemonConfig } from "./registryCache.js";
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 
 const labelKeys = [
   "dim.managed", "dim.owner", "dim.host", "dim.capacity", "dim.admission-generation",
   "dim.attempt", "dim.resource", "dim.kind", "dim.digest"
 ] as const;
+
+/** Host-selected routing; direct image access is the default. */
+export type NativeHostImageRouting = {
+  readonly network: string;
+  readonly blockedHostnames: readonly string[];
+  readonly dockerDaemonConfig: string;
+};
 
 export type NativeDockerPaths = {
   readonly workspace: string;
@@ -19,13 +25,13 @@ export async function prepareNativeImages(runner: StreamingCommandRunner, claim:
   await pullAndVerify(runner, claim.descriptor.runnerBaseImage, signal);
 }
 
-export function nativeContainerArgs(claim: NativeHostClaim, paths: NativeDockerPaths): string[] {
+export function nativeContainerArgs(claim: NativeHostClaim, paths: NativeDockerPaths, routing?: NativeHostImageRouting): string[] {
   const labels = ownershipLabels(claim);
   return [
     "run", "--detach", "--name", containerName(claim), "--runtime", "sysbox-runc",
     "--cpus", claim.descriptor.bounds.cpu, "--memory", claim.descriptor.bounds.memoryBytes,
-    "--pids-limit", claim.descriptor.bounds.pids, "--network", CONTROL_NETWORK,
-    ...DOCKER_HUB_DIRECT_HOSTNAMES.map((hostname) => `--add-host=${hostname}:127.0.0.1`),
+    "--pids-limit", claim.descriptor.bounds.pids, "--network", routing?.network ?? "bridge",
+    ...(routing?.blockedHostnames ?? []).map((hostname) => `--add-host=${hostname}:127.0.0.1`),
     ...labels.flatMap((label) => ["--label", label]),
     "--mount", `type=bind,source=${paths.workspace},target=/workspace`,
     "--mount", `type=bind,source=${paths.script},target=/run/dim/job/script,readonly`,
@@ -75,10 +81,6 @@ docker run --rm --network none --cpus "$DIM_JOB_CPUS" --memory "$DIM_JOB_MEMORY"
   --mount type=bind,source=/run/dim/job/script,target=/run/dim/job/script,readonly \
   --entrypoint /bin/bash "$DIM_JOB_IMAGE" --noprofile --norc /run/dim/job/script
 `;
-}
-
-export function nativeDaemonConfig(): string {
-  return sysboxRegistryDaemonConfig();
 }
 
 async function pullAndVerify(runner: StreamingCommandRunner, image: string, signal: AbortSignal): Promise<void> {

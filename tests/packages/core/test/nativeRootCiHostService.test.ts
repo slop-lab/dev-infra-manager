@@ -62,7 +62,7 @@ describe("native root CI installed host service", () => {
     expect(runner.calls).toEqual([["docker", "info", "--format", "{{json .Runtimes}}"]]);
   });
 
-  it("requires the installed host mirror provider before locking capacity", async () => {
+  it("starts direct image access without a mirror provider", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-native-root-host-mirror-"));
     roots.push(root);
@@ -76,8 +76,24 @@ describe("native root CI installed host service", () => {
       lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), runner);
 
     // Then
-    await expect(running).rejects.toThrow(/requires one enabled host mirror provider/);
+    await expect(running).rejects.toThrow(/native root CI host request failed/);
     expect(runner.calls).toEqual([["docker", "info", "--format", "{{json .Runtimes}}"]]);
+  });
+
+  it("fails an explicitly selected mirror instead of silently switching to direct routing", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dim-native-root-host-broken-mirror-")); roots.push(root);
+    const configPath = join(root, "host.json");
+    await writeFile(configPath, JSON.stringify(config(root)), { mode: 0o600 });
+    const runner = new class extends RuntimeRunner {
+      override async run(command: string, args: string[], options?: RunOptions): Promise<CommandResult> {
+        const result = await super.run(command, args, options);
+        return args[0] === "network" && args[1] === "inspect"
+          ? { ...result, exitCode: 1, stderr: "permission denied" } : result;
+      }
+    }('{"sysbox-runc":{}}');
+    await expect(runNativeRootCiHost(configPath, AbortSignal.timeout(1000), options(root), runner))
+      .rejects.toThrow(/permission denied/);
+    expect(runner.calls).toHaveLength(2);
   });
 
   it("locks every configured capacity before any worker can attest or claim", async () => {

@@ -6,7 +6,7 @@ import { NativeHostVerificationError, verifyAndMaterializeCandidate, type Native
   type NativeCandidateVerificationInput } from "./nativeOrdinaryCandidateVerifier.js";
 import { nativeDescriptorDigest } from "./nativeOrdinaryAuthorityProtocol.js";
 import type { NativeHostClaim, NativeHostClaimRenewal, NativeHostClaimRenewalRequest, NativeHostRecoveryRequest } from "./nativeOrdinaryClaimProtocol.js";
-import { cleanupNativeContainer, nativeContainerArgs, nativeDaemonConfig, nativeRunnerScript, prepareNativeImages } from "./nativeOrdinaryExecutorDocker.js";
+import { cleanupNativeContainer, nativeContainerArgs, nativeRunnerScript, prepareNativeImages, type NativeHostImageRouting } from "./nativeOrdinaryExecutorDocker.js";
 import { NativeHostCleanupError, NativeHostFinalizationUncertainError, NativeHostLaunchError, NativeHostLeaseError, NativeHostRecoveryError } from "./nativeOrdinaryExecutorErrors.js";
 import { renewalRequest, startNativeLease, type NativeLease } from "./nativeOrdinaryExecutorLease.js";
 import { emptyNativeOutput, NativeOutputCollector, type NativeBoundedOutput } from "./nativeOrdinaryExecutorOutput.js";
@@ -43,6 +43,7 @@ export type NativeCandidateReadAuthorityFactory = (
 
 export type NativeHostExecutorDependencies = {
   readonly runner: StreamingCommandRunner;
+  readonly imageRouting?: NativeHostImageRouting;
   readonly createReadAuthority: NativeCandidateReadAuthorityFactory;
   readonly renewClaim: (request: NativeHostClaimRenewalRequest, signal: AbortSignal) => Promise<NativeHostClaimRenewal>;
   readonly reportResult: (request: NativeHostResultRequest, signal: AbortSignal) => Promise<void>;
@@ -111,12 +112,12 @@ export async function executeNativeHostClaim(
       descriptorDigest: execution.claim.descriptorDigest, workspace, scriptFile: script, signal
     });
     await writeFile(launcher, nativeRunnerScript(), { mode: 0o500, flag: "wx" });
-    await writeFile(daemonConfig, nativeDaemonConfig(), { mode: 0o400, flag: "wx" });
+    await writeFile(daemonConfig, dependencies.imageRouting?.dockerDaemonConfig ?? "{}\n", { mode: 0o400, flag: "wx" });
     await prepareNativeImages(dependencies.runner, execution.claim, signal);
     signal.throwIfAborted();
     const launched = await dependencies.runner.run("docker", nativeContainerArgs(execution.claim, {
       workspace, script, launcher, daemonConfig
-    }), { signal });
+    }, dependencies.imageRouting), { signal });
     if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) {
       throw new NativeHostLaunchError(launched.stderr.trim().slice(0, 4_096));
     }

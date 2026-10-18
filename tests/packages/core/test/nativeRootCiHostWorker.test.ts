@@ -1,4 +1,5 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { CONTROL_NETWORK, DOCKER_HUB_DIRECT_HOSTNAMES, sysboxRegistryDaemonConfig } from "../../../../core/packages/managed/src/registryCache.js";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -25,7 +26,7 @@ afterEach(async () => {
 });
 
 describe("native root CI installed host capacity", () => {
-  it("executes one reserved candidate with Sysbox, cleans it, and reports schema-3 evidence", async () => {
+  it.each([false, true])("executes one reserved candidate with selected mirror routing=%s and reports schema-3 evidence", async (mirrored) => {
     // Given
     const fixture = await reservationFixture("native-root-ci-host-worker");
     fixtures.push(fixture);
@@ -38,16 +39,29 @@ describe("native root CI installed host capacity", () => {
         controller.abort();
       }
     };
+    const daemonConfigurations: unknown[] = [];
     const runner = new ExecutorRunner();
+    runner.beforeLaunch = async (args) => {
+      const mount = args.find((argument) => argument.includes("target=/etc/docker/daemon.json,"));
+      const source = mount?.match(/source=([^,]+)/)?.[1];
+      if (!source) throw new Error("missing daemon configuration mount");
+      daemonConfigurations.push(JSON.parse(await readFile(source, "utf8")));
+    };
     const journalPath = join(await temporaryRoot(), "primary.json");
 
     // When
     await serveNativeRootCiHostCapacity({ client: observed, runner, gitExecutable: "/usr/bin/git",
-      nativeGitEndpoint: fixture.nativeOrigin, journalPath, idleDelayMilliseconds: 1 }, controller.signal);
+      nativeGitEndpoint: fixture.nativeOrigin, journalPath, idleDelayMilliseconds: 1,
+      ...(mirrored ? { imageRouting: { network: CONTROL_NETWORK, blockedHostnames: DOCKER_HUB_DIRECT_HOSTNAMES,
+        dockerDaemonConfig: sysboxRegistryDaemonConfig() } } : {}) }, controller.signal);
 
     // Then
     const dockerRun = runner.calls.find(({ args }) => args[0] === "run");
     expect(dockerRun?.args).toContain("sysbox-runc");
+    expect(dockerRun?.args).toEqual(expect.arrayContaining(["--network", mirrored ? CONTROL_NETWORK : "bridge"]));
+    expect(dockerRun?.args.filter((argument) => argument.startsWith("--add-host=")))
+      .toEqual(mirrored ? DOCKER_HUB_DIRECT_HOSTNAMES.map((hostname) => `--add-host=${hostname}:127.0.0.1`) : []);
+    expect(daemonConfigurations).toEqual([mirrored ? JSON.parse(sysboxRegistryDaemonConfig()) : {}]);
     expect(runner.calls.some(({ args }) => args[0] === "container" && args[1] === "rm")).toBe(true);
     const rows = resultRows(fixture.database);
     const result = Array.isArray(rows.results) ? rows.results[0] : undefined;

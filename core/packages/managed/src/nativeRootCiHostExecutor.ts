@@ -1,3 +1,4 @@
+import type { NativeHostImageRouting } from "./nativeOrdinaryExecutorDocker.js";
 import type { NativeHostClaim, NativeHostRecoveryRequest } from "./nativeOrdinaryClaimProtocol.js";
 import { cleanupNativeContainer } from "./nativeOrdinaryExecutorDocker.js";
 import { NativeHostCleanupError } from "./nativeOrdinaryExecutorErrors.js";
@@ -18,6 +19,7 @@ import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 export type NativeRootCiHostExecutionDependencies = {
   readonly client: NativeRootCiHostClient;
   readonly runner: StreamingCommandRunner;
+  readonly imageRouting?: NativeHostImageRouting;
   readonly gitExecutable: string;
   readonly nativeGitEndpoint: string;
   readonly journal: NativeRootCiHostJournal;
@@ -31,10 +33,11 @@ export async function executeNativeRootCiHostClaim(
   privateRootIdentity: NativeHostPrivateRootIdentity,
   signal: AbortSignal
 ): Promise<NativeHostExecutionResult> {
-  const legacyClaim = nativeRootCiHostExecutorClaim(claim, active);
+  const executorClaim = nativeRootCiHostExecutorClaim(claim, active);
   const privateRoot = dependencies.journal.privateRoot(privateRootIdentity);
   return executeNativeHostClaim({
     runner: dependencies.runner,
+    ...(dependencies.imageRouting === undefined ? {} : { imageRouting: dependencies.imageRouting }),
     createReadAuthority: async (input) => {
       const lease = await dependencies.client.candidateLease(active, dependencies.randomId(), input.signal);
       return createNativeGitCandidateReadAuthorityFactory({
@@ -55,7 +58,7 @@ export async function executeNativeRootCiHostClaim(
     recoverClaim: (request, requestSignal) => recover(dependencies, claim, active,
       privateRoot.identity, request, requestSignal),
     randomId: dependencies.randomId
-  }, { claim: legacyClaim, signal, managedPrivateRoot: { root: privateRoot,
+  }, { claim: executorClaim, signal, managedPrivateRoot: { root: privateRoot,
     publishCreated: (identity) => dependencies.journal.save({ kind: "active", claim, active, privateRoot: identity }) } });
 }
 

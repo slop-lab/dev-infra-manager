@@ -21,7 +21,8 @@ not apply to the base workspace path.
 
 - Prepare private control-plane service configuration and initial review policy
   from exact image digests, then connect managed clients to the live generation
-  for a first Project without enabling CI.
+  for a first Project without enabling CI. Optional native root CI hosts use
+  direct image access by default; enabled mirrors select their explicit routing.
 
 - Reviewer web now uses the installed control plane's human-reviewer APIs to
   find published proposal evidence, inspect diffs, approve and revoke decisions.

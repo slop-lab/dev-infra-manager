@@ -1,3 +1,4 @@
+import type { NativeHostImageRouting } from "./nativeOrdinaryExecutorDocker.js";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { tryAcquireKernelGuard, type KernelGuard } from "@slop-lab/dim-core";
@@ -20,6 +21,7 @@ import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 export type NativeRootCiHostCapacityDependencies = {
   readonly client: NativeRootCiHostClient;
   readonly runner: StreamingCommandRunner;
+  readonly imageRouting?: NativeHostImageRouting;
   readonly gitExecutable: string;
   readonly nativeGitEndpoint: string;
   readonly journalPath: string;
@@ -108,7 +110,7 @@ async function executeActive(
   await journal.save({ kind: "active", claim, active, privateRoot });
   await executeNativeRootCiHostClaim({ client: dependencies.client, runner: dependencies.runner,
     gitExecutable: dependencies.gitExecutable, nativeGitEndpoint: dependencies.nativeGitEndpoint,
-    journal, randomId }, claim, active, privateRoot, signal);
+    journal, randomId, ...(dependencies.imageRouting === undefined ? {} : { imageRouting: dependencies.imageRouting }) }, claim, active, privateRoot, signal);
 }
 
 async function replay(
