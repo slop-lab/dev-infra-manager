@@ -7,34 +7,16 @@ import { validateLifecycleName } from "@slop-lab/dim-core";
 const commonFields = ["recordType", "phase", "name", "projectId", "serviceId", "ownerHostId", "generationId",
   "rootRepositoryId", "rootAlias", "protectedRef", "expectedCommit", "expectedTree", "reviewPolicy",
   "bundleDigest", "bundleSize"] as const;
-const modernFields = ["schemaVersion", ...commonFields] as const;
-const legacyFields = ["schemaVersion", ...commonFields, "requiredJobs", "importReceipt"] as const;
+const draftFields = ["schemaVersion", ...commonFields] as const;
 const receiptFields = ["schemaVersion", "serviceId", "projectId", "rootRepositoryId", "generationId",
   "importNonce", "protectedRef", "expectedCommit", "policyDigest", "bundleDigest", "bundleSize",
   "resolvedTree", "phase"] as const;
 const digestPattern = /^[0-9a-f]{64}$/;
 const objectIdPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
-type ModernDraftBase = DraftIdentity & {
+type DraftBase = DraftIdentity & {
   readonly schemaVersion: 2;
   readonly reviewPolicy: NativeRootBootstrapPolicy["reviewPolicy"];
-};
-type LegacyRequiredJob = { readonly name: string; readonly kind: "ordinary-sysbox" | "qemu" };
-type LegacyReviewPolicy = {
-  readonly protectedRef: string;
-  readonly policyRevision: string;
-  readonly requiredReviewRevision: string;
-  readonly requiredJobSetRevision: string;
-  readonly requiredJobNames: readonly string[];
-  readonly requiredReviewerIds: readonly string[];
-  readonly pathReviewerRules: NativeRootBootstrapPolicy["reviewPolicy"]["pathReviewerRules"];
-};
-type LegacyImportedDraft = DraftIdentity & {
-  readonly schemaVersion: 1;
-  readonly phase: "root-imported";
-  readonly requiredJobs: readonly LegacyRequiredJob[];
-  readonly reviewPolicy: LegacyReviewPolicy;
-  readonly importReceipt: NativeGitRootImportResult;
 };
 type DraftIdentity = {
   readonly recordType: "native-project-draft";
@@ -52,10 +34,10 @@ type DraftIdentity = {
   readonly bundleSize: number;
 };
 
-export type NativeProjectDraft = LegacyImportedDraft | (ModernDraftBase & (
+export type NativeProjectDraft = DraftBase & (
   | { readonly phase: "import-pending" }
   | { readonly phase: "root-imported"; readonly importReceipt: NativeGitRootImportResult }
-));
+);
 
 export class NativeProjectDraftError extends UserError {
   readonly name = "NativeProjectDraftError";
@@ -63,41 +45,18 @@ export class NativeProjectDraftError extends UserError {
 
 export function parseNativeProjectDraft(input: unknown): NativeProjectDraft {
   if (!isRecord(input)) invalid();
-  if (input.schemaVersion === 1) return parseLegacyImportedDraft(input);
   if (input.schemaVersion !== 2) invalid();
   const phase = input.phase;
   if (phase !== "import-pending" && phase !== "root-imported") invalid();
-  const record = exactRecord(input, phase === "root-imported" ? [...modernFields, "importReceipt"] : modernFields);
+  const record = exactRecord(input, phase === "root-imported" ? [...draftFields, "importReceipt"] : draftFields);
   const identity = parseIdentity(record);
-  const policy = parseModernPolicy(record, identity);
-  const base: ModernDraftBase = { schemaVersion: 2, ...identity, reviewPolicy: policy };
+  const policy = parsePolicy(record, identity);
+  const base: DraftBase = { schemaVersion: 2, ...identity, reviewPolicy: policy };
   if (phase === "import-pending") return { ...base, phase };
   return { ...base, phase, importReceipt: parseReceipt(record.importReceipt, base, policy) };
 }
 
-function parseLegacyImportedDraft(input: Readonly<Record<string, unknown>>): LegacyImportedDraft {
-  const record = exactRecord(input, legacyFields);
-  if (record.phase !== "root-imported") invalid();
-  const identity = parseIdentity(record);
-  const jobs = parseLegacyJobs(record.requiredJobs);
-  const review = exactRecord(record.reviewPolicy, ["protectedRef", "policyRevision", "requiredReviewRevision",
-    "requiredJobSetRevision", "requiredJobNames", "requiredReviewerIds", "pathReviewerRules"]);
-  const compiled = compilePolicy(identity, review.requiredReviewerIds, review.pathReviewerRules, jobs);
-  const reviewers = { requiredReviewerIds: compiled.requiredReviewerIds,
-    pathReviewerRules: compiled.pathReviewerRules };
-  const policy: LegacyReviewPolicy = {
-    protectedRef: identity.protectedRef,
-    policyRevision: revision("policy", { protectedRef: identity.protectedRef, ...reviewers, requiredJobs: jobs }),
-    requiredReviewRevision: revision("reviewers", reviewers),
-    requiredJobSetRevision: revision("jobs", jobs),
-    requiredJobNames: jobs.map(({ name }) => name), ...reviewers
-  };
-  if (JSON.stringify(record.reviewPolicy) !== JSON.stringify(policy)) invalid();
-  const base = { schemaVersion: 1 as const, ...identity, requiredJobs: jobs, reviewPolicy: policy };
-  return { ...base, phase: "root-imported", importReceipt: parseReceipt(record.importReceipt, base, policy) };
-}
-
-function parseModernPolicy(
+function parsePolicy(
   record: Readonly<Record<string, unknown>>,
   identity: DraftIdentity
 ): NativeRootBootstrapPolicy["reviewPolicy"] {
@@ -149,15 +108,6 @@ function parseIdentity(record: Readonly<Record<string, unknown>>): DraftIdentity
     bundleDigest: field(record.bundleDigest, digestPattern), bundleSize };
 }
 
-function parseLegacyJobs(value: unknown): readonly LegacyRequiredJob[] {
-  if (!Array.isArray(value)) invalid();
-  return value.map((entry) => {
-    const job = exactRecord(entry, ["name", "kind"]);
-    if (typeof job.name !== "string" || (job.kind !== "ordinary-sysbox" && job.kind !== "qemu")) invalid();
-    return { name: job.name, kind: job.kind };
-  });
-}
-
 function parseReceipt(value: unknown, base: DraftIdentity, policy: unknown): NativeGitRootImportResult {
   const receipt = exactRecord(value, receiptFields);
   const policyDigest = createHash("sha256").update(JSON.stringify(policy)).digest("hex");
@@ -173,10 +123,6 @@ function parseReceipt(value: unknown, base: DraftIdentity, policy: unknown): Nat
     protectedRef: base.protectedRef, expectedCommit: base.expectedCommit, policyDigest,
     bundleDigest: base.bundleDigest, bundleSize: base.bundleSize, resolvedTree: base.expectedTree,
     phase: "root-imported" };
-}
-
-function revision(domain: "policy" | "reviewers" | "jobs", input: unknown): string {
-  return createHash("sha256").update(`dim-native-${domain}-v1\0`).update(JSON.stringify(input)).digest("hex");
 }
 
 function exactRecord(value: unknown, fields: readonly string[]): Readonly<Record<string, unknown>> {

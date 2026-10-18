@@ -127,43 +127,18 @@ describe("native Project draft store", () => {
     expect(await readFile(recordPath)).toEqual(before);
   });
 
-  it("reads and replays a completed legacy draft byte-identically without treating pending legacy as current", async () => {
-    // Given
+  it("rejects obsolete draft schemas without changing records or replaying imports", async () => {
     const { root, claim } = await fixture();
     const store = new NativeProjectDraftStore(root);
-    const modern = await store.claim(claim);
-    const jobs = claim.reviewPolicy.requiredJobs.map(({ name, kind }) => ({ name, kind }));
-    const reviewers = { requiredReviewerIds: claim.reviewPolicy.requiredReviewerIds,
-      pathReviewerRules: claim.reviewPolicy.pathReviewerRules };
-    const legacyPolicy = {
-      protectedRef: claim.protectedRef,
-      policyRevision: createHash("sha256").update("dim-native-policy-v1\0")
-        .update(JSON.stringify({ protectedRef: claim.protectedRef, ...reviewers, requiredJobs: jobs })).digest("hex"),
-      requiredReviewRevision: createHash("sha256").update("dim-native-reviewers-v1\0")
-        .update(JSON.stringify(reviewers)).digest("hex"),
-      requiredJobSetRevision: createHash("sha256").update("dim-native-jobs-v1\0")
-        .update(JSON.stringify(jobs)).digest("hex"),
-      requiredJobNames: jobs.map(({ name }) => name), ...reviewers
-    };
-    const legacyReceipt = { ...receipt(claim),
-      policyDigest: createHash("sha256").update(JSON.stringify(legacyPolicy)).digest("hex") };
-    const legacy = { ...modern, schemaVersion: 1, phase: "root-imported", requiredJobs: jobs,
-      reviewPolicy: legacyPolicy, importReceipt: legacyReceipt };
+    const draft = await store.claim(claim);
     const recordPath = join(root, "native-project-drafts", "acme.json");
-    await writeFile(recordPath, `${JSON.stringify(legacy)}\n`, { mode: 0o600 });
-    const before = await readFile(recordPath);
-
-    // When
-    const read = await new NativeProjectDraftStore(root).read(claim.name);
-    const replayed = await store.claim({ ...claim, generationId: "b".repeat(64) });
-
-    // Then
-    expect(read).toEqual(legacy);
-    expect(replayed).toEqual(legacy);
-    expect(await readFile(recordPath)).toEqual(before);
-    await writeFile(recordPath, `${JSON.stringify({ ...legacy, phase: "import-pending",
-      importReceipt: undefined })}\n`, { mode: 0o600 });
-    await expect(store.read(claim.name)).rejects.toBeInstanceOf(NativeProjectDraftStoreError);
+    for (const phase of ["import-pending", "root-imported"]) {
+      await writeFile(recordPath, `${JSON.stringify({ ...draft, schemaVersion: 1, phase })}\n`, { mode: 0o600 });
+      const before = await readFile(recordPath);
+      await expect(store.read(claim.name)).rejects.toBeInstanceOf(NativeProjectDraftStoreError);
+      await expect(store.claim(claim)).rejects.toBeInstanceOf(NativeProjectDraftStoreError);
+      expect(await readFile(recordPath)).toEqual(before);
+    }
   });
 
   it("keeps a pending draft bound to its original generation without rewriting it", async () => {

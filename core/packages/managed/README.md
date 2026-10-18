@@ -69,9 +69,11 @@ operator configurations and credentials on trusted hosts; workspace containers
 receive only their scoped Git capabilities. The separate web package owns any
 reviewer UI and browser authentication.
 
-Start the optional reviewer UI without copying credentials from service JSON:
+Install the separate optional web package, then start the reviewer UI without
+copying credentials from service JSON:
 
 ```bash
+mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
 dim-reviewer-web init "$HOME/dim-control-plane/connections/reviewer.json" \
   --project example --output "$HOME/dim-reviewer.json"
 dim-reviewer-web serve "$HOME/dim-reviewer.json"

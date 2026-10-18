@@ -18,10 +18,12 @@ outside this slice.
 
 ## First use
 
-After `dim managed control-plane connect SETUP --endpoint ORIGIN`, use its private
-reviewer connection to generate a browser login and service configuration:
+Install the optional web package separately; `--with-managed` does not install
+a browser service. After `dim managed control-plane connect SETUP --endpoint ORIGIN`,
+use its private reviewer connection to generate a browser login and service configuration:
 
 ```sh
+mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
 dim-reviewer-web init SETUP/connections/reviewer.json --project my-project --output ~/.config/dim/reviewer-web.json --port 9081
 dim-reviewer-web serve ~/.config/dim/reviewer-web.json
 ```

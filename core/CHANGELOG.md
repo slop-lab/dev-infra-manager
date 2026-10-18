@@ -231,8 +231,7 @@ not apply to the base workspace path.
   commit and tree into a private, read-only, native-only host snapshot, checking
   Git object identities and allowing only safe contained relative symlinks.
   Unsafe lifecycle links, gitlinks, oversized objects, stale refs, and foreign
-  cache nodes cannot publish a snapshot. Fully imported roots, including
-  byte-preserved completed schema-1 host drafts from the earlier unreleased path,
+  cache nodes cannot publish a snapshot. Current schema-2 imported host drafts
   remain readable
   through later serving generations without rewriting the import row, receipt,
   bundle, ref or draft; incomplete earlier-generation imports fail closed.

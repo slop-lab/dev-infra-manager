@@ -49,29 +49,10 @@ describe("native Project draft codec", () => {
     ]) expect(() => parseNativeProjectDraft(invalid)).toThrow(NativeProjectDraftError);
   });
 
-  it("accepts completed legacy schema-1 drafts only as immutable proof data", () => {
-    const legacyJobs = [
-      { name: "integration", kind: "qemu" }, { name: "source", kind: "ordinary-sysbox" }
-    ] as const;
-    const legacyReviewers = { requiredReviewerIds: ["owner"], pathReviewerRules: [] } as const;
-    const legacyPolicy = {
-      protectedRef: "refs/heads/main", policyRevision: createHash("sha256")
-        .update("dim-native-policy-v1\0").update(JSON.stringify({
-          protectedRef: "refs/heads/main", ...legacyReviewers, requiredJobs: legacyJobs
-        })).digest("hex"),
-      requiredReviewRevision: createHash("sha256").update("dim-native-reviewers-v1\0")
-        .update(JSON.stringify(legacyReviewers)).digest("hex"),
-      requiredJobSetRevision: createHash("sha256").update("dim-native-jobs-v1\0")
-        .update(JSON.stringify(legacyJobs)).digest("hex"),
-      requiredJobNames: ["integration", "source"], requiredReviewerIds: ["owner"], pathReviewerRules: []
-    } as const;
-    const legacyBase = { ...pending, schemaVersion: 1, requiredJobs: legacyJobs, reviewPolicy: legacyPolicy } as const;
-    const legacyReceipt = { ...importReceipt,
-      policyDigest: createHash("sha256").update(JSON.stringify(legacyPolicy)).digest("hex") };
-
-    expect(parseNativeProjectDraft({ ...legacyBase, phase: "root-imported",
-      importReceipt: legacyReceipt })).toEqual({ ...legacyBase, phase: "root-imported", importReceipt: legacyReceipt });
-    expect(() => parseNativeProjectDraft({ ...legacyBase, phase: "import-pending" }))
-      .toThrow(NativeProjectDraftError);
+  it("rejects obsolete draft schemas in every phase", () => {
+    for (const phase of ["import-pending", "root-imported"]) {
+      expect(() => parseNativeProjectDraft({ ...pending, schemaVersion: 1, phase, importReceipt }))
+        .toThrow(NativeProjectDraftError);
+    }
   });
 });

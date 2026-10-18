@@ -152,21 +152,6 @@ export class NativeProjectDraftStore {
 }
 
 function sameIntent(left: NativeProjectDraft, right: NativeProjectDraft): boolean {
-  if (left.schemaVersion === 1) {
-    if (right.schemaVersion !== 2) return false;
-    return left.phase === "root-imported"
-      && left.name === right.name && left.projectId === right.projectId && left.serviceId === right.serviceId
-      && left.ownerHostId === right.ownerHostId && left.rootRepositoryId === right.rootRepositoryId
-      && left.rootAlias === right.rootAlias && left.protectedRef === right.protectedRef
-      && left.expectedCommit === right.expectedCommit && left.expectedTree === right.expectedTree
-      && left.bundleDigest === right.bundleDigest && left.bundleSize === right.bundleSize
-      && JSON.stringify(left.requiredJobs) === JSON.stringify(right.reviewPolicy.requiredJobs.map(
-        ({ name, kind }) => ({ name, kind })
-      ))
-      && JSON.stringify(left.reviewPolicy.requiredReviewerIds)
-        === JSON.stringify(right.reviewPolicy.requiredReviewerIds)
-      && JSON.stringify(left.reviewPolicy.pathReviewerRules) === JSON.stringify(right.reviewPolicy.pathReviewerRules);
-  }
   const leftPending = { ...left, phase: "import-pending" };
   if (left.phase === "root-imported") {
     Reflect.deleteProperty(leftPending, "importReceipt");
