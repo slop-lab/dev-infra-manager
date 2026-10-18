@@ -21,6 +21,7 @@ import {
 import { atomicWrite, run } from "./runtimeFiles.js";
 import { runStagedStatePreflight } from "./statePreflight.js";
 import type { InstallerOperation } from "./installProgress.js";
+import { managedControllerIsActive } from "./controllerActivation.js";
 
 export type { CliPluginSelection } from "./cliPluginGraph.js";
 export { installManagedSymlink } from "./managedSymlink.js";
@@ -56,6 +57,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   const managedRoot = path.join(dataHome, "runtime");
   const currentDirectory = path.join(managedRoot, "current");
   await mkdir(managedRoot, { recursive: true, mode: 0o700 });
+  const restartController = options.restartController ?? await managedControllerIsActive(currentDirectory);
   const stagingDirectory = await mkdtemp(path.join(managedRoot, ".staging-"));
   const requestedPackages = options.packageSpecifiers
     ?? (options.version ? [`@slop-lab/dim-cli@${options.version}`] : undefined);
@@ -99,7 +101,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     promoted = true;
     const executable = cliExecutable(dataHome);
     await access(executable, constants.X_OK);
-    if (options.restartController !== false) {
+    if (restartController) {
       controllerRestartAttempted = true;
       options.operation?.reportProgress("controller readiness");
       try {

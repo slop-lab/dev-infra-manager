@@ -21,7 +21,7 @@ Source: https://github.com/slop-lab/dev-infra-manager`);
 export function printInstallerHelp(): void {
   console.log(`Usage:
   dim installer
-  dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [--local-packages PATH] [--defer-controller-restart]
+  dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--with-managed] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [--local-packages PATH] [--defer-controller-restart]
   dim installer install control-plane --config FILE
   dim installer recover control-plane --roll-forward --generation GENERATION
   dim installer install plugin PACKAGE@EXACT_VERSION...
@@ -40,12 +40,13 @@ Options:
   --no-local-bin  Install privately for facade use without ~/.local/bin/dim
   --local-bin     Create a managed dim symlink in the user bin directory
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
+  --with-managed Install optional managed Git, review and CI components
   --host-mirror-plugin PACKAGE@EXACT_VERSION
-                   Install and enable the reviewed required host mirror plugin
+                   Optionally install and enable the reviewed host mirror plugin
   --local-packages PATH
                    Install a packages.json bundle produced by this repository
   --defer-controller-restart
-                   Defer restart until local plugins are activated
+                   Defer an active controller's restart until local plugins are activated
   -h, --help      Show this help
 
 Under mise, --no-local-bin is the default. Elsewhere, --local-bin is the default.

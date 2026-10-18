@@ -4,11 +4,13 @@ import { access, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, wr
 import path from "node:path";
 import { atomicWrite, readManifest, readPackageJson, run } from "./runtimeFiles.js";
 import type { InstallerOperation } from "./installProgress.js";
+import { managedControllerIsActive } from "./controllerActivation.js";
 
 export interface InstallOptions {
   readonly pluginHome: string;
   readonly npmCommand?: string;
   readonly operation?: InstallerOperation;
+  readonly restartController?: boolean;
 }
 
 export async function isPluginEnabled(name: string, pluginHome: string): Promise<boolean> {
@@ -21,6 +23,7 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
   const currentDirectory = path.resolve(options.pluginHome);
   const managedRoot = path.dirname(currentDirectory);
   await mkdir(managedRoot, { recursive: true, mode: 0o700 });
+  const restartController = options.restartController ?? await managedControllerIsActive(currentDirectory);
   const stagingDirectory = await mkdtemp(path.join(managedRoot, ".plugin-staging-"));
   const backupDirectory = path.join(managedRoot, `.plugin-previous-${process.pid}-${Date.now()}`);
   let previousMoved = false;
@@ -43,17 +46,19 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
     }
     await rename(stagingDirectory, currentDirectory);
     promoted = true;
-    controllerRestartAttempted = true;
-    options.operation?.reportProgress("controller readiness");
-    try {
-      await run(
-        path.join(currentDirectory, "node_modules", ".bin", "dim"),
-        ["controller", "restart"],
-        currentDirectory,
-        options.operation
-      );
-    } catch (error) {
-      throw new Error("target controller restart/readiness failed", { cause: error });
+    if (restartController) {
+      controllerRestartAttempted = true;
+      options.operation?.reportProgress("controller readiness");
+      try {
+        await run(
+          path.join(currentDirectory, "node_modules", ".bin", "dim"),
+          ["controller", "restart"],
+          currentDirectory,
+          options.operation
+        );
+      } catch (error) {
+        throw new Error("target controller restart/readiness failed", { cause: error });
+      }
     }
     await rm(backupDirectory, { recursive: true, force: true });
     return installed;

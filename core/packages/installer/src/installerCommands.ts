@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import {
   configuredCli,
   defaultBinDirectory,
+  defaultDataHome,
   defaultPluginHome,
   installDimCli,
   installPlugins,
@@ -20,8 +21,10 @@ import { printFacadeHelp, printInstallCoreHelp, printInstallerHelp, printInstall
 import { installerVersion } from "./installerVersion.js";
 import { withInstallerProgress } from "./installProgress.js";
 import { installControlPlaneCommand, recoverControlPlaneCommand } from "./controlPlaneCommand.js";
+import { readPackageJson } from "./runtimeFiles.js";
 
 const HOST_MIRROR_PLUGIN = "@slop-lab/dim-plugin-host-mirrors";
+const MANAGED_COMPONENT = "@slop-lab/dim-managed";
 
 export async function installerCommand(input: readonly string[]): Promise<void> {
   let commandArgs = input;
@@ -72,8 +75,7 @@ Installer commands may then require an explicit pinned npx invocation. Keeping D
       const localBin = localBinPrompt(noLocalBin);
       await installCore(
         localBin.exposeOnPath(await prompt.question(localBin.question)),
-        defaultBinDirectory(),
-        (question) => prompt.question(question)
+        defaultBinDirectory()
       );
     }
     if (choice === "2" || choice === "3") {
@@ -99,6 +101,7 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
       "local-packages": { type: "string" },
       "defer-controller-restart": { type: "boolean" },
       "host-mirror-plugin": { type: "string" },
+      "with-managed": { type: "boolean" },
       prefix: { type: "string" }
     }
   });
@@ -119,21 +122,24 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
   if (bundle !== undefined && parsed.values["host-mirror-plugin"] !== undefined) {
     throw new Error("--host-mirror-plugin cannot be used with --local-packages");
   }
+  if (bundle !== undefined && parsed.values["with-managed"] && !bundle.packageNames.includes(MANAGED_COMPONENT)) {
+    throw new Error(`the local package bundle does not contain ${MANAGED_COMPONENT}`);
+  }
   const version = await installerVersion();
+  const packages = bundle ?? await selectCorePackages(version, parsed.values["with-managed"] === true);
   const plugins = bundle === undefined
     ? await selectHostMirrorPlugin(
       version,
-      parsed.values["host-mirror-plugin"],
-      stdin.isTTY && stdout.isTTY ? promptHostMirrorPlugin : undefined
+      parsed.values["host-mirror-plugin"]
     )
     : [];
   const installed = bundle === undefined
     ? await withInstallerProgress("core", async (operation) => installDimCli({
-      version, exposeOnPath, binDirectory, operation, plugins
+      ...packages, version, exposeOnPath, binDirectory, operation, plugins
     }))
     : await withInstallerProgress("core", (operation) => installDimCli({
       ...bundle, exposeOnPath, binDirectory, operation,
-      restartController: parsed.values["defer-controller-restart"] !== true
+      ...(parsed.values["defer-controller-restart"] ? { restartController: false } : {})
     }));
   console.log(`${bundle ? "Installed local" : "Installed"} DIM CLI ${installed.version} at ${installed.executable}`);
   if (installed.symlink) console.log(`Linked ${installed.symlink} -> ${installed.executable}`);
@@ -142,13 +148,13 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
 
 async function installCore(
   exposeOnPath: boolean,
-  binDirectory: string,
-  question: (text: string) => Promise<string>
+  binDirectory: string
 ): Promise<void> {
   const version = await installerVersion();
-  const plugins = await selectHostMirrorPlugin(version, undefined, question);
+  const plugins = await selectHostMirrorPlugin(version, undefined);
+  const packages = await selectCorePackages(version, false);
   const installed = await withInstallerProgress("core", (operation) =>
-    installDimCli({ version, exposeOnPath, binDirectory, operation, plugins }));
+    installDimCli({ ...packages, version, exposeOnPath, binDirectory, operation, plugins }));
   console.log(`Installed DIM CLI ${version} at ${installed.executable}`);
   if (!installed.symlink) {
     console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
@@ -162,39 +168,24 @@ async function installCore(
   }
 }
 
+async function selectCorePackages(version: string, withManaged: boolean) {
+  const previous = await readPackageJson(path.join(defaultDataHome(), "runtime/current/package.json"));
+  const names = ["@slop-lab/dim-cli"];
+  if (withManaged || Object.hasOwn(previous?.dependencies ?? {}, MANAGED_COMPONENT)) names.push(MANAGED_COMPONENT);
+  return { packageNames: names, packageSpecifiers: names.map((name) => `${name}@${version}`) };
+}
+
 async function selectHostMirrorPlugin(
   version: string,
-  supplied: string | undefined,
-  question: ((text: string) => Promise<string>) | undefined
+  supplied: string | undefined
 ): Promise<readonly { readonly name: string; readonly specifier: string }[]> {
   const expected = `${HOST_MIRROR_PLUGIN}@${version}`;
   if (supplied !== undefined && supplied !== expected) {
     throw new Error(`--host-mirror-plugin must be the reviewed package '${expected}'`);
   }
   const enabled = await isPluginEnabled(HOST_MIRROR_PLUGIN, defaultPluginHome());
-  if (supplied === undefined && !enabled) {
-    if (question === undefined) {
-      throw new Error(
-        `the required host mirror provider is not enabled; retry with --host-mirror-plugin '${expected}'`
-      );
-    }
-    const answer = (await question(
-      `Install and enable the required reviewed host plugin ${expected}? [Y/n] `
-    )).trim().toLowerCase();
-    if (answer !== "" && answer !== "y" && answer !== "yes") {
-      throw new Error(`the required host mirror provider was declined; no DIM runtime was installed`);
-    }
-  }
+  if (supplied === undefined && !enabled) return [];
   return [{ name: HOST_MIRROR_PLUGIN, specifier: expected }];
-}
-
-async function promptHostMirrorPlugin(question: string): Promise<string> {
-  const prompt = createInterface({ input: stdin, output: stdout });
-  try {
-    return await prompt.question(question);
-  } finally {
-    prompt.close();
-  }
 }
 
 async function installPluginCommand(commandArgs: readonly string[]): Promise<void> {

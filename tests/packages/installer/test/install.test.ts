@@ -139,7 +139,7 @@ describe("@slop-lab/dim-installer", () => {
         version: "9.9.9",
         executable
       });
-      expect(JSON.parse(await readFile(controllerArgsFile, "utf8"))).toEqual([["controller", "restart"]]);
+      await expect(access(controllerArgsFile)).rejects.toMatchObject({ code: "ENOENT" });
     });
 
     it("installs and activates selected plugins in the promoted graph before controller readiness", async () => {
@@ -157,6 +157,7 @@ describe("@slop-lab/dim-installer", () => {
 
       // When
       await installDimCli({
+        restartController: true,
         version: "9.9.9",
         plugins: [{
           name: "@slop-lab/dim-plugin-host-mirrors",
@@ -420,6 +421,7 @@ describe("@slop-lab/dim-installer", () => {
 
       // When
       const installation = installDimCli({
+        restartController: true,
         version: "2.0.0",
         exposeOnPath: true,
         npmCommand: npm,
@@ -464,6 +466,7 @@ describe("@slop-lab/dim-installer", () => {
 
       // When
       const installation = installDimCli({
+        restartController: true,
         version: "2.0.0",
         exposeOnPath: true,
         npmCommand: npm,
@@ -503,6 +506,7 @@ describe("@slop-lab/dim-installer", () => {
 
       // When
       const installation = installDimCli({
+        restartController: true,
         version: "2.0.0",
         exposeOnPath: false,
         npmCommand: npm,
@@ -548,6 +552,7 @@ describe("@slop-lab/dim-installer", () => {
 
       // When
       const installation = installDimCli({
+        restartController: true,
         version: "2.0.0",
         exposeOnPath: true,
         npmCommand: npm,
@@ -592,6 +597,7 @@ describe("@slop-lab/dim-installer", () => {
       await writeFile(join(current, "sentinel"), "previous install");
 
       await expect(installDimCli({
+        restartController: true,
         version: "2.0.0",
         plugins: [{
           name: "@slop-lab/dim-plugin-host-mirrors",
@@ -625,6 +631,7 @@ describe("@slop-lab/dim-installer", () => {
       const abort = new AbortController();
 
       await expect(installDimCli({
+        restartController: true,
         version: "2.0.0",
         exposeOnPath: false,
         npmCommand: npm,
@@ -912,7 +919,7 @@ process.exit("new-plugin" in dependencies ? 9 : 0);
       await writeFakePluginNpm(npm, { argsFile: join(root, "arguments.json") });
 
       // When
-      const installation = installPlugins(["new-plugin@2.0.0"], { pluginHome, npmCommand: npm });
+      const installation = installPlugins(["new-plugin@2.0.0"], { pluginHome, npmCommand: npm, restartController: true });
 
       // Then
       await expect(installation).rejects.toThrow(/controller restart/);

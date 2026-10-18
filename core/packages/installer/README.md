@@ -9,15 +9,13 @@ DIM supports Linux hosts only. Pin and review one exact release:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
-dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
+dim installer install core
 ```
 
 The equivalent one-shot form is:
 
 ```bash
-npx '@slop-lab/dim-installer@0.10.0' installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
+npx '@slop-lab/dim-installer@0.10.0' installer install core
 ```
 
 ## Commands
@@ -25,7 +23,7 @@ npx '@slop-lab/dim-installer@0.10.0' installer install core \
 ```text
 dim installer
 dim installer install core [--local-bin|--no-local-bin] [--prefix PATH]
-  --host-mirror-plugin PACKAGE@EXACT_VERSION
+  [--with-managed] [--host-mirror-plugin PACKAGE@EXACT_VERSION]
 dim installer install control-plane --config ABSOLUTE_FILE
 dim installer recover control-plane --roll-forward --generation GENERATION
 dim installer install plugin PACKAGE@EXACT_VERSION...
@@ -42,8 +40,35 @@ all non-installer commands are forwarded to that exact CLI. The obsolete
 
 The installer stages a complete candidate runtime, validates its package and
 plugin graph, runs the candidate core's read-only compatibility preflight, and
-only then promotes it. A required host-mirror plugin is selected by the trusted
-operator, never by Project or agent input.
+only then promotes it. Base installation requires no control plane, mirror
+plugin, configured container backend, or running controller. It installs the
+CLI without starting a controller service. A controller already active for this
+managed installation is restarted against the promoted runtime; failed readiness
+restores the previous runtime and restarts its controller. Plugin installation
+uses the same activation rule.
+
+Host mirrors are optional. To select the reviewed integration explicitly:
+
+```bash
+dim installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
+```
+
+An already enabled host-mirror integration is updated to the installer's exact
+version during core installation. A fresh install does not select it or prompt
+for it. Project and agent input cannot select host installation dependencies.
+
+Managed Git, review and shared CI are also optional:
+
+```bash
+dim installer install core --with-managed
+```
+
+This installs `@slop-lab/dim-managed` at the installer's exact version alongside
+the CLI. It is a component, not an enabled plugin, and does not deploy a control
+plane. An installed managed component is retained and updated to the matched
+version on later core installations. Local package bundles include the
+components declared by their `packages.json` manifest.
 
 `--no-local-bin` keeps `dim` behind the mise/facade path. `--local-bin` manages
 one symlink below the selected prefix. The installer refuses to overwrite any
@@ -86,15 +111,14 @@ It has no rollback, cleanup, repair, or alternate-generation mode.
 
 ## Compatibility boundary
 
-Before changing the runtime, the candidate parser inspects only canonical DIM
-state. Current root-only native Project and workspace records proceed. Obsolete
-provider, repository, Project-scoped runner, ordinary-pool, and shared-QEMU
-state is rejected unchanged. The installer does not adopt, reinterpret,
-migrate, stop, delete, or rename predecessor containers, volumes, remotes,
-credentials, or databases.
+Before changing the runtime, the candidate parser validates current standalone
+workspace records. Unsupported workspace state is rejected unchanged. Optional
+integrations own validation of their state. The installer does not adopt,
+reinterpret, migrate, stop, delete, or rename predecessor containers, volumes,
+remotes, credentials, or databases.
 
 Use the pinned prior release to stop predecessor services and export needed
-user data. Validate that export outside DIM state, install fresh native state,
+user data. Validate that export outside DIM state, install fresh workspace state,
 and restore only declared user data. Disposal of old resources is a separate
 explicit operator action.
 
