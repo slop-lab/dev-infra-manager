@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
@@ -21,6 +22,7 @@ export type LifecycleLockOwner = {
 export type ProcessProbeResult = "live" | "dead" | "reused" | "unknown";
 
 export type LifecycleLockOptions = {
+  readonly signal?: AbortSignal;
   readonly waitTimeoutMs?: number;
   readonly retryDelayMs?: number;
   readonly now?: () => number;
@@ -50,9 +52,10 @@ export async function acquireLifecycleLock(request: LifecycleLockRequest): Promi
   const guardPath = path.join(directory, `${request.name}.guard`);
   const options = request.options ?? {};
   const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const sleep = options.sleep ?? ((milliseconds: number) => delay(milliseconds, undefined, { signal: options.signal }));
   const timeout = options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
   const retryDelay = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+  options.signal?.throwIfAborted();
   const identity = await currentProcessIdentity();
   const owner: LifecycleLockOwner = {
     version: LOCK_OWNER_VERSION,
@@ -67,10 +70,12 @@ export async function acquireLifecycleLock(request: LifecycleLockRequest): Promi
   await mkdir(directory, { recursive: true, mode: 0o700 });
 
   for (;;) {
+    options.signal?.throwIfAborted();
     const guard = await tryAcquireKernelGuard(guardPath);
     if (guard !== undefined) {
       let ownershipTransferred = false;
       try {
+        options.signal?.throwIfAborted();
         const existing = await readOwner(ownerPath);
         switch (existing.kind) {
           case "missing":

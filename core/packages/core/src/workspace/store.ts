@@ -46,7 +46,7 @@ export function parseWorkspaceRecord(value: unknown): WorkspaceRecord {
 }
 
 export class WorkspaceStore {
-  constructor(readonly root: string) {}
+  constructor(readonly root: string, private readonly options: { signal?: AbortSignal } = {}) {}
 
   private file(name: string): string { return path.join(this.root, "workspaces", `${workspaceName(name)}.json`); }
 
@@ -79,8 +79,8 @@ export class WorkspaceStore {
   async withLock<T>(name: string, action: () => Promise<T>): Promise<T> {
     workspaceName(name);
     await mkdir(this.root, { recursive: true, mode: 0o700 });
-    const release = await acquireLifecycleLock({ root: this.root, name: `workspace-${name}`, description: `workspace '${name}' operation` });
-    try { return await action(); } finally { await release(); }
+    const release = await acquireLifecycleLock({ root: this.root, name: `workspace-${name}`, description: `workspace '${name}' operation`, options: this.options });
+    try { this.options.signal?.throwIfAborted(); return await action(); } finally { await release(); }
   }
 }
 
