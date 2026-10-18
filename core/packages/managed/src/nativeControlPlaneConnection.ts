@@ -119,7 +119,8 @@ function token(value: unknown): string {
 
 function credential(value: unknown): Credential {
   const input = exactRecord(value, ["username", "password"]);
-  return { username: identifier(input.username), password: token(input.password) };
+  if (typeof input.username !== "string" || !/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/.test(input.username)) return invalid();
+  return { username: input.username, password: token(input.password) };
 }
 
 function generation(value: unknown): string {

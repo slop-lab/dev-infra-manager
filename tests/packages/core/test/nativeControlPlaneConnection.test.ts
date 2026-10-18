@@ -18,7 +18,7 @@ const valid = {
   nativeGit: {
     transport: "loopback-http", endpoint: "http://127.0.0.1:9080", serviceId: "native-main",
     generationId: "a".repeat(64),
-    workspaceWriteIssuer: { username: "workspace-writer-a", password: token(1) },
+    workspaceWriteIssuer: { username: "Workspace-Writer-A", password: token(1) },
     rootReadIssuer: { username: "root-read-a", password: token(3) }
   }
 } as const;
