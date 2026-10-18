@@ -393,6 +393,19 @@ describe("local source build policy", () => {
     fixtureRoots.push(fixtureRoot);
     const log = resolve(fixtureRoot, "invocations.log");
     const tools = resolve(fixtureRoot, "tools"); await mkdir(tools);
+    const actualPnpm = spawnSync("/usr/bin/bash", ["-c", "command -v pnpm"], { encoding: "utf8" });
+    expect(actualPnpm.status).toBe(0);
+    // The recipe's compile prerequisite is outside this image-command test.
+    // Keep the real CLI invocation while preserving artifacts used by other suites.
+    await writeFile(resolve(tools, "pnpm"), `#!/usr/bin/env bash
+if [[ "$#" == 4 && "$1" == --filter && "$2" == @slop-lab/dim-core && "$3" == run && "$4" == build ]]; then
+  exit 0
+fi
+exec "$DIM_TEST_REAL_PNPM" "$@"
+`, { mode: 0o755 });
+    const sharedArtifacts = ["package.json", "package-version.js"].map((file) =>
+      resolve(workspaceRoot, "core/packages/core/dist", file));
+    const before = await Promise.all(sharedArtifacts.map((file) => readFile(file)));
     await writeFile(
       resolve(tools, "docker"),
       "#!/usr/bin/env bash\nprintf 'version=%s\\n' \"${DIM_LOCAL_BUILD_VERSION:-unset}\" >>\"$DIM_INVOCATIONS\"\nprintf 'docker' >>\"$DIM_INVOCATIONS\"\nprintf ' %s' \"$@\" >>\"$DIM_INVOCATIONS\"\nprintf '\\n' >>\"$DIM_INVOCATIONS\"\n",
@@ -412,12 +425,14 @@ describe("local source build policy", () => {
         ...process.env,
         ...inheritedEnvironment,
         PATH: `${tools}:${process.env.PATH ?? "/usr/bin:/bin"}`,
-        DIM_INVOCATIONS: log
+        DIM_INVOCATIONS: log,
+        DIM_TEST_REAL_PNPM: actualPnpm.stdout.trim()
       }
     });
     const invocations = await readFile(log, "utf8");
 
     // Then
+    expect(await Promise.all(sharedArtifacts.map((file) => readFile(file)))).toEqual(before);
     expect(expectedVersion.status).toBe(0);
     expect(result.status).toBe(0);
     expect(invocations).toContain(`version=${expectedVersion.stdout.trim()}\n`);
