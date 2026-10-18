@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command, CommanderError } from "commander";
 import { UserError } from "@slop-lab/dim-core";
-import { installerFacadeHelpText } from "./cli-support.js";
+import { installerFacadeHelpText } from "./cli-runtime.js";
 import { registerCiCommands } from "./ci-commands.js";
 import { registerControllerCommands } from "./controller-commands.js";
 import { registerDoctorAndPluginCommands } from "./doctor-plugin-commands.js";
@@ -11,6 +11,7 @@ import { packageVersion } from "./package-version.js";
 import { registerProjectCommands } from "./project-commands.js";
 import { registerWorkspaceCommands } from "./workspace-commands.js";
 import { registerWorkspaceExecutionCommands } from "./workspace-execution-commands.js";
+import { registerWorkspaceImageCommands } from "./workspace-image-commands.js";
 import { registerWorkspaceLifecycleCommands } from "./workspace-lifecycle-commands.js";
 
 const program = new Command();
@@ -25,9 +26,13 @@ program
 
 registerProjectCommands(program);
 registerCiCommands(program);
-const workspace = registerWorkspaceCommands(program);
-registerWorkspaceExecutionCommands(program, workspace);
-registerWorkspaceLifecycleCommands(workspace);
+const workspace = program.command("workspace").description("Manage persistent development workspaces");
+for (const parent of [program, workspace]) {
+  registerWorkspaceCommands(parent);
+  registerWorkspaceExecutionCommands(parent);
+  registerWorkspaceLifecycleCommands(parent);
+}
+registerWorkspaceImageCommands(workspace);
 registerDoctorAndPluginCommands(program);
 registerExternalUrlCommands(program);
 registerControllerCommands(program);

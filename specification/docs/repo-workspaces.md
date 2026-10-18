@@ -197,7 +197,7 @@ variables, publish a repository catalog, or require one container per repository
 ## Workspaces
 
 ```bash
-dim workspace create example dev --profile development
+dim create example dev --profile development
 dim run dev bash
 dim run dev bash -- -lc 'just test'
 dim exec dev -- bash
@@ -230,9 +230,9 @@ non-root `dim-agent` account. Root login stays disabled and is rejected even
 when the client offers that same valid key.
 
 ```bash
-dim workspace restart dev review   # each: stop, start, root fast-forward, setup
-dim workspace stop dev
-dim workspace start dev     # root fast-forward and setup
+dim restart dev review   # each: stop, start, root fast-forward, setup
+dim stop dev
+dim start dev     # root fast-forward and setup
 ```
 
 Restart selects reviewed immutable root bytes before it stops a running
@@ -255,9 +255,9 @@ ownership immediately before removal, so a foreign same-name replacement is
 left untouched.
 
 ```bash
-dim workspace list
-dim workspace show dev
-dim workspace discard dev --yes
+dim list
+dim show dev
+dim discard dev --yes
 ```
 
 ## State compatibility

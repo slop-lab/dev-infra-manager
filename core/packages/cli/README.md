@@ -76,20 +76,25 @@ protected-root materialization. It neither runs CI nor creates approval.
 ```bash
 dim workspace image build
 dim workspace image status --json
-dim workspace create demo work-1
-dim workspace list --json
-dim workspace show work-1 --json
-dim workspace run work-1 shell
-dim workspace run work-1 exec -- git status
-dim workspace exec work-1 -- git log -1 --oneline
-dim workspace resources work-1 --cpus 4 --memory 8g --pids 4096
-dim workspace stop work-1
-dim workspace start work-1
-dim workspace restart work-1
-dim workspace update work-1
-dim workspace setup work-1
-dim workspace discard work-1 --yes
+dim create demo work-1
+dim ls --json
+dim show work-1 --json
+dim run work-1 shell
+dim run work-1 exec -- git status
+dim exec work-1 -- git log -1 --oneline
+dim resources work-1 --cpus 4 --memory 8g --pids 4096
+dim stop work-1
+dim start work-1
+dim restart work-1
+dim update work-1
+dim setup work-1
+dim discard work-1 --yes
 ```
+
+`dim ls` (or `dim list`) lists workspaces. Common workspace operations are
+available directly under `dim`; the `dim workspace` group exposes the same
+commands for discoverability, plus local workspace image management. Both
+forms use the same options and execution path.
 
 Each workspace receives one immutable protected-root snapshot and a brokered
 native Git endpoint. Its writer may create or fast-forward only its own

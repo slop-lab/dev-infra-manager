@@ -13,8 +13,8 @@ export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
 dim project create PROJECT --json
 dim project list --json
 dim project show PROJECT --json
-dim workspace create PROJECT WORKSPACE
-dim workspace show WORKSPACE --json
+dim create PROJECT WORKSPACE
+dim show WORKSPACE --json
 ```
 
 Bootstrap stages immutable reviewed root bytes and creates no runnable state.

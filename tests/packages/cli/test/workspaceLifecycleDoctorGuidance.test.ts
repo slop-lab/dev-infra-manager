@@ -22,7 +22,7 @@ interface CommandRun {
 
 test("host-sensitive workspace lifecycle session failures recommend doctor", async (context) => {
   const scenarios = [
-    { operation: "workspace.create", args: ["workspace", "create", "project", "candidate", "--no-kvm", "--json"] },
+    { operation: "workspace.create", args: ["create", "project", "candidate", "--no-kvm", "--json"] },
     { operation: "workspace.setup", args: ["workspace", "setup", "candidate", "--json"] },
     { operation: "workspace.update", args: ["workspace", "update", "candidate", "--json"] },
     { operation: "workspace.start", args: ["workspace", "start", "candidate", "--json"] },
@@ -65,8 +65,8 @@ test("workspace lifecycle guidance preserves stage context and the original fail
 
 test("unrelated workspace controller-session failures do not recommend doctor", async (context) => {
   const scenarios = [
-    { operation: "workspace.run", args: ["workspace", "run", "candidate", "task"] },
-    { operation: "workspace.exec", args: ["workspace", "exec", "candidate", "true"] },
+    { operation: "workspace.run", args: ["run", "candidate", "task"] },
+    { operation: "workspace.exec", args: ["exec", "candidate", "true"] },
     { operation: "workspace.stop", args: ["workspace", "stop", "candidate"] },
     { operation: "workspace.discard", args: ["workspace", "discard", "candidate", "--yes"] },
     { operation: "workspace.resources", args: ["workspace", "resources", "candidate", "--cpus", "2"] }

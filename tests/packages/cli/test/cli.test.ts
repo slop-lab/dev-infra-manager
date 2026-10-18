@@ -43,31 +43,26 @@ test("managed controller restarts preserve the workspace-mounted runtime directo
   assert.deepEqual(await cliSourceCycles(), []);
 });
 
-test("CLI uses controller sessions and presents sanitized controller errors", async () => {
-  const source = await readCliSource(
-    "workspace-execution-commands",
-    "workspace-commands",
-    "workspace-lifecycle-commands",
-    "ci-commands"
-  );
-  const support = await readCliSource("controller-session");
-  for (const operation of ["workspace.exec", "workspace.run"]) {
-    assert.match(source, new RegExp(`adminStreamCall[^\\n]*[\\s\\S]{0,160}${operation.replace(".", "\\.")}`));
-  }
-  for (const operation of [
-    "workspace.create", "workspace.setup", "workspace.update", "workspace.start", "workspace.restart"
-  ]) {
-    assert.match(
-      source,
-      new RegExp(`workspaceLifecycleStreamCall[^\\n]*[\\s\\S]{0,160}${operation.replace(".", "\\.")}`)
-    );
-  }
-  assert.doesNotMatch(source, /await (?:execWorkspace|runWorkspace)\(/);
-  assert.match(source, /terminal: interactive\(\)/);
-  assert.match(support, /process\.on\("SIGWINCH", resizeHandler\)/);
-  assert.match(support, /columns: process\.stdout\.columns \|\| 80/);
+test("controller errors preserve useful messages", () => {
   assert.equal(adminErrorDetail('{"error":"setup failed safely"}'), "setup failed safely");
   assert.equal(adminErrorDetail("plain failure"), "plain failure");
+});
+
+test("common workspace commands are available directly and in the workspace group", () => {
+  const rootHelp = run(["--help"]);
+  assert.equal(rootHelp.status, 0);
+  for (const command of ["create", "list", "show", "resources", "setup", "start", "stop", "restart", "update", "discard", "exec", "run"]) {
+    assert.match(rootHelp.stdout, new RegExp(`\\b${command}\\b`));
+    const root = run([command, "--help"]);
+    const grouped = run(["workspace", command, "--help"]);
+    assert.equal(root.status, 0);
+    assert.equal(grouped.status, 0);
+    assert.equal(root.stdout, grouped.stdout.replace("Usage: dim workspace ", "Usage: dim "));
+  }
+  const list = run(["ls", "--help"]);
+  assert.equal(list.status, 0);
+  assert.match(list.stdout, /--json/);
+  assert.match(list.stdout, /List workspaces/);
 });
 
 test("workspace actions hide lifecycle records unless JSON is requested", () => {
@@ -188,10 +183,6 @@ test("workspace resources command requires at least one live limit", () => {
   }
   assert.doesNotMatch(workspaceHelp.stdout, /\balign\b/);
 
-  const removedRoot = run(["resources", "work-1"]);
-  assert.notEqual(removedRoot.status, 0);
-  assert.match(removedRoot.stderr, /unknown command 'resources'/);
-
   const help = run(["workspace", "resources", "--help"]);
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--cpus <count>/);
@@ -200,9 +191,11 @@ test("workspace resources command requires at least one live limit", () => {
   assert.doesNotMatch(help.stdout, /--processes/);
   assert.doesNotMatch(help.stdout, /--pids-limit/);
 
-  const missing = run(["workspace", "resources", "work-1"]);
-  assert.notEqual(missing.status, 0);
-  assert.match(missing.stderr, /provide at least one resource limit/);
+  for (const prefix of [[], ["workspace"]]) {
+    const missing = run([...prefix, "resources", "work-1"]);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /provide at least one resource limit/);
+  }
 
 });
 

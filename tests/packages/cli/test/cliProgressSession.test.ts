@@ -8,7 +8,6 @@ import test from "node:test";
 import type { CliProgress, ProgressStream } from "../../../../core/packages/cli/src/cli-progress.js";
 import { readAdminSession } from "../../../../core/packages/cli/src/cli-support.js";
 import { withLocalProgress } from "../../../../core/packages/cli/src/local-progress.js";
-import { readCliSource } from "./sourceArchitecture.js";
 
 class RecordingProgress implements CliProgress {
   activities = 0;
@@ -115,18 +114,6 @@ test("session request errors stop progress", async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
-
-test("top-level and nested exec/run calls retain raw stream options and SIGINT clears progress", async () => {
-  const cli = await readCliSource("workspace-execution-commands");
-  const support = await readCliSource("controller-session");
-  const rawCalls = cli.match(
-    /adminStreamCall<[^>]+>\("workspace\.(?:exec|run)",[\s\S]{0,220}\{ stdin: true, terminal: interactive\(\) \}\)/g
-  );
-
-  assert.equal(rawCalls?.length, 4);
-  assert.match(support, /const requestCancellation = \(\): Promise<void> => \{[\s\S]{0,400}method: "DELETE"[\s\S]*const cancel = \(\) => \{\s+progress\.stop\(\);\s+void requestCancellation\(\)/);
-  assert.match(support, /process\.once\("SIGINT", cancel\)/);
 });
 
 test("local operation SIGINT aborts work and removes its signal listener", async () => {

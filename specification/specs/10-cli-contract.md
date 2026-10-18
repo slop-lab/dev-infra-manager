@@ -19,14 +19,15 @@ dim project create PROJECT [--json]
 dim project list [--json]
 dim project show PROJECT [--json]
 
-dim workspace create PROJECT WORKSPACE
-dim workspace list [--json]
-dim workspace show WORKSPACE [--json]
-dim workspace setup|start|stop|restart|update WORKSPACE
-dim workspace run WORKSPACE shell
-dim workspace run WORKSPACE exec|custom -- COMMAND...
-dim workspace exec WORKSPACE -- COMMAND...
-dim workspace discard WORKSPACE --yes
+dim create PROJECT WORKSPACE
+dim list|ls [--json]
+dim show WORKSPACE [--json]
+dim resources WORKSPACE --cpus COUNT|--memory SIZE|--pids COUNT [--json]
+dim setup|start|stop|restart|update WORKSPACE
+dim run WORKSPACE shell
+dim run WORKSPACE exec|custom -- COMMAND...
+dim exec WORKSPACE -- COMMAND...
+dim discard WORKSPACE --yes
 
 dim host status [--json]
 dim host shutdown|start
@@ -40,6 +41,10 @@ dim ci native-qemu runner image build IMAGE
 dim ci native-qemu host run HOST_ID ABSOLUTE_FILE
 dim ci native-qemu event status EVENT_ID ABSOLUTE_FILE
 ```
+
+Common workspace commands are registered both directly under `dim` and in
+the `dim workspace` group, with identical arguments and behavior. `list` also
+accepts `ls`. Local image operations remain under `dim workspace image`.
 
 There are no repository CRUD/synchronization commands, Project remove/purge
 commands, Project-scoped runner commands, ordinary-pool commands, or manual

@@ -1,56 +1,30 @@
 import { type Command } from "commander";
-import { adminStreamCall, interactive } from "./cli-support.js";
+import { interactive } from "./cli-runtime.js";
+import { adminStreamCall } from "./controller-session.js";
 
-export function registerWorkspaceExecutionCommands(program: Command, workspace: Command): void {
-  program.command("exec")
-  .description("Execute in the recommended agent, or trusted outer workspace for custom Project environments")
-  .argument("<workspace>")
-  .argument("<command...>")
-  .allowUnknownOption(true)
-  .action(async (name: string, command: string[]) => {
-    const result = await adminStreamCall<{ exitCode: number }>("workspace.exec", {
-      name,
-      command,
-      interactive: interactive()
-    }, { stdin: true, terminal: interactive() });
-    process.exitCode = result.exitCode;
-  });
+export function registerWorkspaceExecutionCommands(workspace: Command): void {
+  registerExecutionCommand(workspace, "exec", "command",
+    "Execute in the recommended agent, or trusted outer workspace for custom Project environments");
+  registerExecutionCommand(workspace, "run", "task",
+    "Run recommended shell/exec/custom commands or a custom Project task");
+}
 
-program.command("run")
-  .description("Run recommended shell/exec/custom commands or a custom Project task")
-  .argument("<workspace>")
-  .argument("<task...>")
-  .allowUnknownOption(true)
-  .action(async (name: string, task: string[]) => {
-    const result = await adminStreamCall<{ exitCode: number }>("workspace.run", {
-      name,
-      command: task,
-      interactive: interactive()
-    }, { stdin: true, terminal: interactive() });
-    process.exitCode = result.exitCode;
-  });
-
-workspace.command("exec")
-  .description("Execute in the recommended agent, or trusted outer workspace for custom Project environments")
-  .argument("<workspace>")
-  .argument("<command...>")
-  .allowUnknownOption(true)
-  .action(async (name: string, command: string[]) => {
-    const result = await adminStreamCall<{ exitCode: number }>("workspace.exec", {
-      name, command, interactive: interactive()
-    }, { stdin: true, terminal: interactive() });
-    process.exitCode = result.exitCode;
-  });
-
-workspace.command("run")
-  .description("Run recommended shell/exec/custom commands or a custom Project task")
-  .argument("<workspace>")
-  .argument("<task...>")
-  .allowUnknownOption(true)
-  .action(async (name: string, task: string[]) => {
-    const result = await adminStreamCall<{ exitCode: number }>("workspace.run", {
-      name, command: task, interactive: interactive()
-    }, { stdin: true, terminal: interactive() });
-    process.exitCode = result.exitCode;
-  });
+function registerExecutionCommand(
+  parent: Command,
+  operation: "exec" | "run",
+  argument: string,
+  description: string
+): void {
+  parent.command(operation)
+    .description(description)
+    .argument("<workspace>")
+    .argument(`<${argument}...>`)
+    .allowUnknownOption(true)
+    .action(async (name: string, command: string[]) => {
+      const terminal = interactive();
+      const result = await adminStreamCall<{ exitCode: number }>(`workspace.${operation}`, {
+        name, command, interactive: terminal
+      }, { stdin: true, terminal });
+      process.exitCode = result.exitCode;
+    });
 }
