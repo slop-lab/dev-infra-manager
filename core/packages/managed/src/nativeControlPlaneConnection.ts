@@ -5,7 +5,6 @@ import { hasDuplicateJsonKeys } from "./nativeControlPlaneJson.js";
 
 const maximumBytes = 64 * 1024;
 const identifierPattern = /^[a-z0-9][a-z0-9._-]{0,127}$/;
-const imagePattern = /^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/;
 
 type ServiceConnection = {
   readonly transport: "https" | "loopback-http";
@@ -14,15 +13,6 @@ type ServiceConnection = {
 type Credential = {
   readonly username: string;
   readonly password: string;
-};
-type Capacity = {
-  readonly runnerBaseImage: string;
-  readonly jobBaseImage: string;
-  readonly cpus: number;
-  readonly memoryBytes: number;
-  readonly pids: number;
-  readonly timeoutSeconds: number;
-  readonly outputBytes: number;
 };
 
 export type NativeControlPlaneConnection = {
@@ -34,11 +24,7 @@ export type NativeControlPlaneConnection = {
     readonly workspaceWriteIssuer: Credential;
     readonly rootReadIssuer: Credential;
   };
-  readonly ordinaryCi?: ServiceConnection & {
-    readonly serviceId: "ordinary-main";
-    readonly hostToken: string;
-  };
-  readonly capacities?: Readonly<Record<string, Capacity>>;
+
 };
 
 export class NativeControlPlaneConnectionError extends UserError {
@@ -46,11 +32,7 @@ export class NativeControlPlaneConnectionError extends UserError {
 }
 
 export function parseNativeControlPlaneConnection(value: unknown): NativeControlPlaneConnection {
-  const recordValue = record(value);
-  const readinessOnly = Object.keys(recordValue).length === 3;
-  const input = exactRecord(recordValue, readinessOnly
-    ? ["schemaVersion", "hostId", "nativeGit"]
-    : ["schemaVersion", "hostId", "nativeGit", "ordinaryCi", "capacities"]);
+  const input = exactRecord(value, ["schemaVersion", "hostId", "nativeGit"]);
   if (input.schemaVersion !== 1) return invalid();
   const hostId = identifier(input.hostId);
   const git = exactRecord(input.nativeGit, ["transport", "endpoint", "serviceId", "generationId",
@@ -59,49 +41,11 @@ export function parseNativeControlPlaneConnection(value: unknown): NativeControl
   const nativeTransport = transport(git.transport);
   const workspaceWriteIssuer = credential(git.workspaceWriteIssuer);
   const rootReadIssuer = credential(git.rootReadIssuer);
-  if (workspaceWriteIssuer.username !== hostId
-    || workspaceWriteIssuer.password === rootReadIssuer.password) return invalid();
+  if (workspaceWriteIssuer.password === rootReadIssuer.password) return invalid();
   const nativeGit = { transport: nativeTransport, endpoint: origin(git.endpoint, nativeTransport),
     serviceId: "native-main" as const, generationId: generation(git.generationId),
     workspaceWriteIssuer, rootReadIssuer };
-  if (readinessOnly) {
-    return {
-      schemaVersion: 1,
-      hostId,
-      nativeGit
-    };
-  }
-  const ordinary = exactRecord(input.ordinaryCi, ["transport", "endpoint", "serviceId", "hostToken"]);
-  if (ordinary.serviceId !== "ordinary-main") return invalid();
-  const ordinaryTransport = transport(ordinary.transport);
-  const hostToken = token(ordinary.hostToken);
-  if (workspaceWriteIssuer.password === hostToken || rootReadIssuer.password === hostToken) return invalid();
-  const configured = record(input.capacities);
-  const entries = Object.entries(configured);
-  if (entries.length === 0) return invalid();
-  const capacities: Record<string, Capacity> = {};
-  for (const [name, value] of entries) {
-    identifier(name);
-    const policy = exactRecord(value, ["runnerBaseImage", "jobBaseImage", "cpus",
-      "memoryBytes", "pids", "timeoutSeconds", "outputBytes"]);
-    capacities[name] = {
-      runnerBaseImage: pinnedImage(policy.runnerBaseImage),
-      jobBaseImage: pinnedImage(policy.jobBaseImage),
-      cpus: positiveInteger(policy.cpus),
-      memoryBytes: positiveInteger(policy.memoryBytes),
-      pids: positiveInteger(policy.pids),
-      timeoutSeconds: positiveInteger(policy.timeoutSeconds),
-      outputBytes: positiveInteger(policy.outputBytes)
-    };
-  }
-  return {
-    schemaVersion: 1,
-    hostId,
-    nativeGit,
-    ordinaryCi: { transport: ordinaryTransport, endpoint: origin(ordinary.endpoint, ordinaryTransport),
-      serviceId: "ordinary-main", hostToken },
-    capacities
-  };
+  return { schemaVersion: 1, hostId, nativeGit };
 }
 
 export async function loadNativeControlPlaneConnection(path: string): Promise<NativeControlPlaneConnection> {
@@ -202,16 +146,6 @@ function origin(value: unknown, selected: ServiceConnection["transport"]): strin
     || (selected === "https" && url.protocol !== "https:")
     || (selected === "loopback-http" && (url.protocol !== "http:"
       || (url.hostname !== "127.0.0.1" && url.hostname !== "[::1]")))) return invalid();
-  return value;
-}
-
-function pinnedImage(value: unknown): string {
-  if (typeof value !== "string" || !imagePattern.test(value)) return invalid();
-  return value;
-}
-
-function positiveInteger(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) return invalid();
   return value;
 }
 

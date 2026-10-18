@@ -12,25 +12,15 @@ import {
 } from "../../../../core/packages/managed/src/nativeControlPlaneConnection.js";
 
 const token = (byte: number): string => Buffer.alloc(32, byte).toString("base64url");
-const capacity = {
-  runnerBaseImage: `registry.example/ordinary-runner@sha256:${"c".repeat(64)}`,
-  jobBaseImage: `registry.example/ordinary-job@sha256:${"d".repeat(64)}`,
-  cpus: 4, memoryBytes: 8589934592, pids: 2048, timeoutSeconds: 3600, outputBytes: 16777216
-} as const;
 const valid = {
   schemaVersion: 1,
   hostId: "host-a",
   nativeGit: {
     transport: "loopback-http", endpoint: "http://127.0.0.1:9080", serviceId: "native-main",
     generationId: "a".repeat(64),
-    workspaceWriteIssuer: { username: "host-a", password: token(1) },
+    workspaceWriteIssuer: { username: "workspace-writer-a", password: token(1) },
     rootReadIssuer: { username: "root-read-a", password: token(3) }
-  },
-  ordinaryCi: {
-    transport: "loopback-http", endpoint: "http://127.0.0.1:9081", serviceId: "ordinary-main",
-    hostToken: token(2)
-  },
-  capacities: { primary: capacity }
+  }
 } as const;
 const roots: string[] = [];
 const run = promisify(execFile);
@@ -64,26 +54,16 @@ describe("native control-plane host connection", () => {
     // Given
     const invalid = [
       { ...valid, projects: { acme: {} } },
+      { ...valid, ordinaryCi: {} },
+      { ...valid, capacities: {} },
       { ...valid, schemaVersion: 2 },
       { ...valid, nativeGit: { ...valid.nativeGit, serviceId: "foreign" } },
       { ...valid, nativeGit: { ...valid.nativeGit, generationId: "b" } },
       { ...valid, nativeGit: { ...valid.nativeGit,
-        workspaceWriteIssuer: { ...valid.nativeGit.workspaceWriteIssuer, username: "host-b" } } },
-      { ...valid, nativeGit: { ...valid.nativeGit,
-        workspaceWriteIssuer: { ...valid.nativeGit.workspaceWriteIssuer,
-          password: valid.ordinaryCi.hostToken } } },
-      { ...valid, nativeGit: { ...valid.nativeGit,
         rootReadIssuer: { ...valid.nativeGit.rootReadIssuer,
           password: valid.nativeGit.workspaceWriteIssuer.password } } },
-      { ...valid, ordinaryCi: { ...valid.ordinaryCi, endpoint: "http://remote.example" } },
       { ...valid, nativeGit: { ...valid.nativeGit, endpoint: "http://127.0.0.1:9080/v1" } },
       { ...valid, nativeGit: { ...valid.nativeGit, endpoint: "http://user:pass@127.0.0.1:9080" } },
-      { ...valid, ordinaryCi: { ...valid.ordinaryCi, transport: "https" } },
-      { ...valid, capacities: {} },
-      { ...valid, capacities: { Primary: capacity } },
-      { ...valid, capacities: { primary: { ...capacity, jobBaseImage: "ordinary-job:latest" } } },
-      { ...valid, capacities: { primary: { ...capacity, cpus: 0 } } },
-      { ...valid, capacities: { primary: { ...capacity, labels: ["native"] } } }
     ];
 
     // When / Then
@@ -122,11 +102,11 @@ describe("native control-plane host connection", () => {
     await expect(loadNativeControlPlaneConnection(permissive)).rejects.toThrow(NativeControlPlaneConnectionError);
   });
 
-  it("rejects repeated capacity names before JSON parsing discards the first value", async () => {
+  it("rejects repeated credential names before JSON parsing discards the first value", async () => {
     // Given
-    const duplicate = JSON.stringify(valid).replace('"primary":{', '"primary":{},"primary":{');
+    const duplicate = JSON.stringify(valid).replace('"username":', '"username":"foreign","username":');
     const path = await connectionFile(duplicate);
-    const escaped = await connectionFile(JSON.stringify(valid).replace('"primary":{', '"primary":{},"pr\\u0069mary":{'));
+    const escaped = await connectionFile(JSON.stringify(valid).replace('"username":', '"username":"foreign","userna\\u006de":'));
 
     // When / Then
     await expect(loadNativeControlPlaneConnection(path)).rejects.toThrow(NativeControlPlaneConnectionError);

@@ -135,7 +135,7 @@ export async function connectControlPlane(directoryInput: string, options: {
     hostId, generationId, credential: registrarCredential });
   const hostConnection = parseNativeControlPlaneConnection({ schemaVersion: 1, hostId, nativeGit: {
     transport: "loopback-http", endpoint, serviceId: "native-main", generationId,
-    workspaceWriteIssuer: { ...selected(native.workspaceWriteIssuers), username: hostId }, rootReadIssuer: selected(native.projectRootReadIssuers)
+    workspaceWriteIssuer: selected(native.workspaceWriteIssuers), rootReadIssuer: selected(native.projectRootReadIssuers)
   } });
   const ciPublish = install.ordinaryCi?.publish;
   if (ciPublish?.host !== "127.0.0.1" || typeof ciPublish.port !== "number") throw new UserError("prepared CI loopback endpoint is invalid");

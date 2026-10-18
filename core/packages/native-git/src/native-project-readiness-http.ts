@@ -35,7 +35,7 @@ export async function handleNativeProjectReadinessHttp(
   }
   const credential = nativeBasicCredential(request);
   const issuer = credential === undefined ? undefined : input.issuers.find((candidate) =>
-    credential.username === candidate.hostId && secretEqual(credential.password, candidate.password));
+    credential.username === candidate.username && secretEqual(credential.password, candidate.password));
   if (issuer === undefined) {
     sendJson(response, 401, { error: "unauthorized" });
     return true;

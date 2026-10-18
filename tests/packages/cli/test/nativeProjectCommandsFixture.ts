@@ -240,7 +240,7 @@ function controlConnection(endpoint: string, hostId: string, servingGenerationId
   return { schemaVersion: 1, hostId,
     nativeGit: { transport: "loopback-http", endpoint, serviceId: "native-main",
       generationId: servingGenerationId,
-      workspaceWriteIssuer: { username: hostId, password: bundleSecrets.workspaceWriteIssuer },
+      workspaceWriteIssuer: { username: "workspace-write-issuer-a", password: bundleSecrets.workspaceWriteIssuer },
       rootReadIssuer: { username: "project-root-read-issuer-a", password: bundleSecrets.projectRootReadIssuer } } };
 }
 

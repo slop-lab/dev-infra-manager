@@ -80,8 +80,7 @@ export function createNativeProjectWorkspaceWriteService(
           sendNotFound(response);
           return true;
         }
-        const issuer = input.issuers.find((candidate) => nativeBasicAuthorized(request, candidate)
-          || nativeBasicAuthorized(request, { username: candidate.hostId, password: candidate.password }));
+       const issuer = input.issuers.find((candidate) => nativeBasicAuthorized(request, candidate));
         if (issuer === undefined) {
           const known = input.knownCredentials.some((credential) => nativeBasicAuthorized(request, credential));
           sendJson(response, known ? 403 : 401, { error: known ? "forbidden" : "unauthorized" });
@@ -110,8 +109,7 @@ export function createNativeProjectWorkspaceWriteService(
         sendJson(response, 503, { error: "native Git business operations require exact generation activation" });
         return true;
       }
-       const issuer = input.issuers.find((candidate) => nativeBasicAuthorized(request, candidate)
-         || nativeBasicAuthorized(request, { username: candidate.hostId, password: candidate.password }));
+      const issuer = input.issuers.find((candidate) => nativeBasicAuthorized(request, candidate));
       if (issuer === undefined) {
         const known = input.knownCredentials.some((credential) => nativeBasicAuthorized(request, credential));
         sendJson(response, known ? 403 : 401, { error: known ? "forbidden" : "unauthorized" });

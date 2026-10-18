@@ -21,6 +21,7 @@ import {
   runGit,
   startFinalizeService,
   uploadRootBundle,
+  workspaceWriteIssuer,
   workspaceWriteIssuerAuthorization,
   type WorkspaceWriteLeaseHooks,
   type RunningService
@@ -146,12 +147,23 @@ describe("native Project workspace write lease", () => {
     const fixture = await finalizedFixture("workspace-write-boundary");
     const endpoint = `${fixture.service.origin}/v1/projects/project-a/workspace-write-leases`;
     const validBody = { schemaVersion: 1, generationId, repositoryId: "root", workspaceId };
+    const hostAlias = `Basic ${Buffer.from(`${workspaceWriteIssuer.hostId}:${workspaceWriteIssuer.password}`).toString("base64")}`;
 
     // When
     const wrongRole = await fetch(endpoint, {
       method: "POST",
       headers: { authorization: rootReadIssuerAuthorization, "content-type": "application/json" },
       body: JSON.stringify(validBody)
+    });
+    const alias = await fetch(endpoint, {
+      method: "POST", headers: { authorization: hostAlias, "content-type": "application/json" },
+      body: JSON.stringify(validBody)
+    });
+    const identity = await fetch(`${fixture.service.origin}/v1/operator-workspace-write-issuer-identity`, {
+      headers: { authorization: workspaceWriteIssuerAuthorization }
+    });
+    const aliasIdentity = await fetch(`${fixture.service.origin}/v1/operator-workspace-write-issuer-identity`, {
+      headers: { authorization: hostAlias }
     });
     const queryBearing = await fetch(`${endpoint}?scope=root`, {
       method: "POST",
@@ -166,6 +178,10 @@ describe("native Project workspace write lease", () => {
 
     // Then
     expect(wrongRole.status).toBe(403);
+    expect(alias.status).toBe(401);
+    expect(aliasIdentity.status).toBe(401);
+    expect(identity.status).toBe(200);
+    expect(await identity.json()).toMatchObject({ hostId: workspaceWriteIssuer.hostId });
     expect(queryBearing.status).toBe(404);
     expect(malformed.status).toBe(400);
   });
