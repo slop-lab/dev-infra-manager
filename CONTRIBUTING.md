@@ -50,7 +50,7 @@ DIM_SOURCE_NODE_MAJOR=26 bash verification/scripts/source-gate-container.bash
 for the default Node.js 24 command. `DIM_SOURCE_NODE_MAJOR` accepts only `24`
 or `26` and selects an independently checked Node.js 24.19.0 or 26.5.0 runtime.
 The wrapper builds an image from digest-pinned Node.js and
-Python 3.13.7 bases with checksum-pinned Git 2.43.0 and Just 1.43.1, plus
+Python 3.13.7 bases with Git and checksum-pinned Just 1.43.1, plus
 exact-version pnpm 10.13.1. It copies the current worktree, including tracked and untracked changes,
 into a disposable container;
 it excludes Git metadata, generated `node_modules` and `dist` trees, user state,
@@ -79,10 +79,12 @@ images already available through `DIM_TEST_NATIVE_RUNNER_IMAGE` and
 just verify native-ordinary-executor-live
 ```
 
-Use `just check-source-native` only in an already reviewed environment that
-provides `/usr/bin/git` 2.43.0, Node.js 24 or 26, pnpm 10.13.1, a trusted
-temporary directory, and disposable root-ownership fixture capability. It
-preserves the direct gate used by pinned CI environments.
+`just check-source-native` runs the ordinary source checks with Git, Python 3,
+Node.js 24 or 26, pnpm 10.13.1, and a writable temporary directory. It builds all
+packages before checking cross-package behavior. Root-only QEMU process and
+filesystem checks are a separate disposable-environment profile; see
+[verification profiles](verification/README.md). The default isolated source gate
+runs both profiles without giving the container a host Docker socket.
 
 The `Native integration` workflow has dedicated native ordinary Sysbox and
 native QEMU KVM mechanics lanes. Their matching local recipes are `just verify

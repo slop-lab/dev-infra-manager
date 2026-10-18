@@ -32,7 +32,7 @@ run_node() {
 
 for node_major in 24 26; do
   DIM_SOURCE_NODE_MAJOR="$node_major" bash verification/scripts/source-gate-container.bash \
-    bash -lc 'just check-source-native && just verify package-packs && pnpm audit --prod'
+    bash -lc 'just check-source-native && pnpm --dir verification test:qemu-service && just verify package-packs && pnpm audit --prod'
   run_node "$node_major" pnpm install --frozen-lockfile
   run_node "$node_major" bash -lc 'just verify plugin-install'
 done

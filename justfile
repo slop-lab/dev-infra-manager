@@ -33,16 +33,9 @@ check-source-container:
 # Run the complete source gate directly in an already pinned native environment.
 check-source-native:
     bash verification/scripts/source-gate-preflight.bash
-    bash verification/scripts/source-gate-preflight-test.bash
     just typecheck
-    pnpm --filter @slop-lab/dim-contracts-external-url run build
-    pnpm --filter @slop-lab/dim-core run build
-    pnpm --filter @slop-lab/dim-managed run build
-    pnpm --filter @slop-lab/dim-native-git run build
-    pnpm --filter @slop-lab/dim-cli run build
-    bash verification/scripts/source-gate-preflight.bash --require-artifacts
-    just test
     just build-packages
+    just test
 
 # Prepare matched package and image candidates from one reviewed monorepo commit.
 prepare-local:

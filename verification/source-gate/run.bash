@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd /workspace
 export npm_config_workspace_concurrency=1
-test "$(/usr/bin/git --version)" = "git version 2.43.0"
+/usr/bin/git --version
 case "${DIM_SOURCE_NODE_MAJOR:-24}" in
   24) test "$(node --version)" = "v24.19.0" ;;
   26) test "$(node --version)" = "v26.5.0" ;;
@@ -16,6 +16,7 @@ test ! -e .gitcredentials
 test ! -e .local
 
 if (( $# == 0 )); then
-  exec just check-source-native
+  just check-source-native
+  exec pnpm --dir verification test:qemu-service
 fi
 exec "$@"

@@ -33,7 +33,7 @@ jobs:
           DIM_SOURCE_NODE_MAJOR: ${{ matrix.node }}
         run: >-
           bash verification/scripts/source-gate-container.bash
-          bash -lc 'just check-source-native && just verify package-packs && pnpm audit --prod'
+          bash -lc 'just check-source-native && pnpm --dir verification test:qemu-service && just verify package-packs && pnpm audit --prod'
       - name: Upload exact-tree evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2 (Node 20)

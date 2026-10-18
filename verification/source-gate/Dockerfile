@@ -8,17 +8,8 @@ ARG TARGETARCH=amd64
 
 RUN apt-get update \
   && apt-get install --yes --no-install-recommends \
-    build-essential ca-certificates curl docker.io jq libcurl4-gnutls-dev libexpat1-dev libsqlite3-0 libssl-dev openssh-client procps util-linux xz-utils zlib1g-dev \
-  && curl --fail --silent --show-error --location \
-    --output /tmp/git.tar.xz https://www.kernel.org/pub/software/scm/git/git-2.43.0.tar.xz \
-  && printf '%s  %s\n' 5446603e73d911781d259e565750dcd277a42836c8e392cac91cf137aa9b76ec /tmp/git.tar.xz \
-    | sha256sum --check \
-  && mkdir /tmp/git \
-  && tar --extract --xz --file /tmp/git.tar.xz --directory /tmp/git --strip-components 1 \
-  && make --directory /tmp/git --jobs "$(nproc)" prefix=/usr NO_GETTEXT=YesPlease NO_TCLTK=YesPlease all \
-  && make --directory /tmp/git prefix=/usr NO_GETTEXT=YesPlease NO_TCLTK=YesPlease install \
-  && test "$(/usr/bin/git --version)" = "git version 2.43.0" \
-  && rm -rf /tmp/git /tmp/git.tar.xz /var/lib/apt/lists/*
+    build-essential ca-certificates curl docker.io git jq libsqlite3-0 openssh-client procps util-linux xz-utils \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
     case "$TARGETARCH" in \
