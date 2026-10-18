@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import {
   loadNativeControlPlaneConnection,
   NativeControlPlaneConnectionError,
   parseNativeControlPlaneConnection
-} from "../../../../core/packages/core/src/nativeControlPlaneConnection.js";
+} from "../../../../core/packages/managed/src/nativeControlPlaneConnection.js";
 
 const token = (byte: number): string => Buffer.alloc(32, byte).toString("base64url");
 const capacity = {
@@ -146,7 +146,7 @@ describe("native control-plane host connection", () => {
     await run("/usr/bin/mkfifo", [path]);
     await chmod(path, 0o600);
     const moduleUrl = pathToFileURL(join(import.meta.dirname,
-      "../../../../core/packages/core/dist/nativeControlPlaneConnection.js")).href;
+      "../../../../core/packages/managed/dist/nativeControlPlaneConnection.js")).href;
 
     // When
     const child = run(process.execPath, ["--input-type=module", "-e", `

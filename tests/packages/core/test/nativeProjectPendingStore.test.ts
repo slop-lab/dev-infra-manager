@@ -14,9 +14,9 @@ import {
   type NativeGitImportedRootProof,
   type NativeGitRootImporterClient,
   type NativeProjectDraftClaim
-} from "../../../../core/packages/core/src/index.js";
-import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/core/src/nativeRootBootstrapPolicy.js";
-import { publishNativeProjectPending } from "../../../../core/packages/core/src/nativeProjectPendingFiles.js";
+} from "../../../../core/packages/managed/src/index.js";
+import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
+import { publishNativeProjectPending } from "../../../../core/packages/managed/src/nativeProjectPendingFiles.js";
 
 const roots: string[] = [];
 const run = promisify(execFile);
@@ -217,7 +217,7 @@ describe("native Project admission-pending store", () => {
     await run("/usr/bin/mkfifo", [projectPath]);
     await chmod(projectPath, 0o600);
     const moduleUrl = pathToFileURL(join(import.meta.dirname,
-      "../../../../core/packages/core/dist/nativeProjectPendingFiles.js")).href;
+      "../../../../core/packages/managed/dist/nativeProjectPendingFiles.js")).href;
 
     // When
     const child = run(process.execPath, ["--input-type=module", "-e", `

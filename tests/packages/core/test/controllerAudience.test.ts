@@ -8,10 +8,10 @@ import {
   configuredDimController,
   controllerRoutesForAudience,
   createDimController
-} from "../../../../core/packages/core/src/controller.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { LifecycleOptions, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
+} from "../../../../core/packages/managed/src/controller.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { LifecycleOptions, WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/managed/src/plugin.js";
 import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 describe("DIM controller", () => {

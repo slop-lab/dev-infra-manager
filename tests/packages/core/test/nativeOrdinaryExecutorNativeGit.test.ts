@@ -5,12 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createNativeGitCandidateReadAuthorityFactory,
   NativeGitCandidateReadError
-} from "../../../../core/packages/core/src/nativeGitCandidateReadAuthority.js";
+} from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import {
   executeNativeHostClaim,
   type NativeCandidateReadAuthorityFactoryInput
-} from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryExecutor.js";
+import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js";
 import { candidateReadFixture, type CandidateReadFixture } from "./nativeGitCandidateReadFixture.js";
 import {
   dependencies,

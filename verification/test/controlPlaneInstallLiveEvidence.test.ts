@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { openNativeRootAdmissionDatabase } from "../../core/packages/core/src/nativeRootAdmissionSchema.js";
+import { openNativeRootAdmissionDatabase } from "../../core/packages/managed/src/nativeRootAdmissionSchema.js";
 import { createNativeGitBundleDatabase } from "../../core/packages/native-git/src/native-bundle-state-validation.js";
 import {
   nativeAuthorityTables,

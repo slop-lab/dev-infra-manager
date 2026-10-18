@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -131,7 +131,9 @@ describe("native Project root read lease", () => {
     const packDirectory = join(rootRepository(fixture.root), "objects", "pack");
     const pack = (await readdir(packDirectory)).find((name) => name.endsWith(".pack"));
     if (pack === undefined) throw new Error("imported root has no pack fixture");
-    await writeFile(join(packDirectory, pack), "corrupt graph", { mode: 0o444 });
+    await chmod(join(packDirectory, pack), 0o600);
+    await writeFile(join(packDirectory, pack), "corrupt graph");
+    await chmod(join(packDirectory, pack), 0o444);
 
     // When
     const response = await uploadPackDiscovery(fixture.service.origin, "project-a", "root", lease);

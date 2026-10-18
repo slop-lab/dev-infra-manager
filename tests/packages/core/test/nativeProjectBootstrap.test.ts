@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { bootstrapNativeProjectRoot, NativeProjectBootstrapError,
-  NativeProjectDraftStore } from "../../../../core/packages/core/src/index.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+  NativeProjectDraftStore } from "../../../../core/packages/managed/src/index.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot,
   activateFinalizeServiceForGeneration, activationTokenB, closeFinalizeService, generationB,

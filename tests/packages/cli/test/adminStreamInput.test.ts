@@ -6,7 +6,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { adminStreamCall } from "../../../../core/packages/cli/src/cli-support.js";
+import { adminStreamCall } from "../../../../core/packages/managed/src/cli/cli-support.js";
 
 type InputPayload = {
   readonly data?: string;
@@ -219,7 +219,7 @@ async function withController(
   const runtimeRoot = path.join(root, "runtime");
   const configHome = path.join(root, "config");
   const socketPath = path.join(root, "controller.sock");
-  const runtimeDirectory = path.join(runtimeRoot, "dim", createHash("sha256").update(stateRoot).digest("hex").slice(0, 16));
+  const runtimeDirectory = path.join(runtimeRoot, "dim", "managed", createHash("sha256").update(stateRoot).digest("hex").slice(0, 16));
   await mkdir(path.join(configHome, "dim"), { recursive: true });
   await mkdir(runtimeDirectory, { recursive: true });
   await writeFile(path.join(configHome, "dim", "config.json"), '{"schemaVersion":1,"workspaceBackend":"sysbox"}\n');

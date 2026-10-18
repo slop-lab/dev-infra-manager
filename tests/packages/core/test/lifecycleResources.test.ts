@@ -2,11 +2,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { updateWorkspaceResources } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { updateWorkspaceResources } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
 import { workspaceAgentContainerLabels, workspaceAgentIdentity
-} from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
+} from "../../../../core/packages/managed/src/workspaceAgentRuntime.js";
 import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 

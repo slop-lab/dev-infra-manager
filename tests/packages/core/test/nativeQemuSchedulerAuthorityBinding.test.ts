@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import type { NativeQemuAuthorityClient } from "../../../../core/packages/core/src/nativeQemuAuthorityClient.js";
+import type { NativeQemuAuthorityClient } from "../../../../core/packages/managed/src/nativeQemuAuthorityClient.js";
 import type { NativeQemuCapacity, NativeQemuSchedulerConfig }
-  from "../../../../core/packages/core/src/nativeQemuSchedulerConfig.js";
-import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/core/src/nativeQemuSchedulerService.js";
+  from "../../../../core/packages/managed/src/nativeQemuSchedulerConfig.js";
+import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/managed/src/nativeQemuSchedulerService.js";
 
 const token = (character: string): string => Buffer.alloc(32, character).toString("base64url");
 const capacity = (name: string): NativeQemuCapacity => ({ capacity: name,

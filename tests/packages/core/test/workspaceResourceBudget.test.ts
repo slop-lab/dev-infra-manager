@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allocateWorkspaceResourceBudget,
   RECOMMENDED_WORKSPACE_MINIMUMS
-} from "../../../../core/packages/core/src/workspaceResourceBudget.js";
+} from "../../../../core/packages/managed/src/workspaceResourceBudget.js";
 
 describe("workspace resource budgets", () => {
   it("partitions a recommended budget without exceeding any recorded limit", () => {

@@ -4,8 +4,8 @@ import type {
   NativeCandidateReadAuthority,
   NativeHostExecutorDependencies,
   NativeHostExecution
-} from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
-import { nativeDescriptorDigest, type NativeOrdinaryDescriptor } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryExecutor.js";
+import { nativeDescriptorDigest, type NativeOrdinaryDescriptor } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 
 export const runnerImage = `registry.example/runner@sha256:${"b".repeat(64)}`;

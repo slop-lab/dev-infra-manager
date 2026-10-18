@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   NativeGitAttemptIssuerUnavailableError
-} from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
+} from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
 import {
   activeEligibilityGeneration,
   admission,

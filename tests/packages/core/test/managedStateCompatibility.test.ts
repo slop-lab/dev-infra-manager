@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { preflightManagedStateCompatibility as preflightStateCompatibility } from "../../../../core/packages/core/src/managed-stateCompatibility.js";
+import { preflightManagedStateCompatibility as preflightStateCompatibility } from "../../../../core/packages/managed/src/managed-stateCompatibility.js";
 import { workspaceRecord } from "./hostLifecycleFixture.js";
 
 const roots: string[] = [];
@@ -26,7 +26,7 @@ describe("managed installation state compatibility preflight", () => {
   it("accepts missing state without creating the default state root", async () => {
     // Given
     const home = await temporaryRoot();
-    const stateRoot = join(home, ".local", "state", "dim");
+    const stateRoot = join(home, ".local", "state", "dim", "managed");
 
     // When
     const result = await preflightStateCompatibility({ HOME: home });

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, writeFile } from "node:fs/promises";
+import { chmod, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -201,7 +201,9 @@ describe("authoritative imported-root candidate job inputs", () => {
         const packDirectory = join(rootRepository(fixture.root), "objects", "pack");
         const pack = (await readdir(packDirectory)).find((name) => name.endsWith(".pack"));
         if (pack === undefined) throw new Error("imported root has no pack fixture");
-        await writeFile(join(packDirectory, pack), "corrupt graph", { mode: 0o444 });
+        await chmod(join(packDirectory, pack), 0o600);
+        await writeFile(join(packDirectory, pack), "corrupt graph");
+        await chmod(join(packDirectory, pack), 0o444);
       }
 
       // When

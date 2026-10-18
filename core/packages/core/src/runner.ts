@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { PassThrough, Readable } from "node:stream";
 import { readdir, readFile, readlink } from "node:fs/promises";
-import type { CommandResult, CommandRunner, RunOptions, StreamingCommandRunner, TerminalControl, TerminalSize } from "./types.js";
+import type { CommandResult, RunOptions, StreamingCommandRunner, TerminalControl, TerminalSize } from "./types.js";
 
 const TERMINATE_GRACE_MILLISECONDS = 1_000;
 const KILL_GRACE_MILLISECONDS = 1_000;
@@ -10,52 +11,16 @@ export class ProcessRunner implements StreamingCommandRunner {
     const actualCommand = options.sudo ? "sudo" : command;
     const actualArgs = options.sudo ? [command, ...args] : args;
 
-    return new Promise((resolve) => {
-      const child = spawn(actualCommand, actualArgs, {
-        cwd: options.cwd,
-        env: options.env,
-        stdio: ["ignore", "pipe", "pipe"]
-      });
-      let stdout = "";
-      let stderr = "";
-      let terminateTimer: NodeJS.Timeout | undefined;
-      let killTimer: NodeJS.Timeout | undefined;
-      let settled = false;
-      const finish = (exitCode: number, diagnostic = stderr) => {
-        if (settled) return;
-        settled = true;
-        if (terminateTimer !== undefined) clearTimeout(terminateTimer);
-        if (killTimer !== undefined) clearTimeout(killTimer);
-        options.signal?.removeEventListener("abort", abort);
-        resolve({ command: actualCommand, args: actualArgs, stdout, stderr: diagnostic, exitCode });
-      };
-      const abort = () => {
-        child.kill("SIGTERM");
-        terminateTimer = setTimeout(() => {
-          child.kill("SIGKILL");
-          killTimer = setTimeout(() => {
-            finish(137, `${stderr}${stderr.length === 0 ? "" : "\n"}command did not exit after SIGKILL`);
-          }, KILL_GRACE_MILLISECONDS);
-        }, TERMINATE_GRACE_MILLISECONDS);
-      };
-      child.stdout.setEncoding("utf8");
-      child.stderr.setEncoding("utf8");
-      child.stdout.on("data", (chunk: string) => {
-        stdout += chunk;
-      });
-      child.stderr.on("data", (chunk: string) => {
-        stderr += chunk;
-      });
-      child.on("error", (error) => {
-        finish(127, error.message);
-      });
-      child.on("close", (exitCode, signal) => {
-        const signalExitCode = signal === "SIGKILL" ? 137 : signal === "SIGTERM" ? 143 : 1;
-        finish(exitCode ?? signalExitCode);
-      });
-      if (options.signal?.aborted) abort();
-      else options.signal?.addEventListener("abort", abort, { once: true });
+    const output = new PassThrough();
+    const errors = new PassThrough();
+    let stdout = "";
+    let stderr = "";
+    output.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
+    errors.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
+    const exitCode = await this.runStreaming(command, args, {
+      ...options, terminal: false, stdin: options.stdin ?? Readable.from([]), stdout: output, stderr: errors
     });
+    return { command: actualCommand, args: actualArgs, stdout, stderr, exitCode };
   }
 
   async runStreaming(command: string, args: string[], options: RunOptions = {}): Promise<number> {
@@ -66,57 +31,16 @@ export class ProcessRunner implements StreamingCommandRunner {
       return runInTerminal(actualCommand, actualArgs, options);
     }
 
-    return new Promise((resolve) => {
-      const child = spawn(actualCommand, actualArgs, {
-        cwd: options.cwd,
-        env: options.env,
-        detached: true,
-        stdio: [options.stdin ? "pipe" : "inherit", options.stdout ? "pipe" : "inherit", options.stderr ? "pipe" : "inherit"]
-      });
-      if (options.stdin && child.stdin) options.stdin.pipe(child.stdin);
-      if (options.stdout && child.stdout) child.stdout.pipe(options.stdout);
-      if (options.stderr && child.stderr) child.stderr.pipe(options.stderr);
-      let terminateTimer: NodeJS.Timeout | undefined;
-      let killTimer: NodeJS.Timeout | undefined;
-      let aborting = false;
-      let settled = false;
-      const finish = (exitCode: number) => {
-        if (settled) return;
-        settled = true;
-        if (terminateTimer !== undefined) clearTimeout(terminateTimer);
-        if (killTimer !== undefined) clearTimeout(killTimer);
-        options.signal?.removeEventListener("abort", abort);
-        resolve(exitCode);
-      };
-      const signalGroup = (signal: NodeJS.Signals) => {
-        if (child.pid === undefined) return;
-        try {
-          process.kill(-child.pid, signal);
-        } catch (error) {
-          if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) child.kill(signal);
-        }
-      };
-      const abort = () => {
-        if (settled || aborting) return;
-        aborting = true;
-        signalGroup("SIGTERM");
-        terminateTimer = setTimeout(() => {
-          if (settled) return;
-          signalGroup("SIGKILL");
-          killTimer = setTimeout(() => finish(137), KILL_GRACE_MILLISECONDS);
-        }, TERMINATE_GRACE_MILLISECONDS);
-      };
-      child.on("error", () => {
-        finish(127);
-      });
-      child.on("close", (exitCode, signal) => {
-        const signalExitCode = signal === "SIGKILL" ? 137 : signal === "SIGTERM" ? 143 : 1;
-        if (aborting) signalGroup("SIGKILL");
-        finish(exitCode ?? signalExitCode);
-      });
-      if (options.signal?.aborted) abort();
-      else options.signal?.addEventListener("abort", abort, { once: true });
+    const child = spawn(actualCommand, actualArgs, {
+      cwd: options.cwd,
+      env: options.env,
+      detached: true,
+      stdio: [options.stdin ? "pipe" : "inherit", options.stdout ? "pipe" : "inherit", options.stderr ? "pipe" : "inherit"]
     });
+    attachInput(child, options);
+    if (options.stdout && child.stdout) child.stdout.pipe(options.stdout);
+    if (options.stderr && child.stderr) child.stderr.pipe(options.stderr);
+    return processExit(child, options);
   }
 }
 
@@ -128,40 +52,78 @@ async function runInTerminal(command: string, args: string[], options: RunOption
     "stty", "cols", String(terminal.columns), "rows", String(terminal.rows), ";", "exec",
     shellQuote(command), ...args.map(shellQuote)
   ].join(" ");
-  return await new Promise((resolve) => {
-    const child = spawn("script", [
-      "--quiet", "--return", "--flush", "--command", shellCommand, "/dev/null"
-    ], {
-      cwd: options.cwd,
-      env: options.env,
-      detached: true,
-      stdio: ["pipe", options.stdout ? "pipe" : "inherit", options.stderr ? "pipe" : "inherit"]
-    });
-    if (options.stdin && child.stdin) options.stdin.pipe(child.stdin);
-    if (options.stdout && child.stdout) child.stdout.pipe(options.stdout);
-    if (options.stderr && child.stderr) child.stderr.pipe(options.stderr);
-    let resizeChain = Promise.resolve();
-    const resize = (size: TerminalSize) => {
-      resizeChain = resizeChain.then(() => resizeTerminalChild(child.pid, size));
-    };
-    const removeResize = typeof options.terminal === "object"
-      ? options.terminal.onResize(resize)
-      : () => {};
-    const abort = () => {
+  const child = spawn("script", [
+    "--quiet", "--return", "--flush", "--command", shellCommand, "/dev/null"
+  ], {
+    cwd: options.cwd,
+    env: options.env,
+    detached: true,
+    stdio: ["pipe", options.stdout ? "pipe" : "inherit", options.stderr ? "pipe" : "inherit"]
+  });
+  attachInput(child, options);
+  if (options.stdout && child.stdout) child.stdout.pipe(options.stdout);
+  if (options.stderr && child.stderr) child.stderr.pipe(options.stderr);
+  let resizeChain = Promise.resolve();
+  const resize = (size: TerminalSize) => {
+    resizeChain = resizeChain.then(() => resizeTerminalChild(child.pid, size));
+  };
+  const removeResize = typeof options.terminal === "object"
+    ? options.terminal.onResize(resize)
+    : () => {};
+  try { return await processExit(child, options); }
+  finally { removeResize(); }
+}
+
+function attachInput(child: ChildProcess, options: RunOptions): void {
+  if (!options.stdin || !child.stdin) return;
+  const input = options.stdin;
+  const destination = child.stdin;
+  // Commands may stop reading before their input producer finishes.
+  destination.once("error", () => input.unpipe(destination));
+  child.once("close", () => input.unpipe(destination));
+  input.pipe(destination);
+}
+
+/** One owner for process-group lifetime in capture, streaming and PTY modes. */
+function processExit(child: ChildProcess, options: RunOptions): Promise<number> {
+  return new Promise((resolve) => {
+    let terminating = false;
+    let settled = false;
+    let terminateTimer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+    const signalGroup = (signal: NodeJS.Signals) => {
       if (child.pid === undefined) return;
-      try { process.kill(-child.pid, "SIGTERM"); } catch {}
+      try { process.kill(-child.pid, signal); }
+      catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) child.kill(signal);
+      }
     };
+    const finish = (code: number) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(terminateTimer); clearTimeout(killTimer);
+      options.signal?.removeEventListener("abort", abort);
+      resolve(code);
+    };
+    const abort = () => {
+      if (settled || terminating) return;
+      terminating = true;
+      signalGroup("SIGTERM");
+      terminateTimer = setTimeout(() => {
+        signalGroup("SIGKILL");
+        killTimer = setTimeout(() => finish(137), KILL_GRACE_MILLISECONDS);
+      }, TERMINATE_GRACE_MILLISECONDS);
+    };
+    child.once("error", (error) => {
+      options.stderr?.write(`failed to start process: ${error.message}\n`);
+      finish(127);
+    });
+    child.once("close", (code, signal) => {
+      if (terminating) signalGroup("SIGKILL");
+      finish(code ?? (signal === "SIGKILL" ? 137 : signal === "SIGTERM" ? 143 : 1));
+    });
     if (options.signal?.aborted) abort();
     else options.signal?.addEventListener("abort", abort, { once: true });
-    child.on("error", (error) => {
-      options.stderr?.write(`failed to start terminal helper: ${error.message}\n`);
-      resolve(127);
-    });
-    child.on("close", (exitCode) => {
-      removeResize();
-      options.signal?.removeEventListener("abort", abort);
-      resolve(exitCode ?? 1);
-    });
   });
 }
 
@@ -212,13 +174,4 @@ async function resizeTerminalChild(scriptPid: number | undefined, size: Terminal
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
-export class RecordingRunner implements CommandRunner {
-  readonly commands: Array<{ command: string; args: string[]; sudo: boolean }> = [];
-
-  async run(command: string, args: string[], options: RunOptions = {}): Promise<CommandResult> {
-    this.commands.push({ command, args, sudo: options.sudo ?? false });
-    return { command, args, stdout: "", stderr: "", exitCode: 0 };
-  }
 }

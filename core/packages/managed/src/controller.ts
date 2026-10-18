@@ -1,0 +1,618 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { isUserError, UserError } from "@slop-lab/dim-core";
+import { LifecycleState } from "./lifecycleState.js";
+import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
+import type { RegisteredDimPlugins } from "./plugin.js";
+import { ProcessRunner } from "@slop-lab/dim-core";
+import { hostLifecycleStatus } from "./hostLifecycle.js";
+import { bufferControllerRequestBody, parseControllerJsonBody } from "./controllerRequestBody.js";
+import type { StreamingCommandRunner } from "@slop-lab/dim-core";
+import {
+  listWorkspaces as listWorkspaceRecords,
+  PROJECT_COMPOSE_NAME,
+  restartWorkspace as restartWorkspaceLifecycle
+} from "./workspaceLifecycle.js";
+import { workspaceResourcesRoute } from "./workspaceResourcesRoute.js";
+import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
+import { serveNativeWorkspaceGit } from "./nativeWorkspaceGitBroker.js";
+
+export type ControllerMethod = "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
+export type ControllerAudience = "workspace" | "agent";
+
+export interface ControllerWorkspace {
+  id: string;
+  name: string;
+  projectId: string;
+  projectName: string;
+}
+
+export interface WorkspaceTarget {
+  containers: string[];
+  port: number;
+  protocol: "http" | "https" | "tcp";
+}
+
+export interface ResolvedWorkspaceTarget {
+  readonly protocol: "http" | "https" | "tcp";
+  readonly host: string;
+  readonly port: number;
+  readonly fingerprint: string;
+}
+
+export interface ControllerRouteResponse {
+  status?: number;
+  body?: unknown;
+  headers?: Readonly<Record<string, string>>;
+}
+
+export interface ControllerRouteContext {
+  readonly workspace: ControllerWorkspace;
+  readonly params: Readonly<Record<string, string>>;
+  readonly request: IncomingMessage;
+  readonly stateRoot: string;
+  readJson(maxBytes?: number): Promise<unknown>;
+  resolveTarget(target: WorkspaceTarget, mode: "container-dns" | "container-ip"): Promise<ResolvedWorkspaceTarget>;
+}
+
+export interface DimControllerRoute {
+  readonly method: ControllerMethod;
+  readonly path: string;
+  readonly summary: string;
+  readonly audiences: readonly ControllerAudience[];
+  readonly discovery?: Readonly<Record<string, unknown>>;
+  readonly plugin?: string;
+  initialize?(context: ControllerRuntimeContext): Promise<void>;
+  handle(context: ControllerRouteContext): Promise<ControllerRouteResponse | void>;
+}
+
+export interface ControllerRuntimeContext {
+  readonly stateRoot: string;
+  readonly runner: StreamingCommandRunner;
+  listWorkspaces(): Promise<ControllerWorkspace[]>;
+  resolveTarget(
+    workspace: ControllerWorkspace,
+    target: WorkspaceTarget,
+    mode: "container-dns" | "container-ip"
+  ): Promise<ResolvedWorkspaceTarget>;
+  runWorkspaceRequest<T>(workspace: ControllerWorkspace, operation: () => Promise<T>): Promise<T>;
+}
+
+export interface DimControllerOptions {
+  stateRoot: string;
+  routes: readonly DimControllerRoute[];
+  hostInputProviders?: RegisteredDimPlugins["hostInputProviders"];
+  authenticate(token: string): Promise<ControllerWorkspace | undefined>;
+  authenticateNativeGit?(token: string): Promise<ControllerWorkspace | undefined>;
+  serveNativeGit?(
+    workspace: ControllerWorkspace,
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL
+  ): Promise<void>;
+  resolveTarget(
+    workspace: ControllerWorkspace,
+    target: WorkspaceTarget,
+    mode: "container-dns" | "container-ip"
+  ): Promise<ResolvedWorkspaceTarget>;
+  restartWorkspace?(workspace: ControllerWorkspace): Promise<void>;
+  runWorkspaceRequest<T>(workspace: ControllerWorkspace, operation: () => Promise<T>): Promise<T>;
+  maxBodyBytes?: number;
+  hostReady?(): Promise<boolean>;
+  admitDuringHostRecovery?(workspace: ControllerWorkspace): Promise<boolean>;
+}
+
+export function configuredDimController(
+  lifecycle: LifecycleOptions,
+  plugins: RegisteredDimPlugins,
+  runner: StreamingCommandRunner = new ProcessRunner()
+): Server {
+  const state = new LifecycleState(lifecycle.stateRoot);
+  const nativeConnectionFile = lifecycle.nativeControlPlaneConnection?.file;
+  return createDimController({
+    stateRoot: lifecycle.stateRoot,
+    routes: controllerRoutesForAudience(plugins.controllerRoutes, "workspace"),
+    hostInputProviders: plugins.hostInputProviders,
+    hostReady: async () => (await hostLifecycleStatus(lifecycle)).phase === "ready",
+    admitDuringHostRecovery: async (workspace) => {
+      const host = await hostLifecycleStatus(lifecycle);
+      if (host.phase !== "starting" || !host.resumeWorkspaces.includes(workspace.name)) return false;
+      const record = await state.readWorkspace(workspace.name);
+      return record.phase === "setting-up" && record.workspaceId === workspace.id;
+    },
+    authenticate: async (token) => {
+      const workspace = await state.authenticateWorkspaceGrant(token);
+      return workspace && {
+        id: workspace.workspaceId,
+        name: workspace.name,
+        projectId: workspace.projectId,
+        projectName: workspace.projectName
+      };
+    },
+    ...(nativeConnectionFile === undefined ? {} : {
+      authenticateNativeGit: async (token: string) => {
+        const workspace = await state.authenticateNativeGitGrant(token);
+        return workspace && {
+          id: workspace.workspaceId, name: workspace.name, projectId: workspace.projectId,
+          projectName: workspace.projectName
+        };
+      },
+      serveNativeGit: async (workspace: ControllerWorkspace, request: IncomingMessage,
+        response: ServerResponse, url: URL) => {
+        const record = await state.readWorkspace(workspace.name);
+        if (record.schemaVersion !== 9 || record.workspaceId !== workspace.id) {
+          throw new UserError("native Git broker requires an active native workspace");
+        }
+        await serveNativeWorkspaceGit({ stateRoot: lifecycle.stateRoot,
+          connection: await loadNativeControlPlaneConnection(nativeConnectionFile),
+          workspace: record, request, response, url });
+      }
+    }),
+    runWorkspaceRequest: (workspace, operation) => runWorkspaceRequest(state, workspace, operation),
+    resolveTarget: async (workspace, target, mode) => {
+      const record = await state.readWorkspace(workspace.name);
+      if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
+      return resolveWorkspaceTarget(runner, record, target, mode);
+    },
+    restartWorkspace: async (workspace) => {
+      const record = await state.readWorkspace(workspace.name);
+      if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
+      await restartWorkspaceLifecycle(runner, lifecycle, workspace.name);
+    }
+  });
+}
+
+export function configuredDimAgentController(
+  lifecycle: LifecycleOptions,
+  plugins: RegisteredDimPlugins,
+  runner: StreamingCommandRunner = new ProcessRunner()
+): Server {
+  const state = new LifecycleState(lifecycle.stateRoot);
+  return createDimController({
+    stateRoot: lifecycle.stateRoot,
+    routes: [workspaceResourcesRoute(state), ...controllerRoutesForAudience(plugins.controllerRoutes, "agent")],
+    hostReady: async () => (await hostLifecycleStatus(lifecycle)).phase === "ready",
+    authenticate: async (token) => {
+      const workspace = await state.authenticateAgentGrant(token);
+      return workspace && {
+        id: workspace.workspaceId,
+        name: workspace.name,
+        projectId: workspace.projectId,
+        projectName: workspace.projectName
+      };
+    },
+    runWorkspaceRequest: (workspace, operation) => runWorkspaceRequest(state, workspace, operation),
+    resolveTarget: async (workspace, target, mode) => {
+      const record = await state.readWorkspace(workspace.name);
+      if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
+      return resolveWorkspaceTarget(runner, record, target, mode);
+    }
+  });
+}
+
+export function controllerRoutesForAudience(
+  routes: readonly DimControllerRoute[],
+  audience: ControllerAudience
+): DimControllerRoute[] {
+  return routes.filter((route) => route.audiences.includes(audience));
+}
+
+export async function initializeControllerRoutes(
+  lifecycle: LifecycleOptions,
+  plugins: RegisteredDimPlugins,
+  runner: StreamingCommandRunner = new ProcessRunner()
+): Promise<void> {
+  const state = new LifecycleState(lifecycle.stateRoot);
+  const runtime: ControllerRuntimeContext = {
+    stateRoot: lifecycle.stateRoot,
+    runner,
+    listWorkspaces: async () => (await listWorkspaceRecords(runner, lifecycle))
+      .filter((workspace) => workspace.phase !== "discarding")
+      .map((workspace) => ({
+        id: workspace.workspaceId,
+        name: workspace.name,
+        projectId: workspace.projectId,
+        projectName: workspace.projectName
+      })),
+    runWorkspaceRequest: (workspace, operation) => runWorkspaceRequest(state, workspace, operation),
+    resolveTarget: async (workspace, target, mode) => {
+      const record = await state.readWorkspace(workspace.name);
+      if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
+      return resolveWorkspaceTarget(runner, record, target, mode);
+    }
+  };
+  const initialized = new Set<DimControllerRoute["initialize"]>();
+  for (const route of plugins.controllerRoutes) {
+    if (!route.initialize || initialized.has(route.initialize)) continue;
+    initialized.add(route.initialize);
+    await route.initialize(runtime);
+  }
+}
+
+export function createDimController(options: DimControllerOptions): Server {
+  const pendingRestarts = new Set<string>();
+  return createServer((request, response) => {
+    void handleRequest(options, pendingRestarts, request, response).catch((error) => {
+      sendJson(response, isUserError(error) ? 400 : 500, {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  });
+}
+
+async function handleRequest(
+  options: DimControllerOptions,
+  pendingRestarts: Set<string>,
+  request: IncomingMessage,
+  response: ServerResponse
+): Promise<void> {
+  const url = new URL(request.url ?? "/", "http://dim-controller");
+  if (request.method === "GET" && url.pathname === "/healthz") {
+    const ready = options.hostReady === undefined || await options.hostReady();
+    return sendJson(response, 200, { ok: true, ready, apiVersion: 1 });
+  }
+  if (url.pathname.startsWith("/api/native-git/")) {
+    if (options.authenticateNativeGit === undefined || options.serveNativeGit === undefined) {
+      return sendJson(response, 404, { error: "not found" });
+    }
+    if (options.hostReady !== undefined && !await options.hostReady()) {
+      return sendJson(response, 503, { error: "DIM host is not ready" });
+    }
+    const header = request.headers.authorization;
+    const workspace = header?.startsWith("Bearer ")
+      ? await options.authenticateNativeGit(header.slice("Bearer ".length))
+      : undefined;
+    if (workspace === undefined) return sendJson(response, 401, { error: "invalid native Git broker grant" });
+    return options.runWorkspaceRequest(workspace,
+      () => options.serveNativeGit?.(workspace, request, response, url) ?? Promise.resolve());
+  }
+  let workspace: ControllerWorkspace | undefined;
+  if (options.hostReady !== undefined && !await options.hostReady()) {
+    workspace = await authenticate(options, request);
+    if (workspace === undefined
+      || options.admitDuringHostRecovery === undefined
+      || !await options.admitDuringHostRecovery(workspace)) {
+      return sendJson(response, 503, { error: "DIM host is not ready" });
+    }
+  }
+  workspace ??= await authenticate(options, request);
+  if (!workspace) return sendJson(response, 401, { error: "invalid workspace grant" });
+  const body = await bufferControllerRequestBody(request, options.maxBodyBytes ?? 16_384);
+  return options.runWorkspaceRequest(
+    workspace,
+    () => handleAuthenticatedRequest(options, pendingRestarts, request, response, url, workspace, body)
+  );
+}
+
+async function handleAuthenticatedRequest(
+  options: DimControllerOptions,
+  pendingRestarts: Set<string>,
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  workspace: ControllerWorkspace,
+  body: Buffer
+): Promise<void> {
+  if (request.method === "GET" && url.pathname === "/api") {
+    return sendJson(response, 200, {
+      apiVersion: 1,
+      workspace: { name: workspace.name, project: workspace.projectName },
+      routes: [
+        ...(options.restartWorkspace ? [{
+          method: "POST",
+          path: "/api/workspace/restart",
+          summary: "Restart the authenticated workspace"
+        }] : []),
+        ...options.routes.map(({ method, path, summary, discovery, plugin }) => ({
+          method,
+          path: `/api${path}`,
+          summary,
+          ...(plugin ? { plugin } : {}),
+          ...(discovery ? { discovery } : {})
+        }))
+      ],
+      hostInputProviders: [...(options.hostInputProviders?.keys() ?? [])]
+    });
+  }
+  if (request.method === "POST" && url.pathname === "/api/workspace/restart" && options.restartWorkspace) {
+    if ((request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0")
+      || request.headers["transfer-encoding"] !== undefined) {
+      throw new UserError("workspace restart request must not include a body");
+    }
+    if (!pendingRestarts.has(workspace.id)) {
+      pendingRestarts.add(workspace.id);
+      response.once("finish", () => {
+        setImmediate(() => {
+          void options.restartWorkspace!(workspace)
+            .catch((error) => console.error(`DIM workspace '${workspace.name}' self-restart failed`, error))
+            .finally(() => pendingRestarts.delete(workspace.id));
+        });
+      });
+    }
+    sendJson(response, 202, { accepted: true, workspace: workspace.name });
+    return;
+  }
+  if (request.method === "POST" && url.pathname.startsWith("/api/host-inputs/")) {
+    const name = decodeURIComponent(url.pathname.slice("/api/host-inputs/".length));
+    const provider = options.hostInputProviders?.get(name);
+    if (!provider) return sendJson(response, 404, { error: "host input provider not found" });
+    const input = parseControllerJsonBody(body, options.maxBodyBytes ?? 16_384);
+    if (!input || typeof input !== "object" || typeof (input as { key?: unknown }).key !== "string") {
+      throw new UserError("host input request requires a string key");
+    }
+    const parameters = (input as { parameters?: unknown }).parameters;
+    if (parameters !== undefined && typeof parameters !== "string") {
+      throw new UserError("host input request parameters must be a string");
+    }
+    const value = await provider.resolve({
+      key: (input as { key: string }).key,
+      ...(parameters === undefined ? {} : { parameters })
+    }, {
+      projectId: workspace.projectId,
+      projectName: workspace.projectName,
+      workspaceName: workspace.name
+    });
+    return sendJson(response, 200, { value });
+  }
+
+  for (const route of options.routes) {
+    if (route.method !== request.method) continue;
+    const params = matchRoute(route.path, url.pathname);
+    if (!params) continue;
+    const result = await route.handle({
+      workspace,
+      params,
+      request,
+      stateRoot: options.stateRoot,
+      readJson: async (limit = options.maxBodyBytes ?? 16_384) => parseControllerJsonBody(body, limit),
+      resolveTarget: (target, mode) => options.resolveTarget(workspace, target, mode)
+    });
+    if (!result) {
+      response.writeHead(204).end();
+      return;
+    }
+    const status = result.status ?? 200;
+    if (result.body === undefined) {
+      response.writeHead(status, result.headers).end();
+      return;
+    }
+    sendJson(response, status, result.body, result.headers);
+    return;
+  }
+  sendJson(response, 404, { error: "not found" });
+}
+
+async function runWorkspaceRequest<T>(
+  state: LifecycleState,
+  workspace: ControllerWorkspace,
+  operation: () => Promise<T>
+): Promise<T> {
+  const release = await state.acquireWorkspaceAuthorityLock(workspace.name);
+  try {
+    const record = await state.readWorkspace(workspace.name);
+    if (record.workspaceId !== workspace.id || record.phase === "discarding") {
+      throw new UserError("workspace authority is no longer active");
+    }
+    return await operation();
+  } finally {
+    await release();
+  }
+}
+
+function matchRoute(path: string, requestPath: string): Record<string, string> | undefined {
+  const routeParts = `/api${path}`.split("/");
+  const requestParts = requestPath.split("/");
+  if (routeParts.length !== requestParts.length) return undefined;
+  const params: Record<string, string> = {};
+  for (let index = 0; index < routeParts.length; index += 1) {
+    const expected = routeParts[index] ?? "";
+    const actual = requestParts[index] ?? "";
+    if (expected.startsWith(":")) {
+      params[expected.slice(1)] = decodeURIComponent(actual);
+    } else if (expected !== actual) {
+      return undefined;
+    }
+  }
+  return params;
+}
+
+async function authenticate(options: DimControllerOptions, request: IncomingMessage): Promise<ControllerWorkspace | undefined> {
+  const header = request.headers.authorization;
+  if (!header?.startsWith("Bearer ")) return undefined;
+  return options.authenticate(header.slice("Bearer ".length));
+}
+
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Readonly<Record<string, string>> = {}
+): void {
+  if (response.headersSent) {
+    response.end();
+    return;
+  }
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers });
+  response.end(`${JSON.stringify(body)}\n`);
+}
+
+export async function resolveWorkspaceTarget(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord,
+  target: WorkspaceTarget,
+  mode: "container-dns" | "container-ip"
+): Promise<ResolvedWorkspaceTarget> {
+  validateTarget(target);
+  const outer = await outerContainer(runner, record);
+  if (target.containers.length === 0) {
+    return {
+      protocol: target.protocol,
+      host: mode === "container-ip" ? outer.ip : record.containerName,
+      port: target.port,
+      fingerprint: outer.id
+    };
+  }
+
+  const first = await innerContainer(runner, record, target.containers[0] as string);
+  let relayTargetPort = target.port;
+  let fingerprint = first.id;
+  if (target.containers.length === 2) {
+    const nested = await nestedPublishedTarget(
+      runner,
+      record,
+      first.name,
+      target.containers[1] as string,
+      target.port
+    );
+    relayTargetPort = nested.port;
+    fingerprint = nested.id;
+  }
+  const relayPort = 20_000 + stableHash(JSON.stringify(target)) % 30_000;
+  await ensureWorkspaceRelay(runner, record, relayPort, first.ip, relayTargetPort);
+  return {
+    protocol: target.protocol,
+    host: mode === "container-ip" ? outer.ip : record.containerName,
+    port: relayPort,
+    fingerprint
+  };
+}
+
+function validateTarget(target: WorkspaceTarget): void {
+  if (!target || typeof target !== "object" || !Array.isArray(target.containers) || target.containers.length > 2) {
+    throw new UserError("target.containers must contain zero, one, or two container names");
+  }
+  if (!target.containers.every((name) => /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(name))) {
+    throw new UserError("target container names are invalid");
+  }
+  if (!Number.isInteger(target.port) || target.port < 1 || target.port > 65_535) {
+    throw new UserError("target.port must be an integer between 1 and 65535");
+  }
+  if (target.protocol !== "http" && target.protocol !== "https" && target.protocol !== "tcp") {
+    throw new UserError("target.protocol must be http, https, or tcp");
+  }
+}
+
+async function outerContainer(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord
+): Promise<{ readonly id: string; readonly ip: string }> {
+  const inspected = await runner.run("docker", [
+    "container", "inspect", record.containerName,
+    "--format", "{{json .}}"
+  ]);
+  if (inspected.exitCode !== 0) throw new UserError(`cannot inspect workspace '${record.name}'`);
+  const container = JSON.parse(inspected.stdout) as {
+    Id?: string;
+    NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> };
+  };
+  const address = container.NetworkSettings?.Networks?.[record.networkName]?.IPAddress;
+  if (!container.Id) throw new UserError(`workspace '${record.name}' has no container identity`);
+  if (!address) throw new UserError(`workspace '${record.name}' has no address on '${record.networkName}'`);
+  return { id: container.Id, ip: address };
+}
+
+async function innerContainer(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord,
+  nameOrService: string
+): Promise<{ readonly id: string; readonly name: string; readonly ip: string }> {
+  let inspected = await workspaceDocker(runner, record, [
+    "container", "inspect", nameOrService,
+    "--format", "{{json .}}"
+  ]);
+  if (inspected.exitCode !== 0) {
+    const found = await workspaceDocker(runner, record, [
+      "ps", "--filter", `label=com.docker.compose.project=${PROJECT_COMPOSE_NAME}`,
+      "--filter", `label=com.docker.compose.service=${nameOrService}`,
+      "--format", "{{.Names}}"
+    ]);
+    const names = found.stdout.trim().split(/\r?\n/).filter(Boolean);
+    if (found.exitCode !== 0 || names.length !== 1) {
+      throw new UserError(`workspace target container '${nameOrService}' was not found uniquely`);
+    }
+    inspected = await workspaceDocker(runner, record, [
+      "container", "inspect", names[0] as string,
+      "--format", "{{json .}}"
+    ]);
+  }
+  if (inspected.exitCode !== 0) throw new UserError(`cannot inspect workspace target '${nameOrService}'`);
+  const container = JSON.parse(inspected.stdout) as {
+    Id?: string;
+    Name?: string;
+    NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> };
+  };
+  const ip = Object.values(container.NetworkSettings?.Networks ?? {}).map((network) => network.IPAddress).find(Boolean);
+  if (!container.Id) throw new UserError(`workspace target '${nameOrService}' has no container identity`);
+  if (!ip) throw new UserError(`workspace target '${nameOrService}' has no reachable address`);
+  return { id: container.Id, name: (container.Name ?? nameOrService).replace(/^\//, ""), ip };
+}
+
+async function nestedPublishedTarget(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord,
+  parent: string,
+  child: string,
+  port: number
+): Promise<{ readonly id: string; readonly port: number }> {
+  const inspected = await runner.run("docker", [
+    "exec", "--user", "root", record.containerName,
+    nestedEngine(record), "exec", parent,
+    "docker", "container", "inspect", child,
+    "--format", "{{json .}}"
+  ]);
+  if (inspected.exitCode !== 0) {
+    throw new UserError(`nested target '${parent}/${child}' was not found`);
+  }
+  const container = JSON.parse(inspected.stdout) as {
+    Id?: string;
+    NetworkSettings?: { Ports?: Record<string, Array<{ HostPort?: string }> | null> };
+  };
+  const published = container.NetworkSettings?.Ports?.[`${port}/tcp`]?.[0]?.HostPort;
+  const parsed = Number(published);
+  if (!container.Id) throw new UserError(`nested target '${parent}/${child}' has no container identity`);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    throw new UserError(`nested target '${parent}/${child}' must publish TCP port ${port} on '${parent}'`);
+  }
+  return { id: container.Id, port: parsed };
+}
+
+async function ensureWorkspaceRelay(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord,
+  listenPort: number,
+  host: string,
+  port: number
+): Promise<void> {
+  const config = Buffer.from(JSON.stringify({ host, port })).toString("base64");
+  const result = await runner.run("docker", [
+    "exec", "--user", "root",
+    "--env", `DIM_ROUTE_CONFIG_B64=${config}`,
+    record.containerName,
+    "sh", "-c",
+    `mkdir -p /run/dim/routes; printf %s "$DIM_ROUTE_CONFIG_B64" | base64 -d > /run/dim/routes/${listenPort}.json; `
+      + `test -s /run/dim/routes/${listenPort}.pid && kill -0 "$(cat /run/dim/routes/${listenPort}.pid)" 2>/dev/null || `
+      + `(nohup node /usr/local/lib/dim/route-relay.mjs ${listenPort} /run/dim/routes/${listenPort}.json `
+      + `>/run/dim/routes/${listenPort}.log 2>&1 & echo $! > /run/dim/routes/${listenPort}.pid)`
+  ]);
+  if (result.exitCode !== 0) throw new UserError(`cannot create route relay in workspace '${record.name}'`);
+}
+
+async function workspaceDocker(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord,
+  args: string[]
+) {
+  return runner.run("docker", ["exec", "--user", "root", record.containerName, nestedEngine(record), ...args]);
+}
+
+function nestedEngine(_record: WorkspaceRecord): "docker" {
+  return "docker";
+}
+
+function stableHash(value: string): number {
+  let hash = 0x811c9dc5;
+  for (const byte of Buffer.from(value)) {
+    hash ^= byte;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}

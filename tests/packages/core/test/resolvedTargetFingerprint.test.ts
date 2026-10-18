@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveWorkspaceTarget } from "../../../../core/packages/core/src/controller.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { resolveWorkspaceTarget } from "../../../../core/packages/managed/src/controller.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 

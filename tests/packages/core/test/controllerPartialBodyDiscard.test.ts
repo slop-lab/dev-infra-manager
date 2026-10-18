@@ -5,10 +5,10 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDimController } from "../../../../core/packages/core/src/controller.js";
-import type { DimControllerOptions } from "../../../../core/packages/core/src/controller.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { discardWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { createDimController } from "../../../../core/packages/managed/src/controller.js";
+import type { DimControllerOptions } from "../../../../core/packages/managed/src/controller.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { discardWorkspace } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
 import type { StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 

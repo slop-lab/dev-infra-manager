@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/dim-core",
   "version": "0.10.0",
-  "description": "Project, managed Git, and persistent workspace lifecycle APIs for DIM",
+  "description": "Persistent isolated workspaces from local and remote Git repositories",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -30,10 +30,6 @@
       "import": "./dist/workspace.js"
     }
   },
-  "bin": {
-    "dim-service": "./dist/nativeOrdinaryServiceCli.js",
-    "dim-native-qemu-service": "./dist/nativeQemuServiceCli.js"
-  },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
@@ -44,10 +40,6 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "dependencies": {
-    "@slop-lab/dim-controller-proxy": "workspace:0.10.0",
-    "yaml": "2.8.3"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

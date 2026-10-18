@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createNativeRootCiHostClient,
   type NativeRootCiHostClient
-} from "../../../../core/packages/core/src/nativeRootCiHostClient.js";
-import { serveNativeRootCiHostCapacity } from "../../../../core/packages/core/src/nativeRootCiHostWorker.js";
-import { NativeHostFinalizationUncertainError } from "../../../../core/packages/core/src/nativeOrdinaryExecutorErrors.js";
+} from "../../../../core/packages/managed/src/nativeRootCiHostClient.js";
+import { serveNativeRootCiHostCapacity } from "../../../../core/packages/managed/src/nativeRootCiHostWorker.js";
+import { NativeHostFinalizationUncertainError } from "../../../../core/packages/managed/src/nativeOrdinaryExecutorErrors.js";
 import { tryAcquireKernelGuard } from "../../../../core/packages/core/src/lifecycleLockGuard.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";

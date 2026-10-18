@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import type { NativeWorkspaceRecord, ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import type { NativeWorkspaceRecord, ProjectRecord, WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import { seedTestHostMirrorOwnership, TEST_HOST_MIRROR_PROVIDER } from "./hostLifecycleFixture.js";
 import { nativeProjectFixture, nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 import { COMMIT, INITIAL_COMMIT } from "./workspaceUpdateLockRunner.js";

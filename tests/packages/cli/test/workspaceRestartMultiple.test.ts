@@ -78,7 +78,7 @@ async function runRestart(
   const socketPath = path.join(root, "admin.sock");
   const runtimeDirectory = path.join(
     runtimeRoot,
-    "dim",
+    "dim", "managed",
     createHash("sha256").update(stateRoot).digest("hex").slice(0, 16)
   );
   await mkdir(path.join(configHome, "dim"), { recursive: true });

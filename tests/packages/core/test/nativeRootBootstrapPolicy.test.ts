@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   compileNativeRootBootstrapPolicy,
   parseNativeRootBootstrapManifestYaml
-} from "../../../../core/packages/core/src/index.js";
-import { parseRepositorySetYaml } from "../../../../core/packages/core/src/repositorySet.js";
+} from "../../../../core/packages/managed/src/index.js";
+import { parseRepositorySetYaml } from "../../../../core/packages/managed/src/repositorySet.js";
 import { parseNativeProjectRootImportInput } from "../../../../core/packages/native-git/src/native-project-root-import-codec.js";
 
 const review = {

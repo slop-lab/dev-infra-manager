@@ -1,8 +1,8 @@
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import {
   workspaceContainerLabels,
   workspaceVolumeLabels
-} from "../../../../core/packages/core/src/workspaceResourceOwnership.js";
+} from "../../../../core/packages/managed/src/workspaceResourceOwnership.js";
 
 type WorkspaceIdentity = Pick<WorkspaceRecord,
   "name" | "workspaceId" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |

@@ -1,5 +1,5 @@
-import type { LegacyNativeAttemptIssuer } from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
+import type { LegacyNativeAttemptIssuer } from "../../../../core/packages/managed/src/nativeOrdinaryClaimService.js";
+import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
 import { assignment, descriptor } from "./nativeOrdinaryAuthorityFixture.js";
 
 type IssuerHooks = {

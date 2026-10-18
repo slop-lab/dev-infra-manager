@@ -9,7 +9,7 @@ import {
   type DimPluginLogger,
   type ResolvedWorkspaceTarget,
   type WorkspaceTarget
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 import { HttpFlowTracker, type HttpFlow } from "./httpFlows.js";
 import { WorkspaceRouteRegistry } from "./httpRouteRegistry.js";
 import {

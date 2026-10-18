@@ -1,7 +1,7 @@
 import { vi } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
+import { hostMirrorInspection } from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
 import { registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
 

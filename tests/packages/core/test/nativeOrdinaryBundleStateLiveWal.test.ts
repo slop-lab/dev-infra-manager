@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   initializeNativeOrdinaryBundleState,
   inspectNativeOrdinaryBundleState
-} from "../../../../core/packages/core/src/nativeOrdinaryBundleState.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryBundleState.js";
 
 const roots: string[] = [];
 const children: ChildProcess[] = [];

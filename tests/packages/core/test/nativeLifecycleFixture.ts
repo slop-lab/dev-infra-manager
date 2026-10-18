@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import type {
   NativeWorkspaceRecord,
   ProjectRecord
-} from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/core/src/nativeRootBootstrapPolicy.js";
+} from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
 
 const createdAt = "2026-10-11T00:00:00.000Z";
 const reviewPolicy = compileNativeRootBootstrapPolicy({

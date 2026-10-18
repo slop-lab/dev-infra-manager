@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   configuredWorkspaceBackend,
   setConfiguredWorkspaceBackend
-} from "../../../../core/packages/core/src/userConfig.js";
+} from "../../../../core/packages/managed/src/userConfig.js";
 
 describe("DIM user config", () => {
   const roots: string[] = [];

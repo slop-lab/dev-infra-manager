@@ -2,9 +2,9 @@ import { chmod, chown, link, mkdtemp, rm, symlink, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import { loadNativeQemuConnection, NativeQemuConnectionError,
-  parseNativeQemuConnection } from "../../../../core/packages/core/src/index.js";
+  parseNativeQemuConnection } from "../../../../core/packages/managed/src/index.js";
 
 const roots: string[] = [];
 const capacity = { capacity: "primary",

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionHttpClient.js";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
-import { createNativeRootCiHostClient, type NativeRootCiHostClient } from "../../../../core/packages/core/src/nativeRootCiHostClient.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import { createNativeRootCiHostClient, type NativeRootCiHostClient } from "../../../../core/packages/managed/src/nativeRootCiHostClient.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import {

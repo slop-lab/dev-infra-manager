@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { dirname } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionHttpClient.js";
-import { inspectNativeOrdinaryBundleState } from "../../../../core/packages/core/src/nativeOrdinaryBundleState.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
+import { inspectNativeOrdinaryBundleState } from "../../../../core/packages/managed/src/nativeOrdinaryBundleState.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import {
   hostAuthorization,

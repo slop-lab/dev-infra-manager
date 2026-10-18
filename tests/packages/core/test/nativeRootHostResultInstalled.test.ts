@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionHttpClient.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
 import { statusRecordPath } from "../../native-git/test/nativeOrdinaryStatusFixture.js";
 import { rootRepository } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import {

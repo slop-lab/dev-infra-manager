@@ -4,7 +4,7 @@ import {
   createNativeRootCiProofClient,
   NativeRootCiProofUnavailableError,
   type NativeRootCiProofHttpClient
-} from "../../../../core/packages/core/src/nativeRootCiProofClient.js";
+} from "../../../../core/packages/managed/src/nativeRootCiProofClient.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 
 const credential = { username: "ordinary-identity", password: "identity-secret" } as const;

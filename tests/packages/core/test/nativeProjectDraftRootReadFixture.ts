@@ -1,10 +1,11 @@
+import { prepareNativeProjectFixtureRootForRemoval } from "../../cli/test/nativeProjectFixtureCleanup.js";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { bootstrapNativeProjectRoot } from "../../../../core/packages/core/src/index.js";
-import type { NativeProjectDraft } from "../../../../core/packages/core/src/nativeProjectDraftCodec.js";
+import { bootstrapNativeProjectRoot } from "../../../../core/packages/managed/src/index.js";
+import type { NativeProjectDraft } from "../../../../core/packages/managed/src/nativeProjectDraftCodec.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot, generationId,
   importer, rootReadIssuer, startFinalizeService,
@@ -26,7 +27,10 @@ export type NativeProjectDraftRootReadFixture = {
 
 export async function cleanupNativeProjectDraftRootReadFixtures(): Promise<void> {
   await cleanupFinalizeFixtures();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map(async (root) => {
+    await prepareNativeProjectFixtureRootForRemoval(root);
+    await rm(root, { recursive: true, force: true });
+  }));
 }
 
 export async function nativeProjectDraftRootReadFixture(

@@ -2,10 +2,10 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import * as nativeWorkspaceSelection from "../../../../core/packages/core/src/nativeWorkspaceSelection.js";
-import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { updateWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import * as nativeWorkspaceSelection from "../../../../core/packages/managed/src/nativeWorkspaceSelection.js";
+import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { updateWorkspace } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
 
 import {
   captureFailure, options, projectFixture, seedSelectedRootSnapshot, selectedWorkspaceFixture, workspaceFixture

@@ -5,7 +5,7 @@ const source = JSON.parse(await readFile(new URL("../package.json", import.meta.
 if (source.private !== true) throw new Error("The host mirror provider source package must remain private");
 delete source.private;
 source.version = publishPackageVersion(source.version);
-source.peerDependencies["@slop-lab/dim-core"] = source.version;
+source.peerDependencies["@slop-lab/dim-managed"] = source.version;
 source.types = "./index.d.ts";
 source.main = "./index.js";
 source.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };

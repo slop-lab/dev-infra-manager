@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { CommandSessionManager } from "../../../../core/packages/core/src/commandSessions.js";
+import { CommandSessionManager } from "../../../../core/packages/managed/src/commandSessions.js";
 import { ProcessRunner } from "../../../../core/packages/core/src/runner.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 

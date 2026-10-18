@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { afterEach, test } from "vitest";
 import { createNodeNativeGitRootImporterClient, LifecycleState, loadNativeControlPlaneConnection,
   NativeProjectPendingStore, proveNativeProjectReadiness, serveNativeWorkspaceGit,
-  type NativeWorkspaceRecord } from "../../../../core/packages/core/src/index.js";
+  type NativeWorkspaceRecord } from "../../../../core/packages/managed/src/index.js";
 import { cleanupNativeProjectFixtures, nativeFixture } from "../../cli/test/nativeProjectCommandsFixture.js";
 import { nativeTlsProxy, type NativeTlsFixture } from "./nativeTlsFixture.js";
 

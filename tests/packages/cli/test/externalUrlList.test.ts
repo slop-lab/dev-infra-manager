@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import { workspaceRecord } from "../../core/test/hostLifecycleFixture.js";
 import { runPublishedCli } from "./publishedCliFixture.js";
 
@@ -109,7 +109,7 @@ async function createHostFixture(
   const socketPath = path.join(root, "controller.sock");
   const runtimeDirectory = path.join(
     runtimeRoot,
-    "dim",
+    "dim", "managed",
     createHash("sha256").update(stateRoot).digest("hex").slice(0, 16)
   );
   await mkdir(path.join(configHome, "dim"), { recursive: true });

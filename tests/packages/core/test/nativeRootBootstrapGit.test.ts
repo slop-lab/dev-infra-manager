@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNodeNativeGitRootImporterClient, prepareNativeRootBootstrapGit
-} from "../../../../core/packages/core/src/index.js";
+} from "../../../../core/packages/managed/src/index.js";
 import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot, generationId,
   importer, projectInput, rootRepository, startFinalizeService
 } from "../../native-git/test/nativeRootImportFinalizeFixture.js";

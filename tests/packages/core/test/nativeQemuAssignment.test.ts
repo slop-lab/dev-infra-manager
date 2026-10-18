@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { parseNativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuAssignment.js";
-import type { NativeQemuConnection } from "../../../../core/packages/core/src/nativeQemuConnection.js";
+import { parseNativeQemuHostAssignment } from "../../../../core/packages/managed/src/nativeQemuAssignment.js";
+import type { NativeQemuConnection } from "../../../../core/packages/managed/src/nativeQemuConnection.js";
 import { qemuExecutionDescriptorDigest } from "../../../../core/packages/native-git/src/qemu-execution-descriptor.js";
 
 const script = Buffer.from("exit 0\n");

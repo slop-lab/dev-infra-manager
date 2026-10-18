@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createNativeGitAttemptIssuerClient,
   type NativeGitAttemptIssuerHttpClient
-} from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+} from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import {
   createBundleReview,
@@ -12,7 +12,7 @@ import {
   type NativeBundleReviewFixture
 } from "../../native-git/test/nativeBundleReviewFixture.js";
 import type { AuthoritativeNativeReviewEnvelope } from "../../../../core/packages/native-git/src/authoritative-native-review-schema.js";
-import { parseNativeRootCiReviewEvent } from "../../../../core/packages/core/src/nativeRootCiReviewEvent.js";
+import { parseNativeRootCiReviewEvent } from "../../../../core/packages/managed/src/nativeRootCiReviewEvent.js";
 import {
   cleanupFinalizeFixtures,
   generationId,

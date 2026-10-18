@@ -3,10 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { configuredDimAdminController } from "../../../../core/packages/core/src/adminController.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { LifecycleOptions } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
+import { configuredDimAdminController } from "../../../../core/packages/managed/src/adminController.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { LifecycleOptions } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/managed/src/plugin.js";
 
 describe("DIM admin controller", () => {
   const servers: ReturnType<typeof configuredDimAdminController>[] = [];

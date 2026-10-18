@@ -248,3 +248,16 @@ services, enabled features install/connect naturally, domain state has one
 owner, the dependency graph reflects optional features, and relevant behavioral
 and capable-host checks pass. Record remaining concrete issues. Do not claim
 that an arbitrary large codebase has no possible further improvements.
+
+## Implementation checkpoints
+
+- Responsibility/backlog plan recorded in `6b4d81f2`.
+- Host contexts and stdio transport: `16bef988`.
+- Ordinary Git, one-container workspace lifecycle and CLI vertical slice:
+  `0fde8eb3`. Real Sysbox and CLI data-preservation/cleanup checks passed.
+- Optional installation and active-controller recovery: `004e724d`.
+- Real SSH-host lifecycle evidence: `50844092`; source existed only on the
+  selected remote host, with stdin/status and persistent data verified.
+- Physical optional-package extraction, base image reduction and local bundle
+  selection are in progress. This does not mark CI state-model/workflow-provider
+  consolidation or the remaining backlog complete.

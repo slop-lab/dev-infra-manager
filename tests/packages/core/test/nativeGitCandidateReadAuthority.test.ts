@@ -1,7 +1,7 @@
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNativeGitCandidateReadAuthority } from "../../../../core/packages/core/src/nativeGitCandidateReadAuthority.js";
+import { createNativeGitCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import {
   nativeGitFixture,
   type NativeGitFixture,

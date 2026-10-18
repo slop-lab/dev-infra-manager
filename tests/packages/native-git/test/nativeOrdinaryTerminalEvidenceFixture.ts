@@ -5,15 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect } from "vitest";
-import { createNativeGitAttemptIssuerClient } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
-import { parseNativeOrdinaryBundleConfig } from "../../../../core/packages/core/src/nativeOrdinaryBundleConfig.js";
-import { configuredNativeRootAdmissionServer } from "../../../../core/packages/core/src/nativeRootAdmissionService.js";
+import { createNativeGitAttemptIssuerClient } from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import { parseNativeOrdinaryBundleConfig } from "../../../../core/packages/managed/src/nativeOrdinaryBundleConfig.js";
+import { configuredNativeRootAdmissionServer } from "../../../../core/packages/managed/src/nativeRootAdmissionService.js";
 import {
   parseNativeRootCiClaim,
   type NativeRootCiClaim
-} from "../../../../core/packages/core/src/nativeRootCiClaimProtocol.js";
-import type { NativeJobAttemptIssuance } from "../../../../core/packages/core/src/nativeGitAttemptIssuerModel.js";
+} from "../../../../core/packages/managed/src/nativeRootCiClaimProtocol.js";
+import type { NativeJobAttemptIssuance } from "../../../../core/packages/managed/src/nativeGitAttemptIssuerModel.js";
 import type { AdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { bundleSecrets, idleOrdinaryConfig } from "./bundleConfigFixture.js";
 import { createBundleReview, nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";

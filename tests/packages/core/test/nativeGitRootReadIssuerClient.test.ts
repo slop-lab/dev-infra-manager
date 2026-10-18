@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
 import {
   createNativeGitRootReadIssuerClient,
   createNodeNativeGitRootImporterClient,
   createNodeNativeGitRootReadIssuerClient,
   NativeGitRootReadIssuerClientError
-} from "../../../../core/packages/core/src/index.js";
+} from "../../../../core/packages/managed/src/index.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import {
   activateFinalizeService,

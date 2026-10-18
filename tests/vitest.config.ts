@@ -10,6 +10,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@slop-lab/dim-managed/cli": path.resolve(import.meta.dirname, "../core/packages/managed/src/cli/managed-cli.ts"),
+      "@slop-lab/dim-managed": path.resolve(import.meta.dirname, "../core/packages/managed/src/index.ts"),
       "@slop-lab/dim-core/workspace": path.resolve(import.meta.dirname, "../core/packages/core/src/workspace.ts"),
       "@slop-lab/dim-core": path.resolve(import.meta.dirname, "../core/packages/core/src/index.ts"),
       "@slop-lab/dim-contracts-external-url": path.resolve(

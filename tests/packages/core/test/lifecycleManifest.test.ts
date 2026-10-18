@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { lifecycleOptions } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState, validateLifecycleName } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { lifecycleOptions } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { LifecycleState, validateLifecycleName } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
   detectWorkspaceKvm,
@@ -17,8 +17,8 @@ import {
   validateWorkspaceResources,
   waitForInnerDocker,
   workspaceContainerArgs
-} from "../../../../core/packages/core/src/workspaceLifecycle.js";
-import { workspaceRuntimePlan } from "../../../../core/packages/core/src/runtimeBackends.js";
+} from "../../../../core/packages/managed/src/workspaceLifecycle.js";
+import { workspaceRuntimePlan } from "../../../../core/packages/managed/src/runtimeBackends.js";
 import { rootRepositorySnapshot } from "./lifecycleFixture.js";
 
 describe("project and workspace lifecycle", () => {

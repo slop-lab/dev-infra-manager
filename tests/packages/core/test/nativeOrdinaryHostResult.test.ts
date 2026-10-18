@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { NativeGitResultReporterUnavailableError } from "../../../../core/packages/core/src/nativeGitResultReporter.js";
+import { NativeGitResultReporterUnavailableError } from "../../../../core/packages/managed/src/nativeGitResultReporter.js";
 import { jsonRecord, post, startAuthority, type AuthorityFixture } from "./nativeOrdinaryAuthorityFixture.js";
 import { leaseIssuer, preparedLeaseFixture } from "./nativeOrdinaryLeaseFixture.js";
 

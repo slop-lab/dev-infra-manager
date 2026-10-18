@@ -9,15 +9,15 @@ import {
   configuredNativeOrdinaryAuthorityServer,
   type NativeOrdinaryCredential,
   type NativeOrdinaryAuthorityConfig
-} from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
-import type { NativeAdmissionPolicy } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
-import type { NativeReviewJobEvent } from "../../../../core/packages/core/src/nativeOrdinaryEvent.js";
-import type { LegacyNativeAttemptIssuer } from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityService.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import type { NativeAdmissionPolicy } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js";
+import type { NativeReviewJobEvent } from "../../../../core/packages/managed/src/nativeOrdinaryEvent.js";
+import type { LegacyNativeAttemptIssuer } from "../../../../core/packages/managed/src/nativeOrdinaryClaimService.js";
 import {
   NativeGitResultReporterUnavailableError,
   type NativeGitResultReporterClient
-} from "../../../../core/packages/core/src/nativeGitResultReporter.js";
+} from "../../../../core/packages/managed/src/nativeGitResultReporter.js";
 import { createNodeAdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { createOrdinaryAdmissionVerifier } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { descriptorDigest } from "../../../../core/packages/native-git/src/candidate-execution.js";

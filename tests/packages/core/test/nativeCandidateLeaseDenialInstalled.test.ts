@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostClient.js";
+import type { NativeQemuHostAssignment } from "../../../../core/packages/managed/src/nativeQemuHostClient.js";
 import { refreshBundleReviewWriter, reviewProposalRef } from "../../native-git/test/nativeBundleReviewFixture.js";
 import { runGit } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import { qemuBrokerFixture, type QemuBrokerFixture } from "./nativeCandidateLeaseBrokerFixture.js";

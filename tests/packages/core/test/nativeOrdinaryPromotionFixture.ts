@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
-import { NativeGitResultReporterUnavailableError } from "../../../../core/packages/core/src/nativeGitResultReporter.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import { NativeGitResultReporterUnavailableError } from "../../../../core/packages/managed/src/nativeGitResultReporter.js";
 import { parseReviewEnvelope } from "../../../../core/packages/native-git/src/review-event-schema.js";
 import {
   createNodeAdmissionVerifierHttpClient,

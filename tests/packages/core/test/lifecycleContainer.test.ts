@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { workspaceContainerArgs } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { workspaceContainerArgs } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
 import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 
 const roots: string[] = [];

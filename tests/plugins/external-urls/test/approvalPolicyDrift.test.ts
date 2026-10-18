@@ -3,7 +3,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { LifecycleState } from "@slop-lab/dim-core";
+import { LifecycleState } from "@slop-lab/dim-managed";
 import { ExternalUrlStore } from "../../../../plugin-external-urls/src/routeStore.js";
 import {
   adminAction,

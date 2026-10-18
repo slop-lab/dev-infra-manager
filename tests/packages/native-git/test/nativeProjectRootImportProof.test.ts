@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -220,7 +220,9 @@ describe("native Project imported root proof", () => {
         const packDirectory = join(repository, "objects", "pack");
         const pack = (await readdir(packDirectory)).find((name) => name.endsWith(".pack"));
         if (pack === undefined) throw new Error("imported root has no pack fixture");
-        await writeFile(join(packDirectory, pack), "corrupt graph", { mode: 0o444 });
+        await chmod(join(packDirectory, pack), 0o600);
+        await writeFile(join(packDirectory, pack), "corrupt graph");
+        await chmod(join(packDirectory, pack), 0o444);
       }
 
       // When

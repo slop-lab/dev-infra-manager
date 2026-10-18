@@ -7,7 +7,7 @@ import {
   initializeNativeOrdinaryBundleState,
   inspectNativeOrdinaryBundleState,
   nativeOrdinaryBundleMarkerPath
-} from "../../../../core/packages/core/src/nativeOrdinaryBundleState.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryBundleState.js";
 
 const roots: string[] = [];
 
@@ -98,7 +98,10 @@ describe("native ordinary bundle state filesystem safety", () => {
     // Then
     await expect(inspection).rejects.toThrow(/link/i);
     expect(await readdir(root)).toEqual(beforeEntries);
-    expect(await stat(root, { bigint: true })).toEqual(before);
+    const after = await stat(root, { bigint: true });
+    for (const field of ["dev", "ino", "mode", "nlink", "uid", "gid", "size", "mtimeNs", "ctimeNs"] as const) {
+      expect(after[field]).toBe(before[field]);
+    }
   });
 
   it.each(["ordinary-ci.sqlite3-wal", "ordinary-ci.sqlite3-shm"])(

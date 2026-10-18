@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { assertNativeRootCiEventReceiptIntegrity } from "../../../../core/packages/core/src/nativeRootCiEventReceiptIntegrity.js";
+import { assertNativeRootCiEventReceiptIntegrity } from "../../../../core/packages/managed/src/nativeRootCiEventReceiptIntegrity.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import {
   claimRequest,

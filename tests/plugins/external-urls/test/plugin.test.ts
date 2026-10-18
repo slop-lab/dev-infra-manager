@@ -1,3 +1,4 @@
+import { RecordingRunner } from "../../../support/recordingRunner.js";
 import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
@@ -9,10 +10,9 @@ import {
   createDimController,
   DIM_PLUGIN_API_VERSION,
   initializeControllerRoutes,
-  RecordingRunner,
   registerPlugins,
   type LifecycleOptions
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 import {
   EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
   type ExternalUrlDnsProviderDriver

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { lifecycleOptionsForBackend } from "@slop-lab/dim-core";
+import { lifecycleOptionsForBackend } from "@slop-lab/dim-managed";
 
 const cli = fileURLToPath(new URL("../../../../core/packages/cli/dist/cli.js", import.meta.url));
 const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", import.meta.url));
@@ -223,7 +223,7 @@ test("controller stop never signals an unrelated process with controller-looking
   // Given
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-stop-owner-"));
   const runtimeRoot = path.join(root, "runtime");
-  const controllerRuntime = path.join(runtimeRoot, "dim");
+  const controllerRuntime = path.join(runtimeRoot, "dim", "managed");
   const configHome = path.join(root, "config");
   await mkdir(controllerRuntime, { recursive: true });
   await mkdir(path.join(configHome, "dim"), { recursive: true });
@@ -269,7 +269,7 @@ test("controller stop terminates with an attacker-held partial workspace request
   // Given
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-stop-self-"));
   const runtimeRoot = path.join(root, "runtime");
-  const controllerRuntime = path.join(runtimeRoot, "dim");
+  const controllerRuntime = path.join(runtimeRoot, "dim", "managed");
   const configHome = path.join(root, "config");
   const pluginHome = path.join(root, "plugins");
   const socket = path.join(controllerRuntime, "workspace", "controller.sock");
@@ -289,7 +289,7 @@ test("controller stop terminates with an attacker-held partial workspace request
     DIM_AGENT_CONTROLLER_SOCKET: agentSocket,
     DIM_CONTROLLER_SOCKET: socket,
     DIM_PLUGIN_HOME: pluginHome,
-    DIM_STATE_ROOT: path.join(root, ".local", "state", "dim"),
+    DIM_STATE_ROOT: path.join(root, ".local", "state", "dim", "managed"),
     XDG_CONFIG_HOME: configHome,
     XDG_RUNTIME_DIR: runtimeRoot
   };

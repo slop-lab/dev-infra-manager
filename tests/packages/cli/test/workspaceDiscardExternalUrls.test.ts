@@ -7,13 +7,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { lifecycleOptions } from "../../../../core/packages/core/src/index.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import { lifecycleOptions } from "../../../../core/packages/managed/src/index.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import {
   controllerRequest,
   WorkspaceControllerGrantNotFoundError
-} from "../../../../core/packages/cli/src/controller-client.js";
-import { revokeWorkspaceExternalUrls } from "../../../../core/packages/cli/src/workspace-lifecycle-commands.js";
+} from "../../../../core/packages/managed/src/cli/controller-client.js";
+import { revokeWorkspaceExternalUrls } from "../../../../core/packages/managed/src/cli/workspace-lifecycle-commands.js";
 import { workspaceRecord } from "../../core/test/hostLifecycleFixture.js";
 
 const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));

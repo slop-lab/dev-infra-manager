@@ -3,7 +3,7 @@ import {
   registerHostMirrorProvider,
   type DimPlugin,
   type HostMirrorProvider
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 
 export const hostMirrorProvider = {
   dockerImage: "registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33",

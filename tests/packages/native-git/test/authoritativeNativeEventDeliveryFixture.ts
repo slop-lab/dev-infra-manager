@@ -4,9 +4,9 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionHttpClient.js";
-import { parseNativeOrdinaryBundleConfig } from "../../../../core/packages/core/src/nativeOrdinaryBundleConfig.js";
-import { configuredNativeRootAdmissionServer } from "../../../../core/packages/core/src/nativeRootAdmissionService.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
+import { parseNativeOrdinaryBundleConfig } from "../../../../core/packages/managed/src/nativeOrdinaryBundleConfig.js";
+import { configuredNativeRootAdmissionServer } from "../../../../core/packages/managed/src/nativeRootAdmissionService.js";
 import type {
   AdmissionVerifierHttpClient,
   AdmissionVerifierHttpRequest,

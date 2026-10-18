@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { NativeOrdinaryDescriptor } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
-import type { NativeRootCiReviewEvent } from "../../../../core/packages/core/src/nativeRootCiReviewEvent.js";
+import type { NativeOrdinaryDescriptor } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js";
+import type { NativeRootCiReviewEvent } from "../../../../core/packages/managed/src/nativeRootCiReviewEvent.js";
 
 const admissionGeneration = "00000000-0000-4000-8000-000000000104";
 const claimId = "00000000-0000-4000-8000-000000000101";

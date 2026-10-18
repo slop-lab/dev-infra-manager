@@ -5,11 +5,11 @@ import { DatabaseSync } from "node:sqlite";
 import {
   createNativeGitAttemptIssuerClient,
   type NativeGitAttemptIssuerHttpClient
-} from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+} from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
-import { parseNativeRootCiClaim } from "../../../../core/packages/core/src/nativeRootCiClaimProtocol.js";
+import { parseNativeRootCiClaim } from "../../../../core/packages/managed/src/nativeRootCiClaimProtocol.js";
 import {
   claimRequest,
   hostAuthorization,

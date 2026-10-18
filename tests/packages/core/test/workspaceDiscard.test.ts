@@ -2,11 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend as coreLifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { lifecycleOptionsForBackend as coreLifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { discardWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { discardWorkspace } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
 import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 

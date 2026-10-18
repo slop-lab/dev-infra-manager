@@ -11,8 +11,8 @@ import {
   type ProgressScheduler,
   type ProgressStream,
   type ProgressTimer
-} from "../../../../core/packages/cli/src/cli-progress.js";
-import { readAdminSession } from "../../../../core/packages/cli/src/cli-support.js";
+} from "../../../../core/packages/managed/src/cli/cli-progress.js";
+import { readAdminSession } from "../../../../core/packages/managed/src/cli/cli-support.js";
 
 class FakeTimer implements ProgressTimer {
   cancelled = false;

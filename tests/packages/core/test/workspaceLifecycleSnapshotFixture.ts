@@ -1,7 +1,7 @@
-import type { ProjectRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import type { ProjectRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
-import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
+import { hostMirrorInspection } from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
 import { registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
 import { nativeProjectFixture } from "./nativeLifecycleFixture.js";
 

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   loadNativeGitProjectRegistrarConnection,
   NativeGitProjectRegistrarConnectionError
-} from "../../../../core/packages/core/src/nativeGitProjectRegistrarConnection.js";
+} from "../../../../core/packages/managed/src/nativeGitProjectRegistrarConnection.js";
 
 const roots: string[] = [];
 const password = Buffer.alloc(32, 71).toString("base64url");

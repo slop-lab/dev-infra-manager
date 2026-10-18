@@ -36,10 +36,11 @@ Resource updates report whether container recreation was necessary. Failed
 initialization remains distinguishable from a ready workspace, and malformed
 state is rejected at the storage boundary.
 
-The package's historical root export still contains managed workspace, native
-Git clients, ordinary CI and QEMU APIs. That extraction is ongoing; it is not a
-stable compatibility surface. New base consumers should use `/workspace` and
-must not import the root barrel for an error type or process runner.
+The root export and `/workspace` expose the base API. Optional managed
+workspaces, native Git clients, controllers, ordinary CI, QEMU and plugin
+integration live in `@slop-lab/dim-managed`; they are not installed by the base
+CLI dependency graph. The base package has no production dependencies or
+service binaries.
 
 See the [architecture rework plan](../../../specification/docs/architecture-rework-plan.md)
 for responsibility boundaries, optional service composition, implementation

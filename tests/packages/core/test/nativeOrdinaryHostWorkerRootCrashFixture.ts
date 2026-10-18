@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { NativeOrdinaryHostJournal } from "../../../../core/packages/core/src/nativeOrdinaryHostJournal.js";
+import { NativeOrdinaryHostJournal } from "../../../../core/packages/managed/src/nativeOrdinaryHostJournal.js";
 import { execution } from "./nativeOrdinaryExecutorFixture.js";
 
 const journalPath = process.argv[2];

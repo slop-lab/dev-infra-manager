@@ -9,10 +9,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   NativeOrdinaryHostRequestRejectedError,
   type NativeOrdinaryHostClient
-} from "../../../../core/packages/core/src/nativeOrdinaryHostClient.js";
-import { NativeOrdinaryHostJournal } from "../../../../core/packages/core/src/nativeOrdinaryHostJournal.js";
-import { serveNativeOrdinaryHostCapacity } from "../../../../core/packages/core/src/nativeOrdinaryHostWorker.js";
-import { nativeContainerArgs } from "../../../../core/packages/core/src/nativeOrdinaryExecutorDocker.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryHostClient.js";
+import { NativeOrdinaryHostJournal } from "../../../../core/packages/managed/src/nativeOrdinaryHostJournal.js";
+import { serveNativeOrdinaryHostCapacity } from "../../../../core/packages/managed/src/nativeOrdinaryHostWorker.js";
+import { nativeContainerArgs } from "../../../../core/packages/managed/src/nativeOrdinaryExecutorDocker.js";
 import { execution, ExecutorRunner } from "./nativeOrdinaryExecutorFixture.js";
 import { WorkerClient, ids, resultRequest } from "./nativeOrdinaryHostWorkerReplayFixture.js";
 

@@ -1,9 +1,9 @@
 import { lstat } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
-import { executeNativeHostClaim, NativeHostCleanupError, NativeHostLaunchError, NativeHostVerificationError } from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
-import { NativeHostImageError } from "../../../../core/packages/core/src/nativeOrdinaryExecutorDocker.js";
-import { nativeRunnerScript } from "../../../../core/packages/core/src/nativeOrdinaryExecutorDocker.js";
-import { parseNativeHostResultRequest } from "../../../../core/packages/core/src/nativeOrdinaryResultProtocol.js";
+import { executeNativeHostClaim, NativeHostCleanupError, NativeHostLaunchError, NativeHostVerificationError } from "../../../../core/packages/managed/src/nativeOrdinaryExecutor.js";
+import { NativeHostImageError } from "../../../../core/packages/managed/src/nativeOrdinaryExecutorDocker.js";
+import { nativeRunnerScript } from "../../../../core/packages/managed/src/nativeOrdinaryExecutorDocker.js";
+import { parseNativeHostResultRequest } from "../../../../core/packages/managed/src/nativeOrdinaryResultProtocol.js";
 import { authority, configBytes, dependencies, execution, ExecutorRunner, jobImage, runnerImage } from "./nativeOrdinaryExecutorFixture.js";
 
 describe("native ordinary host claim executor", () => {
@@ -298,7 +298,7 @@ describe("native ordinary host claim executor", () => {
       claim: {
         ...baseline.claim,
         descriptor,
-        descriptorDigest: (await import("../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js"))
+        descriptorDigest: (await import("../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js"))
           .nativeDescriptorDigest(descriptor)
       }
     };

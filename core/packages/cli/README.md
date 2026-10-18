@@ -1,124 +1,87 @@
 # @slop-lab/dim-cli
 
-`dim` manages persistent Linux development workspaces around one reviewed,
-native Git root. The current product is root-only and native-only: it does not
-embed Gitea, expose repository CRUD, remove Projects, or create Project-scoped
-CI runners.
+`dim` creates persistent, isolated development workspaces from ordinary Git
+repositories on a local or SSH host. Managed Git, review and CI are optional.
+Repositories do not need `.dim` configuration.
 
-## Requirements
+## Installation
 
-- Linux with a systemd user manager
-- Node.js 24 or 26
-- Git, Docker with Compose v2 and Buildx, and `sysbox-runc`
-- real, accessible `/dev/kvm` for optional native QEMU capacity
-
-Pin the CLI to the same reviewed version as the installer and plugins. The
-recommended installation is through `@slop-lab/dim-installer`:
+The supported facade is `@slop-lab/dim-installer`. Install the same exact
+version on each development host:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
-dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
+dim installer install core
 dim doctor
 ```
 
-## Native control plane
+Linux development hosts need Docker, Compose, Buildx and `sysbox-runc`. A remote
+client needs Node.js and SSH; runtime operations execute on the selected host.
 
-Install the empty native Git and ordinary-CI service bundle from one absolute,
-owner-only configuration file:
-
-```bash
-dim installer install control-plane --config /absolute/operator/install.json
-```
-
-The installer does not create Projects, approvals, execution capacity, or a
-reviewer UI. Start global ordinary and QEMU capacity separately:
+## Local development
 
 ```bash
-dim ci native-root host run /absolute/operator/ordinary-host.json
-dim ci native-qemu scheduler image build registry.example/dim-native-qemu-scheduler:0.10.0
-dim ci native-qemu runner image build registry.example/dim-native-qemu-runner:0.10.0
-dim ci native-qemu scheduler run /absolute/operator/qemu-scheduler.json
-dim ci native-qemu host run qemu-a /absolute/operator/qemu-host.json
-dim ci native-qemu event status EVENT_ID /absolute/operator/qemu-scheduler.json
+dim image build
+dim create https://example.com/team/app.git dev
+dim ls
+dim show dev
+dim shell dev
+dim exec dev -- git status
+dim run dev exec -- docker compose up -d
+dim resources dev --cpus 4 --memory 8g --pids 4096
+dim stop dev
+dim start dev
+dim recreate dev
+dim discard dev --yes
 ```
 
-These long-running commands consume fixed operator configuration. Candidate
-bytes cannot choose credentials, images, bounds, mounts, networks, or fallback
-executors. The ordinary host loads the enabled exact-version host mirror plugin
-and reconciles DIM-owned cache and control-network resources before it locks
-capacity. QEMU execution requires KVM; there is no TCG or ordinary fallback.
+`create SOURCE NAME` accepts a Git URL or path on the selected host and an
+optional `--ref`. Checkout, user home and private Docker data survive stop,
+start and recreation. `discard` deletes all three and requires confirmation.
+Resource values can be positive limits or `unlimited`; changing resources may
+recreate the container while retaining those persistent volumes.
 
-## Projects and workspaces
+`dim run dev` opens a shell. `run dev exec -- COMMAND`, `run dev custom --
+COMMAND` and `exec dev -- COMMAND` execute ordinary commands without custom
+Project hooks. The `workspace` group exposes the same operations when explicit
+grouping is helpful.
 
-Bootstrap one exact branch from an already-local reviewed repository through
-separate registrar and importer roles:
+## SSH development hosts
 
 ```bash
-dim project bootstrap-native-root demo \
-  --project-id demo-root \
-  --source-repository "$PWD/project-root" \
-  --source-ref refs/heads/main \
-  --registrar-connection /absolute/operator/registrar.json \
-  --importer-connection /absolute/operator/importer.json \
-  --json
-
-export DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE=/absolute/operator/control-plane.json
-export DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE=/absolute/operator/importer.json
-dim project create demo --json
-dim project list --json
-dim project show demo --json
+dim host add devbox --ssh alice@devbox
+dim host use devbox
+dim image build
+dim create https://example.com/team/app.git dev
+dim shell dev
+dim --host local ls
+dim host list
+dim host remove devbox
 ```
 
-`project create` publishes readiness only after fresh native service proof and
-protected-root materialization. It neither runs CI nor creates approval.
+SSH targets use existing SSH configuration, including keys, ports and jump
+hosts. Requests and terminal streams travel over SSH; no host-admin HTTP port
+is exposed. Non-interactive shells can find the installer through mise without
+an activated shell PATH.
+
+Contexts live in `~/.config/dim/hosts.json` (or `$XDG_CONFIG_HOME/dim/hosts.json`).
+Workspace state and source paths belong to the execution host. Inspection does
+not start a controller or provision runtime resources. Removing a context
+changes client configuration only.
+
+## Optional managed administration
 
 ```bash
-dim workspace image build
-dim workspace image status --json
-dim create demo work-1
-dim ls --json
-dim show work-1 --json
-dim run work-1 shell
-dim run work-1 exec -- git status
-dim exec work-1 -- git log -1 --oneline
-dim resources work-1 --cpus 4 --memory 8g --pids 4096
-dim stop work-1
-dim start work-1
-dim restart work-1
-dim update work-1
-dim setup work-1
-dim discard work-1 --yes
+dim installer install core --with-managed
+dim managed --help
 ```
 
-`dim ls` (or `dim list`) lists workspaces. Common workspace operations are
-available directly under `dim`; the `dim workspace` group exposes the same
-commands for discoverability, plus local workspace image management. Both
-forms use the same options and execution path.
+The additional exact-version `@slop-lab/dim-managed` package owns managed
+workspaces, native Git, review, CI, controller services and their plugins.
+Installing the base CLI does not install or import it. Selecting an unavailable
+managed command reports how to add the component.
 
-Each workspace receives one immutable protected-root snapshot and a brokered
-native Git endpoint. Its writer may create or fast-forward only its own
-proposal namespace. Protected writes, deletes, force pushes, tags, foreign
-workspace namespaces, and foreign Projects are rejected before mutation.
-
-## Host lifecycle
-
-```bash
-dim host status --json
-dim host shutdown
-dim host start
-```
-
-`shutdown` preserves managed volumes and leaves the controller available.
-`start` restores only the runtimes selected by the durable host lifecycle
-record. There are no `host stop` or `host restart` commands.
-
-## State compatibility
-
-DIM is pre-stable. Current Project schema 6 and workspace schema 9 are strict.
-Predecessor provider, repository, runner, and workspace state is rejected and
-never adopted, migrated, renamed, or deleted. Use the pinned prior release to
-export needed data, then create fresh native state.
-
-See the repository's native [CLI contract](../../../specification/specs/10-cli-contract.md)
-and [workspace guide](../../../specification/docs/project-workspaces.md).
+`dim installer install control-plane` configures native services separately;
+ordinary development does not require either the managed component or those
+services. See the managed package's administration documentation for reviewed
+Project bootstrap and service configuration.

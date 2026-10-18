@@ -2,18 +2,18 @@ import { access, mkdir, writeFile } from "node:fs/promises";
 import type { Server } from "node:http";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { configuredDimAgentController, configuredDimController } from "../../core/packages/core/src/controller.js";
-import { ensureAptCache } from "../../core/packages/core/src/aptCache.js";
-import { lifecycleOptionsForBackend } from "../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState } from "../../core/packages/core/src/lifecycleState.js";
-import { loadNativeControlPlaneConnection } from "../../core/packages/core/src/nativeControlPlaneConnection.js";
-import { createNodeNativeGitRootImporterClient } from "../../core/packages/core/src/nativeGitRootImporterClient.js";
-import { NativeProjectPendingStore } from "../../core/packages/core/src/nativeProjectPendingStore.js";
-import { registerPlugins } from "../../core/packages/core/src/plugin.js";
-import { ensureRegistryCache } from "../../core/packages/core/src/registryCache.js";
+import { configuredDimAgentController, configuredDimController } from "../../core/packages/managed/src/controller.js";
+import { ensureAptCache } from "../../core/packages/managed/src/aptCache.js";
+import { lifecycleOptionsForBackend } from "../../core/packages/managed/src/lifecycleOptions.js";
+import { LifecycleState } from "../../core/packages/managed/src/lifecycleState.js";
+import { loadNativeControlPlaneConnection } from "../../core/packages/managed/src/nativeControlPlaneConnection.js";
+import { createNodeNativeGitRootImporterClient } from "../../core/packages/managed/src/nativeGitRootImporterClient.js";
+import { NativeProjectPendingStore } from "../../core/packages/managed/src/nativeProjectPendingStore.js";
+import { registerPlugins } from "../../core/packages/managed/src/plugin.js";
+import { ensureRegistryCache } from "../../core/packages/managed/src/registryCache.js";
 import { ProcessRunner } from "../../core/packages/core/src/runner.js";
-import { workspaceAgentIdentity } from "../../core/packages/core/src/workspaceAgentRuntime.js";
-import { buildWorkspaceImage } from "../../core/packages/core/src/workspaceImage.js";
+import { workspaceAgentIdentity } from "../../core/packages/managed/src/workspaceAgentRuntime.js";
+import { buildWorkspaceImage } from "../../core/packages/managed/src/workspaceImage.js";
 import {
   createWorkspace,
   discardWorkspace,
@@ -21,7 +21,7 @@ import {
   startWorkspace,
   stopWorkspace,
   updateWorkspace
-} from "../../core/packages/core/src/workspaceLifecycle.js";
+} from "../../core/packages/managed/src/workspaceLifecycle.js";
 import {
   cleanupNativeProjectFixtures,
   nativeFixture

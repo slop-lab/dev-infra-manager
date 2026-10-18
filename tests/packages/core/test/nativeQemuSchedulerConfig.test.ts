@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNativeQemuSchedulerConfig } from "../../../../core/packages/core/src/nativeQemuSchedulerConfig.js";
+import { parseNativeQemuSchedulerConfig } from "../../../../core/packages/managed/src/nativeQemuSchedulerConfig.js";
 
 const token = (character: string): string => Buffer.alloc(32, character).toString("base64url");
 const image = (name: string, character: string): string => `${name}@sha256:${character.repeat(64)}`;

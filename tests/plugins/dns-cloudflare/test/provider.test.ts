@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { registerPlugin } from "@slop-lab/dim-core";
+import { registerPlugin } from "@slop-lab/dim-managed";
 import {
   EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
   type ExternalUrlDnsProviderDriver

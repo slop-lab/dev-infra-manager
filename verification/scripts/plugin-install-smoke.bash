@@ -136,7 +136,7 @@ printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"sysbox"}' > "$config_path"
 printf '%s\n' '{"schemaVersion":1,"plugins":["@slop-lab/dim-plugin-host-mirrors"]}' > "$plugin_home/plugins.json"
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  installer install core --local-packages "$package_bundle" --no-local-bin >/dev/null
+  installer install core --with-managed --local-packages "$package_bundle" --no-local-bin >/dev/null
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   installer install plugin \
@@ -150,7 +150,7 @@ test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smo
 # caller's temporary tarball still existing.
 rm "$root/$plugin_tarball"
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  installer install core --local-packages "$package_bundle" --no-local-bin >/dev/null
+  installer install core --with-managed --local-packages "$package_bundle" --no-local-bin >/dev/null
 result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node core/packages/cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 

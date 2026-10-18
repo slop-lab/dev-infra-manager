@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { expect } from "vitest";
-import { createNativeGitAttemptIssuerClient } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
-import { parseNativeRootCiClaim, type NativeRootCiClaim } from "../../../../core/packages/core/src/nativeRootCiClaimProtocol.js";
-import type { NativeJobAttemptIssuance } from "../../../../core/packages/core/src/nativeGitAttemptIssuerModel.js";
+import { createNativeGitAttemptIssuerClient } from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import { parseNativeRootCiClaim, type NativeRootCiClaim } from "../../../../core/packages/managed/src/nativeRootCiClaimProtocol.js";
+import type { NativeJobAttemptIssuance } from "../../../../core/packages/managed/src/nativeGitAttemptIssuerModel.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import {

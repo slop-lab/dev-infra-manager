@@ -12,7 +12,7 @@ import {
   type ControllerWorkspace,
   type LifecycleOptions,
   type WorkspaceRecord
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
 import { nativeWorkspaceFixture } from "../../../packages/core/test/nativeLifecycleFixture.js";
 

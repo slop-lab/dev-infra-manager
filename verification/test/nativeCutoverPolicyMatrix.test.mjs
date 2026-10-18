@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, test } from "vitest";
-import { openNativeQemuSchedulerDatabase } from "../../core/packages/core/src/nativeQemuSchedulerDatabase.ts";
-import { assertWorkspaceRecord } from "../../core/packages/core/src/workspaceRecord.ts";
+import { openNativeQemuSchedulerDatabase } from "../../core/packages/managed/src/nativeQemuSchedulerDatabase.ts";
+import { assertWorkspaceRecord } from "../../core/packages/managed/src/workspaceRecord.ts";
 
 const exec = promisify(execFile);
 const verificationRoot = dirname(dirname(fileURLToPath(import.meta.url)));

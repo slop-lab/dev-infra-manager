@@ -4,20 +4,16 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { initializeNativeOrdinaryBundleState } from "../../../../core/packages/core/src/nativeOrdinaryBundleState.js";
+import { afterAll, describe, expect, it } from "vitest";
+import { initializeNativeOrdinaryBundleState } from "../../../../core/packages/managed/src/nativeOrdinaryBundleState.js";
 import { ordinaryBundleConfig, ordinaryBundleSecrets } from "./nativeOrdinaryBundleConfigFixture.js";
 
 const run = promisify(execFile);
 const workspaceRoot = resolve(import.meta.dirname, "../../../..");
-const packageRoot = join(workspaceRoot, "core/packages/core");
+const packageRoot = join(workspaceRoot, "core/packages/managed");
 const serviceCli = join(packageRoot, "dist/nativeOrdinaryServiceCli.js");
 const stateProbe = join(import.meta.dirname, "fixtures/nativeOrdinaryStateProbeProcess.mjs");
 const roots: string[] = [];
-
-beforeAll(async () => {
-  await run("pnpm", ["run", "build"], { cwd: packageRoot });
-});
 
 afterAll(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -62,9 +58,9 @@ describe("ordinary CI image configuration preflight CLI", () => {
     // Given
     const dockerfile = await readFile(join(workspaceRoot, "core/images/ordinary-ci/Dockerfile"), "utf8");
     const dockerignore = await readFile(join(workspaceRoot, ".dockerignore"), "utf8");
-    const copied = new Set([...dockerfile.matchAll(/core\/packages\/core\/dist\/([A-Za-z0-9-]+\.js)/g)]
+    const copied = new Set([...dockerfile.matchAll(/core\/packages\/managed\/dist\/([A-Za-z0-9-]+\.js)/g)]
       .map((match) => match[1]));
-    const included = new Set([...dockerignore.matchAll(/!core\/packages\/core\/dist\/([A-Za-z0-9-]+\.js)/g)]
+    const included = new Set([...dockerignore.matchAll(/!core\/packages\/managed\/dist\/([A-Za-z0-9-]+\.js)/g)]
       .map((match) => match[1]));
     const required = new Set<string>();
     const pending = ["nativeOrdinaryServiceCli.js"];
@@ -81,7 +77,8 @@ describe("ordinary CI image configuration preflight CLI", () => {
     }
 
     // Then
-    expect(dockerfile).not.toMatch(/core\/packages\/core\/dist\/\*\.js/);
+    expect(dockerfile).not.toMatch(/core\/packages\/managed\/dist\/\*\.js/);
+    expect(dockerfile).toContain("COPY core/packages/core/dist ./node_modules/@slop-lab/dim-core");
     expect([...required].filter((filename) => !copied.has(filename)).sort()).toEqual([]);
     expect([...required].filter((filename) => !included.has(filename)).sort()).toEqual([]);
   });

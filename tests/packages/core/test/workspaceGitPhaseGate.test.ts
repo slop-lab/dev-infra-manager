@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { workspaceGitOperationAllowed } from "../../../../core/packages/core/src/nativeWorkspaceGitBroker.js";
-import type { WorkspacePhase } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { workspaceGitOperationAllowed } from "../../../../core/packages/managed/src/nativeWorkspaceGitBroker.js";
+import type { WorkspacePhase } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 
 describe("workspace Git phase fence", () => {
   const cases: readonly [WorkspacePhase, boolean, boolean][] = [

@@ -4,10 +4,11 @@ import path from "node:path";
 import { MissingRecordError, UserError } from "../errors.js";
 import type { RunOptions } from "../types.js";
 import { workspaceImageReference } from "../workspaceImageReference.js";
-import type { AcquiredWorkspaceSource, WorkspaceRecord, WorkspaceResources, WorkspaceSource } from "./models.js";
+import type { AcquiredWorkspaceSource, WorkspaceRecord, WorkspaceResources, WorkspaceSource, WorkspaceView } from "./models.js";
 import { WorkspaceStore, validateResources, workspaceName } from "./store.js";
 
 export interface WorkspaceRuntime {
+  inspect(record: WorkspaceRecord): Promise<{ running: boolean } | undefined>;
   create(record: WorkspaceRecord): Promise<void>;
   start(record: WorkspaceRecord): Promise<void>;
   stop(record: WorkspaceRecord): Promise<void>;
@@ -31,8 +32,19 @@ export type AcquireSource = (input: { source: WorkspaceSource; destination: stri
 export class WorkspaceService {
   constructor(readonly store: WorkspaceStore, private readonly runtime: WorkspaceRuntime, private readonly acquireSource: AcquireSource) {}
 
-  list(): Promise<WorkspaceRecord[]> { return this.store.list(); }
-  show(name: string): Promise<WorkspaceRecord> { return this.store.read(workspaceName(name)); }
+  async list(): Promise<WorkspaceView[]> {
+    return Promise.all((await this.store.list()).map((record) => this.observe(record)));
+  }
+  async show(name: string): Promise<WorkspaceView> { return this.observe(await this.store.read(workspaceName(name))); }
+
+  private async observe(record: WorkspaceRecord): Promise<WorkspaceView> {
+    try {
+      const actual = await this.runtime.inspect(record);
+      return { ...record, runtimeStatus: actual === undefined ? "missing" : actual.running ? "running" : "stopped" };
+    } catch (error) {
+      return { ...record, runtimeStatus: "unavailable", runtimeError: error instanceof Error ? error.message : String(error) };
+    }
+  }
 
   async create(input: CreateWorkspaceInput): Promise<WorkspaceRecord> {
     const name = workspaceName(input.name);

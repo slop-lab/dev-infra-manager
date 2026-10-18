@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   NativeProjectPendingRecordError,
   parseNativeProjectPendingRecord
-} from "../../../../core/packages/core/src/index.js";
-import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/core/src/nativeRootBootstrapPolicy.js";
+} from "../../../../core/packages/managed/src/index.js";
+import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
 
 const reviewPolicy = compileNativeRootBootstrapPolicy({
   rootAlias: "root",

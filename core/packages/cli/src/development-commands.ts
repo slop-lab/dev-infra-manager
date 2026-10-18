@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { type Command } from "commander";
-import { UserError, type WorkspaceRecord } from "@slop-lab/dim-core/workspace";
+import { UserError, type WorkspaceRecord, type WorkspaceView } from "@slop-lab/dim-core/workspace";
 import { HostContextStore, type HostTarget } from "./host-context.js";
 import { callHost, streamHost } from "./host-transport.js";
 
@@ -18,6 +18,17 @@ interface CreateFlags extends OutputFlags {
 export function registerDevelopmentCommands(program: Command): void {
   const hosts = new HostContextStore();
   registerHostContexts(program, hosts);
+  program.command("doctor")
+    .description("Check development host readiness")
+    .option("--json", "print JSON")
+    .action(async (flags: OutputFlags, command: Command) => {
+      const checks = await callHost<Array<{ name: string; ok: boolean; detail: string }>>(
+        await selectedHost(command, hosts), { operation: "doctor" }
+      );
+      if (flags.json) console.log(JSON.stringify(checks));
+      else for (const check of checks) console.log(`${check.ok ? "ok" : "fail"}\t${check.name}\t${check.detail}`);
+      if (checks.some((check) => !check.ok)) process.exitCode = 2;
+    });
   const workspace = program.command("workspace").description("Manage persistent development workspaces");
   for (const parent of [program, workspace]) registerWorkspaceOperations(parent, hosts);
 }
@@ -68,12 +79,12 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
     .description("List workspaces on the selected host")
     .option("--json", "print JSON")
     .action(async (flags: OutputFlags, command: Command) => {
-      const records = await callHost<WorkspaceRecord[]>(await selectedHost(command, hosts), { operation: "list" });
+      const records = await callHost<WorkspaceView[]>(await selectedHost(command, hosts), { operation: "list" });
       if (flags.json) console.log(JSON.stringify(records));
       else if (records.length === 0) console.log("No workspaces");
       else {
         console.log("NAME\tSTATUS\tSOURCE");
-        for (const record of records) console.log(`${record.name}\t${record.phase}\t${record.source.url}`);
+        for (const record of records) console.log(`${record.name}\t${workspaceStatus(record)}\t${record.source.url}`);
       }
     });
 
@@ -82,10 +93,11 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
     .argument("<name>")
     .option("--json", "print JSON")
     .action(async (name: string, flags: OutputFlags, command: Command) => {
-      const record = await callHost<WorkspaceRecord>(await selectedHost(command, hosts), { operation: "show", input: { name } });
+      const record = await callHost<WorkspaceView>(await selectedHost(command, hosts), { operation: "show", input: { name } });
       if (flags.json) console.log(JSON.stringify(record));
       else {
-        console.log(`${record.name}\t${record.phase}`);
+        console.log(`${record.name}\t${workspaceStatus(record)}`);
+        if (record.runtimeError) console.log(`Runtime: ${record.runtimeError}`);
         console.log(`Source: ${record.source.url} (${record.source.ref})`);
         console.log(`Image: ${record.image}`);
         console.log(`Resources: ${record.resources.cpuCount} CPUs, ${record.resources.memory} memory, ${record.resources.pidsLimit} PIDs`);
@@ -215,3 +227,8 @@ function printAction(record: unknown, flags: OutputFlags, message: string): void
 
 function interactive(): boolean { return Boolean(process.stdin.isTTY && process.stdout.isTTY); }
 function capitalize(value: string): string { return value[0]?.toUpperCase() + value.slice(1); }
+
+function workspaceStatus(record: WorkspaceView): string {
+  const observed = record.runtimeStatus ?? record.phase;
+  return observed === record.phase ? record.phase : `${record.phase}/${observed}`;
+}

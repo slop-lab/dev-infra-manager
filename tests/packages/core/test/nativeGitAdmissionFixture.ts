@@ -4,8 +4,8 @@ import { isDeepStrictEqual } from "node:util";
 import type {
   NativeAdmissionPolicy,
   NativeAttemptAssignment
-} from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
-import type { NativeReviewJobEvent } from "../../../../core/packages/core/src/nativeOrdinaryEvent.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
+import type { NativeReviewJobEvent } from "../../../../core/packages/managed/src/nativeOrdinaryEvent.js";
 
 export type ProofMode = "available" | "redirect" | "replay" | "timeout" | "wrong-role" | "wrong-service" | "wrong-scope";
 

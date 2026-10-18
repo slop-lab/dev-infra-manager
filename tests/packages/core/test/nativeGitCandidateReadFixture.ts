@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createNativeGitCandidateReadAuthority, type NativeGitReaderLimits } from "../../../../core/packages/core/src/nativeGitCandidateReadAuthority.js";
+import { createNativeGitCandidateReadAuthority, type NativeGitReaderLimits } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import {
   nativeGitFixture,
   type NativeGitFixture,

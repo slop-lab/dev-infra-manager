@@ -8,10 +8,10 @@ import {
   APT_CACHE_VOLUME,
   aptCacheContainerArgs,
   ensureAptCache
-} from "../../../../core/packages/core/src/aptCache.js";
+} from "../../../../core/packages/managed/src/aptCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import { hostMirrorInspection } from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import { hostLifecycleOptions, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
 
 const APT_IMAGE = `registry.example/apt-cache@sha256:${"b".repeat(64)}`;

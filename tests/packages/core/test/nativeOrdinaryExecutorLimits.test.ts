@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { executeNativeHostClaim, NativeHostLeaseError } from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
+import { executeNativeHostClaim, NativeHostLeaseError } from "../../../../core/packages/managed/src/nativeOrdinaryExecutor.js";
 import { dependencies, execution, ExecutorRunner } from "./nativeOrdinaryExecutorFixture.js";
 
 vi.mock("node:timers/promises", async () => {
@@ -20,7 +20,7 @@ describe("native ordinary executor limits and lease ownership", () => {
     const bounded = { ...input, claim: { ...input.claim, descriptor: {
       ...input.claim.descriptor, bounds: { ...input.claim.descriptor.bounds, outputBytes: "16" }
     } } };
-    bounded.claim.descriptorDigest = (await import("../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js"))
+    bounded.claim.descriptorDigest = (await import("../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js"))
       .nativeDescriptorDigest(bounded.claim.descriptor);
 
     // When
@@ -41,7 +41,7 @@ describe("native ordinary executor limits and lease ownership", () => {
     const bounded = { ...input, claim: { ...input.claim, descriptor: {
       ...input.claim.descriptor, bounds: { ...input.claim.descriptor.bounds, wallClockSeconds: "1" }
     } } };
-    bounded.claim.descriptorDigest = (await import("../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js"))
+    bounded.claim.descriptorDigest = (await import("../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js"))
       .nativeDescriptorDigest(bounded.claim.descriptor);
     const running = executeNativeHostClaim(dependencies(runner), bounded);
 

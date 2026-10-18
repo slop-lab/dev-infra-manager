@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeNativeHostClaim } from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
+import { executeNativeHostClaim } from "../../../../core/packages/managed/src/nativeOrdinaryExecutor.js";
 import { dependencies, execution, ExecutorRunner } from "./nativeOrdinaryExecutorFixture.js";
 
 describe("native ordinary executor observer cancellation", () => {

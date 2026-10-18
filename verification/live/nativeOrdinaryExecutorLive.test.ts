@@ -5,11 +5,11 @@ import {
   executeNativeHostClaim,
   type NativeCandidateReadAuthority,
   type NativeHostExecutorDependencies
-} from "../../core/packages/core/src/nativeOrdinaryExecutor.js";
-import { nativeDescriptorDigest } from "../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
+} from "../../core/packages/managed/src/nativeOrdinaryExecutor.js";
+import { nativeDescriptorDigest } from "../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js";
 import { ProcessRunner } from "../../core/packages/core/src/runner.js";
-import { ensureRegistryCache } from "../../core/packages/core/src/registryCache.js";
-import { lifecycleOptionsForBackend } from "../../core/packages/core/src/lifecycleOptions.js";
+import { ensureRegistryCache } from "../../core/packages/managed/src/registryCache.js";
+import { lifecycleOptionsForBackend } from "../../core/packages/managed/src/lifecycleOptions.js";
 import { hostMirrorProvider } from "../../plugin-host-mirrors/src/index.js";
 import { execution } from "../../tests/packages/core/test/nativeOrdinaryExecutorFixture.js";
 

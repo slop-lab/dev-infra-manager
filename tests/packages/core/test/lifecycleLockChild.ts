@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 
 const root = process.argv[2];
 const name = process.argv[3];

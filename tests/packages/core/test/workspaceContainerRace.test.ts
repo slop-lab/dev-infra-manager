@@ -2,18 +2,18 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { reconcileContainer } from "../../../../core/packages/core/src/workspaceContainer.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { reconcileContainer } from "../../../../core/packages/managed/src/workspaceContainer.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
   workspaceContainerLabels,
   workspaceVolumeLabels
-} from "../../../../core/packages/core/src/workspaceResourceOwnership.js";
+} from "../../../../core/packages/managed/src/workspaceResourceOwnership.js";
 import { options, projectFixture, workspaceFixture } from "./workspaceUpdateLockFixture.js";
 
-vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../../../core/packages/core/src/registryCache.js")>(),
+vi.mock("../../../../core/packages/managed/src/registryCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/managed/src/registryCache.js")>(),
   ensureRegistryCache: vi.fn(async () => {})
 }));
 

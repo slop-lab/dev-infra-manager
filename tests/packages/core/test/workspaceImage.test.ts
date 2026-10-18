@@ -2,12 +2,12 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { UserError } from "../../../../core/packages/core/src/errors.js";
-import { buildWorkspaceImage, inspectWorkspaceImage } from "../../../../core/packages/core/src/index.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { buildWorkspaceImage, inspectWorkspaceImage } from "../../../../core/packages/managed/src/index.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import type { CommandResult, CommandRunner, RunOptions } from "../../../../core/packages/core/src/types.js";
 
 const canonicalWorkspaceImageAssets = path.resolve(import.meta.dirname, "../../../../core/images/project-workspace");
-const shippedWorkspaceImageAssets = path.resolve(import.meta.dirname, "../../../../core/packages/core/src/workspace-image-assets");
+const shippedWorkspaceImageAssets = path.resolve(import.meta.dirname, "../../../../core/packages/managed/src/workspace-image-assets");
 const workspaceImageHelperAssets = [
   "entrypoint.bash",
   "git-askpass.sh",
@@ -175,14 +175,14 @@ describe("workspace image build", () => {
 
     const result = await buildWorkspaceImage(runner, {});
 
-    expect(result).toEqual({ image: "dev-infra-project-workspace:0.10.0" });
+    expect(result).toEqual({ image: "dev-infra-managed-workspace:0.10.0" });
     expect(runner.calls).toEqual([{
       command: "docker",
       args: [
         "buildx", "build", "--load",
         "--build-arg", `DIM_UID=${process.getuid?.()}`,
         "--build-arg", `DIM_GID=${process.getgid?.()}`,
-        "--tag", "dev-infra-project-workspace:0.10.0",
+        "--tag", "dev-infra-managed-workspace:0.10.0",
         "--file", "Dockerfile", "."
       ],
       cwd: expect.stringContaining("dim-workspace-image-")
@@ -218,7 +218,7 @@ describe("workspace image build", () => {
 
     const build = buildWorkspaceImage(runner, {});
 
-    await expect(build).rejects.toThrow("failed to build workspace image 'dev-infra-project-workspace:0.10.0': build denied");
+    await expect(build).rejects.toThrow("failed to build workspace image 'dev-infra-managed-workspace:0.10.0': build denied");
     const context = runner.calls[0]?.cwd;
     expect(context).toBeDefined();
     await expect(access(context ?? "")).rejects.toMatchObject({ code: "ENOENT" });

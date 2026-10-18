@@ -4,9 +4,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createNativeGitCandidateReadAuthority,
   NativeGitCandidateReadError
-} from "../../../../core/packages/core/src/nativeGitCandidateReadAuthority.js";
-import { CandidateObjectError } from "../../../../core/packages/core/src/nativeGitCandidateObjects.js";
-import { NativeGitProcessError } from "../../../../core/packages/core/src/nativeGitCandidateProcess.js";
+} from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
+import { CandidateObjectError } from "../../../../core/packages/managed/src/nativeGitCandidateObjects.js";
+import { NativeGitProcessError } from "../../../../core/packages/managed/src/nativeGitCandidateProcess.js";
 import { candidateReadFixture, type CandidateReadFixture } from "./nativeGitCandidateReadFixture.js";
 
 const fixtures: CandidateReadFixture[] = [];

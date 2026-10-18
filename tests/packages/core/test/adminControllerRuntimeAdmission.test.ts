@@ -4,16 +4,16 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configuredDimAdminController } from "../../../../core/packages/core/src/adminController.js";
-import { withHostRuntimeAdmission } from "../../../../core/packages/core/src/hostAdminAdmission.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { registerPlugins, type RegisteredDimPlugins } from "../../../../core/packages/core/src/plugin.js";
+import { configuredDimAdminController } from "../../../../core/packages/managed/src/adminController.js";
+import { withHostRuntimeAdmission } from "../../../../core/packages/managed/src/hostAdminAdmission.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { registerPlugins, type RegisteredDimPlugins } from "../../../../core/packages/managed/src/plugin.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
   WORKSPACE_RUNTIME_CONFIG_VERSION,
   workspaceRootSnapshotPath
-} from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
-import { workspaceContainerLabels } from "../../../../core/packages/core/src/workspaceResourceOwnership.js";
+} from "../../../../core/packages/managed/src/workspaceLifecycleTypes.js";
+import { workspaceContainerLabels } from "../../../../core/packages/managed/src/workspaceResourceOwnership.js";
 import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 
 class Barrier {

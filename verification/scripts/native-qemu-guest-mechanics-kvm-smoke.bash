@@ -126,7 +126,7 @@ EOF
 cp "$root_dir/verification/assets/native-qemu-fork-pressure.c" "$work_dir/native-qemu-fork-pressure.c"
 
 DOCKER_BUILDKIT=0 docker build --label "$resource_label" --tag "$runner_image" \
-  "$root_dir/core/packages/core/src/native-qemu-runner-assets" >"$evidence_dir/runner-build.log" 2>&1
+  "$root_dir/core/packages/managed/src/native-qemu-runner-assets" >"$evidence_dir/runner-build.log" 2>&1
 DOCKER_BUILDKIT=0 docker build --label "$resource_label" --tag "$job_image" \
   "$work_dir" >"$evidence_dir/job-build.log" 2>&1
 runner_image_id="$(docker image inspect "$runner_image" --format '{{.Id}}')"

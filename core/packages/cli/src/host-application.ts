@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import {
-  acquireWorkspaceSource, buildWorkspaceImage, ContainerWorkspaceRuntime, ProcessRunner, UserError,
+  acquireWorkspaceSource, buildWorkspaceImage, checkWorkspaceHost, ContainerWorkspaceRuntime, ProcessRunner, UserError,
   WorkspaceService, WorkspaceStore, type CreateWorkspaceInput
 } from "@slop-lab/dim-core/workspace";
 import { decodeHostRequest } from "./host-transport.js";
@@ -38,6 +38,7 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
       }, { signal, reportProgress: (stage) => process.stderr.write(`${stage}\n`) });
       break;
     }
+    case "doctor": result = await checkWorkspaceHost(runner); break;
     case "list": result = await service.list(); break;
     case "show": result = await service.show(string(input.name, "name")); break;
     case "create": result = await service.create(createInput(input)); break;

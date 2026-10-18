@@ -33,6 +33,7 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
 
   const packageDirectories = [
     "core/packages/core",
+    "core/packages/managed",
     "core/packages/cli",
     "core/packages/installer",
     "core/packages/controller-proxy",

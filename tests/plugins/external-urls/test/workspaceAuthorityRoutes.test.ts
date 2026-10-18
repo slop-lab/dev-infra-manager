@@ -4,9 +4,9 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDimController, registerPlugins, UserError } from "@slop-lab/dim-core";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { createDimController, registerPlugins, UserError } from "@slop-lab/dim-managed";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
 import { nativeWorkspaceFixture } from "../../../packages/core/test/nativeLifecycleFixture.js";
 

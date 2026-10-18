@@ -39,6 +39,7 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
+pnpm --dir core/packages/managed/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/core/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/controller-proxy/dist pack --pack-destination "$source_dir" --json >/dev/null
@@ -80,6 +81,7 @@ dim_start_local_npm_registry /work
 
 echo "[container] publish local tarballs to the local registry"
 dim_publish_to_local_registry \
+  /work/*dim-managed*.tgz \
   /work/*dim-core*.tgz \
   /work/*dim-contracts-external-url*.tgz \
   /work/*dim-controller-proxy*.tgz \
@@ -129,7 +131,7 @@ config_path="$HOME/.config/dim/config.json"
 mkdir -p "$(dirname "$config_path")"
 printf '{"schemaVersion":1,"workspaceBackend":"sysbox"}\n' >"$config_path"
 config_before="$(sha256sum "$config_path")"
-if dim installer install core >/tmp/core-refusal.out 2>/tmp/core-refusal.err; then
+if dim installer install core --with-managed >/tmp/core-refusal.out 2>/tmp/core-refusal.err; then
   echo "clean non-TTY core install unexpectedly succeeded without explicit host plugin selection" >&2
   exit 1
 fi
@@ -140,7 +142,7 @@ test "$(sha256sum "$config_path")" = "$config_before"
 echo "[container] clean direct install stops its target before foreign-bin rollback"
 mkdir -p "$HOME/.local/bin"
 printf 'user-owned dim\n' >"$HOME/.local/bin/dim"
-if dim installer install core --local-bin \
+if dim installer install core --with-managed --local-bin \
   --host-mirror-plugin "@slop-lab/dim-plugin-host-mirrors@$DIM_PACKAGE_VERSION" \
   >/tmp/core-rollback.out 2>/tmp/core-rollback.err; then
   echo "clean direct install unexpectedly replaced a foreign bin file" >&2
@@ -155,7 +157,7 @@ test "$(sha256sum "$config_path")" = "$config_before"
 rm "$HOME/.local/bin/dim"
 
 echo "[container] install the exact reviewed host plugin in the first core transaction"
-dim installer install core \
+dim installer install core --with-managed \
   --host-mirror-plugin "@slop-lab/dim-plugin-host-mirrors@$DIM_PACKAGE_VERSION"
 test ! -e "$HOME/.local/bin/dim"
 mode="$(mise exec node@24 -- node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).cli.mode)" "$config_path")"
@@ -217,7 +219,7 @@ for _ in $(seq 1 100); do
   sleep 0.05
 done
 test -s "$partial_connections"
-if dim installer install core --local-bin \
+if dim installer install core --with-managed --local-bin \
   >/tmp/core-upgrade-rollback.out 2>/tmp/core-upgrade-rollback.err; then
   echo "existing-runtime install unexpectedly replaced a foreign bin file" >&2
   exit 1
@@ -247,7 +249,7 @@ mise exec node@24 -- node -e '
 rm "$HOME/.local/bin/dim"
 
 echo "[container] explicit --local-bin overrides the mise auto-detected default"
-dim installer install core --local-bin
+dim installer install core --with-managed --local-bin
 test -L "$HOME/.local/bin/dim"
 readlink -f "$HOME/.local/bin/dim" | grep -q "/dim/runtime/current/"
 

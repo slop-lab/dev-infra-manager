@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createNativeGitAdmissionSource } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+import { createNativeGitAdmissionSource } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
 import {
   createNativeGitResultReporterClient,
   type NativeGitResultReporterConfig
-} from "../../../../core/packages/core/src/nativeGitResultReporter.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
+} from "../../../../core/packages/managed/src/nativeGitResultReporter.js";
+import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
 import { statusDigest } from "../../../../core/packages/native-git/src/promotion-schema.js";
 import { admission, descriptor } from "./nativeOrdinaryAuthorityFixture.js";
 

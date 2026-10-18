@@ -1,20 +1,22 @@
+import { dirname } from "node:path";
+import { prepareNativeProjectFixtureRootForRemoval } from "../../cli/test/nativeProjectFixtureCleanup.js";
 import { execFile } from "node:child_process";
 import { createServer, request as httpRequest, type Server } from "node:http";
 import { mkdir, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { loadNativeControlPlaneConnection } from "../../../../core/packages/core/src/nativeControlPlaneConnection.js";
-import { NativeProjectPendingStore } from "../../../../core/packages/core/src/nativeProjectPendingStore.js";
-import { createNodeNativeGitRootImporterClient } from "../../../../core/packages/core/src/nativeGitRootImporterClient.js";
-import { serveNativeWorkspaceGit } from "../../../../core/packages/core/src/nativeWorkspaceGitBroker.js";
-import type { NativeWorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { loadNativeControlPlaneConnection } from "../../../../core/packages/managed/src/nativeControlPlaneConnection.js";
+import { NativeProjectPendingStore } from "../../../../core/packages/managed/src/nativeProjectPendingStore.js";
+import { createNodeNativeGitRootImporterClient } from "../../../../core/packages/managed/src/nativeGitRootImporterClient.js";
+import { serveNativeWorkspaceGit } from "../../../../core/packages/managed/src/nativeWorkspaceGitBroker.js";
+import type { NativeWorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { workspaceAgentContainerLabels, workspaceAgentIdentity, workspaceAgentNetworkLabels,
-  workspaceAgentVolumeLabels } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
-import { workspaceRootSnapshotPath } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
-import { setupWorkspaceLocked } from "../../../../core/packages/core/src/workspaceSetup.js";
+  workspaceAgentVolumeLabels } from "../../../../core/packages/managed/src/workspaceAgentRuntime.js";
+import { workspaceRootSnapshotPath } from "../../../../core/packages/managed/src/workspaceLifecycleTypes.js";
+import { setupWorkspaceLocked } from "../../../../core/packages/managed/src/workspaceSetup.js";
 import { cleanupNativeProjectFixtures, nativeFixture } from "../../cli/test/nativeProjectCommandsFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
@@ -69,6 +71,7 @@ it("grants native checkout reads only after durable setting-up and grants writes
   expect(runner.checkoutReadSucceeded).toBe(true);
   expect(runner.checkoutWriteDenied).toBe(true);
   expect(runner.readyWriteSucceeded).toBe(true);
+  await prepareNativeProjectFixtureRootForRemoval(dirname(fixture.stateRoot));
   await rm(workspaceRootSnapshotPath(fixture.stateRoot, workspace), { recursive: true, force: true });
 });
 

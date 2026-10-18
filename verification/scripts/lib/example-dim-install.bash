@@ -97,6 +97,7 @@ dim_publish_example_packages() {
   dim_publish_to_local_registry \
     "$work_dir"/*dim-contracts-external-url*.tgz \
     "$work_dir"/*dim-controller-proxy*.tgz \
+    "$work_dir"/*dim-managed*.tgz \
     "$work_dir"/*dim-core*.tgz \
     "$work_dir"/*plugin-dns-cloudflare*.tgz \
     "$work_dir"/*plugin-external-urls*.tgz \
@@ -123,6 +124,6 @@ dim_install_example_cli() {
     "$work_dir"/*dim-installer*.tgz --silent >/dev/null
   DIM_EXAMPLE_DIM_BIN="$install_prefix/bin/dim"
   export DIM_EXAMPLE_DIM_BIN
-  "$DIM_EXAMPLE_DIM_BIN" installer install core --no-local-bin \
+  "$DIM_EXAMPLE_DIM_BIN" installer install core --with-managed --no-local-bin \
     --host-mirror-plugin "@slop-lab/dim-plugin-host-mirrors@$host_mirror_version" >/dev/null
 }

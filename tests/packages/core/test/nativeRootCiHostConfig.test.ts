@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   loadNativeRootCiHostConfig,
   parseNativeRootCiHostConfig
-} from "../../../../core/packages/core/src/nativeRootCiHostConfig.js";
+} from "../../../../core/packages/managed/src/nativeRootCiHostConfig.js";
 
 const roots: string[] = [];
 const generationId = "a".repeat(64);

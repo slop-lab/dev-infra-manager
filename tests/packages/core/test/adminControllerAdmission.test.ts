@@ -6,25 +6,25 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   configuredDimAdminController
-} from "../../../../core/packages/core/src/adminController.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+} from "../../../../core/packages/managed/src/adminController.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import {
   HostRuntimeTransitions,
   type HostRuntimeSupervisor
-} from "../../../../core/packages/core/src/hostRuntimeTransitions.js";
-import type { RegisteredDimPlugins } from "../../../../core/packages/core/src/plugin.js";
-import { DIM_PLUGIN_API_VERSION, registerPlugin, registerPlugins } from "../../../../core/packages/core/src/plugin.js";
-import { registerHostMirrorProvider } from "../../../../core/packages/core/src/hostMirrorProvider.js";
+} from "../../../../core/packages/managed/src/hostRuntimeTransitions.js";
+import type { RegisteredDimPlugins } from "../../../../core/packages/managed/src/plugin.js";
+import { DIM_PLUGIN_API_VERSION, registerPlugin, registerPlugins } from "../../../../core/packages/managed/src/plugin.js";
+import { registerHostMirrorProvider } from "../../../../core/packages/managed/src/hostMirrorProvider.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { hostLifecycleOptions, hostRecord, TEST_HOST_MIRROR_PROVIDER } from "./hostLifecycleFixture.js";
 
-vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../../../core/packages/core/src/registryCache.js")>(),
+vi.mock("../../../../core/packages/managed/src/registryCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/managed/src/registryCache.js")>(),
   ensureRegistryCache: vi.fn(async () => {})
 }));
 
-vi.mock("../../../../core/packages/core/src/aptCache.js", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../../../core/packages/core/src/aptCache.js")>(),
+vi.mock("../../../../core/packages/managed/src/aptCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/managed/src/aptCache.js")>(),
   ensureAptCache: vi.fn(async () => {})
 }));
 

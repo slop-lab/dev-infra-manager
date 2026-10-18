@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 import {
   createNodeNativeGitRootImporterClient,
   NativeProjectDraftStore
-} from "../../../../core/packages/core/src/index.js";
-import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/core/src/nativeRootBootstrapPolicy.js";
+} from "../../../../core/packages/managed/src/index.js";
+import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
 import { configuredNativeGitBundleServer,
   type NativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";

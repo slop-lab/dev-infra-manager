@@ -2,13 +2,13 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import * as nativeWorkspaceSelection from "../../../../core/packages/core/src/nativeWorkspaceSelection.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import * as nativeWorkspaceSelection from "../../../../core/packages/managed/src/nativeWorkspaceSelection.js";
 import type {
   ProjectRecord,
   WorkspaceRecord
-} from "../../../../core/packages/core/src/lifecycleTypes.js";
+} from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type {
   CommandResult,
   StreamingCommandRunner
@@ -18,7 +18,7 @@ import {
   setupWorkspace,
   updateWorkspace,
   updateWorkspaceResources
-} from "../../../../core/packages/core/src/workspaceLifecycle.js";
+} from "../../../../core/packages/managed/src/workspaceLifecycle.js";
 
 import {
   options, projectFixture, seedSelectedRootSnapshot, selectedWorkspaceFixture, workspaceFixture

@@ -2,12 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { workspaceAgentIdentity, workspaceAgentNetworkLabels } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
-import { discardWorkspace } from "../../../../core/packages/core/src/workspaceDiscard.js";
+import { workspaceAgentIdentity, workspaceAgentNetworkLabels } from "../../../../core/packages/managed/src/workspaceAgentRuntime.js";
+import { discardWorkspace } from "../../../../core/packages/managed/src/workspaceDiscard.js";
 import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 const roots: string[] = [];

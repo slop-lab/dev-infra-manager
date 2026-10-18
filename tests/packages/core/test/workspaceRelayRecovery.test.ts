@@ -2,12 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { workspaceAgentContainerLabels, workspaceAgentIdentity } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
-import { workspaceRootSnapshotPath } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
-import { reconcileWorkspaceRuntimeState } from "../../../../core/packages/core/src/workspaceState.js";
+import { workspaceAgentContainerLabels, workspaceAgentIdentity } from "../../../../core/packages/managed/src/workspaceAgentRuntime.js";
+import { workspaceRootSnapshotPath } from "../../../../core/packages/managed/src/workspaceLifecycleTypes.js";
+import { reconcileWorkspaceRuntimeState } from "../../../../core/packages/managed/src/workspaceState.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 

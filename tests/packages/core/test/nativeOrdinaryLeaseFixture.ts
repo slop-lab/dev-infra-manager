@@ -1,13 +1,13 @@
 import { DatabaseSync } from "node:sqlite";
 import {
   NativeGitAttemptIssuerUnavailableError
-} from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
+} from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
 import type {
   LegacyAttemptIssueRequest,
   LegacyNativeAttemptIssuer
-} from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
-import type { NativeJobAttemptIssuance } from "../../../../core/packages/core/src/nativeGitAttemptIssuerModel.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryClaimService.js";
+import type { NativeJobAttemptIssuance } from "../../../../core/packages/managed/src/nativeGitAttemptIssuerModel.js";
+import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
 import {
   admission,
   assignment,

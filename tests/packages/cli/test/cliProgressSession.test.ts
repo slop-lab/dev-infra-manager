@@ -5,9 +5,9 @@ import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { CliProgress, ProgressStream } from "../../../../core/packages/cli/src/cli-progress.js";
-import { readAdminSession } from "../../../../core/packages/cli/src/cli-support.js";
-import { withLocalProgress } from "../../../../core/packages/cli/src/local-progress.js";
+import type { CliProgress, ProgressStream } from "../../../../core/packages/managed/src/cli/cli-progress.js";
+import { readAdminSession } from "../../../../core/packages/managed/src/cli/cli-support.js";
+import { withLocalProgress } from "../../../../core/packages/managed/src/cli/local-progress.js";
 
 class RecordingProgress implements CliProgress {
   activities = 0;

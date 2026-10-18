@@ -2,15 +2,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
   showWorkspace,
   stopWorkspace,
   updateWorkspaceResources
-} from "../../../../core/packages/core/src/workspaceLifecycle.js";
-import { workspaceContainerLabels } from "../../../../core/packages/core/src/workspaceResourceOwnership.js";
+} from "../../../../core/packages/managed/src/workspaceLifecycle.js";
+import { workspaceContainerLabels } from "../../../../core/packages/managed/src/workspaceResourceOwnership.js";
 import { options, projectFixture, workspaceFixture } from "./workspaceUpdateLockFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 

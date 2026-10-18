@@ -8,9 +8,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   configuredDimAgentController,
   configuredDimController
-} from "../../../../core/packages/core/src/controller.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
+} from "../../../../core/packages/managed/src/controller.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/managed/src/plugin.js";
 import { hostLifecycleOptions, hostRecord, workspaceRecord } from "./hostLifecycleFixture.js";
 
 describe("controller proxy audience integration", () => {

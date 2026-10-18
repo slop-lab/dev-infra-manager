@@ -7,11 +7,11 @@ import {
   workspaceAgentIdentity,
   workspaceAgentNetworkLabels,
   workspaceAgentVolumeLabels
-} from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
-import { discardWorkspaceAgentResources } from "../../../../core/packages/core/src/workspaceAgentLifecycle.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+} from "../../../../core/packages/managed/src/workspaceAgentRuntime.js";
+import { discardWorkspaceAgentResources } from "../../../../core/packages/managed/src/workspaceAgentLifecycle.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { inspectWorkspaceAgentContainer } from "../../../../core/packages/core/src/workspaceAgentInspection.js";
+import { inspectWorkspaceAgentContainer } from "../../../../core/packages/managed/src/workspaceAgentInspection.js";
 
 const record = {
   schemaVersion: 9,

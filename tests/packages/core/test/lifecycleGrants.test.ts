@@ -2,8 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { resolveWorkspaceCapabilities } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { resolveWorkspaceCapabilities } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
 import { workspaceRecord } from "./hostLifecycleFixture.js";
 
 const roots: string[] = [];

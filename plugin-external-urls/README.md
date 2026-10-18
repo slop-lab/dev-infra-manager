@@ -5,6 +5,10 @@ direct HTTP ingresses, controller-managed Caddy HTTPS ingresses, and opt-in raw
 TCP listeners, then routes each endpoint to a container or nested container
 selected by the authenticated workspace.
 
+This plugin extends the optional `@slop-lab/dim-managed` component. Install it
+at the same exact version with `dim installer install core --with-managed`
+before installing the plugin; base ordinary-Git workspaces do not require it.
+
 ## Installation
 
 Install the plugin at the same exact version as DIM:

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { NativeQemuSchedulerStore } from "../../../../core/packages/core/src/nativeQemuSchedulerStore.js";
+import { NativeQemuSchedulerStore } from "../../../../core/packages/managed/src/nativeQemuSchedulerStore.js";
 import { qemuTerminalEvent } from "./nativeQemuHostFixture.js";
 
 const executionAuthorityJson = JSON.stringify([]);

@@ -1,3 +1,4 @@
+import { RecordingRunner } from "../../../support/recordingRunner.js";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
@@ -9,11 +10,10 @@ import {
   configuredDimAdminController,
   createDimController,
   LifecycleState,
-  RecordingRunner,
   registerPlugins,
   type WorkspaceRecord,
   type LifecycleOptions
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 import { vi } from "vitest";
 import { workspaceRecord } from "../../../packages/core/test/hostLifecycleFixture.js";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";

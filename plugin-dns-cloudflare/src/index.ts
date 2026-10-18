@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 import {
   DIM_PLUGIN_API_VERSION,
   type DimPlugin
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 import {
   EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
   type ExternalUrlDnsProviderDriver,

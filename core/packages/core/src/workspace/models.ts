@@ -31,3 +31,9 @@ export interface WorkspaceRecord {
   updatedAt: string;
   error?: string;
 }
+
+/** Observation is returned to clients; it never rewrites desired or recovery state. */
+export interface WorkspaceView extends WorkspaceRecord {
+  runtimeStatus: "running" | "stopped" | "missing" | "unavailable";
+  runtimeError?: string;
+}

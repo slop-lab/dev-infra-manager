@@ -1,11 +1,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HostLifecycleRecord, LifecycleOptions, WorkspacePhase, WorkspaceRecord
-} from "../../../../core/packages/core/src/lifecycleTypes.js";
+} from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import {
   hostMirrorInspection,
   type HostMirrorOwnership
-} from "../../../../core/packages/core/src/hostMirrorOwnership.js";
+} from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
 
 export const TEST_HOST_MIRROR_PROVIDER = {
   dockerImage: "registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33",

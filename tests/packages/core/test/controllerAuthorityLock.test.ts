@@ -8,10 +8,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   configuredDimController,
   createDimController
-} from "../../../../core/packages/core/src/controller.js";
-import type { DimControllerOptions } from "../../../../core/packages/core/src/controller.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
+} from "../../../../core/packages/managed/src/controller.js";
+import type { DimControllerOptions } from "../../../../core/packages/managed/src/controller.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/managed/src/plugin.js";
 import { hostLifecycleOptions, hostRecord, workspaceRecord } from "./hostLifecycleFixture.js";
 
 describe("controller workspace authority locking", () => {

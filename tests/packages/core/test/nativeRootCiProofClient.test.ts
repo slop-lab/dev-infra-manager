@@ -5,7 +5,7 @@ import {
   NativeRootCiProofRejectedError,
   NativeRootCiProofUnavailableError,
   type NativeRootCiProofHttpClient
-} from "../../../../core/packages/core/src/nativeRootCiProofClient.js";
+} from "../../../../core/packages/managed/src/nativeRootCiProofClient.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import {
   createBundleReview,

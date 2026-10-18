@@ -3,11 +3,11 @@ import type {
   NativeGitAdmissionHttpClient,
   NativeGitAdmissionHttpRequest,
   NativeGitAdmissionHttpResponse
-} from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+} from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
 import {
   createNativeOrdinaryHostClient,
   NativeOrdinaryHostClientError
-} from "../../../../core/packages/core/src/nativeOrdinaryHostClient.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryHostClient.js";
 import { execution } from "./nativeOrdinaryExecutorFixture.js";
 
 const config = {

@@ -4,10 +4,10 @@ import { join } from "node:path";
 import type { Server } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { createNativeQemuAuthorityClient, type NativeQemuAuthorityClient }
-  from "../../../../core/packages/core/src/nativeQemuAuthorityClient.js";
-import type { NativeQemuSchedulerConfig } from "../../../../core/packages/core/src/nativeQemuSchedulerConfig.js";
-import { NativeQemuHostClient } from "../../../../core/packages/core/src/nativeQemuHostClient.js";
-import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/core/src/nativeQemuSchedulerService.js";
+  from "../../../../core/packages/managed/src/nativeQemuAuthorityClient.js";
+import type { NativeQemuSchedulerConfig } from "../../../../core/packages/managed/src/nativeQemuSchedulerConfig.js";
+import { NativeQemuHostClient } from "../../../../core/packages/managed/src/nativeQemuHostClient.js";
+import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/managed/src/nativeQemuSchedulerService.js";
 import { authoritativePolicy } from "../../native-git/test/authoritativeNativeCandidateFixture.js";
 import { createBundleReview, nativeBundleReviewFixture, type NativeBundleReviewFixture }
   from "../../native-git/test/nativeBundleReviewFixture.js";

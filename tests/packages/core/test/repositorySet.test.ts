@@ -6,7 +6,7 @@ import {
   mapRepositoryRefToExternal,
   resolveRepositoryConnection,
   parseRepositorySetYaml
-} from "../../../../core/packages/core/src/repositorySet.js";
+} from "../../../../core/packages/managed/src/repositorySet.js";
 
 describe("repository sets", () => {
   it("uses mapping keys as project-scoped aliases without deriving names from URLs", () => {

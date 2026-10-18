@@ -4,11 +4,11 @@ import {
   type DimPlugin,
   registerPlugin,
   registerPlugins
-} from "../../../../core/packages/core/src/plugin.js";
+} from "../../../../core/packages/managed/src/plugin.js";
 import {
   registerHostMirrorProvider,
   resolveHostMirrorProvider
-} from "../../../../core/packages/core/src/hostMirrorProvider.js";
+} from "../../../../core/packages/managed/src/hostMirrorProvider.js";
 
 describe("plugin contract", () => {
   it("loads plugins through a versioned contract", async () => {

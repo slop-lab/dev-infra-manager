@@ -1,18 +1,13 @@
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { promisify } from "node:util";
 import { spawn, type ChildProcess } from "node:child_process";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { ordinaryBundleConfig, ordinaryBundleSecrets } from "./nativeOrdinaryBundleConfigFixture.js";
 
-const run = promisify(execFile);
-const workspaceRoot = resolve(import.meta.dirname, "../../../..");
-const packageRoot = join(workspaceRoot, "core/packages/core");
 const fixtureProcess = join(import.meta.dirname, "fixtures/nativeOrdinaryIdleProcess.mjs");
 const roots: string[] = [];
 const children: ChildProcess[] = [];
@@ -21,10 +16,6 @@ const activationToken = Buffer.alloc(32, 22).toString("base64url");
 const rotatedActivationToken = Buffer.alloc(32, 23).toString("base64url");
 const generation = "a".repeat(64);
 const nextGeneration = "b".repeat(64);
-
-beforeAll(async () => {
-  await run("pnpm", ["run", "build"], { cwd: packageRoot });
-});
 
 afterAll(async () => {
   await Promise.all(children.splice(0).map(stopService));
@@ -166,7 +157,9 @@ async function startService(existingRoot?: string, token = activationToken): Pro
       writeFile(activationPath, `${token}\n`, { mode: 0o444 })
     ]);
   } else {
+    await chmod(activationPath, 0o600);
     await writeFile(activationPath, `${token}\n`);
+    await chmod(activationPath, 0o444);
   }
   const expectedGenerationId = token === rotatedActivationToken ? nextGeneration : generation;
   const child = spawn(process.execPath, [

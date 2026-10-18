@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { configuredNativeOrdinaryIdleServer } from "../../../../../core/packages/core/dist/nativeOrdinaryIdleService.js";
-import { parseNativeOrdinaryBundleConfig } from "../../../../../core/packages/core/dist/nativeOrdinaryBundleConfig.js";
+import { configuredNativeOrdinaryIdleServer } from "../../../../../core/packages/managed/dist/nativeOrdinaryIdleService.js";
+import { parseNativeOrdinaryBundleConfig } from "../../../../../core/packages/managed/dist/nativeOrdinaryBundleConfig.js";
 
 process.umask(0o022);
 

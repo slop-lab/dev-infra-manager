@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { nativeQemuDescriptorDigest, type NativeQemuDescriptor,
-  type NativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuAssignment.js";
-import type { NativeCandidateReadAuthority } from "../../../../core/packages/core/src/nativeOrdinaryCandidateVerifier.js";
+  type NativeQemuHostAssignment } from "../../../../core/packages/managed/src/nativeQemuAssignment.js";
+import type { NativeCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeOrdinaryCandidateVerifier.js";
 
 export const qemuConfig = Buffer.from(`schemaVersion: 4
 ordinary:

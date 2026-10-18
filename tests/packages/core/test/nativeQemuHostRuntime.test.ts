@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertNativeQemuKvmAvailable, assertNativeQemuRunnerAvailable } from "../../../../core/packages/core/src/nativeQemuHostRuntime.js";
+import { assertNativeQemuKvmAvailable, assertNativeQemuRunnerAvailable } from "../../../../core/packages/managed/src/nativeQemuHostRuntime.js";
 import type { RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 
 const ready = '{"return":{},"id":"caps"}\n{"return":{"enabled":true,"present":true},"id":"kvm"}\n{"return":{},"id":"quit"}\n';

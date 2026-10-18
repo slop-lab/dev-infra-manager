@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { acquireNativeQemuHostCapacityGuard, acquireNativeQemuHostCapacityGuards,
-  NativeQemuHostJournal } from "../../../../core/packages/core/src/nativeQemuHostJournal.js";
+  NativeQemuHostJournal } from "../../../../core/packages/managed/src/nativeQemuHostJournal.js";
 import { qemuAssignment as assignment, qemuTerminalEvent as terminalEvent } from "./nativeQemuHostFixture.js";
 
 const claimId = "00000000-0000-4000-8000-000000000001";

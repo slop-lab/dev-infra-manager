@@ -2,9 +2,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { globalAgent } from "node:https";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNodeNativeGitAdmissionHttpClient }
-  from "../../../../core/packages/core/src/nativeGitAdmissionHttpClient.js";
+  from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
 import { requestNativeGitCandidateLease }
-  from "../../../../core/packages/core/src/nativeGitCandidateLeaseClient.js";
+  from "../../../../core/packages/managed/src/nativeGitCandidateLeaseClient.js";
 import { nativeTlsServer, type NativeTlsFixture } from "./nativeTlsFixture.js";
 
 const fixtures: NativeTlsFixture[] = [];

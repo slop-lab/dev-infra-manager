@@ -1,4 +1,4 @@
-import { UserError, type ResolvedWorkspaceTarget } from "@slop-lab/dim-core";
+import { UserError, type ResolvedWorkspaceTarget } from "@slop-lab/dim-managed";
 import { HttpFlowTracker } from "./httpFlows.js";
 
 interface RegisteredRoute {

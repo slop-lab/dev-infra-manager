@@ -7,11 +7,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   NativeQemuAuthorityRejectedError,
   type NativeQemuAuthorityClient
-} from "../../../../core/packages/core/src/nativeQemuAuthorityClient.js";
-import type { NativeQemuSchedulerConfig } from "../../../../core/packages/core/src/nativeQemuSchedulerConfig.js";
-import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/core/src/nativeQemuSchedulerService.js";
+} from "../../../../core/packages/managed/src/nativeQemuAuthorityClient.js";
+import type { NativeQemuSchedulerConfig } from "../../../../core/packages/managed/src/nativeQemuSchedulerConfig.js";
+import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/managed/src/nativeQemuSchedulerService.js";
 import { queryNativeQemuEvent }
-  from "../../../../core/packages/core/src/nativeQemuOperator.js";
+  from "../../../../core/packages/managed/src/nativeQemuOperator.js";
 
 const servers: ReturnType<typeof configuredNativeQemuSchedulerServer>[] = [];
 afterEach(async () => Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve())))));

@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseNativeDescriptor } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
-import { configuredNativeOrdinaryAuthorityServer } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
-import { openNativeOrdinaryDatabase } from "../../../../core/packages/core/src/nativeOrdinaryAuthoritySchema.js";
+import { parseNativeDescriptor } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
+import { configuredNativeOrdinaryAuthorityServer } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityService.js";
+import { openNativeOrdinaryDatabase } from "../../../../core/packages/managed/src/nativeOrdinaryAuthoritySchema.js";
 import { execution } from "./nativeOrdinaryExecutorFixture.js";
 
 const roots: string[] = [];

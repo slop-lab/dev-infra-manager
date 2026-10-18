@@ -6,7 +6,7 @@ import { createServer as createNetServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { unixHttpRequest } from "../../../../core/packages/cli/src/cli-support.js";
+import { unixHttpRequest } from "../../../../core/packages/managed/src/cli/cli-support.js";
 
 const settlementDeadlineMs = 1_000;
 

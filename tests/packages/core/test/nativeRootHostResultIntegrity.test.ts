@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { dirname } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { inspectNativeOrdinaryBundleState } from "../../../../core/packages/core/src/nativeOrdinaryBundleState.js";
+import { inspectNativeOrdinaryBundleState } from "../../../../core/packages/managed/src/nativeOrdinaryBundleState.js";
 import {
   hostAuthorization,
   post,

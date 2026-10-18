@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NativeOrdinaryAuthorityConfig } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
+import type { NativeOrdinaryAuthorityConfig } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityService.js";
+import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityProtocol.js";
 import { acceptNativeEvent, admission, descriptor, nativeEvent, post, startAuthority, type AuthorityFixture } from "./nativeOrdinaryAuthorityFixture.js";
 
 const runnerBaseImage = `registry.example/runner@sha256:${"3".repeat(64)}`;

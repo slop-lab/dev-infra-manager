@@ -4,8 +4,8 @@ import {
   type NativeGitAttemptIssuerConfig,
   type NativeGitAttemptIssuerHttpClient,
   type NativeGitAttemptIssuerHttpResponse
-} from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
+} from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
+import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
 import { descriptor as descriptorValue } from "./nativeOrdinaryAuthorityFixture.js";
 import { reservationContext, schema2Event } from "./nativeRootReservationClaimFixture.js";
 

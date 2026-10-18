@@ -1,10 +1,11 @@
+import { RecordingRunner } from "../../../support/recordingRunner.js";
 import { once } from "node:events";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDimController, RecordingRunner, registerPlugins } from "@slop-lab/dim-core";
+import { createDimController, registerPlugins } from "@slop-lab/dim-managed";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
 import { tailscaleIngressDriver, tailscaleSelfAddress } from "../../../../plugin-external-urls/src/tailscale.js";
 

@@ -12,6 +12,7 @@ async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "dim-workspace-service-")); roots.push(root);
   const calls: string[] = [];
   const runtime: WorkspaceRuntime = {
+    async inspect() { return { running: true }; },
     async updateResources() { calls.push("resources"); return { recreated: false }; },
     async create() { calls.push("create"); }, async start() { calls.push("start"); },
     async stop() { calls.push("stop"); }, async seed() { calls.push("seed"); },
@@ -87,6 +88,17 @@ describe("workspace application lifecycle", () => {
     const updated = await f.service.resources("dev", { cpuCount: "unlimited" });
     expect(updated.workspace.resources.cpuCount).toBe("unlimited");
     expect(updated.recreated).toBe(false);
+  });
+
+  it("reports actual stopped or missing runtimes without rewriting lifecycle state", async () => {
+    const f = await fixture(); await f.service.create(create);
+    f.runtime.inspect = async () => ({ running: false });
+    expect((await f.service.show("dev")).runtimeStatus).toBe("stopped");
+    f.runtime.inspect = async () => undefined;
+    expect((await f.service.list())[0]?.runtimeStatus).toBe("missing");
+    f.runtime.inspect = async () => { throw new Error("Docker offline"); };
+    expect((await f.service.show("dev")).runtimeError).toBe("Docker offline");
+    expect((await f.store.read("dev")).phase).toBe("running");
   });
 
   it("validates complete persisted records rather than asserting partial data", async () => {

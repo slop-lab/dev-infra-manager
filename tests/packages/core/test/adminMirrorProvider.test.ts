@@ -2,9 +2,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { adminBuiltinCall } from "../../../../core/packages/core/src/adminBuiltin.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { registerPlugins } from "../../../../core/packages/core/src/plugin.js";
+import { adminBuiltinCall } from "../../../../core/packages/managed/src/adminBuiltin.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { registerPlugins } from "../../../../core/packages/managed/src/plugin.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 
 describe("admin host mirror admission", () => {

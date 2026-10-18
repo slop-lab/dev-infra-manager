@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { NativeProjectDraftStore, NativeProjectDraftStoreError,
   type NativeGitRootImportResult,
-  type NativeProjectDraftClaim } from "../../../../core/packages/core/src/index.js";
-import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/core/src/nativeRootBootstrapPolicy.js";
+  type NativeProjectDraftClaim } from "../../../../core/packages/managed/src/index.js";
+import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
 
 const roots: string[] = [];
 const run = promisify(execFile);
@@ -281,7 +281,7 @@ describe("native Project draft store", () => {
       await run("/usr/bin/mkfifo", [path]);
       await chmod(path, 0o600);
       const moduleUrl = pathToFileURL(join(import.meta.dirname,
-        "../../../../core/packages/core/dist/nativeProjectDraftFiles.js")).href;
+        "../../../../core/packages/managed/dist/nativeProjectDraftFiles.js")).href;
       const exportName = boundary === "draft record" ? "readPrivateDraftJson" : "inspectPrivateBundle";
 
       // When

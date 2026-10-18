@@ -20,6 +20,12 @@
       ],
       "@slop-lab/dim-core/workspace": [
         "../core/packages/core/src/workspace.ts"
+      ],
+      "@slop-lab/dim-managed": [
+        "../core/packages/managed/src/index.ts"
+      ],
+      "@slop-lab/dim-managed/cli": [
+        "../core/packages/managed/src/cli/managed-cli.ts"
       ]
     }
   },

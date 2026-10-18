@@ -7,7 +7,7 @@ import {
   type ProgressScheduler,
   type ProgressStream,
   type ProgressTimer
-} from "../../../../core/packages/cli/src/cli-progress.js";
+} from "../../../../core/packages/managed/src/cli/cli-progress.js";
 
 class TestTimer implements ProgressTimer {
   cancelled = false;

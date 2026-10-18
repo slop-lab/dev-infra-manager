@@ -3,10 +3,10 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNativeGitCandidateReadAuthority } from "../../../../core/packages/core/src/nativeGitCandidateReadAuthority.js";
-import type { NativeJobAttemptIssuance } from "../../../../core/packages/core/src/nativeGitAttemptIssuerModel.js";
-import { createNativeRootCiHostClient } from "../../../../core/packages/core/src/nativeRootCiHostClient.js";
-import { NativeQemuHostClient, type NativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostClient.js";
+import { createNativeGitCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
+import type { NativeJobAttemptIssuance } from "../../../../core/packages/managed/src/nativeGitAttemptIssuerModel.js";
+import { createNativeRootCiHostClient } from "../../../../core/packages/managed/src/nativeRootCiHostClient.js";
+import { NativeQemuHostClient, type NativeQemuHostAssignment } from "../../../../core/packages/managed/src/nativeQemuHostClient.js";
 import { authoritativePolicy } from "../../native-git/test/authoritativeNativeCandidateFixture.js";
 import { refreshBundleReviewWriter, reviewProposalRef } from "../../native-git/test/nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, generationId,

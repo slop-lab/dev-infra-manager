@@ -7,8 +7,8 @@ import {
   runtimeBackendChecks,
   sysboxExecutionCheck,
   userLingerCheck
-} from "../../../../core/packages/core/src/doctor.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+} from "../../../../core/packages/managed/src/doctor.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import type { CommandResult, CommandRunner, RunOptions } from "../../../../core/packages/core/src/types.js";
 
 class QueueRunner implements CommandRunner {

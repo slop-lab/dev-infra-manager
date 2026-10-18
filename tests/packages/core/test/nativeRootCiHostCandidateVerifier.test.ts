@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { verifyAndMaterializeNativeRootCiCandidate } from "../../../../core/packages/core/src/nativeRootCiHostCandidateVerifier.js";
+import { verifyAndMaterializeNativeRootCiCandidate } from "../../../../core/packages/managed/src/nativeRootCiHostCandidateVerifier.js";
 import { authority, execution } from "./nativeOrdinaryExecutorFixture.js";
 
 const roots: string[] = [];

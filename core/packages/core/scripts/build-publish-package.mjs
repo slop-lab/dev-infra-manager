@@ -16,10 +16,6 @@ const output = minifyPackageJson(source, {
   includeFields: ["publishConfig", "exports", "types"]
 });
 output.version = publishPackageVersion(source.version);
-output.dependencies = {
-  ...output.dependencies,
-  "@slop-lab/dim-controller-proxy": output.version
-};
 
 output.types = "./index.d.ts";
 output.exports = {
@@ -29,8 +25,7 @@ output.exports = {
   }
 };
 output.exports["./workspace"] = { types: "./workspace.d.ts", import: "./workspace.js" };
-output.bin = { "dim-service": "nativeOrdinaryServiceCli.js",
-  "dim-native-qemu-service": "nativeQemuServiceCli.js" };
+
 
 if ("private" in output) {
   throw new Error("The publish package.json must not contain private");
@@ -43,15 +38,5 @@ await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LI
 await cp(
   new URL("../src/workspace-image-assets", import.meta.url),
   new URL("../dist/workspace-image-assets", import.meta.url),
-  { recursive: true }
-);
-await cp(
-  new URL("../src/native-qemu-scheduler-assets", import.meta.url),
-  new URL("../dist/native-qemu-scheduler-assets", import.meta.url),
-  { recursive: true }
-);
-await cp(
-  new URL("../src/native-qemu-runner-assets", import.meta.url),
-  new URL("../dist/native-qemu-runner-assets", import.meta.url),
   { recursive: true }
 );

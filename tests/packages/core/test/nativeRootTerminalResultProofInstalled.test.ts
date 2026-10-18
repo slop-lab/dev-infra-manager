@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionHttpClient.js";
-import { nativeRootCiTerminalEventDigest } from "../../../../core/packages/core/src/nativeRootCiResultProtocol.js";
-import { parseNativeRootCiCurrentTerminalProof } from "../../../../core/packages/core/src/nativeRootCiTerminalResultProofModel.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionHttpClient.js";
+import { nativeRootCiTerminalEventDigest } from "../../../../core/packages/managed/src/nativeRootCiResultProtocol.js";
+import { parseNativeRootCiCurrentTerminalProof } from "../../../../core/packages/managed/src/nativeRootCiTerminalResultProofModel.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import {

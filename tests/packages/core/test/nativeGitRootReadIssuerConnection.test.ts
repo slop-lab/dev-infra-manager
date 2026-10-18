@@ -6,7 +6,7 @@ import {
   loadNativeGitRootReadIssuerConnection,
   NativeGitRootReadIssuerConnectionError,
   parseNativeGitRootReadIssuerConnection
-} from "../../../../core/packages/core/src/nativeGitRootReadIssuerConnection.js";
+} from "../../../../core/packages/managed/src/nativeGitRootReadIssuerConnection.js";
 
 const roots: string[] = [];
 const valid = {

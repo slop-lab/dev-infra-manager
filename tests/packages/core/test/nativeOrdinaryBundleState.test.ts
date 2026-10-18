@@ -8,7 +8,7 @@ import {
   inspectNativeOrdinaryBundleState,
   initializeNativeOrdinaryBundleState,
   nativeOrdinaryBundleMarkerPath
-} from "../../../../core/packages/core/src/nativeOrdinaryBundleState.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryBundleState.js";
 
 const roots: string[] = [];
 

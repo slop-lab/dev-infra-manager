@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { issueNativeProjectDraftRootReadLease, LifecycleState,
-  NativeProjectDraftRootReadError } from "../../../../core/packages/core/src/index.js";
+  NativeProjectDraftRootReadError } from "../../../../core/packages/managed/src/index.js";
 import { generationId, importer, rootReadIssuer,
   activateFinalizeServiceForGeneration, activationTokenB, closeFinalizeService, generationB,
   rootRepository, startFinalizeServiceForGeneration

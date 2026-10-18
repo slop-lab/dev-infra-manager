@@ -96,6 +96,42 @@ test("image build runs on the selected host and reports the built image", async 
   });
 });
 
+test("doctor checks the selected host and returns failure status with either text or JSON output", async () => {
+  await withFixture(async (fixture) => {
+    await configureRemote(fixture);
+    const healthy = await run(["--host", "devbox", "doctor"], fixture);
+    assert.equal(healthy.status, 0, healthy.stderr);
+    assert.match(healthy.stdout, /ok\tDocker\tready/);
+    assert.deepEqual(await request(fixture), { operation: "doctor" });
+
+    fixture.env.DIM_TEST_DOCTOR_FAIL = "1";
+    const failed = await run(["--host", "devbox", "doctor"], fixture);
+    assert.equal(failed.status, 2, failed.stderr);
+    assert.match(failed.stdout, /fail\tDocker\tnot available/);
+    const json = await run(["--host", "devbox", "doctor", "--json"], fixture);
+    assert.equal(json.status, 2, json.stderr);
+    assert.deepEqual(JSON.parse(json.stdout), [{ name: "Docker", ok: false, detail: "not available" }]);
+  });
+});
+
+test("workspace inspection distinguishes recorded lifecycle from observed runtime status", async () => {
+  await withFixture(async (fixture) => {
+    await configureRemote(fixture);
+    fixture.env.DIM_TEST_RUNTIME_STATUS = "stopped";
+    const list = await run(["--host", "devbox", "ls"], fixture);
+    assert.equal(list.status, 0, list.stderr);
+    assert.match(list.stdout, /dev\trunning\/stopped\t/);
+    const json = await run(["--host", "devbox", "show", "dev", "--json"], fixture);
+    assert.equal(JSON.parse(json.stdout).runtimeStatus, "stopped");
+    assert.equal(JSON.parse(json.stdout).phase, "running");
+    fixture.env.DIM_TEST_RUNTIME_STATUS = "unavailable";
+    const unavailable = await run(["--host", "devbox", "show", "dev"], fixture);
+    assert.equal(unavailable.status, 0, unavailable.stderr);
+    assert.match(unavailable.stdout, /running\/unavailable/);
+    assert.match(unavailable.stdout, /Runtime: Docker unavailable/);
+  });
+});
+
 test("shell, exec and run dispatch raw commands with the remote exit status", async () => {
   await withFixture(async (fixture) => {
     await configureRemote(fixture);
@@ -171,8 +207,11 @@ const request = JSON.parse(Buffer.from(process.argv[3], 'base64url').toString('u
 fs.writeFileSync(process.env.DIM_TEST_REQUEST, JSON.stringify(request));
 if (request.operation === 'exec') { process.stdout.write('command output\\n'); process.exitCode = 17; }
 else if (request.operation === 'image.build') { process.stdout.write(JSON.stringify({image:request.input.image})); }
+else if (request.operation === 'doctor') { const ok = !process.env.DIM_TEST_DOCTOR_FAIL; process.stdout.write(JSON.stringify([{name:'Docker',ok,detail:ok?'ready':'not available'}])); }
 else {
   const record = { name: request.input?.name ?? 'dev', phase:'running', source:{url:'https://example.com/app',ref:'main'},resources:{cpuCount:'2',memory:'4g',pidsLimit:'2048'},image:'workspace' };
+  if (process.env.DIM_TEST_RUNTIME_STATUS) record.runtimeStatus = process.env.DIM_TEST_RUNTIME_STATUS;
+  if (record.runtimeStatus === 'unavailable') record.runtimeError = 'Docker unavailable';
   process.stdout.write(JSON.stringify(request.operation === 'list' ? [record] : request.operation === 'discard' ? {removed:true} : request.operation === 'resources' ? {workspace:record,recreated:true} : record));
 }
 `);

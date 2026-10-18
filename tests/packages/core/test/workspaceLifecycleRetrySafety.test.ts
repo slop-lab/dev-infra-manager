@@ -2,17 +2,17 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend as coreLifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { lifecycleOptionsForBackend as coreLifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { discardWorkspaceAgentResources, reconcileWorkspaceAgent } from "../../../../core/packages/core/src/workspaceAgentLifecycle.js";
+import { discardWorkspaceAgentResources, reconcileWorkspaceAgent } from "../../../../core/packages/managed/src/workspaceAgentLifecycle.js";
 import { workspaceAgentContainerLabels, workspaceAgentIdentity, workspaceAgentNetworkLabels,
-  workspaceAgentVolumeLabels } from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
-import { discardWorkspace } from "../../../../core/packages/core/src/workspaceDiscard.js";
-import { workspaceRootSnapshotPath } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
-import { reconcileWorkspaceRuntimeState } from "../../../../core/packages/core/src/workspaceState.js";
-import { setupWorkspaceLocked } from "../../../../core/packages/core/src/workspaceSetup.js";
+  workspaceAgentVolumeLabels } from "../../../../core/packages/managed/src/workspaceAgentRuntime.js";
+import { discardWorkspace } from "../../../../core/packages/managed/src/workspaceDiscard.js";
+import { workspaceRootSnapshotPath } from "../../../../core/packages/managed/src/workspaceLifecycleTypes.js";
+import { reconcileWorkspaceRuntimeState } from "../../../../core/packages/managed/src/workspaceState.js";
+import { setupWorkspaceLocked } from "../../../../core/packages/managed/src/workspaceSetup.js";
 
 function lifecycleOptionsForBackend(backend: "sysbox", env: NodeJS.ProcessEnv = {}) {
   return coreLifecycleOptionsForBackend(backend, { ...env,

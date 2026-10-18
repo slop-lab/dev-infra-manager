@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { NativeWorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { assertWorkspaceRecord } from "../../../../core/packages/core/src/workspaceRecord.js";
+import type { NativeWorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { assertWorkspaceRecord } from "../../../../core/packages/managed/src/workspaceRecord.js";
 
 const nativeWorkspace = (): NativeWorkspaceRecord => ({
   schemaVersion: 9,

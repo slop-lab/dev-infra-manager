@@ -2,10 +2,10 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { selectWorkspaceEnvironment } from "../../../../core/packages/core/src/workspaceEnvironment.js";
-import { selectWorkspaceEnvironmentTransition } from "../../../../core/packages/core/src/workspaceEnvironmentTransition.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { selectWorkspaceEnvironment } from "../../../../core/packages/managed/src/workspaceEnvironment.js";
+import { selectWorkspaceEnvironmentTransition } from "../../../../core/packages/managed/src/workspaceEnvironmentTransition.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 
 describe("workspace environment selection", () => {

@@ -3,9 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { nativeQemuDescriptorDigest, type NativeQemuDescriptor } from "../../../../core/packages/core/src/nativeQemuAssignment.js";
-import { verifyAndMaterializeNativeQemuCandidate } from "../../../../core/packages/core/src/nativeQemuHostCandidateVerifier.js";
-import type { NativeCandidateReadAuthority } from "../../../../core/packages/core/src/nativeOrdinaryCandidateVerifier.js";
+import { nativeQemuDescriptorDigest, type NativeQemuDescriptor } from "../../../../core/packages/managed/src/nativeQemuAssignment.js";
+import { verifyAndMaterializeNativeQemuCandidate } from "../../../../core/packages/managed/src/nativeQemuHostCandidateVerifier.js";
+import type { NativeCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeOrdinaryCandidateVerifier.js";
 
 const roots: string[] = [];
 const config = Buffer.from(`schemaVersion: 4

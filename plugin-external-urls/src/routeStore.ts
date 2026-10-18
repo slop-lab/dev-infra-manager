@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { LifecycleState, UserError, type WorkspaceTarget } from "@slop-lab/dim-core";
+import { LifecycleState, UserError, type WorkspaceTarget } from "@slop-lab/dim-managed";
 
 const HOST_URL_LIST_LIMIT = 1_000;
 

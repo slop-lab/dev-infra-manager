@@ -404,7 +404,7 @@ describe("local source build policy", () => {
     });
 
     // When
-    const result = spawnSync("/usr/local/bin/just", ["build-local-workspace-image"], {
+    const result = spawnSync("just", ["build-local-workspace-image"], {
       cwd: workspaceRoot,
       encoding: "utf8",
       env: {

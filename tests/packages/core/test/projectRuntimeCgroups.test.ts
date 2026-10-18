@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyProjectRuntimeCgroups, inspectProjectRuntimeCgroups } from "../../../../core/packages/core/src/projectRuntimeCgroups.js";
+import { classifyProjectRuntimeCgroups, inspectProjectRuntimeCgroups } from "../../../../core/packages/managed/src/projectRuntimeCgroups.js";
 
 describe("project runtime cgroups", () => {
   it.each(["systemd", "cgroupfs"])("accepts writable cgroup v2 delegation with the %s driver", (driver) => {

@@ -2,7 +2,7 @@ import { access, chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { assertNativeQemuKvmAvailable, assertNativeQemuRunnerAvailable } from "../../../../core/packages/core/src/nativeQemuHostRuntime.js";
+import { assertNativeQemuKvmAvailable, assertNativeQemuRunnerAvailable } from "../../../../core/packages/managed/src/nativeQemuHostRuntime.js";
 import { ProcessRunner } from "../../../../core/packages/core/src/runner.js";
 import type { RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 

@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { cleanupNativeQemuAssignment } from "../../../../core/packages/core/src/nativeQemuHostExecutor.js";
-import { executeNativeQemuAssignment } from "../../../../core/packages/core/src/nativeQemuHostExecutor.js";
+import { cleanupNativeQemuAssignment } from "../../../../core/packages/managed/src/nativeQemuHostExecutor.js";
+import { executeNativeQemuAssignment } from "../../../../core/packages/managed/src/nativeQemuHostExecutor.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { qemuAssignment, qemuAuthority, qemuScript } from "./nativeQemuHostFixture.js";
 

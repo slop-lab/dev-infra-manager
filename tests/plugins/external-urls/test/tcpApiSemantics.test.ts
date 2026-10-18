@@ -4,7 +4,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDimController, registerPlugins } from "@slop-lab/dim-core";
+import { createDimController, registerPlugins } from "@slop-lab/dim-managed";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
 
 const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };

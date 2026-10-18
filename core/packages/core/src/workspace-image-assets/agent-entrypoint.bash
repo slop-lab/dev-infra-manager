@@ -8,14 +8,14 @@ initialize_user_root() {
   local root="$1"
   mkdir -p -- "$root"
   [[ ! -L "$root" && -d "$root" ]] || {
-    printf 'recommended agent root is not a directory: %s\n' "$root" >&2
+    printf 'workspace root is not a directory: %s\n' "$root" >&2
     exit 1
   }
   if [[ "$(stat -c '%u:%g' -- "$root")" == "$dim_uid:$dim_gid" ]]; then
     return
   fi
   [[ -z "$(find "$root" -mindepth 1 -maxdepth 1 -print -quit)" ]] || {
-    printf 'recommended agent root has incompatible ownership: %s\n' "$root" >&2
+    printf 'workspace root has incompatible ownership: %s\n' "$root" >&2
     exit 1
   }
   chown dim:dim -- "$root"
@@ -30,6 +30,7 @@ rm -f -- /var/run/docker.pid /var/run/docker.sock
 dockerd \
   --host=unix:///var/run/docker.sock \
   --data-root=/var/lib/docker \
+  --feature containerd-snapshotter=false \
   --group=dim \
   >/var/log/dockerd.log 2>&1 &
 for _ in $(seq 1 60); do

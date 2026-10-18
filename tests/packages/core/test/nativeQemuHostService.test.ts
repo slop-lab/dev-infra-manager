@@ -2,11 +2,11 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { executeNativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostService.js";
-import { claimNativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostService.js";
-import { replayNativeQemuHostJournal } from "../../../../core/packages/core/src/nativeQemuHostService.js";
-import { NativeQemuHostJournal } from "../../../../core/packages/core/src/nativeQemuHostJournal.js";
-import type { NativeQemuHostAssignment } from "../../../../core/packages/core/src/nativeQemuHostClient.js";
+import { executeNativeQemuHostAssignment } from "../../../../core/packages/managed/src/nativeQemuHostService.js";
+import { claimNativeQemuHostAssignment } from "../../../../core/packages/managed/src/nativeQemuHostService.js";
+import { replayNativeQemuHostJournal } from "../../../../core/packages/managed/src/nativeQemuHostService.js";
+import { NativeQemuHostJournal } from "../../../../core/packages/managed/src/nativeQemuHostJournal.js";
+import type { NativeQemuHostAssignment } from "../../../../core/packages/managed/src/nativeQemuHostClient.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { qemuAssignment as assignment, qemuAuthority } from "./nativeQemuHostFixture.js";
 

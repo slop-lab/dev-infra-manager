@@ -17,8 +17,16 @@ async function main(): Promise<void> {
     }
     // Optional administration is loaded only when selected. The installer uses
     // controller restart, so that facade integration remains directly reachable.
-    if (args[0] === "managed" || ["controller", "doctor", "plugin", "ci", "external-url", "project", "host-input", "x"].includes(args[0] ?? "")) {
-      const { runManagedCli } = await import("./managed-cli.js");
+    if (args[0] === "managed" || ["controller", "plugin", "ci", "external-url", "project", "host-input", "x"].includes(args[0] ?? "")) {
+      try {
+        import.meta.resolve("@slop-lab/dim-managed/cli");
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "ERR_MODULE_NOT_FOUND") {
+          throw new Error("Managed administration is not installed. Run 'dim installer install core --with-managed' to add it.");
+        }
+        throw error;
+      }
+      const { runManagedCli } = await import("@slop-lab/dim-managed/cli");
       await runManagedCli(args[0] === "managed" ? args.slice(1) : args);
       return;
     }
@@ -31,7 +39,6 @@ async function main(): Promise<void> {
       .configureHelp({ sortSubcommands: true, sortOptions: true });
     registerDevelopmentCommands(program);
     program.command("managed").description("Optional managed Git, review, CI and host administration");
-    program.command("doctor").description("Check host runtime readiness");
     program.command("controller").description("Manage the optional host controller");
     program.addHelpText("after", `
 Start developing:

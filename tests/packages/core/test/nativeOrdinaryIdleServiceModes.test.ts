@@ -1,20 +1,12 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { promisify } from "node:util";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import { ordinaryBundleConfig } from "./nativeOrdinaryBundleConfigFixture.js";
 
-const run = promisify(execFile);
-const workspaceRoot = resolve(import.meta.dirname, "../../../..");
-const packageRoot = join(workspaceRoot, "core/packages/core");
 const fixture = join(import.meta.dirname, "fixtures/nativeOrdinaryIdleProcess.mjs");
 const roots: string[] = [];
-
-beforeAll(async () => {
-  await run("pnpm", ["run", "build"], { cwd: packageRoot });
-});
 
 afterAll(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));

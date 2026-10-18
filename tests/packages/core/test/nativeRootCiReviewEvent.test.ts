@@ -4,7 +4,7 @@ import {
   canonicalNativeRootCiReviewEvent,
   NativeRootCiReviewEventError,
   parseNativeRootCiReviewEvent
-} from "../../../../core/packages/core/src/nativeRootCiReviewEvent.js";
+} from "../../../../core/packages/managed/src/nativeRootCiReviewEvent.js";
 
 describe("native root CI review event parser", () => {
   it("canonicalizes the exact schema-3 ordinary event for proof and receipt use", () => {

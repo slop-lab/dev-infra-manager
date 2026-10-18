@@ -2,18 +2,18 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { runWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
-import { setupWorkspaceLocked } from "../../../../core/packages/core/src/workspaceSetup.js";
+import { runWorkspace } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
+import { setupWorkspaceLocked } from "../../../../core/packages/managed/src/workspaceSetup.js";
 import {
   workspaceAgentContainerLabels,
   workspaceAgentIdentity,
   workspaceAgentNetworkLabels,
   workspaceAgentVolumeLabels
-} from "../../../../core/packages/core/src/workspaceAgentRuntime.js";
+} from "../../../../core/packages/managed/src/workspaceAgentRuntime.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 import { nativeWorkspaceFixture } from "./nativeLifecycleFixture.js";
 

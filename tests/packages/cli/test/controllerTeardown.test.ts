@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   disposeControllerPlugins,
   disposeHostRuntime
-} from "../../../../core/packages/cli/src/controller-teardown.js";
+} from "../../../../core/packages/managed/src/cli/controller-teardown.js";
 
 test("controller plugin disposal stops waiting at the shutdown deadline", async () => {
   let finishDisposal = (): void => undefined;

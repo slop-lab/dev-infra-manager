@@ -1,7 +1,7 @@
 import { once } from "node:events";
 import net from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ControllerWorkspace, ResolvedWorkspaceTarget, WorkspaceTarget } from "@slop-lab/dim-core";
+import type { ControllerWorkspace, ResolvedWorkspaceTarget, WorkspaceTarget } from "@slop-lab/dim-managed";
 import { TcpIngressListener, type TcpExternalRoute } from "../../../../plugin-external-urls/src/tcpIngress.js";
 import { within } from "./support/within.js";
 

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { nativeRootCiTerminalEventDigest } from "../../../../core/packages/core/src/nativeRootCiResultProtocol.js";
-import { parseNativeRootCiCurrentResultProof } from "../../../../core/packages/core/src/nativeRootCiResultProofModel.js";
+import { nativeRootCiTerminalEventDigest } from "../../../../core/packages/managed/src/nativeRootCiResultProtocol.js";
+import { parseNativeRootCiCurrentResultProof } from "../../../../core/packages/managed/src/nativeRootCiResultProofModel.js";
 import { generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import {
   queryAuthorization,

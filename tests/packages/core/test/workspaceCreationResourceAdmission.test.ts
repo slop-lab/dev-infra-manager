@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import type { RegisteredWorkspaceCapabilityProvider } from "../../../../core/packages/core/src/plugin.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import type { RegisteredWorkspaceCapabilityProvider } from "../../../../core/packages/managed/src/plugin.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { createWorkspace } from "../../../../core/packages/core/src/workspaceCreation.js";
+import { createWorkspace } from "../../../../core/packages/managed/src/workspaceCreation.js";
 
 const creation = vi.hoisted(() => ({
   nativeSnapshotRoot: "",
@@ -20,27 +20,27 @@ const creation = vi.hoisted(() => ({
   ) => record)
 }));
 
-vi.mock("../../../../core/packages/core/src/nativeControlPlaneConnection.js", () => ({
+vi.mock("../../../../core/packages/managed/src/nativeControlPlaneConnection.js", () => ({
   loadNativeControlPlaneConnection: vi.fn(async () => ({ hostId: "native-host" }))
 }));
 
-vi.mock("../../../../core/packages/core/src/nativeProjectPendingStore.js", () => ({
+vi.mock("../../../../core/packages/managed/src/nativeProjectPendingStore.js", () => ({
   NativeProjectPendingStore: class {
     async read(): Promise<ReturnType<typeof nativeProject>> { return nativeProject(); }
   }
 }));
 
-vi.mock("../../../../core/packages/core/src/nativeProjectReadinessClient.js", () => ({
+vi.mock("../../../../core/packages/managed/src/nativeProjectReadinessClient.js", () => ({
   proveNativeProjectReadiness: vi.fn(async () => nativeProof())
 }));
 
-vi.mock("../../../../core/packages/core/src/nativeProjectRootSelection.js", () => ({
+vi.mock("../../../../core/packages/managed/src/nativeProjectRootSelection.js", () => ({
   materializeNativeProjectReadinessRoot: vi.fn(async () => {
     await mkdir(creation.nativeSnapshotRoot, { recursive: true });
   })
 }));
 
-vi.mock("../../../../core/packages/core/src/workspaceSetup.js", () => ({
+vi.mock("../../../../core/packages/managed/src/workspaceSetup.js", () => ({
   reconcileProject: vi.fn(async (
     _runner: unknown,
     _options: unknown,

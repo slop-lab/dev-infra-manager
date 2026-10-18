@@ -5,12 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
 import {
   createNativeGitProjectRegistrarClient,
   createNodeNativeGitProjectRegistrarClient,
   NativeGitProjectRegistrarClientError
-} from "../../../../core/packages/core/src/nativeGitProjectRegistrarClient.js";
+} from "../../../../core/packages/managed/src/nativeGitProjectRegistrarClient.js";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
 import { configuredNativeGitBundleServer, type NativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
 import { idleNativeConfig } from "../../native-git/test/bundleConfigFixture.js";

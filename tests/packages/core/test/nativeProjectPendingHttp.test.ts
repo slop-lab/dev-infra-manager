@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNodeNativeGitRootImporterClient, LifecycleState, NativeProjectDraftStore,
-  NativeProjectPendingStore } from "../../../../core/packages/core/src/index.js";
-import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/core/src/nativeRootBootstrapPolicy.js";
+  NativeProjectPendingStore } from "../../../../core/packages/managed/src/index.js";
+import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
 import { activateFinalizeService, cleanupFinalizeFixtures, generationId, importer,
   projectInput, startFinalizeService } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 

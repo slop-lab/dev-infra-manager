@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { registerPlugin } from "@slop-lab/dim-core";
+import { registerPlugin } from "@slop-lab/dim-managed";
 import plugin, { hostMirrorProvider } from "../../../../plugin-host-mirrors/src/index.js";
 
 describe("host mirror plugin", () => {

@@ -2,8 +2,8 @@ import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, syml
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { NativeOrdinaryHostJournal } from "../../../../core/packages/core/src/nativeOrdinaryHostJournal.js";
-import { executeNativeHostClaim } from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
+import { NativeOrdinaryHostJournal } from "../../../../core/packages/managed/src/nativeOrdinaryHostJournal.js";
+import { executeNativeHostClaim } from "../../../../core/packages/managed/src/nativeOrdinaryExecutor.js";
 import { authority, dependencies, execution, ExecutorRunner } from "./nativeOrdinaryExecutorFixture.js";
 
 const roots: string[] = [];

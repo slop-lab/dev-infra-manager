@@ -1,13 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { UserError } from "../../../../core/packages/core/src/errors.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
 import type { StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { setupWorkspace } from "../../../../core/packages/core/src/workspaceSetup.js";
+import { setupWorkspace } from "../../../../core/packages/managed/src/workspaceSetup.js";
 import { restartWorkspace, startWorkspace, updateWorkspace
-} from "../../../../core/packages/core/src/workspaceTransitions.js";
+} from "../../../../core/packages/managed/src/workspaceTransitions.js";
 import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
 
-const options = hostLifecycleOptions("/state");
+const stateRoot = mkdtempSync(join(tmpdir(), "dim-record-absence-"));
+const options = hostLifecycleOptions(stateRoot);
+afterAll(() => rm(stateRoot, { recursive: true, force: true }));
 const readFailure = new UserError("lifecycle record malformed: not found in expected structure");
 const calls: string[][] = [];
 const runner = {

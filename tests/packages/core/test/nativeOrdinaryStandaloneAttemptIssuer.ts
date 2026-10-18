@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   NativeGitAttemptIssuerUnavailableError,
   type NativeAttemptIssueResult
-} from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
+} from "../../../../core/packages/managed/src/nativeGitAttemptIssuerClient.js";
 import {
   parseNativeExecutionDescriptor,
   parseNativeJobAttemptIssuance,
@@ -10,14 +10,14 @@ import {
   type NativeExecutionDescriptor,
   type NativeJobAttemptIssuance,
   type NativeJobAttemptRevocation
-} from "../../../../core/packages/core/src/nativeGitAttemptIssuerModel.js";
-import { requestAttemptIssuerJson } from "../../../../core/packages/core/src/nativeGitAttemptIssuerWire.js";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
+} from "../../../../core/packages/managed/src/nativeGitAttemptIssuerModel.js";
+import { requestAttemptIssuerJson } from "../../../../core/packages/managed/src/nativeGitAttemptIssuerWire.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
+import { nativeDescriptorDigest } from "../../../../core/packages/managed/src/nativeOrdinaryAuthorityModel.js";
 import type {
   LegacyAttemptContext,
   LegacyNativeAttemptIssuer
-} from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryClaimService.js";
 import {
   jobAttemptRevocationSchema,
   jobAttemptSchema

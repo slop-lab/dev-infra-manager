@@ -10,7 +10,7 @@ import {
   createDimController,
   registerPlugins,
   type LifecycleOptions
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../../../plugin-external-urls/src/index.js";
 
 const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };

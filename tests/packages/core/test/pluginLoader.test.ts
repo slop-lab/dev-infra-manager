@@ -7,8 +7,8 @@ import {
   pluginHome,
   readPluginManifest,
   resolvePluginHome
-} from "../../../../core/packages/core/src/pluginLoader.js";
-import { configuredWorkspaceBackend, dimUserConfigPath } from "../../../../core/packages/core/src/userConfig.js";
+} from "../../../../core/packages/managed/src/pluginLoader.js";
+import { configuredWorkspaceBackend, dimUserConfigPath } from "../../../../core/packages/managed/src/userConfig.js";
 
 describe("plugin loader configuration", () => {
   let root: string;

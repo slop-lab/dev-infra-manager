@@ -4,6 +4,10 @@ Cloudflare DNS provider for DIM's External URLs plugin. It idempotently
 creates, verifies, updates, and removes the wildcard DNS record used by a
 managed HTTPS ingress.
 
+This plugin extends the optional `@slop-lab/dim-managed` component. Install it
+at the same exact version with `dim installer install core --with-managed`
+before installing the plugin; base ordinary-Git workspaces do not require it.
+
 ## Installation
 
 Install the provider and External URLs plugin at the same exact DIM version:

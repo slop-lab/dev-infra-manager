@@ -2,11 +2,11 @@ import { chmod, lstat, readdir, realpath } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
 const fixtureParent = "/tmp";
-const fixturePrefix = "dim-native-cli-";
+const fixturePrefixes = ["dim-native-cli-", "dim-native-draft-root-read-"];
 
 export async function prepareNativeProjectFixtureRootForRemoval(root: string): Promise<void> {
   const resolvedRoot = resolve(root);
-  if (dirname(resolvedRoot) !== fixtureParent || !basename(resolvedRoot).startsWith(fixturePrefix)) {
+  if (dirname(resolvedRoot) !== fixtureParent || !fixturePrefixes.some((prefix) => basename(resolvedRoot).startsWith(prefix))) {
     throw new NativeProjectFixtureCleanupError("native Project fixture cleanup root is outside its temporary namespace");
   }
   const metadata = await lstat(resolvedRoot);

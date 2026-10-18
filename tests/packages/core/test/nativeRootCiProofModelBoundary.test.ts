@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { parseNativeRootCiReviewEventProof } from "../../../../core/packages/core/src/nativeRootCiProofModel.js";
+import { parseNativeRootCiReviewEventProof } from "../../../../core/packages/managed/src/nativeRootCiProofModel.js";
 
 describe("native root CI event selector binding", () => {
   it("rejects a QEMU event selected through the ordinary proof client", () => {

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   LifecycleState,
   materializeNativeProjectDraftRootSnapshot
-} from "../../../../core/packages/core/src/index.js";
+} from "../../../../core/packages/managed/src/index.js";
 import {
   cleanupNativeProjectDraftRootReadFixtures,
   nativeProjectDraftRootReadFixture

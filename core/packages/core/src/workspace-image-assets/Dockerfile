@@ -3,10 +3,7 @@ FROM docker:29.1.3-dind@sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c
 ARG DIM_UID=1000
 ARG DIM_GID=1000
 
-# A nested user namespace can make files created while assigning DIM_UID
-# appear to inherit that UID. Reassert sudo's required root ownership after
-# all user-account writes, independently of the chosen workspace UID.
-RUN apk add --no-cache bash ca-certificates cdrkit coreutils curl git jq just nodejs npm openssh-client python3 qemu-img qemu-system-x86_64 shadow sudo tini \
+RUN apk add --no-cache bash ca-certificates coreutils curl git jq just nodejs npm openssh-client python3 shadow sudo tini \
   && groupadd --non-unique --gid "${DIM_GID}" dim \
   && useradd --non-unique --uid "${DIM_UID}" --gid dim --create-home --shell /bin/bash dim \
   && echo "dim ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dim \
@@ -21,29 +18,9 @@ ENV HOME=/home/dim \
     PATH=/home/dim/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN npm install --global pnpm@10.13.1
-
-COPY entrypoint.bash /usr/local/bin/dim-project-entrypoint
-COPY git-askpass.sh /usr/local/bin/dim-git-askpass
-COPY route-relay.mjs /usr/local/lib/dim/route-relay.mjs
-COPY project-cgroup.bash /usr/local/bin/dim-project-cgroup
-COPY agent-checkout.bash /usr/local/bin/dim-agent-checkout
 COPY agent-entrypoint.bash /usr/local/bin/dim-agent-entrypoint
-COPY agent-git-relay.mjs /usr/local/lib/dim/agent-git-relay.mjs
-COPY agent-git-relay-supervisor.mjs /usr/local/lib/dim/agent-git-relay-supervisor.mjs
-COPY controller-proxy /usr/local/lib/dim/controller-proxy
-RUN chmod +x /usr/local/bin/dim-project-entrypoint /usr/local/bin/dim-git-askpass \
-  /usr/local/bin/dim-agent-checkout \
-  /usr/local/bin/dim-agent-entrypoint \
-  /usr/local/bin/dim-project-cgroup \
-  /usr/local/lib/dim/controller-proxy/cli.js \
-  /usr/local/lib/dim/controller-proxy/development-service-cli.js \
-  /usr/local/lib/dim/controller-proxy/workspace-resources-cli.js \
-  /usr/local/lib/dim/controller-proxy/nproc-cli.js \
-  && ln -s /usr/local/lib/dim/controller-proxy/cli.js /usr/local/bin/dim-controller-proxy \
-  && ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js /usr/local/bin/dim-development-service \
-  && ln -s /usr/local/lib/dim/controller-proxy/workspace-resources-cli.js /usr/local/bin/dim-workspace-resources \
-  && ln -s /usr/local/lib/dim/controller-proxy/nproc-cli.js /usr/local/bin/dim-nproc
+RUN chmod 0555 /usr/local/bin/dim-agent-entrypoint
 
 WORKDIR /workspace
-ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/dim-project-entrypoint"]
-CMD ["bash"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/dim-agent-entrypoint"]
+CMD ["sleep", "infinity"]

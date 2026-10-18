@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { parseNativeProjectDraft, NativeProjectDraftError } from "../../../../core/packages/core/src/nativeProjectDraftCodec.js";
-import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/core/src/nativeRootBootstrapPolicy.js";
+import { parseNativeProjectDraft, NativeProjectDraftError } from "../../../../core/packages/managed/src/nativeProjectDraftCodec.js";
+import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
 
 const compiled = compileNativeRootBootstrapPolicy({ rootAlias: "root", protectedRef: "refs/heads/main",
   review: { requiredReviewerIds: ["owner"], pathReviewerRules: [],

@@ -1,15 +1,15 @@
+import { RecordingRunner } from "../../../../support/recordingRunner.js";
 import { readFile, readdir } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import {
   configuredDimAdminController,
   createDimController,
-  RecordingRunner,
   registerPlugins,
   type ControllerWorkspace,
   type LifecycleOptions,
   type WorkspaceRecord
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 import { vi } from "vitest";
 import { createExternalUrlsPlugin } from "../../../../../plugin-external-urls/src/index.js";
 import type { ExternalUrlRoutePolicyConfig } from "../../../../../plugin-external-urls/src/routePolicy.js";

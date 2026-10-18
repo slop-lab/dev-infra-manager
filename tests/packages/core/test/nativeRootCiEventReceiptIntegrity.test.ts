@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   initializeNativeOrdinaryBundleState,
   inspectNativeOrdinaryBundleState
-} from "../../../../core/packages/core/src/nativeOrdinaryBundleState.js";
-import { assertNativeRootCiEventReceiptIntegrity } from "../../../../core/packages/core/src/nativeRootCiEventReceiptIntegrity.js";
+} from "../../../../core/packages/managed/src/nativeOrdinaryBundleState.js";
+import { assertNativeRootCiEventReceiptIntegrity } from "../../../../core/packages/managed/src/nativeRootCiEventReceiptIntegrity.js";
 
 const roots: string[] = [];
 

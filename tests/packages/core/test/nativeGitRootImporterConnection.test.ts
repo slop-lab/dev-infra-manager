@@ -9,7 +9,7 @@ import {
   loadNativeGitRootImporterConnection,
   parseNativeGitRootImporterConnection,
   NativeGitRootImporterConnectionError
-} from "../../../../core/packages/core/src/nativeGitRootImporterConnection.js";
+} from "../../../../core/packages/managed/src/nativeGitRootImporterConnection.js";
 
 const roots: string[] = [];
 const run = promisify(execFile);
@@ -85,7 +85,7 @@ describe("native Git root importer connection", () => {
     await run("/usr/bin/mkfifo", [path]);
     await chmod(path, 0o600);
     const moduleUrl = pathToFileURL(join(import.meta.dirname,
-      "../../../../core/packages/core/dist/nativeGitRootImporterConnection.js")).href;
+      "../../../../core/packages/managed/dist/nativeGitRootImporterConnection.js")).href;
 
     // When
     const child = run(process.execPath, ["--input-type=module", "-e", `

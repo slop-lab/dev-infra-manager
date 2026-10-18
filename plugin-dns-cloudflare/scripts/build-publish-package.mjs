@@ -12,7 +12,7 @@ const output = minifyPackageJson(source, {
 });
 output.version = publishPackageVersion(source.version);
 output.dependencies["@slop-lab/dim-contracts-external-url"] = output.version;
-output.peerDependencies["@slop-lab/dim-core"] = output.version;
+output.peerDependencies["@slop-lab/dim-managed"] = output.version;
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
 delete output.private;

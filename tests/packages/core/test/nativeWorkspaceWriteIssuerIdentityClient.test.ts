@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { NativeControlPlaneConnection } from "../../../../core/packages/core/src/nativeControlPlaneConnection.js";
-import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+import type { NativeControlPlaneConnection } from "../../../../core/packages/managed/src/nativeControlPlaneConnection.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/managed/src/nativeGitAdmissionSource.js";
 import {
   attestNativeWorkspaceWriteIssuer,
   NativeProjectReadinessClientError
-} from "../../../../core/packages/core/src/nativeProjectReadinessClient.js";
+} from "../../../../core/packages/managed/src/nativeProjectReadinessClient.js";
 
 const generationId = "b".repeat(64);
 const password = Buffer.alloc(32, 20).toString("base64url");

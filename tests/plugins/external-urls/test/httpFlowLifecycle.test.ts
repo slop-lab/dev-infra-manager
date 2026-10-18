@@ -5,7 +5,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { createDimController, registerPlugins } from "@slop-lab/dim-core";
+import { createDimController, registerPlugins } from "@slop-lab/dim-managed";
 import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
 import { within } from "./support/within.js";
 

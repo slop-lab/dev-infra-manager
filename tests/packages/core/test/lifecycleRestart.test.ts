@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import type { StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { restartWorkspace } from "../../../../core/packages/core/src/workspaceTransitions.js";
+import { restartWorkspace } from "../../../../core/packages/managed/src/workspaceTransitions.js";
 
 describe("native workspace restart", () => {
   it("requires native control-plane configuration before state or runtime access", async () => {

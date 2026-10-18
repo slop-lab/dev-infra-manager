@@ -6,7 +6,7 @@ import {
   loadNativeGitWorkspaceWriteIssuerConnection,
   NativeGitWorkspaceWriteIssuerConnectionError,
   parseNativeGitWorkspaceWriteIssuerConnection
-} from "../../../../core/packages/core/src/nativeGitWorkspaceWriteIssuerConnection.js";
+} from "../../../../core/packages/managed/src/nativeGitWorkspaceWriteIssuerConnection.js";
 
 const roots: string[] = [];
 const valid = {

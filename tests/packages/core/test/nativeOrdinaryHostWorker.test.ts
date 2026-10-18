@@ -2,8 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeOrdinaryHostClient } from "../../../../core/packages/core/src/nativeOrdinaryHostClient.js";
-import { serveNativeOrdinaryHostCapacity } from "../../../../core/packages/core/src/nativeOrdinaryHostWorker.js";
+import type { NativeOrdinaryHostClient } from "../../../../core/packages/managed/src/nativeOrdinaryHostClient.js";
+import { serveNativeOrdinaryHostCapacity } from "../../../../core/packages/managed/src/nativeOrdinaryHostWorker.js";
 import { execution, ExecutorRunner } from "./nativeOrdinaryExecutorFixture.js";
 
 const roots: string[] = [];

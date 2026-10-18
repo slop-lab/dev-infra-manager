@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 
 describe("lifecycle options", () => {
   it("uses discoverable sockets for the default state root", () => {
@@ -8,10 +8,11 @@ describe("lifecycle options", () => {
       XDG_RUNTIME_DIR: "/run/user/1000"
     });
 
-    expect(options.controllerRuntimeDirectory).toBe("/run/user/1000/dim");
-    expect(options.controllerSocketPath).toBe("/run/user/1000/dim/workspace/controller.sock");
-    expect(options.agentControllerSocketPath).toBe("/run/user/1000/dim/agent/controller.sock");
-    expect(options.adminControllerSocketPath).toBe("/run/user/1000/dim/admin/controller.sock");
+    expect(options.stateRoot).toBe("/home/developer/.local/state/dim/managed");
+    expect(options.controllerRuntimeDirectory).toBe("/run/user/1000/dim/managed");
+    expect(options.controllerSocketPath).toBe("/run/user/1000/dim/managed/workspace/controller.sock");
+    expect(options.agentControllerSocketPath).toBe("/run/user/1000/dim/managed/agent/controller.sock");
+    expect(options.adminControllerSocketPath).toBe("/run/user/1000/dim/managed/admin/controller.sock");
   });
 
   it("namespaces sockets for a custom state root", () => {
@@ -22,8 +23,22 @@ describe("lifecycle options", () => {
     });
 
     expect(options.adminControllerSocketPath).toMatch(
-      /^\/run\/user\/1000\/dim\/[a-f0-9]{16}\/admin\/controller\.sock$/
+      /^\/run\/user\/1000\/dim\/managed\/[a-f0-9]{16}\/admin\/controller\.sock$/
     );
+  });
+
+  it("prefers an explicit managed state root over the base state root", () => {
+    const options = lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer", DIM_STATE_ROOT: "/tmp/base", DIM_MANAGED_STATE_ROOT: "/tmp/managed"
+    });
+    expect(options.stateRoot).toBe("/tmp/managed");
+  });
+
+  it("prefers the managed image without changing the base image choice", () => {
+    const options = lifecycleOptionsForBackend("sysbox", {
+      DIM_WORKSPACE_IMAGE: "workspace:base", DIM_MANAGED_WORKSPACE_IMAGE: "workspace:managed"
+    });
+    expect(options.workspaceImage).toBe("workspace:managed");
   });
 
   it("selects native Project lifecycle through an explicit control-plane connection", () => {

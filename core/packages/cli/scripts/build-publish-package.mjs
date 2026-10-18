@@ -13,7 +13,7 @@ if (source.private !== true) {
 
 const output = minifyPackageJson(source, {
   stripPackagePathPrefix: "./dist/",
-  includeFields: ["publishConfig"]
+  includeFields: ["publishConfig", "peerDependenciesMeta"]
 });
 output.version = publishPackageVersion(source.version);
 
@@ -21,6 +21,8 @@ output.dependencies = {
   ...output.dependencies,
   "@slop-lab/dim-core": output.version
 };
+output.peerDependencies = { "@slop-lab/dim-managed": output.version };
+output.peerDependenciesMeta = { "@slop-lab/dim-managed": { optional: true } };
 output.bin = {
   dim: "cli.js"
 };

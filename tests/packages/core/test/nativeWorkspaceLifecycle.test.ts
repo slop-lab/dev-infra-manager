@@ -1,21 +1,21 @@
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createNodeNativeGitRootImporterClient } from "../../../../core/packages/core/src/nativeGitRootImporterClient.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import { loadNativeControlPlaneConnection } from "../../../../core/packages/core/src/nativeControlPlaneConnection.js";
-import { NativeProjectPendingStore } from "../../../../core/packages/core/src/nativeProjectPendingStore.js";
-import type { NativeWorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { createNodeNativeGitRootImporterClient } from "../../../../core/packages/managed/src/nativeGitRootImporterClient.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { loadNativeControlPlaneConnection } from "../../../../core/packages/managed/src/nativeControlPlaneConnection.js";
+import { NativeProjectPendingStore } from "../../../../core/packages/managed/src/nativeProjectPendingStore.js";
+import type { NativeWorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { shutdownHost, startHost } from "../../../../core/packages/core/src/hostLifecycle.js";
-import { setupWorkspace, startWorkspace, restartWorkspace, updateWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
-import { workspaceRootSnapshotPath } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
+import { shutdownHost, startHost } from "../../../../core/packages/managed/src/hostLifecycle.js";
+import { setupWorkspace, startWorkspace, restartWorkspace, updateWorkspace } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
+import { workspaceRootSnapshotPath } from "../../../../core/packages/managed/src/workspaceLifecycleTypes.js";
 import { cleanupNativeProjectFixtures, nativeFixture, rewriteJson,
   type NativeFixture } from "../../cli/test/nativeProjectCommandsFixture.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
 
-vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../../../core/packages/core/src/registryCache.js")>(),
+vi.mock("../../../../core/packages/managed/src/registryCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/managed/src/registryCache.js")>(),
   ensureRegistryCache: vi.fn(async () => {})
 }));
 

@@ -5,15 +5,15 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeQemuAuthorityClient } from "../../../../core/packages/core/src/nativeQemuAuthorityClient.js";
-import type { NativeQemuSchedulerConfig } from "../../../../core/packages/core/src/nativeQemuSchedulerConfig.js";
+import type { NativeQemuAuthorityClient } from "../../../../core/packages/managed/src/nativeQemuAuthorityClient.js";
+import type { NativeQemuSchedulerConfig } from "../../../../core/packages/managed/src/nativeQemuSchedulerConfig.js";
 import { claimNativeQemuHostAssignment,
-  replayNativeQemuHostJournal } from "../../../../core/packages/core/src/nativeQemuHostService.js";
-import { NativeQemuHostJournal } from "../../../../core/packages/core/src/nativeQemuHostJournal.js";
-import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/core/src/nativeQemuSchedulerService.js";
+  replayNativeQemuHostJournal } from "../../../../core/packages/managed/src/nativeQemuHostService.js";
+import { NativeQemuHostJournal } from "../../../../core/packages/managed/src/nativeQemuHostJournal.js";
+import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/managed/src/nativeQemuSchedulerService.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { qemuDescriptor } from "./nativeQemuHostFixture.js";
-import { nativeQemuDescriptorDigest } from "../../../../core/packages/core/src/nativeQemuAssignment.js";
+import { nativeQemuDescriptorDigest } from "../../../../core/packages/managed/src/nativeQemuAssignment.js";
 
 const servers: ReturnType<typeof configuredNativeQemuSchedulerServer>[] = [];
 const token = (character: string): string => Buffer.alloc(32, character).toString("base64url");
@@ -194,7 +194,7 @@ async function schedulerFixture(options: { readonly failFirstIssue?: boolean; re
         if (result.status === 204) return undefined;
         const body = await result.json() as Readonly<Record<string, unknown>>;
         return { claim: body.claim as Readonly<Record<string, unknown>>,
-          attempt: body.attempt as import("../../../../core/packages/core/src/nativeQemuHostClient.js").NativeQemuHostAssignment["attempt"] };
+          attempt: body.attempt as import("../../../../core/packages/managed/src/nativeQemuHostClient.js").NativeQemuHostAssignment["attempt"] };
       },
       async renew() {},
       async report(claimId: string, terminalEvent: Readonly<Record<string, unknown>>) {

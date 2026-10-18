@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNativeQemuAuthorityClient, type NativeQemuAuthorityClient }
-  from "../../../../core/packages/core/src/nativeQemuAuthorityClient.js";
-import type { NativeQemuSchedulerConfig } from "../../../../core/packages/core/src/nativeQemuSchedulerConfig.js";
-import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/core/src/nativeQemuSchedulerService.js";
+  from "../../../../core/packages/managed/src/nativeQemuAuthorityClient.js";
+import type { NativeQemuSchedulerConfig } from "../../../../core/packages/managed/src/nativeQemuSchedulerConfig.js";
+import { configuredNativeQemuSchedulerServer } from "../../../../core/packages/managed/src/nativeQemuSchedulerService.js";
 import { createNodeAdmissionVerifierHttpClient, type AdmissionVerifierHttpClient,
   type AdmissionVerifierHttpRequest, type AdmissionVerifierHttpResponse }
   from "../../../../core/packages/native-git/src/ordinary-admission-http.js";

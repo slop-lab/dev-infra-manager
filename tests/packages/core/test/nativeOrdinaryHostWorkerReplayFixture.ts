@@ -1,4 +1,4 @@
-import type { NativeOrdinaryHostClient } from "../../../../core/packages/core/src/nativeOrdinaryHostClient.js";
+import type { NativeOrdinaryHostClient } from "../../../../core/packages/managed/src/nativeOrdinaryHostClient.js";
 import { execution } from "./nativeOrdinaryExecutorFixture.js";
 
 export class WorkerClient implements NativeOrdinaryHostClient {

@@ -3,7 +3,7 @@ import {
   runWorkspaceLifecycle,
   runWorkspaceLifecycleStage,
   withWorkspaceLifecycleProgress
-} from "../../../../core/packages/core/src/workspaceLifecycleError.js";
+} from "../../../../core/packages/managed/src/workspaceLifecycleError.js";
 
 describe("workspace lifecycle progress", () => {
   it("reports the initial stage and each entered stage in order", async () => {

@@ -19,7 +19,7 @@ type Fixture = {
 beforeAll(async () => {
   [smoke, runtimeBackends] = await Promise.all([
     readFile(resolve(workspaceRoot, "verification/scripts/container-inner-docker-smoke.bash"), "utf8"),
-    readFile(resolve(workspaceRoot, "core/packages/core/src/runtimeBackends.ts"), "utf8"),
+    readFile(resolve(workspaceRoot, "core/packages/managed/src/runtimeBackends.ts"), "utf8"),
   ]);
 });
 

@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { runWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { runWorkspace } from "../../../../core/packages/managed/src/workspaceLifecycle.js";
 import { lifecycleFileExists, runProjectSetup, runProjectTeardown
-} from "../../../../core/packages/core/src/workspaceProjectCommands.js";
+} from "../../../../core/packages/managed/src/workspaceProjectCommands.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 

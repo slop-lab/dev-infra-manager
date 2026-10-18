@@ -3,11 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseNativeRootCiEventReceiptRequest } from "../../../../core/packages/core/src/nativeRootCiEventReceiptModel.js";
-import { NativeRootCiEventReceiptStore } from "../../../../core/packages/core/src/nativeRootCiEventReceiptStore.js";
-import type { NativeRootCiPolicyProof, NativeRootCiReviewEventProof } from "../../../../core/packages/core/src/nativeRootCiProofModel.js";
-import { openNativeRootAdmissionDatabase } from "../../../../core/packages/core/src/nativeRootAdmissionSchema.js";
-import { NativeRootAdmissionStore } from "../../../../core/packages/core/src/nativeRootAdmissionStore.js";
+import { parseNativeRootCiEventReceiptRequest } from "../../../../core/packages/managed/src/nativeRootCiEventReceiptModel.js";
+import { NativeRootCiEventReceiptStore } from "../../../../core/packages/managed/src/nativeRootCiEventReceiptStore.js";
+import type { NativeRootCiPolicyProof, NativeRootCiReviewEventProof } from "../../../../core/packages/managed/src/nativeRootCiProofModel.js";
+import { openNativeRootAdmissionDatabase } from "../../../../core/packages/managed/src/nativeRootAdmissionSchema.js";
+import { NativeRootAdmissionStore } from "../../../../core/packages/managed/src/nativeRootAdmissionStore.js";
 
 const generationId = "a".repeat(64);
 const capacityDigest = "c".repeat(64);

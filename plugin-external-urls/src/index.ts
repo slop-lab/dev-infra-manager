@@ -14,7 +14,7 @@ import {
   type ResolvedWorkspaceTarget,
   type WorkspaceDiscardContext,
   type WorkspaceTarget
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-managed";
 import {
   readExternalUrlConfig,
   writeExternalUrlConfig,

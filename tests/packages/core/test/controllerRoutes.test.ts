@@ -9,12 +9,12 @@ import {
   controllerRoutesForAudience,
   createDimController,
   initializeControllerRoutes
-} from "../../../../core/packages/core/src/controller.js";
+} from "../../../../core/packages/managed/src/controller.js";
 import { UserError } from "../../../../core/packages/core/src/errors.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
-import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
+import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import type { WorkspaceRecord } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/managed/src/plugin.js";
 import { workspaceRecord } from "./hostLifecycleFixture.js";
 
 describe("DIM controller", () => {

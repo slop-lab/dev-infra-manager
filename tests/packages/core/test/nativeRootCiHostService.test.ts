@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
-import { runNativeRootCiHost } from "../../../../core/packages/core/src/nativeRootCiHostService.js";
-import { NativeRootCiHostJournal } from "../../../../core/packages/core/src/nativeRootCiHostJournal.js";
+import { runNativeRootCiHost } from "../../../../core/packages/managed/src/nativeRootCiHostService.js";
+import { NativeRootCiHostJournal } from "../../../../core/packages/managed/src/nativeRootCiHostJournal.js";
 import { tryAcquireKernelGuard } from "../../../../core/packages/core/src/lifecycleLockGuard.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));

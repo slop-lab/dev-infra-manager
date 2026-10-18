@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const assets = new URL("../../../../core/packages/core/src/native-qemu-runner-assets/", import.meta.url);
+const assets = new URL("../../../../core/packages/managed/src/native-qemu-runner-assets/", import.meta.url);
 
 describe("native QEMU runner resource boundary", () => {
   it("ships syntactically valid launch scripts and rejects an incomplete launcher invocation", () => {
