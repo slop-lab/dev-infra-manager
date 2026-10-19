@@ -3,14 +3,12 @@ import { registerPlugin } from "@slop-lab/dim-managed";
 import plugin, { hostMirrorProvider } from "../../../../plugin-host-mirrors/src/index.js";
 
 describe("host mirror plugin", () => {
-  it("registers its reviewed immutable Docker and APT service images", async () => {
+  it("registers client routing without installing cache services", async () => {
     // Given / When
     const registered = await registerPlugin(plugin);
 
     // Then
     expect(registered.host.extension("dim.host-mirror-provider", "host")).toEqual(hostMirrorProvider);
-    expect(hostMirrorProvider.dockerImage).toMatch(/@sha256:[0-9a-f]{64}$/);
-    expect(hostMirrorProvider.aptImage).toMatch(/@sha256:[0-9a-f]{64}$/);
     await registered.dispose();
   });
 });

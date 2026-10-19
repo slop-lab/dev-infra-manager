@@ -33,7 +33,11 @@ Object.assign(env, {
 const facade = path.join(scratch, "facade/node_modules/.bin/dim");
 const runtime = path.join(scratch, "data/dim/runtime/current");
 const dependencies = () => object(object(parseJson(readFileSync(path.join(runtime, "package.json"), "utf8"))).dependencies);
-const plugins = () => object(parseJson(readFileSync(path.join(runtime, "plugins.json"), "utf8"))).plugins;
+const plugins = () => {
+  const selected = object(parseJson(readFileSync(path.join(runtime, "plugins.json"), "utf8"))).plugins;
+  assert.ok(Array.isArray(selected), "plugin manifest must contain an array");
+  return selected.map(string);
+};
 /** @param {string} file @param {string[]} args @param {boolean} [allowFailure] */
 function run(file, args, allowFailure = false) {
   const result = spawnSync(file, args, { env, encoding: "utf8", timeout: 120_000 });
@@ -66,11 +70,14 @@ try {
   }
   console.log("managed artifacts: exact optional dependency closure, no automatic plugin activation");
 
-  run(facade, ["installer", "install", "plugin", artifact("@slop-lab/dim-plugin-host-mirrors")]);
+  run(facade, ["installer", "install", "plugin", artifact("@slop-lab/dim-plugin-host-mirrors"), artifact("@slop-lab/dim-plugin-cache-server")]);
   run(facade, install);
-  assert.deepEqual(plugins(), ["@slop-lab/dim-plugin-host-mirrors"]);
+  assert.deepEqual(plugins().sort(), ["@slop-lab/dim-plugin-cache-server", "@slop-lab/dim-plugin-host-mirrors"]);
   assert.equal(path.resolve(runtime, string(dependencies()["@slop-lab/dim-plugin-host-mirrors"]).slice(5)),
     artifact("@slop-lab/dim-plugin-host-mirrors"));
+  assert.equal(path.resolve(runtime, string(dependencies()["@slop-lab/dim-plugin-cache-server"]).slice(5)),
+    artifact("@slop-lab/dim-plugin-cache-server"));
+  assert.equal(existsSync(path.join(scratch, "state/dim", "services/package-caches.json")), false);
   assert.equal(existsSync(path.join(scratch, "config", "systemd/user/dim-controller.service")), false);
   assert.equal(existsSync(path.join(scratch, "run", "dim/controller.pid")), false);
   console.log("explicit plugin survives matched-bundle upgrade without controller activation");

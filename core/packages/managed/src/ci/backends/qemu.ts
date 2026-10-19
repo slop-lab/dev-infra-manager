@@ -2,7 +2,7 @@ import { chmod, mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { verifyAndMaterializeCandidate } from "../candidate.js";
 import { NativeOutputCollector, executionDiagnostics } from "../output.js";
-import { cleanupNativeContainer, containerName, ownershipLabels, prepareExecutionImage, validateJobConfigTargets, type NativeHostImageRouting } from "./containers.js";
+import { cleanupNativeContainer, containerName, ownershipLabels, prepareExecutionImage, jobEnvironmentScript, validateJobConfigTargets, type NativeHostImageRouting } from "./containers.js";
 import type { BackendInput, ExecutionBackend } from "../backend.js";
 import type { ExecutionResult } from "../execution.js";
 
@@ -34,6 +34,13 @@ export function createQemuBackend(routing?: NativeHostImageRouting): ExecutionBa
       if (!kvm.isCharacterDevice() || uid === undefined || gid === undefined) throw new Error("KVM is required");
       await prepareExecutionImage(input.runner, descriptor.runnerBaseImage, signal);
       await prepareExecutionImage(input.runner, descriptor.jobImage, signal);
+      const imageInfo = await input.runner.run("docker", ["image", "inspect", descriptor.jobImage, "--format", "{{json .Config.Env}}"], { signal });
+      if (imageInfo.exitCode !== 0) throw new Error("QEMU job image environment inspection failed");
+      const imageEnvironment: unknown = JSON.parse(imageInfo.stdout);
+      if (imageEnvironment !== null && (!Array.isArray(imageEnvironment) || !imageEnvironment.every((entry) => typeof entry === "string"))) {
+        throw new Error("invalid QEMU job image environment");
+      }
+      await writeFile(join(job, "job-environment"), jobEnvironmentScript(routing?.jobEnvironmentDefaults, imageEnvironment ?? []), { mode: 0o444, flag: "wx" });
       const archive = await input.runner.run("docker", ["create", "--name", rootfsContainerName(input.grant), "--network", "none", "--read-only", "--entrypoint", "/bin/bash",
         ...ownershipLabels(input.grant, "qemu-rootfs").flatMap((label) => ["--label", label]), descriptor.jobImage], { signal });
       if (archive.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(archive.stdout.trim())) throw new Error("QEMU root filesystem preparation failed");

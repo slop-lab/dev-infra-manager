@@ -13,18 +13,18 @@ async function main() {
   if (!guard) throw new Error("mirror relay is already running");
   try {
     const relay = await createMirrorRelay(config);
-    await atomicWrite(join(root, "ready.json"), { configurationId: config.configurationId, registryPort: relay.registryPort, aptPort: relay.aptPort });
+    await atomicWrite(join(root, "ready.json"), { configurationId: config.configurationId, ports: relay.ports });
     let reloading = false;
     const timer = setInterval(() => {
       if (reloading) return; reloading = true;
       void (async () => {
         const next = parseRelayConfig(await privateJson(file));
-        const { registry: _registry, apt: _apt, configurationId: _id, ...scope } = config;
-        const { registry: _nextRegistry, apt: _nextApt, configurationId: _nextId, ...nextScope } = next;
+        const { endpoints: _endpoints, configurationId: _id, ...scope } = config;
+        const { endpoints: _nextEndpoints, configurationId: _nextId, ...nextScope } = next;
         if (!isDeepStrictEqual(scope, nextScope)) throw new Error("mirror relay scope changed");
         if (next.configurationId !== config.configurationId) {
           relay.updateTargets(next);
-          await atomicWrite(join(root, "ready.json"), { configurationId: next.configurationId, registryPort: relay.registryPort, aptPort: relay.aptPort });
+          await atomicWrite(join(root, "ready.json"), { configurationId: next.configurationId, ports: relay.ports });
         }
       })().catch(() => relay.close()).finally(() => { reloading = false; });
     }, 250);

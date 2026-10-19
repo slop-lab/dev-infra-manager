@@ -50,9 +50,12 @@ it("delivers host plugin configuration read-only to networked jobs without placi
     expect(launcher).toContain("--network bridge");
     expect(launcher).toContain("source=/run/dim/job/config-0,target=/etc/apt/apt.conf.d/99dim-mirrors,readonly");
     expect(launcher).not.toContain("HTTP_PROXY");
+    expect(launcher).toContain("NPM_CONFIG_GLOBALCONFIG");
+    expect(launcher).toContain("/etc/npmrc");
   };
   const backend = createSysboxBackend({ network: "cache-network", blockedHostnames: [], dockerDaemonConfig: "{}\n",
-    jobFiles: [{ target: "/etc/apt/apt.conf.d/99dim-mirrors", contents }] });
+    jobFiles: [{ target: "/etc/apt/apt.conf.d/99dim-mirrors", contents }],
+    jobEnvironmentDefaults: { NPM_CONFIG_GLOBALCONFIG: "/etc/npmrc" } });
   expect((await backend.run(options)).result).toBe("success");
 });
 it("fences resources with foreign labels instead of deleting or reporting cleanup complete", async () => {

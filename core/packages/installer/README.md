@@ -53,12 +53,29 @@ with `dim controller stop` and, for the owned user service,
 not bypass this profile check. Separate control-plane containers are untouched.
 Plugin installation uses the same activation rule.
 
-Host mirrors are optional. To select the reviewed integration explicitly:
+Workspace cache clients are optional. To select the reviewed client explicitly:
 
 ```bash
 dim installer install core \
   --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
 ```
+
+This selects the client only; installation does not provision caches or require
+cache URLs. Before using the selected client, either configure reviewed endpoint
+URLs with `dim mirrors configure FILE`, or install and explicitly start the
+independent server plugin on this host:
+
+```bash
+dim installer install plugin '@slop-lab/dim-plugin-cache-server@0.10.0'
+dim cache-server ensure
+dim mirrors ensure
+```
+
+The server publishes a host-local URL catalog consumed by the client. For a
+separate cache host, copy its reviewed endpoint catalog to the workspace host
+and run `dim mirrors configure FILE`; use addresses reachable from that host.
+Installing either plugin never starts cache services. Base installation does
+not select either package.
 
 An already enabled host-mirror integration is updated to the installer's exact
 version during core installation. A fresh install does not select it or prompt

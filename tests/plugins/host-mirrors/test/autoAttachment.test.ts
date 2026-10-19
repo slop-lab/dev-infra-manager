@@ -30,7 +30,7 @@ it("injects nested Docker/APT mirror defaults while preserving binary build stre
   const received: Array<{ path: string; bytes: Buffer }> = [];
   const upstream = createServer(async (request, response) => { const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk)); received.push({ path: request.url ?? "", bytes: Buffer.concat(chunks) }); response.end(Buffer.concat(chunks)); });
   await listen(upstream, engine);
-  const config: GuestProxyConfig = { socket, engineSocket: engine, aptConfig: "/workspace/mirrors/apt.conf", daemonConfig: "/workspace/mirrors/daemon.json", blockedHostnames: ["registry-1.docker.io", "auth.docker.io"] };
+  const config: GuestProxyConfig = { socket, engineSocket: engine, files: [{ source: "/workspace/mirrors/apt.conf", target: "/etc/apt/apt.conf.d/99dim-mirrors" }, { source: "/workspace/mirrors/daemon.json", target: "/etc/docker/daemon.json" }], environmentDefaults: [], blockedHostnames: ["registry-1.docker.io", "auth.docker.io"] };
   const proxy = createGuestDockerProxy(config); await new Promise<void>((resolve) => proxy.server.listen(socket, resolve)); cleanup.push(() => proxy.close());
   const response = await unix(socket, "/v1.53/containers/create?name=debian", Buffer.from(JSON.stringify({ Image: "debian:bookworm", HostConfig: { Binds: ["project-data:/workspace:rw"], ExtraHosts: ["internal.local:10.0.0.2"] }, Env: ["APP_URL=http://internal.local:3000"] })));
   expect(response.status).toBe(200);
@@ -48,7 +48,7 @@ it("passes Docker upgrade streams in both directions including final bytes after
     stream.allowHalfOpen = true; stream.write("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n");
     const chunks = [head]; stream.on("data", (chunk: Buffer) => chunks.push(chunk)); stream.on("end", () => stream.end(Buffer.concat(chunks)));
   }); await listen(upstream, engine);
-  const proxy = createGuestDockerProxy({ socket, engineSocket: engine, aptConfig: "/apt", daemonConfig: "/daemon", blockedHostnames: [] });
+  const proxy = createGuestDockerProxy({ socket, engineSocket: engine, files: [], environmentDefaults: [], blockedHostnames: [] });
   await new Promise<void>((resolve) => proxy.server.listen(socket, resolve)); cleanup.push(() => proxy.close());
   const bytes = Buffer.from([0, 255, 0, 1]);
   const response = await new Promise<Buffer>((resolve, reject) => {
@@ -59,9 +59,10 @@ it("passes Docker upgrade streams in both directions including final bytes after
 });
 async function relayFixture(upstream: (request: IncomingMessage, response: ServerResponse) => void) {
   const directory = await root(), store = new WorkspaceStore(join(directory, "workspaces")), workspace = workspaceRecord(); await store.write(workspace);
-  const server = createServer(upstream), origin = await listen(server), endpoint = { host: "127.0.0.1", port: Number(new URL(origin).port) };
-  const relay = await createMirrorRelay({ workspaceStateRoot: store.root, workspaceId: workspace.id, workspaceName: workspace.name, listen: "127.0.0.1", registry: endpoint, apt: endpoint, controlToken: "a".repeat(43), configurationId: randomUUID() });
-  cleanup.push(() => relay.close()); return { relay, store, workspace, registry: `http://127.0.0.1:${relay.registryPort}`, apt: `http://127.0.0.1:${relay.aptPort}` };
+  const server = createServer(upstream), origin = await listen(server);
+  const endpoints = { docker: origin + "/", apt: origin + "/", npm: origin + "/", pypi: origin + "/root/pypi/+simple/" };
+  const relay = await createMirrorRelay({ workspaceStateRoot: store.root, workspaceId: workspace.id, workspaceName: workspace.name, listen: "127.0.0.1", endpoints, controlToken: "a".repeat(43), configurationId: randomUUID() });
+  cleanup.push(() => relay.close()); return { relay, store, workspace, registry: `http://127.0.0.1:${relay.ports.docker}`, apt: `http://127.0.0.1:${relay.ports.apt}`, npm: `http://127.0.0.1:${relay.ports.npm}`, pypi: `http://127.0.0.1:${relay.ports.pypi}` };
 }
 it("limits cache access to fixed public reads, strips credentials and rejects APT SSRF/CONNECT", async () => {
   const received: Array<{ url: string; headers: IncomingMessage["headers"] }> = [];
@@ -71,7 +72,7 @@ it("limits cache access to fixed public reads, strips credentials and rejects AP
   expect(received[0]?.headers).not.toHaveProperty("authorization"); expect(received[0]?.headers).not.toHaveProperty("cookie"); expect(received[0]?.headers).not.toHaveProperty("x-forwarded-for");
   expect((await fetch(f.registry + "/v2/library/debian/manifests/bookworm", { method: "DELETE" })).status).toBe(405);
   expect((await fetch(f.registry + "/admin")).status).toBe(403);
-  const absolute = (path: string) => new Promise<number>((resolve, reject) => { const outgoing = request({ hostname: "127.0.0.1", port: f.relay.aptPort, path }, (response) => { response.resume(); resolve(response.statusCode!); }); outgoing.on("error", reject); outgoing.end(); });
+  const absolute = (path: string) => new Promise<number>((resolve, reject) => { const outgoing = request({ hostname: "127.0.0.1", port: f.relay.ports.apt, path }, (response) => { response.resume(); resolve(response.statusCode!); }); outgoing.on("error", reject); outgoing.end(); });
   expect(await absolute("http://deb.debian.org/debian/dists/bookworm/Release")).toBe(200);
   expect(received[1]?.url).toBe("http://deb.debian.org/debian/dists/bookworm/Release");
   for (const target of ["http://169.254.169.254/", "http://127.0.0.1/private", "http://deb.debian.org:8787/private", "http://user:secret@deb.debian.org/file", "https://deb.debian.org/file"]) expect(await absolute(target)).toBe(403);
@@ -91,7 +92,7 @@ it("flushes Docker wait response headers before body bytes so container startup 
   let complete: (() => void) | undefined;
   const upstream = createServer((_request, response) => { response.writeHead(200, { "content-type": "application/json" }); response.flushHeaders(); complete = () => response.end('{"StatusCode":0}'); });
   await listen(upstream, engine);
-  const proxy = createGuestDockerProxy({ socket, engineSocket: engine, aptConfig: "/apt", daemonConfig: "/daemon", blockedHostnames: [] });
+  const proxy = createGuestDockerProxy({ socket, engineSocket: engine, files: [], environmentDefaults: [], blockedHostnames: [] });
   await new Promise<void>((resolve) => proxy.server.listen(socket, resolve)); cleanup.push(() => proxy.close());
   const response = await new Promise<IncomingMessage>((resolve, reject) => {
     const outgoing = request({ socketPath: socket, path: "/v1.53/containers/id/wait?condition=next-exit", method: "POST", signal: AbortSignal.timeout(2_000) }, resolve);
@@ -110,7 +111,7 @@ it("reuses a detached UUID relay across pause/resume and atomically refreshes ca
   const a = new URL(await listen(createServer((_request, response) => response.end("first cache"))));
   const b = new URL(await listen(createServer((_request, response) => response.end("replacement cache"))));
   const relayRoot = join(directory, "relay"), input = { workspaceStateRoot: store.root, workspaceName: workspace.name, workspaceId: workspace.id, listen: "127.0.0.1",
-    registry: { host: "127.0.0.1", port: Number(a.port) }, apt: { host: "127.0.0.1", port: Number(a.port) } };
+    endpoints: { docker: a.href, apt: a.href, npm: a.href, pypi: a.href } };
   cleanup.push(async () => {
     await store.remove(workspace.name).catch(() => {});
     for (let index = 0; index < 100; index++) {
@@ -123,12 +124,37 @@ it("reuses a detached UUID relay across pause/resume and atomically refreshes ca
   const signal = AbortSignal.timeout(10_000);
   const [first, replay] = await Promise.all([ensureWorkspaceRelay(relayRoot, input, signal), ensureWorkspaceRelay(relayRoot, input, signal)]);
   expect(replay).toEqual(first);
-  const endpoint = `http://127.0.0.1:${first.registryPort}/v2/cache`;
+  const endpoint = `http://127.0.0.1:${first.ports.docker}/v2/cache`;
   expect(await (await fetch(endpoint)).text()).toBe("first cache");
-  const next = { ...input, registry: { host: "127.0.0.1", port: Number(b.port) } };
+  const next = { ...input, endpoints: { ...input.endpoints, docker: b.href } };
   expect(await ensureWorkspaceRelay(relayRoot, next, signal)).toEqual(first);
   expect(await (await fetch(endpoint)).text()).toBe("replacement cache");
   await store.write({ ...workspace, phase: "stopped" }); expect((await fetch(endpoint)).status).toBe(503);
   await store.write(workspace); expect(await ensureWorkspaceRelay(relayRoot, next, signal)).toEqual(first);
   expect(await (await fetch(endpoint)).text()).toBe("replacement cache");
+});
+
+it("serves npm and PyPI metadata plus artifact bytes through the workspace relay without origin bypass", async () => {
+  const bytes = Buffer.from([0, 255, 128, 42]);
+  const received: string[] = [];
+  const f = await relayFixture((request, response) => {
+    const path = request.url ?? ""; received.push(path);
+    if (path === "/package") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ dist: { tarball: `http://${request.headers.host}/package/-/package.tgz` } }));
+    } else if (path === "/root/pypi/+simple/example/") {
+      response.setHeader("content-type", "text/html");
+      response.end('<a href="../../+f/example.whl#sha256=1234">example</a>');
+    } else if (path === "/package/-/package.tgz" || path === "/root/pypi/+f/example.whl") {
+      response.setHeader("content-type", "application/octet-stream"); response.end(bytes);
+    } else { response.writeHead(404); response.end(); }
+  });
+  const manifest: unknown = await (await fetch(f.npm + "/package")).json();
+  expect(manifest).toEqual({ dist: { tarball: f.npm + "/package/-/package.tgz" } });
+  expect(Buffer.from(await (await fetch(f.npm + "/package/-/package.tgz")).arrayBuffer())).toEqual(bytes);
+  const index = await (await fetch(f.pypi + "/example/")).text();
+  const file = new URL(/href="([^"]+)"/.exec(index)![1]!);
+  expect(file.origin).toBe(f.pypi); expect(file.hash).toBe("#sha256=1234");
+  expect(Buffer.from(await (await fetch(file)).arrayBuffer())).toEqual(bytes);
+  expect(received).toContain("/root/pypi/+f/example.whl");
 });

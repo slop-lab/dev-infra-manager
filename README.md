@@ -146,7 +146,8 @@ the base CLI.
 | Package | Responsibility |
 | --- | --- |
 | [agent-tools](plugin-agent-tools/README.md) | Codex/OpenCode setup, launch, session continuation and OpenCode server |
-| [host-mirrors](plugin-host-mirrors/README.md) | Host-owned Docker Hub and APT caches |
+| [cache-server](plugin-cache-server/README.md) | Optional host-owned Docker, npm, PyPI and APT cache services |
+| [host-mirrors](plugin-host-mirrors/README.md) | Workspace clients for local or remote package caches |
 | [llm-router](plugin-llm-router/README.md) | Scoped model access, host-side provider credentials, quotas and usage |
 | [vm](plugin-vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped browser consoles |
 | [tunnels](plugin-tunnels/README.md) | Persistent TCP/UDP routes, workspace grants and operator web UI |

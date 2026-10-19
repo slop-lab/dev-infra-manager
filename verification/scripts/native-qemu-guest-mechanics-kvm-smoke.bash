@@ -17,7 +17,6 @@ suffix="$(basename "$work_dir" | tr '[:upper:]' '[:lower:]')"
 resource_prefix="dim-native-qemu-kvm-$suffix"
 runner_image="$resource_prefix-runner:verification"
 job_image="$resource_prefix-job:verification"
-guest_root_volume="$resource_prefix-guest-root"
 job_volume="$resource_prefix-job-input"
 workspace_volume="$resource_prefix-workspace"
 qemu_container="$resource_prefix-qemu"
@@ -103,7 +102,7 @@ for image in "$runner_image" "$job_image"; do
     exit 125
   fi
 done
-for volume in "$guest_root_volume" "$job_volume" "$workspace_volume"; do
+for volume in "$job_volume" "$workspace_volume"; do
   if docker volume inspect "$volume" >/dev/null 2>&1; then
     printf 'refusing to use pre-existing volume %s\n' "$volume" >&2
     exit 125
@@ -120,7 +119,6 @@ COPY native-qemu-fork-pressure.c /build/native-qemu-fork-pressure.c
 RUN apk add --no-cache bash build-base && \
     cc -Os -s -o /usr/local/bin/fork-pressure /build/native-qemu-fork-pressure.c && \
     apk del build-base && \
-    addgroup -g 1000 dim && adduser -D -u 1000 -G dim dim && \
     mkdir -p /dev /proc /sys /run/dim/job /workspace /tmp
 EOF
 cp "$root_dir/verification/assets/native-qemu-fork-pressure.c" "$work_dir/native-qemu-fork-pressure.c"
@@ -137,14 +135,14 @@ docker version --format 'client={{.Client.Version}} server={{.Server.Version}}' 
 docker info --format 'driver={{.Driver}} driverStatus={{json .DriverStatus}} defaultRuntime={{.DefaultRuntime}}' \
   >"$evidence_dir/docker-info.txt"
 
-for volume in "$guest_root_volume" "$job_volume" "$workspace_volume"; do
+for volume in "$job_volume" "$workspace_volume"; do
   docker volume create --label "$resource_label" "$volume" >/dev/null
   created_volumes+=("$volume")
 done
 job_container="$(docker create --label "$resource_label" "$job_image")"
 docker export "$job_container" | docker run --rm --interactive \
-  --mount "type=volume,source=$guest_root_volume,target=/target" \
-  "$runner_image" tar -x -C /target
+  --mount "type=volume,source=$job_volume,target=/target" \
+  "$runner_image" sh -ec 'cat > /target/rootfs.tar && chmod 0444 /target/rootfs.tar'
 docker container rm "$job_container" >/dev/null
 job_container=""
 
@@ -173,7 +171,7 @@ printf 'candidate-updated\n' >> /workspace/candidate-marker
 EOF
 printf '{"schemaVersion":1}\n' | docker run --rm --interactive \
   --mount "type=volume,source=$job_volume,target=/target" "$runner_image" \
-  sh -c 'cat > /target/descriptor.json && chmod 0444 /target/descriptor.json'
+  sh -c 'cat > /target/descriptor.json && touch /target/config-targets /target/job-environment && chmod 0444 /target/descriptor.json /target/config-targets /target/job-environment'
 docker run --rm --interactive --mount "type=volume,source=$job_volume,target=/target" "$runner_image" \
   sh -c 'cat > /target/script && chmod 0444 /target/script' <"$work_dir/job-script"
 printf 'dim-qemu-candidate-marker\n' | docker run --rm --interactive \
@@ -185,7 +183,6 @@ timeout --signal=TERM --kill-after=15s 180s docker run --rm --name "$qemu_contai
   --label "$resource_label" --read-only --network none --pids-limit 128 --device /dev/kvm \
   --user 65534:65534 --group-add "$(stat -Lc '%g' /dev/kvm)" \
   --cap-drop ALL --security-opt no-new-privileges \
-  --mount "type=volume,source=$guest_root_volume,target=/run/dim/guest-root,readonly" \
   --mount "type=volume,source=$job_volume,target=/run/dim/job,readonly" \
   --mount "type=volume,source=$workspace_volume,target=/run/dim/workspace" \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m "$runner_image" \
@@ -194,8 +191,7 @@ timeout --signal=TERM --kill-after=15s 180s docker run --rm --name "$qemu_contai
   -kernel /opt/dim/vmlinuz -initrd /opt/dim/initramfs.gz \
   -append 'console=ttyS0 panic=-1 dim.pids=8' \
   -device virtio-rng-pci -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-  -fsdev local,id=jobroot,path=/run/dim/guest-root,security_model=none,readonly=on \
-  -device virtio-9p-pci,fsdev=jobroot,mount_tag=jobroot \
+  -netdev user,id=jobnet -device virtio-net-pci,netdev=jobnet \
   -fsdev local,id=job,path=/run/dim/job,security_model=none,readonly=on \
   -device virtio-9p-pci,fsdev=job,mount_tag=job \
   -fsdev local,id=workspace,path=/run/dim/workspace,security_model=mapped-xattr \
@@ -223,15 +219,14 @@ grep -Fx 'candidate-updated' "$evidence_dir/workspace/candidate-marker" >/dev/nu
 grep -Fx 'console=ttyS0 panic=-1 dim.pids=8' "$evidence_dir/workspace/guest-cmdline" >/dev/null
 grep -Fx '0::/dim-job' "$evidence_dir/workspace/cgroup" >/dev/null
 grep -Fx '8' "$evidence_dir/workspace/pids.max" >/dev/null
-grep -Eq '^Uid:[[:space:]]+1000[[:space:]]+1000[[:space:]]+1000[[:space:]]+1000$' "$evidence_dir/workspace/candidate-status"
-grep -Eq '^CapEff:[[:space:]]+0+$' "$evidence_dir/workspace/candidate-status"
+grep -Eq '^Uid:[[:space:]]+0[[:space:]]+0[[:space:]]+0[[:space:]]+0$' "$evidence_dir/workspace/candidate-status"
 grep -Eq '^NoNewPrivs:[[:space:]]+1$' "$evidence_dir/workspace/candidate-status"
 grep -Fx 'rejected' "$evidence_dir/workspace/pids-max-write" >/dev/null
 grep -Fx 'rejected' "$evidence_dir/workspace/subtree-write" >/dev/null
 grep -Fx 'workspace-writable' "$evidence_dir/workspace/workspace-write" >/dev/null
 grep -Fx 'scratch-writable' "$evidence_dir/workspace/scratch-write" >/dev/null
 grep -Eq '^forked=[1-7] rejection=EAGAIN$' "$evidence_dir/workspace/fork-pressure"
-printf '{"schemaVersion":1,"classification":"same-host-native-mechanics-not-independent-acceptance","acceleration":"kvm","qemuExitCode":%s,"pidsLimit":8,"runnerImageId":"%s","jobImageId":"%s","initramfsSha256":"%s","kernelSha256":"%s","jobRootStaging":"docker-export-private-volume"}\n' \
+printf '{"schemaVersion":1,"classification":"same-host-native-mechanics-not-independent-acceptance","acceleration":"kvm","qemuExitCode":%s,"pidsLimit":8,"runnerImageId":"%s","jobImageId":"%s","initramfsSha256":"%s","kernelSha256":"%s","jobRootStaging":"docker-export-archive-private-volume"}\n' \
   "$qemu_exit_code" "$runner_image_id" "$job_image_id" "$initramfs_sha256" "$kernel_sha256" \
   >"$evidence_dir/summary.json"
 cleanup_resources || exit 125

@@ -18,6 +18,7 @@ try {
   await mkdir(job, { mode: 0o755 }); await mkdir(workspace);
   await writeFile(join(job, "descriptor.json"), "{}\n", { mode: 0o444 });
   await writeFile(join(job, "config-0"), "read-only host plugin configuration\n", { mode: 0o444 });
+  await writeFile(join(job, "job-environment"), "", { mode: 0o444 });
   await writeFile(join(job, "config-targets"), "config-0 /etc/dim-ci-smoke.conf\n", { mode: 0o444 });
   if (runtime === "vm") {
   const prepared = await runner.run("docker", ["create", "--name", `${name}-rootfs`, "--label", `dim.verification=${name}`, "--network", "none", "--read-only", "--entrypoint", "/bin/bash", image]);

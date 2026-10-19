@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/dim-plugin-host-mirrors",
   "version": "0.10.0",
-  "description": "Host-owned Docker and APT mirror provider for DIM",
+  "description": "Connect DIM workspaces and CI to Docker, npm, PyPI and APT caches",
   "license": "MIT",
   "repository": {
     "type": "git",

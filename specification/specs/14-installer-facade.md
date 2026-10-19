@@ -159,7 +159,13 @@ coordinate is `@slop-lab/dim-plugin-host-mirrors@<installer-version>`; another
 package or version must be rejected before npm or installed-state mutation.
 A previously enabled host-mirror plugin remains selected at that matched
 version. This is trusted host-operator input; Project or agent input must not
-select host installation dependencies.
+select host installation dependencies. This flag selects only the workspace
+cache client. It must not provision cache services or require cache endpoint
+configuration during package installation. The optional independent
+`@slop-lab/dim-plugin-cache-server` uses the ordinary exact plugin installation
+command; only its explicit `dim cache-server ensure` operation deploys services.
+Neither server nor client depends on the managed component. Client connection
+configuration and server deployment are outside installer transaction policy.
 
 A selected plugin must join the core and CLI in the same staged npm graph and
 be recorded in staged `plugins.json` before promotion. After a successful

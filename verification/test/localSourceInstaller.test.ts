@@ -102,7 +102,7 @@ describe("local source installation", () => {
     for (const entry of manifest.packages.filter(({ name }) => ["@slop-lab/dim-cli", "@slop-lab/dim-core"].includes(name))) {
       expect(runtimeManifest.dependencies[entry.name]).toContain(entry.file);
     }
-    const pluginNames = ["host-mirrors", "llm-router", "vm", "workspace-check", "agent-tools", "tunnels"]
+    const pluginNames = ["cache-server", "host-mirrors", "llm-router", "vm", "workspace-check", "agent-tools", "tunnels"]
       .map((name) => `@slop-lab/dim-plugin-${name}`);
     const pluginArtifacts = pluginNames.map((name) => {
       const entry = manifest.packages.find((entry) => entry.name === name);
@@ -114,8 +114,8 @@ describe("local source installation", () => {
     const discovered = run(facade, ["plugins"], environment);
     expect(discovered.status, discovered.stderr).toBe(0);
     const metadata = JSON.parse(discovered.stdout) as Array<{ name: string; commands: Array<{ name: string }>; runtime?: string }>;
-    expect(metadata.map(({ name }) => name).sort()).toEqual(["host-mirrors", "llm-router", "vm", "workspace-check", "agent-tools", "tunnels"].sort());
-    expect(metadata.flatMap(({ commands }) => commands.map(({ name }) => name))).toEqual(expect.arrayContaining(["tools", "llm", "vm", "workspace-check", "tunnel"]));
+    expect(metadata.map(({ name }) => name).sort()).toEqual(["cache-server", "host-mirrors", "llm-router", "vm", "workspace-check", "agent-tools", "tunnels"].sort());
+    expect(metadata.flatMap(({ commands }) => commands.map(({ name }) => name))).toEqual(expect.arrayContaining(["cache-server", "mirrors", "tools", "llm", "vm", "workspace-check", "tunnel"]));
     expect(metadata.find(({ name }) => name === "vm")?.runtime).toBe("vm");
     const expanded = JSON.parse(await readFile(resolve(dataHome, "runtime/current/package.json"), "utf8")) as { dependencies: Record<string, string> };
     expect(Object.keys(expanded.dependencies).sort()).toEqual(["@slop-lab/dim-cli", "@slop-lab/dim-core", ...pluginNames].sort());

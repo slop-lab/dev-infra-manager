@@ -14,6 +14,7 @@ export type NativeHostImageRouting = {
   readonly blockedHostnames: readonly string[];
   readonly dockerDaemonConfig: string;
   readonly jobFiles?: readonly { readonly target: string; readonly contents: string }[];
+  readonly jobEnvironmentDefaults?: Readonly<Record<string, string>>;
 };
 
 export type NativeDockerPaths = {
@@ -62,7 +63,7 @@ export async function cleanupNativeContainer(runner: StreamingCommandRunner, cla
   return removed.exitCode === 0 || isMissing(removed.stderr, id);
 }
 
-export function nativeRunnerScript(targets: readonly string[] = []): string {
+export function nativeRunnerScript(targets: readonly string[] = [], defaults?: Readonly<Record<string, string>>): string {
   const mounts = validateJobConfigTargets(targets).map((target, index) => {
     return `--mount type=bind,source=/run/dim/job/config-${index},target=${target},readonly`;
   }).join(" ");
@@ -87,7 +88,7 @@ docker run --rm --oom-score-adj 500 --network bridge --cpus "$DIM_JOB_CPUS" --me
   --workdir /workspace --mount type=bind,source=/workspace,target=/workspace \
   --mount type=bind,source=/run/dim/job/script,target=/run/dim/job/script,readonly \
   ${mounts} \
-  --entrypoint /bin/bash "$DIM_JOB_IMAGE" --noprofile --norc /run/dim/job/script
+  --entrypoint /bin/bash "$DIM_JOB_IMAGE" --noprofile --norc -c ${shellQuote(jobEnvironmentScript(defaults) + 'exec /bin/bash --noprofile --norc /run/dim/job/script\n')}
 `;
 }
 
@@ -145,3 +146,22 @@ export class NativeHostImageError extends Error {
     this.image = image;
   }
 }
+
+/** Apply only missing keys, preserving image/job environment irrespective of key casing. */
+export function jobEnvironmentScript(defaults: Readonly<Record<string, string>> = {}, imageEnvironment: readonly string[] = []): string {
+  const explicit = imageEnvironment.map((entry) => {
+    const separator = entry.indexOf("=");
+    if (separator < 1) throw new Error("invalid job image environment");
+    return [entry.slice(0, separator), entry.slice(separator + 1)] as const;
+  });
+  const fallback = Object.entries(defaults);
+  if (explicit.length > 256 || fallback.length > 64) throw new Error("too many host job environment entries");
+  for (const [key, value] of [...explicit, ...fallback]) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key) || value.includes("\0") || Buffer.byteLength(value) > 64 * 1024) {
+      throw new Error("invalid host job environment entry");
+    }
+  }
+  return explicit.map(([key, value]) => `export ${key}=${shellQuote(value)}\n`).join("")
+    + fallback.map(([key, value]) => `if ! env | cut -d= -f1 | grep -iqxF ${shellQuote(key)}; then export ${key}=${shellQuote(value)}; fi\n`).join("");
+}
+function shellQuote(value: string): string { return "'" + value.replaceAll("'", "'\"'\"'") + "'"; }

@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createHostMirrorOwnership,
   parseHostMirrorOwnership
-} from "../../../../plugin-host-mirrors/src/hostMirrorOwnership.js";
-import { MirrorState as LifecycleState } from "../../../../plugin-host-mirrors/src/cacheState.js";
+} from "../../../../plugin-cache-server/src/hostMirrorOwnership.js";
+import { MirrorState as LifecycleState } from "../../../../plugin-cache-server/src/cacheState.js";
 
 const roots: string[] = [];
 
@@ -16,13 +16,13 @@ afterEach(async () => {
 
 describe("host mirror ownership", () => {
   it("creates independent unpredictable service and resource identities", () => {
-    const first = createHostMirrorOwnership();
-    const second = createHostMirrorOwnership();
+    const first = createHostMirrorOwnership(["network", "cache:docker", "data:docker"]);
+    const second = createHostMirrorOwnership(["network", "cache:docker", "data:docker"]);
     const firstIdentities = [first.serviceId, ...Object.values(first.resourceIds)];
     const secondIdentities = [second.serviceId, ...Object.values(second.resourceIds)];
 
-    expect(firstIdentities).toHaveLength(6);
-    expect(new Set(firstIdentities)).toHaveLength(6);
+    expect(firstIdentities).toHaveLength(4);
+    expect(new Set(firstIdentities)).toHaveLength(4);
     expect(firstIdentities.every((identity) => /^[A-Za-z0-9_-]{43}$/.test(identity))).toBe(true);
     expect(secondIdentities).not.toEqual(firstIdentities);
   });
@@ -31,7 +31,7 @@ describe("host mirror ownership", () => {
     const root = await mkdtemp(join(tmpdir(), "dim-host-mirror-ownership-"));
     roots.push(root);
     const state = new LifecycleState(root);
-    const ownership = createHostMirrorOwnership();
+    const ownership = createHostMirrorOwnership(["network", "cache:docker", "data:docker"]);
 
     await state.writeHostMirrorOwnership(ownership);
 

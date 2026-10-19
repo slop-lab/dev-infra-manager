@@ -5,7 +5,8 @@ import { chmod, chown, lstat, rename, rm } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 const maximumCreateBytes = 2 * 1024 * 1024;
 export interface GuestProxyConfig {
-  socket: string; engineSocket: string; aptConfig: string; daemonConfig: string;
+  socket: string; engineSocket: string; files: readonly { readonly source: string; readonly target: string }[];
+  environmentDefaults: readonly string[];
   blockedHostnames: readonly string[];
 }
 function object(input: unknown): Record<string, unknown> {
@@ -18,12 +19,17 @@ export function injectMirrorMounts(input: unknown, config: GuestProxyConfig) {
   const mounts = host.Mounts === undefined || host.Mounts === null ? [] : host.Mounts;
   if (!Array.isArray(mounts)) throw new Error("Docker mounts must be an array");
   const destinations = new Set([...binds.map((bind) => bind.split(":")[1]), ...mounts.map((mount: unknown) => object(mount).Target)]);
-  for (const [source, target] of [[config.aptConfig, "/etc/apt/apt.conf.d/99dim-mirrors"], [config.daemonConfig, "/etc/docker/daemon.json"]] as const) {
+  for (const { source, target } of config.files) {
     if (!destinations.has(target)) binds.push(`${source}:${target}:ro`);
   }
   const extra = host.ExtraHosts === undefined || host.ExtraHosts === null ? [] : strings(host.ExtraHosts);
   for (const hostname of config.blockedHostnames) if (!extra.some((entry) => entry.startsWith(`${hostname}:`) || entry.startsWith(`${hostname}=`))) extra.push(`${hostname}:127.0.0.1`);
-  return { ...body, HostConfig: { ...host, Binds: binds, ExtraHosts: extra } };
+  const environment = body.Env === undefined || body.Env === null ? [] : strings(body.Env);
+  for (const entry of config.environmentDefaults) {
+    const key = entry.slice(0, entry.indexOf("=")).toLowerCase();
+    if (!environment.some((value) => value.split("=", 1)[0]?.toLowerCase() === key)) environment.push(entry);
+  }
+  return { ...body, Env: environment, HostConfig: { ...host, Binds: binds, ExtraHosts: extra } };
 }
 function strings(value: unknown): string[] {
   if (!Array.isArray(value) || value.some((entry: unknown) => typeof entry !== "string")) throw new Error("Docker configuration must contain strings");
@@ -83,8 +89,17 @@ async function engineAvailable(socket: string) {
 }
 export async function runGuestDockerProxy(input: unknown): Promise<void> {
   const value = object(input);
-  for (const key of ["socket", "engineSocket", "aptConfig", "daemonConfig"]) if (typeof value[key] !== "string" || !value[key].startsWith("/") || value[key].includes(":")) throw new Error("mirror paths must be absolute local paths");
-  const config: GuestProxyConfig = { socket: String(value.socket), engineSocket: String(value.engineSocket), aptConfig: String(value.aptConfig), daemonConfig: String(value.daemonConfig), blockedHostnames: strings(value.blockedHostnames) };
+  const localPath = (value: unknown): value is string => typeof value === "string" && value.startsWith("/") && !/[:,\0]/.test(value);
+  if (!localPath(value.socket) || !localPath(value.engineSocket) || !Array.isArray(value.files)) throw new Error("mirror paths must be absolute local paths");
+  const files: { source: string; target: string }[] = [];
+  for (const item of value.files) {
+    const file = object(item);
+    if (!localPath(file.source) || !localPath(file.target)) throw new Error("mirror paths must be absolute local paths");
+    files.push({ source: file.source, target: file.target });
+  }
+  const environmentDefaults = strings(value.environmentDefaults);
+  if (environmentDefaults.some((entry) => !/^[A-Za-z_][A-Za-z0-9_]*=[^\0]*$/.test(entry))) throw new Error("invalid mirror environment default");
+  const config: GuestProxyConfig = { socket: value.socket, engineSocket: value.engineSocket, files, environmentDefaults, blockedHostnames: strings(value.blockedHostnames) };
   for (const name of config.blockedHostnames) if (!/^[a-z0-9.-]+$/.test(name)) throw new Error("invalid blocked registry hostname");
   // A stopped shim leaves the real nested engine alive at engineSocket. A guest
   // restart starts a new engine at socket; the old engine socket no longer answers.

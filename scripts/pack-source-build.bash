@@ -97,6 +97,7 @@ GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$sou
   plugin-dns-cloudflare \
   plugin-external-urls \
   plugin-host-mirrors \
+  plugin-cache-server \
   plugin-ci-workflows \
   plugin-llm-router \
   plugin-vm \
@@ -120,6 +121,7 @@ packages:
   - plugin-dns-cloudflare
   - plugin-external-urls
   - plugin-host-mirrors
+  - plugin-cache-server
   - plugin-ci-workflows
   - plugin-llm-router
   - plugin-vm

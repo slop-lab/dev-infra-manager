@@ -10,9 +10,9 @@ import { acquireLifecycleLock, atomicWrite } from "@slop-lab/dim-core";
 import type { WorkspaceHostPluginContext, WorkspaceRecord } from "@slop-lab/dim-core/workspace";
 import type { MirrorRelayConfig } from "./relay.js";
 import { object, parseRelayConfig, privateJson } from "./relay-state.js";
-import { DOCKER_HUB_DIRECT_HOSTNAMES } from "./registryCache.js";
+import { cacheKinds, DOCKER_HUB_DIRECT_HOSTNAMES, type CacheKind, type CacheEndpoints } from "./cache-routing.js";
 
-interface RelayReady { registryPort: number; aptPort: number }
+interface RelayReady { ports: Record<CacheKind, number> }
 async function control(config: MirrorRelayConfig, port: number, close = false) {
   return new Promise<boolean>((resolve) => {
     const outgoing = request({ hostname: config.listen, port, path: close ? "/__dim/close" : "/__dim/health", method: close ? "POST" : "GET",
@@ -28,9 +28,9 @@ async function control(config: MirrorRelayConfig, port: number, close = false) {
 }
 async function ready(root: string, config: MirrorRelayConfig): Promise<RelayReady | undefined> {
   try { const value = object(await privateJson(join(root, "ready.json")));
-    if (value.configurationId !== config.configurationId || typeof value.registryPort !== "number" || !Number.isSafeInteger(value.registryPort) || value.registryPort < 1 || value.registryPort > 65535
-      || typeof value.aptPort !== "number" || !Number.isSafeInteger(value.aptPort) || value.aptPort < 1 || value.aptPort > 65535) return;
-    if (await control(config, value.registryPort)) return { registryPort: value.registryPort, aptPort: value.aptPort };
+    const ports = object(value.ports);
+    if (value.configurationId !== config.configurationId || cacheKinds.some((kind) => typeof ports[kind] !== "number" || !Number.isSafeInteger(ports[kind]) || Number(ports[kind]) < 1 || Number(ports[kind]) > 65535)) return;
+    if (await control(config, Number(ports.docker))) return { ports: ports as Record<CacheKind, number> };
   } catch { return; }
   return;
 }
@@ -49,8 +49,8 @@ export async function ensureWorkspaceRelay(root: string, input: Omit<MirrorRelay
           for (let attempt = 0; attempt < 100; attempt++) { const updated = await ready(root, next); if (updated) return updated; await new Promise<void>((resolve) => setTimeout(resolve, 50)); }
           throw new Error("workspace mirror relay configuration did not refresh");
         }
-        await control(old, current.registryPort, true);
-        for (let attempt = 0; attempt < 100 && await control(old, current.registryPort); attempt++) await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        await control(old, current.ports.docker, true);
+        for (let attempt = 0; attempt < 100 && await control(old, current.ports.docker); attempt++) await new Promise<void>((resolve) => setTimeout(resolve, 20));
       }
     } catch (error) { if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error; }
     const config = parseRelayConfig({ ...input, controlToken: randomBytes(32).toString("base64url"), configurationId: randomUUID() });
@@ -68,7 +68,7 @@ export async function ensureWorkspaceRelay(root: string, input: Omit<MirrorRelay
     } finally { await log.close(); }
   } finally { await release(); }
 }
-export async function attachWorkspaceMirrors(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext, endpoints: Pick<MirrorRelayConfig, "registry" | "apt">): Promise<void> {
+export async function attachWorkspaceMirrors(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext, endpoints: Pick<MirrorRelayConfig, "endpoints">): Promise<void> {
   if (!workspace.initialized || workspace.phase !== "running") return;
   if (!context.hostGateway) throw new Error("workspace runtime does not provide a private mirror gateway");
   const attachmentRoot = join(context.stateRoot, "plugins/host-mirrors/workspaces", workspace.id);
@@ -77,12 +77,12 @@ export async function attachWorkspaceMirrors(workspace: WorkspaceRecord, context
     const current = await context.store.read(workspace.name);
     if (current.id !== workspace.id || current.phase !== "running" || !current.initialized) throw new Error("workspace mirror identity changed before attachment");
     const listen = await context.hostGateway(workspace);
-    const { registry, apt } = endpoints;
+    const { endpoints: targets } = endpoints;
     const relay = await ensureWorkspaceRelay(attachmentRoot, {
-      workspaceStateRoot: context.store.root, workspaceName: workspace.name, workspaceId: workspace.id, listen, registry, apt
+      workspaceStateRoot: context.store.root, workspaceName: workspace.name, workspaceId: workspace.id, listen, endpoints: targets
     }, context.signal);
     const proxy = await readFile(new URL("./guest-proxy.js", import.meta.url), "utf8"), setup = await readFile(new URL("./guest-setup.js", import.meta.url), "utf8");
-    const payload = { registry: `http://${listen}:${relay.registryPort}`, apt: `http://${listen}:${relay.aptPort}`, proxy, setup, blockedHostnames: [...DOCKER_HUB_DIRECT_HOSTNAMES] };
+    const payload = { endpoints: Object.fromEntries(cacheKinds.map((kind) => [kind, `http://${listen}:${relay.ports[kind]}/`])) as CacheEndpoints, proxy, setup, blockedHostnames: [...DOCKER_HUB_DIRECT_HOSTNAMES] };
     const script = `${setup}\nconst chunks=[];for await (const chunk of process.stdin) chunks.push(chunk);await installGuestMirrors(JSON.parse(Buffer.concat(chunks).toString('utf8')));`;
     const status = await context.service.exec(workspace.name, ["node", "--input-type=module", "-e", script], { workspaceId: workspace.id, signal: context.signal, stdin: Readable.from([JSON.stringify(payload)]) });
     if (status !== 0) throw new Error("workspace mirror attachment failed; workspace data was preserved");

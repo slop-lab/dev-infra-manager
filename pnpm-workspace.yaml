@@ -10,6 +10,7 @@ packages:
   - plugin-external-urls
   - plugin-ci-workflows
   - plugin-host-mirrors
+  - plugin-cache-server
   - plugin-llm-router
   - plugin-vm
   - plugin-workspace-check

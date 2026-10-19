@@ -208,8 +208,6 @@ test("controller serve identifies plugin route initialization as the failing sta
   apiVersion: 4,
   register(host) {
     host.registerExtension("dim.host-mirror-provider", "host", {
-      dockerImage: "registry.example/cache@sha256:${"a".repeat(64)}",
-      aptImage: "registry.example/apt@sha256:${"b".repeat(64)}",
       async ensure() { throw new Error("cache services must not start while initializing controller routes"); }
     });
     host.registerControllerRoute({
@@ -259,8 +257,6 @@ async function installProviderPlugin(pluginHome: string): Promise<void> {
   await writeFile(path.join(directory, "index.js"), `export const plugin = {
   name: ${JSON.stringify(name)}, apiVersion: 4, register(host) {
     host.registerExtension("dim.host-mirror-provider", "host", {
-      dockerImage: "registry.example/cache@sha256:${"a".repeat(64)}",
-      aptImage: "registry.example/apt@sha256:${"b".repeat(64)}",
       async ensure() { throw new Error("cache services must not start while initializing controller routes"); }
     });
   }

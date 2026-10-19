@@ -1,8 +1,9 @@
 #!/usr/bin/env -S tsx
-/** Explicit disposable Sysbox + Docker/APT cache verification; no installed service is changed. */
+/** Four-endpoint workspace attachment with disposable nested Docker/APT checks.
+ * npm/PyPI artifact reuse is checked separately by package-cache-smoke.mts. */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProcessRunner } from "../../core/packages/core/src/runner.js";
@@ -13,11 +14,19 @@ import { acquireWorkspaceSource } from "../../core/packages/core/src/workspace/s
 import type { WorkspaceHostPluginContext } from "../../core/packages/core/src/workspace/hostPlugin.js";
 const image = process.argv[2]; if (!image) throw new Error("usage: tsx auto-host-mirrors-smoke.mts WORKSPACE_IMAGE");
 const artifact: typeof import("../../plugin-host-mirrors/src/attachment.js") = await import(new URL("../../plugin-host-mirrors/dist/attachment.js", import.meta.url).href);
+const packageCaches: typeof import("../../plugin-cache-server/src/packageCaches.js") = await import(new URL("../../plugin-cache-server/dist/packageCaches.js", import.meta.url).href);
+const pins: unknown = JSON.parse(await readFile(new URL("../../plugin-cache-server/dist/cache-images.json", import.meta.url), "utf8"));
+function pin(kind: string): string {
+  assert(pins !== null && typeof pins === "object" && !Array.isArray(pins));
+  const image: unknown = Reflect.get(pins, kind);
+  assert(typeof image === "string" && /@sha256:[a-f0-9]{64}$/.test(image), `reviewed ${kind} image pin is required`);
+  return image;
+}
 const token = randomUUID().slice(0, 8), prefix = `dim-mirrors-smoke-${token}`;
 const root = await mkdtemp(join(tmpdir(), prefix));
 const runner = new ProcessRunner(), runtime = new ContainerWorkspaceRuntime(runner), store = new WorkspaceStore(join(root, "workspaces"));
 const service = new WorkspaceService(store, runtime, acquireWorkspaceSource);
-const registry = `${prefix}-registry`, apt = `${prefix}-apt`, network = `${prefix}-network`, egress = `${prefix}-egress`, volumes = [`${prefix}-registry-data`, `${prefix}-apt-data`];
+const registry = `${prefix}-registry`, apt = `${prefix}-apt`, npm = `${prefix}-npm`, pypi = `${prefix}-pypi`, network = `${prefix}-network`, egress = `${prefix}-egress`, volumes = [`${prefix}-registry-data`, `${prefix}-apt-data`, `${prefix}-npm-data`, `${prefix}-pypi-data`];
 let workspace: Awaited<ReturnType<typeof service.create>> | undefined;
 async function run(args: string[], allowedFailure = false) {
   const result = await runner.run("docker", args, { signal: AbortSignal.timeout(180_000) });
@@ -27,10 +36,26 @@ const registryImage = "registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7
 const aptImage = "sameersbn/apt-cacher-ng@sha256:58e74113cfac7e593201444648c105351cbfce7538bfb36dcafdc9479b2aefcc";
 async function address(name: string) { return (await run(["inspect", name, "--format", `{{(index .NetworkSettings.Networks "${network}").IPAddress}}`])).stdout.trim(); }
 async function startApt() { await run(["create", "--name", apt, "--network", network, "--mount", `type=volume,src=${volumes[1]},dst=/var/cache/apt-cacher-ng`, aptImage]); await run(["network", "connect", egress, apt]); await run(["start", apt]); }
+async function startPackageCache(name: string, definition: import("../../plugin-cache-server/src/cache-services.js").CacheServiceDefinition, volume: string) {
+  const configuration = join(root, name); await mkdir(configuration);
+  const mounts: string[] = [];
+  for (const file of definition.configFiles ?? []) {
+    const source = join(configuration, file.name); await writeFile(source, file.contents, { mode: 0o644 });
+    mounts.push("--mount", `type=bind,src=${source},dst=${file.target},readonly`);
+  }
+  const args = ["create", "--name", name, "--network", network, "--mount", `type=volume,src=${volume},dst=${definition.dataTarget}`,
+    ...mounts, ...Object.entries(definition.environment ?? {}).flatMap(([key, value]) => ["--env", `${key}=${value}`])];
+  if (definition.entrypoint?.[0]) args.push("--entrypoint", definition.entrypoint[0]);
+  args.push(definition.image, ...(definition.entrypoint?.slice(1) ?? []), ...(definition.command ?? []));
+  await run(args); await run(["network", "connect", egress, name]); await run(["start", name]);
+}
 async function attach() {
   assert(workspace);
   const context: WorkspaceHostPluginContext = { runner, cleanupRunner: runner, stateRoot: root, store, service, signal: AbortSignal.timeout(60_000), hostGateway: (record) => runtime.hostGateway(record) };
-  await artifact.attachWorkspaceMirrors(workspace, context, { registry: { host: await address(registry), port: 5000 }, apt: { host: await address(apt), port: 3142 } });
+  await artifact.attachWorkspaceMirrors(workspace, context, { endpoints: {
+    docker: `http://${await address(registry)}:5000/`, apt: `http://${await address(apt)}:3142/`,
+    npm: `http://${await address(npm)}:4873/`, pypi: `http://${await address(pypi)}:3141/root/pypi/+simple/`
+  } });
 }
 async function guest(args: string[], allowedFailure = false) {
   assert(workspace); const result = await runtime.run(workspace, args, { signal: AbortSignal.timeout(180_000) });
@@ -51,6 +76,8 @@ try {
   await run(["network", "connect", egress, registry]);
   await run(["start", registry]);
   await startApt();
+  await startPackageCache(npm, packageCaches.npmCacheDefinition(pin("npm")), volumes[2]!);
+  await startPackageCache(pypi, packageCaches.pypiCacheDefinition(pin("pypi")), volumes[3]!);
   workspace = await service.create({ name: prefix, source: { url: source }, image, resources: { cpuCount: "2", memory: "3g", pidsLimit: "2048" } });
   await attach();
   const daemon = JSON.parse((await guest(["docker", "info", "--format", "{{json .RegistryConfig}}"])).stdout) as { Mirrors: string[] };
@@ -107,7 +134,7 @@ try {
 } finally {
   if (workspace) await service.discard(workspace.name, workspace.id).catch(async () => runtime.remove(workspace!, { keepData: false }));
   await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
-  for (const name of [registry, apt, `${prefix}-address-holder`]) await run(["rm", "--force", name], true);
+  for (const name of [registry, apt, npm, pypi, `${prefix}-address-holder`]) await run(["rm", "--force", name], true);
   for (const volume of volumes) await run(["volume", "rm", volume], true);
   await run(["network", "rm", network], true);
   await run(["network", "rm", egress], true);

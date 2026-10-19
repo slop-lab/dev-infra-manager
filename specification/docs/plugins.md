@@ -104,10 +104,27 @@ Core owns workspace execution and isolation. Plugins own their explicit
 operations and resource cleanup; external URL delete/revoke closes its flows,
 and per-connection identity checks enforce discard without lifecycle callbacks.
 
-## Optional mirrors
+## Optional package caches
 
-Base workspaces and native root CI use direct image access by default. A host
-may explicitly enable `@slop-lab/dim-plugin-host-mirrors`. An enabled provider
-selects reviewed cache images and CI mirror routing; provider failure stops
-that selected path rather than silently changing routing. The mirror plugin is
-not required by ordinary workspaces, controller startup or native Git.
+Base workspaces and native root CI use direct package access by default.
+`@slop-lab/dim-plugin-cache-server` owns optional host cache deployment,
+storage, resource ownership and Docker/npm/PyPI/APT service reconciliation.
+`@slop-lab/dim-plugin-host-mirrors` owns workspace/CI connection configuration,
+scoped relays and package-manager adapters. Installing or connecting a client
+must never deploy servers. Both packages work without managed support.
+
+Install either package through `dim installer install plugin` at its exact
+reviewed version. Deploy a selected local server with `dim cache-server ensure`;
+it publishes `DIM_STATE_ROOT/services/package-caches.json`. The fixed catalog is
+`{schemaVersion:1,endpoints:{docker,npm,pypi,apt}}`, where each endpoint is a URL.
+The client may consume that local catalog or an explicit reviewed catalog saved
+with `dim mirrors configure FILE`. Explicit client configuration takes
+precedence, supporting a separate host or NAS without a deployment DSL.
+`dim mirrors ensure` validates connection configuration and never starts servers.
+
+An enabled client refreshes scoped workspace relays and guest configuration on
+workspace readiness. Provider failure stops that selected path rather than
+silently changing routing. Docker Hub fallback is blocked for the selected
+mirror path. Neither package is required by ordinary workspaces, controller
+startup or native Git. Cache storage outlives individual workspaces; workspace
+discard does not delete shared host cache state.

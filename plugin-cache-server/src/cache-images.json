@@ -1,0 +1,6 @@
+{
+  "docker": "registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33",
+  "apt": "sameersbn/apt-cacher-ng@sha256:58e74113cfac7e593201444648c105351cbfce7538bfb36dcafdc9479b2aefcc",
+  "npm": "verdaccio/verdaccio:6.10.5@sha256:560744912b640ddc0f23cd475d296b663b656c0fcfa0ba17cc5ca1cbcb620225",
+  "pypi": "jonasal/devpi-server:6.20.3@sha256:32144f05594638874232d210155073986d55ec462ab8d8aab679a50ab3794c7d"
+}

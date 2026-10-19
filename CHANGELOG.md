@@ -33,7 +33,10 @@ is implied by these source changes.
   durable TCP/UDP tunnels, mirrors, agent tools and disposable workspace checks
   in optional plugins. Fence guest capabilities by current workspace UUID;
   credentials remain on the selected host. Configured workspace OpenCode/OMO
-  helpers use that router by default. Publish the versioned OpenCode static UI
+  helpers use that router by default. Separate Docker/npm/PyPI/APT cache clients
+  from optional host cache servers; external cache URLs use the same client path.
+  Reviewed VM image downloads share a resumable checksum-verified host cache.
+  Publish the versioned OpenCode static UI
   automatically from `main` and `development` through GitHub Pages.
 - Align documentation and disposable verification with the current architecture;
   remove tests and gates that enforce retired internal contracts. Preserve the

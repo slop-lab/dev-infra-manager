@@ -43,6 +43,7 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
     "plugin-dns-cloudflare",
     "plugin-external-urls",
     "plugin-host-mirrors",
+    "plugin-cache-server",
     "plugin-ci-workflows",
     "plugin-llm-router",
     "plugin-vm",

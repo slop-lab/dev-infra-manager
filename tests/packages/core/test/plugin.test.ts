@@ -143,11 +143,9 @@ describe("plugin contract", () => {
     ])).rejects.toThrow(/already registered/);
   });
 
-  it("registers one host-owned mirror provider with immutable service images", async () => {
+  it("registers one host-owned mirror provider without deploying services", async () => {
     // Given
     const provider = {
-      dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
-      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`,
       async ensure() { throw new Error("registration must not start services"); }
     };
 
@@ -163,22 +161,13 @@ describe("plugin contract", () => {
     await registered.dispose();
   });
 
-  it("rejects mutable and duplicate host mirror providers", async () => {
+  it("rejects duplicate host mirror providers", async () => {
     // Given
     const immutable = {
-      dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
-      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`,
       async ensure() { throw new Error("registration must not start services"); }
     };
 
     // When / Then
-    await expect(registerPlugin({
-      name: "mutable-mirrors",
-      apiVersion: DIM_PLUGIN_API_VERSION,
-      register(host) {
-        registerHostMirrorProvider(host, { ...immutable, aptImage: "registry.example/apt-cache:latest" });
-      }
-    })).rejects.toThrow(/immutable digest/);
     await expect(registerPlugins([
       {
         name: "first-mirrors",
@@ -196,8 +185,6 @@ describe("plugin contract", () => {
   it("rejects a second host mirror provider registered under another name", async () => {
     // Given
     const provider = {
-      dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
-      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`,
       async ensure() { throw new Error("registration must not start services"); }
     };
 
@@ -226,7 +213,7 @@ describe("plugin contract", () => {
     });
 
     // Then
-    await expect(registration).rejects.toThrow(/host mirror provider images must use an immutable digest/);
+    await expect(registration).rejects.toThrow(/host mirror provider must supply cache routing/);
   });
 
   it("shares named extensions between plugins and rejects duplicates", async () => {

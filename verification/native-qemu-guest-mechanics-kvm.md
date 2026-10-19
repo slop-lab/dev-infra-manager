@@ -3,8 +3,8 @@
 `just verify native-qemu-guest-mechanics-kvm` boots the shipped native-QEMU
 kernel and initramfs in a real Docker-hosted QEMU VM with `accel=kvm`. It
 verifies guest boot, the fixed Bash argv, writable candidate workspace and
-`/tmp`, read-only kernel control mounts, non-root execution, and an enforced
-cgroup-v2 PID limit.
+`/tmp`, read-only kernel control mounts, guest-root execution with restricted
+capabilities, and an enforced cgroup-v2 PID limit.
 
 The lane requires an accessible character `/dev/kvm`. Missing KVM, Docker, or
 required build inputs is `unavailable` with exit `2`; there is no TCG fallback.
@@ -13,10 +13,11 @@ independent-host release acceptance, human review, or checked protected-ref
 promotion.
 
 The fixture builds uniquely tagged disposable runner and job images. It stages
-the job image root with `docker export` into a fixture-owned private Docker
-volume. Separate private volumes contain only read-only job inputs and the
-writable candidate marker and artifacts. No Docker socket or unrelated host
-device is passed into the runner container.
+the job image as a `docker export` archive alongside read-only job inputs in
+a fixture-owned private Docker volume. The archive is extracted only inside
+the VM. A separate private volume contains the writable candidate marker and
+artifacts. No Docker socket or unrelated host device is passed into the runner
+container.
 
 Evidence is written under
 `.local/verification/native-qemu-guest-mechanics-kvm-*` unless

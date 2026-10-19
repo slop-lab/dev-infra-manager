@@ -42,7 +42,7 @@ Options:
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
   --with-managed Install optional managed Git, review and CI components
   --host-mirror-plugin PACKAGE@EXACT_VERSION
-                   Optionally install and enable the reviewed host mirror plugin
+                   Optionally enable the cache client (does not deploy cache servers)
   --local-packages PATH
                    Install a packages.json bundle produced by this repository
   --defer-controller-restart

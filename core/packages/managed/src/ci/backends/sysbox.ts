@@ -26,7 +26,7 @@ export function createSysboxBackend(routing?: NativeHostImageRouting): Execution
         descriptorDigest: input.grant.descriptorDigest, workspace, scriptFile: script, signal });
       const files = routing?.jobFiles ?? [];
       if (files.length > 16 || new Set(files.map(({ target }) => target)).size !== files.length) throw new Error("invalid host job configuration files");
-      const launchScript = nativeRunnerScript(files.map(({ target }) => target));
+      const launchScript = nativeRunnerScript(files.map(({ target }) => target), routing?.jobEnvironmentDefaults);
       const jobFiles = await Promise.all(files.map(async ({ target, contents }, index) => {
         if (Buffer.byteLength(contents) > 64 * 1024) throw new Error("host job configuration is too large");
         const source = join(input.root, `config-${index}`);

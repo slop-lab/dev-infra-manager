@@ -1,36 +1,33 @@
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 import os from "node:os";
 import path from "node:path";
-import type { MirrorRouting } from "./cacheState.js";
-import { ensureRegistryCache, REGISTRY_CACHE_CONTAINER, CONTROL_NETWORK, DOCKER_HUB_DIRECT_HOSTNAMES, sysboxRegistryDaemonConfig } from "./registryCache.js";
-import { ensureAptCache, APT_CACHE_CONTAINER } from "./aptCache.js";
-
-const images = {
-  dockerImage: "registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33",
-  aptImage: "sameersbn/apt-cacher-ng@sha256:58e74113cfac7e593201444648c105351cbfce7538bfb36dcafdc9479b2aefcc"
-} as const;
-
+import { cacheEndpoint, cacheKinds, clientFiles, DOCKER_HUB_DIRECT_HOSTNAMES, type CacheEndpoints, type MirrorRouting } from "./cache-routing.js";
+import { object, privateJson } from "./relay-state.js";
+export function hostStateRoot(): string {
+  return path.resolve(process.env.DIM_STATE_ROOT ?? path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local/state"), "dim"));
+}
+export function mirrorStateRoot(): string { return path.join(hostStateRoot(), "plugins/host-mirrors"); }
+export function parseCacheCatalog(input: unknown): CacheEndpoints {
+  const value = object(input);
+  if (value.schemaVersion !== 1 || Object.keys(value).some((key) => key !== "schemaVersion" && key !== "endpoints")) throw new Error("expected cache URL catalog schemaVersion 1 and endpoints");
+  const endpoints = object(value.endpoints);
+  if (Object.keys(endpoints).some((key) => !cacheKinds.includes(key as typeof cacheKinds[number]))) throw new Error("unknown cache kind");
+  return Object.fromEntries(cacheKinds.map((kind) => [kind, cacheEndpoint(endpoints[kind], kind)])) as CacheEndpoints;
+}
+/** Connecting never provisions a server. A server plugin may publish the same URL catalog. */
+export async function readCacheEndpoints(): Promise<CacheEndpoints> {
+  try { return parseCacheCatalog(await privateJson(path.join(mirrorStateRoot(), "config.json"))); }
+  catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
+  try { return parseCacheCatalog(await privateJson(path.join(hostStateRoot(), "services/package-caches.json"))); }
+  catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") throw new Error("cache URLs are not configured; run dim mirrors configure FILE, or install a cache server plugin and publish its endpoints");
+    throw error;
+  }
+}
 export const hostMirrorProvider = {
-  ...images,
-  async ensure(runner: StreamingCommandRunner): Promise<MirrorRouting> {
-    const stateRoot = path.resolve(process.env.DIM_HOST_MIRRORS_STATE_ROOT
-      ?? path.join(process.env.DIM_STATE_ROOT ?? path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local/state"), "dim"), "plugins/host-mirrors"));
-    const options = { stateRoot, hostMirrorProvider: images };
-    await ensureRegistryCache(runner, options);
-    await ensureAptCache(runner, options);
-    const endpoints = await workspaceCacheEndpoints(runner);
-    return { jobFiles: [{ target: "/etc/apt/apt.conf.d/99dim-mirrors", contents: `Acquire::http::Proxy "http://${endpoints.apt.host}:${endpoints.apt.port}";\nAcquire::https::Proxy "DIRECT";\n` }], network: CONTROL_NETWORK, blockedHostnames: DOCKER_HUB_DIRECT_HOSTNAMES,
-      dockerDaemonConfig: sysboxRegistryDaemonConfig() };
+  async ensure(_runner: StreamingCommandRunner): Promise<MirrorRouting> {
+    const endpoints = await readCacheEndpoints();
+    return { network: "bridge", blockedHostnames: DOCKER_HUB_DIRECT_HOSTNAMES, jobFiles: clientFiles(endpoints), jobEnvironmentDefaults: { NPM_CONFIG_GLOBALCONFIG: "/etc/npmrc" },
+      dockerDaemonConfig: JSON.stringify({ "registry-mirrors": [endpoints.docker], "insecure-registries": new URL(endpoints.docker).protocol === "http:" ? [new URL(endpoints.docker).host] : [] }) };
   }
 };
-
-
-export async function workspaceCacheEndpoints(runner: StreamingCommandRunner) {
-  async function address(name: string, port: number) {
-    const result = await runner.run("docker", ["inspect", name, "--format", `{{(index .NetworkSettings.Networks "${CONTROL_NETWORK}").IPAddress}}`]);
-    const host = result.stdout.trim();
-    if (result.exitCode !== 0 || !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.split(".").some((part) => Number(part) > 255)) throw new Error("owned mirror cache has no private network address");
-    return { host, port };
-  }
-  return { registry: await address(REGISTRY_CACHE_CONTAINER, 5000), apt: await address(APT_CACHE_CONTAINER, 3142) };
-}

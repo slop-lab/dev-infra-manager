@@ -5,10 +5,11 @@
 Target: `0.10.0` internal-development candidate. The plugin remains part of the
 matched unpublished source package set.
 
-- Automatically attach host-owned Docker/APT caches to ordinary Git workspaces
-  when the exact optional plugin is installed. Keep cache ownership and image
-  selection in the plugin, preserve internal application HTTP routing, and
-  supply read-only defaults to nested containers and shared CI. Stable private
-  relays survive pause/resume and cache replacement while workspace UUID fencing
-  closes discarded routes. Verify real nested Debian/Ubuntu cold, warm and
-  unavailable-cache behavior without changing installed services.
+- Connect ordinary Git workspaces, new nested containers and optional shared CI
+  to Docker Hub, npm, PyPI and APT caches through fixed protocol adapters. Keep
+  cache-server deployment in the separate optional cache-server plugin, and
+  select local or independently operated/NAS services through the same URL-only
+  catalog. Preserve explicit package-manager settings and internal application
+  HTTP routing. Private workspace UUID-fenced relays survive pause/resume,
+  recreation and endpoint changes while rejecting discarded routes and upstream
+  package-artifact escapes.

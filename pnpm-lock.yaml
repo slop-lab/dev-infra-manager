@@ -144,6 +144,18 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  plugin-cache-server:
+    devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   plugin-ci-workflows:
     dependencies:
       yaml:
