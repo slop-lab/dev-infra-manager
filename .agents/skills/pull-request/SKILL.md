@@ -1,55 +1,79 @@
 ---
 name: pull-request
-description: Create, update, or monitor pull requests across GitHub and Gitea repositories. Use for PR publication or CI follow-up; resolve the forge with the bundled script before selecting provider-specific tools.
+description: Create, update, or monitor GitHub pull requests and exact-commit CI for DIM's canonical source. Distinguish public PRs from optional DIM native Git proposal and review operations.
 ---
 
 # Pull Request
 
-Publish and monitor the requested change without assuming that `origin` is
-GitHub. External mutations still require the user's authorization; a request
-to create or update a PR provides that authorization for the named change.
+GitHub is DIM's canonical public source. `development` is the active development
+branch; inspect the requested head/base and existing PR before choosing a target.
+Optional DIM native Git is a separate repository, proposal, human-review and
+protected-ref promotion authority. It is not a GitHub-compatible PR forge.
 
-## Resolve the forge
+## Identify the publication target
 
-Resolve `<skill-dir>` to the directory containing this `SKILL.md`. Skill
-loading does not change the shell working directory or make relative script
-paths resolve against the skill automatically. From the target repository,
-run `bash <skill-dir>/scripts/detect-forge.bash` before using provider-specific
-PR tooling. It returns the provider and repository identity as JSON. Do not
-infer the provider from installed CLIs, credential variable names, or a
-familiar repository name.
+From the target checkout run:
 
-- For `github`, use available GitHub tooling and preserve the requested draft
-  state. Do not default to draft unless repository guidance requires it.
-- For `gitea`, read [references/gitea.md](references/gitea.md), then use the
-  bundled helpers. They contain the supported Gitea API workflow; do not
-  search for Gitea usage or handcraft equivalent API requests.
-- For `unknown`, report the remote and the helper's error without trying
-  provider APIs speculatively.
+```sh
+bash <skill-dir>/scripts/detect-forge.bash [--remote REMOTE]
+```
 
-## Prepare and publish
+Resolve `<skill-dir>` against this skill's directory, not the checkout's current
+working directory. The helper defaults to `origin`, reads Git configuration
+offline and returns a canonical GitHub repository identity without credentials.
+Use that identity explicitly with GitHub tools (`gh --repo OWNER/REPOSITORY` or
+the equivalent connector arguments).
 
-Inspect the worktree and target branch, verify the intended change, stage exact
-paths, commit, and push the head branch. Never overwrite unrelated work or
-force-push unless the user explicitly requested it.
+For `unknown`/exit 3, inspect the configured remote names and task scope. Select
+an existing canonical GitHub remote when public publication was requested. Do
+not probe a native Git endpoint as a forge or invent a GitHub repository from
+its Project ID. Native proposal/review/promotion requests use the installed
+managed Git operations and their separate authority roles; do not translate
+them into a PR or use retired Gitea APIs. Historical backup issue numbers are
+not automatically current GitHub issue numbers.
 
-Before committing, distinguish the canonical public source from a development
-forge. DIM-managed Git hosts are development and review locations, currently
-backed by Gitea; GitHub is DIM's canonical public source. For a development
-forge, do not put its local issue numbers (for example `#123`) in commit
-subjects or PR titles because those strings may later enter public history.
-Use a descriptive standalone subject. A local issue reference may remain in
-the PR body when useful for review inside that forge.
+## Publish or update
 
-For Gitea, follow the referenced helper contract. Never expose credentials in
-output, arguments, remote URLs, PR text, or persistent files.
+Inspect the intended diff and worktree, run checks appropriate to the change,
+and stage exact paths. Preserve unrelated work. Push the requested head through
+the selected canonical remote; do not force-push or merge without authorization.
+Existing publication authorization covers its necessary steps; do not invent
+another confirmation requirement.
 
-## Verify CI
+Find an open PR for the same head/base before creating one. For example:
 
-Report local verification separately from remote CI. For Gitea, use the
-referenced helper to wait on the exact pushed SHA rather than only a branch
-name.
+```sh
+gh pr list --repo OWNER/REPOSITORY --head HEAD --base BASE --state open \
+  --json number,url,isDraft
+```
 
-Stop when all reported statuses succeed, any status fails, or the timeout is
-reached. A timeout or unavailable required runner is not success. For GitHub,
-use the provider tooling's equivalent exact-SHA checks.
+Create or edit that PR using a descriptive title and the final behavior,
+relevant validation and material limitations. Preserve the user's requested
+draft state; do not impose a draft default. Use structured tool arguments or
+an actual temporary body file with `--body-file`, preserving real newlines.
+Use existing GitHub authentication; never extract or print raw Git credentials
+or include credentials in URLs, PR text or evidence files.
+
+## Verify the tested commit
+
+Record the pushed head SHA and inspect workflows for that exact commit:
+
+```sh
+gh run list --repo OWNER/REPOSITORY --commit SHA
+gh run view RUN_ID --repo OWNER/REPOSITORY --json headSha,status,conclusion,jobs,url
+```
+
+Confirm each run's `headSha`. A PR workflow may test a synthetic merge commit;
+distinguish that SHA from the pushed head in the result. Identify the workflows
+relevant to the change: DIM's source verification has Node 24 and 26 lanes;
+OpenCode Pages deploys when its tool/workflow paths change. Hardware integration
+lanes are explicit manual workflows, not implied by a green source run.
+
+Report local checks separately from remote CI and live deployment. Monitor with
+a bounded deadline, giving current step and elapsed time while pending. Stop
+when all relevant checks succeed, a check fails, or the deadline is reached.
+On failure, read the failing job/step's safe logs and report its concrete cause
+and run URL. Missing required checks, an unavailable runner, cancellation and a
+timeout are pending/unsuccessful outcomes, not evidence of success. A failed
+deployment does not establish a new live site. Retry only after understanding
+the cause; do not hide a failure through repeated reruns.
