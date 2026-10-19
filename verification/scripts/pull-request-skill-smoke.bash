@@ -3,41 +3,37 @@ set -euo pipefail
 
 workbench_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 helper="$workbench_root/.agents/skills/pull-request/scripts/detect-forge.bash"
-logs_helper="$workbench_root/.agents/skills/pull-request/scripts/get-gitea-job-logs.bash"
 work_dir="$(mktemp -d /tmp/dim-pull-request-skill.XXXXXX)"
 cleanup() { find "$work_dir" -depth -delete 2>/dev/null || true; }
 trap cleanup EXIT
 
-mkdir -p "$work_dir/bin" "$work_dir/github" "$work_dir/gitea"
+mkdir -p "$work_dir/bin" "$work_dir/repository"
 cat >"$work_dir/bin/curl" <<'EOF'
 #!/usr/bin/env bash
-case "${*: -1}" in
-  https://code.example.test/api/v1/version)
-    printf '%s\n' '{"version":"1.27.0"}'
-    ;;
-  https://code.example.test/api/v1/repos/team/project/actions/jobs/42/logs)
-    printf '%s\n' 'failed-step-log'
-    ;;
-  *)
-    echo "unexpected curl request: ${*: -1}" >&2
-    exit 22
-    ;;
-esac
+printf called >"$DIM_PR_SKILL_NETWORK_TOUCH"
+exit 70
 EOF
 chmod +x "$work_dir/bin/curl"
+cp "$work_dir/bin/curl" "$work_dir/bin/gh"
 
-git -C "$work_dir/github" init --quiet
-git -C "$work_dir/github" remote add origin git@github.com:example/project.git
-github="$(cd "$work_dir/github" && PATH="$work_dir/bin:$PATH" bash "$helper")"
-test "$(jq -r .provider <<<"$github")" = github
-test "$(jq -r .repository <<<"$github")" = example/project
+detect() {
+  (cd "$work_dir/repository" && PATH="$work_dir/bin:$PATH" \
+    DIM_PR_SKILL_NETWORK_TOUCH="$work_dir/network-called" bash "$helper" 2>&1)
+}
 
-git -C "$work_dir/gitea" init --quiet
-git -C "$work_dir/gitea" remote add origin https://code.example.test/team/project.git
-gitea="$(cd "$work_dir/gitea" && PATH="$work_dir/bin:$PATH" bash "$helper")"
-test "$(jq -r .provider <<<"$gitea")" = gitea
-test "$(jq -r .repository <<<"$gitea")" = team/project
-logs="$(cd "$work_dir/gitea" && GITEA_TOKEN=test PATH="$work_dir/bin:$PATH" bash "$logs_helper" --job-id 42)"
-test "$logs" = failed-step-log
+git -C "$work_dir/repository" init --quiet
+git -C "$work_dir/repository" remote add origin git@github.com:example/project.git
+github="$(detect)"
+jq -e '.provider == "github" and .repository == "example/project" and .remoteUrl == "https://github.com/example/project.git"' <<<"$github" >/dev/null
+
+git -C "$work_dir/repository" remote set-url origin http://127.0.0.1:19419/v1/projects/project/repositories/root.git
+if native="$(detect)"; then echo 'native Git was mistaken for a PR forge' >&2; exit 1; else test "$?" -eq 3; fi
+jq -e '.provider == "unknown" and (.reason | type == "string")' <<<"$native" >/dev/null
+
+git -C "$work_dir/repository" remote set-url origin https://operator:credential-must-not-leak@github.com/example/project.git
+if redacted="$(detect)"; then echo 'credential-bearing remote was accepted' >&2; exit 1; else test "$?" -eq 3; fi
+jq -e '.provider == "unknown"' <<<"$redacted" >/dev/null
+[[ "$redacted" != *operator* && "$redacted" != *credential-must-not-leak* ]]
+test ! -e "$work_dir/network-called"
 
 echo pull-request-skill-smoke-ok
