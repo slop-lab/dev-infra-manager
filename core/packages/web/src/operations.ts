@@ -13,11 +13,26 @@ export const operationsConfigSchema = z.object({
   }) }).strict()).max(64).default([])
 }).strict().refine((value) => new Set(value.hosts.map((host) => host.id)).size === value.hosts.length);
 export type OperationsConfig = z.infer<typeof operationsConfigSchema>;
+const resourcesSchema = z.object({
+  cpuCount: z.string().regex(/^(?:unlimited|[1-9][0-9]*(?:\.[0-9]+)?|0\.[0-9]*[1-9][0-9]*)$/).max(32).optional(),
+  memory: z.union([z.literal("unlimited"), z.string().regex(/^[1-9][0-9]*(?:[bkmg]|[kmgt]i?b)?$/i).max(32)]).optional(),
+  pidsLimit: z.string().regex(/^(?:unlimited|[1-9][0-9]*)$/).max(16).optional()
+}).strict();
+export const workspaceCreateSchema = z.object({
+  name: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,47}$/),
+  source: z.string().min(1).max(4096).refine((value) => {
+    if (/[\s\x00-\x1f\x7f]/.test(value)) return false;
+    try { const url = new URL(value); return ["https:", "http:", "ssh:", "git:"].includes(url.protocol) && Boolean(url.hostname) && !url.hash; }
+    catch { return false; }
+  }, "use an HTTP(S), SSH or Git repository URL"),
+  ref: z.string().min(1).max(256).regex(/^[^\s\x00-\x1f\x7f-][^\s\x00-\x1f\x7f]*$/).optional(),
+  runtime: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/).default("container"),
+  image: z.string().min(1).max(512).regex(/^[a-zA-Z0-9][a-zA-Z0-9./:@_-]*$/).optional(),
+  resources: resourcesSchema.optional()
+}).strict();
+export type WorkspaceCreate = z.infer<typeof workspaceCreateSchema>;
 export const workspaceActionSchema = z.object({ name: identifier, expectedId: z.string().uuid(),
-  action: z.enum(["start", "stop", "restart", "recreate", "discard", "resources"]),
-  resources: z.object({ cpuCount: z.string().regex(/^[0-9]+(?:\.[0-9]+)?$/).max(32).optional(),
-    memory: z.string().regex(/^[1-9][0-9]*(?:[kmg]i?b?)?$/i).max(32).optional(),
-    pidsLimit: z.string().regex(/^[1-9][0-9]*$/).max(16).optional() }).strict().optional()
+  action: z.enum(["start", "stop", "restart", "recreate", "discard", "resources"]), resources: resourcesSchema.optional()
 }).strict().refine((value) => value.action === "resources" ? value.resources !== undefined && Object.keys(value.resources).length > 0 : value.resources === undefined);
 export const workspaceSummarySchema = z.object({ id: z.string().uuid(), name: identifier, runtime: z.string(),
   phase: z.enum(["creating", "running", "stopped", "error", "discarding"]), runtimeStatus: z.string(),
@@ -27,6 +42,7 @@ export interface WebOperations {
   hosts(): Promise<unknown>;
   workspaces(host: string): Promise<unknown>;
   workspaceAction(host: string, input: WorkspaceAction): Promise<void>;
+  workspaceCreate(host: string, input: WorkspaceCreate): Promise<void>;
   jobs(): Promise<unknown>;
   detail(id: string): Promise<unknown>;
   workers(): Promise<unknown>;
@@ -40,11 +56,11 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
     if (!selected) throw new HttpResponseError(404, "host not found");
     return selected;
   }
-  async function command(id: string, args: string[]): Promise<unknown> {
+  async function command(id: string, args: string[], timeout = 30_000): Promise<unknown> {
     const selected = host(id);
     try {
       const result = await execute(selected.executable, ["--host", selected.selector, ...args, "--json"], {
-        timeout: 30_000, maxBuffer: 2 * 1024 * 1024, encoding: "utf8", windowsHide: true
+        timeout, maxBuffer: 2 * 1024 * 1024, encoding: "utf8", windowsHide: true
       });
       return JSON.parse(result.stdout);
     } catch { throw new HttpResponseError(409, "host operation failed; refresh the workspace before retrying"); }
@@ -62,6 +78,16 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
   return {
     async hosts() { return config.hosts.map(({ id }) => ({ id })); },
     async workspaces(id) { return z.array(workspaceSummarySchema).max(1024).parse(await command(id, ["ls"])); },
+    async workspaceCreate(id, input) {
+      const value = workspaceCreateSchema.parse(input);
+      const args = ["create", value.source, value.name, "--runtime", value.runtime];
+      if (value.ref !== undefined) args.push("--ref", value.ref);
+      if (value.image !== undefined) args.push("--image", value.image);
+      for (const [key, flag] of [["cpuCount", "--cpus"], ["memory", "--memory"], ["pidsLimit", "--pids"]] as const) {
+        const limit = value.resources?.[key]; if (limit !== undefined) args.push(flag, limit);
+      }
+      await command(id, args, 300_000);
+    },
     async workspaceAction(id, input) {
       const args = [input.action, input.name, "--expect-id", input.expectedId];
       for (const [key, flag] of [["cpuCount", "--cpus"], ["memory", "--memory"], ["pidsLimit", "--pids"]] as const) {

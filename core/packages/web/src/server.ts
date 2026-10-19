@@ -8,7 +8,7 @@ import { BodyError, HttpResponseError, readJson, sendEmpty, sendJson } from "./h
 import { NativeGitClient, NativeGitHttpError, NativeGitClientError } from "./native-client.js";
 import { AccountAuthenticator, SessionStore, type AuthenticationState, type ReviewerSession } from "./session.js";
 import { serveStaticAsset } from "./static-assets.js";
-import { configuredWebOperations, workspaceActionSchema, type WebOperations } from "./operations.js";
+import { configuredWebOperations, workspaceActionSchema, workspaceCreateSchema, type WebOperations } from "./operations.js";
 import { printableText } from "./text-schema.js";
 
 const DEFAULT_AUTHENTICATION_DERIVATIONS = 2;
@@ -304,12 +304,15 @@ async function handleOperations(context: RequestContext, session: ReviewerSessio
     if (!roles.includes("operator")) throw new HttpResponseError(403, "operator authority required");
   }
   const host = /^\/v1\/operations\/hosts\/([a-z0-9._-]{1,128})\/workspaces$/.exec(path);
+  const creation = /^\/v1\/operations\/hosts\/([a-z0-9._-]{1,128})\/workspaces\/create$/.exec(path);
   const job = /^\/v1\/operations\/ci\/jobs\/([0-9a-f-]{36})(?:\/(cancel|retry))?$/.exec(path);
   let body: unknown;
   try {
     if (request.method === "GET" && path === "/v1/operations/status") {
       body = { hosts: await operations.hosts(), ci: context.config.operations.ci !== undefined, ciOperator: context.config.operations.ci?.operatorConnection !== undefined, review: context.native !== undefined,
         consoles: context.config.operations.consoles, generationId: context.config.nativeGit?.generationId ?? null };
+    } else if (creation?.[1] !== undefined && mutation) {
+      await operations.workspaceCreate(creation[1], workspaceCreateSchema.parse(await readJson(request))); body = { accepted: true };
     } else if (host?.[1] !== undefined && request.method === "GET") body = await operations.workspaces(host[1]);
     else if (host?.[1] !== undefined && mutation) {
       await operations.workspaceAction(host[1], workspaceActionSchema.parse(await readJson(request))); body = { accepted: true };

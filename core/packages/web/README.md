@@ -36,9 +36,15 @@ dim-reviewer-web serve /absolute/web.json
 
 Save the generated browser password. Initialization creates a new private
 configuration and stores only its scrypt hash. Existing files are never
-replaced. The UI lists workspaces and their observed runtime status, starts,
+replaced. Operators can create workspaces from HTTP(S), SSH or Git repository URLs on an explicitly
+configured host, with an optional ref, runtime, image and CPU/memory/PID limits.
+Empty limits use the host defaults; `unlimited` removes a limit. A VM workspace
+requires its provider to be installed and an explicit reviewed image fingerprint.
+Creation uses ordinary Git and needs no control plane. The UI lists workspaces
+and their observed runtime status, starts,
 stops, restarts and recreates them, updates CPU/memory/PID limits, and discards
-persistent data after explicit browser confirmation. Mutations pass the selected
+persistent data after explicit browser confirmation. Actions on existing
+workspaces pass the selected
 workspace UUID through the public CLI's `--expect-id` guard; the host checks it
 inside its workspace lock before changing state. A reused name cannot redirect
 an action to a replacement workspace.
@@ -156,7 +162,8 @@ clears rendered operations and diagnostics; requests from an earlier session
 cannot populate a later session's view.
 
 The operations API lives under `/v1/operations`: `status`,
-`hosts/:configuredId/workspaces` (GET and POST allowlisted action), `ci/jobs`,
+`hosts/:configuredId/workspaces` (GET and POST allowlisted action),
+`hosts/:configuredId/workspaces/create` (operator-only POST with origin and CSRF checks), `ci/jobs`,
 `ci/jobs/:uuid`, `ci/jobs/:uuid/cancel`, `ci/jobs/:uuid/retry`, and `ci/workers`.
 Review APIs are scoped to `/v1/projects/:project/repositories/root/reviews`:
 collection GET, proposal `/resolve`, exact review GET, `/approvals`,

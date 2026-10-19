@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createReviewerWebServerFromConfigFile } from "../../../../core/packages/web/src/server.js";
-import { configuredWebOperations, type WebOperations } from "../../../../core/packages/web/src/operations.js";
+import { configuredWebOperations, workspaceCreateSchema, type WebOperations } from "../../../../core/packages/web/src/operations.js";
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 const uuid = randomUUID();
@@ -15,6 +15,7 @@ export async function operationsFixture() {
   const calls: unknown[] = [];
   const operations: WebOperations = { hosts: async () => [{ id: "devbox" }],
     workspaces: async () => [{ id: uuid, name: "development", phase: "running", runtimeStatus: "running", runtime: "container", resources: { cpuCount: "1", memory: "2g", pidsLimit: "512" } }],
+    workspaceCreate: async (host, input) => { calls.push({ create: host, ...input }); },
     workspaceAction: async (host, input) => { calls.push({ host, ...input }); },
     jobs: async () => [], detail: async () => ({ job: { id: uuid }, result: { logs: { stdout: { base64: Buffer.from("diagnostic").toString("base64"), truncated: false }, stderr: { base64: "", truncated: false } } } }),
     workers: async () => [{ id: "worker", slots: [] }], cancel: async (id) => { calls.push({ cancel: id }); return { id, phase: "recovering" }; },
@@ -51,6 +52,25 @@ it("supports ordinary Git host operations without loading a control plane and en
   expect(await status.json()).toMatchObject({ hosts: [{ id: "devbox" }], ci: false, review: false });
   expect((await fetch(f.base + "/v1/projects/project-a/repositories/root/reviews/" + "a".repeat(64), { headers: reader })).status).toBe(404);
 });
+it("creates Git workspaces only with operator, origin and CSRF authority and rejects executable or option inputs", async () => {
+  const f = await operationsFixture(), reader = await f.login("reader"), operator = await f.login("operator");
+  const path = f.base + "/v1/operations/hosts/devbox/workspaces/create";
+  const input = { name: "new-dev", source: "ssh://git@example.test/project.git", runtime: "vm", image: "a".repeat(64),
+    resources: { cpuCount: "1.5", memory: "unlimited", pidsLimit: "2048" } };
+  const body = JSON.stringify(input);
+  expect((await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body })).status).toBe(401);
+  expect((await fetch(path, { method: "POST", headers: reader, body })).status).toBe(403);
+  expect((await fetch(path, { method: "POST", headers: { ...operator, "x-dim-csrf": "wrong" }, body })).status).toBe(403);
+  expect((await fetch(path, { method: "POST", headers: { ...operator, origin: "https://attacker.invalid" }, body })).status).toBe(403);
+  for (const invalid of [{ ...input, source: "ext::sh -c command" }, { ...input, source: "file:///host/private" },
+    { ...input, image: "--privileged" }, { ...input, name: "--help" }, { ...input, executable: "/bin/sh" },
+    { ...input, resources: { cpuCount: "0" } }, { ...input, runtime: "../../host" }]) {
+    expect((await fetch(path, { method: "POST", headers: operator, body: JSON.stringify(invalid) })).status).toBe(400);
+  }
+  expect(f.calls).toEqual([]);
+  expect((await fetch(path, { method: "POST", headers: operator, body })).status).toBe(200);
+  expect(f.calls).toEqual([{ create: "devbox", ...input }]);
+});
 it("gates CI mutation separately from diagnostics and forwards an explicit retry idempotency key", async () => {
   const f = await operationsFixture(), reader = await f.login("reader"), operator = await f.login("operator");
   expect((await fetch(`${f.base}/v1/operations/ci/jobs/${uuid}`, { headers: reader })).status).toBe(200);
@@ -72,6 +92,11 @@ it("executes only configured public DIM host ports, projects safe summaries and 
   expect(await readFile(argv, "utf8")).toBe(JSON.stringify(["--host", "ssh-development", "ls", "--json"]));
   await operations.workspaceAction("devbox", { name: "development", expectedId: uuid, action: "restart" });
   expect(JSON.parse(await readFile(argv, "utf8"))).toEqual(["--host", "ssh-development", "restart", "development", "--expect-id", uuid, "--json"]);
+  await operations.workspaceCreate("devbox", workspaceCreateSchema.parse({ name: "new-dev", source: "https://example.test/repo;literal.git", ref: "main",
+    runtime: "container", image: "registry.example.test/team/dev@sha256:" + "a".repeat(64), resources: { cpuCount: "unlimited", memory: "4g", pidsLimit: "512" } }));
+  expect(JSON.parse(await readFile(argv, "utf8"))).toEqual(["--host", "ssh-development", "create", "https://example.test/repo;literal.git", "new-dev", "--runtime", "container", "--ref", "main",
+    "--image", "registry.example.test/team/dev@sha256:" + "a".repeat(64), "--cpus", "unlimited", "--memory", "4g", "--pids", "512", "--json"]);
+  await expect(operations.workspaceCreate("attacker-host", { name: "new-dev", source: "git://example.test/repo.git", runtime: "container" })).rejects.toThrow("host not found");
   await expect(operations.workspaces("attacker-host")).rejects.toThrow("host not found");
 });
 

@@ -19,6 +19,16 @@ try {
   await page.getByRole("button", { name: "stop development", exact: true }).click();
   await page.getByText("development · container · stopped / stopped", { exact: true }).waitFor();
   assert.equal((await fixture.workspace()).phase, "stopped");
+  await page.getByLabel("Git URL on devbox", { exact: true }).fill("https://example.test/daily.git");
+  await page.getByLabel("Workspace name on devbox", { exact: true }).fill("browser-created");
+  await page.getByLabel("Runtime on devbox", { exact: true }).fill("container");
+  await page.getByLabel("Image (optional) on devbox", { exact: true }).fill("registry.example.test/dev:reviewed");
+  await page.getByLabel("CPU limit (optional) on devbox", { exact: true }).fill("1.5");
+  await page.getByRole("button", { name: "Create workspace on devbox", exact: true }).click();
+  await page.getByText("browser-created · container · running / running", { exact: true }).waitFor();
+  const created = await fixture.createdWorkspace(); assert(created);
+  assert.equal(created.source, "https://example.test/daily.git"); assert.equal(created.runtime, "container");
+  assert.equal(created.image, "registry.example.test/dev:reviewed"); assert.equal(created.resources.cpuCount, "1.5");
   const queued = page.locator("#operations-jobs .operations-row").filter({ hasText: "queued · queued" });
   await queued.getByRole("button", { name: "Cancel execution" }).click();
   const cancelled = page.locator("#operations-jobs .operations-row").filter({ hasText: "queued · finished" });
@@ -34,6 +44,12 @@ try {
   await page.locator("#login-view").waitFor({ state: "visible" });
   assert.equal(await page.locator("#operations-panel").isHidden(), true);
   assert.equal(await page.locator("#operations-details").textContent(), "");
+  await page.getByLabel("Username").fill("readonly");
+  await page.getByLabel("Password").fill(fixture.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByText("Services refreshed.", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Create workspace on devbox", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "stop development", exact: true }).count(), 0);
   assert.deepEqual(errors, []);
-  console.log("operations-browser: ordinary host stop, live CI cancel/retry/logs, configured worker capacity and logout PASS");
+  console.log("operations-browser: ordinary host create/stop, live CI cancel/retry/logs, configured worker capacity and logout PASS");
 } finally { await browser.close(); await fixture.close(); }

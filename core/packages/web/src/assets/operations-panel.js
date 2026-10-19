@@ -28,12 +28,12 @@ function button(target, label, action) {
     finally { node.disabled = false; }
   }); target.append(node); return node;
 }
-/** @param {string} path @param {unknown} [body] */
-async function request(path, body) {
+/** @param {string} path @param {unknown} [body] @param {number} [timeout] */
+async function request(path, body, timeout = 35_000) {
   const active = session; if (!active) throw new Error("session required");
   const response = await fetch(path, { method: body === undefined ? "GET" : "POST", credentials: "same-origin",
     headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json", "x-dim-csrf": active.csrfToken }) },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(35_000) });
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeout) });
   if (!response.ok) throw new Error("operation failed");
   /** @type {unknown} */ const value = await response.json(); return value;
 }
@@ -57,6 +57,7 @@ async function refresh() {
     for (const host of rows(state?.hosts)) {
       const id = text(host.id); if (!id) continue;
       const section = document.createElement("section"); section.className = "operations-card"; hosts.append(section); line(section, `Host: ${id}`);
+      if (active.roles.includes("operator")) renderCreateWorkspace(section, id);
       const workspaces = rows(await request(`/v1/operations/hosts/${encodeURIComponent(id)}/workspaces`)); if (selected !== epoch) return;
       for (const workspace of workspaces) renderWorkspace(section, id, workspace, active.roles.includes("operator"));
     }
@@ -88,6 +89,36 @@ async function refresh() {
   })());
   const results = await Promise.allSettled(loads); if (selected !== epoch) return;
   status.textContent = results.some((result) => result.status === "rejected") ? "Some services are unavailable. Refresh after checking their connected generation." : "Services refreshed.";
+}
+/** @param {HTMLElement} parent @param {string} host */
+function renderCreateWorkspace(parent, host) {
+  const form = document.createElement("form"); form.className = "operations-create"; parent.append(form);
+  const heading = document.createElement("h3"); heading.textContent = "Create workspace"; form.append(heading);
+  /** @param {string} name @param {string} label @param {string} [value] */
+  function input(name, label, value = "") {
+    const field = document.createElement("label"), control = document.createElement("input");
+    field.textContent = `${label} `; control.name = name; control.value = value;
+    control.setAttribute("aria-label", `${label} on ${host}`); field.append(control); form.append(field); return control;
+  }
+  const source = input("source", "Git URL"); source.type = "url"; source.required = true; source.placeholder = "ssh://git@example.com/project.git";
+  const name = input("name", "Workspace name"); name.required = true; name.pattern = "[a-z0-9][a-z0-9._-]{0,47}";
+  const ref = input("ref", "Git ref (optional)");
+  const runtime = input("runtime", "Runtime", "container"); runtime.required = true; runtime.pattern = "[a-z][a-z0-9-]{0,31}";
+  const image = input("image", "Image (optional)"); image.placeholder = "Container image or VM fingerprint";
+  const cpuCount = input("cpuCount", "CPU limit (optional)"), memory = input("memory", "Memory limit (optional)"), pidsLimit = input("pidsLimit", "PID limit (optional)");
+  line(form, "Empty limits use the host defaults. Use unlimited to remove a host limit.");
+  button(form, `Create workspace on ${host}`, async () => {
+    if (!form.reportValidity()) throw new Error("complete the workspace fields");
+    /** @type {Record<string,string>} */ const resources = {};
+    for (const field of [cpuCount, memory, pidsLimit]) if (field.value.trim()) resources[field.name] = field.value.trim();
+    await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces/create`, {
+      source: source.value.trim(), name: name.value.trim(), runtime: runtime.value.trim(),
+      ...(ref.value.trim() ? { ref: ref.value.trim() } : {}), ...(image.value.trim() ? { image: image.value.trim() } : {}),
+      ...(Object.keys(resources).length ? { resources } : {})
+    }, 300_000);
+    await refresh();
+  });
+  form.addEventListener("submit", (event) => event.preventDefault());
 }
 /** @param {HTMLElement} parent @param {string} host @param {Record<string,unknown>} workspace @param {boolean} canOperate */
 function renderWorkspace(parent, host, workspace, canOperate) {
