@@ -3,7 +3,8 @@
 DIM provides persistent, isolated development workspaces on Linux hosts. Start
 from an ordinary Git URL or a repository on the selected host; a DIM control
 plane and `.dim` configuration are not prerequisites. Checkout, home and the
-workspace's private Docker data persist across restarts and recreation.
+workspace's private Docker data and separate temporary volume persist across
+restarts and recreation.
 
 The default runtime is an unprivileged Sysbox container with its own Docker
 engine. The workspace does not receive the host Docker socket or a writable
@@ -12,8 +13,8 @@ not a claim that arbitrary hostile workloads cannot escape the host kernel.
 
 Managed Git, proposal/review workflows, CI and development URL integrations are
 optional. They are separated from the base workspace dependency and startup path;
-see the [architecture rework plan](specification/docs/architecture-rework-plan.md)
-for the remaining work and the exported issue backlog.
+see the [preserved issue implementation](specification/docs/preserved-issues-implementation.md)
+for the issue-by-issue implementation and verification evidence.
 
 ## Install and start
 
@@ -103,11 +104,12 @@ that replacement and retains the data.
 
 `dim run dev` opens a shell. `dim run dev exec COMMAND...` and
 `dim run dev custom COMMAND...` run ordinary commands inside the workspace.
-Project-specific setup and tool integration are being separated from the base
-runtime; the default path does not execute host-side `.dim` hooks.
+Project-specific setup runs inside the workspace. Optional tool integration
+belongs to the agent-tools plugin; the default path does not execute host-side
+`.dim` hooks.
 
 ```bash
-# Permanently removes checkout, home and private Docker data.
+# Permanently removes checkout, home, private Docker data and temporary storage.
 dim discard dev --yes
 ```
 
@@ -131,8 +133,36 @@ managed-Git role files and does not load its service implementation.
 
 Use `dim managed control-plane prepare` to generate private deployment
 configuration and `connect` to validate and save host connections. The advanced
-installer configuration remains available. The reviewer web service
-is a separate optional package. DIM does not embed an issue tracker.
+installer configuration remains available. The operations and review web service
+is a separate optional package with explicit account roles. DIM does not embed
+an issue tracker.
+
+## Optional workspace plugins
+
+Install only the integrations needed on the selected host. `dim plugins` lists
+the host's installed commands and runtime providers; remote clients need only
+the base CLI.
+
+| Package | Responsibility |
+| --- | --- |
+| [agent-tools](plugin-agent-tools/README.md) | Codex/OpenCode setup, launch, session continuation and OpenCode server |
+| [host-mirrors](plugin-host-mirrors/README.md) | Host-owned Docker Hub and APT caches |
+| [llm-router](plugin-llm-router/README.md) | Scoped model access, host-side provider credentials, quotas and usage |
+| [vm](plugin-vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped browser consoles |
+| [tunnels](plugin-tunnels/README.md) | Persistent TCP/UDP routes, workspace grants and operator web UI |
+| [workspace-check](plugin-workspace-check/README.md) | Disposable lifecycle/data-preservation checks for ordinary repositories |
+
+Install the matching agent-tools tarball from the prepared source bundle with
+`dim installer install plugin /absolute/path/to/plugin.tgz`, then run
+`dim tools setup dev opencode`. Plugins own their service configuration and required
+host prerequisites; installing a package does not implicitly log into an account
+or initialize a VM host.
+
+Inside a workspace, `dim-workspace resources`, `dim-nproc`, `dim-workspace restart`
+and `dim-workspace recreate` use a connection scoped to that workspace's immutable
+identity. Registered sessions and independent background services resume from
+the persistent home. See the [guest client documentation](core/packages/core/docs/workspace-client.md)
+for public-key SSH access and HTTP service publication.
 
 ## Development and verification
 
@@ -157,8 +187,10 @@ pnpm --dir tests exec tsx ../verification/scripts/base-workspace-runtime-smoke.m
 
 This check creates disposable Sysbox resources, exercises nested Docker and
 storage/resource lifecycle behavior, and cleans up its resources. Container
-runtime evidence does not establish VM/KVM support. VM workspaces and automatic tool-specific session continuation remain future
-product work; the architecture plan records their relation to the issue backup.
+runtime evidence does not establish VM/KVM support. The VM plugin records its
+separate hardware verification requirements and evidence. Coding-agent account
+authentication and real provider inference also require independent verification;
+local HTTP tests do not establish either.
 
 Managed administration also follows the selected host:
 

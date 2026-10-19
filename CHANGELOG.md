@@ -9,8 +9,9 @@ is implied by these source changes.
 
 - Develop ordinary Git repositories on local or SSH hosts without installing a
   control plane. Use `dim ls`, `create`, `exec`, `connect` and `forward` directly.
-  Persistent Sysbox workspaces preserve checkout, home and private Docker data
-  across recreation, with explicit resource limits and owned cleanup.
+  Persistent Sysbox workspaces preserve checkout, home, private Docker data
+  and a private temporary volume across recreation, with explicit resource
+  limits, tool-neutral SSH and scoped in-guest lifecycle/session helpers.
 - Install managed Git, human review, shared CI and service plugins only when
   selected. Keep the `@slop-lab/dim-installer` facade, exact component graphs
   and transactional install/activation recovery. Prepare initial CI capacity
@@ -23,9 +24,14 @@ is implied by these source changes.
 - Separate workflow compilation, Git authority and execution responsibilities.
   Candidate scripts never gain host, review or protected-ref authority. Inspect
   CI jobs and bounded diagnostics through a separate read-only query role.
-- Make reviewer web use the installed authority's proposal, diff and human
-  decision APIs. Protect optional published-service connections with current
-  workspace UUID/ownership checks, including discard and display-name reuse.
+- Provide the separate `dim-web` operations application for workspace creation,
+  lifecycle, resources, CI diagnostics and authoritative Git review. Separate
+  read, operator and reviewer roles. Deliver external Git events through signed,
+  durable webhook subscriptions with bounded retry and restart recovery.
+- Keep LLM routing/account governance, Incus VM workspaces and SPICE consoles,
+  durable TCP/UDP tunnels, mirrors, agent tools and disposable workspace checks
+  in optional plugins. Fence guest capabilities by current workspace UUID;
+  credentials remain on the selected host.
 - Align documentation and disposable verification with the current architecture;
   remove tests and gates that enforce retired internal contracts. Preserve the
   exported issue backup and map its 32 open issues into the architecture plan.

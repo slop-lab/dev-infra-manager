@@ -133,11 +133,11 @@ service environment may still exist when the operator deliberately enables it.
 Validate this change against the existing working agent implementation before
 replacing runtime code.
 
-The initial supported runtime remains the existing container mechanism. Implement
-one honest adapter before adding a registry of imaginary backends. The VM issue
-requires an actual KVM experiment with persistent disks, guest Docker, restart,
-resource limits and memory return. Incus is a candidate, not an accepted dependency
-or a security claim. VM management and QEMU CI execution are different features.
+The default runtime remains the existing container mechanism. The optional VM
+plugin uses Incus and requires explicit host preparation; it does not initialize
+an existing VM host implicitly. Its acceptance includes actual KVM experiments
+with persistent disks, guest Docker, restart, resource limits and memory return.
+VM workspace management and QEMU CI execution are different features.
 
 Plugin ports should be small and typed: repository source, runtime, service,
 workflow compiler and commands where needed. Validate the extension at its
@@ -190,7 +190,7 @@ New product decisions above supersede mandatory-control-plane assumptions.
 | Optional managed Git, UI and install | #40, #41, #45 | Reuse working Git/review behavior behind optional composition, keep facade behavior, make install/connect usable, build UI on application services. |
 | Development URLs and tools | #32, #39, #50, #52 | Scoped service publication, explicit scratch storage and generic tool bootstrap; OpenCode configuration lives outside core. Recheck implemented pieces before adding replacements. |
 | Reusable environment verification | #47 | A plugin can exercise Project lifecycle through the same public operations. Avoid building another scheduler or requiring DIM-specific repositories. |
-| Future services | #51, #53, #54 | Support scoped service/secret adapters in the design. LLM router attachment is design input, not an obligation to implement a new router during cleanup. Persistent VM service is distinct from VM workspace; tunnels remain deferred unless needed. |
+| Optional services | #51, #53, #54 | Implement LLM routing, persistent auxiliary VMs and TCP/UDP tunnels in plugins. The later request includes the full issue contents and LLM architecture attachment; see the current acceptance map. |
 
 All 32 open issues are represented. Keep original JSON, comments and attachments
 unchanged. Track adopted work and acceptance evidence separately; do not declare
@@ -322,10 +322,12 @@ that an arbitrary large codebase has no possible further improvements.
 - Add operator job summaries and bounded binary logs with a dedicated query role:
   `6534d25d`. Saved connection setup remains usable while CI is offline.
 
-Persistent VM workspaces and the larger LLM/router service remain separate
-product work; their requirements are represented in the issue map without
-claiming implementation. No KVM device is available on this host, so actual
-QEMU guest execution requires the separate disposable KVM verification host.
+The subsequent request expanded implementation to every preserved issue,
+including LLM routing, VM workspaces, persistent auxiliary VMs and tunnels.
+Those implementations live in optional plugins; the current acceptance map is
+[preserved-issues-implementation.md](preserved-issues-implementation.md).
+Actual KVM is available on this host outside the restricted process sandbox.
+Disposable Incus/KVM experiments are tracked separately from source-only tests.
 
 - Retire unused duplicate installation and runner verification paths, parallel
   Project state APIs and CI host/capacity connection formats: `b00968dd`,
@@ -347,10 +349,12 @@ QEMU guest execution requires the separate disposable KVM verification host.
 
 ## Completion audit map
 
-This audit concerns the requested responsibility and usability rework. The issue
-backup remains input to later product work; mapping an issue does not close it.
-Hardware-specific mechanics and first-time host provisioning are separate from
-ordinary developer checks.
+This audit concerns the responsibility and usability rework. The subsequent
+implementation also covers the preserved issue contents; its current evidence
+and explicit external verification boundaries are recorded in
+[preserved-issues-implementation.md](preserved-issues-implementation.md). No
+source change closes or edits the original issues. Hardware-specific mechanics
+and first-time host provisioning remain separate from ordinary developer checks.
 
 | Requirement | Authoritative implementation and verification |
 | --- | --- |
