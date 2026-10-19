@@ -15,7 +15,7 @@ that shared source identity. There is no required sibling checkout.
 | `tests/` | Centralized behavior tests and fixtures |
 | `verification/` | Disposable cross-component, packaging and physical runtime checks |
 | `specification/` | Current architecture, usage and design records |
-| `.dim/` | DIM-recognized Project configuration (`repos.yml`, `ci/runner.yml`) |
+| `.dim/` | DIM-recognized Project configuration (`repos.yml`, `ci/runner.yml`, optional `workspace.json` required plugins) |
 | `scripts/`, `agent/` | Explicit repository development tools and CI job payloads |
 | `verification/qemu/` | Explicit host-run QEMU verification tools |
 

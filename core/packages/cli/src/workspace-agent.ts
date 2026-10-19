@@ -67,7 +67,7 @@ export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: Age
     }
     const payload = JSON.stringify({ endpoint: ready.endpoint, token: config.token, workspaceId: record.id });
     const written = await context.runtime.exec(record, ["node", "--input-type=commonjs", "-e",
-      'const fs=require("node:fs"),p=require("node:path");const d=p.join(process.env.HOME,".config/dim");fs.mkdirSync(d,{recursive:true,mode:0o700});let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const f=p.join(d,"workspace.json"),t=f+".tmp-"+process.pid;fs.writeFileSync(t,s,{mode:0o600,flag:"wx"});fs.renameSync(t,f)});'
+      'const fs=require("node:fs"),p=require("node:path"),{randomUUID}=require("node:crypto");const d=p.join(process.env.HOME,".config/dim");fs.mkdirSync(d,{recursive:true,mode:0o700});let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const f=p.join(d,"workspace.json"),t=f+".tmp-"+randomUUID();let owned=false;try{const fd=fs.openSync(t,"wx",0o600);owned=true;try{fs.writeFileSync(fd,s)}finally{fs.closeSync(fd)}fs.renameSync(t,f)}finally{if(owned)fs.rmSync(t,{force:true})}});'
     ], { stdin: Readable.from([payload]), signal: context.signal });
     if (written !== 0) throw new UserError("cannot install the workspace-scoped service connection; workspace data was preserved");
   });

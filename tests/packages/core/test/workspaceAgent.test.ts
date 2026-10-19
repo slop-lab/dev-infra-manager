@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceService, WorkspaceStore, type WorkspaceRuntime } from "@slop-lab/dim-core/workspace";
-import { createWorkspaceAgentServer } from "../../../../core/packages/cli/src/workspace-agent.js";
+import { createWorkspaceAgentServer, ensureWorkspaceAgent } from "../../../../core/packages/cli/src/workspace-agent.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { await Promise.all(cleanup.splice(0).map((action) => action())); });
@@ -44,6 +44,42 @@ async function fixture() {
 }
 
 describe("workspace-scoped agent gateway", () => {
+  it("refreshes guest connection despite reused PIDs and cleans its own temporary file after a failed rename", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "dim-agent-connection-"));
+    const home = path.join(root, "home"), state = path.join(root, "state"), guest = path.join(home, ".config/dim");
+    const runner = new ProcessRunner(), store = new WorkspaceStore(state);
+    const runtime: WorkspaceRuntime = {
+      async inspect() { return { running: true }; }, async create() {}, async seed() {}, async start() {}, async stop() {}, async remove() {},
+      async updateResources() { return { recreated: false }; }, async connect() { return 0; }, async hostGateway() { return "10.0.0.1"; },
+      async exec(_record, command, options) {
+        const script = command.at(-1); if (!script) throw new Error("missing guest writer");
+        return (await runner.run(process.execPath, ["--input-type=commonjs", "-e", `Object.defineProperty(process,'pid',{value:42});${script}`], {
+          ...options, env: { ...process.env, HOME: home }
+        })).exitCode;
+      }
+    };
+    const service = new WorkspaceService(store, runtime, async ({ destination }) => { await mkdir(destination); return { url: "source", ref: "main", commit: "a".repeat(40) }; });
+    const record = await service.create({ name: "dev", source: { url: "source" } });
+    const connection = { workspaceId: record.id, workspaceName: record.name, stateRoot: state, host: "10.0.0.1", token: "a".repeat(43) };
+    const directory = path.join(state, "agents", record.id);
+    await mkdir(directory, { recursive: true }); await mkdir(guest, { recursive: true });
+    await writeFile(path.join(directory, "config.json"), JSON.stringify(connection), { mode: 0o600 });
+    await writeFile(path.join(directory, "ready.json"), JSON.stringify({ endpoint: "http://10.0.0.1:12345", workspaceId: record.id }), { mode: 0o600 });
+    await writeFile(path.join(guest, "workspace.json.tmp-42"), "interrupted earlier guest process");
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("{}"));
+    vi.stubEnv("DIM_PLUGIN_HOME", path.join(root, "no-plugins"));
+    const context = { store, service, runtime, runner, cleanupRunner: runner, stateRoot: state, signal: AbortSignal.timeout(5000) };
+    try {
+      await ensureWorkspaceAgent(record, context);
+      expect(JSON.parse(await readFile(path.join(guest, "workspace.json"), "utf8"))).toEqual({ endpoint: "http://10.0.0.1:12345", workspaceId: record.id, token: connection.token });
+      expect((await stat(path.join(guest, "workspace.json"))).mode & 0o777).toBe(0o600);
+      await rm(path.join(guest, "workspace.json")); await mkdir(path.join(guest, "workspace.json"));
+      await expect(ensureWorkspaceAgent(record, context)).rejects.toThrow(/cannot install/);
+      expect((await readdir(guest)).sort()).toEqual(["workspace.json", "workspace.json.tmp-42"]);
+      expect(await readFile(path.join(guest, "workspace.json.tmp-42"), "utf8")).toBe("interrupted earlier guest process");
+    } finally { fetch.mockRestore(); vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
+  });
+
   it("returns current assigned resources and denies foreign tokens, browser origins and admin paths", async () => {
     const f = await fixture();
     expect(await (await f.request("/v1/resources")).json()).toEqual(f.record.resources);
