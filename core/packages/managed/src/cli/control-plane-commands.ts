@@ -55,7 +55,7 @@ export function registerControlPlaneCommands(program: Command): void {
       } else if (connected.ciWorkerCount > 1) {
         console.log("Several CI workers are configured; generate each host's private worker configuration explicitly. No worker.json was selected.");
       }
-      console.log("Bootstrap a reviewed repository with 'dim managed project bootstrap-native-root', using registrar.json and importer.json from that directory.");
+      console.log("Create a Project with 'dim managed project create NAME', then import each repository with 'dim managed project repository import NAME REPOSITORY --source PATH --ref REF --review-policy FILE'.");
     });
 }
 function quote(value: string): string { return `'${value.replaceAll("'", "'\\''")}'`; }
