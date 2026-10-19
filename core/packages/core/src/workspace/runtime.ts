@@ -121,14 +121,17 @@ export class ContainerWorkspaceRuntime {
     if (!container.running) await this.checked(["start", container.id]);
     const signal = AbortSignal.timeout(60_000);
     while (!signal.aborted) {
-      const ready = await this.runner.run("docker", ["exec", container.id, "docker", "info"], { signal });
+      const ready = await this.runner.run("docker", ["exec", container.id, "sh", "-c",
+        'test -f "$1" && test "$(cat "$1")" = "$(awk \'{print $22}\' /proc/1/stat) $(readlink /proc/self/ns/pid)" && docker info',
+        "dim-workspace-ready", "/run/dim-workspace.ready"], { signal });
       if (ready.exitCode === 0) return;
       if (!(await this.require(record)).running) {
-        throw new UserError(`workspace '${record.name}' stopped while its nested Docker engine was starting`);
+        const logs = await this.runner.run("docker", ["logs", "--tail", "40", container.id]);
+        throw new UserError(`workspace '${record.name}' stopped during boot: ${(logs.stderr || logs.stdout).slice(-8192)}`);
       }
       await new Promise<void>((resolve) => setTimeout(resolve, 250));
     }
-    throw new UserError(`workspace '${record.name}' nested Docker engine did not become ready within 60 seconds`);
+    throw new UserError(`workspace '${record.name}' boot services and nested Docker engine did not become ready within 60 seconds`);
   }
 
   async stop(record: WorkspaceRecord): Promise<void> {

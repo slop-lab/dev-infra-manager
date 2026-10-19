@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# /run survives a Docker stop/start. A previous boot must never acknowledge
+# this boot before SSH and the registered service launches have completed.
+ready_file=/run/dim-workspace.ready
+rm -f -- "$ready_file"
+
 dim_uid="$(id -u dim)"
 dim_gid="$(id -g dim)"
 
@@ -54,6 +59,12 @@ if ! sudo -H -E -u dim env HOME=/home/dim /usr/local/bin/dim-workspace service r
 fi
 sudo -H -E -u dim env HOME=/home/dim sh -c \
   'mkdir -p "$HOME/.local/state/dim"; exec /usr/local/bin/dim-workspace session resume >>"$HOME/.local/state/dim/session.log" 2>&1' &
+
+ready_temporary="$(mktemp /run/.dim-workspace-ready.XXXXXX)"
+trap 'rm -f -- "$ready_temporary"' EXIT
+printf '%s %s\n' "$(awk '{print $22}' /proc/1/stat)" "$(readlink /proc/self/ns/pid)" >"$ready_temporary"
+mv -f -- "$ready_temporary" "$ready_file"
+trap - EXIT
 
 exec sudo -H -E -u dim env \
   HOME=/home/dim \
