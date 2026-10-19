@@ -9,11 +9,15 @@ import {
 } from "@slop-lab/dim-core/workspace";
 
 /** Only explicitly installed host modules execute. Repository files never select host code. */
-export async function loadHostPlugins(): Promise<readonly WorkspaceHostPlugin[]> {
-  const home = path.resolve(process.env.DIM_PLUGIN_HOME ?? path.join(
+export function hostPluginHome(): string {
+  return path.resolve(process.env.DIM_PLUGIN_HOME ?? path.join(
     process.env.DIM_DATA_HOME ?? path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local/share"), "dim"),
     "runtime/current"
   ));
+}
+
+export async function loadHostPlugins(): Promise<readonly WorkspaceHostPlugin[]> {
+  const home = hostPluginHome();
   let raw: unknown;
   try { raw = JSON.parse(await readFile(path.join(home, "plugins.json"), "utf8")); }
   catch (error) { if (hasCode(error, "ENOENT")) return []; throw error; }

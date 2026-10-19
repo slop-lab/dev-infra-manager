@@ -3,7 +3,8 @@
 Optional host-owned Docker Hub and APT caching for ordinary Git workspaces and
 managed CI. The base feature needs only `dim-core`; `dim-managed` is an optional
 peer for shared CI. Exact reviewed image digests and cache ownership live in
-this plugin. Projects do not select host packages or cache images.
+this plugin. Repositories may declare this exact plugin as required, with explicit
+operator approval before installation; cache images remain host policy.
 
 ```sh
 dim installer install plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'

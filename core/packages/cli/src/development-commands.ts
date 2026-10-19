@@ -4,6 +4,7 @@ import { UserError, type WorkspaceRecord, type WorkspaceView } from "@slop-lab/d
 import { HostContextStore, type HostTarget } from "./host-context.js";
 import { callHost, streamHost } from "./host-transport.js";
 import { forwardWorkspace } from "./port-forward.js";
+import { createWorkspaceWithPlugins } from "./workspace-create-client.js";
 
 interface OutputFlags { json?: boolean; expectId?: string }
 interface CreateFlags extends OutputFlags {
@@ -101,15 +102,24 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
         throw new UserError("--git-user-name and --git-user-email must be provided together");
       }
       const target = await selectedHost(command, hosts);
-      const record = await callHost<WorkspaceRecord>(target, { operation: "create", input: {
+      const record = await withConnectionSignals((signal) => createWorkspaceWithPlugins(target, {
         name,
         source: { url: source, ...(flags.ref === undefined ? {} : { ref: flags.ref }) },
         ...(flags.image === undefined ? {} : { image: flags.image }),
         ...(flags.runtime === undefined ? {} : { runtime: flags.runtime }),
         ...resourceInput(flags),
         ...(flags.gitUserName && flags.gitUserEmail ? { git: { name: flags.gitUserName, email: flags.gitUserEmail } } : {})
-      } });
-      printAction(record, flags, `Workspace '${record.name}' is ready on '${target.name}'`);
+      }, {
+        signal,
+        ...(process.stdin.isTTY && process.stderr.isTTY ? { approve: async (required, host) => {
+          const prompt = createInterface({ input: process.stdin, output: process.stderr });
+          try {
+            const answer = await prompt.question(`Repository ${required.source.url}\nCommit ${required.source.commit}\nInstall and enable host code on '${host.name}':\n  ${required.plugins.join("\n  ")}\nApprove plugin installation? [y/N] `, { signal });
+            return /^y(?:es)?$/i.test(answer.trim());
+          } finally { prompt.close(); }
+        } } : {})
+      }));
+      if (record) printAction(record, flags, `Workspace '${record.name}' is ready on '${target.name}'`);
     });
 
   parent.command("list").alias("ls")
@@ -281,7 +291,7 @@ function portNumber(value: string, allowZero = false): number {
   return port;
 }
 
-async function withConnectionSignals(action: (signal: AbortSignal) => Promise<void>): Promise<void> {
+async function withConnectionSignals<T>(action: (signal: AbortSignal) => Promise<T>): Promise<T | undefined> {
   const abort = new AbortController();
   let signalCode: number | undefined;
   const stop = (signal: NodeJS.Signals) => {
@@ -290,7 +300,7 @@ async function withConnectionSignals(action: (signal: AbortSignal) => Promise<vo
   };
   const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
   for (const signal of signals) process.once(signal, stop);
-  try { await action(abort.signal); }
+  try { return await action(abort.signal); }
   catch (error) { if (!abort.signal.aborted) throw error; }
   finally {
     for (const signal of signals) process.off(signal, stop);

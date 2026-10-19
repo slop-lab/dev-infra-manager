@@ -8,6 +8,7 @@ import { createWorkspaceOnHost, ensureWorkspaceIntegration } from "./workspace-c
 import { decodeHostRequest } from "./host-transport.js";
 import { composeWorkspaceRuntime, loadHostPlugins } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
+import { installRequiredPlugins, workspaceRequirements } from "./workspace-requirements.js";
 
 /** All filesystem/runtime work happens here, on the host selected by the client. */
 export async function runHostRequest(encoded: string): Promise<void> {
@@ -35,6 +36,7 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
   const input = request.input ?? {};
   const expectedId = input.expectedId === undefined ? undefined : string(input.expectedId, "expectedId");
   const processRunner = new ProcessRunner();
+  const requirements = workspaceRequirements(input.expectedSourceCommit === undefined ? undefined : string(input.expectedSourceCommit, "expectedSourceCommit"));
   const runner = {
     run: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
       processRunner.run(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal }),
@@ -57,17 +59,23 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
     await cleanup.discard(name, workspaceId);
   };
   const context = { store, runner, cleanupRunner: processRunner, signal, runtime: composition.runtime, cleanupWorkspace,
+    validateCheckout: requirements.validateCheckout,
     hostGateway: (workspace: import("@slop-lab/dim-core/workspace").WorkspaceRecord) => {
       if (!composition.runtime.hostGateway) throw new UserError(`runtime '${workspace.runtime}' does not provide a private host gateway`);
       return composition.runtime.hostGateway(workspace);
     } };
   const service = new WorkspaceService(
     store, composition.runtime,
-    (input) => acquireWorkspaceSource({ ...input, runner, signal })
+    async (input) => {
+      const source = await acquireWorkspaceSource({ ...input, runner, signal });
+      await requirements.validateCheckout(input.destination, source);
+      return source;
+    }
   );
   const agentContext = { ...context, stateRoot: store.root, service };
   let result: unknown;
   switch (request.operation) {
+    case "plugins.installRequired": await installRequiredPlugins(input.plugins, runner, signal); result = { installed: true }; break;
     case "plugins": result = (await loadHostPlugins()).map(({ name, commands, runtime }) => ({ name, commands: commands ?? [], ...(runtime ? { runtime: runtime.name } : {}) })); break;
     case "plugin.cli": {
       if (!Array.isArray(input.args) || !input.args.every((arg: unknown) => typeof arg === "string" && !arg.includes("\0"))) throw new UserError("plugin command must be an argument array");
@@ -92,7 +100,12 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
         if (!creation.image && !defaultImage) throw new UserError(`runtime '${creation.runtime}' requires an explicit --image`);
         if (!creation.image && defaultImage) creation.image = defaultImage;
       }
-      const record = await createWorkspaceOnHost(creation, service, context);
+      let record;
+      try { record = await createWorkspaceOnHost(creation, service, context); }
+      catch (error) {
+        if (!requirements.missing) throw error;
+        result = requirements.missing; break;
+      }
       await ensureWorkspaceAgent(record, agentContext);
       result = record; break;
     }

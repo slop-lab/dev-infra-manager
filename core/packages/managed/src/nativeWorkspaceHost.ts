@@ -3,7 +3,7 @@ import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { randomBytes } from "node:crypto";
 import {
   ContainerWorkspaceRuntime, WorkspaceService, UserError, type CommandRunner, type CreateWorkspaceInput,
-  type StreamingCommandRunner, type WorkspaceRecord, type WorkspaceStore, type WorkspaceRuntime
+  type StreamingCommandRunner, type WorkspaceRecord, type WorkspaceStore, type WorkspaceRuntime, type AcquiredWorkspaceSource
 } from "@slop-lab/dim-core/workspace";
 import { managedStateRoot } from "./lifecycleOptions.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
@@ -20,6 +20,7 @@ export interface ManagedWorkspaceHostContext {
   readonly cleanupRunner?: CommandRunner;
   readonly signal?: AbortSignal;
   readonly runtime?: WorkspaceRuntime;
+  readonly validateCheckout?: (directory: string, source: AcquiredWorkspaceSource) => Promise<void>;
 }
 
 /** Managed Git contributes acquisition and a scoped Git attachment; core owns the whole runtime lifecycle. */
@@ -83,7 +84,9 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput, contex
     await git(["clone", "--no-checkout", "--single-branch", "--branch", proof.protectedRef.slice("refs/heads/".length), "--", url, destination]);
     await git(["-C", destination, "checkout", "--force", "-B", proof.protectedRef.slice("refs/heads/".length), proof.commit]);
     if (await git(["-C", destination, "rev-parse", "HEAD^{tree}"]) !== proof.tree) throw new UserError("native Project checkout differs from its attested tree");
-    return { url: input.source.url, ref: proof.protectedRef, commit: proof.commit };
+    const source = { url: input.source.url, ref: proof.protectedRef, commit: proof.commit };
+    await context.validateCheckout?.(destination, source);
+    return source;
   });
   return service.create(input);
 }

@@ -4,6 +4,11 @@
 
 Target: `0.10.0` internal development candidate; this is not a published release.
 
+- Let repositories declare exact required workspace plugins as data. Creation
+  checks installed packages before starting a runtime and offers explicit TTY
+  approval to install missing host code on the selected local or SSH host;
+  non-interactive creation fails safely with installation instructions.
+
 - Make ordinary Git development the base product. Local and SSH hosts share
   one workspace application and one Sysbox runtime with persistent checkout,
   home and private Docker volumes. Common commands include `dim ls`, `exec`,

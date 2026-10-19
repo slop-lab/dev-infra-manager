@@ -269,7 +269,7 @@ else if (request.operation === 'connect') { process.stdin.pipe(process.stdout); 
 else if (request.operation === 'image.build') { process.stdout.write(JSON.stringify({image:request.input.image})); }
 else if (request.operation === 'doctor') { const ok = !process.env.DIM_TEST_DOCTOR_FAIL; process.stdout.write(JSON.stringify([{name:'Docker',ok,detail:ok?'ready':'not available'}])); }
 else {
-  const record = { name: request.input?.name ?? 'dev', phase:'running', source:{url:'https://example.com/app',ref:'main'},resources:{cpuCount:'2',memory:'4g',pidsLimit:'2048'},image:'workspace' };
+  const record = { schemaVersion:10,id:'00000000-0000-4000-8000-000000000001',runtime:'container',initialized:true,git:{name:'Dev',email:'dev@example.invalid'},createdAt:'2026-01-01T00:00:00Z',updatedAt:'2026-01-01T00:00:00Z',name: request.input?.name ?? 'dev', phase:'running', source:{url:'https://example.com/app',ref:'main',commit:'a'.repeat(40)},resources:{cpuCount:'2',memory:'4g',pidsLimit:'2048'},image:'workspace' };
   if (process.env.DIM_TEST_RUNTIME_STATUS) record.runtimeStatus = process.env.DIM_TEST_RUNTIME_STATUS;
   if (record.runtimeStatus === 'unavailable') record.runtimeError = 'Docker unavailable';
   process.stdout.write(JSON.stringify(request.operation === 'list' ? [record] : request.operation === 'discard' ? {removed:true} : request.operation === 'resources' ? {workspace:record,recreated:true} : record));

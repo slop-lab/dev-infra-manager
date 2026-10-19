@@ -46,6 +46,28 @@ COMMAND` and `exec dev -- COMMAND` execute ordinary commands without custom
 Project hooks. The `workspace` group exposes the same operations when explicit
 grouping is helpful.
 
+### Required workspace plugins
+
+A repository may declare exact host plugin packages in `.dim/workspace.json`:
+
+```json
+{"plugins":["@slop-lab/dim-plugin-host-mirrors@0.10.0"]}
+```
+
+Ordinary repositories need no declaration. Installed, enabled packages at the
+declared exact versions work automatically. DIM reads this data from the staged
+checkout before creating a workspace record or runtime. Paths, tarballs, Git
+URLs, version ranges, unknown keys and symlinked declarations are rejected.
+
+If a package is missing, an interactive `create` shows the source commit,
+selected host and exact packages, then asks before installing host code through
+that host's installer facade. Declining leaves no workspace. Non-interactive
+creation fails with an explicit installation command; it never approves package
+installation. SSH creation installs on the selected remote host. If the source
+changes during approval, creation stops for a new inspection rather than using
+different repository requirements. Managed Git retains its protected-ref and
+attested checkout restrictions.
+
 ## SSH development hosts
 
 ```bash
