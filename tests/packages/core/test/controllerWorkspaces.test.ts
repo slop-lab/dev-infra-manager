@@ -146,9 +146,9 @@ class RouteRunner implements StreamingCommandRunner {
       value = { Id: "owned-container-id", Config: { Image: this.record.image, Labels: {
         "dim.managed": "true", "dim.workspace-id": this.foreign ? randomUUID() : this.record.id,
         "dim.resource": "container", "dim.workspace-schema": "10"
-      } }, HostConfig: { Runtime: "sysbox-runc", Privileged: false, NetworkMode: r.network }, State: { Running: true },
-      Mounts: [["home", "/home/dim"], ["checkout", "/workspace"], ["docker", "/var/lib/docker"]].map(([role, destination]) => ({
-        Type: "volume", RW: true, Destination: destination, Name: r[role as "home" | "checkout" | "docker"]
+      } }, HostConfig: { Runtime: "sysbox-runc", Privileged: false, OomScoreAdj: 500, NetworkMode: r.network }, State: { Running: true },
+      Mounts: [["home", "/home/dim"], ["checkout", "/workspace"], ["docker", "/var/lib/docker"], ["tmp", "/mnt/dim-tmp"]].map(([role, destination]) => ({
+        Type: "volume", RW: true, Destination: destination, Name: r[role as "home" | "checkout" | "docker" | "tmp"]
       })), NetworkSettings: { Networks: { [r.network]: { IPAddress: this.agentIp } } } };
     } else if (args.includes("docker")) {
       value = { Id: "nested-container-id", State: { Running: true }, NetworkSettings: { Networks: { bridge: { IPAddress: "172.19.0.2" } } } };

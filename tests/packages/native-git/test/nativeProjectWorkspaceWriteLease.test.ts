@@ -202,7 +202,7 @@ describe("native Project workspace write lease", () => {
     ]);
 
     // Then
-    expect(responses.map((response) => response.status)).toEqual([404, 404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([404, 401, 404]);
   });
 });
 

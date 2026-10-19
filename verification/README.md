@@ -4,6 +4,21 @@
 host. It packages existing matched `dist` outputs when testing installation; it
 does not rebuild shared packages. Run `just build-packages` first.
 
+With an already built workspace image, run the explicit live container checks:
+
+```bash
+pnpm --dir tests exec tsx ../verification/scripts/base-workspace-runtime-smoke.mts IMAGE
+just verify workspace-agent IMAGE
+```
+
+The first checks owned storage, nested Docker, resource updates/unlimited,
+private temporary data, SSH keys and registered service/session recovery through
+stop/start/recreation. It also checks repeated nested exits for leaked zombie
+processes and rejects missing initialized storage. The second uses the compiled
+CLI and actual in-guest capability for assigned resources, CPU concurrency,
+self restart/recreate and session continuation. Both create disposable resources
+and discard their own workspace/storage. They do not modify installed DIM services.
+
 The QEMU service ownership and process-safety fixtures require a root-owned,
 canonical Node interpreter and root filesystem operations. Run
 `pnpm --dir verification test:qemu-service` only in a disposable root environment.

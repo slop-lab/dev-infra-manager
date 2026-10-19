@@ -112,6 +112,10 @@ workspace-runtime:
     just build-local-workspace-image
     cd .. && image_version="$(bash verification/scripts/local-build-version.bash)" && node --import ./tests/node_modules/tsx/dist/loader.mjs verification/scripts/base-workspace-runtime-smoke.mts "dev-infra-project-workspace:$image_version"
 
+# Exercise compiled CLI guest capabilities and session continuation with an existing image.
+workspace-agent image:
+    cd .. && node --import ./tests/node_modules/tsx/dist/loader.mjs verification/scripts/base-workspace-agent-smoke.mts "{{image}}"
+
 # Exercise optional workspace capabilities through the bounded base transport.
 controller-workspace-relay-smoke image:
     cd .. && node verification/scripts/controller-workspace-relay-smoke.mjs "{{image}}"
