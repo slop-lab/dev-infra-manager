@@ -11,7 +11,7 @@ import { UsageObserver } from "./usage.js";
 class RequestError extends Error { constructor(readonly status: number, message: string, readonly category = "invalid_request") { super(message); } }
 export async function createRouter(config: RouterConfig) {
   const ledger = new RouterLedger(config.stateDirectory);
-  const guard = await tryAcquireKernelGuard(join(config.stateDirectory, "service.guard"));
+  const guard = await tryAcquireKernelGuard(join(config.stateDirectory, "service.guard"), { timeoutMilliseconds: 2000 });
   if (guard === undefined) { ledger.close(); throw new Error("LLM router is already running for this state directory"); }
   ledger.recoverInterrupted();
   const workspaces = new WorkspaceStore(config.workspaceStateRoot), active = new Set<Promise<void>>(), cancellation = new AbortController();

@@ -6,10 +6,17 @@ const LOCK_HOLDER_SOURCE = "process.stdout.write('locked\\n');process.stdin.resu
 
 export type KernelGuard = { readonly release: () => Promise<void> };
 
-export async function tryAcquireKernelGuard(guardPath: string): Promise<KernelGuard | undefined> {
+/** A bounded kernel wait also covers parent death before its stdin-owned holder observes EOF. */
+export async function tryAcquireKernelGuard(guardPath: string, options: {
+  readonly timeoutMilliseconds?: number;
+} = {}): Promise<KernelGuard | undefined> {
+  const timeout = options.timeoutMilliseconds ?? 0;
+  if (!Number.isInteger(timeout) || timeout < 0 || timeout > 30_000) {
+    throw new UserError("Linux flock guard timeout must be an integer between 0 and 30000 milliseconds");
+  }
   const guardFile = await open(guardPath, "a", 0o600);
   await guardFile.close();
-  const child = spawn("flock", ["--exclusive", "--nonblock", guardPath, process.execPath, "--eval", LOCK_HOLDER_SOURCE], {
+  const child = spawn("flock", ["--exclusive", ...(timeout === 0 ? ["--nonblock"] : ["--wait", String(timeout / 1000)]), guardPath, process.execPath, "--eval", LOCK_HOLDER_SOURCE], {
     stdio: ["pipe", "pipe", "pipe"]
   });
   child.stdout.setEncoding("utf8");
