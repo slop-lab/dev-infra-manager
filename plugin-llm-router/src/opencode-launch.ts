@@ -69,7 +69,7 @@ export async function prepareOpenCode(): Promise<Record<string, string>> {
     for (const key of layer.agents === undefined ? [] : Object.keys(record(layer.agents))) agents.add(key);
     for (const key of layer.categories === undefined ? [] : Object.keys(record(layer.categories))) categories.add(key);
   }
-  const route = () => ({ model, fallback_models: [] });
+  const route = () => ({ models: [model] });
   const profile = { "[opencode]": { agents: Object.fromEntries([...agents].map((name) => [name, route()])),
     categories: Object.fromEntries([...categories].map((name) => [name, route()])), runtime_fallback: false } };
   const metadataFile = join(home, ".config/dim/opencode-omo-profile.json");

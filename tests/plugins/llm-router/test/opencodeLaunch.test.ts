@@ -35,12 +35,18 @@ it("adds an isolated OMO routing profile while preserving commented user configu
   expect(configured).toMatchObject({ agents: { "custom-reviewer": { model: "user/choice", prompt: "preserve" } },
     profiles: { personal: { "[opencode]": { agents: { sisyphus: { model: "personal/model" } } } },
       "dim-router": { "[opencode]": { runtime_fallback: false,
-        agents: { "custom-reviewer": { model: "dim-responses/reviewed", fallback_models: [] }, sisyphus: { model: "dim-responses/reviewed" } },
-        categories: { quick: { model: "dim-responses/reviewed" }, "custom-category": { model: "dim-responses/reviewed", fallback_models: [] } } } } } });
+        agents: { "custom-reviewer": { models: ["dim-responses/reviewed"] }, sisyphus: { models: ["dim-responses/reviewed"] } },
+        categories: { quick: { models: ["dim-responses/reviewed"] }, "custom-category": { models: ["dim-responses/reviewed"] } } } } } });
   expect(await prepareOpenCode()).toEqual(environment);
   expect(await readFile(fx.omo, "utf8")).toBe(source);
+  // OMO may add its own migration metadata outside the reserved profile. Its
+  // current canonical models chains already match our output and stay owned.
+  const migrated = source.replace("{", '{"_migrations":{"model-chains":true},');
+  await writeFile(fx.omo, migrated);
+  expect(await prepareOpenCode()).toEqual(environment);
+  expect(await readFile(fx.omo, "utf8")).toBe(migrated);
   vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "providers");
-  expect(await prepareOpenCode()).toEqual({}); expect(await readFile(fx.omo, "utf8")).toBe(source);
+  expect(await prepareOpenCode()).toEqual({}); expect(await readFile(fx.omo, "utf8")).toBe(migrated);
 });
 it("refuses conflicting user-owned profiles and repairs an interrupted generated profile publication", async () => {
   const fx = await fixture();
