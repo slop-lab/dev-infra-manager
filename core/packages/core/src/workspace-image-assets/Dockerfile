@@ -17,7 +17,7 @@ ENV HOME=/home/dim \
     DOCKER_HOST=unix:///var/run/docker.sock \
     PATH=/home/dim/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-RUN npm install --global pnpm@10.13.1
+RUN HOME=/root npm install --global pnpm@10.13.1 && rm -rf /root/.npm
 RUN mkdir -p /mnt/dim-tmp && chown dim:dim /mnt/dim-tmp && chmod 0700 /mnt/dim-tmp
 ENV TMPDIR=/mnt/dim-tmp DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp
 RUN docker buildx version && docker compose version && flock --version
