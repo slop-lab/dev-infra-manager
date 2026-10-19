@@ -54,6 +54,7 @@ describe("local source installation", () => {
       XDG_DATA_HOME: resolve(root, "data"),
       DIM_CONFIG_PATH: resolve(configHome, "dim", "config.json"),
       DIM_DATA_HOME: dataHome,
+      DIM_PLUGIN_HOME: resolve(dataHome, "runtime", "current"),
       DIM_INSTALL_PREFIX: installPrefix,
       DIM_STATE_ROOT: resolve(root, "state")
     };
@@ -101,6 +102,26 @@ describe("local source installation", () => {
     for (const entry of manifest.packages.filter(({ name }) => ["@slop-lab/dim-cli", "@slop-lab/dim-core"].includes(name))) {
       expect(runtimeManifest.dependencies[entry.name]).toContain(entry.file);
     }
+    const pluginNames = ["host-mirrors", "llm-router", "vm", "workspace-check", "agent-tools", "tunnels"]
+      .map((name) => `@slop-lab/dim-plugin-${name}`);
+    const pluginArtifacts = pluginNames.map((name) => {
+      const entry = manifest.packages.find((entry) => entry.name === name);
+      if (!entry) throw new Error(`matched plugin bundle is missing ${name}`);
+      return resolve(bundle, entry.file);
+    });
+    const installedPlugins = run(facade, ["installer", "install", "plugin", ...pluginArtifacts], environment);
+    expect(installedPlugins.status, installedPlugins.stderr).toBe(0);
+    const discovered = run(facade, ["plugins"], environment);
+    expect(discovered.status, discovered.stderr).toBe(0);
+    const metadata = JSON.parse(discovered.stdout) as Array<{ name: string; commands: Array<{ name: string }>; runtime?: string }>;
+    expect(metadata.map(({ name }) => name).sort()).toEqual(["host-mirrors", "llm-router", "vm", "workspace-check", "agent-tools", "tunnels"].sort());
+    expect(metadata.flatMap(({ commands }) => commands.map(({ name }) => name))).toEqual(expect.arrayContaining(["tools", "llm", "vm", "workspace-check", "tunnel"]));
+    expect(metadata.find(({ name }) => name === "vm")?.runtime).toBe("vm");
+    const expanded = JSON.parse(await readFile(resolve(dataHome, "runtime/current/package.json"), "utf8")) as { dependencies: Record<string, string> };
+    expect(Object.keys(expanded.dependencies).sort()).toEqual(["@slop-lab/dim-cli", "@slop-lab/dim-core", ...pluginNames].sort());
+    for (const optional of ["@slop-lab/dim-managed", "@slop-lab/dim-native-git"]) {
+      await expect(access(resolve(dataHome, "runtime/current/node_modules", optional))).rejects.toMatchObject({ code: "ENOENT" });
+    }
   }, 120_000);
 
   it("refuses unsupported state through the exact packed target without changing installed data", async () => {
@@ -121,6 +142,7 @@ describe("local source installation", () => {
       HOME: home,
       DIM_CONFIG_PATH: configPath,
       DIM_DATA_HOME: dataHome,
+      DIM_PLUGIN_HOME: resolve(dataHome, "runtime", "current"),
       DIM_INSTALL_PREFIX: installPrefix,
       DIM_STATE_ROOT: stateRoot
     };
