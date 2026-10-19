@@ -12,6 +12,7 @@ is implied by these source changes.
   Persistent Sysbox workspaces preserve checkout, home, private Docker data
   and a private temporary volume across recreation, with explicit resource
   limits, tool-neutral SSH and scoped in-guest lifecycle/session helpers.
+  Concurrent service resume keeps one supervisor and workload.
 - Install managed Git, human review, shared CI and service plugins only when
   selected. Keep the `@slop-lab/dim-installer` facade, exact component graphs
   and transactional install/activation recovery. Prepare initial CI capacity

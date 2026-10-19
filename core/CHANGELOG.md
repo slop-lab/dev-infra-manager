@@ -13,6 +13,8 @@ Target: `0.10.0` internal development candidate; this is not a published release
   one workspace application and one Sysbox runtime with persistent checkout,
   home and private Docker volumes. Common commands include `dim ls`, `exec`,
   `connect`, `forward`, lifecycle operations and explicit resource limits.
+  Registered guest services keep a kernel lock for their supervisor lifetime,
+  preventing duplicate workloads during concurrent resume.
 - Extract managed Git, review, CI and controller integrations into optional
   packages. Base installation and startup do not import or activate them.
   Managed Git supplies proposal-scoped source access to the same workspace
