@@ -1,4 +1,4 @@
-import type { ExecutionDescriptor } from "@slop-lab/dim-native-git/execution";
+import type { ExecutionDescriptor } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import type { NativeCandidateReadAuthority } from "./ci/candidate.js";
 import {
   materializeVerifiedTree,

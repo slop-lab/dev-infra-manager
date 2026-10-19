@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { join } from "node:path";
-import { readNativeProjectRootImportsFromDatabase } from "../../../../core/packages/native-git/src/native-project-root-import-transitions.js";
+import { readNativeProjectRootImportsFromDatabase } from "../../../../plugin-control-plane-native-git/src/native-project-root-import-transitions.js";
 import {
   activationTokenB,
   authorization,

@@ -24,8 +24,8 @@ docker info >/dev/null
 # Callers with a protected, matched build can verify those exact artifacts without cleaning dist.
 if [[ "${DIM_VERIFY_SKIP_BUILD:-0}" != 1 ]]; then
   pnpm --dir core/packages/core run build >/dev/null
-  pnpm --dir core/packages/native-git run build >/dev/null
-  pnpm --dir plugin-ci-workflows run build >/dev/null
+  pnpm --dir plugin-control-plane-native-git run build >/dev/null
+  pnpm --dir plugin-control-plane-ci-workflows run build >/dev/null
   pnpm --dir core/packages/managed run build >/dev/null
 fi
 node --input-type=module - "$work_dir" <<'JS'
@@ -95,7 +95,7 @@ assert.equal(response.status, 200); assert.deepEqual(await response.json(), []);
 JS
 for container in "$native_container" "$ci_container"; do docker stop --time 15 "$container" >/dev/null; done
 for kind in native ci; do
-  if [[ "$kind" == native ]]; then image="$native_image"; state="$native_state"; target=/var/lib/dim-native-git; format=8;
+  if [[ "$kind" == native ]]; then image="$native_image"; state="$native_state"; target=/var/lib/dim-native-git; format=9;
   else image="$ci_image"; state="$ci_state"; target=/var/lib/dim-ordinary-ci; format=102; fi
   compatibility="$(docker run --rm --read-only --network none "$image" compatibility --json)"
   inspected="$(docker run --rm --read-only --network none --tmpfs /tmp:rw,noexec,nosuid,nodev,size=32m \

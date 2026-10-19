@@ -3,7 +3,7 @@ import { open } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { UserError } from "@slop-lab/dim-core";
-import { executionCredentialSchema } from "@slop-lab/dim-native-git/execution";
+import { executionCredentialSchema } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import { selectedControlPlaneHostFile } from "../controlPlaneSelection.js";
 import { createNodeNativeGitAdmissionHttpClient } from "../nativeGitAdmissionHttpClient.js";
 import { executionSummarySchema, executionDetailSchema } from "./query.js";

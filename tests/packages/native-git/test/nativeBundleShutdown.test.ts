@@ -1,7 +1,7 @@
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { describe, expect, it } from "vitest";
-import { createNativeBundleShutdown } from "../../../../core/packages/native-git/src/native-bundle-shutdown.js";
+import { createNativeBundleShutdown } from "../../../../plugin-control-plane-native-git/src/native-bundle-shutdown.js";
 
 describe("native bundle shutdown", () => {
   it("releases the owned store and closes the listener after a drain failure", async () => {

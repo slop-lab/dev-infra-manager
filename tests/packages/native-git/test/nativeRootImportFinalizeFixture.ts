@@ -1,16 +1,16 @@
-import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
-import { configuredNativeGitBundleServer, type NativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
-import type { AdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
-import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
-import type { AuthoritativeNativeReviewHooks } from "../../../../core/packages/native-git/src/authoritative-native-review.js";
-import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
-import type { NativeInstalledPromotionHooks } from "../../../../core/packages/native-git/src/native-installed-promotion.js";
+import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
+import { configuredNativeGitBundleServer, type NativeGitBundleServer } from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
+import type { AdmissionVerifierHttpClient } from "../../../../plugin-control-plane-native-git/src/ordinary-admission-http.js";
+import type { ReviewPublicationFaults } from "../../../../plugin-control-plane-native-git/src/review-record-storage.js";
+import type { AuthoritativeNativeReviewHooks } from "../../../../plugin-control-plane-native-git/src/authoritative-native-review.js";
+import type { NativeHumanReviewerHooks } from "../../../../plugin-control-plane-native-git/src/native-human-reviewer-http.js";
+import type { NativeInstalledPromotionHooks } from "../../../../plugin-control-plane-native-git/src/native-installed-promotion.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
 import type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit, WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
 

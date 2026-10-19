@@ -3,8 +3,11 @@
 Required components: matching managed administration installed with
 `dim installer install core --with-managed`, connected native Git/CI services,
 and a private generation-bound worker connection. The managed service composes
-`@slop-lab/dim-plugin-ci-workflows`; this compiler and the
-`@slop-lab/dim-native-git` service are not host-plugin registry entries. No
+`@slop-lab/dim-plugin-control-plane-ci-workflows`; this compiler and the
+`@slop-lab/dim-plugin-control-plane-native-git` service are control-plane plugins,
+installed using `dim installer install control-plane plugin PACKAGE@EXACT_VERSION`.
+Their standalone runtime needs no workspace core; see
+[plugin locations](../../../specification/docs/plugin-scopes.md). No
 optional host plugin is required. Host mirrors are optional. Container slots
 require Docker/Sysbox; VM slots require Docker and functional KVM. Both require
 operator-reviewed runner/job image digests, not the placeholders below.

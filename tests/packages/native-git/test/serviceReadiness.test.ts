@@ -3,7 +3,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkNativeGitServiceReadiness } from "../../../../core/packages/native-git/src/serviceReadiness.js";
+import { checkNativeGitServiceReadiness } from "../../../../plugin-control-plane-native-git/src/serviceReadiness.js";
 
 const roots: string[] = [];
 

@@ -5,10 +5,13 @@
 Install matching managed administration on the selected host with
 `dim installer install core --with-managed`. Prepare/install/connect its native
 Git and CI services as described in [managed administration](../../../core/packages/managed/docs/cli.md).
-`@slop-lab/dim-native-git` supplies the Git service;
-`@slop-lab/dim-plugin-ci-workflows` supplies the `.dim/ci/runner.yml` compiler
-composed by the managed service. These are service/library components, not
-host plugins to put in a workspace declaration.
+`@slop-lab/dim-plugin-control-plane-native-git` supplies the Git service;
+`@slop-lab/dim-plugin-control-plane-ci-workflows` supplies the `.dim/ci/runner.yml`
+compiler. Install these on the control-plane machine with
+`dim installer install control-plane plugin PACKAGE@EXACT_VERSION`.
+They use the standalone control-plane runtime without workspace core. They are
+control-plane plugins, separate from `.dim/workspace.json` host requirements;
+see [plugin locations](../../../specification/docs/plugin-scopes.md).
 
 This example needs no optional host plugin, so it has no host-plugin requirement
 file. It still requires a Docker/Sysbox host and a built workspace image

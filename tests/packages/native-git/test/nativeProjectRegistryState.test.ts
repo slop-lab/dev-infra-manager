@@ -8,7 +8,7 @@ import {
   inspectNativeGitBundleState,
   readNativeProjectRegistrations,
   registerNativeProject
-} from "../../../../core/packages/native-git/src/native-bundle-state.js";
+} from "../../../../plugin-control-plane-native-git/src/native-bundle-state.js";
 
 const roots: string[] = [];
 const projectA = { serviceId: "native-main", projectId: "project-a", repositoryId: "root", ownerHostId: "host-a" } as const;

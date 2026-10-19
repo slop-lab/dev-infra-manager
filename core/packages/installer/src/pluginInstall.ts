@@ -2,12 +2,24 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { access, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { validatePluginTarget, assertControlPlaneClosure } from "./pluginTarget.js";
+import { installerVersion } from "./installerVersion.js";
+
 import { atomicWrite, readManifest, readPackageJson, run } from "./runtimeFiles.js";
 import type { InstallerOperation } from "./installProgress.js";
 import { managedControllerIsActive } from "./controllerActivation.js";
 
+export type PluginTarget = "host" | "control-plane";
+const CONTROL_PLANE_RUNTIME = "@slop-lab/dim-control-plane";
+
 export interface InstallOptions {
   readonly pluginHome: string;
+  readonly target?: PluginTarget;
+  /** Reviewed source bundle override; otherwise the exact installer version is used. */
+  readonly runtimeSpecifier?: string;
+  /** Complete reviewed artifact closure; only pluginNames are enabled. */
+  readonly packageSpecifiers?: readonly string[];
+  readonly pluginNames?: readonly string[];
   readonly npmCommand?: string;
   readonly operation?: InstallerOperation;
   readonly restartController?: boolean;
@@ -19,11 +31,15 @@ export async function isPluginEnabled(name: string, pluginHome: string): Promise
 
 export async function installPlugins(specifiers: readonly string[], options: InstallOptions): Promise<string[]> {
   if (specifiers.length === 0) throw new Error("at least one plugin package is required");
-  for (const specifier of specifiers) assertExactPluginSpecifier(specifier);
+  for (const specifier of specifiers) {
+    assertExactPluginSpecifier(specifier);
+    if (packageNameFromSpecifier(specifier) === CONTROL_PLANE_RUNTIME) throw new Error("the control-plane runtime is not a plugin");
+  }
   const currentDirectory = path.resolve(options.pluginHome);
   const managedRoot = path.dirname(currentDirectory);
   await mkdir(managedRoot, { recursive: true, mode: 0o700 });
-  const restartController = options.restartController ?? await managedControllerIsActive(currentDirectory);
+  const restartController = options.target === "control-plane" ? false
+    : options.restartController ?? await managedControllerIsActive(currentDirectory);
   const stagingDirectory = await mkdtemp(path.join(managedRoot, ".plugin-staging-"));
   const backupDirectory = path.join(managedRoot, `.plugin-previous-${process.pid}-${Date.now()}`);
   let previousMoved = false;
@@ -89,7 +105,11 @@ async function installPluginsInStage(
   const packagePath = path.join(stagingDirectory, "package.json");
   const before = await readPackageJson(packagePath);
   if (!before) await writeFile(packagePath, `${JSON.stringify({ private: true }, null, 2)}\n`, { mode: 0o600 });
-  const durableSpecifiers = await Promise.all(specifiers.map((specifier) => persistLocalSpecifier(specifier, stagingDirectory)));
+  const runtime = options.target === "control-plane"
+    ? options.runtimeSpecifier ?? `${CONTROL_PLANE_RUNTIME}@${await installerVersion()}` : undefined;
+  if (runtime !== undefined) assertExactPluginSpecifier(runtime);
+  const durableSpecifiers = await Promise.all([...(options.packageSpecifiers ?? [...specifiers, ...(runtime === undefined ? [] : [runtime])])]
+    .map((specifier) => persistLocalSpecifier(specifier, stagingDirectory)));
   await run(
     options.npmCommand ?? "npm",
     ["install", "--save-exact", "--no-fund", "--no-audit", ...durableSpecifiers],
@@ -101,9 +121,23 @@ async function installPluginsInStage(
   const previousDependencies = before?.dependencies ?? {};
   const added = Object.keys(dependencies).filter((name) => !(name in previousDependencies));
   const inferred = specifiers.map(packageNameFromSpecifier).filter((name): name is string => name !== undefined);
-  const installed = [...new Set([...added, ...inferred])];
+  const requestedArchives = new Set(options.packageSpecifiers === undefined
+    ? specifiers.flatMap((specifier, index) => {
+      const durable = durableSpecifiers[index];
+      return specifier.endsWith(".tgz") && durable !== undefined ? [path.resolve(durable)] : [];
+    }) : []);
+  const archiveNames = Object.entries(dependencies).flatMap(([name, value]) => value.startsWith("file:")
+    && requestedArchives.has(path.resolve(stagingDirectory, value.slice(5))) ? [name] : []);
+  const installed = [...new Set(options.pluginNames ?? [...added, ...inferred, ...archiveNames])].filter((name) => name !== CONTROL_PLANE_RUNTIME);
+  if (!installed.length) throw new Error("no plugin package was installed; the control-plane runtime is not a plugin");
   for (const name of installed) {
     if (!(name in dependencies)) throw new Error(`npm did not install '${name}' as a direct plugin dependency`);
+  }
+  for (const name of installed) await validatePluginTarget(stagingDirectory, name, options.target ?? "host");
+  if (options.target === "control-plane") {
+    if (!(CONTROL_PLANE_RUNTIME in dependencies)) throw new Error("control-plane runtime was not installed as a direct dependency");
+    await assertControlPlaneClosure(stagingDirectory);
+    await access(path.join(stagingDirectory, "node_modules", ".bin", "dim-control-plane"), constants.X_OK);
   }
   const manifestPath = path.join(stagingDirectory, "plugins.json");
   const manifest = await readManifest(manifestPath);
@@ -130,8 +164,10 @@ export async function setPluginsEnabled(
   if (names.length === 0) throw new Error("at least one plugin package is required");
   const dependencies = (await readPackageJson(path.join(options.pluginHome, "package.json")))?.dependencies ?? {};
   for (const name of names) {
+    if (name === CONTROL_PLANE_RUNTIME) throw new Error("the control-plane runtime is not a plugin");
     if (!(name in dependencies)) throw new Error(`plugin '${name}' is not installed`);
   }
+  if (enabled) for (const name of names) await validatePluginTarget(options.pluginHome, name, options.target ?? "host");
   const manifestPath = path.join(options.pluginHome, "plugins.json");
   const manifest = await readManifest(manifestPath);
   const selected = new Set(manifest.plugins);
@@ -143,6 +179,7 @@ export async function removePlugins(names: readonly string[], options: InstallOp
   if (names.length === 0) throw new Error("at least one plugin package is required");
   const dependencies = (await readPackageJson(path.join(options.pluginHome, "package.json")))?.dependencies ?? {};
   for (const name of names) {
+    if (name === CONTROL_PLANE_RUNTIME) throw new Error("the control-plane runtime is not a plugin");
     if (!(name in dependencies)) throw new Error(`plugin '${name}' is not installed`);
   }
   await run(options.npmCommand ?? "npm", ["uninstall", "--no-fund", "--no-audit", ...names], options.pluginHome);
@@ -157,6 +194,7 @@ export async function removePlugins(names: readonly string[], options: InstallOp
 }
 
 export function packageNameFromSpecifier(specifier: string): string | undefined {
+  if (specifier.startsWith("file:") || specifier.endsWith(".tgz")) return undefined;
   if (specifier.startsWith("@")) {
     const separator = specifier.indexOf("@", 1);
     return separator === -1 ? specifier : specifier.slice(0, separator);

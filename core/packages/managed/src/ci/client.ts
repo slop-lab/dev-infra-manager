@@ -1,4 +1,4 @@
-import { executionGrantSchema } from "@slop-lab/dim-native-git/execution";
+import { executionGrantSchema } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import { z } from "zod";
 import { createNodeNativeGitAdmissionHttpClient } from "../nativeGitAdmissionHttpClient.js";
 import type { NativeGitAdmissionHttpClient } from "../nativeGitAdmissionHttpClient.js";

@@ -42,6 +42,15 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  core/packages/control-plane:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   core/packages/core:
     devDependencies:
       '@types/node':
@@ -68,37 +77,24 @@ importers:
 
   core/packages/managed:
     dependencies:
+      '@slop-lab/dim-control-plane':
+        specifier: workspace:0.10.0
+        version: link:../control-plane
       '@slop-lab/dim-core':
         specifier: workspace:0.10.0
         version: link:../core
-      '@slop-lab/dim-native-git':
+      '@slop-lab/dim-plugin-control-plane-ci-workflows':
         specifier: workspace:0.10.0
-        version: link:../native-git
-      '@slop-lab/dim-plugin-ci-workflows':
+        version: link:../../../plugin-control-plane-ci-workflows
+      '@slop-lab/dim-plugin-control-plane-native-git':
         specifier: workspace:0.10.0
-        version: link:../../../plugin-ci-workflows
+        version: link:../../../plugin-control-plane-native-git
       commander:
         specifier: 14.0.0
         version: 14.0.0
       yaml:
         specifier: 2.8.3
         version: 2.8.3
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  core/packages/native-git:
-    dependencies:
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -156,7 +152,7 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  plugin-ci-workflows:
+  plugin-control-plane-ci-workflows:
     dependencies:
       yaml:
         specifier: 2.8.3
@@ -165,9 +161,44 @@ importers:
         specifier: 4.1.11
         version: 4.1.11
     devDependencies:
+      '@slop-lab/dim-control-plane':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/control-plane
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  plugin-control-plane-llm-router:
+    dependencies:
+      '@slop-lab/dim-control-plane':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/control-plane
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  plugin-control-plane-native-git:
+    dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/control-plane
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
       typescript:
         specifier: 5.8.3
         version: 5.8.3
@@ -210,6 +241,18 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  plugin-host-llm-router:
+    devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   plugin-host-mirrors:
     devDependencies:
       '@slop-lab/dim-core':
@@ -218,18 +261,6 @@ importers:
       '@slop-lab/dim-managed':
         specifier: workspace:0.10.0
         version: link:../core/packages/managed
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  plugin-llm-router:
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:0.10.0
-        version: link:../core/packages/core
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3

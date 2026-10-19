@@ -583,6 +583,13 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     }));
     await writeFile(join(pluginHome, "plugins.json"), '{"schemaVersion":1,"plugins":[]}\n');
 
+    for (const name of ["plugin-one", "plugin-two"]) {
+      const directory = join(pluginHome, "node_modules", name);
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, "package.json"), JSON.stringify({ name, type: "module", main: "index.js" }));
+      await writeFile(join(directory, "index.js"), "// @ts-check\nexport const hostPlugin = {name:'fixture'};\n");
+    }
+
     const result = await runCli(["installer", "enable-plugin", "plugin-two", "plugin-one"], tsxPath!, env, root);
 
     expect(result.code).toBe(0);
@@ -612,8 +619,8 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const packages = [
       { name: "@slop-lab/dim-core", version: "0.9.0", file: "core.tgz", requires: {} },
       { name: "@slop-lab/dim-cli", version: "0.9.0", file: "cli.tgz", requires: { "@slop-lab/dim-core": "0.9.0" } },
-      { name: "@slop-lab/dim-managed", version: "0.9.0", file: "managed.tgz", requires: { "@slop-lab/dim-core": "0.9.0", "@slop-lab/dim-native-git": "0.9.0" } },
-      { name: "@slop-lab/dim-native-git", version: "0.9.0", file: "native-git.tgz", requires: { "@slop-lab/dim-contracts-external-url": "0.9.0" } },
+      { name: "@slop-lab/dim-managed", version: "0.9.0", file: "managed.tgz", requires: { "@slop-lab/dim-core": "0.9.0", "@slop-lab/dim-plugin-control-plane-native-git": "0.9.0" } },
+      { name: "@slop-lab/dim-plugin-control-plane-native-git", version: "0.9.0", file: "native-git.tgz", requires: { "@slop-lab/dim-contracts-external-url": "0.9.0" } },
       { name: "@slop-lab/dim-contracts-external-url", version: "0.9.0", file: "contract.tgz", requires: {} },
       { name: "@slop-lab/dim-plugin-host-mirrors", version: "0.9.0", file: "mirrors.tgz", requires: { "@slop-lab/dim-managed": "0.9.0" } },
       { name: "@slop-lab/dim-installer", version: "0.9.0", file: "installer.tgz", requires: {} }

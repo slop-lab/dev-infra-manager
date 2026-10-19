@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { executionCredentialSchema, executionSourceCredentialsSchema, executionProfileSchema } from "@slop-lab/dim-native-git/execution";
+import { executionCredentialSchema, executionSourceCredentialsSchema, executionProfileSchema } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 export const executionServiceConfigSchema = z.object({ schemaVersion: z.literal(1),
   claimLeaseMilliseconds: z.number().int().min(1_000).max(3_600_000),
   nativeGit: executionSourceCredentialsSchema.extend({ endpoint: z.literal("http://native-git:8080") }).strict().readonly(),

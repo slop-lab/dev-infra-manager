@@ -98,8 +98,10 @@ GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$sou
   plugin-external-urls \
   plugin-host-mirrors \
   plugin-cache-server \
-  plugin-ci-workflows \
-  plugin-llm-router \
+  plugin-control-plane-native-git \
+  plugin-control-plane-ci-workflows \
+  plugin-host-llm-router \
+  plugin-control-plane-llm-router \
   plugin-vm \
   plugin-workspace-check \
   plugin-agent-tools \
@@ -112,18 +114,20 @@ EOF
 cat >"$source_root/pnpm-workspace.yaml" <<'EOF'
 packages:
   - core/packages/core
+  - core/packages/control-plane
   - core/packages/managed
   - core/packages/cli
   - core/packages/installer
-  - core/packages/native-git
+  - plugin-control-plane-native-git
   - core/packages/web
   - core/packages/contracts/*
   - plugin-dns-cloudflare
   - plugin-external-urls
   - plugin-host-mirrors
   - plugin-cache-server
-  - plugin-ci-workflows
-  - plugin-llm-router
+  - plugin-control-plane-ci-workflows
+  - plugin-host-llm-router
+  - plugin-control-plane-llm-router
   - plugin-vm
   - plugin-workspace-check
   - plugin-agent-tools

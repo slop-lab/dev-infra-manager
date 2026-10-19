@@ -11,11 +11,19 @@ credentials or access to private product code.
 Install the optional managed integration with
 `dim installer install core --with-managed`, then prepare/install/connect native
 Git on the selected host using [managed administration](../../../core/packages/managed/docs/cli.md).
-Native Git (`@slop-lab/dim-native-git`) is a required service for `dim://`
-workspaces and proposal Git. It is not a separately installable host plugin.
-The service must have the CI workflow compiler plugin
-`@slop-lab/dim-plugin-ci-workflows@0.10.0` composed into it to interpret
-`.dim/ci/runner.yml`; the shipped managed service includes this compiler.
+The control-plane machine requires the native Git and CI workflow plugins:
+
+```bash
+dim installer install control-plane plugin \
+  '@slop-lab/dim-plugin-control-plane-native-git@0.10.0' \
+  '@slop-lab/dim-plugin-control-plane-ci-workflows@0.10.0'
+```
+
+These install without workspace core on the control-plane machine. The workspace
+host uses the managed client integration and a saved service connection.
+Native Git serves `dim://` sources and proposal Git; the workflow plugin interprets
+`.dim/ci/runner.yml`. See [plugin locations](../../../specification/docs/plugin-scopes.md)
+for standalone runtime configuration and the separate Docker deployment path.
 
 Running the jobs also requires the shared execution service, a Sysbox worker,
 and reviewed runner/job images containing Bash and `cmp`. See

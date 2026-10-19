@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { execFile, spawn } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -11,9 +11,9 @@ import {
   NativeProjectDraftStore, NativeProjectPendingStore, parseNativeControlPlaneConnection
 } from "../../../../core/packages/managed/src/index.js";
 import { compileNativeRepositoryBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
-import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
+import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
 import { configuredNativeGitBundleServer,
-  type NativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
+  type NativeGitBundleServer } from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
 import { bundleSecrets, idleNativeConfig } from "../../native-git/test/bundleConfigFixture.js";
 import { prepareNativeProjectFixtureRootForRemoval } from "./nativeProjectFixtureCleanup.js";
 import type { NativeFixture, NativeFixtureOptions } from "./nativeProjectCommandsFixtureTypes.js";

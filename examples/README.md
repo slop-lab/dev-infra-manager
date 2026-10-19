@@ -27,7 +27,7 @@ source installations should use the matching prepared package set.
 | Example | Host plugins | Other required components |
 | --- | --- | --- |
 | [Basic development](projects/basic-development/README.md) | None | Base DIM, Docker with Sysbox, built workspace image; SSH access for a remote host |
-| [Native basic repository](projects/native-basic-root/README.md) | None | `@slop-lab/dim-managed` via `dim installer install core --with-managed`; connected native Git/control-plane services; managed service's `@slop-lab/dim-plugin-ci-workflows` compiler; configured Sysbox and QEMU/KVM CI slots for both required jobs |
+| [Native basic repository](projects/native-basic-root/README.md) | None | `@slop-lab/dim-managed` via `dim installer install core --with-managed`; connected native Git/control-plane services; managed service's `@slop-lab/dim-plugin-control-plane-ci-workflows` compiler; configured Sysbox and QEMU/KVM CI slots for both required jobs |
 | [Multiple repositories](projects/native-multiple-repositories/README.md) | None | Managed integration, connected native Git service and its CI workflow compiler; Sysbox workspace image; shared execution service and Sysbox worker to run CI |
 | [Codex](use-cases/codex/README.md) | `@slop-lab/dim-plugin-agent-tools@0.10.0` | Base workspace prerequisites; guest tool installation network access and deliberate Codex authentication; guest SSH setup for remote editors |
 | [External URLs](features/external-urls/README.md) | `@slop-lab/dim-plugin-external-urls@0.10.0` | Managed administration and its host controller, an owned workspace, configured ingress; no native Git/control-plane service required |
@@ -45,9 +45,12 @@ configuration repository before creating a workspace and asks before installing
 missing plugins. An empty list explicitly means no host plugins are required;
 it does not provision managed services, CI workers, images or tool credentials.
 In particular,
-`@slop-lab/dim-native-git` is a service package and
-`@slop-lab/dim-plugin-ci-workflows` is an injected workflow compiler; neither is
-an installable host-plugin declaration. Feature recipes applied to an arbitrary
+`@slop-lab/dim-plugin-control-plane-native-git` and
+`@slop-lab/dim-plugin-control-plane-ci-workflows` are control-plane plugins installed
+with `dim installer install control-plane plugin PACKAGE@EXACT_VERSION`, using
+the standalone control-plane runtime without workspace core. See
+[plugin locations](../specification/docs/plugin-scopes.md).
+Feature recipes applied to an arbitrary
 repository document their plugin installation steps instead of adding a
 manifest to that unrelated source.
 

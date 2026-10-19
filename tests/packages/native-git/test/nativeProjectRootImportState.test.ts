@@ -11,13 +11,13 @@ import {
   inspectNativeGitBundleState,
   markNativeProjectRootBundleDurable,
   registerNativeProject
-} from "../../../../core/packages/native-git/src/native-bundle-state.js";
+} from "../../../../plugin-control-plane-native-git/src/native-bundle-state.js";
 import {
   activationTokenSha256,
   bindExactActivation
-} from "../../../../core/packages/native-git/src/native-bundle-activation.js";
-import { executeNativeProjectPreparation } from "../../../../core/packages/native-git/src/native-project-registration.js";
-import { rootBundlePath } from "../../../../core/packages/native-git/src/native-root-import-storage.js";
+} from "../../../../plugin-control-plane-native-git/src/native-bundle-activation.js";
+import { executeNativeProjectPreparation } from "../../../../plugin-control-plane-native-git/src/native-project-registration.js";
+import { rootBundlePath } from "../../../../plugin-control-plane-native-git/src/native-root-import-storage.js";
 import { refValue } from "../../../support/gitHelpers.js";
 
 const roots: string[] = [];

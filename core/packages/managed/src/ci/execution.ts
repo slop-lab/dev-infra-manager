@@ -1,4 +1,4 @@
-import type { ExecutionEvent, ExecutionGrant, ExecutionProfile } from "@slop-lab/dim-native-git/execution";
+import type { ExecutionEvent, ExecutionGrant, ExecutionProfile } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 export type { ExecutionEvent, ExecutionGrant, ExecutionProfile };
 export type ExecutionResult = z.infer<typeof executionResultSchema>;
 export type ExecutionPhase = "queued" | "assigned" | "running" | "recovering" | "finished";
@@ -12,7 +12,7 @@ export class ExecutionConflictError extends Error {}
 
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
-import { executionEventSchema, executionGrantSchema, executionProfileSchema, executionResultSchema as gitExecutionResultSchema } from "@slop-lab/dim-native-git/execution";
+import { executionEventSchema, executionGrantSchema, executionProfileSchema, executionResultSchema as gitExecutionResultSchema } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 const diagnostic = z.object({ base64: z.string().max(88_000).refine((value) =>
   Buffer.from(value, "base64").toString("base64") === value && Buffer.from(value, "base64").length <= 64 * 1024),
   truncated: z.boolean() }).strict();

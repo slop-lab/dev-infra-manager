@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   initializeNativeGitBundleState,
   inspectNativeGitBundleState
-} from "../../../../core/packages/native-git/src/native-bundle-state.js";
+} from "../../../../plugin-control-plane-native-git/src/native-bundle-state.js";
 
 const roots: string[] = [];
 

@@ -17,14 +17,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { activationTokenSha256, bindExactActivation } from "../../../../core/packages/native-git/src/native-bundle-activation.js";
+import { activationTokenSha256, bindExactActivation } from "../../../../plugin-control-plane-native-git/src/native-bundle-activation.js";
 import {
   claimNativeProjectRootImport,
   initializeNativeGitBundleState,
   inspectNativeGitBundleState,
   markNativeProjectRootBundleDurable
-} from "../../../../core/packages/native-git/src/native-bundle-state.js";
-import { executeNativeProjectPreparation } from "../../../../core/packages/native-git/src/native-project-registration.js";
+} from "../../../../plugin-control-plane-native-git/src/native-bundle-state.js";
+import { executeNativeProjectPreparation } from "../../../../plugin-control-plane-native-git/src/native-project-registration.js";
 import { refValue } from "../../../support/gitHelpers.js";
 
 const roots: string[] = [];

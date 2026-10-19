@@ -26,6 +26,10 @@ The target facade owns:
 dim installer                         # interactive installer (TTY only), always
 dim installer install core [--with-managed] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [options]
 dim installer install control-plane --config FILE
+dim installer install control-plane plugin [--local-packages DIRECTORY] PACKAGE@EXACT_VERSION...
+dim installer control-plane enable-plugin PACKAGE...
+dim installer control-plane disable-plugin PACKAGE...
+dim installer control-plane remove-plugin PACKAGE...
 dim installer recover control-plane --roll-forward --generation GENERATION
 dim installer install plugin PACKAGE@EXACT_VERSION...
 dim installer enable-plugin PACKAGE...
@@ -294,6 +298,25 @@ project and npm must validate their managed-component peer dependency against
 that runtime.
 `installer enable-plugin`, `installer disable-plugin`, and `installer remove-plugin` provide recovery without
 hand-editing the managed npm project or activation manifest.
+
+`dim installer install control-plane plugin` MUST instead install matching
+`@slop-lab/dim-control-plane` and the selected service plugins in an independent
+tree. It MUST NOT require a configured workspace CLI, query or restart the host
+controller, or admit `dim-core`, `dim-cli` or `dim-managed` in its dependency
+closure. `DIM_CONTROL_PLANE_PLUGIN_HOME` overrides the default
+`DIM_DATA_HOME/control-plane/runtime/current` tree. A local bundle selects only
+the runtime and requested plugin artifact closure; its activation manifest lists
+only the requested plugins. Installation validates each `controlPlanePlugin`
+descriptor without invoking its configuration or starting a service, then
+promotes the tree transactionally. Wrong-target packages fail before promotion.
+
+The `installer control-plane enable-plugin`, `disable-plugin` and `remove-plugin`
+commands operate on that independent tree. The standalone loader MUST resolve
+only packages explicitly installed and enabled there, with no parent-directory
+or global fallback. Configuration and required capabilities are validated before
+service startup; failed startup cleans already started services in reverse order.
+The separate Docker `install control-plane --config` transaction remains as
+specified below. Host workspace declarations cannot activate control-plane plugins.
 
 ## Verification
 
@@ -614,8 +637,8 @@ identical deployment.
 For an update, each candidate image MUST also expose
 `/usr/local/bin/dim-service compatibility --json`. The installer runs it for
 both candidate and prior services before container replacement and requires
-exact JSON shaped as `{"schemaVersion":1,"writeFormat":8,"readableFormats":[8]}`
-for current native Git and `{"schemaVersion":1,"writeFormat":11,"readableFormats":[11]}`
+exact JSON shaped as `{"schemaVersion":1,"writeFormat":9,"readableFormats":[9]}`
+for current native Git and `{"schemaVersion":1,"writeFormat":102,"readableFormats":[102]}`
 for current ordinary CI.
 `writeFormat` is one positive integer; `readableFormats` is a non-empty sorted
 array of unique positive integers. The installer also runs both candidate and
@@ -623,8 +646,8 @@ prior images' `dim-service check-state --read-only /var/lib/dim-native-git
 --json` for native Git and `dim-service check-state --read-only
 /var/lib/dim-ordinary-ci --json` for ordinary CI, with only that service's data
 volume mounted read-only. Each returns exact JSON
-`{"schemaVersion":1,"stateFormat":8}` for current native Git or
-`{"schemaVersion":1,"stateFormat":11}` for current ordinary CI and performs no
+`{"schemaVersion":1,"stateFormat":9}` for current native Git or
+`{"schemaVersion":1,"stateFormat":102}` for current ordinary CI and performs no
 write. Earlier ordinary formats are rejected unchanged, not migrated. The candidate and
 prior probes must report the same state format. The update is admitted only
 when that current state format is in both images'

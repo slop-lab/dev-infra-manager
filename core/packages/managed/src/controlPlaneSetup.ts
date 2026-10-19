@@ -1,5 +1,5 @@
 import { executionWorkerConfigSchema } from "./ci/workerConfig.js";
-import { executionProfileSchema, type ExecutionProfile } from "@slop-lab/dim-native-git/execution";
+import { executionProfileSchema, type ExecutionProfile } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import { ciQueryConnectionSchema } from "./ci/queryClient.js";
 import { parseControlPlaneServicePair } from "./controlPlaneServicePair.js";
 import { randomBytes } from "node:crypto";
@@ -7,7 +7,7 @@ import { constants } from "node:fs";
 import { mkdir, open, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-core";
-import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/config";
+import { parseNativeGitBundleConfig } from "@slop-lab/dim-plugin-control-plane-native-git/config";
 import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
 import type { NativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
 import { compileNativeRepositoryBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";

@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { acquireStorageOwner, inspectStorageOwner } from "../../../../core/packages/native-git/src/storage-owner.js";
+import { acquireStorageOwner, inspectStorageOwner } from "../../../../plugin-control-plane-native-git/src/storage-owner.js";
 
 const run = promisify(execFile);
 const roots: string[] = [];

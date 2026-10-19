@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
-import { executionEventSchema } from "@slop-lab/dim-native-git/execution";
+import { executionEventSchema } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import type { ExecutionServiceConfig } from "./config.js";
 import { ExecutionStore } from "./store.js";
 import { ExecutionConflictError, type WorkerIdentity } from "./execution.js";

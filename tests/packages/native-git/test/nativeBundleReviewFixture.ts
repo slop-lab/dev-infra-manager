@@ -4,11 +4,11 @@ import type {
   AdmissionVerifierHttpClient,
   AuthoritativeNativeReviewEnvelope,
   AuthoritativeNativeReviewHooks
-} from "../../../../core/packages/native-git/src/index.js";
-import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
-import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
-import type { NativeInstalledPromotionHooks } from "../../../../core/packages/native-git/src/native-installed-promotion.js";
-import { parseAuthoritativeNativeReviewEnvelope } from "../../../../core/packages/native-git/src/authoritative-native-review-schema.js";
+} from "../../../../plugin-control-plane-native-git/src/index.js";
+import type { NativeHumanReviewerHooks } from "../../../../plugin-control-plane-native-git/src/native-human-reviewer-http.js";
+import type { ReviewPublicationFaults } from "../../../../plugin-control-plane-native-git/src/review-record-storage.js";
+import type { NativeInstalledPromotionHooks } from "../../../../plugin-control-plane-native-git/src/native-installed-promotion.js";
+import { parseAuthoritativeNativeReviewEnvelope } from "../../../../plugin-control-plane-native-git/src/authoritative-native-review-schema.js";
 import { authoritativePolicy, matchingRunner } from "./authoritativeNativeCandidateFixture.js";
 import {
   activateFinalizeService,

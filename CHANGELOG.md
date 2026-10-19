@@ -28,6 +28,8 @@ is implied by these source changes.
   and connect generation-bound worker configuration without hand-writing
   credentials. Source installs retain the
   matching installer and select it through mise for subsequent operations.
+  Install named control-plane plugins in an independent runtime without
+  workspace core through `installer install control-plane plugin`.
 - Use the same workspace lifecycle for ordinary and managed Git sources.
   Remove the separate trusted outer container, duplicate host/workspace state,
   unused controller RPC/session paths and predecessor compatibility machinery.
@@ -41,7 +43,9 @@ is implied by these source changes.
 - Keep LLM routing/account governance, Incus VM workspaces and SPICE consoles,
   durable TCP/UDP tunnels, mirrors, agent tools and disposable workspace checks
   in optional plugins. Fence guest capabilities by current workspace UUID;
-  credentials remain on the selected host. Configured workspace OpenCode/OMO
+  control-plane router plugins own backend keys and usage, while the separate
+  host router adapter owns workspace fencing and guest gateway tokens.
+  Configured workspace OpenCode/OMO
   helpers use that router by default. Separate Docker/npm/PyPI/APT cache clients
   from optional host cache servers; external cache URLs use the same client path.
   Reviewed VM image downloads share a resumable checksum-verified host cache.

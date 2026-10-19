@@ -1,4 +1,4 @@
-import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/config";
+import { parseNativeGitBundleConfig } from "@slop-lab/dim-plugin-control-plane-native-git/config";
 import { executionServiceConfigSchema } from "./ci/config.js";
 export function parseControlPlaneServicePair(nativeValue: unknown, ciValue: unknown) {
   const native = parseNativeGitBundleConfig(nativeValue), parsed = executionServiceConfigSchema.safeParse(ciValue);

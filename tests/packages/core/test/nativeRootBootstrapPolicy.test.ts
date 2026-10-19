@@ -5,7 +5,7 @@ import {
   parseNativeRootBootstrapManifestYaml
 } from "../../../../core/packages/managed/src/index.js";
 import { parseRepositorySetYaml } from "../../../../core/packages/managed/src/repositorySet.js";
-import { parseNativeProjectRootImportInput } from "../../../../core/packages/native-git/src/native-project-root-import-codec.js";
+import { parseNativeProjectRootImportInput } from "../../../../plugin-control-plane-native-git/src/native-project-root-import-codec.js";
 
 const review = { ciRepositoryIds: ["root"],
   requiredReviewerIds: ["owner", "security"],

@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { CandidateExecutionError } from "../../../../core/packages/native-git/src/candidate-execution-schema.js";
-import { resolveAuthoritativeNativeRepositoryTarget } from "../../../../core/packages/native-git/src/authoritative-native-root-target.js";
+import { CandidateExecutionError } from "../../../../plugin-control-plane-native-git/src/candidate-execution-schema.js";
+import { resolveAuthoritativeNativeRepositoryTarget } from "../../../../plugin-control-plane-native-git/src/authoritative-native-root-target.js";
 import {
   authoritativePolicy,
   candidateContext,

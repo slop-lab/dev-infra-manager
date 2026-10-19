@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 import { parseControlPlaneServicePair } from "./controlPlaneServicePair.js";
-import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
+import { controlPlanePlugin as workflowPlugin } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
-import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/config";
-import { configuredNativeGitBundleServer } from "@slop-lab/dim-native-git/service";
-import { inspectNativeGitBundleState } from "@slop-lab/dim-native-git/service";
-import { assertGitVersion } from "@slop-lab/dim-native-git/service";
-import { checkNativeGitServiceReadiness } from "@slop-lab/dim-native-git/service";
+import { parseNativeGitBundleConfig } from "@slop-lab/dim-plugin-control-plane-native-git/config";
+import { controlPlanePlugin as nativeGitPlugin } from "@slop-lab/dim-plugin-control-plane-native-git";
+import { startControlPlanePlugins } from "@slop-lab/dim-control-plane";
+import { inspectNativeGitBundleState } from "@slop-lab/dim-plugin-control-plane-native-git/service";
+import { assertGitVersion } from "@slop-lab/dim-plugin-control-plane-native-git/service";
+import { checkNativeGitServiceReadiness } from "@slop-lab/dim-plugin-control-plane-native-git/service";
 
 const configPath = "/run/secrets/service.json";
 const stateDirectory = "/var/lib/dim-native-git";
@@ -46,7 +47,7 @@ export async function runNativeGitServiceCli(
     return;
   }
   if (command === "compatibility" && arguments_.length === 2 && arguments_[1] === "--json") {
-    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 8, readableFormats: [8] })}\n`);
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 9, readableFormats: [9] })}\n`);
     return;
   }
   if (command === "check-state" && arguments_.length === 4 && arguments_[1] === "--read-only"
@@ -58,19 +59,21 @@ export async function runNativeGitServiceCli(
   if (command === "serve" && arguments_.length === 3 && arguments_[1] === configPath) {
     const expectedGenerationId = parseGenerationId(arguments_[2]);
     const config = parseNativeGitBundleConfig(await readJson(configPath, 0o444));
-    const options = {
-      workflowCompiler: dimWorkflowCompiler,
-      config,
-      stateDirectory,
-      readinessToken: await readToken(readinessTokenPath, "readiness"),
-      activationToken: await readToken(activationTokenPath, "activation"),
-      expectedGenerationId
-    };
-    const service = await configuredNativeGitBundleServer(options);
+    const shutdown = new AbortController();
+    const stop = () => shutdown.abort();
+    process.once("SIGTERM", stop); process.once("SIGINT", stop);
+    let service: Awaited<ReturnType<typeof startControlPlanePlugins>> | undefined;
     try {
-      await listenUntilTermination(service.server, () => service.close());
+      service = await startControlPlanePlugins([
+        { plugin: workflowPlugin, config: {} },
+        { plugin: nativeGitPlugin, config: { service: config, stateDirectory,
+          readinessToken: await readToken(readinessTokenPath, "readiness"),
+          activationToken: await readToken(activationTokenPath, "activation"), expectedGenerationId } }
+      ], shutdown.signal);
+      if (!shutdown.signal.aborted) await new Promise<void>((resolve) => shutdown.signal.addEventListener("abort", () => resolve(), { once: true }));
     } finally {
-      await service.close();
+      process.off("SIGTERM", stop); process.off("SIGINT", stop);
+      await service?.close();
     }
     return;
   }
@@ -190,34 +193,6 @@ async function readToken(path: string, label: string): Promise<string> {
   } finally {
     await handle.close();
   }
-}
-
-async function listenUntilTermination(
-  server: import("node:http").Server,
-  closeService?: () => Promise<void>
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(8080, "0.0.0.0", () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-  await new Promise<void>((resolve, reject) => {
-    const close = () => {
-      process.off("SIGTERM", close);
-      process.off("SIGINT", close);
-      if (closeService !== undefined) {
-        void closeService().then(resolve, reject);
-        return;
-      }
-      server.close((error) => error === undefined ? resolve() : reject(error));
-      server.closeAllConnections();
-    };
-    process.once("SIGTERM", close);
-    process.once("SIGINT", close);
-    server.once("error", reject);
-  });
 }
 
 const invokedPath = process.argv[1];

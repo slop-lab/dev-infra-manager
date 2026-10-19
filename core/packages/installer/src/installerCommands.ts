@@ -7,11 +7,15 @@ import {
   defaultBinDirectory,
   defaultDataHome,
   defaultPluginHome,
+  defaultControlPlanePluginHome,
+  type PluginTarget,
   installDimCli,
   installPlugins,
   isPluginEnabled,
   queryCliVersion,
   readLocalPackageBundle,
+  readControlPlanePackageBundle,
+  packageNameFromSpecifier,
   removePlugins,
   setPluginsEnabled,
   validateConfiguredCli
@@ -35,8 +39,11 @@ export async function installerCommand(input: readonly string[]): Promise<void> 
   if (command === "install") {
     const target = commandArgs[1];
     if (target === "core") return installCoreCommand(commandArgs.slice(2));
-    if (target === "control-plane") return installControlPlaneCommand(commandArgs.slice(2));
-    if (target === "plugin") return installPluginCommand(commandArgs.slice(2));
+    if (target === "control-plane") {
+      if (commandArgs[2] === "plugin") return installPluginCommand(commandArgs.slice(3), "control-plane");
+      return installControlPlaneCommand(commandArgs.slice(2));
+    }
+    if (target === "plugin") return installPluginCommand(commandArgs.slice(2), "host");
     throw new Error(`unknown installer install target: ${target ?? "missing"}`);
   }
   if (command === "recover") {
@@ -44,8 +51,15 @@ export async function installerCommand(input: readonly string[]): Promise<void> 
     if (target === "control-plane") return recoverControlPlaneCommand(commandArgs.slice(2));
     throw new Error(`unknown installer recover target: ${target ?? "missing"}`);
   }
+  if (command === "control-plane") {
+    const action = commandArgs[1];
+    if (action === "enable-plugin" || action === "disable-plugin" || action === "remove-plugin") {
+      return pluginLifecycleCommand(action, commandArgs.slice(2), "control-plane");
+    }
+    throw new Error(`unknown installer control-plane command: ${action ?? "missing"}`);
+  }
   if (command === "enable-plugin" || command === "disable-plugin" || command === "remove-plugin") {
-    return pluginLifecycleCommand(command, commandArgs.slice(1));
+    return pluginLifecycleCommand(command, commandArgs.slice(1), "host");
   }
   throw new Error(`unknown installer command: ${command}`);
 }
@@ -189,14 +203,29 @@ async function selectHostMirrorPlugin(
   return [{ name: HOST_MIRROR_PLUGIN, specifier: expected }];
 }
 
-async function installPluginCommand(commandArgs: readonly string[]): Promise<void> {
-  const parsed = parseArgs({ args: commandArgs, allowPositionals: true, strict: true, options: { help: { type: "boolean", short: "h" } } });
-  if (parsed.values.help) return printInstallPluginHelp();
-  if (parsed.positionals.length === 0) throw new Error("installer install plugin requires at least one package");
-  await installPluginPackages(parsed.positionals);
+async function installPluginCommand(commandArgs: readonly string[], target: PluginTarget): Promise<void> {
+  const parsed = parseArgs({ args: commandArgs, allowPositionals: true, strict: true, options: { help: { type: "boolean", short: "h" }, "local-packages": { type: "string" } } });
+  if (parsed.values.help) return printInstallPluginHelp(target);
+  if (parsed.positionals.length === 0) throw new Error(`installer install ${target === "host" ? "plugin" : "control-plane plugin"} requires at least one package`);
+  await installPluginPackages(parsed.positionals, target, parsed.values["local-packages"]);
 }
 
-async function installPluginPackages(specifiers: readonly string[]): Promise<void> {
+async function installPluginPackages(specifiers: readonly string[], target: PluginTarget = "host", localDirectory?: string): Promise<void> {
+  if (target === "control-plane") {
+    const home = defaultControlPlanePluginHome();
+    const bundle = localDirectory === undefined ? undefined : await readControlPlanePackageBundle(localDirectory, specifiers);
+    const selected = specifiers.map(packageNameFromSpecifier).filter((name): name is string => name !== undefined);
+    const installed = await withInstallerProgress("plugin", (operation) =>
+      installPlugins(specifiers, { pluginHome: home, target, operation, ...(bundle === undefined ? {} : { packageSpecifiers: bundle.packageSpecifiers, pluginNames: selected }) }));
+    for (const name of installed) console.log(`Installed and enabled ${name}`);
+    console.log(`Control-plane plugin home: ${home}`);
+    console.log(`Executable: ${path.join(home, "node_modules", ".bin", "dim-control-plane")}`);
+    return;
+  }
+  if (localDirectory !== undefined) throw new Error("--local-packages for plugins requires install control-plane plugin");
+  if (specifiers.some((specifier) => packageNameFromSpecifier(specifier)?.startsWith("@slop-lab/dim-plugin-control-plane-"))) {
+    throw new Error("control-plane packages use 'dim installer install control-plane plugin'; no host CLI installation is required");
+  }
   const cli = await configuredCli();
   if (cli === undefined) {
     throw new Error("DIM CLI must be installed before plugins so npm can validate the shared runtime");
@@ -215,13 +244,14 @@ async function installPluginPackages(specifiers: readonly string[]): Promise<voi
 
 async function pluginLifecycleCommand(
   command: "enable-plugin" | "disable-plugin" | "remove-plugin",
-  commandArgs: readonly string[]
+  commandArgs: readonly string[],
+  target: PluginTarget
 ): Promise<void> {
   const parsed = parseArgs({ args: commandArgs, allowPositionals: true, strict: true, options: { help: { type: "boolean", short: "h" } } });
-  if (parsed.values.help) return console.log(`Usage: dim installer ${command} PACKAGE...`);
+  if (parsed.values.help) return console.log(`Usage: dim installer ${target === "control-plane" ? "control-plane " : ""}${command} PACKAGE...`);
   if (parsed.positionals.length === 0) throw new Error(`${command} requires at least one package`);
-  if (await configuredCli() === undefined) throw new Error("DIM CLI is not installed");
-  const options = { pluginHome: defaultPluginHome() };
+  if (target === "host" && await configuredCli() === undefined) throw new Error("DIM CLI is not installed");
+  const options = { target, pluginHome: target === "host" ? defaultPluginHome() : defaultControlPlanePluginHome() };
   if (command === "remove-plugin") await removePlugins(parsed.positionals, options);
   else await setPluginsEnabled(parsed.positionals, command === "enable-plugin", options);
   for (const name of parsed.positionals) {

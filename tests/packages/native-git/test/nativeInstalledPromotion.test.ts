@@ -281,7 +281,7 @@ async function connectionFile(path: string, endpoint: string, role: "human-revie
 }
 
 async function cli(arguments_: readonly string[]): Promise<string> {
-  const cliPath = join(import.meta.dirname, "../../../../core/packages/native-git/src/cli.ts");
+  const cliPath = join(import.meta.dirname, "../../../../plugin-control-plane-native-git/src/cli.ts");
   const result = await execute(process.execPath, ["--import", "tsx", cliPath, "operator", "review", ...arguments_],
     { env: { ...process.env, TMPDIR: "/tmp" } });
   return result.stdout;

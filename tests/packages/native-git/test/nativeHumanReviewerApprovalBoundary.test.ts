@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBundleReview, nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
 import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
-import { createAuthoritativeNativeReviewEnvelope } from "../../../../core/packages/native-git/src/authoritative-native-review-schema.js";
+import { createAuthoritativeNativeReviewEnvelope } from "../../../../plugin-control-plane-native-git/src/authoritative-native-review-schema.js";
 import { cleanupFinalizeFixtures, closeFinalizeService, createFinalizeRoot, generationId,
   humanReviewerAuthorization, rootRepository, startFinalizeService } from "./nativeRootImportFinalizeFixture.js";
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
-import type { ExecutionGrant } from "@slop-lab/dim-native-git/execution";
+import type { ExecutionGrant } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 
 const labelKeys = [

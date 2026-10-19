@@ -1,11 +1,11 @@
-import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { initializeNativeGitBundleState } from "../../../../core/packages/native-git/src/index.js";
-import { activationTokenSha256 } from "../../../../core/packages/native-git/src/native-bundle-activation.js";
-import { assertGitVersion } from "../../../../core/packages/native-git/src/repository.js";
+import { initializeNativeGitBundleState } from "../../../../plugin-control-plane-native-git/src/index.js";
+import { activationTokenSha256 } from "../../../../plugin-control-plane-native-git/src/native-bundle-activation.js";
+import { assertGitVersion } from "../../../../plugin-control-plane-native-git/src/repository.js";
 import {
   activateFinalizeService,
   activationToken,

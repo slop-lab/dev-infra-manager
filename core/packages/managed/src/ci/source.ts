@@ -1,6 +1,6 @@
 import { createNodeNativeGitAdmissionHttpClient } from "../nativeGitAdmissionHttpClient.js";
 import type { NativeGitAdmissionHttpClient } from "../nativeGitAdmissionHttpClient.js";
-import { executionGrantSchema, executionResultSchema } from "@slop-lab/dim-native-git/execution";
+import { executionGrantSchema, executionResultSchema } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import type { ExecutionAssignment, ExecutionGrant, ExecutionResult } from "./execution.js";
 
 type Credential = { readonly username: string; readonly password: string };

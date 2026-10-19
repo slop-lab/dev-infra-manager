@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   readNativeProposalRefs
-} from "../../../../core/packages/native-git/src/native-proposal-reconciler.js";
+} from "../../../../plugin-control-plane-native-git/src/native-proposal-reconciler.js";
 import { candidateContext } from "./authoritativeNativeCandidateFixture.js";
 import {
   cleanupFinalizeFixtures,

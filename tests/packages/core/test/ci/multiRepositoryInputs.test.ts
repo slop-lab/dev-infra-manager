@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from "../../../../../core/packages/managed/src/ci/candidate.js";
 import { withNativeGitExecutionReadAuthority } from "../../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
-import { executionGrantSchema, executionDescriptorSchema, executionDescriptorDigest } from "../../../../../core/packages/native-git/src/execution-protocol.js";
+import { executionGrantSchema, executionDescriptorSchema, executionDescriptorDigest } from "../../../../../plugin-control-plane-native-git/src/execution-protocol.js";
 import { assignment, grant, hash } from "./executionFixture.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

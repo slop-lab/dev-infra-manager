@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { UserError } from "@slop-lab/dim-core";
-import { executionDescriptorSchema, executionDescriptorDigest, type ExecutionDescriptor } from "@slop-lab/dim-native-git/execution";
+import { executionDescriptorSchema, executionDescriptorDigest, type ExecutionDescriptor } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 
 export type NativeCandidateBlob = {
   readonly objectId: string;

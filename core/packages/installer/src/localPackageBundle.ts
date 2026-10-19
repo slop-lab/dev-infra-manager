@@ -20,6 +20,21 @@ export async function readLocalPackageBundle(
   directory: string,
   selectedPackages: readonly string[] = []
 ): Promise<LocalPackageBundle> {
+  return readArtifactClosure(directory, ["@slop-lab/dim-cli", "@slop-lab/dim-core", ...selectedPackages], "@slop-lab/dim-cli");
+}
+
+export async function readControlPlanePackageBundle(directory: string, selectedSpecifiers: readonly string[]): Promise<LocalPackageBundle> {
+  const versions = new Map<string, string>();
+  for (const specifier of selectedSpecifiers) {
+    const separator = specifier.lastIndexOf("@"), name = specifier.slice(0, separator), version = specifier.slice(separator + 1);
+    if (separator <= 0 || !packageName.test(name) || !exactVersion.test(version)) throw new Error("--local-packages requires exact PACKAGE@VERSION plugin selections");
+    if (versions.has(name)) throw new Error(`duplicate selected plugin '${name}'`);
+    versions.set(name, version);
+  }
+  return readArtifactClosure(directory, ["@slop-lab/dim-control-plane", ...versions.keys()], "@slop-lab/dim-control-plane", versions);
+}
+
+async function readArtifactClosure(directory: string, roots: readonly string[], runtime: string, expectedVersions: ReadonlyMap<string, string> = new Map()): Promise<LocalPackageBundle> {
   const bundleDirectory = path.resolve(directory);
   const manifestPath = path.join(bundleDirectory, "packages.json");
   const raw: unknown = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -42,6 +57,9 @@ export async function readLocalPackageBundle(
     packages.set(entry.name, { name: entry.name, version: entry.version, file: entry.file,
       requires: entry.requires as Readonly<Record<string, string>> });
   }
+  for (const [name, version] of expectedVersions) {
+    if (packages.get(name)?.version !== version) throw new Error(`local bundle does not match selected plugin '${name}@${version}'`);
+  }
   const selected = new Set<string>();
   const include = (name: string): void => {
     if (name === "@slop-lab/dim-installer") throw new Error("the installer facade cannot be selected as a runtime dependency");
@@ -58,11 +76,14 @@ export async function readLocalPackageBundle(
       include(dependency);
     }
   };
-  for (const name of ["@slop-lab/dim-cli", "@slop-lab/dim-core", ...selectedPackages]) include(name);
+  for (const name of roots) include(name);
+  if (runtime === "@slop-lab/dim-control-plane" && ["@slop-lab/dim-cli", "@slop-lab/dim-core", "@slop-lab/dim-managed"].some((name) => selected.has(name))) {
+    throw new Error("control-plane bundle closure must not include host CLI, core or managed packages");
+  }
   const entries = [...packages.values()].filter(({ name }) => selected.has(name));
   const specifiers = entries.map(({ file }) => path.join(bundleDirectory, file));
   await Promise.all(specifiers.map((file) => access(file, constants.R_OK)));
-  return { version: packages.get("@slop-lab/dim-cli")!.version,
+  return { version: packages.get(runtime)!.version,
     packageSpecifiers: specifiers, packageNames: entries.map(({ name }) => name) };
 }
 

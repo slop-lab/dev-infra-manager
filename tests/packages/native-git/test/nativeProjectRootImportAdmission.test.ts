@@ -1,12 +1,12 @@
-import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { request as httpRequest } from "node:http";
 import { watch, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
-import { configuredNativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
+import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
+import { configuredNativeGitBundleServer } from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
 
 const generationId = "a".repeat(64);

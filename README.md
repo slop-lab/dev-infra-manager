@@ -124,6 +124,7 @@ The installer facade retains its namespace:
 
 ```bash
 dim installer install plugin PACKAGE@EXACT_VERSION
+dim installer install control-plane plugin PACKAGE@EXACT_VERSION
 dim installer install control-plane --config /absolute/operator/install.json
 ```
 
@@ -137,6 +138,13 @@ installer configuration remains available. The operations and review web service
 is a separate optional package with explicit account roles. DIM does not embed
 an issue tracker.
 
+Control-plane plugins run in the standalone
+[`@slop-lab/dim-control-plane`](core/packages/control-plane/README.md) runtime.
+Native Git, the CI workflow compiler and the LLM router have explicit
+`dim-plugin-control-plane-*` package names. They install in a separate tree
+without `dim-core`, the workspace CLI or managed host integration. See
+[plugin locations and installation](specification/docs/plugin-scopes.md).
+
 ## Optional workspace plugins
 
 Install only the integrations needed on the selected host. `dim plugins` lists
@@ -148,7 +156,7 @@ the base CLI.
 | [agent-tools](plugin-agent-tools/README.md) | Codex/OpenCode setup, launch, session continuation and OpenCode server |
 | [cache-server](plugin-cache-server/README.md) | Optional host-owned Docker, npm, PyPI and APT cache services |
 | [host-mirrors](plugin-host-mirrors/README.md) | Workspace clients for local or remote package caches |
-| [llm-router](plugin-llm-router/README.md) | Scoped model access, host-side provider credentials, quotas and usage |
+| [host-llm-router](plugin-host-llm-router/README.md) | Workspace identity fencing, private gateway and OpenCode connection to a control-plane router |
 | [vm](plugin-vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped browser consoles |
 | [tunnels](plugin-tunnels/README.md) | Persistent TCP/UDP routes, workspace grants and operator web UI |
 | [workspace-check](plugin-workspace-check/README.md) | Disposable lifecycle/data-preservation checks for ordinary repositories |

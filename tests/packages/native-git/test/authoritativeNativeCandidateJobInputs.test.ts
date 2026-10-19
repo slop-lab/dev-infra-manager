@@ -1,4 +1,4 @@
-import { candidateArgv } from "@slop-lab/dim-plugin-ci-workflows";
+import { candidateArgv } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { createHash } from "node:crypto";
 import { chmod, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CandidateExecutionError,
   loadAuthoritativeNativeCandidateJobInputs
-} from "../../../../core/packages/native-git/src/index.js";
+} from "../../../../plugin-control-plane-native-git/src/index.js";
 import {
   authoritativePolicy,
   candidateContext,

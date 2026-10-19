@@ -7,7 +7,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 
 COPY core/packages/core/dist ./node_modules/@slop-lab/dim-core
-COPY core/packages/native-git/dist ./node_modules/@slop-lab/dim-native-git
+COPY plugin-control-plane-native-git/dist ./node_modules/@slop-lab/dim-plugin-control-plane-native-git
 COPY core/packages/managed/dist/ci ./ci
 COPY core/packages/managed/dist/nativeGitAdmissionHttpClient.js \
   core/packages/managed/dist/nativeOrdinaryServiceCli.js \

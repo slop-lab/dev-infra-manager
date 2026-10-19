@@ -32,6 +32,7 @@ Object.assign(env, {
 });
 const facade = path.join(scratch, "facade/node_modules/.bin/dim");
 const runtime = path.join(scratch, "data/dim/runtime/current");
+const controlPlaneRuntime = path.join(scratch, "data/dim/control-plane/runtime/current");
 const dependencies = () => object(object(parseJson(readFileSync(path.join(runtime, "package.json"), "utf8"))).dependencies);
 const plugins = () => {
   const selected = object(parseJson(readFileSync(path.join(runtime, "plugins.json"), "utf8"))).plugins;
@@ -47,6 +48,29 @@ function run(file, args, allowFailure = false) {
 try {
   run("npm", ["install", "--prefix", path.join(scratch, "facade"), "--no-save", "--no-audit", "--no-fund",
     artifact("@slop-lab/dim-installer")]);
+  const controlPlanePlugins = ["@slop-lab/dim-plugin-control-plane-native-git",
+    "@slop-lab/dim-plugin-control-plane-ci-workflows", "@slop-lab/dim-plugin-control-plane-llm-router"];
+  run(facade, ["installer", "install", "control-plane", "plugin", "--local-packages", bundle,
+    ...controlPlanePlugins.map((name) => `${name}@${packages.find((entry) => entry.name === name)?.version}`)]);
+  assert.equal(existsSync(runtime), false, "control-plane plugins must not install a host runtime");
+  assert.deepEqual(object(parseJson(readFileSync(path.join(controlPlaneRuntime, "plugins.json"), "utf8"))).plugins,
+    [...controlPlanePlugins].sort());
+  for (const name of ["@slop-lab/dim-core", "@slop-lab/dim-cli", "@slop-lab/dim-managed"]) {
+    assert.equal(existsSync(path.join(controlPlaneRuntime, "node_modules", name)), false);
+  }
+  run(process.execPath, ["--input-type=module", "--eval", `
+    import {createRequire} from 'node:module'; import {pathToFileURL} from 'node:url';
+    const require = createRequire(${JSON.stringify(path.join(controlPlaneRuntime, "package.json"))});
+    const load = async name => import(pathToFileURL(require.resolve(name)).href);
+    const {startControlPlanePlugins} = await load('@slop-lab/dim-control-plane');
+    const {controlPlanePlugin} = await load('@slop-lab/dim-plugin-control-plane-ci-workflows');
+    const prepared = await controlPlanePlugin.configure({});
+    const jobs = prepared.workflowCompiler.compile(Buffer.from('jobs:\\n  source: {script: check.bash}\\n'));
+    if (jobs[0]?.name !== 'source') throw new Error('installed workflow compiler did not compile');
+    const running = await startControlPlanePlugins([{plugin:controlPlanePlugin,config:{}}],new AbortController().signal);
+    await running.close();
+  `]);
+  console.log("control-plane artifacts: native Git, workflows and router install without core, CLI or managed");
   const install = ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"];
   run(facade, install);
   assert.deepEqual(Object.keys(dependencies()).sort(), ["@slop-lab/dim-cli", "@slop-lab/dim-core"]);
@@ -59,7 +83,8 @@ try {
 
   run(facade, [...install, "--with-managed"]);
   assert.deepEqual(Object.keys(dependencies()).sort(), ["@slop-lab/dim-cli", "@slop-lab/dim-core",
-    "@slop-lab/dim-managed", "@slop-lab/dim-native-git", "@slop-lab/dim-plugin-ci-workflows"]);
+    "@slop-lab/dim-control-plane", "@slop-lab/dim-managed",
+    "@slop-lab/dim-plugin-control-plane-ci-workflows", "@slop-lab/dim-plugin-control-plane-native-git"].sort());
   assert.deepEqual(plugins(), []);
   run(facade, ["managed", "--help"]);
   for (const name of Object.keys(dependencies())) {

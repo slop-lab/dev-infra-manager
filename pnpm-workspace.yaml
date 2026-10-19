@@ -1,17 +1,19 @@
 packages:
   - core/packages/core
+  - core/packages/control-plane
   - core/packages/managed
   - core/packages/cli
   - core/packages/installer
-  - core/packages/native-git
+  - plugin-control-plane-native-git
   - core/packages/web
   - core/packages/contracts/*
   - plugin-dns-cloudflare
   - plugin-external-urls
-  - plugin-ci-workflows
+  - plugin-control-plane-ci-workflows
   - plugin-host-mirrors
   - plugin-cache-server
-  - plugin-llm-router
+  - plugin-host-llm-router
+  - plugin-control-plane-llm-router
   - plugin-vm
   - plugin-workspace-check
   - plugin-agent-tools

@@ -11,8 +11,9 @@ RUN apt-get update \
   && test "$(git --version)" = "git version 2.39.5" \
   && rm -rf /var/lib/apt/lists/*
 
-COPY core/packages/native-git/dist ./node_modules/@slop-lab/dim-native-git
-COPY plugin-ci-workflows/dist ./node_modules/@slop-lab/dim-plugin-ci-workflows
+COPY core/packages/control-plane/dist ./node_modules/@slop-lab/dim-control-plane
+COPY plugin-control-plane-native-git/dist ./node_modules/@slop-lab/dim-plugin-control-plane-native-git
+COPY plugin-control-plane-ci-workflows/dist ./node_modules/@slop-lab/dim-plugin-control-plane-ci-workflows
 COPY core/packages/managed/dist/nativeGitServiceCli.js core/packages/managed/dist/controlPlaneServicePair.js ./
 COPY core/packages/managed/dist/ci/config.js ./ci/config.js
 COPY core/images/native-git/dim-service /usr/local/bin/dim-service

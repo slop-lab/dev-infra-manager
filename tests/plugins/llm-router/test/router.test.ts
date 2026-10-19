@@ -1,15 +1,15 @@
+import { DatabaseSync } from "node:sqlite";
 import { spawn } from "node:child_process";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
-import { createRouter } from "../../../../plugin-llm-router/src/server.js";
-import { parseConfig, parsePolicy, defaultLimits, backendProfile, type RouterConfig } from "../../../../plugin-llm-router/src/config.js";
-import { RouterLedger } from "../../../../plugin-llm-router/src/ledger.js";
-import { backupRouter, restoreRouter, accountHealth, effectivePolicy } from "../../../../plugin-llm-router/src/operator.js";
-import { captureBody, captureManifest, exportCapture, removeCapture } from "../../../../plugin-llm-router/src/archive.js";
+import { createRouter } from "../../../../plugin-control-plane-llm-router/src/server.js";
+import { parseConfig, parsePolicy, defaultLimits, backendProfile, type RouterConfig } from "../../../../plugin-control-plane-llm-router/src/config.js";
+import { RouterLedger } from "../../../../plugin-control-plane-llm-router/src/ledger.js";
+import { backupRouter, restoreRouter, accountHealth, effectivePolicy } from "../../../../plugin-control-plane-llm-router/src/operator.js";
+import { captureBody, captureManifest, exportCapture, removeCapture } from "../../../../plugin-control-plane-llm-router/src/archive.js";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
 
 type Backend = (request: IncomingMessage, response: ServerResponse) => void;
@@ -25,10 +25,10 @@ async function fixture(backend: Backend, overrides: Partial<RouterConfig["limits
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   const upstream = createServer(backend); const endpoint = await listen(upstream);
   cleanup.push(async () => { upstream.closeAllConnections(); await new Promise<void>((resolve) => upstream.close(() => resolve())); });
-  const store = new WorkspaceStore(join(root, "workspaces")); const workspace = workspaceRecord(); await store.write(workspace);
+  const workspace = workspaceRecord();
   const keyFile = join(root, "upstream.key"), upstreamKey = "private-provider-access-key";
   await writeFile(keyFile, upstreamKey, { mode: 0o600 });
-  const config = parseConfig({ schemaVersion: 2, backend: backendProfile, accounts: [{id:"default", reference:"operator-exclusive-account", endpoint, keyFile}], stateDirectory: join(root, "router"), workspaceStateRoot: store.root,
+  const config = parseConfig({ schemaVersion: 3, hostIssuers: [], backend: backendProfile, accounts: [{id:"default", reference:"operator-exclusive-account", endpoint, keyFile}], stateDirectory: join(root, "router"),
     listen: { host: "127.0.0.1", port: 8318 }, routes: [{ id: "default", accountId: "default", models: [
       { id: "reviewed-model", name: "Reviewed model", api: "responses", context: 10000, output: 1000 }] }], limits: { ...defaultLimits, ...overrides } });
   const router = await createRouter(config); const origin = await listen(router.server);
@@ -38,7 +38,7 @@ async function fixture(backend: Backend, overrides: Partial<RouterConfig["limits
   const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
   const request = (extra: object = {}, selectedHeaders: Record<string, string> = headers) => fetch(`${origin}/v1/responses`, { method: "POST", headers: selectedHeaders,
     body: JSON.stringify({ model: "reviewed-model", input: [{ role: "user", content: "hello" }], ...extra }) });
-  return { root, router, config, store, workspace, origin, request, headers, upstreamKey, token };
+  return { root, router, config, workspace, origin, request, headers, upstreamKey, token };
 }
 function completed(response: ServerResponse) { response.writeHead(200, { "content-type": "application/json" });
   response.end(JSON.stringify({ object: "response", status: "completed", model: "reviewed-model", output: [], usage: { input_tokens: 7, output_tokens: 3 } })); }
@@ -59,7 +59,7 @@ it("replaces caller credentials, captures exact bodies and attributes observed u
   const usage = await fetch(`${fx.origin}/v1/usage`, { headers: fx.headers });
   expect(await usage.json()).toMatchObject({ projectId: fx.workspace.id, requests: 1, knownInputTokens: 7, knownOutputTokens: 3, unknownUsageRequests: 0 });
   expect(bytes.toString()).not.toContain(fx.upstreamKey);
-  const foreign = workspaceRecord("other-workspace"); await fx.store.write(foreign);
+  const foreign = workspaceRecord("other-workspace");
   fx.router.ledger.createProject(foreign.id, {allowedRoutes:["default"],limits:defaultLimits,captureMode:"required",tokenMode:"observe"});
   const token = fx.router.ledger.issue(foreign, "default", foreign.id);
   expect(await (await fetch(`${fx.origin}/v1/usage`, { headers: { authorization: `Bearer ${token}` } })).json()).toMatchObject({ requests: 0 });
@@ -89,7 +89,7 @@ it("rejects cross-workspace selectors, unreviewed models and stateful provider a
   expect((await fx.request({ account_id: "foreign" })).status).toBe(400);
   expect((await fetch(`${fx.origin}/v1/responses/foreign`, { headers: fx.headers })).status).toBe(404);
   expect(calls).toBe(0);
-  await fx.store.write({ ...fx.workspace, id: "a".repeat(8) + "-bbbb-cccc-dddd-" + "e".repeat(12) });
+  fx.router.ledger.revoke(fx.workspace.id);
   expect((await fx.request()).status).toBe(401);
 });
 it("cancels upstream on client disconnect and retains an incomplete durable capture with unknown usage", async () => {
@@ -107,13 +107,13 @@ it("cancels upstream on client disconnect and retains an incomplete durable capt
   expect(row.capture_complete).toBe(0);
   expect((await readdir(join(fx.config.stateDirectory, "captures"))).length).toBe(1);
 });
-it("keeps usage across grant rotation and revokes discarded workspace access", async () => {
+it("keeps usage across grant rotation and denies revoked principals", async () => {
   const fx = await fixture((_request, response) => completed(response));
   await (await fx.request()).text();
   fx.router.ledger.issue(fx.workspace, "default", fx.workspace.id); expect((await fx.request()).status).toBe(401);
   expect(fx.router.ledger.usage(fx.workspace.id)).toMatchObject({ requests: 1 });
   const token = fx.router.ledger.issue(fx.workspace, "default", fx.workspace.id);
-  await fx.store.write({ ...fx.workspace, phase: "discarding" });
+  fx.router.ledger.revoke(fx.workspace.id);
   expect((await fx.request({}, { ...fx.headers, authorization: `Bearer ${token}` })).status).toBe(401);
 });
 it("treats interrupted dispatch as uncertain on restart and does not let administrative readers recover a live request", async () => {
@@ -137,7 +137,7 @@ it("rejects a response larger than the archive allowance without recording a com
 
 it("shares a stable project allowance across principals and credential rotation without accepting claimed ownership", async () => {
   const fx = await fixture((_request, response) => completed(response), { requestsPerUtcDay: 2 });
-  const second = workspaceRecord("second-instance"); await fx.store.write(second);
+  const second = workspaceRecord("second-instance");
   const token2 = fx.router.ledger.issue(second, "default", fx.workspace.id, "second-principal");
   await (await fx.request()).text();
   const rotated = fx.router.ledger.issue(fx.workspace, "default", fx.workspace.id);
@@ -189,7 +189,7 @@ it("captures token-like text, tool/multimodal/unknown fields exactly and serves 
   const download = await fetch(`${fx.origin}/v1/requests/${id}/request`, { headers: fx.headers });
   expect(download.headers.get("content-type")).toBe("application/octet-stream"); expect(download.headers.get("content-disposition")).toContain("attachment"); expect(Buffer.from(await download.arrayBuffer())).toEqual(original);
   expect(captureManifest(fx.router.ledger, id)).toMatchObject({ capture: { boundary: "client application protocol bodies", upstreamTranslatedPayloads: "not observed", remoteReferences: "referenced bytes not fetched", complete: true } });
-  const foreign = workspaceRecord("foreign"); await fx.store.write(foreign); fx.router.ledger.createProject("foreign-app", { allowedRoutes: ["default"], limits: defaultLimits, captureMode: "required", tokenMode: "observe" });
+  const foreign = workspaceRecord("foreign"); fx.router.ledger.createProject("foreign-app", { allowedRoutes: ["default"], limits: defaultLimits, captureMode: "required", tokenMode: "observe" });
   const token = fx.router.ledger.issue(foreign, "default", "foreign-app");
   expect((await fetch(`${fx.origin}/v1/requests/${id}/capture`, { headers: { authorization: `Bearer ${token}` } })).status).toBe(404);
   const destination = join(fx.root, "export"); await exportCapture(fx.router.ledger, id, destination);
@@ -250,8 +250,8 @@ it("backs up private credentials, ledger, captures and unresolved reservations w
   await fx.router.close();
   await expect(backupRouter(fx.config, snapshot)).rejects.toThrow(/stop configured backend credential writers/);
   await backupRouter(fx.config, snapshot, { backendStateQuiesced: true });
-  const file = await restoreRouter(snapshot, join(fx.root, "restored"), fx.store.root);
-  const restoredConfig = await (await import("../../../../plugin-llm-router/src/config.js")).loadConfig(file);
+  const file = await restoreRouter(snapshot, join(fx.root, "restored"));
+  const restoredConfig = await (await import("../../../../plugin-control-plane-llm-router/src/config.js")).loadConfig(file);
   expect(await readFile(join(restoredConfig.accounts[0]!.credentialDirectory!, "account.json"), "utf8")).toContain("inert-test-token");
   const restored = await createRouter(restoredConfig); cleanup.push(() => restored.close()); const origin = await listen(restored.server);
   expect(restored.ledger.request(id)).toMatchObject({ execution: "outcome_unknown", occupied: 1, accounting: "reconciliation_required" });
@@ -259,7 +259,7 @@ it("backs up private credentials, ledger, captures and unresolved reservations w
   expect(calls).toBe(1);
   expect((await fetch(`${origin}/v1/usage`, { headers: fx.headers })).status).toBe(200); expect(calls).toBe(1);
   await writeFile(join(snapshot, "accounts/default/access.key"), "tampered", { mode: 0o600 });
-  await expect(restoreRouter(snapshot, join(fx.root, "tampered-restore"), fx.store.root)).rejects.toThrow(/integrity/);
+  await expect(restoreRouter(snapshot, join(fx.root, "tampered-restore"))).rejects.toThrow(/integrity/);
 });
 
 it("reports backend authentication health without making inference or claiming provider quota", async () => {
@@ -278,7 +278,7 @@ it("keeps concurrent account routes isolated and an expired backend account does
   const endpoint = await listen(backend); cleanup.push(async () => { backend.closeAllConnections(); await new Promise<void>((resolve) => backend.close(() => resolve())); });
   fx.config.accounts.push({ id: "second", reference: "second-exclusive-account", endpoint, keyFile: secondKey });
   fx.config.routes.push({ id: "second", accountId: "second", models: fx.config.routes[0]!.models });
-  const workspace = workspaceRecord("second-account-workspace"); await fx.store.write(workspace);
+  const workspace = workspaceRecord("second-account-workspace");
   fx.router.ledger.createProject("second-app", { allowedRoutes: ["second"], limits: defaultLimits, captureMode: "required", tokenMode: "observe" });
   const token = fx.router.ledger.issue(workspace, "second", "second-app");
   const [expired, healthy] = await Promise.all([fx.request(), fx.request({}, { ...fx.headers, authorization: `Bearer ${token}` })]);
@@ -310,8 +310,8 @@ it("recovers a real killed router process without replaying or freeing ambiguous
   await fx.router.close();
   const configuration = join(fx.root, "router.json"); await writeFile(configuration, JSON.stringify(fx.config), { mode: 0o600 });
   const child = spawn(process.execPath, ["--input-type=module", "-e", `
-    const {loadConfig}=await import(${JSON.stringify(new URL("../../../../plugin-llm-router/dist/config.js", import.meta.url).href)});
-    const {createRouter}=await import(${JSON.stringify(new URL("../../../../plugin-llm-router/dist/server.js", import.meta.url).href)});
+    const {loadConfig}=await import(${JSON.stringify(new URL("../../../../plugin-control-plane-llm-router/dist/config.js", import.meta.url).href)});
+    const {createRouter}=await import(${JSON.stringify(new URL("../../../../plugin-control-plane-llm-router/dist/server.js", import.meta.url).href)});
     const router=await createRouter(await loadConfig(process.argv[1]));router.server.listen(0,'127.0.0.1',()=>console.log(router.server.address().port));
   `, configuration], { stdio: ["ignore", "pipe", "pipe"] });
   let diagnostic = ""; child.stderr.setEncoding("utf8").on("data", (chunk: string) => { diagnostic += chunk; });
@@ -427,4 +427,19 @@ it.each([
     // Each operator/client invocation dispatches once. A terminal failure is not retried.
     expect(calls).toBe(request);
   }
+});
+
+it("rejects an old combined-router ledger without accepting its guest-visible principal or changing its bytes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-llm-old-ledger-")); cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const ledger = new RouterLedger(root), workspace = workspaceRecord();
+  ledger.createProject("application", { allowedRoutes: ["default"], limits: defaultLimits, captureMode: "required", tokenMode: "observe" });
+  const guestVisibleToken = ledger.issue(workspace, "default", "application");
+  expect(ledger.authenticate(guestVisibleToken)?.workspaceId).toBe(workspace.id); ledger.close();
+  // The old combined-router format used this same principal table, but delivered
+  // these bearer tokens to guests. They must never become CP-only credentials.
+  const file = join(root, "router.sqlite3"), old = new DatabaseSync(file);
+  old.exec("PRAGMA user_version=2"); old.close();
+  const before = await readFile(file);
+  expect(() => new RouterLedger(root)).toThrow(/unsupported router state/);
+  expect(await readFile(file)).toEqual(before);
 });

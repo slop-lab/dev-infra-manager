@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "pnpm --filter @slop-lab/dim-core... --filter @slop-lab/dim-managed... --filter @slop-lab/dim-cli... --filter @slop-lab/dim-installer... --filter @slop-lab/dim-native-git... --filter @slop-lab/dim-web... --filter @slop-lab/dim-contracts-external-url... run check",
-    "build": "pnpm --filter @slop-lab/dim-core... --filter @slop-lab/dim-managed... --filter @slop-lab/dim-cli... --filter @slop-lab/dim-installer... --filter @slop-lab/dim-native-git... --filter @slop-lab/dim-web... --filter @slop-lab/dim-contracts-external-url... run build",
+    "check": "pnpm --filter @slop-lab/dim-core... --filter @slop-lab/dim-managed... --filter @slop-lab/dim-cli... --filter @slop-lab/dim-installer... --filter @slop-lab/dim-plugin-control-plane-native-git... --filter @slop-lab/dim-web... --filter @slop-lab/dim-contracts-external-url... run check",
+    "build": "pnpm --filter @slop-lab/dim-core... --filter @slop-lab/dim-managed... --filter @slop-lab/dim-cli... --filter @slop-lab/dim-installer... --filter @slop-lab/dim-plugin-control-plane-native-git... --filter @slop-lab/dim-web... --filter @slop-lab/dim-contracts-external-url... run build",
     "verify": "pnpm run check && pnpm run build"
   },
   "engines": {

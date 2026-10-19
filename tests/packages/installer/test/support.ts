@@ -100,7 +100,7 @@ export async function writeFakePluginNpm(
   options: { argsFile: string; skipNames?: string[]; exitCode?: number }
 ): Promise<void> {
   const content = `#!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 const args = process.argv.slice(2);
@@ -129,6 +129,10 @@ for (const specifier of specifiers) {
   }
   if (skip.has(name)) continue;
   pkg.dependencies[name] = version;
+  const directory = path.join(process.cwd(), "node_modules", name);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version, type: "module", main: "index.js" }));
+  writeFileSync(path.join(directory, "index.js"), "export const hostPlugin = { name: 'fixture' };\\n");
 }
 writeFileSync(pkgPath, \`\${JSON.stringify(pkg, null, 2)}\\n\`);
 process.exit(${options.exitCode ?? 0});

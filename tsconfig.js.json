@@ -25,26 +25,26 @@
       "@slop-lab/dim-managed/cli": [
         "core/packages/managed/src/cli/managed-cli.ts"
       ],
-      "@slop-lab/dim-plugin-ci-workflows": [
-        "plugin-ci-workflows/src/index.ts"
+      "@slop-lab/dim-plugin-control-plane-ci-workflows": [
+        "plugin-control-plane-ci-workflows/src/index.ts"
       ],
-      "@slop-lab/dim-native-git/config": [
-        "core/packages/native-git/src/bundle-config.ts"
+      "@slop-lab/dim-plugin-control-plane-native-git/config": [
+        "plugin-control-plane-native-git/src/bundle-config.ts"
       ],
-      "@slop-lab/dim-native-git/service": [
-        "core/packages/native-git/src/service.ts"
+      "@slop-lab/dim-plugin-control-plane-native-git/service": [
+        "plugin-control-plane-native-git/src/service.ts"
       ],
-      "@slop-lab/dim-native-git/workflow": [
-        "core/packages/native-git/src/workflowCompiler.ts"
+      "@slop-lab/dim-plugin-control-plane-native-git/workflow": [
+        "plugin-control-plane-native-git/src/workflowCompiler.ts"
       ],
-      "@slop-lab/dim-native-git/execution": [
-        "core/packages/native-git/src/execution-protocol.ts"
+      "@slop-lab/dim-plugin-control-plane-native-git/execution": [
+        "plugin-control-plane-native-git/src/execution-protocol.ts"
       ],
       "@slop-lab/dim-plugin-vm": [
         "plugin-vm/src/index.ts"
       ],
-      "@slop-lab/dim-plugin-llm-router": [
-        "plugin-llm-router/src/index.ts"
+      "@slop-lab/dim-plugin-host-llm-router": [
+        "plugin-host-llm-router/src/index.ts"
       ],
       "@slop-lab/dim-plugin-workspace-check": [
         "plugin-workspace-check/src/index.ts"
@@ -54,6 +54,15 @@
       ],
       "@slop-lab/dim-plugin-tunnels": [
         "plugin-tunnels/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane": [
+        "core/packages/control-plane/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane/plugin": [
+        "core/packages/control-plane/src/plugin.ts"
+      ],
+      "@slop-lab/dim-control-plane/lock": [
+        "core/packages/control-plane/src/lock.ts"
       ]
     },
     "typeRoots": [

@@ -4,7 +4,7 @@ import { chmodSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
-import { executionEventSchema, executionGrantSchema } from "@slop-lab/dim-native-git/execution";
+import { executionEventSchema, executionGrantSchema } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import { executionResultSchema, parseExecution, ExecutionConflictError, type Execution, type ExecutionAssignment, type ExecutionEvent,
   type ExecutionGrant, type ExecutionResult, type WorkerSlot } from "./execution.js";
 

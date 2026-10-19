@@ -1,6 +1,6 @@
 # Managed Git transport and review
 
-`@slop-lab/dim-native-git` owns registered bare repositories, scoped smart-HTTP
+`@slop-lab/dim-plugin-control-plane-native-git` owns registered bare repositories, scoped smart-HTTP
 reads/proposals, exact candidate evidence, human decisions and atomic protected
 promotion. It does not implement issue tracking, runtime orchestration, worker
 capacity or workflow language interpretation.

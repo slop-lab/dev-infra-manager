@@ -1,4 +1,4 @@
-import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -7,11 +7,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
+import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
 import {
   configuredNativeGitBundleServer,
   type NativeGitBundleServer
-} from "../../../../core/packages/native-git/src/native-bundle-server.js";
+} from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
 import { refValue } from "../../../support/gitHelpers.js";
 

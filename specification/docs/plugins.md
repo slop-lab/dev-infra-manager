@@ -3,7 +3,7 @@
 Ordinary Git workspaces, local/SSH host selection, shell execution and loopback
 forwarding run without plugins or a control plane. Optional managed services
 compose extensions for their own responsibilities. Workflow syntax belongs to
-`@slop-lab/dim-plugin-ci-workflows`; Git authority and CI runtimes consume its
+`@slop-lab/dim-plugin-control-plane-ci-workflows`; Git authority and CI runtimes consume its
 compiled job plans through an explicit compiler interface.
 
 The optional controller plugin host belongs to `@slop-lab/dim-managed`. It owns

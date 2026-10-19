@@ -32,6 +32,10 @@ export function defaultPluginHome(env: NodeJS.ProcessEnv = process.env): string 
   return path.resolve(env.DIM_PLUGIN_HOME ?? path.join(defaultDataHome(env), "runtime", "current"));
 }
 
+export function defaultControlPlanePluginHome(env: NodeJS.ProcessEnv = process.env): string {
+  return path.resolve(env.DIM_CONTROL_PLANE_PLUGIN_HOME ?? path.join(defaultDataHome(env), "control-plane", "runtime", "current"));
+}
+
 export function defaultInstallPrefix(env: NodeJS.ProcessEnv = process.env): string {
   return path.resolve(env.DIM_INSTALL_PREFIX ?? path.join(env.HOME ?? os.homedir(), ".local"));
 }

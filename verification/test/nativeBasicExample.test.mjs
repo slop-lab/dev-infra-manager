@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "vitest";
 import { compileNativeRepositoryBootstrapPolicy } from "../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
-import { dimWorkflowCompiler } from "../../plugin-ci-workflows/src/index.js";
+import { dimWorkflowCompiler } from "../../plugin-control-plane-ci-workflows/src/index.js";
 
 const root = resolve(import.meta.dirname, "../../examples/projects/native-basic-root");
 

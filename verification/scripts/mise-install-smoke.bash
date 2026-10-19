@@ -39,8 +39,9 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
-pnpm --dir core/packages/native-git/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir plugin-ci-workflows/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir core/packages/control-plane/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir plugin-control-plane-native-git/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir plugin-control-plane-ci-workflows/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/managed/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/core/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
@@ -82,8 +83,9 @@ dim_start_local_npm_registry /work
 echo "[container] publish local tarballs to the local registry"
 dim_publish_to_local_registry \
   /work/*dim-managed*.tgz \
-  /work/*dim-native-git*.tgz \
-  /work/*plugin-ci-workflows*.tgz \
+  /work/*dim-control-plane-*.tgz \
+  /work/*dim-plugin-control-plane-native-git*.tgz \
+  /work/*plugin-control-plane-ci-workflows*.tgz \
   /work/*dim-core*.tgz \
   /work/*dim-contracts-external-url*.tgz \
   /work/*plugin-dns-cloudflare*.tgz \

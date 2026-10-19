@@ -9,7 +9,7 @@ that shared source identity. There is no required sibling checkout.
 | `core/packages/core` | Base workspace application, state, runtime/source primitives |
 | `core/packages/cli` | Commands, presentation, host contexts and SSH transport |
 | `core/packages/managed` | Optional Project/source attachment, controller and execution composition |
-| `core/packages/native-git` | Optional repository, proposal, review and protected-ref authority |
+| `plugin-control-plane-native-git` | Optional repository, proposal, review and protected-ref authority |
 | `core/packages/installer` | Exact component installation, activation and recovery behind the facade |
 | `plugin-*/` | Explicitly selected integrations and workflow language |
 | `tests/` | Centralized behavior tests and fixtures |

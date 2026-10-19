@@ -5,6 +5,7 @@ export {
   defaultDataHome,
   defaultInstallPrefix,
   defaultPluginHome,
+  defaultControlPlanePluginHome,
   defaultUserConfigPath,
   readUserConfig,
   type DimCliConfig,
@@ -14,7 +15,6 @@ export {
   installDimCli,
   installManagedSymlink,
   queryCliVersion,
-  readLocalPackageBundle,
   validateConfiguredCli,
   type CliInstallOptions,
   type InstalledCli,
@@ -26,6 +26,7 @@ export {
   packageNameFromSpecifier,
   removePlugins,
   setPluginsEnabled,
+  type PluginTarget,
   type InstallOptions
 } from "./pluginInstall.js";
 export {
@@ -106,3 +107,5 @@ export {
   type ControlPlaneInstalledState,
   type ControlPlaneStaging
 } from "./controlPlaneState.js";
+
+export { readLocalPackageBundle, readControlPlanePackageBundle } from "./localPackageBundle.js";

@@ -1,6 +1,6 @@
-import { readNativeCandidateJobInputsFromGit } from "../../../../core/packages/native-git/src/native-candidate-job-inputs.js";
-import { candidateArgv } from "@slop-lab/dim-plugin-ci-workflows";
-import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-ci-workflows";
+import { readNativeCandidateJobInputsFromGit } from "../../../../plugin-control-plane-native-git/src/native-candidate-job-inputs.js";
+import { candidateArgv } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
+import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { git } from "../../../support/gitCommands.js";

@@ -10,9 +10,13 @@ Usage:
   dim installer install control-plane --config FILE
   dim installer recover control-plane --roll-forward --generation GENERATION
   dim installer install plugin PACKAGE@EXACT_VERSION...
+  dim installer install control-plane plugin [--local-packages DIRECTORY] PACKAGE@EXACT_VERSION...
   dim installer enable-plugin PACKAGE...
+  dim installer control-plane enable-plugin PACKAGE...
   dim installer disable-plugin PACKAGE...
+  dim installer control-plane disable-plugin PACKAGE...
   dim installer remove-plugin PACKAGE...
+  dim installer control-plane remove-plugin PACKAGE...
 
 Run 'dim installer install core --help' for installation modes.
 Source: https://github.com/slop-lab/dev-infra-manager`);
@@ -25,9 +29,13 @@ export function printInstallerHelp(): void {
   dim installer install control-plane --config FILE
   dim installer recover control-plane --roll-forward --generation GENERATION
   dim installer install plugin PACKAGE@EXACT_VERSION...
+  dim installer install control-plane plugin [--local-packages DIRECTORY] PACKAGE@EXACT_VERSION...
   dim installer enable-plugin PACKAGE...
+  dim installer control-plane enable-plugin PACKAGE...
   dim installer disable-plugin PACKAGE...
+  dim installer control-plane disable-plugin PACKAGE...
   dim installer remove-plugin PACKAGE...
+  dim installer control-plane remove-plugin PACKAGE...
 
 The installer owns the installer namespace.
 All other commands are forwarded unchanged to the installed DIM CLI.`);
@@ -54,15 +62,41 @@ Using --local-bin under mise may shadow its dim shim, bypass the installer facad
 and make mise version selection differ from the CLI that actually runs.`);
 }
 
-export function printInstallPluginHelp(): void {
-  console.log(`Usage: dim installer install plugin PACKAGE@EXACT_VERSION...
+export function printInstallPluginHelp(target: "host" | "control-plane" = "host"): void {
+  if (target === "host") {
+    console.log(`Usage: dim installer install plugin PACKAGE@EXACT_VERSION...
+
+Installs host plugins beside an installed DIM CLI. For standalone service plugins
+use 'dim installer install control-plane plugin'.
 
 Options:
   -h, --help  Show this help`);
+    return;
+  }
+  console.log(`Usage: dim installer install control-plane plugin [options] PACKAGE@EXACT_VERSION...
+
+Options:
+  --local-packages DIRECTORY  Use a reviewed packages.json artifact closure
+  -h, --help                 Show this help
+
+Control-plane-only installation needs no DIM core or CLI:
+  dim installer install control-plane plugin @slop-lab/dim-plugin-control-plane-native-git@0.10.0
+  dim installer control-plane disable-plugin @slop-lab/dim-plugin-control-plane-native-git
+  dim installer control-plane enable-plugin @slop-lab/dim-plugin-control-plane-native-git
+  dim installer control-plane remove-plugin @slop-lab/dim-plugin-control-plane-native-git
+
+Installs matching @slop-lab/dim-control-plane beside the plugins. Its executable
+is PLUGIN_HOME/node_modules/.bin/dim-control-plane. Override the private home
+with DIM_CONTROL_PLANE_PLUGIN_HOME; host DIM_PLUGIN_HOME remains independent.
+Plugin changes do not restart running control-plane services.`);
 }
 
 export function printInstallControlPlaneHelp(): void {
   console.log(`Usage: dim installer install control-plane --config FILE
+  dim installer install control-plane plugin [--local-packages DIRECTORY] PACKAGE@EXACT_VERSION...
+
+Use the plugin subcommand for a standalone Node control plane without DIM core.
+Run 'dim installer install control-plane plugin --help' for that workflow.
 
 Options:
   --config FILE  Read the control-plane installation configuration from FILE

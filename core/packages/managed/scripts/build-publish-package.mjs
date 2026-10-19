@@ -19,8 +19,9 @@ output.version = publishPackageVersion(source.version);
 output.dependencies = {
   ...source.dependencies,
   "@slop-lab/dim-core": output.version,
-  "@slop-lab/dim-native-git": output.version,
-  "@slop-lab/dim-plugin-ci-workflows": output.version
+  "@slop-lab/dim-control-plane": output.version,
+  "@slop-lab/dim-plugin-control-plane-native-git": output.version,
+  "@slop-lab/dim-plugin-control-plane-ci-workflows": output.version
 };
 
 output.types = "./index.d.ts";

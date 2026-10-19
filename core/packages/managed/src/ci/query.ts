@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { executionEventSchema } from "@slop-lab/dim-native-git/execution";
+import { executionEventSchema } from "@slop-lab/dim-plugin-control-plane-native-git/execution";
 import { executionSchema, executionResultSchema, type Execution } from "./execution.js";
 
 const event = executionEventSchema.unwrap().shape;

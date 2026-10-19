@@ -40,7 +40,7 @@ kvm_ready() {
 native_contracts() {
   cd "$repo_root"
   pnpm --filter @slop-lab/dim-core run build
-  pnpm --filter @slop-lab/dim-native-git run build
+  pnpm --filter @slop-lab/dim-plugin-control-plane-native-git run build
   pnpm --filter @slop-lab/dim-cli run build
   pnpm --dir tests exec vitest run packages/core/test/workspaceService.test.ts packages/core/test/nativeWorkspaceBroker.test.ts
   pnpm --dir verification exec vitest run test/nativeBasicExample.test.mjs test/candidateSourceWorkflow.test.ts

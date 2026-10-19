@@ -14,7 +14,7 @@ it("configuration parsing and host preparation do not load the SQLite authority 
       if (specifier === "node:sqlite") throw new Error("configuration loaded the SQLite authority runtime");
       return next(specifier, context);
     } });
-    const { parseNativeGitBundleConfig, NativeGitBundleConfigError } = await import("@slop-lab/dim-native-git/config");
+    const { parseNativeGitBundleConfig, NativeGitBundleConfigError } = await import("@slop-lab/dim-plugin-control-plane-native-git/config");
     const parsed = parseNativeGitBundleConfig(JSON.parse(process.env.DIM_TEST_CONFIG));
     let rejected = false;
     try { parseNativeGitBundleConfig({ ...parsed, schemaVersion: -1 }); }
@@ -24,7 +24,7 @@ it("configuration parsing and host preparation do not load the SQLite authority 
     await import(${JSON.stringify(cli)});
     console.log(JSON.stringify({ serviceId: parsed.serviceId, rejected }));
   `], {
-    cwd: fileURLToPath(new URL("../../../../core/packages/native-git/", import.meta.url)),
+    cwd: fileURLToPath(new URL("../../../../plugin-control-plane-native-git/", import.meta.url)),
     env: { ...process.env, DIM_TEST_CONFIG: JSON.stringify(idleNativeConfig()) }, encoding: "utf8"
   });
   expect(JSON.parse(output)).toEqual({ serviceId: "native-main", rejected: true });
