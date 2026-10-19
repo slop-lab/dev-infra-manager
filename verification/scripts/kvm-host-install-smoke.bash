@@ -145,7 +145,10 @@ terminate_exact_launch_process() {
     echo "refusing to signal QEMU service PID $service_launch_pid after its process identity changed" >&2
     return 1
   }
-  run_sudo_once /bin/kill -TERM -- "$service_launch_pid" || return 1
+  if ! run_sudo_once /bin/kill -TERM -- "$service_launch_pid"; then
+    launch_process_exited
+    return "$?"
+  fi
   for _ in $(seq 1 100); do
     process_is_live "$service_launch_pid" || return 0
     sleep 0.05
@@ -154,7 +157,26 @@ terminate_exact_launch_process() {
     echo "refusing to force-stop QEMU service PID $service_launch_pid after its process identity changed" >&2
     return 1
   }
-  run_sudo_once /bin/kill -KILL -- "$service_launch_pid"
+  if ! run_sudo_once /bin/kill -KILL -- "$service_launch_pid"; then
+    launch_process_exited
+    return "$?"
+  fi
+}
+
+# A clean service exit can race the signal after the identity check. Only a
+# missing PID or the exact launch's terminal state proves this harmless; a
+# replacement, a live process or an unreadable identity remains a failure.
+launch_process_exited() {
+  run_sudo_once /usr/bin/env -i "PATH=$runtime_path" HOME=/root "$node" --input-type=commonjs -e '
+    const fs = require("node:fs"), pid = process.argv[1], expected = process.argv[2];
+    if (!/^[1-9][0-9]*$/.test(pid) || !/^[0-9]+$/.test(expected)) process.exit(1);
+    let snapshot;
+    try { snapshot = fs.readFileSync(`/proc/${pid}/stat`, "utf8"); }
+    catch (error) { if (error.code === "ENOENT" || error.code === "ESRCH") process.exit(0); throw error; }
+    const fields = snapshot.slice(snapshot.lastIndexOf(")") + 2).trim().split(/\s+/);
+    if (fields[19] !== expected) process.exit(1);
+    process.exit(fields[0] === "Z" || fields[0] === "X" ? 0 : 1);
+  ' "$service_launch_pid" "$service_launch_start_ticks"
 }
 
 remove_service_directory() {

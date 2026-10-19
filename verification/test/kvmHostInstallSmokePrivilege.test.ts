@@ -27,6 +27,8 @@ type FixtureOptions = {
   readonly clientMode?: "normal" | "hold" | "replace-directory" | "revoke-sudo";
   readonly failSudoRefresh?: boolean;
   readonly mutateCheckoutBeforeServiceLaunch?: boolean;
+  readonly signalFailure?: "exited" | "live";
+  readonly failedSignal?: "TERM" | "KILL";
 };
 
 async function fixture(options: FixtureOptions = {}): Promise<Fixture> {
@@ -63,6 +65,17 @@ if [[ "\${1:-}" == -v ]]; then
   ${options.failSudoRefresh ? "exit 1" : "exit 0"}
 fi
 [[ ! -e ${JSON.stringify(sudoRevoked)} ]] || exit 1
+${options.signalFailure === undefined ? "" : `
+for argument in "$@"; do
+  if [[ "$argument" == retire-exact ]]; then exit 0; fi
+done
+if [[ "\${1:-}" == /bin/kill ]]; then
+  if [[ "\${2:-}" == -TERM && ${options.failedSignal === "KILL" ? "true" : "false"} == true ]]; then exit 0; fi
+  ${options.signalFailure === "exited" ? '/bin/kill -KILL -- "${@: -1}"' : ":"}
+  printf 'injected signal failure\\n' >&2
+  exit 1
+fi
+`}
 for argument in "$@"; do
   if [[ "$argument" == qemu-service && ${options.mutateCheckoutBeforeServiceLaunch ? "true" : "false"} == true ]]; then
     printf 'throw new Error("mutable checkout module executed")\n' >${JSON.stringify(resolve(projectQemu, "qemu-event-followers.mjs"))}
@@ -210,6 +223,25 @@ describe("KVM host-install smoke privilege boundary", () => {
     // Then
     expect(result, `${result.stderr}\n${result.stdout}`).toMatchObject({ status: 0 });
     expect(await readFile(fixtureValue.clientRecord, "utf8")).toContain("handoff=1000:1000:500\nhandoff-readable\n");
+  }, 25_000);
+
+  it.each(["TERM", "KILL"] as const)("accepts a %s signal race only after independently proving the exact launch exited", async (failedSignal) => {
+    const fixtureValue = await fixture({ signalFailure: "exited", failedSignal });
+    const result = run(fixtureValue);
+    expect(result, `${result.stderr}\n${result.stdout}`).toMatchObject({ status: 0 });
+    expect(result.stderr).toContain("injected signal failure");
+    await expect(lstat(fixtureValue.serviceDirectory)).rejects.toMatchObject({ code: "ENOENT" });
+  }, 25_000);
+
+  it("preserves a live launch and its directory when signaling fails", async () => {
+    const fixtureValue = await fixture({ signalFailure: "live" });
+    const result = run(fixtureValue);
+    expect(result, `${result.stderr}\n${result.stdout}`).toMatchObject({ status: 1 });
+    expect(result.stderr).toContain("leaving QEMU service directory intact because service shutdown was not proven");
+    const owner: unknown = JSON.parse(await readFile(resolve(fixtureValue.serviceDirectory, "service-owner.json"), "utf8"));
+    if (typeof owner !== "object" || owner === null || !("pid" in owner) || typeof owner.pid !== "string") throw new TypeError("fixture owner PID is invalid");
+    expect(() => process.kill(Number(owner.pid), 0)).not.toThrow();
+    process.kill(Number(owner.pid), "SIGKILL");
   }, 25_000);
 
   it("uses narrow privileged commands only for the root service and keeps the client outside sudo", async () => {
