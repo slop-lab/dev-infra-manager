@@ -4,6 +4,7 @@ import {
   materializeVerifiedTree,
   readVerifiedBlob,
   readVerifiedCommit,
+  type CandidateMaterializationBudget,
   type CandidateObjectLimits
 } from "./nativeGitCandidateObjects.js";
 import {
@@ -43,54 +44,79 @@ export type NativeGitCandidateReadOptions = {
   readonly limits?: Partial<NativeGitReaderLimits>;
 };
 
-export type NativeGitCandidateReaderConfig = Omit<
-  NativeGitCandidateReadOptions,
-  "claim" | "temporaryRoot"
->;
+export type NativeGitCandidateReadSession = NativeCandidateReadAuthority & { close(): Promise<void> };
 
-export function createNativeGitCandidateReadAuthority(
-  options: NativeGitCandidateReadOptions
-): NativeCandidateReadAuthority {
+export function openNativeGitCandidateReadAuthority(
+  options: NativeGitCandidateReadOptions,
+  budget: CandidateMaterializationBudget = { entries: 0, bytes: 0, treeBytes: 0 }
+): NativeGitCandidateReadSession {
   const parsed = parseOptions(options);
+  let closed = false;
+  let opened: Promise<DisposableGit> | undefined;
+  let fetched: Promise<Awaited<ReturnType<typeof readVerifiedCommit>>> | undefined;
+  async function git(signal: AbortSignal) {
+    if (closed) throw new NativeGitCandidateReadError("candidate reader session is closed");
+    signal.throwIfAborted();
+    opened ??= openDisposableGit({ executable: parsed.gitExecutable, temporaryRoot: parsed.temporaryRoot,
+      objectFormat: parsed.objectFormat, username: parsed.credential.username, password: parsed.credential.password,
+      ...(parsed.credentialProvider === undefined ? {} : { credentialProvider: parsed.credentialProvider }),
+      timeoutMilliseconds: parsed.limits.processTimeoutMilliseconds }, signal);
+    return opened;
+  }
+  async function candidate(signal: AbortSignal) {
+    const session = await git(signal);
+    fetched ??= (async () => {
+      await fetchCandidate(session, parsed, signal);
+      const commit = await readVerifiedCommit(session, parsed.claim.candidateCommit, signal);
+      if (commit.treeObjectId !== parsed.claim.candidateTree) throw new NativeGitCandidateReadError("candidate commit tree does not match the claim");
+      return commit;
+    })();
+    const commit = await fetched;
+    return { git: session, commit };
+  }
+  async function current(signal: AbortSignal) {
+    if (parsed.claim.protectedRef === undefined) return;
+    const head = await resolveProtectedHead(await git(signal), parsed, signal);
+    if (head !== parsed.claim.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed from the claim");
+  }
   return {
+    async close() {
+      if (closed) return; closed = true;
+      if (opened !== undefined) {
+        let session: DisposableGit;
+        try { session = await opened; } catch { return; }
+        await session.close();
+      }
+    },
     async resolveProtectedHead(input) {
       assertScope(parsed.claim, input);
       if (input.protectedRef !== parsed.claim.protectedRef) throw new NativeGitCandidateReadError("protected ref is outside the claim");
       if (parsed.claim.protectedRef === undefined) throw new NativeGitCandidateReadError("snapshot has no protected ref");
-      return withGit(parsed, input.signal, (git) => resolveProtectedHead(git, parsed, input.signal));
+      return resolveProtectedHead(await git(input.signal), parsed, input.signal);
     },
     async readCommit(input) {
       assertScope(parsed.claim, input);
       if (input.objectId !== parsed.claim.candidateCommit) throw new NativeGitCandidateReadError("commit is outside the claim");
-      return withCandidate(parsed, input.signal, async (git) => {
-        const commit = await readVerifiedCommit(git, input.objectId, input.signal);
-        if (commit.treeObjectId !== parsed.claim.candidateTree) throw new NativeGitCandidateReadError("candidate commit tree does not match the claim");
-        return commit;
-      });
+      return (await candidate(input.signal)).commit;
     },
     async readBlob(input) {
       assertScope(parsed.claim, input);
       if (input.treeObjectId !== parsed.claim.candidateTree) throw new NativeGitCandidateReadError("tree is outside the claim");
-      return withCandidate(parsed, input.signal, (git) => readVerifiedBlob({
-        git, treeObjectId: input.treeObjectId, path: input.path,
+      return readVerifiedBlob({
+        git: (await candidate(input.signal)).git, treeObjectId: input.treeObjectId, path: input.path,
         maximumBytes: input.maximumBytes, limits: parsed.limits, signal: input.signal
-      }));
+      });
     },
     async materializeTree(input) {
       assertScope(parsed.claim, input);
       if (input.commitObjectId !== parsed.claim.candidateCommit || input.treeObjectId !== parsed.claim.candidateTree) {
         throw new NativeGitCandidateReadError("materialization objects are outside the claim");
       }
-      await assertProtectedHead(parsed, input.signal);
-      await withCandidate(parsed, input.signal, async (git) => {
-        const commit = await readVerifiedCommit(git, input.commitObjectId, input.signal);
-        if (commit.treeObjectId !== input.treeObjectId) throw new NativeGitCandidateReadError("materialized commit tree does not match the claim");
-        await materializeVerifiedTree({
-          git, treeObjectId: input.treeObjectId, destination: input.destination,
-          limits: parsed.limits, signal: input.signal
-        });
-      });
-      await assertProtectedHead(parsed, input.signal);
+      await current(input.signal);
+      const selected = await candidate(input.signal);
+      await materializeVerifiedTree({ git: selected.git, treeObjectId: input.treeObjectId, destination: input.destination,
+        limits: parsed.limits, budget, signal: input.signal });
+      await current(input.signal);
       return { commitObjectId: input.commitObjectId, treeObjectId: input.treeObjectId };
     }
   };
@@ -155,8 +181,7 @@ function parseOptions(options: NativeGitCandidateReadOptions): ParsedOptions {
   };
 }
 
-async function withCandidate<T>(options: ParsedOptions, signal: AbortSignal, action: (git: DisposableGit) => Promise<T>): Promise<T> {
-  return withGit(options, signal, async (git) => {
+async function fetchCandidate(git: DisposableGit, options: ParsedOptions, signal: AbortSignal): Promise<void> {
     await git.runAuthenticated([
       "--git-dir", git.repository, "fetch", "--depth=1", "--no-tags", "--no-write-fetch-head", "--force",
       options.repositoryUrl, `${options.claim.candidateCommit}:refs/dim/candidate`
@@ -168,25 +193,6 @@ async function withCandidate<T>(options: ParsedOptions, signal: AbortSignal, act
       "--git-dir", git.repository, "rev-parse", "--verify", "refs/dim/candidate^{commit}"
     ], 128, signal)).toString("ascii").trim();
     if (fetched !== options.claim.candidateCommit) throw new NativeGitCandidateReadError("native Git returned a different candidate commit");
-    return action(git);
-  });
-}
-
-async function withGit<T>(options: ParsedOptions, signal: AbortSignal, action: (git: DisposableGit) => Promise<T>): Promise<T> {
-  const credential = await options.credentialProvider?.(signal) ?? options.credential;
-  const git = await openDisposableGit({
-    executable: options.gitExecutable,
-    temporaryRoot: options.temporaryRoot,
-    objectFormat: options.objectFormat,
-    username: credential.username,
-    password: credential.password,
-    timeoutMilliseconds: options.limits.processTimeoutMilliseconds
-  }, signal);
-  try {
-    return await action(git);
-  } finally {
-    await git.close();
-  }
 }
 
 async function resolveProtectedHead(git: DisposableGit, options: ParsedOptions, signal: AbortSignal): Promise<string> {
@@ -200,12 +206,6 @@ async function resolveProtectedHead(git: DisposableGit, options: ParsedOptions, 
     throw new NativeGitCandidateReadError("native Git protected ref response is invalid");
   }
   return match[1];
-}
-
-async function assertProtectedHead(options: ParsedOptions, signal: AbortSignal): Promise<void> {
-  if (options.claim.protectedRef === undefined) return;
-  const head = await withGit(options, signal, (git) => resolveProtectedHead(git, options, signal));
-  if (head !== options.claim.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed from the claim");
 }
 
 function assertScope(claim: NativeGitCandidateClaim, input: { readonly projectId: string; readonly repositoryId: string }): void {
@@ -249,21 +249,35 @@ export class NativeGitCandidateReadError extends Error {
   readonly name = "NativeGitCandidateReadError";
 }
 
-/** One credential stays on the trusted worker; guests receive only selected immutable trees. */
-export function createNativeGitExecutionReadAuthority(options: Omit<NativeGitCandidateReadOptions, "claim"> & {
+/** Objects and credentials exist only during trusted acquisition, before any job starts. */
+export async function withNativeGitExecutionReadAuthority<T>(options: Omit<NativeGitCandidateReadOptions, "claim"> & {
   readonly descriptor: ExecutionDescriptor;
-}): NativeCandidateReadAuthority {
+}, signal: AbortSignal, action: (authority: NativeCandidateReadAuthority) => Promise<T>): Promise<T> {
   const descriptor = options.descriptor;
+  const budget: CandidateMaterializationBudget = { entries: 0, bytes: 0, treeBytes: 0 };
   const readers = new Map(Object.entries(descriptor.inputs).map(([repositoryId, snapshot]) => [repositoryId,
-    createNativeGitCandidateReadAuthority({ ...options, claim: { projectId: descriptor.projectId, repositoryId,
+    openNativeGitCandidateReadAuthority({ ...options, claim: { projectId: descriptor.projectId, repositoryId,
       candidateCommit: snapshot.commit, candidateTree: snapshot.tree,
-      ...(repositoryId !== descriptor.repositoryId ? {} : { protectedRef: descriptor.protectedRef, expectedProtectedHead: descriptor.expectedProtectedHead }) } })]));
+      ...(repositoryId !== descriptor.repositoryId ? {} : { protectedRef: descriptor.protectedRef, expectedProtectedHead: descriptor.expectedProtectedHead }) } }, budget)]));
   function select(input: { projectId: string; repositoryId: string }) {
     const reader = readers.get(input.repositoryId);
     if (input.projectId !== descriptor.projectId || reader === undefined) throw new NativeGitCandidateReadError("repository is outside execution inputs");
     return reader;
   }
-  return { resolveProtectedHead: (input) => select(input).resolveProtectedHead(input),
+  const authority: NativeCandidateReadAuthority = { resolveProtectedHead: (input) => select(input).resolveProtectedHead(input),
     readCommit: (input) => select(input).readCommit(input), readBlob: (input) => select(input).readBlob(input),
     materializeTree: (input) => select(input).materializeTree(input) };
+  try {
+    const result = await action(authority);
+    // The remote probe authenticates the live execution lease again, including
+    // dependency heads and current-attempt authority, even when objects are cached.
+    const head = await authority.resolveProtectedHead({ projectId: descriptor.projectId, repositoryId: descriptor.repositoryId,
+      protectedRef: descriptor.protectedRef, signal });
+    if (head !== descriptor.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed before candidate handoff");
+    return result;
+  } finally {
+    const cleanup = await Promise.allSettled([...readers.values()].map((reader) => reader.close()));
+    const failures = cleanup.filter((entry): entry is PromiseRejectedResult => entry.status === "rejected");
+    if (failures.length) throw new AggregateError(failures.map((entry) => entry.reason), "candidate reader cleanup failed");
+  }
 }

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { StaleExecutionSourceError } from "../../../../../core/packages/managed/src/ci/source.js";
 import { executionCandidateCredential } from "../../../../../core/packages/managed/src/ci/candidateLease.js";
-import { createNativeGitExecutionReadAuthority } from "../../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
+import { withNativeGitExecutionReadAuthority } from "../../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import { verifyAndMaterializeCandidate } from "../../../../../core/packages/managed/src/ci/candidate.js";
 import { createBundleReview, reviewProposalRef, addCandidateCommit } from "../../../native-git/test/nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, createFinalizeRoot, generationId, humanReviewerAuthorization, runGit } from "../../../native-git/test/nativeRootImportFinalizeFixture.js";
@@ -30,10 +30,10 @@ it("materializes exact joint inputs while public-only leases cannot read private
     headers: { authorization: `Basic ${Buffer.from(`${publicRead.username}:${publicRead.password}`).toString("base64")}` }
   })).status).toBe(403);
   const directory = await createFinalizeRoot("joint-materialized");
-  const authority = createNativeGitExecutionReadAuthority({ descriptor: joint.descriptor, gitExecutable: "/usr/bin/git",
-    serviceEndpoint: f.native.service.origin, temporaryRoot: directory, credential: firstJoint, credentialProvider: jointCredential });
-  await verifyAndMaterializeCandidate({ descriptor: joint.descriptor, descriptorDigest: joint.descriptorDigest, authority,
-    workspace: join(directory, "workspace"), scriptFile: join(directory, "script"), signal });
+  await withNativeGitExecutionReadAuthority({ descriptor: joint.descriptor, gitExecutable: "/usr/bin/git",
+    serviceEndpoint: f.native.service.origin, temporaryRoot: directory, credential: firstJoint, credentialProvider: jointCredential }, signal, (authority) => verifyAndMaterializeCandidate({ descriptor: joint.descriptor, descriptorDigest: joint.descriptorDigest, authority,
+    workspace: join(directory, "workspace"), scriptFile: join(directory, "script"), signal }));
+  expect((await readdir(directory)).sort()).toEqual(["script", "workspace"]);
   expect((await readdir(join(directory, "workspace"))).sort()).toEqual(["private", "public"]);
   expect(await readFile(join(directory, "workspace/private/README.md"), "utf8")).toBe("private repository bytes\n");
   expect(await readdir(join(directory, "workspace/private"))).toEqual(["README.md"]);

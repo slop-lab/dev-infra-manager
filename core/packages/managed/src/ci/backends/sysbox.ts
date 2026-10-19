@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import type { ExecutionResult } from "../execution.js";
-import { verifyAndMaterializeCandidate } from "../candidate.js";
 import { cleanupNativeContainer, nativeContainerArgs, nativeRunnerScript, prepareNativeImages, type NativeHostImageRouting } from "./containers.js";
 import type { ExecutionBackend } from "../backend.js";
 import { NativeOutputCollector, executionDiagnostics } from "../output.js";
@@ -22,8 +21,7 @@ export function createSysboxBackend(routing?: NativeHostImageRouting): Execution
     const output = new NativeOutputCollector(bound(descriptor.bounds.outputBytes), () => stop.abort());
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
     try {
-      await verifyAndMaterializeCandidate({ authority: input.authority, descriptor,
-        descriptorDigest: input.grant.descriptorDigest, workspace, scriptFile: script, signal });
+      await input.acquireCandidate({ workspace, scriptFile: script, signal });
       const files = routing?.jobFiles ?? [];
       if (files.length > 16 || new Set(files.map(({ target }) => target)).size !== files.length) throw new Error("invalid host job configuration files");
       const launchScript = nativeRunnerScript(descriptor.repositoryId, files.map(({ target }) => target), routing?.jobEnvironmentDefaults);

@@ -22,7 +22,7 @@ type TreeEntry = {
   readonly objectId: string;
 };
 
-type MaterializeState = {
+export type CandidateMaterializationBudget = {
   entries: number;
   bytes: number;
   treeBytes: number;
@@ -33,7 +33,7 @@ type DirectoryMaterialization = {
   readonly treeObjectId: string;
   readonly destination: string;
   readonly depth: number;
-  readonly state: MaterializeState;
+  readonly state: CandidateMaterializationBudget;
   readonly limits: CandidateObjectLimits;
   readonly signal: AbortSignal;
 };
@@ -93,6 +93,7 @@ export async function readVerifiedBlob(input: {
 
 export async function materializeVerifiedTree(input: {
   readonly git: DisposableGit;
+  readonly budget?: CandidateMaterializationBudget;
   readonly treeObjectId: string;
   readonly destination: string;
   readonly limits: CandidateObjectLimits;
@@ -110,7 +111,7 @@ export async function materializeVerifiedTree(input: {
   await assertAbsent(destination);
   const staging = await mkdtemp(join(parent, `.${basename(destination)}.dim-stage-`));
   try {
-    const state: MaterializeState = { entries: 0, bytes: 0, treeBytes: 0 };
+    const state = input.budget ?? { entries: 0, bytes: 0, treeBytes: 0 };
     await materializeDirectory({
       git: input.git, treeObjectId: input.treeObjectId, destination: staging, depth: 0,
       state, limits: input.limits, signal: input.signal

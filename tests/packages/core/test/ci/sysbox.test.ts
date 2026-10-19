@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createSysboxBackend, sysboxBackend } from "../../../../../core/packages/managed/src/ci/backends/sysbox.js";
 import { executionDescriptorDigest } from "../../../../../core/packages/native-git/src/execution-protocol.js";
-import type { NativeCandidateReadAuthority } from "../../../../../core/packages/managed/src/ci/candidate.js";
+import { verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from "../../../../../core/packages/managed/src/ci/candidate.js";
 import { assignment, grant, hash } from "./executionFixture.js";
 import { ExecutorRunner } from "./sysboxFixture.js";
 const roots: string[] = [];
@@ -23,7 +23,8 @@ async function input() {
     async materializeTree(input) { await mkdir(input.destination); await writeFile(join(input.destination, "README"), "candidate");
       return { commitObjectId: descriptor.candidateCommit, treeObjectId: descriptor.candidateTree }; }
   };
-  return { root, grant: { ...selected, descriptor, descriptorDigest: executionDescriptorDigest(descriptor) }, authority,
+  return { root, grant: { ...selected, descriptor, descriptorDigest: executionDescriptorDigest(descriptor) },
+    acquireCandidate: (paths: { workspace: string; scriptFile: string; signal: AbortSignal }) => verifyAndMaterializeCandidate({ ...paths, authority, descriptor, descriptorDigest: executionDescriptorDigest(descriptor) }),
     runner: new ExecutorRunner(), signal: new AbortController().signal };
 }
 it("runs verified candidate bytes with bounded Docker resources and cleans up before returning evidence", async () => {

@@ -1,6 +1,5 @@
 import { chmod, mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { verifyAndMaterializeCandidate } from "../candidate.js";
 import { NativeOutputCollector, executionDiagnostics } from "../output.js";
 import { cleanupNativeContainer, containerName, ownershipLabels, prepareExecutionImage, jobEnvironmentScript, validateJobConfigTargets, type NativeHostImageRouting } from "./containers.js";
 import type { BackendInput, ExecutionBackend } from "../backend.js";
@@ -18,8 +17,7 @@ export function createQemuBackend(routing?: NativeHostImageRouting): ExecutionBa
     try {
       const job = join(input.root, "job"), workspace = join(input.root, "workspace"), script = join(job, "script");
       await mkdir(job, { mode: 0o700 });
-      await verifyAndMaterializeCandidate({ descriptor, descriptorDigest: input.grant.descriptorDigest,
-        authority: input.authority, workspace, scriptFile: script, signal });
+      await input.acquireCandidate({ workspace, scriptFile: script, signal });
       await writeFile(join(job, "working-directory"), `/workspace/${descriptor.repositoryId}`, { mode: 0o444, flag: "wx" });
       await writeFile(join(job, "descriptor.json"), JSON.stringify(descriptor), { mode: 0o444, flag: "wx" });
       const files = routing?.jobFiles ?? [];

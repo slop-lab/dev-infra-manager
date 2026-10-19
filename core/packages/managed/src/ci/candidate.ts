@@ -63,8 +63,10 @@ export async function verifyAndMaterializeCandidate(input: NativeCandidateVerifi
   await mkdir(input.workspace, { mode: 0o700 });
   for (const [repositoryId, snapshot] of Object.entries(descriptor.inputs)) {
     const selected = { projectId: descriptor.projectId, repositoryId };
-    const commit = await input.authority.readCommit({ ...selected, objectId: snapshot.commit, signal: input.signal });
-    if (commit.objectId !== snapshot.commit || commit.treeObjectId !== snapshot.tree) throw new NativeHostVerificationError("input repository commit does not match snapshot");
+    if (repositoryId !== descriptor.repositoryId) {
+      const commit = await input.authority.readCommit({ ...selected, objectId: snapshot.commit, signal: input.signal });
+      if (commit.objectId !== snapshot.commit || commit.treeObjectId !== snapshot.tree) throw new NativeHostVerificationError("input repository commit does not match snapshot");
+    }
     const materialized = await input.authority.materializeTree({ ...selected, commitObjectId: snapshot.commit,
       treeObjectId: snapshot.tree, destination: join(input.workspace, repositoryId), signal: input.signal });
     if (materialized.commitObjectId !== snapshot.commit || materialized.treeObjectId !== snapshot.tree) {

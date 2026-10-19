@@ -1,16 +1,18 @@
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNativeGitCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
+import { openNativeGitCandidateReadAuthority } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import {
   gitHttpFixture,
   type GitHttpFixture,
   type GitObjectFormat
 } from "../../../support/gitHttpFixture.js";
 
+const readers: ReturnType<typeof openNativeGitCandidateReadAuthority>[] = [];
 const fixtures: GitHttpFixture[] = [];
 
 afterEach(async () => {
+  await Promise.all(readers.splice(0).map((reader) => reader.close()));
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
 });
 
@@ -47,7 +49,7 @@ describe("native Git candidate read authority", () => {
     const destinationParent = join(fixture.root, "materialized");
     await mkdir(temporaryRoot, { mode: 0o700 });
     await mkdir(destinationParent, { mode: 0o700 });
-    const authority = createNativeGitCandidateReadAuthority({
+    const authority = openReader({
       gitExecutable: fixture.config.gitExecutable,
       serviceEndpoint: fixture.baseUrl,
       credential: { username: "reader-a", password: "reader-a-secret-1" },
@@ -99,3 +101,7 @@ describe("native Git candidate read authority", () => {
     }
   );
 });
+
+function openReader(options: Parameters<typeof openNativeGitCandidateReadAuthority>[0]) {
+  const reader = openNativeGitCandidateReadAuthority(options); readers.push(reader); return reader;
+}

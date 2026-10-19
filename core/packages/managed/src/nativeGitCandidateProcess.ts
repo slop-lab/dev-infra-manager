@@ -17,6 +17,7 @@ export type GitProcessOptions = {
   readonly username: string;
   readonly password: string;
   readonly timeoutMilliseconds: number;
+  readonly credentialProvider?: (signal: AbortSignal) => Promise<{ readonly username: string; readonly password: string }>;
 };
 
 export type GitObjectFormat = "sha1" | "sha256";
@@ -49,12 +50,6 @@ export async function openDisposableGit(options: GitProcessOptions, signal: Abor
   const askpass = join(root, "askpass");
   await writeFile(askpass, ASKPASS, { encoding: "utf8", flag: "wx", mode: 0o700 });
   const environment = gitEnvironment();
-  const authenticatedEnvironment = {
-    ...environment,
-    GIT_ASKPASS: askpass,
-    DIM_NATIVE_GIT_READER_USERNAME: options.username,
-    DIM_NATIVE_GIT_READER_PASSWORD: options.password
-  };
   const operation = {
     repository,
     objectFormat: options.objectFormat,
@@ -63,11 +58,13 @@ export async function openDisposableGit(options: GitProcessOptions, signal: Abor
         executable: options.executable, args, environment, maximumOutputBytes,
         timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal
       }),
-    runAuthenticated: (args: readonly string[], maximumOutputBytes: number, operationSignal: AbortSignal) =>
-      runGit({
-        executable: options.executable, args, environment: authenticatedEnvironment, maximumOutputBytes,
-        timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal
-      }),
+    runAuthenticated: async (args: readonly string[], maximumOutputBytes: number, operationSignal: AbortSignal) => {
+      const credential = await options.credentialProvider?.(operationSignal) ?? options;
+      return runGit({ executable: options.executable, args,
+        environment: { ...environment, GIT_ASKPASS: askpass, DIM_NATIVE_GIT_READER_USERNAME: credential.username,
+          DIM_NATIVE_GIT_READER_PASSWORD: credential.password }, maximumOutputBytes,
+        timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal });
+    },
     close: () => rm(root, { recursive: true, force: true })
   } satisfies DisposableGit;
   try {

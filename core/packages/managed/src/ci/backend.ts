@@ -1,8 +1,8 @@
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 import type { ExecutionGrant, ExecutionResult } from "./execution.js";
-import type { NativeCandidateReadAuthority } from "./candidate.js";
+import type { NativeCandidateVerificationInput } from "./candidate.js";
 export type BackendInput = { readonly grant: ExecutionGrant; readonly root: string;
-  readonly runner: StreamingCommandRunner; readonly signal: AbortSignal; readonly authority: NativeCandidateReadAuthority };
+  readonly runner: StreamingCommandRunner; readonly signal: AbortSignal; readonly acquireCandidate: (input: Pick<NativeCandidateVerificationInput, "workspace" | "scriptFile" | "signal">) => Promise<void> };
 export interface ExecutionBackend {
   readonly kind: "ordinary-sysbox" | "qemu";
   run(input: BackendInput): Promise<ExecutionResult>;

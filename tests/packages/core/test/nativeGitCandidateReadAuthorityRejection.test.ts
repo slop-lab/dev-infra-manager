@@ -2,17 +2,19 @@ import { mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  createNativeGitCandidateReadAuthority,
+  openNativeGitCandidateReadAuthority,
   NativeGitCandidateReadError
 } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import { CandidateObjectError } from "../../../../core/packages/managed/src/nativeGitCandidateObjects.js";
 import { NativeGitProcessError } from "../../../../core/packages/managed/src/nativeGitCandidateProcess.js";
 import { candidateReadFixture, type CandidateReadFixture } from "./nativeGitCandidateReadFixture.js";
 
+const readers: ReturnType<typeof openNativeGitCandidateReadAuthority>[] = [];
 const fixtures: CandidateReadFixture[] = [];
 
 afterEach(async () => {
-  await Promise.all(fixtures.splice(0).map((fixture) => fixture.native.close()));
+  await Promise.all(readers.splice(0).map((reader) => reader.close()));
+  await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
 });
 
 describe("native Git candidate read authority rejection", () => {
@@ -133,6 +135,7 @@ describe("native Git candidate read authority rejection", () => {
 
     // Then
     await expect(read).rejects.toBeInstanceOf(CandidateObjectError);
+    await authority.close();
     expect(await readdir(fixture.temporaryRoot)).toEqual([]);
   });
 
@@ -178,7 +181,7 @@ describe("native Git candidate read authority rejection", () => {
     const fixture = await startFixture();
 
     // When
-    const create = () => createNativeGitCandidateReadAuthority({
+    const create = () => openReader({
       gitExecutable: fixture.native.config.gitExecutable,
       serviceEndpoint: fixture.native.baseUrl.replace("http://", "http://reader-a:reader-a-secret-1@"),
       credential: { username: "reader-a", password: "reader-a-secret-1" },
@@ -199,7 +202,7 @@ describe("native Git candidate read authority rejection", () => {
     const fixture = await startFixture();
 
     // When
-    const create = () => createNativeGitCandidateReadAuthority({
+    const create = () => openReader({
       gitExecutable: fixture.native.config.gitExecutable,
       serviceEndpoint: fixture.native.baseUrl,
       credential: { username: "reader-a", password: "reader-a-secret-1" },
@@ -218,7 +221,7 @@ describe("native Git candidate read authority rejection", () => {
   it("rejects a SHA-256 claim presented for a SHA-1 repository", async () => {
     // Given
     const fixture = await startFixture();
-    const authority = createNativeGitCandidateReadAuthority({
+    const authority = openReader({
       gitExecutable: fixture.native.config.gitExecutable,
       serviceEndpoint: fixture.native.baseUrl,
       credential: { username: "reader-a", password: "reader-a-secret-1" },
@@ -293,4 +296,8 @@ function materializeScope(
     destination,
     signal: AbortSignal.timeout(10_000)
   } as const;
+}
+
+function openReader(options: Parameters<typeof openNativeGitCandidateReadAuthority>[0]) {
+  const reader = openNativeGitCandidateReadAuthority(options); readers.push(reader); return reader;
 }

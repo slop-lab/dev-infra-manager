@@ -39,7 +39,12 @@ refreshing expiring capabilities against the same immutable execution grant.
 Changed dependencies deny refresh. Jobs receive only materialized trees under
 `/workspace/<repositoryId>`, and their current directory is the primary
 repository's directory. Git credentials, refs and `.git` remain outside runtime
-mounts. Single-repository jobs use the same layout. Execution diagnostics and
+mounts. During trusted acquisition, each selected repository is fetched and
+verified once; configuration, scripts and checkout trees reuse those immutable
+objects. Extraction byte and entry limits apply across the job's repositories.
+Before handoff, a remote probe revalidates the live execution lease and protected
+head, then the worker removes its temporary Git sessions before starting code.
+Single-repository jobs use the same layout. Execution diagnostics and
 joint-job results remain Project-private through existing operator/query roles;
 there is no automatic public artifact export.
 

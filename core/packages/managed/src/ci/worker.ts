@@ -1,3 +1,4 @@
+import { verifyAndMaterializeCandidate } from "./candidate.js";
 import { executionCandidateCredential } from "./candidateLease.js";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
@@ -6,7 +7,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { tryAcquireKernelGuard, type StreamingCommandRunner } from "@slop-lab/dim-core";
-import { createNativeGitExecutionReadAuthority } from "../nativeGitCandidateReadAuthority.js";
+import { withNativeGitExecutionReadAuthority } from "../nativeGitCandidateReadAuthority.js";
 import { NativeHostPrivateRoot, type NativeHostPrivateRootIdentity } from "./private-root.js";
 import { executionResultSchema, type ExecutionAssignment, type ExecutionResult } from "./execution.js";
 import { ExecutionServiceUnavailableError, parseAssignment, type ExecutionWorkerClient } from "./client.js";
@@ -72,10 +73,12 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     try {
       const credentialProvider = executionCandidateCredential((signal) => options.client.candidate(assignment, signal));
       const credential = await credentialProvider(signal);
-      const authority = createNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable,
-        serviceEndpoint: options.gitEndpoint, temporaryRoot: root.path,
-        credential: { username: credential.username, password: credential.password }, credentialProvider, descriptor: grant.descriptor });
-      result = await options.backend.run({ grant, root: root.path, runner: options.runner, signal, authority });
+      result = await options.backend.run({ grant, root: root.path, runner: options.runner, signal,
+        acquireCandidate: async (paths) => withNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable,
+          serviceEndpoint: options.gitEndpoint, temporaryRoot: root.path,
+          credential: { username: credential.username, password: credential.password }, credentialProvider, descriptor: grant.descriptor },
+        paths.signal, (authority) => verifyAndMaterializeCandidate({ ...paths, authority,
+          descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })) });
     } finally { stopRenewing.abort(); await renewals; }
     if (!await root.cleanup(assignment.id)) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
     journal.result = result;

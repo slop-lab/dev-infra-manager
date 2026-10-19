@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createNativeGitCandidateReadAuthority, type NativeGitReaderLimits } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
+import { openNativeGitCandidateReadAuthority, type NativeGitReaderLimits } from "../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import {
   gitHttpFixture,
   type GitHttpFixture,
@@ -9,13 +9,14 @@ import {
 
 export type CandidateReadFixture = {
   readonly native: GitHttpFixture;
+  close(): Promise<void>;
   readonly clone: string;
   readonly temporaryRoot: string;
   readonly destinationParent: string;
   readonly initialHead: string;
   commitFile(path: string, bytes: string): Promise<{ readonly commit: string; readonly tree: string }>;
   push(commit: string, name: string): Promise<void>;
-  authority(candidate: { readonly commit: string; readonly tree: string }, limits?: Partial<NativeGitReaderLimits>): ReturnType<typeof createNativeGitCandidateReadAuthority>;
+  authority(candidate: { readonly commit: string; readonly tree: string }, limits?: Partial<NativeGitReaderLimits>): ReturnType<typeof openNativeGitCandidateReadAuthority>;
 };
 
 export async function candidateReadFixture(objectFormat: GitObjectFormat = "sha1"): Promise<CandidateReadFixture> {
@@ -29,8 +30,10 @@ export async function candidateReadFixture(objectFormat: GitObjectFormat = "sha1
   await mkdir(temporaryRoot, { mode: 0o700 });
   await mkdir(destinationParent, { mode: 0o700 });
   const initialHead = (await native.git(clone, ["rev-parse", "HEAD"])).stdout.trim();
+  const readers: ReturnType<typeof openNativeGitCandidateReadAuthority>[] = [];
   return {
     native,
+    async close() { await Promise.all(readers.map((reader) => reader.close())); await native.close(); },
     clone,
     temporaryRoot,
     destinationParent,
@@ -50,7 +53,7 @@ export async function candidateReadFixture(objectFormat: GitObjectFormat = "sha1
       await native.git(clone, ["push", "origin", `${commit}:refs/heads/proposals/workspace-a/${name}`]);
     },
     authority(candidate, limits) {
-      return createNativeGitCandidateReadAuthority({
+      const reader = openNativeGitCandidateReadAuthority({
         gitExecutable: native.config.gitExecutable,
         serviceEndpoint: native.baseUrl,
         credential: { username: "reader-a", password: "reader-a-secret-1" },
@@ -65,6 +68,7 @@ export async function candidateReadFixture(objectFormat: GitObjectFormat = "sha1
         },
         ...(limits === undefined ? {} : { limits })
       });
+      readers.push(reader); return reader;
     }
   };
 }

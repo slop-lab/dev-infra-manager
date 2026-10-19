@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from "../../../../../core/packages/managed/src/ci/candidate.js";
-import { createNativeGitExecutionReadAuthority } from "../../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
+import { withNativeGitExecutionReadAuthority } from "../../../../../core/packages/managed/src/nativeGitCandidateReadAuthority.js";
 import { executionGrantSchema, executionDescriptorSchema, executionDescriptorDigest } from "../../../../../core/packages/native-git/src/execution-protocol.js";
 import { assignment, grant, hash } from "./executionFixture.js";
 const roots: string[] = [];
@@ -47,11 +47,12 @@ it("rejects an altered dependency tree before materializing it", async () => {
 });
 it("does not grant the trusted reader access to a repository absent from the descriptor", async () => {
   const input = await fixture(false);
-  const authority = createNativeGitExecutionReadAuthority({ descriptor: input.descriptor, gitExecutable: "/usr/bin/git",
+  await expect(withNativeGitExecutionReadAuthority({ descriptor: input.descriptor, gitExecutable: "/usr/bin/git",
     serviceEndpoint: "http://127.0.0.1:1234", temporaryRoot: input.root,
-    credential: { username: "execution-reader", password: "x".repeat(32) } });
-  expect(() => authority.readCommit({ projectId: input.descriptor.projectId, repositoryId: "private",
-    objectId: "7".repeat(40), signal: input.signal })).toThrow("repository is outside execution inputs");
+    credential: { username: "execution-reader", password: "x".repeat(32) } }, input.signal, async (authority) => {
+    await authority.readCommit({ projectId: input.descriptor.projectId, repositoryId: "private",
+      objectId: "7".repeat(40), signal: input.signal });
+  })).rejects.toThrow("repository is outside execution inputs");
 });
 
 it("accepts the same numeric-leading repository IDs as native Project registration", () => {
