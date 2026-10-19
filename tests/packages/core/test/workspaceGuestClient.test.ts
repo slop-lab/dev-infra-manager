@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, link, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -124,6 +124,50 @@ it("parallel service resumes retain one kernel guard across stale metadata recov
       await run("service", "register", "--name", "worker", "--", process.execPath, "-e",
         "require('node:fs').appendFileSync(process.argv[1], JSON.stringify(process.pid)+'\\n');setInterval(()=>{},1000)", marker);
     }
+  } finally { await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true }); }
+});
+
+it("service resume tolerates owner publication between opening metadata and checking its inode", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "dim-guest-owner-publication-"));
+  const env = { ...process.env, HOME: home };
+  const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env });
+  try {
+    const starts = path.join(home, "starts"), replaced = path.join(home, "replaced");
+    await run("service", "register", "--name", "worker", "--", process.execPath, "-e",
+      "require('node:fs').appendFileSync(process.argv[1],'started\\n');setInterval(()=>{},1000)", starts);
+    await run("service", "resume");
+    const owner = path.join(home, ".local/state/dim/services/worker.lock/owner.json");
+    const preload = path.join(home, "replace-owner.cjs");
+    // Reproduce the exact open -> atomic rename -> fstat interleaving, without
+    // relying on the scheduler or weakening the file's permissions/ownership.
+    await writeFile(preload, `
+const fs = require('node:fs/promises');
+const originalOpen = fs.open;
+let replaced = false;
+fs.open = async function(file, ...args) {
+  const handle = await originalOpen.call(this, file, ...args);
+  if (file === ${JSON.stringify(owner)} && !replaced) {
+    replaced = true;
+    const value = await fs.readFile(file);
+    await fs.writeFile(file + '.replacement', value, { mode: 0o600, flag: 'wx' });
+    await fs.rename(file + '.replacement', file);
+    await fs.writeFile(${JSON.stringify(replaced)}, 'done');
+  }
+  return handle;
+};
+require('node:module').syncBuiltinESMExports();
+`);
+    await execute(process.execPath, ["--require", preload, client, "service", "resume"], { cwd: home, env });
+    expect(await readFile(replaced, "utf8")).toBe("done");
+    expect(JSON.parse((await run("service", "list")).stdout)).toEqual([{ name: "worker", running: true }]);
+    expect((await readFile(starts, "utf8")).trim().split("\n")).toEqual(["started"]);
+    // Stale inode handling must not accept a linked or non-private owner file.
+    await link(owner, `${owner}.linked`);
+    try { await expect(run("service", "resume")).rejects.toThrow(/private user-owned/); }
+    finally { await rm(`${owner}.linked`); }
+    await chmod(owner, 0o644);
+    try { await expect(run("service", "resume")).rejects.toThrow(/private user-owned/); }
+    finally { await chmod(owner, 0o600); }
   } finally { await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true }); }
 });
 

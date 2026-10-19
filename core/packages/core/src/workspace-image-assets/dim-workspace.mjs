@@ -11,6 +11,8 @@ const configuration = path.join(homedir(), ".config/dim/workspace.json");
 const servicesRoot = path.join(homedir(), ".local/state/dim/services");
 const sessionFile = path.join(homedir(), ".local/state/dim/session.json");
 
+class RemovedPrivateFileError extends Error {}
+
 try { await main(process.argv.slice(2)); }
 catch (error) { console.error(`dim-workspace: ${error instanceof Error ? error.message : String(error)}`); process.exitCode = 2; }
 
@@ -73,9 +75,12 @@ async function privateJson(file) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const metadata = await handle.stat();
-    if (!metadata.isFile() || metadata.uid !== process.geteuid?.() || (metadata.mode & 0o777) !== 0o600 || metadata.nlink !== 1 || metadata.size > 64 * 1024) {
+    if (!metadata.isFile() || metadata.uid !== process.geteuid?.() || (metadata.mode & 0o777) !== 0o600 || metadata.nlink > 1 || metadata.size > 64 * 1024) {
       throw new Error(`expected a private user-owned regular file: ${file}`);
     }
+    // Atomic replacement can unlink an already opened, otherwise valid inode.
+    // Never consume it as current metadata; ordinary config reads still fail closed.
+    if (metadata.nlink === 0) throw new RemovedPrivateFileError(`private file was replaced: ${file}`);
     /** @type {unknown} */
     const value = JSON.parse(await handle.readFile("utf8"));
     return value;
@@ -241,7 +246,12 @@ async function serviceOwner(name) {
       || typeof value.ticks !== "string" || typeof value.boot !== "string" || typeof value.nonce !== "string"
       || typeof value.child !== "number" || typeof value.childTicks !== "string") throw new Error("invalid service owner");
     return { pid: value.pid, ticks: value.ticks, boot: value.boot, nonce: value.nonce, child: value.child, childTicks: value.childTicks };
-  } catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined; throw error; }
+  } catch (error) {
+    // Owner records are advisory: the permanent kernel guard arbitrates startup.
+    // A replaced/removed record cannot identify a current supervisor.
+    if (error instanceof RemovedPrivateFileError || (error instanceof Error && "code" in error && error.code === "ENOENT")) return undefined;
+    throw error;
+  }
 }
 /** @param {string} name */
 async function serviceAlive(name) {
