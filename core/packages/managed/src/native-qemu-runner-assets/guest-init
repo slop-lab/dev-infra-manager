@@ -7,6 +7,11 @@ mount -t sysfs sysfs /sys
 /bin/busybox modprobe virtio_pci
 /bin/busybox modprobe 9p
 /bin/busybox modprobe 9pnet_virtio
+/bin/busybox modprobe virtio_net
+ip link set lo up
+ip link set eth0 up
+ip addr add 10.0.2.15/24 dev eth0
+ip route add default via 10.0.2.2
 mkdir -p /sys/fs/cgroup
 mount -t cgroup2 cgroup2 /sys/fs/cgroup
 pids=
@@ -19,7 +24,12 @@ printf '+pids\n' >/sys/fs/cgroup/cgroup.subtree_control
 mkdir /sys/fs/cgroup/dim-job
 printf '%s\n' "$pids" >/sys/fs/cgroup/dim-job/pids.max
 printf '%s\n' "$$" >/sys/fs/cgroup/dim-job/cgroup.procs
-mount -t 9p -o trans=virtio,ro jobroot /guest
+mkdir -p /job
+mount -t 9p -o trans=virtio,ro job /job
+# Extract untrusted image paths only inside the isolated VM, never on the host.
+mount -t tmpfs -o nosuid,nodev tmpfs /guest
+tar -xf /job/rootfs.tar -C /guest
+mkdir -p /guest/dev /guest/proc /guest/sys /guest/sys/fs/cgroup /guest/run/dim/job /guest/workspace /guest/tmp /guest/etc
 mount --bind /dev /guest/dev
 mount --bind /proc /guest/proc
 mount -o remount,bind,ro /guest/proc
@@ -27,13 +37,24 @@ mount --bind /sys /guest/sys
 mount --bind /sys/fs/cgroup /guest/sys/fs/cgroup
 mount -o remount,bind,ro /guest/sys/fs/cgroup
 mount -o remount,bind,ro /guest/sys
-mount -t 9p -o trans=virtio,ro job /guest/run/dim/job
+mount --bind /job /guest/run/dim/job
+mount -o remount,bind,ro /guest/run/dim/job
+rm -f /guest/etc/resolv.conf
+printf 'nameserver 10.0.2.3\n' >/guest/etc/resolv.conf
+while read -r source target; do
+  [ -n "$source" ] || continue
+  mkdir -p "/guest${target%/*}"
+  rm -f "/guest$target"
+  touch "/guest$target"
+  mount --bind "/guest/run/dim/job/$source" "/guest$target"
+  mount -o remount,bind,ro "/guest$target"
+done </guest/run/dim/job/config-targets
 mount -t 9p -o trans=virtio workspace /guest/workspace
 chown -R 1000:1000 /guest/workspace
 mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /guest/tmp
 stty -F /dev/console -onlcr
 set +e
-/guest-exec /guest /workspace 1000 1000 /bin/bash --noprofile --norc /run/dim/job/script
+/guest-exec /guest /workspace 0 0 /bin/bash --noprofile --norc /run/dim/job/script
 status=$?
 set -e
 sync

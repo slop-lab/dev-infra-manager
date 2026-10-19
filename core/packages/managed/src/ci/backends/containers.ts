@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { posix } from "node:path";
 import type { ExecutionGrant } from "@slop-lab/dim-native-git/execution";
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 
@@ -12,6 +13,7 @@ export type NativeHostImageRouting = {
   readonly network: string;
   readonly blockedHostnames: readonly string[];
   readonly dockerDaemonConfig: string;
+  readonly jobFiles?: readonly { readonly target: string; readonly contents: string }[];
 };
 
 export type NativeDockerPaths = {
@@ -19,6 +21,7 @@ export type NativeDockerPaths = {
   readonly script: string;
   readonly launcher: string;
   readonly daemonConfig: string;
+  readonly jobFiles?: readonly { readonly source: string; readonly target: string }[];
 };
 
 export async function prepareNativeImages(runner: StreamingCommandRunner, claim: ExecutionGrant, signal: AbortSignal): Promise<void> {
@@ -28,7 +31,7 @@ export async function prepareNativeImages(runner: StreamingCommandRunner, claim:
 export function nativeContainerArgs(claim: ExecutionGrant, paths: NativeDockerPaths, routing?: NativeHostImageRouting): string[] {
   const labels = ownershipLabels(claim);
   return [
-    "run", "--detach", "--name", containerName(claim), "--runtime", "sysbox-runc",
+    "run", "--detach", "--init", "--name", containerName(claim), "--runtime", "sysbox-runc",
     "--cpus", claim.descriptor.bounds.cpu, "--memory", claim.descriptor.bounds.memoryBytes,
     "--pids-limit", claim.descriptor.bounds.pids, "--oom-score-adj", "500", "--network", routing?.network ?? "bridge",
     ...(routing?.blockedHostnames ?? []).map((hostname) => `--add-host=${hostname}:127.0.0.1`),
@@ -37,6 +40,7 @@ export function nativeContainerArgs(claim: ExecutionGrant, paths: NativeDockerPa
     "--mount", `type=bind,source=${paths.script},target=/run/dim/job/script,readonly`,
     "--mount", `type=bind,source=${paths.launcher},target=/run/dim/runner,readonly`,
     "--mount", `type=bind,source=${paths.daemonConfig},target=/etc/docker/daemon.json,readonly`,
+    ...(paths.jobFiles ?? []).flatMap(({ source }, index) => ["--mount", `type=bind,source=${source},target=/run/dim/job/config-${index},readonly`]),
     "--env", `DIM_JOB_IMAGE=${claim.descriptor.jobImage}`,
     "--env", `DIM_JOB_CPUS=${claim.descriptor.bounds.cpu}`,
     "--env", `DIM_JOB_MEMORY=${claim.descriptor.bounds.memoryBytes}`,
@@ -45,20 +49,23 @@ export function nativeContainerArgs(claim: ExecutionGrant, paths: NativeDockerPa
   ];
 }
 
-export async function cleanupNativeContainer(runner: StreamingCommandRunner, claim: ExecutionGrant, kind = "sysbox"): Promise<boolean> {
+export async function cleanupNativeContainer(runner: StreamingCommandRunner, claim: ExecutionGrant, kind = "sysbox", name = containerName(claim)): Promise<boolean> {
   const format = ["{{.Id}}", ...labelKeys.map((key) => `{{index .Config.Labels \"${key}\"}}`)].join("|");
-  const inspected = await runner.run("docker", ["container", "inspect", containerName(claim), "--format", format], {
+  const inspected = await runner.run("docker", ["container", "inspect", name, "--format", format], {
     signal: AbortSignal.timeout(30_000)
   });
-  if (inspected.exitCode !== 0) return isMissing(inspected.stderr, containerName(claim));
+  if (inspected.exitCode !== 0) return isMissing(inspected.stderr, name);
   const [id, ...labels] = inspected.stdout.trim().split("|");
   const expected = ownershipLabels(claim, kind).map((label) => label.slice(label.indexOf("=") + 1));
   if (id === undefined || !/^[0-9a-f]{64}$/.test(id) || labels.join("|") !== expected.join("|")) return false;
-  const removed = await runner.run("docker", ["container", "rm", "--force", id], { signal: AbortSignal.timeout(30_000) });
+  const removed = await runner.run("docker", ["container", "rm", "--force", "--volumes", id], { signal: AbortSignal.timeout(30_000) });
   return removed.exitCode === 0 || isMissing(removed.stderr, id);
 }
 
-export function nativeRunnerScript(): string {
+export function nativeRunnerScript(targets: readonly string[] = []): string {
+  const mounts = validateJobConfigTargets(targets).map((target, index) => {
+    return `--mount type=bind,source=/run/dim/job/config-${index},target=${target},readonly`;
+  }).join(" ");
   return String.raw`#!/bin/sh
 set -eu
 export DOCKER_HOST=unix:///run/dim/docker.sock
@@ -76,11 +83,20 @@ if [ "$ready" != true ]; then exit 1; fi
 docker image pull "$DIM_JOB_IMAGE" >/dev/null
 job_digests="$(docker image inspect "$DIM_JOB_IMAGE" --format '{{json .RepoDigests}}')"
 printf '%s\n' "$job_digests" | grep -Fq -- "\"$DIM_JOB_IMAGE\""
-docker run --rm --oom-score-adj 500 --network none --cpus "$DIM_JOB_CPUS" --memory "$DIM_JOB_MEMORY" --pids-limit "$DIM_JOB_PIDS" \
+docker run --rm --oom-score-adj 500 --network bridge --cpus "$DIM_JOB_CPUS" --memory "$DIM_JOB_MEMORY" --pids-limit "$DIM_JOB_PIDS" \
   --workdir /workspace --mount type=bind,source=/workspace,target=/workspace \
   --mount type=bind,source=/run/dim/job/script,target=/run/dim/job/script,readonly \
+  ${mounts} \
   --entrypoint /bin/bash "$DIM_JOB_IMAGE" --noprofile --norc /run/dim/job/script
 `;
+}
+
+export function validateJobConfigTargets(targets: readonly string[]): readonly string[] {
+  if (targets.length > 16 || new Set(targets).size !== targets.length) throw new Error("invalid host job configuration files");
+  for (const target of targets) {
+    if (!/^\/etc\/[a-zA-Z0-9_./-]*[a-zA-Z0-9_-]$/.test(target) || posix.normalize(target) !== target) throw new Error("host-selected job configuration requires a normalized /etc file path");
+  }
+  return targets;
 }
 
 export async function prepareExecutionImage(runner: StreamingCommandRunner, image: string, signal: AbortSignal): Promise<void> {

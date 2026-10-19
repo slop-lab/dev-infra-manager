@@ -11,7 +11,7 @@ pids=${7-}
 if [ "$#" -ne 7 ] || [ "$descriptor" != /run/dim/job/descriptor.json ] || \
   [ "$script" != /run/dim/job/script ] || [ ! -r "$descriptor" ] || [ ! -r "$script" ] || \
   [ "$workspace" != /run/dim/workspace ] || [ ! -d "$workspace" ] || [ ! -w "$workspace" ] || \
-  [ ! -d /run/dim/guest-root ] || ! printf '%s' "$job_image" | grep -Eq '@sha256:[0-9a-f]{64}$'; then
+  [ ! -r /run/dim/job/rootfs.tar ] || ! printf '%s' "$job_image" | grep -Eq '@sha256:[0-9a-f]{64}$'; then
   echo "invalid native QEMU runner invocation" >&2
   exit 64
 fi
@@ -31,9 +31,8 @@ qemu-system-x86_64 \
   -kernel /opt/dim/vmlinuz -initrd /opt/dim/initramfs.gz \
   -append "console=ttyS0 quiet loglevel=0 panic=-1 dim.pids=$pids" \
   -device virtio-rng-pci \
+  -netdev user,id=jobnet -device virtio-net-pci,netdev=jobnet \
   -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-  -fsdev local,id=jobroot,path=/run/dim/guest-root,security_model=none,readonly=on \
-  -device virtio-9p-pci,fsdev=jobroot,mount_tag=jobroot \
   -fsdev local,id=job,path=/run/dim/job,security_model=none,readonly=on \
   -device virtio-9p-pci,fsdev=job,mount_tag=job \
   -fsdev local,id=workspace,path=/run/dim/workspace,security_model=mapped-xattr \

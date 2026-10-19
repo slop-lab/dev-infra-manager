@@ -24,12 +24,21 @@ export function createSysboxBackend(routing?: NativeHostImageRouting): Execution
     try {
       await verifyAndMaterializeCandidate({ authority: input.authority, descriptor,
         descriptorDigest: input.grant.descriptorDigest, workspace, scriptFile: script, signal });
-      await writeFile(launcher, nativeRunnerScript(), { mode: 0o500, flag: "wx" });
+      const files = routing?.jobFiles ?? [];
+      if (files.length > 16 || new Set(files.map(({ target }) => target)).size !== files.length) throw new Error("invalid host job configuration files");
+      const launchScript = nativeRunnerScript(files.map(({ target }) => target));
+      const jobFiles = await Promise.all(files.map(async ({ target, contents }, index) => {
+        if (Buffer.byteLength(contents) > 64 * 1024) throw new Error("host job configuration is too large");
+        const source = join(input.root, `config-${index}`);
+        await writeFile(source, contents, { mode: 0o400, flag: "wx" });
+        return { source, target };
+      }));
+      await writeFile(launcher, launchScript, { mode: 0o500, flag: "wx" });
       await writeFile(daemonConfig, routing?.dockerDaemonConfig ?? "{}\n", { mode: 0o400, flag: "wx" });
       await prepareNativeImages(input.runner, claim, signal);
       signal.throwIfAborted();
       const launched = await input.runner.run("docker", nativeContainerArgs(claim,
-        { workspace, script, launcher, daemonConfig }, routing), { signal });
+        { workspace, script, launcher, daemonConfig, jobFiles }, routing), { signal });
       if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) throw new Error("container launch failed");
       const id = launched.stdout.trim();
       const [waited, logs] = await Promise.all([

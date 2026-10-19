@@ -1,5 +1,5 @@
 FROM alpine:3.22.2@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412 AS build
-RUN apk add --no-cache build-base busybox-static cpio linux-virt
+RUN apk add --no-cache build-base busybox-static cpio linux-headers linux-virt
 COPY guest-init /build/init
 COPY guest-exit.c /build/guest-exit.c
 COPY guest-exec.c /build/guest-exec.c

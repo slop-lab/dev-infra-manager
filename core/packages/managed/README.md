@@ -119,5 +119,6 @@ updating the UI configuration.
 
 Native root CI hosts use direct registry access by default. No controller or
 host-mirror plugin is required. An explicitly enabled host-mirror provider
-selects the managed cache network and nested Docker mirror configuration;
+selects the owned cache network, nested Docker mirror and read-only job
+configuration for the selected runtime;
 errors in that selected provider stop startup rather than changing routing.

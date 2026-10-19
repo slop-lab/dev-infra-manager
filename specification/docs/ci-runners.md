@@ -63,9 +63,26 @@ registration or separate QEMU scheduler. Only select QEMU slots on hosts with
 real KVM. Missing hardware is unavailable; another backend is not a substitute.
 
 Mirrors are optional host integration. Direct pulls work by default. An enabled
-reviewed mirror provider supplies owned cache/network routing to Sysbox jobs;
+reviewed mirror provider supplies owned cache/network routing and read-only job
+configuration to the selected backend;
 explicit provider failure is reported rather than silently changing routing.
 Workers retain their own capacity journal independently of mirror resources.
+
+Ordinary jobs have outbound access through a private container bridge or QEMU
+user networking, so job scripts can install their own dependencies. The mirror
+plugin owns APT configuration; the execution backend only delivers bounded
+read-only configuration files. It does not set a global HTTP proxy.
+
+QEMU uses an exported, reviewed job image, extracted only inside the guest into
+a writable temporary root filesystem. It does not extract image archives on
+the host or require Docker image-mount support. The root filesystem consumes
+guest memory and must fit the configured guest budget along with the job.
+Job root can install packages but runs in its own PID/mount namespace without
+kernel-admin, resource-admin, ptrace or chroot capabilities. Its inherited PID
+limit and system mounts remain protected. The host supervisor stays unprivileged,
+with a read-only root, dropped capabilities and only KVM plus explicit candidate
+and workspace data. Owned stopped image-export containers and anonymous volumes
+are removed before capacity is returned.
 
 Service grammar and worker grammar belong to the execution implementation in
 `core/packages/managed/src/ci/`; Git owns only its job/grant/evidence wire contract.

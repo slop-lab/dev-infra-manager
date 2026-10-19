@@ -8,7 +8,7 @@ import { runExecutionWorker } from "./worker.js";
 import { createSysboxBackend } from "./backends/sysbox.js";
 import { lifecycleOptions } from "../lifecycleOptions.js";
 import type { LifecycleOptions } from "../lifecycleTypes.js";
-import { qemuBackend } from "./backends/qemu.js";
+import { createQemuBackend } from "./backends/qemu.js";
 export async function runCiWorker(path: string, signal: AbortSignal, options: { runner?: StreamingCommandRunner; lifecycle?: LifecycleOptions } = {}): Promise<void> {
   const runner = options.runner ?? new ProcessRunner();
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -32,13 +32,12 @@ export async function runCiWorker(path: string, signal: AbortSignal, options: { 
     await device.close();
   }
   const lifecycle = options.lifecycle ?? lifecycleOptions();
-  const routing = config.slots.some((slot) => slot.runtime === "container")
-    ? await lifecycle.hostMirrorProvider?.ensure(runner) : undefined;
+  const routing = await lifecycle.hostMirrorProvider?.ensure(runner);
   const stop = new AbortController(), workerSignal = AbortSignal.any([signal, stop.signal]);
   const workers = config.slots.map((slot) => runExecutionWorker({
     directory: join(config.stateDirectory, slot.id), client: executionWorkerClient({ endpoint: config.endpoint,
       workerId: config.workerId, slotId: slot.id, token: config.token, generationId: config.generationId }),
-    backend: slot.runtime === "container" ? createSysboxBackend(routing) : qemuBackend, runner,
+    backend: slot.runtime === "container" ? createSysboxBackend(routing) : createQemuBackend(routing), runner,
     gitEndpoint: config.nativeGitEndpoint, gitExecutable: config.gitExecutable, signal: workerSignal
   }));
   try { await Promise.all(workers); }
