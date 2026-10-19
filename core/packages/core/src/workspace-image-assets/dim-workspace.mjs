@@ -2,7 +2,7 @@
 // @ts-check
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { availableParallelism, homedir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -196,12 +196,24 @@ async function services(args) {
       if (await serviceAlive(name)) continue;
       const log = await open(path.join(servicesRoot, `${name}.log`), "a", 0o600);
       try {
-        const child = spawn(process.execPath, [process.argv[1] ?? "", "service", "__run", name], { detached: true, stdio: ["ignore", log.fd, log.fd, "ipc"] });
-        await new Promise((resolve, reject) => {
-          child.once("error", reject);
-          child.once("message", () => { child.disconnect(); child.unref(); resolve(undefined); });
-          child.once("exit", (code) => { if (code) reject(new Error(`service '${name}' failed; inspect ${name}.log`)); else resolve(undefined); });
-        });
+        // Keep this inode permanently: unlinking a lock allows two owners of different inodes.
+        const guard = await open(`${serviceLock(name)}.guard`, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+        try {
+          const metadata = await guard.stat();
+          if (!metadata.isFile() || metadata.uid !== process.geteuid?.() || (metadata.mode & 0o777) !== 0o600 || metadata.nlink !== 1) {
+            throw new Error("expected a private user-owned service guard");
+          }
+          // Open the validated inherited descriptor, rather than resolving the user path again.
+          // --no-fork makes the supervisor itself retain the kernel lock until it exits.
+          const child = spawn("flock", ["--exclusive", "--nonblock", "--conflict-exit-code", "75", "--no-fork", "/proc/self/fd/4",
+            process.execPath, process.argv[1] ?? "", "service", "__run", name],
+          { detached: true, stdio: ["ignore", log.fd, log.fd, "ipc", guard.fd] });
+          await new Promise((resolve, reject) => {
+            child.once("error", reject);
+            child.once("message", () => { child.disconnect(); child.unref(); resolve(undefined); });
+            child.once("exit", (code) => { if (code !== 0 && code !== 75) reject(new Error(`service '${name}' failed; inspect ${name}.log`)); else resolve(undefined); });
+          });
+        } finally { await guard.close(); }
       } finally { await log.close(); }
     } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
   }
@@ -252,20 +264,10 @@ async function stopService(name) {
 /** @param {string} name */
 async function superviseService(name) {
   const lock = serviceLock(name), nonce = randomUUID();
-  const deadline = Date.now() + 5000;
-  while (true) {
-    try { await mkdir(lock, { mode: 0o700 }); break; }
-    catch (error) { if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error; }
-    if (await serviceAlive(name)) { process.send?.({ ready: true }); return; }
-    const owner = await serviceOwner(name);
-    // A fresh lock without an owner may still be publishing its identity.
-    const info = await stat(lock).catch((error) => { if (error.code === "ENOENT") return undefined; throw error; });
-    if (owner || (info && Date.now() - info.mtimeMs > 30_000)) {
-      await rm(lock, { recursive: true, force: true }); continue;
-    }
-    if (Date.now() > deadline) throw new Error(`service '${name}' startup is still in progress`);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  }
+  // Only the kernel-lock owner reaches this process. Leftover metadata is never
+  // used to steal a lock; it can be replaced safely after the previous owner exits.
+  await rm(lock, { recursive: true, force: true });
+  await mkdir(lock, { mode: 0o700 });
   const ownerFile = path.join(lock, "owner.json");
   const boot = (await readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
   const ticks = await processIdentity(process.pid);

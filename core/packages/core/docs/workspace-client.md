@@ -103,6 +103,9 @@ dim-workspace service remove tunnel
 Registered commands keep exact arguments and working directories in private
 `~/.local/state/dim/services/NAME.json` files. Boot resumes them as the workspace
 user. Repeating `resume` does not start another copy of a running service;
-identities include the kernel boot identifier and process start time. Services
+identities include the kernel boot identifier and process start time. A Linux
+`flock` guard remains held by each supervisor until it exits, including during
+startup; the supplied workspace image includes this dependency. Guard files
+remain beside registrations so concurrent resumes always lock the same inode. Services
 run in the foreground under detached supervisors, with logs beside registrations.
 Removing a service stops its supervised process.

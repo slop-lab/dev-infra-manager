@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -93,6 +93,40 @@ it("registered services resume independently of sessions without duplicate proce
   } finally { await run("service", "remove", "tunnel").catch(() => {}); await rm(home, { recursive: true, force: true }); }
 });
 
+it("parallel service resumes retain one kernel guard across stale metadata recovery and restarts", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "dim-guest-services-race-"));
+  const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env: { ...process.env, HOME: home } });
+  const root = path.join(home, ".local/state/dim/services");
+  const guard = path.join(root, "worker.lock.guard");
+  const marker = path.join(home, "starts");
+  try {
+    await run("service", "register", "--name", "worker", "--", process.execPath, "-e",
+      "require('node:fs').appendFileSync(process.argv[1], JSON.stringify(process.pid)+'\\n');setInterval(()=>{},1000)", marker);
+    // A dead supervisor may leave metadata behind. Contenders must not unlink a
+    // replacement owner's lock while recovering the previous registration.
+    await mkdir(path.join(root, "worker.lock"));
+    await writeFile(path.join(root, "worker.lock/owner.json"), JSON.stringify({
+      pid: process.pid, ticks: "obsolete", boot: "previous-boot", nonce: "dead", child: 0, childTicks: ""
+    }), { mode: 0o600 });
+    let inode: number | undefined;
+    for (let round = 1; round <= 3; round++) {
+      await Promise.all(Array.from({ length: 12 }, () => run("service", "resume")));
+      await expect.poll(async () => (await readFile(marker, "utf8")).trim().split("\n").length).toBe(round);
+      expect(JSON.parse((await run("service", "list")).stdout)).toEqual([{ name: "worker", running: true }]);
+      // This is the synchronization invariant, independent of process scheduling:
+      // the running supervisor owns the same kernel lock used by every contender.
+      await expect(execute("flock", ["--nonblock", guard, "true"])).rejects.toMatchObject({ code: 1 });
+      const current = await stat(guard);
+      if (inode !== undefined) expect(current.ino).toBe(inode);
+      inode = current.ino;
+      await run("service", "remove", "worker");
+      expect((await stat(guard)).ino).toBe(inode);
+      await run("service", "register", "--name", "worker", "--", process.execPath, "-e",
+        "require('node:fs').appendFileSync(process.argv[1], JSON.stringify(process.pid)+'\\n');setInterval(()=>{},1000)", marker);
+    }
+  } finally { await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true }); }
+});
+
 it("one failed registered service does not prevent other independent services from starting", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "dim-guest-services-failure-"));
   const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env: { ...process.env, HOME: home } });
@@ -104,4 +138,18 @@ it("one failed registered service does not prevent other independent services fr
     await expect.poll(() => readFile(marker, "utf8")).toBe("started");
     expect(JSON.parse((await run("service", "list")).stdout)).toEqual([{ name: "broken", running: false }, { name: "healthy", running: true }]);
   } finally { await run("service", "remove", "healthy").catch(() => {}); await rm(home, { recursive: true, force: true }); }
+});
+
+it("a supervisor terminated before readiness reports startup failure", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "dim-guest-service-terminated-"));
+  const env = { ...process.env, HOME: home };
+  try {
+    await execute(process.execPath, [client, "service", "register", "--name", "worker", "--", "true"], { cwd: home, env });
+    const bin = path.join(home, "bin");
+    await mkdir(bin);
+    await writeFile(path.join(bin, "flock"), "#!/bin/sh\nkill -TERM $$\n", { mode: 0o700 });
+    await expect(execute(process.execPath, [client, "service", "resume"], {
+      cwd: home, env: { ...env, PATH: `${bin}:${process.env.PATH ?? ""}` }
+    })).rejects.toThrow(/service 'worker' failed/);
+  } finally { await rm(home, { recursive: true, force: true }); }
 });
