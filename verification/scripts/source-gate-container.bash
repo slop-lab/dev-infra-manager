@@ -93,7 +93,7 @@ check_output_run dependencies docker exec "$container" pnpm install --frozen-loc
 
 if (( $# == 0 )); then
   collect_logs=1
-  docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" "$container" /usr/local/bin/dim-source-gate-run
+  docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" --env "DIM_CHECK_VERBOSE=${DIM_CHECK_VERBOSE:-0}" "$container" /usr/local/bin/dim-source-gate-run
 else
-  check_output_run command docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" "$container" /usr/local/bin/dim-source-gate-run "$@"
+  check_output_run command docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" --env "DIM_CHECK_VERBOSE=${DIM_CHECK_VERBOSE:-0}" "$container" /usr/local/bin/dim-source-gate-run "$@"
 fi

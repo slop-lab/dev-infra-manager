@@ -113,10 +113,11 @@ describe("source gate container behavior", () => {
   it("exports failed gate logs before removing the owned container", async () => {
     const fixture = await fakeDockerFixture(false);
     try {
-      const result = runWrapper(fixture, "24", [], { DIM_FAKE_GATE_FAILURE: "1" });
+      const result = runWrapper(fixture, "24", [], { DIM_FAKE_GATE_FAILURE: "1", DIM_CHECK_VERBOSE: "1" });
       expect(result.status).toBe(23);
       expect(result.stderr).toContain("intentional gate failure");
       const log = await readFile(fixture.log, "utf8");
+      expect(log).toContain("DIM_CHECK_VERBOSE=1");
       const exportAt = log.indexOf(`${containerId}:/tmp/dim-source-checks`);
       const removeAt = log.indexOf(`container\trm\t--force\t${containerId}`);
       expect(exportAt).toBeGreaterThan(-1);
