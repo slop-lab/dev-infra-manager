@@ -2,7 +2,7 @@
 // @ts-check
 import { execFileSync, spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { mkdir, open, realpath, stat, lstat } from "node:fs/promises";
+import { mkdir, open, realpath, stat, lstat, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -43,6 +43,17 @@ async function main() {
     const temporary = path.join(root, "opencode");
     await mkdir(temporary, { recursive: true, mode: 0o700 });
     process.env.TMPDIR = temporary;
+    const npmCache = process.env.NPM_CONFIG_CACHE ?? process.env.npm_config_cache
+      ?? path.join(home, ".local/share/workspace-user-setup/cache");
+    if (!path.isAbsolute(npmCache)) throw new Error("npm cache must be an absolute user-owned directory");
+    await mkdir(npmCache, { recursive: true, mode: 0o700 });
+    const cacheInfo = await lstat(npmCache);
+    if (!cacheInfo.isDirectory() || cacheInfo.isSymbolicLink() || cacheInfo.uid !== process.getuid?.()) {
+      throw new Error("npm cache must be an absolute user-owned directory without a symlink");
+    }
+    await chmod(npmCache, 0o700);
+    process.env.NPM_CONFIG_CACHE = npmCache;
+    process.env.npm_config_cache = npmCache;
     const hookFile = path.join(home, ".config/dim/opencode-launch.js");
     let hookInfo;
     try { hookInfo = await lstat(hookFile); }

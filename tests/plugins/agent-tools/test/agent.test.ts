@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { copyFile, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, chmod, mkdir, mkdtemp, readFile, rm, writeFile, symlink, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,7 @@ it("tool launch forwards exact arguments and registers tool-owned noninteractive
       await writeFile(path.join(home, ".local/state/dim-tools", `${tool}.json`), JSON.stringify({ tool, version, executable }), { mode: 0o600 });
     }
     await writeFile(path.join(bin, "dim-workspace"), `#!${process.execPath}\n// @ts-check\nconst {spawnSync}=require('node:child_process');const r=spawnSync(process.execPath,[${JSON.stringify(guest)},...process.argv.slice(2)],{stdio:'inherit'});process.exit(r.status??1);`, { mode: 0o700 });
-    const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, DIM_WORKSPACE_TMPDIR: path.join(root, "temporary-volume") };
+    const env = { ...process.env, NPM_CONFIG_CACHE: undefined, npm_config_cache: undefined, HOME: home, PATH: `${bin}:${process.env.PATH}`, DIM_WORKSPACE_TMPDIR: path.join(root, "temporary-volume") };
     const run = (...args: string[]) => execute(process.execPath, [agent, ...args], { cwd: home, env });
     const literal = "value;$(not-a-shell)";
     expect(JSON.parse((await run("codex", literal, "--host", "unchanged")).stdout).argv).toEqual([literal, "--host", "unchanged"]);
@@ -31,12 +31,25 @@ it("tool launch forwards exact arguments and registers tool-owned noninteractive
     const first = JSON.parse((await run("opencode", "--resume-on-restart", literal)).stdout);
     expect(first.argv).toEqual([literal]);
     expect(JSON.parse(first.opencodeConfig)).toEqual({ model: "dim-responses/reviewed" });
-    expect(first.omoProfile).toBe("dim-router"); expect(first.temporary).toBe(path.join(root, "temporary-volume/opencode"));
+    expect(first.omoProfile).toBe("dim-router");
+    expect(first.npmCache).toBe(path.join(home, ".local/share/workspace-user-setup/cache"));
+    expect(first.npmCacheAlias).toBe(first.npmCache);
+    expect((await stat(first.npmCache)).mode & 0o777).toBe(0o700);
+    const customCache = path.join(root, "explicit-user-cache");
+    const explicit = JSON.parse((await execute(process.execPath, [agent, "opencode", "run", "explicit"], {
+      cwd: home, env: { ...env, NPM_CONFIG_CACHE: customCache }
+    })).stdout);
+    expect(explicit.npmCache).toBe(customCache); expect(explicit.npmCacheAlias).toBe(customCache);
+    const unsafe = path.join(root, "cache-symlink"); await symlink(customCache, unsafe);
+    await expect(execute(process.execPath, [agent, "opencode"], {
+      cwd: home, env: { ...env, NPM_CONFIG_CACHE: unsafe }
+    })).rejects.toThrow(/without a symlink/); expect(first.temporary).toBe(path.join(root, "temporary-volume/opencode"));
     const resumed = JSON.parse((await execute(process.execPath, [guest, "session", "resume"], { env, cwd: home })).stdout);
     expect(resumed.argv.slice(0, 2)).toEqual(["run", "--continue"]);
     expect(resumed.temporary).toBe(first.temporary);
     expect(resumed.opencodeConfig).toBe(first.opencodeConfig);
     expect(resumed.omoProfile).toBe(first.omoProfile);
+    expect(resumed.npmCache).toBe(first.npmCache);
     await run("codex", "--resume-on-restart");
     const codex = JSON.parse((await execute(process.execPath, [guest, "session", "resume"], { env, cwd: home })).stdout);
     expect(codex.argv.slice(0, 4)).toEqual(["exec", "resume", "--last", expect.stringContaining("Continue the interrupted task")]);

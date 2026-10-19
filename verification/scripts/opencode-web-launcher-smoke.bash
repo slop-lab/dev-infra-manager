@@ -53,6 +53,13 @@ chmod 0700 "$work_dir/tools/opencode"
 
 cat >"$work_dir/opencode-server.mjs" <<'EOF'
 import http from "node:http";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+assert.ok(process.env.NPM_CONFIG_CACHE?.startsWith("/"));
+assert.equal(process.env.NPM_CONFIG_CACHE, process.env.npm_config_cache);
+const npmCache = fs.lstatSync(process.env.NPM_CONFIG_CACHE);
+assert.equal(npmCache.uid, process.getuid());
+assert.equal(npmCache.isSymbolicLink(), false);
 const [hostname, portText] = process.argv.slice(2);
 const expected = `Basic ${Buffer.from(`${process.env.OPENCODE_SERVER_USERNAME}:${process.env.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`;
 http.createServer((request, response) => {
@@ -75,6 +82,8 @@ port="$(available_port)"
 opencode_arguments="$work_dir/opencode-arguments"
 base_env=(
   HOME="$work_dir/home"
+  NPM_CONFIG_CACHE="$work_dir/home/.local/share/workspace-user-setup/cache"
+  npm_config_cache="$work_dir/home/.local/share/workspace-user-setup/cache"
   PATH="$work_dir/tools:$PATH"
   MOCK_OPENCODE_SERVER="$work_dir/opencode-server.mjs"
   MOCK_OPENCODE_ARGUMENTS="$opencode_arguments"
@@ -120,6 +129,7 @@ mkdir -p "$state_dir"
 chmod 0700 "$state_dir"
 printf '%s\n' opencode "$unowned_password" >"$state_dir/credentials"
 chmod 0600 "$state_dir/credentials"
+NPM_CONFIG_CACHE="$work_dir/home" npm_config_cache="$work_dir/home" \
 OPENCODE_SERVER_USERNAME=opencode OPENCODE_SERVER_PASSWORD="$unowned_password" \
   node "$work_dir/opencode-server.mjs" 127.0.0.1 "$port" &
 unowned_pid=$!
@@ -233,6 +243,21 @@ for changed_file in "$work_dir/home/.config/dim/llm-router.json" "$work_dir/home
   [[ "$(cut -d ' ' -f 1 "$state_dir/server.pid")" = "$server_pid" ]]
   kill -0 "$unrelated_pid"
 done
+
+explicit_cache="$work_dir/explicit-npm-cache"
+env "${base_env[@]}" NPM_CONFIG_CACHE="$explicit_cache" bash "$launcher" >/dev/null
+changed_pid="$(cut -d ' ' -f 1 "$state_dir/server.pid")"
+[[ "$changed_pid" != "$server_pid" ]]
+! kill -0 "$server_pid" 2>/dev/null
+server_pid="$changed_pid"
+[[ "$(stat -c %a "$explicit_cache")" = 700 ]]
+tr '\0' '\n' <"/proc/$server_pid/environ" | grep -Fxq "NPM_CONFIG_CACHE=$explicit_cache"
+ln -s "$explicit_cache" "$work_dir/unsafe-npm-cache"
+if env "${base_env[@]}" NPM_CONFIG_CACHE="$work_dir/unsafe-npm-cache" bash "$launcher" >/dev/null 2>"$work_dir/unsafe-cache"; then
+  printf 'launcher accepted a symlink npm cache\n' >&2; exit 1
+fi
+grep -Fq 'without a symlink' "$work_dir/unsafe-cache"
+kill -0 "$server_pid"
 
 kill "$server_pid"
 wait "$server_pid" 2>/dev/null || true

@@ -98,3 +98,10 @@ restarted when router, OMO, or OpenCode configuration changes and reused when
 unchanged. Run `dim tools server WORKSPACE` again after attachment/token rotation
 to refresh an existing server. `DIM_LLM_ROUTER_OPENCODE_MODE=providers` explicitly
 retains independent model/provider choices.
+
+OpenCode's runtime npm installs use the same private, user-owned npm cache as
+setup, including TUI/run/server and saved continuation. This avoids older images'
+root-owned `~/.npm` cache without changing its ownership or contents. An explicit
+`NPM_CONFIG_CACHE` or `npm_config_cache` is retained when it names an absolute,
+owned directory without a symlink. Changing this cache selection refreshes an
+owned server on the next `dim tools server` invocation.

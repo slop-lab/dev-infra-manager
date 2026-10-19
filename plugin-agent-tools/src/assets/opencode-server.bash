@@ -63,6 +63,15 @@ mkdir -p -- "$temp_root/opencode"
 chmod 0700 "$temp_root/opencode"
 export TMPDIR="$temp_root/opencode"
 
+# OpenCode installs plugins at runtime through npm. Do not inherit a root-owned
+# default ~/.npm left by an older image; setup already uses this private cache.
+npm_cache="${NPM_CONFIG_CACHE-${npm_config_cache-$HOME/.local/share/workspace-user-setup/cache}}"
+[[ "$npm_cache" = /* ]] || fail 'npm cache must be an absolute user-owned directory'
+mkdir -p -- "$npm_cache"
+[[ -d "$npm_cache" && ! -L "$npm_cache" && -O "$npm_cache" ]] || fail 'npm cache must be an absolute user-owned directory without a symlink'
+chmod 0700 "$npm_cache"
+export NPM_CONFIG_CACHE="$npm_cache" npm_config_cache="$npm_cache"
+
 installed_version="$(opencode --version)"
 [[ "$installed_version" = "$EXPECTED_OPENCODE_VERSION" ]] || \
   fail "expected opencode $EXPECTED_OPENCODE_VERSION; run workspace-user-setup.bash first (found $installed_version)"
@@ -84,7 +93,7 @@ configuration_fingerprint="$(node --input-type=commonjs <<'NODE'
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto")
 const home = process.env.HOME
 const hash = crypto.createHash("sha256")
-for (const key of ["DIM_LLM_ROUTER_OPENCODE_MODE", "DIM_LLM_ROUTER_CONNECTION_FILE", "OPENCODE_CONFIG_CONTENT", "OMO_PROFILE", "OCX_PROFILE", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR"]) {
+for (const key of ["DIM_LLM_ROUTER_OPENCODE_MODE", "DIM_LLM_ROUTER_CONNECTION_FILE", "OPENCODE_CONFIG_CONTENT", "OMO_PROFILE", "OCX_PROFILE", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "NPM_CONFIG_CACHE", "npm_config_cache"]) {
   hash.update(JSON.stringify([key, process.env[key] ?? null]))
 }
 const config = process.env.XDG_CONFIG_HOME || path.join(home, ".config")
