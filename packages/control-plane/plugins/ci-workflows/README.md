@@ -41,7 +41,7 @@ repository does not publish execution artifacts.
 
 ## Control-plane plugin
 
-Install `@slop-lab/dim-plugin-control-plane-ci-workflows` with
+Install `@slop-lab/dim-control-plane-plugin-ci-workflows` with
 `dim installer install control-plane plugin PACKAGE...` and select it with
 `config: {}` in the standalone runtime configuration. Its `controlPlanePlugin`
 exports the workflow compiler capability only. It does not start a CI coordinator

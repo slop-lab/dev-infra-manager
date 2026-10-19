@@ -42,22 +42,17 @@ The installer stages a complete candidate runtime, validates its package and
 plugin graph, runs the candidate core's read-only compatibility preflight, and
 only then promotes it. Base installation requires no control plane, mirror
 plugin, configured container backend, or running controller. It installs the
-CLI without starting a controller service. A controller already active for this
-managed installation is restarted only when the selected runtime includes the
-managed component; failed readiness restores the previous runtime and restarts
-its controller. If an existing owned controller is active and the target is
-base-only, installation fails before promotion or controller mutation. Stop it
-with `dim controller stop` and, for the owned user service,
-`systemctl --user disable --now dim-controller.service`, then retry. Select
-`--with-managed` instead to retain managed administration. Deferred restart does
-not bypass this profile check. Separate control-plane containers are untouched.
-Plugin installation uses the same activation rule.
+CLI without starting a controller service. An already active owned controller
+is restarted against the candidate runtime; failed readiness restores the
+previous runtime and controller. Generic controller functionality belongs to
+host core and is available in the base installation. Separate control-plane
+containers are untouched. Plugin installation follows the same activation rule.
 
 Workspace cache clients are optional. To select the reviewed client explicitly:
 
 ```bash
 dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
+  --host-mirror-plugin '@slop-lab/dim-host-plugin-mirrors@0.10.0'
 ```
 
 This selects the client only; installation does not provision caches or require
@@ -66,7 +61,7 @@ URLs with `dim mirrors configure FILE`, or install and explicitly start the
 independent server plugin on this host:
 
 ```bash
-dim installer install plugin '@slop-lab/dim-plugin-cache-server@0.10.0'
+dim installer install plugin '@slop-lab/dim-host-plugin-cache-server@0.10.0'
 dim cache-server ensure
 dim mirrors ensure
 ```
@@ -87,13 +82,12 @@ Managed Git, review and shared CI are also optional:
 dim installer install core --with-managed
 ```
 
-This installs `@slop-lab/dim-managed` at the installer's exact version alongside
-the CLI. It is a component, not an enabled plugin, and does not deploy a control
-plane. An installed managed component is retained and updated to the matched
-version on later core installations. Local package bundles declare the exact
+This selects the exact-version Native Git and CI worker host plugins together
+with control-plane operator tools. It does not deploy a control plane. Later
+core installations retain selected operator tools and enabled plugins.
+Local package bundles declare the exact
 dependency graph in `packages.json`; base installation selects only CLI/core
-and their required dependencies. `--with-managed` selects the managed component
-and its required dependencies. Previously enabled plugins remain selected and
+and their required dependencies. `--with-managed` selects those host plugins and operator tools. Previously enabled plugins remain selected and
 use matched bundle artifacts. Missing or mismatched selected dependencies fail
 before package installation instead of falling back to a registry.
 
@@ -104,9 +98,9 @@ bash scripts/install-source-build.bash
 bash scripts/install-source-build.bash --with-managed
 ```
 
-The latter installs the optional managed library. Plugins and host services
-remain explicit operator choices. For manual local plugin installation, install
-core with `--with-managed` first so plugins can use its matched component peers.
+The latter selects the Native Git and CI worker host plugins with operator
+tools. Other plugins and service deployments remain explicit operator choices.
+Host plugins use their matched host-core peer.
 
 `--no-local-bin` keeps `dim` behind the mise/facade path. `--local-bin` manages
 one symlink below the selected prefix. The installer refuses to overwrite any
@@ -115,16 +109,12 @@ exact version; ranges and `latest` are not accepted.
 
 ## Native control plane
 
-For generated private configuration and first-Project connections, use
-`dim managed control-plane prepare` and `connect` from the optional managed
-package; see its README. A control-plane-only deployment host still needs only
-the installer facade and reviewed configuration files.
-
-The native Git schema-7 source may include its optional `qemuCi` dependency
-for a separately deployed native QEMU scheduler. The installer validates its
-service identity and HTTP(S) origin, includes all six role credentials in
-cross-role collision checks and diagnostic secret redaction, and leaves
-scheduler deployment to the operator.
+For private deployment configuration and host connections, use
+`dim control-plane prepare` and `connect` from
+`@slop-lab/dim-control-plane-admin`; see the
+[Native Git guide](../host/plugins/native-git/docs/cli.md). A deployment host
+running only control-plane services needs the installer facade and reviewed
+configuration files. It does not need the workspace CLI or host core.
 
 ```bash
 dim installer install control-plane --config /absolute/operator/install.json
@@ -137,8 +127,8 @@ services start empty and idle.
 
 This command does not create Projects or repositories, advertise execution
 capacity, run jobs, approve reviews, promote refs, install a reviewer UI, or
-install native QEMU. Ordinary Sysbox hosts and native QEMU scheduler/runner
-hosts are separate global deployments through the installed CLI.
+install native QEMU. CI worker capacity is provided explicitly by the host CI worker plugin, with
+configured Sysbox or QEMU/KVM slots.
 
 If candidate activation is uncertain, the installer retains the exact
 generation and requires explicit roll-forward recovery:
@@ -169,12 +159,12 @@ explicit operator action.
 
 Plugin coordinates must be exact versions. Local tarballs are copied into
 installer-owned storage so replacement does not depend on the original path.
-Installed plugins share the runtime's exact `@slop-lab/dim-managed` and are
-validated before activation.
+Host plugins share the runtime's exact `@slop-lab/dim-host-core` and are
+validated before activation. Control-plane plugins use their separate runtime.
 
 Installer configuration is stored below
 `${XDG_CONFIG_HOME:-$HOME/.config}/dim`; runtime data is below
 `${XDG_DATA_HOME:-$HOME/.local/share}/dim`. Treat both as trusted host state.
 
-See the normative [installer contract](../../specification/specs/14-installer-facade.md)
-and [adoption guide](../../specification/docs/adoption.md).
+See the normative [installer contract](../../docs/specs/14-installer-facade.md)
+and [adoption guide](../../docs/guides/adoption.md).

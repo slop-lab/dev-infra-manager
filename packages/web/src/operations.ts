@@ -71,12 +71,12 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
   }
   async function ci() {
     if (!config.ci) throw new HttpResponseError(404, "CI is not configured");
-    const module = await import("@slop-lab/dim-managed/ci");
+    const module = await import("@slop-lab/dim-control-plane-admin/ci");
     return module.createCiQueryClient(config.ci.queryConnection);
   }
   async function operator() {
     if (!config.ci?.operatorConnection) throw new HttpResponseError(403, "CI operator connection is not configured");
-    const module = await import("@slop-lab/dim-managed/ci");
+    const module = await import("@slop-lab/dim-control-plane-admin/ci");
     return module.createCiOperatorClient(config.ci.operatorConnection);
   }
   return {

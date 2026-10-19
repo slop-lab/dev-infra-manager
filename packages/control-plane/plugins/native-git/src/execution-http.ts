@@ -1,4 +1,4 @@
-import { CandidateExecutionError } from "./candidate-execution-schema.js";
+import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { authorizeExecution, assertCurrentExecution, readExecutionGrant, recordExecutionEvidence, ExecutionConflictError } from "./execution-evidence.js";
-import { executionGrantRequestSchema, type ExecutionGrant } from "./execution-protocol.js";
+import { executionGrantRequestSchema, type ExecutionGrant } from "@slop-lab/dim-contracts-ci/execution";
 import { nativeBasicAuthorized, nativeBasicCredential } from "./native-basic-auth.js";
 import { readBoundedJson, sendJson, sendNotFound, NativeGitBundleHttpError } from "./native-bundle-http.js";
 import { serveGitBackend } from "./backend.js";

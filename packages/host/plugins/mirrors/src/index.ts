@@ -1,13 +1,13 @@
-import { atomicWrite } from "@slop-lab/dim-core";
+import { atomicWrite } from "@slop-lab/dim-host-core";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { WorkspaceHostPlugin } from "@slop-lab/dim-core/workspace";
+import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
 import { hostMirrorProvider, findCacheEndpoints, mirrorStateRoot, parseCacheCatalog } from "./provider.js";
 import { attachWorkspaceMirrors } from "./attachment.js";
 export { hostMirrorProvider } from "./provider.js";
 
 export const plugin = {
-  name: "@slop-lab/dim-plugin-host-mirrors",
+  name: "@slop-lab/dim-host-plugin-mirrors",
   apiVersion: 4 as const,
   register(host: { registerExtension(kind: string, name: string, extension: object): void }) {
     host.registerExtension("dim.host-mirror-provider", "host", hostMirrorProvider);
@@ -18,6 +18,10 @@ export default plugin;
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "host-mirrors",
+  async executionRouting(context) {
+    if (!await findCacheEndpoints()) return;
+    return hostMirrorProvider.ensure(context.runner);
+  },
   commands: [{ name: "mirrors", description: "Connect workspaces and CI to package caches" }],
   async run(args, context) {
     if (args.length === 3 && args[1] === "configure") {

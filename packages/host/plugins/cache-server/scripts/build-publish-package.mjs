@@ -7,7 +7,7 @@ if (source.private !== true) throw new Error("The cache server source package mu
 const { private: privateSource, scripts, devDependencies, ...metadata } = source;
 const version = publishPackageVersion(source.version);
 const output = { ...metadata, version, types: "./index.d.ts", main: "./index.js",
-  peerDependencies: { "@slop-lab/dim-core": version },
+  peerDependencies: { "@slop-lab/dim-host-core": version },
   exports: { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } } };
 await writeFile(new URL("../dist/package.json", import.meta.url), `${JSON.stringify(output, null, 2)}\n`);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));

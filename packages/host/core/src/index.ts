@@ -1,4 +1,4 @@
-/** Base local and remote Git workspaces. Optional managed services live in dim-managed. */
+/** Host infrastructure primitives. Workspace and controller APIs have explicit subpath exports. */
 export * from "./workspace.js";
 export { isUserError, assertCondition } from "./errors.js";
 export type * from "./types.js";

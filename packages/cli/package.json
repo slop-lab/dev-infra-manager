@@ -34,20 +34,25 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-core": "workspace:0.10.0",
+    "@slop-lab/dim-host-core": "workspace:0.10.0",
     "commander": "14.0.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
     "typescript": "5.8.3",
-    "@slop-lab/dim-managed": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-admin": "workspace:0.10.0",
+    "@slop-lab/dim-host-plugin-native-git": "workspace:0.10.0"
   },
   "peerDependencies": {
-    "@slop-lab/dim-managed": "0.10.0"
+    "@slop-lab/dim-control-plane-admin": "0.10.0",
+    "@slop-lab/dim-host-plugin-native-git": "0.10.0"
   },
   "peerDependenciesMeta": {
-    "@slop-lab/dim-managed": {
+    "@slop-lab/dim-control-plane-admin": {
+      "optional": true
+    },
+    "@slop-lab/dim-host-plugin-native-git": {
       "optional": true
     }
   }

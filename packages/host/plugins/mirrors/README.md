@@ -1,12 +1,12 @@
-# `@slop-lab/dim-plugin-host-mirrors`
+# `@slop-lab/dim-host-plugin-mirrors`
 
-Connect ordinary Git workspaces and optional managed CI to shared Docker Hub,
+Connect ordinary Git workspaces and optional CI workers to shared Docker Hub,
 npm, PyPI and APT caches. This optional **client** plugin configures consumers;
-it does not install, start, replace or own cache servers. It requires DIM core;
-managed CI is an optional peer.
+it does not install, start, replace or own cache servers. It requires `@slop-lab/dim-host-core`;
+CI workers consume the host execution-routing capability.
 
 ```sh
-dim installer install plugin '@slop-lab/dim-plugin-host-mirrors@0.10.0'
+dim installer install plugin '@slop-lab/dim-host-plugin-mirrors@0.10.0'
 ```
 
 ## Select cache URLs
@@ -15,7 +15,7 @@ A cache host may independently install the optional
 [`cache-server`](../cache-server/README.md) plugin:
 
 ```sh
-dim installer install plugin '@slop-lab/dim-plugin-cache-server@0.10.0'
+dim installer install plugin '@slop-lab/dim-host-plugin-cache-server@0.10.0'
 dim cache-server ensure
 dim mirrors ensure
 ```
@@ -127,20 +127,21 @@ proxy failures propagate; default direct Docker Hub fallback is suppressed.
 These relays serve public cache data on a private network, not confidential
 per-workspace repositories.
 
-## Managed CI and verification
+## CI workers and verification
 
-The optional managed composition receives the same selected cache URLs and
-plugin-owned read-only client files. The CI execution core does not select cache
+The host execution-routing provider supplies CI workers with the same selected
+cache URLs and plugin-owned read-only client files. Without configured cache URLs
+it returns no route; multiple configured routing providers are rejected. The CI execution core does not select cache
 images, deploy servers or interpret package-manager syntax. Host credentials
 are absent from job configuration.
 
-`tests/plugins/host-mirrors/test/autoAttachment.test.ts` exercises actual Unix
+`tests/host/plugins/mirrors/autoAttachment.test.ts` exercises actual Unix
 Docker API forwarding, streaming/binary upgrades, relay request restrictions and
 workspace lifetime fencing. `guestClients.test.ts` covers four-endpoint payloads
 and explicit npm/pip and nested-container overrides.
 
 Disposable runtime gates live at
-`verification/scripts/auto-host-mirrors-smoke.mts` and
-`verification/scripts/package-cache-smoke.mts`. They use random resource names;
+`scripts/checks/auto-host-mirrors-smoke.mts` and
+`scripts/checks/package-cache-smoke.mts`. They use random resource names;
 never point them at installed cache services or existing data volumes. Read each
 script's prerequisites and usage before running it.

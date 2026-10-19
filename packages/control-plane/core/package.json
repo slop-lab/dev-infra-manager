@@ -1,5 +1,5 @@
 {
-  "name": "@slop-lab/dim-control-plane",
+  "name": "@slop-lab/dim-control-plane-core",
   "version": "0.10.0",
   "description": "Standalone DIM control-plane plugin runtime",
   "license": "MIT",

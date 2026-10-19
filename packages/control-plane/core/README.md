@@ -1,7 +1,7 @@
 # DIM control-plane runtime
 
-`@slop-lab/dim-control-plane` runs explicitly installed, operator-trusted service
-plugins without installing DIM workspaces, `dim-core`, Docker, or a host controller.
+`@slop-lab/dim-control-plane-core` runs explicitly installed, operator-trusted service
+plugins without installing DIM workspaces, `dim-host-core`, Docker, or a host controller.
 Node 24 or 26 is required. Services may have their own system prerequisites.
 
 Install selected plugins with
@@ -15,8 +15,8 @@ prints its `node_modules/.bin/dim-control-plane` path. Run that executable as
 {
   "schemaVersion": 1,
   "plugins": [
-    {"package": "@slop-lab/dim-plugin-control-plane-ci-workflows", "config": {}},
-    {"package": "@slop-lab/dim-plugin-control-plane-native-git", "config": {
+    {"package": "@slop-lab/dim-control-plane-plugin-ci-workflows", "config": {}},
+    {"package": "@slop-lab/dim-control-plane-plugin-native-git", "config": {
       "service": {}, "stateDirectory": "/var/lib/dim-native-git",
       "readinessToken": "REVIEWED_TOKEN", "activationToken": "REVIEWED_TOKEN",
       "expectedGenerationId": "REVIEWED_GENERATION_SHA256"

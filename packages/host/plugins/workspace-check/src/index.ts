@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { MissingRecordError, UserError, type WorkspaceHostPlugin, type WorkspaceHostPluginContext, type WorkspaceService } from "@slop-lab/dim-core/workspace";
+import { MissingRecordError, UserError, type WorkspaceHostPlugin, type WorkspaceHostPluginContext, type WorkspaceService } from "@slop-lab/dim-host-core/workspace";
 
 type CheckOperations = Pick<WorkspaceService, "create" | "start" | "stop" | "recreate" | "discard" | "exec">;
 

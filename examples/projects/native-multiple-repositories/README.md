@@ -10,19 +10,19 @@ credentials or access to private product code.
 
 Install the optional managed integration with
 `dim installer install core --with-managed`, then prepare/install/connect native
-Git on the selected host using [managed administration](../../../core/packages/managed/docs/cli.md).
+Git on the selected host using [managed administration](../../../packages/host/plugins/native-git/docs/cli.md).
 The control-plane machine requires the native Git and CI workflow plugins:
 
 ```bash
 dim installer install control-plane plugin \
-  '@slop-lab/dim-plugin-control-plane-native-git@0.10.0' \
-  '@slop-lab/dim-plugin-control-plane-ci-workflows@0.10.0'
+  '@slop-lab/dim-control-plane-plugin-native-git@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-ci-workflows@0.10.0'
 ```
 
 These install without workspace core on the control-plane machine. The workspace
 host uses the managed client integration and a saved service connection.
 Native Git serves `dim://` sources and proposal Git; the workflow plugin interprets
-`.dim/ci/runner.yml`. See [plugin locations](../../../specification/docs/plugin-scopes.md)
+`.dim/ci/runner.yml`. See [plugin locations](../../../docs/guides/plugin-scopes.md)
 for standalone runtime configuration and the separate Docker deployment path.
 
 Running the jobs also requires the shared execution service, a Sysbox worker,
@@ -50,14 +50,14 @@ for repository in public private; do
     -c user.email=example@invalid commit -m 'initial example'
 done
 
-dim managed project create codyssey --project-id codyssey
-dim managed project repository import codyssey public \
+dim project create codyssey --project-id codyssey
+dim project repository import codyssey public \
   --source "$work/public" --ref refs/heads/main \
   --review-policy "$example/policies/public.json"
-dim managed project repository import codyssey private \
+dim project repository import codyssey private \
   --source "$work/private" --ref refs/heads/main \
   --review-policy "$example/policies/private.json"
-dim managed project configure codyssey \
+dim project configure codyssey \
   --configuration-repository private --default-repository public
 dim create dim://codyssey full-dev --repository public --repository private --workdir private
 dim exec full-dev -- bash .dim/ci/jobs/integration.bash
@@ -107,4 +107,4 @@ workflow plugin, acquire selected snapshots, and execute the sample scripts.
 They cover both the successful combination and incompatible public input.
 The optional Sysbox journey also uses these files for workspace checkout,
 proposal Git, recreation and public-only isolation; see its command in
-[verification](../../../verification/README.md).
+[verification](../../../docs/development/verification.md).

@@ -3,7 +3,7 @@ import { createServer, request as httpRequest, type IncomingMessage, type Server
 import { request as httpsRequest } from "node:https";
 import { cacheKinds, type CacheKind, type CacheEndpoints } from "./cache-routing.js";
 import { dockerTarget, packageTarget, rewritePackageMetadata } from "./package-routing.js";
-import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
+import { WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import type { Socket } from "node:net";
 export interface MirrorRelayConfig {
   workspaceStateRoot: string; workspaceName: string; workspaceId: string;

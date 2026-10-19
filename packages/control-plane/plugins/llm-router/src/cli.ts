@@ -1,7 +1,7 @@
 import { mkdir, open, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
-import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane/lock";
+import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import { backendProfile, defaultLimits, integer, loadConfig, parseConfig, parsePolicy, privateFile, text } from "./config.js";
 import { RouterLedger, type Usage } from "./ledger.js";
 import { createRouter } from "./server.js";

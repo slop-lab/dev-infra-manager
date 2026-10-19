@@ -1,7 +1,7 @@
 import {
   UserError, type CommandRunner, type CreateWorkspaceInput, type StreamingCommandRunner,
   type WorkspaceRecord, type WorkspaceService, type WorkspaceStore, type WorkspaceRuntime, type AcquiredWorkspaceSource
-} from "@slop-lab/dim-core/workspace";
+} from "@slop-lab/dim-host-core/workspace";
 
 export interface WorkspaceHostCreateInput extends CreateWorkspaceInput {
   readonly repositories?: readonly string[];
@@ -39,14 +39,14 @@ export async function ensureWorkspaceIntegration(record: WorkspaceRecord, contex
 function managedSource(source: string): boolean { return source.startsWith("dim://"); }
 
 async function managedHost() {
-  try { import.meta.resolve("@slop-lab/dim-managed/host"); }
+  try { import.meta.resolve("@slop-lab/dim-host-plugin-native-git/host"); }
   catch (error) {
     if (error instanceof Error && "code" in error
       && ["ERR_MODULE_NOT_FOUND", "ERR_PACKAGE_PATH_NOT_EXPORTED"].includes(String(error.code))) {
-      throw new UserError("Managed Git workspace support is not installed. Install the matching package set with "
-        + "'dim installer install core --with-managed' (or 'just install-local --with-managed' for source builds).");
+      throw new UserError("Native Git host integration is not installed. Install the matching package set with "
+        + "'dim installer install plugin @slop-lab/dim-host-plugin-native-git@0.10.0'.");
     }
     throw error;
   }
-  return import("@slop-lab/dim-managed/host");
+  return import("@slop-lab/dim-host-plugin-native-git/host");
 }

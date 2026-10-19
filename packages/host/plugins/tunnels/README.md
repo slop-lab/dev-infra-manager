@@ -1,11 +1,11 @@
 # Workspace tunnels
 
-Optional host plugin `@slop-lab/dim-plugin-tunnels` connects workspace-local TCP
+Optional host plugin `@slop-lab/dim-host-plugin-tunnels` connects workspace-local TCP
 and UDP ports to fixed services chosen by the operator. It needs the base DIM
 workspace service; it does not need a control plane or managed controller.
 
 ```sh
-dim installer install plugin @slop-lab/dim-plugin-tunnels@0.10.0
+dim installer install plugin @slop-lab/dim-host-plugin-tunnels@0.10.0
 dim tunnel prepare --config /home/operator/.config/dim/tunnels.json
 dim tunnel add --config /home/operator/.config/dim/tunnels.json \
   --name database --protocol tcp --target-host database.internal --target-port 5432

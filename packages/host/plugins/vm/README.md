@@ -1,6 +1,6 @@
 # Optional persistent VM integration
 
-`@slop-lab/dim-plugin-vm` provides an Incus/KVM `vm` workspace runtime and
+`@slop-lab/dim-host-plugin-vm` provides an Incus/KVM `vm` workspace runtime and
 independent persistent VMs with scoped browser SPICE consoles. Install it as
 an explicit host plugin; the base container workspace does not need Incus,
 KVM, this package, its WebSocket dependency or graphical console assets.
@@ -63,7 +63,7 @@ sudo systemctl restart incus
 ```
 
 The same setup script ships with the published plugin through its
-`@slop-lab/dim-plugin-vm/budget-setup` export. Setup is explicit and never runs
+`@slop-lab/dim-host-plugin-vm/budget-setup` export. Setup is explicit and never runs
 as a package installation script. It installs immutable root-owned helper
 code, a narrowly matched sudoers rule and an Incus service PATH drop-in. It
 does **not** restart an existing daemon automatically. Coordinate that

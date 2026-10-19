@@ -27,4 +27,4 @@ await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
 await copyFile(new URL("../src/dim", import.meta.url), new URL("../dist/dim", import.meta.url));
 await chmod(new URL("../dist/dim", import.meta.url), 0o755);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
-await copyFile(new URL("../../../core/LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
+await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));

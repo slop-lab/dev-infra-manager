@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /usr/local/lib/dim/nativeOrdinaryServiceCli.js "$@"
+exec /usr/local/lib/dim/node_modules/@slop-lab/dim-control-plane-plugin-ci/cli.js "$@"

@@ -4,11 +4,11 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { executionGrantSchema, executionGrantRequestSchema, executionResultSchema,
-  type ExecutionGrant, type ExecutionResult } from "./execution-protocol.js";
+  type ExecutionGrant, type ExecutionResult } from "@slop-lab/dim-contracts-ci/execution";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import { loadAuthoritativeExecutionReview, loadCurrentAuthoritativeExecutionInputs } from "./authoritative-execution-review-inputs.js";
-import { candidateExecutionDescriptorSchema } from "./candidate-execution-schema.js";
-import { descriptorDigest } from "./candidate-execution.js";
+import { candidateExecutionDescriptorSchema } from "@slop-lab/dim-contracts-ci/descriptor";
+import { descriptorDigest } from "@slop-lab/dim-contracts-ci/digest";
 import { ownedReviewDirectory, readReviewJson as readStoredJson, writeImmutableReviewRecord } from "./review-record-storage.js";
 
 export async function authorizeExecution(runtime: AuthoritativeNativeCandidateRuntime, value: unknown): Promise<ExecutionGrant> {

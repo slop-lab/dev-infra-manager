@@ -10,7 +10,7 @@ import type { InstallerOperation } from "./installProgress.js";
 import { managedControllerIsActive } from "./controllerActivation.js";
 
 export type PluginTarget = "host" | "control-plane";
-const CONTROL_PLANE_RUNTIME = "@slop-lab/dim-control-plane";
+const CONTROL_PLANE_RUNTIME = "@slop-lab/dim-control-plane-core";
 
 export interface InstallOptions {
   readonly pluginHome: string;

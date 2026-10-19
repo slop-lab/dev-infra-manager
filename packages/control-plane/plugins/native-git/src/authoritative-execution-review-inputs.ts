@@ -3,7 +3,7 @@ import type { NativeCandidateJobInputs } from "./native-candidate-job-inputs.js"
 import { readAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import { resolveAuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
-import { CandidateExecutionError } from "./candidate-execution-schema.js";
+import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
 
 type Target = Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;

@@ -3,7 +3,7 @@ import { access, lstat, open, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
-import { UserError, type AcquiredWorkspaceSource, type StreamingCommandRunner } from "@slop-lab/dim-core/workspace";
+import { UserError, type AcquiredWorkspaceSource, type StreamingCommandRunner } from "@slop-lab/dim-host-core/workspace";
 import { hostPluginHome } from "./host-plugins.js";
 
 export interface RequiredPlugins {

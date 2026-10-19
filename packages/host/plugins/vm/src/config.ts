@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { isIPv4 } from "node:net";
-import { UserError } from "@slop-lab/dim-core/workspace";
+import { UserError } from "@slop-lab/dim-host-core/workspace";
 
 /** Host-reviewed settings. Neither guest code nor image metadata can add devices. */
 export interface VmHostConfig {

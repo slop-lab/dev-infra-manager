@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane/plugin";
+import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
 import { parseNativeGitBundleConfig } from "./bundle-config.js";
 import { configuredNativeGitBundleServer } from "./native-bundle-server.js";
 

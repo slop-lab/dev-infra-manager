@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { UserError } from "@slop-lab/dim-managed";
+import { UserError } from "@slop-lab/dim-host-core";
 
 const run = promisify(execFile);
 export const EXTERNAL_URL_INGRESS_DRIVER_EXTENSION = "external-url.ingress-driver";

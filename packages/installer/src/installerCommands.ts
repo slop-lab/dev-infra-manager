@@ -27,8 +27,9 @@ import { withInstallerProgress } from "./installProgress.js";
 import { installControlPlaneCommand, recoverControlPlaneCommand } from "./controlPlaneCommand.js";
 import { readManifest, readPackageJson } from "./runtimeFiles.js";
 
-const HOST_MIRROR_PLUGIN = "@slop-lab/dim-plugin-host-mirrors";
-const MANAGED_COMPONENT = "@slop-lab/dim-managed";
+const HOST_MIRROR_PLUGIN = "@slop-lab/dim-host-plugin-mirrors";
+const CONTROL_PLANE_ADMIN = "@slop-lab/dim-control-plane-admin";
+const HOST_PROFILE_PLUGINS = ["@slop-lab/dim-host-plugin-native-git", "@slop-lab/dim-host-plugin-ci-worker"] as const;
 
 export async function installerCommand(input: readonly string[]): Promise<void> {
   let commandArgs = input;
@@ -136,24 +137,26 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
   }
   const version = await installerVersion();
   const packages = await selectCorePackages(version, parsed.values["with-managed"] === true);
+  const profilePlugins = parsed.values["with-managed"] ? HOST_PROFILE_PLUGINS.map((name) => ({ name, specifier: `${name}@${version}` })) : [];
   const enabledPlugins = localDirectory === undefined ? [] : (await readManifest(
     path.join(defaultDataHome(), "runtime/current/plugins.json")
   )).plugins;
   const bundle = localDirectory === undefined ? undefined : await readLocalPackageBundle(
-    localDirectory, [...packages.packageNames, ...enabledPlugins]
+    localDirectory, [...packages.packageNames, ...enabledPlugins, ...profilePlugins.map(({ name }) => name)]
   );
   const plugins = bundle === undefined
-    ? await selectHostMirrorPlugin(
-      version,
-      parsed.values["host-mirror-plugin"]
-    )
-    : [];
+    ? [...await selectHostMirrorPlugin(version, parsed.values["host-mirror-plugin"]), ...profilePlugins]
+    : profilePlugins.map(({ name }) => {
+      const specifier = bundle.packageSpecifiers[bundle.packageNames.indexOf(name)];
+      if (!specifier) throw new Error(`local package bundle is missing profile plugin '${name}'`);
+      return { name, specifier };
+    });
   const installed = bundle === undefined
     ? await withInstallerProgress("core", async (operation) => installDimCli({
       ...packages, version, exposeOnPath, binDirectory, operation, plugins
     }))
     : await withInstallerProgress("core", (operation) => installDimCli({
-      ...bundle, exposeOnPath, binDirectory, operation,
+      ...bundle, exposeOnPath, binDirectory, operation, plugins,
       ...(parsed.values["defer-controller-restart"] ? { restartController: false } : {})
     }));
   console.log(`${bundle ? "Installed local" : "Installed"} DIM CLI ${installed.version} at ${installed.executable}`);
@@ -186,7 +189,7 @@ async function installCore(
 async function selectCorePackages(version: string, withManaged: boolean) {
   const previous = await readPackageJson(path.join(defaultDataHome(), "runtime/current/package.json"));
   const names = ["@slop-lab/dim-cli"];
-  if (withManaged || Object.hasOwn(previous?.dependencies ?? {}, MANAGED_COMPONENT)) names.push(MANAGED_COMPONENT);
+  if (withManaged || Object.hasOwn(previous?.dependencies ?? {}, CONTROL_PLANE_ADMIN)) names.push(CONTROL_PLANE_ADMIN);
   return { packageNames: names, packageSpecifiers: names.map((name) => `${name}@${version}`) };
 }
 
@@ -223,7 +226,7 @@ async function installPluginPackages(specifiers: readonly string[], target: Plug
     return;
   }
   if (localDirectory !== undefined) throw new Error("--local-packages for plugins requires install control-plane plugin");
-  if (specifiers.some((specifier) => packageNameFromSpecifier(specifier)?.startsWith("@slop-lab/dim-plugin-control-plane-"))) {
+  if (specifiers.some((specifier) => packageNameFromSpecifier(specifier)?.startsWith("@slop-lab/dim-control-plane-plugin-"))) {
     throw new Error("control-plane packages use 'dim installer install control-plane plugin'; no host CLI installation is required");
   }
   const cli = await configuredCli();

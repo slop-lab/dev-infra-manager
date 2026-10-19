@@ -1,5 +1,5 @@
 {
-  "name": "@slop-lab/dim-plugin-dns-cloudflare",
+  "name": "@slop-lab/dim-host-plugin-dns-cloudflare",
   "version": "0.10.0",
   "description": "Cloudflare DNS provider plugin for DIM external URL ingresses",
   "license": "MIT",
@@ -20,9 +20,9 @@
     }
   },
   "scripts": {
-    "build": "node scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "build": "node ../../../../scripts/packages/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
-    "pack:dry-run": "pnpm run build && bash scripts/pnpm-pack-dry-run.bash"
+    "pack:dry-run": "pnpm run build && bash ../../../../scripts/packages/pnpm-pack-dry-run.bash ./dist"
   },
   "packageManager": "pnpm@10.13.1",
   "engines": {
@@ -35,12 +35,12 @@
     "@slop-lab/dim-contracts-external-url": "0.10.0"
   },
   "peerDependencies": {
-    "@slop-lab/dim-managed": "0.10.0"
+    "@slop-lab/dim-host-core": "0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
     "typescript": "5.8.3",
-    "@slop-lab/dim-managed": "workspace:0.10.0"
+    "@slop-lab/dim-host-core": "workspace:0.10.0"
   }
 }

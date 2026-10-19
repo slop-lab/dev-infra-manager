@@ -11,12 +11,12 @@ approval.
 
 Required components: base Docker/Sysbox workspace support, matching managed
 administration (`dim installer install core --with-managed`), and
-`@slop-lab/dim-plugin-external-urls@0.10.0` installed on the workspace host.
+`@slop-lab/dim-host-plugin-external-urls@0.10.0` installed on the workspace host.
 The host controller and ingress provide this integration; no native Git service,
 CI worker, DNS plugin or separate control-plane deployment is required for the
 loopback HTTP example. An arbitrary source repository needs no declaration;
 if the integration is intrinsic to that repository, its `.dim/workspace.json`
-can declare `{"plugins":["@slop-lab/dim-plugin-external-urls@0.10.0"]}`.
+can declare `{"plugins":["@slop-lab/dim-host-plugin-external-urls@0.10.0"]}`.
 That declaration does not install managed administration or configure ingress.
 
 ## Start a service
@@ -35,7 +35,7 @@ optional component and plugin, then configure a loopback-only ingress:
 
 ```bash
 dim installer install core --with-managed
-dim installer install plugin '@slop-lab/dim-plugin-external-urls@0.10.0'
+dim installer install plugin '@slop-lab/dim-host-plugin-external-urls@0.10.0'
 bash configure-ingress.bash
 bash request-urls.bash external-dev
 ```
@@ -97,9 +97,9 @@ The actual container relay smoke checks concurrent binary streams, half-close,
 relay reuse, ownership fencing and discard cleanup:
 
 ```bash
-node verification/scripts/controller-workspace-relay-smoke.mjs WORKSPACE_IMAGE
+node scripts/checks/controller-workspace-relay-smoke.mjs WORKSPACE_IMAGE
 ```
 
 Run that command from the repository root after building matched packages and a
 Sysbox workspace image. Public HTTPS/DNS configuration is documented in
-[External workspace URLs](../../../specification/docs/external-urls.md).
+[External workspace URLs](../../../docs/guides/external-urls.md).

@@ -1,6 +1,6 @@
 import { mkdir, readFile, realpath, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { WorkspaceResources } from "@slop-lab/dim-core/workspace";
+import type { WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 
 export interface VmBudget {
   prepare?(identity: { instance: string }, resources: WorkspaceResources): Promise<void>;

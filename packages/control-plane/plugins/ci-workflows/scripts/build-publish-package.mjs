@@ -5,7 +5,7 @@ import { publishPackageVersion } from "../../../../../scripts/packages/publish-p
 const { private: privateSource, scripts: sourceScripts, devDependencies, ...metadata } = source;
 if (privateSource !== true) throw new Error("The source package.json must remain private");
 const output = { ...metadata, version: publishPackageVersion(source.version) };
-output.peerDependencies = { "@slop-lab/dim-control-plane": output.version };
+output.peerDependencies = { "@slop-lab/dim-control-plane-core": output.version };
 output.main = "./index.js";
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };

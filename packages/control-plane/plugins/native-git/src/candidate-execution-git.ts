@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { assertGitExecutableIdentity, type GitExecutableIdentity } from "./repository.js";
-import { CandidateExecutionError } from "./candidate-execution-schema.js";
+import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
 
 const execute = promisify(execFile);
 const processTimeout = 10_000;

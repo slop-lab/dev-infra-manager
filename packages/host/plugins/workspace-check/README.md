@@ -4,7 +4,7 @@ This optional host plugin tests an ordinary Git source without Project hooks
 or a managed control plane:
 
 ```sh
-dim installer install plugin '@slop-lab/dim-plugin-workspace-check@0.10.0'
+dim installer install plugin '@slop-lab/dim-host-plugin-workspace-check@0.10.0'
 dim workspace-check /absolute/path/on/selected/host/to/repository
 # Or: dim --host devbox workspace-check https://example.com/team/app.git --image REVIEWED_IMAGE
 ```

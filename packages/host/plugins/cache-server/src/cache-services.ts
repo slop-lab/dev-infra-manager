@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { UserError, type StreamingCommandRunner } from "@slop-lab/dim-core";
+import { UserError, type StreamingCommandRunner } from "@slop-lab/dim-host-core";
 import { MirrorState } from "./cacheState.js";
 import { createHostMirrorOwnership, extendHostMirrorOwnership, hostMirrorLabels, type HostMirrorOwnership } from "./hostMirrorOwnership.js";
 

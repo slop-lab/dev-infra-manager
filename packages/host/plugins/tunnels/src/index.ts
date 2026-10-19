@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { UserError, type WorkspaceHostPlugin, type WorkspaceService } from "@slop-lab/dim-core/workspace";
+import { UserError, type WorkspaceHostPlugin, type WorkspaceService } from "@slop-lab/dim-host-core/workspace";
 import { TunnelStore, namePattern, parseRoute, validPort } from "./store.js";
 import { serveTunnels } from "./server.js";
 export { serveTunnels } from "./server.js";

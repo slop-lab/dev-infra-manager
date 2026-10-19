@@ -5,10 +5,14 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const packageDirectories = [
+export const packageDirectories = [
   "packages/host/core/dist",
   "packages/control-plane/core/dist",
-  "core/packages/managed/dist",
+  "packages/contracts/ci/dist",
+  "packages/control-plane/admin/dist",
+  "packages/control-plane/plugins/ci/dist",
+  "packages/host/plugins/native-git/dist",
+  "packages/host/plugins/ci-worker/dist",
   "packages/control-plane/plugins/native-git/dist",
   "packages/web/dist",
   "packages/control-plane/plugins/ci-workflows/dist",

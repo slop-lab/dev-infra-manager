@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout } from "node:timers/promises";
-import { UserError, type CommandRunner, type StreamingCommandRunner, type RunOptions, type WorkspaceResources } from "@slop-lab/dim-core/workspace";
+import { UserError, type CommandRunner, type StreamingCommandRunner, type RunOptions, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import { fingerprint, object, uuid, parseVmHostConfig, type VmHostConfig } from "./config.js";
 import type { VmBudget } from "./budget.js";
 

@@ -10,7 +10,16 @@ export interface WorkspaceRuntimeFactoryContext {
   readonly stateRoot: string;
 }
 
+export interface HostExecutionRouting {
+  readonly network: string;
+  readonly blockedHostnames: readonly string[];
+  readonly dockerDaemonConfig: string;
+  readonly jobFiles?: readonly { readonly target: string; readonly contents: string }[];
+  readonly jobEnvironmentDefaults?: Readonly<Record<string, string>>;
+}
+
 export interface WorkspaceHostPluginContext extends WorkspaceRuntimeFactoryContext {
+  executionRouting?(): Promise<HostExecutionRouting | undefined>;
   readonly signal: AbortSignal;
   readonly service: WorkspaceService;
   readonly store: WorkspaceStore;
@@ -27,6 +36,8 @@ export interface WorkspaceHostPlugin {
     readonly defaultImage?: string;
     create(context: WorkspaceRuntimeFactoryContext): WorkspaceRuntime | Promise<WorkspaceRuntime>;
   };
+  /** Optional host execution routing; absent configuration must return undefined. */
+  executionRouting?(context: WorkspaceRuntimeFactoryContext & { readonly signal: AbortSignal }): Promise<HostExecutionRouting | undefined>;
   readonly commands?: readonly { readonly name: string; readonly description: string }[];
   run?(args: string[], context: WorkspaceHostPluginContext): Promise<void>;
   workspaceReady?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void>;

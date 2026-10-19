@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
-import { UserError, type ControllerWorkspace } from "@slop-lab/dim-managed";
+import { UserError } from "@slop-lab/dim-host-core";
+import { type ControllerWorkspace } from "@slop-lab/dim-host-core/controller";
 import { workspaceServiceSubdomain } from "@slop-lab/dim-contracts-external-url";
 
 export type ExternalUrlRoutePolicyConfig =

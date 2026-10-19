@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { join, resolve } from "node:path";
-import { deployGuestIntegration, type WorkspaceHostPluginContext } from "@slop-lab/dim-core/workspace";
+import { deployGuestIntegration, type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/workspace";
 import { issuePrincipal, revokePrincipal } from "./client.js";
 import { loadHostConfig, parseHostConfig } from "./config.js";
 import { deployRouterHelpers } from "./integration.js";

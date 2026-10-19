@@ -1,5 +1,5 @@
 import { createServer, type Socket } from "node:net";
-import { UserError, type WorkspaceView } from "@slop-lab/dim-core/workspace";
+import { UserError, type WorkspaceView } from "@slop-lab/dim-host-core/workspace";
 import { type HostTarget } from "./host-context.js";
 import { callHost, streamHost, type HostTransportOptions } from "./host-transport.js";
 

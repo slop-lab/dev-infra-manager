@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command, CommanderError } from "commander";
-import { UserError } from "@slop-lab/dim-core/workspace";
+import { UserError } from "@slop-lab/dim-host-core/workspace";
 import { HostContextError, HostContextStore } from "./host-context.js";
 import { packageVersion } from "./package-version.js";
 import { HostTransportError, streamHost } from "./host-transport.js";
@@ -22,33 +22,36 @@ async function main(): Promise<void> {
       await runHostRequest(args[1]!);
       return;
     }
-    // Managed administration follows the selected host. The root controller
-    // alias remains local for installer activation/recovery.
-    const { args: managedArgs, host: selectedHost } = hostArguments(args);
-    const managedAliases = ["plugin", "ci", "external-url", "project", "host-input", "x"];
-    if (managedArgs[0] === "managed" || managedAliases.includes(managedArgs[0] ?? "")) {
-      const commandArgs = managedArgs[0] === "managed" ? managedArgs.slice(1) : managedArgs;
+    // Optional administration follows the selected host. The root controller
+    // alias without an explicit host remains local for installer activation/recovery.
+    const { args: commandArgs, host: selectedHost } = hostArguments(args);
+    if (commandArgs[0] === "control-plane" || (commandArgs[0] === "controller" && selectedHost !== undefined)) {
       const host = await new HostContextStore().resolve(selectedHost);
       if (host.ssh !== undefined) {
         const abort = new AbortController();
         const stop = () => abort.abort();
         process.once("SIGINT", stop); process.once("SIGTERM", stop); process.once("SIGHUP", stop);
         try {
-          process.exitCode = await streamHost(host, { operation: "managed.cli", input: { args: commandArgs } }, {
+          process.exitCode = await streamHost(host, { operation: commandArgs[0] === "controller" ? "controller.cli" : "controlPlane.cli", input: { args: commandArgs } }, {
             signal: abort.signal, terminal: Boolean(process.stdin.isTTY && process.stdout.isTTY)
           });
         } finally {
           process.off("SIGINT", stop); process.off("SIGTERM", stop); process.off("SIGHUP", stop);
         }
       } else {
-        const { runManagedApplication } = await import("./managed-application.js");
-        await runManagedApplication(commandArgs);
+        if (commandArgs[0] === "controller") {
+          const { runControllerApplication } = await import("./controller-application.js");
+          await runControllerApplication(commandArgs);
+        } else {
+          const { runControlPlaneApplication } = await import("./control-plane-application.js");
+          await runControlPlaneApplication(commandArgs);
+        }
       }
       return;
     }
-    if (managedArgs[0] === "controller") {
-      const { runManagedApplication } = await import("./managed-application.js");
-      await runManagedApplication(managedArgs);
+    if (commandArgs[0] === "controller") {
+      const { runControllerApplication } = await import("./controller-application.js");
+      await runControllerApplication(commandArgs);
       return;
     }
     const program = new Command()
@@ -59,18 +62,18 @@ async function main(): Promise<void> {
       .showSuggestionAfterError()
       .configureHelp({ sortSubcommands: true, sortOptions: true });
     registerDevelopmentCommands(program);
-    program.command("managed").description("Optional managed Git, review, CI and host administration");
-    program.command("controller").description("Manage the optional host controller");
+    program.command("control-plane").description("Optional control-plane deployment and operator commands");
+    program.command("controller").description("Manage the host controller (local unless --host is explicit)");
     // Unknown top-level commands are resolved on the selected host, where optional
     // integrations are installed. A base-only remote client loads none of them.
-    if (managedArgs[0] && !managedArgs[0].startsWith("-")
-      && !program.commands.some((command) => command.name() === managedArgs[0] || command.aliases().includes(managedArgs[0]!))) {
+    if (commandArgs[0] && !commandArgs[0].startsWith("-")
+      && !program.commands.some((command) => command.name() === commandArgs[0] || command.aliases().includes(commandArgs[0]!))) {
       const target = await new HostContextStore().resolve(selectedHost);
       const abort = new AbortController();
       const stop = () => abort.abort();
       process.once("SIGINT", stop); process.once("SIGTERM", stop); process.once("SIGHUP", stop);
       try {
-        process.exitCode = await streamHost(target, { operation: "plugin.cli", input: { args: managedArgs } }, {
+        process.exitCode = await streamHost(target, { operation: "plugin.cli", input: { args: commandArgs } }, {
           signal: abort.signal, terminal: Boolean(process.stdin.isTTY && process.stdout.isTTY)
         });
       } finally {
@@ -84,7 +87,7 @@ Start developing:
   dim ls
   dim shell dev
 
-Use 'dim host --help' for SSH hosts and 'dim managed --help' for managed services.
+Use 'dim host --help' for SSH hosts and 'dim control-plane --help' for optional control-plane administration.
 ${process.env.DIM_INVOKED_VIA_INSTALLER === "1" ? "\nInstaller: dim installer install core|plugin|control-plane" : ""}`);
     program.exitOverride();
     await program.parseAsync(args, { from: "user" });

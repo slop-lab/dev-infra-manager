@@ -11,7 +11,7 @@ status. `dim-tools-setup opencode` or `dim-tools-setup codex` performs the expli
 pinned tool installation there; helper preparation itself downloads no tools.
 
 ```sh
-dim installer install plugin '@slop-lab/dim-plugin-agent-tools@0.10.0'
+dim installer install plugin '@slop-lab/dim-host-plugin-agent-tools@0.10.0'
 dim tools setup development opencode
 # Independently install Codex in the same persistent home:
 dim tools setup development codex

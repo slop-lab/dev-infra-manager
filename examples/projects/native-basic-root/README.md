@@ -4,14 +4,14 @@
 
 Install matching managed administration on the selected host with
 `dim installer install core --with-managed`. Prepare/install/connect its native
-Git and CI services as described in [managed administration](../../../core/packages/managed/docs/cli.md).
-`@slop-lab/dim-plugin-control-plane-native-git` supplies the Git service;
-`@slop-lab/dim-plugin-control-plane-ci-workflows` supplies the `.dim/ci/runner.yml`
+Git and CI services as described in [managed administration](../../../packages/host/plugins/native-git/docs/cli.md).
+`@slop-lab/dim-control-plane-plugin-native-git` supplies the Git service;
+`@slop-lab/dim-control-plane-plugin-ci-workflows` supplies the `.dim/ci/runner.yml`
 compiler. Install these on the control-plane machine with
 `dim installer install control-plane plugin PACKAGE@EXACT_VERSION`.
 They use the standalone control-plane runtime without workspace core. They are
 control-plane plugins, separate from `.dim/workspace.json` host requirements;
-see [plugin locations](../../../specification/docs/plugin-scopes.md).
+see [plugin locations](../../../docs/guides/plugin-scopes.md).
 
 This example needs no optional host plugin, so it has no host-plugin requirement
 file. It still requires a Docker/Sysbox host and a built workspace image
@@ -29,13 +29,13 @@ files stay outside the repository and workspace; connect saves their selection.
 Review `review-policy.json` as trusted operator input before importing:
 
 ```bash
-dim managed project create native-basic --project-id native-basic
-dim managed project repository import native-basic root \
+dim project create native-basic --project-id native-basic
+dim project repository import native-basic root \
   --source "$PWD" --ref refs/heads/main \
   --review-policy "$PWD/review-policy.json" --json
-dim managed project configure native-basic \
+dim project configure native-basic \
   --configuration-repository root --default-repository root --json
-dim managed project repository list native-basic --json
+dim project repository list native-basic --json
 dim create dim://native-basic native-basic-work
 dim exec native-basic-work -- git status
 ```

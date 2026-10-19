@@ -1,5 +1,5 @@
 {
-  "name": "@slop-lab/dim-plugin-control-plane-ci-workflows",
+  "name": "@slop-lab/dim-control-plane-plugin-ci-workflows",
   "version": "0.10.0",
   "description": "DIM control-plane workflow language compiler plugin",
   "license": "MIT",
@@ -28,9 +28,9 @@
   "devDependencies": {
     "@types/node": "24.13.3",
     "typescript": "5.8.3",
-    "@slop-lab/dim-control-plane": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-core": "workspace:0.10.0"
   },
   "peerDependencies": {
-    "@slop-lab/dim-control-plane": "0.10.0"
+    "@slop-lab/dim-control-plane-core": "0.10.0"
   }
 }

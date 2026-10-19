@@ -1,9 +1,9 @@
 # Control-plane LLM router
 
-`@slop-lab/dim-plugin-control-plane-llm-router` runs independently of DIM workspace core and host stores. It owns project policy, private upstream credentials, principals, durable usage and inert exchange archives. Projects are accounting identities and require no managed Git repositories.
+`@slop-lab/dim-control-plane-plugin-llm-router` runs independently of DIM workspace core and host stores. It owns project policy, private upstream credentials, principals, durable usage and inert exchange archives. Projects are accounting identities and require no managed Git repositories.
 
 ```sh
-dim installer install control-plane plugin @slop-lab/dim-plugin-control-plane-llm-router@0.10.0
+dim installer install control-plane plugin @slop-lab/dim-control-plane-plugin-llm-router@0.10.0
 ```
 
 ## Backend boundary

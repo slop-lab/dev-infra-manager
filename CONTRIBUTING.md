@@ -16,7 +16,7 @@ just build-packages  # publishable package builds
 just check-source    # isolated pinned source gate; Docker is the only toolchain prerequisite
 just check-source-native # same gate in an already pinned native environment
 just verify agent    # strongest gate supported inside this repository's DIM agent
-bash verification/scripts/local-ci-matrix.bash # isolated Node.js 24/26 source matrix plus mise host integrations
+bash scripts/checks/local-ci-matrix.bash # isolated Node.js 24/26 source matrix plus mise host integrations
 just build-workspace-image # run the source CLI's shipped-asset release image build
 just build-local-workspace-image # image-only build for the current worktree
 just prepare-local   # matched package/image candidate from one reviewed root commit
@@ -41,9 +41,9 @@ The recommended complete source check requires only Bash and Docker on the
 host:
 
 ```bash
-bash verification/scripts/source-gate-container.bash
+bash scripts/checks/source-gate-container.bash
 # Select the real Node.js 26 source lane explicitly:
-DIM_SOURCE_NODE_MAJOR=26 bash verification/scripts/source-gate-container.bash
+DIM_SOURCE_NODE_MAJOR=26 bash scripts/checks/source-gate-container.bash
 ```
 
 `just check-source` and `just check-source-container` are convenience aliases
@@ -87,7 +87,7 @@ just verify native-ordinary-executor-live
 Node.js 24 or 26, pnpm 10.13.1, and a writable temporary directory. It builds all
 packages before checking cross-package behavior. Root-only QEMU process and
 filesystem checks are a separate disposable-environment profile; see
-[verification profiles](verification/README.md). The default isolated source gate
+[verification profiles](docs/development/verification.md). The default isolated source gate
 runs both profiles without giving the container a host Docker socket.
 
 The `Native integration` workflow has dedicated native ordinary Sysbox and
@@ -100,7 +100,7 @@ replace clean independent-host release acceptance or human review.
 
 For GitHub UI/CLI manual dispatch, default-branch and disposable-runner
 prerequisites, exact-SHA result checks, and remaining release gates, follow
-[the release verification runbook](specification/docs/releasing.md#github-manual-triggers).
+[the release verification runbook](docs/guides/releasing.md#github-manual-triggers).
 
 `local-ci-matrix.bash` requires mise, Docker with Compose v2, and the same host
 capabilities as the container integration tests. It first runs the complete
@@ -116,19 +116,19 @@ On Ubuntu, install the QEMU tooling and grant the invoking user persistent KVM
 access with:
 
 ```bash
-bash verification/scripts/install-kvm-verify-deps-ubuntu.bash
+bash scripts/checks/install-kvm-verify-deps-ubuntu.bash
 ```
 
 The full setup, verification-gate, and installer-testing walkthrough — host
 backend installers, KVM-based installer/backend smoke tests, the
 `just verify container` integration suite, the direct host-backend smoke scripts,
 and the installer/example smoke tests — is the
-[verification contract](specification/specs/12-verification.md).
+[verification contract](docs/specs/12-verification.md).
 
 ## Fresh internal-development VMs
 
 For a new Ubuntu 24.04 amd64 VM, use
-[the role bootstrap](verification/bootstrap-ubuntu-vm.md) instead of assembling
+[the role bootstrap](docs/development/bootstrap-ubuntu-vm.md) instead of assembling
 the host and build-tool installers manually:
 
 ```bash
@@ -143,30 +143,30 @@ services. The `0.10.0` target is internal and pre-stable, not a public release.
 
 ## Repository layout
 
-[docs/architecture.md](specification/docs/architecture.md) covers workspace boundaries and
+[docs/architecture.md](docs/guides/architecture.md) covers workspace boundaries and
 dependency direction. In short: `packages/host/core` has no CLI dependency,
 `packages/cli` is a thin executable adapter over it, and
 `packages/installer` is the separate installer facade — see
-[docs/README.md](specification/docs/README.md) for the full documentation index and
-[specs/README.md](specification/specs/README.md) for the normative, implementation-facing
+[docs/README.md](docs/guides/README.md) for the full documentation index and
+[specs/README.md](docs/specs/README.md) for the normative, implementation-facing
 specifications that changes should stay consistent with.
 
 ## Publishing packages
 
-See [docs/releasing.md](specification/docs/releasing.md) for prerequisites, the
+See [docs/releasing.md](docs/guides/releasing.md) for prerequisites, the
 verification gate, and the publish order (core and shared integration
 libraries, then `dim-cli`, then `dim-installer`).
 
 ## Bootstrapping a fresh dev host
 
 ```bash
-bash verification/scripts/bootstrap-ubuntu.bash
+bash scripts/checks/bootstrap-ubuntu.bash
 ```
 
 Installs Node.js/pnpm/`just` (via mise when available), Sysbox, project
 dependencies, then runs `just check-source`, `just verify plugin-install`,
 `just build-workspace-image`, and `just run-cli doctor`. See the
-[configuration guide](specification/docs/configuration.md) for the current
+[configuration guide](docs/guides/configuration.md) for the current
 native host boundary.
 
 ## Preparing local DIM changes

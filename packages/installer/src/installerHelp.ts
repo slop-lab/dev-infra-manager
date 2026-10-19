@@ -48,7 +48,7 @@ Options:
   --no-local-bin  Install privately for facade use without ~/.local/bin/dim
   --local-bin     Create a managed dim symlink in the user bin directory
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
-  --with-managed Install optional managed Git, review and CI components
+  --with-managed Install native Git host + CI worker plugins and control-plane administration
   --host-mirror-plugin PACKAGE@EXACT_VERSION
                    Optionally enable the cache client (does not deploy cache servers)
   --local-packages PATH
@@ -80,12 +80,12 @@ Options:
   -h, --help                 Show this help
 
 Control-plane-only installation needs no DIM core or CLI:
-  dim installer install control-plane plugin @slop-lab/dim-plugin-control-plane-native-git@0.10.0
-  dim installer control-plane disable-plugin @slop-lab/dim-plugin-control-plane-native-git
-  dim installer control-plane enable-plugin @slop-lab/dim-plugin-control-plane-native-git
-  dim installer control-plane remove-plugin @slop-lab/dim-plugin-control-plane-native-git
+  dim installer install control-plane plugin @slop-lab/dim-control-plane-plugin-native-git@0.10.0
+  dim installer control-plane disable-plugin @slop-lab/dim-control-plane-plugin-native-git
+  dim installer control-plane enable-plugin @slop-lab/dim-control-plane-plugin-native-git
+  dim installer control-plane remove-plugin @slop-lab/dim-control-plane-plugin-native-git
 
-Installs matching @slop-lab/dim-control-plane beside the plugins. Its executable
+Installs matching @slop-lab/dim-control-plane-core beside the plugins. Its executable
 is PLUGIN_HOME/node_modules/.bin/dim-control-plane. Override the private home
 with DIM_CONTROL_PLANE_PLUGIN_HOME; host DIM_PLUGIN_HOME remains independent.
 Plugin changes do not restart running control-plane services.`);

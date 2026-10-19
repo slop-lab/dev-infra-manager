@@ -23,7 +23,9 @@ output.exports = {
     types: "./index.d.ts",
     import: "./index.js"
   },
-  "./workspace": { types: "./workspace.d.ts", import: "./workspace.js" }
+  "./workspace": { types: "./workspace.d.ts", import: "./workspace.js" },
+  "./controller": { types: "./controller/index.d.ts", import: "./controller/index.js", default: "./controller/index.js" },
+  "./controller/cli": { types: "./controller/cli/index.d.ts", import: "./controller/cli/index.js", default: "./controller/cli/index.js" }
 };
 
 if ("private" in output) {
@@ -33,7 +35,7 @@ if ("private" in output) {
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
 await writeFile(versionModulePath, `export const packageVersion = ${JSON.stringify(output.version)};\n`);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
-await copyFile(new URL("../../../../core/LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
+await copyFile(new URL("../../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
 await cp(
   new URL("../src/workspace-image-assets", import.meta.url),
   new URL("../dist/workspace-image-assets", import.meta.url),

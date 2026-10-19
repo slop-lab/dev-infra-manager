@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /usr/local/lib/dim/nativeGitServiceCli.js "$@"
+exec node /usr/local/lib/dim/node_modules/@slop-lab/dim-control-plane-plugin-native-git/deployment-cli.js "$@"

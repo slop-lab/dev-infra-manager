@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { join, dirname } from "node:path";
-import { atomicWrite, tryAcquireKernelGuard } from "@slop-lab/dim-core";
+import { atomicWrite, tryAcquireKernelGuard } from "@slop-lab/dim-host-core";
 import { createMirrorRelay } from "./relay.js";
 import { parseRelayConfig, privateJson } from "./relay-state.js";
 async function main() {

@@ -32,11 +32,11 @@ export type { NativeGitProjectRegistrar } from "./native-project-registrar-http.
 export {
   CandidateExecutionError,
   candidateExecutionDescriptorSchema
-} from "./candidate-execution-schema.js";
+} from "@slop-lab/dim-contracts-ci/descriptor";
 export type {
   CandidateExecutionDescriptor
-} from "./candidate-execution-schema.js";
-export type { WorkflowCompiler, WorkflowJob, NativeCandidateRequiredJob } from "./workflowCompiler.js";
+} from "@slop-lab/dim-contracts-ci/descriptor";
+export type { WorkflowCompiler, WorkflowJob, NativeCandidateRequiredJob } from "@slop-lab/dim-contracts-ci/workflow";
 export type {
   NativeCandidateBlobIdentity,
   NativeCandidateJobInputPlanEntry,
@@ -48,7 +48,7 @@ export type {
   AuthoritativeNativeCandidateJobSelector,
   AuthoritativeNativeCandidateRuntime
 } from "./authoritative-native-candidate-job-inputs.js";
-export { descriptorDigest } from "./candidate-execution.js";
+export { descriptorDigest } from "@slop-lab/dim-contracts-ci/digest";
 export {
   createNodeAdmissionVerifierHttpClient,
   OrdinaryAdmissionVerifierError

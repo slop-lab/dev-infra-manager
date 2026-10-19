@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { MissingRecordError, UserError, WorkspaceStore, validateResources, type WorkspaceResources } from "@slop-lab/dim-core/workspace";
+import { MissingRecordError, UserError, WorkspaceStore, validateResources, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import { fingerprint, object, text, uuid } from "./config.js";
 import { type VmIdentity, IncusMachines } from "./incus.js";
 

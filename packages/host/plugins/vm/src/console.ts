@@ -4,7 +4,7 @@ import { createServer, request, type IncomingMessage, type ServerResponse, type 
 import path from "node:path";
 import { once } from "node:events";
 import WebSocket, { createWebSocketStream, WebSocketServer } from "ws";
-import { UserError } from "@slop-lab/dim-core/workspace";
+import { UserError } from "@slop-lab/dim-host-core/workspace";
 import { object, text, type VmHostConfig } from "./config.js";
 import { digest, equal, PersistentVmService } from "./store.js";
 

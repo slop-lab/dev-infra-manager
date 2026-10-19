@@ -1,5 +1,5 @@
-import type { StreamingCommandRunner } from "@slop-lab/dim-core";
-import { atomicWrite } from "@slop-lab/dim-core";
+import type { StreamingCommandRunner } from "@slop-lab/dim-host-core";
+import { atomicWrite } from "@slop-lab/dim-host-core";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { connect } from "node:net";

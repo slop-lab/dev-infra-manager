@@ -13,15 +13,16 @@ const output = minifyPackageJson(source, {
   includeFields: ["exports", "types", "publishConfig"]
 });
 output.version = publishPackageVersion(source.version);
-output.peerDependencies = { "@slop-lab/dim-control-plane": output.version };
+output.peerDependencies = { "@slop-lab/dim-control-plane-core": output.version };
 output.types = "./index.d.ts";
 output.exports = {
   ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" },
   "./config": { types: "./bundle-config.d.ts", import: "./bundle-config.js" },
   "./service": { types: "./service.d.ts", import: "./service.js" },
-  "./execution": { types: "./execution-protocol.d.ts", import: "./execution-protocol.js" },
-  "./workflow": { types: "./workflowCompiler.d.ts", import: "./workflowCompiler.js" }
+  "./deployment": { types: "./service-pair.d.ts", import: "./service-pair.js" },
+  "./deployment-cli": { types: "./deployment-cli.d.ts", import: "./deployment-cli.js" }
 };
+output.dependencies = { ...source.dependencies, "@slop-lab/dim-contracts-ci": output.version, "@slop-lab/dim-control-plane-plugin-ci-workflows": output.version };
 output.bin = { "dim-native-git": "cli.js" };
 delete output.private;
 

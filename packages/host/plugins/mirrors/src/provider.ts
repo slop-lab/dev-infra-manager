@@ -1,4 +1,4 @@
-import type { StreamingCommandRunner } from "@slop-lab/dim-core";
+import type { StreamingCommandRunner } from "@slop-lab/dim-host-core";
 import os from "node:os";
 import path from "node:path";
 import { cacheEndpoint, cacheKinds, clientFiles, DOCKER_HUB_DIRECT_HOSTNAMES, type CacheEndpoints, type MirrorRouting } from "./cache-routing.js";

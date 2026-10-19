@@ -3,13 +3,8 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import https from "node:https";
 import net from "node:net";
 import tls from "node:tls";
-import {
-  UserError,
-  type ControllerWorkspace,
-  type DimPluginLogger,
-  type ResolvedWorkspaceTarget,
-  type WorkspaceTarget
-} from "@slop-lab/dim-managed";
+import { UserError } from "@slop-lab/dim-host-core";
+import { type ControllerWorkspace, type DimPluginLogger, type ResolvedWorkspaceTarget, type WorkspaceTarget } from "@slop-lab/dim-host-core/controller";
 import { HttpFlowTracker, type HttpFlow } from "./httpFlows.js";
 import { WorkspaceRouteRegistry } from "./httpRouteRegistry.js";
 import {

@@ -85,17 +85,6 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
       throw new Error(`installed DIM CLI reports ${installedVersion}, expected ${options.version}`);
     }
     await verifySelectedPlugins(stagingDirectory, selectedPlugins);
-    if (restartController || existingControllerActive) {
-      try {
-        await access(path.join(stagingDirectory, "node_modules", "@slop-lab", "dim-managed", "package.json"), constants.R_OK);
-      } catch (error) {
-        if (errorCode(error) !== "ENOENT") throw error;
-        throw new Error("A managed controller is active or its restart was requested, but the selected installation is base-only. "
-          + "Stop the existing controller with 'dim controller stop'; if it is an owned user service, also run "
-          + "'systemctl --user disable --now dim-controller.service', then retry. "
-          + "To retain managed administration, install with '--with-managed'. No installed runtime was changed.");
-      }
-    }
     options.operation?.reportProgress("state preflight");
     await runStagedStatePreflight(stagingDirectory);
     await atomicWrite(path.join(stagingDirectory, "plugins.json"), pluginGraph.manifest);

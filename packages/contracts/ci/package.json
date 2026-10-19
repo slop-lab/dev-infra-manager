@@ -1,0 +1,94 @@
+{
+  "name": "@slop-lab/dim-contracts-ci",
+  "version": "0.10.0",
+  "description": "Shared DIM CI protocol schemas and transport",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./execution": {
+      "types": "./src/execution-protocol.ts",
+      "import": "./dist/execution-protocol.js",
+      "default": "./dist/execution-protocol.js"
+    },
+    "./aggregate": {
+      "types": "./src/aggregate.ts",
+      "import": "./dist/aggregate.js",
+      "default": "./dist/aggregate.js"
+    },
+    "./config": {
+      "types": "./src/config.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
+    },
+    "./worker": {
+      "types": "./src/worker.ts",
+      "import": "./dist/worker.js",
+      "default": "./dist/worker.js"
+    },
+    "./query": {
+      "types": "./src/query.ts",
+      "import": "./dist/query.js",
+      "default": "./dist/query.js"
+    },
+    "./connections": {
+      "types": "./src/connections.ts",
+      "import": "./dist/connections.js",
+      "default": "./dist/connections.js"
+    },
+    "./http": {
+      "types": "./src/http.ts",
+      "import": "./dist/http.js",
+      "default": "./dist/http.js"
+    },
+    "./workflow": {
+      "types": "./src/workflow.ts",
+      "import": "./dist/workflow.js",
+      "default": "./dist/workflow.js"
+    },
+    "./descriptor": {
+      "types": "./src/candidate-execution-schema.ts",
+      "import": "./dist/candidate-execution-schema.js",
+      "default": "./dist/candidate-execution-schema.js"
+    },
+    "./digest": {
+      "types": "./src/candidate-execution.ts",
+      "import": "./dist/candidate-execution.js",
+      "default": "./dist/candidate-execution.js"
+    },
+    "./events": {
+      "types": "./src/events.ts",
+      "import": "./dist/events.js",
+      "default": "./dist/events.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
+    "directory": "packages/contracts/ci"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node ../../../scripts/packages/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "dependencies": {
+    "zod": "4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  }
+}

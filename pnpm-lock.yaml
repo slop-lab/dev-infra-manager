@@ -10,22 +10,38 @@ importers:
 
   packages/cli:
     dependencies:
-      '@slop-lab/dim-core':
+      '@slop-lab/dim-host-core':
         specifier: workspace:0.10.0
-        version: link:../core
+        version: link:../host/core
       commander:
         specifier: 14.0.0
         version: 14.0.0
     devDependencies:
-      '@slop-lab/dim-managed':
+      '@slop-lab/dim-control-plane-admin':
         specifier: workspace:0.10.0
-        version: link:../managed
+        version: link:../control-plane/admin
+      '@slop-lab/dim-host-plugin-native-git':
+        specifier: workspace:0.10.0
+        version: link:../host/plugins/native-git
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
         specifier: 0.0.6
         version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/contracts/ci:
+    dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3
@@ -42,6 +58,34 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/control-plane/admin:
+    dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/ci
+      '@slop-lab/dim-control-plane-plugin-native-git':
+        specifier: workspace:0.10.0
+        version: link:../plugins/native-git
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../host/core
+      '@slop-lab/dim-host-plugin-native-git':
+        specifier: workspace:0.10.0
+        version: link:../../host/plugins/native-git
+      commander:
+        specifier: 14.0.0
+        version: 14.0.0
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/control-plane/core:
     devDependencies:
       '@types/node':
@@ -51,53 +95,272 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/host/core:
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/installer:
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  core/packages/managed:
+  packages/control-plane/plugins/ci:
     dependencies:
-      '@slop-lab/dim-control-plane':
+      '@slop-lab/dim-contracts-ci':
         specifier: workspace:0.10.0
-        version: link:../control-plane
-      '@slop-lab/dim-core':
+        version: link:../../../contracts/ci
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
-        version: link:../core
-      '@slop-lab/dim-plugin-control-plane-ci-workflows':
-        specifier: workspace:0.10.0
-        version: link:../../../packages/control-plane/plugins/ci-workflows
-      '@slop-lab/dim-plugin-control-plane-native-git':
-        specifier: workspace:0.10.0
-        version: link:../../../packages/control-plane/plugins/native-git
-      commander:
-        specifier: 14.0.0
-        version: 14.0.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/ci-workflows:
+    dependencies:
       yaml:
         specifier: 2.8.3
         version: 2.8.3
       zod:
         specifier: 4.1.11
         version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/llm-router:
+    dependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/native-git:
+    dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/ci
+      '@slop-lab/dim-control-plane-plugin-ci-workflows':
+        specifier: workspace:0.10.0
+        version: link:../ci-workflows
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/core:
+    dependencies:
+      commander:
+        specifier: 14.0.0
+        version: 14.0.0
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/agent-tools:
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/cache-server:
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/ci-worker:
+    dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/ci
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/dns-cloudflare:
+    dependencies:
+      '@slop-lab/dim-contracts-external-url':
+        specifier: 0.10.0
+        version: link:../../../contracts/external-url
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/external-urls:
+    dependencies:
+      '@slop-lab/dim-contracts-external-url':
+        specifier: 0.10.0
+        version: link:../../../contracts/external-url
+      commander:
+        specifier: 14.0.0
+        version: 14.0.0
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/llm-router:
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/mirrors:
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/native-git:
+    dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/ci
+      commander:
+        specifier: 14.0.0
+        version: 14.0.0
+      yaml:
+        specifier: 2.8.3
+        version: 2.8.3
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/tunnels:
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/vm:
+    dependencies:
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:*
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      '@types/ws':
+        specifier: 8.18.2
+        version: 8.18.2
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/host/plugins/workspace-check:
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/installer:
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -115,201 +378,15 @@ importers:
         specifier: 4.1.11
         version: 4.1.11
     devDependencies:
-      '@slop-lab/dim-managed':
+      '@slop-lab/dim-control-plane-admin':
         specifier: workspace:*
-        version: link:../managed
+        version: link:../control-plane/admin
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
         specifier: 0.0.6
         version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/agent-tools:
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:0.10.0
-        version: link:../packages/host/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/cache-server:
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:0.10.0
-        version: link:../packages/host/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/control-plane/plugins/ci-workflows:
-    dependencies:
-      yaml:
-        specifier: 2.8.3
-        version: 2.8.3
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      '@slop-lab/dim-control-plane':
-        specifier: workspace:0.10.0
-        version: link:../packages/control-plane/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/control-plane/plugins/llm-router:
-    dependencies:
-      '@slop-lab/dim-control-plane':
-        specifier: workspace:0.10.0
-        version: link:../packages/control-plane/core
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/control-plane/plugins/native-git:
-    dependencies:
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      '@slop-lab/dim-control-plane':
-        specifier: workspace:0.10.0
-        version: link:../packages/control-plane/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/dns-cloudflare:
-    dependencies:
-      '@slop-lab/dim-contracts-external-url':
-        specifier: 0.10.0
-        version: link:../packages/contracts/external-url
-    devDependencies:
-      '@slop-lab/dim-managed':
-        specifier: workspace:0.10.0
-        version: link:../core/packages/managed
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/external-urls:
-    dependencies:
-      '@slop-lab/dim-contracts-external-url':
-        specifier: 0.10.0
-        version: link:../packages/contracts/external-url
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:0.10.0
-        version: link:../packages/host/core
-      '@slop-lab/dim-managed':
-        specifier: workspace:0.10.0
-        version: link:../core/packages/managed
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/llm-router:
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:0.10.0
-        version: link:../packages/host/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/mirrors:
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:0.10.0
-        version: link:../packages/host/core
-      '@slop-lab/dim-managed':
-        specifier: workspace:0.10.0
-        version: link:../core/packages/managed
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/tunnels:
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:0.10.0
-        version: link:../packages/host/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/vm:
-    dependencies:
-      ws:
-        specifier: 8.22.0
-        version: 8.22.0
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:*
-        version: link:../packages/host/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      '@types/ws':
-        specifier: 8.18.2
-        version: 8.18.2
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/workspace-check:
-    devDependencies:
-      '@slop-lab/dim-core':
-        specifier: workspace:0.10.0
-        version: link:../packages/host/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3
@@ -334,21 +411,15 @@ importers:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
-      vitest:
-        specifier: 3.2.4
-        version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
-      ws:
-        specifier: 8.22.0
-        version: 8.22.0
-
-  verification:
-    devDependencies:
       verdaccio:
         specifier: 6.8.0
         version: 6.8.0(typanion@3.14.0)
       vitest:
         specifier: 3.2.4
         version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
       yaml:
         specifier: 2.8.3
         version: 2.8.3

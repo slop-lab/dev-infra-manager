@@ -2,7 +2,7 @@
 import source from "../package.json" with { type: "json" };
 import { cp, copyFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
-import { publishPackageVersion } from "./publish-package-version.mjs";
+import { publishPackageVersion } from "../../../../../scripts/packages/publish-package-version.mjs";
 
 const outputPath = new URL("../dist/package.json", import.meta.url);
 
@@ -16,7 +16,7 @@ output.version = publishPackageVersion(source.version);
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
 output.dependencies = { ...source.dependencies, "@slop-lab/dim-contracts-external-url": output.version };
-output.peerDependencies = { ...source.peerDependencies, "@slop-lab/dim-managed": output.version, "@slop-lab/dim-core": output.version };
+output.peerDependencies = { ...source.peerDependencies, "@slop-lab/dim-host-core": output.version };
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);

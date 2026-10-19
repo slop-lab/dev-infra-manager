@@ -31,7 +31,7 @@ export async function assertControlPlaneClosure(home: string): Promise<void> {
       const location = path.join(directory, entry.name);
       if (entry.name.startsWith("@")) { await visit(location); continue; }
       if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-      if (path.basename(directory) === "@slop-lab" && ["dim-core", "dim-cli", "dim-managed"].includes(entry.name)) {
+      if (path.basename(directory) === "@slop-lab" && (["dim-host-core", "dim-cli", "dim-control-plane-admin"].includes(entry.name) || entry.name.startsWith("dim-host-plugin-"))) {
         throw new Error(`control-plane plugins must not install host runtime @slop-lab/${entry.name}`);
       }
       await visit(path.join(location, "node_modules"));

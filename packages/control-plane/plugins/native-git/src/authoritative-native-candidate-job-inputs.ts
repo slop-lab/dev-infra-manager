@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { resolveAuthoritativeNativeRepositoryTarget,
   type AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
-import { CandidateExecutionError } from "./candidate-execution-schema.js";
+import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
 import {
   readNativeCandidateJobInputsFromGit,
   type NativeCandidateJobInputs

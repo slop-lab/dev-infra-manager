@@ -19,10 +19,10 @@ output.version = publishPackageVersion(source.version);
 
 output.dependencies = {
   ...source.dependencies,
-  "@slop-lab/dim-core": output.version
+  "@slop-lab/dim-host-core": output.version
 };
-output.peerDependencies = { "@slop-lab/dim-managed": output.version };
-output.peerDependenciesMeta = { "@slop-lab/dim-managed": { optional: true } };
+output.peerDependencies = { "@slop-lab/dim-control-plane-admin": output.version, "@slop-lab/dim-host-plugin-native-git": output.version };
+output.peerDependenciesMeta = { "@slop-lab/dim-control-plane-admin": { optional: true }, "@slop-lab/dim-host-plugin-native-git": { optional: true } };
 output.bin = {
   dim: "cli.js"
 };
@@ -34,4 +34,4 @@ if ("private" in output) {
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
 await writeFile(versionModulePath, `export const packageVersion = ${JSON.stringify(output.version)};\n`);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
-await copyFile(new URL("../../../core/LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
+await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));

@@ -1,5 +1,6 @@
 import net from "node:net";
-import { UserError, type ControllerWorkspace, type ResolvedWorkspaceTarget, type WorkspaceTarget } from "@slop-lab/dim-managed";
+import { UserError } from "@slop-lab/dim-host-core";
+import { type ControllerWorkspace, type ResolvedWorkspaceTarget, type WorkspaceTarget } from "@slop-lab/dim-host-core/controller";
 import type { ExternalUrlApproval } from "./routeStore.js";
 
 export interface TcpIngressRequest {

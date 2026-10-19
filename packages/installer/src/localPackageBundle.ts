@@ -20,7 +20,7 @@ export async function readLocalPackageBundle(
   directory: string,
   selectedPackages: readonly string[] = []
 ): Promise<LocalPackageBundle> {
-  return readArtifactClosure(directory, ["@slop-lab/dim-cli", "@slop-lab/dim-core", ...selectedPackages], "@slop-lab/dim-cli");
+  return readArtifactClosure(directory, ["@slop-lab/dim-cli", "@slop-lab/dim-host-core", ...selectedPackages], "@slop-lab/dim-cli");
 }
 
 export async function readControlPlanePackageBundle(directory: string, selectedSpecifiers: readonly string[]): Promise<LocalPackageBundle> {
@@ -31,7 +31,7 @@ export async function readControlPlanePackageBundle(directory: string, selectedS
     if (versions.has(name)) throw new Error(`duplicate selected plugin '${name}'`);
     versions.set(name, version);
   }
-  return readArtifactClosure(directory, ["@slop-lab/dim-control-plane", ...versions.keys()], "@slop-lab/dim-control-plane", versions);
+  return readArtifactClosure(directory, ["@slop-lab/dim-control-plane-core", ...versions.keys()], "@slop-lab/dim-control-plane-core", versions);
 }
 
 async function readArtifactClosure(directory: string, roots: readonly string[], runtime: string, expectedVersions: ReadonlyMap<string, string> = new Map()): Promise<LocalPackageBundle> {
@@ -77,8 +77,8 @@ async function readArtifactClosure(directory: string, roots: readonly string[], 
     }
   };
   for (const name of roots) include(name);
-  if (runtime === "@slop-lab/dim-control-plane" && ["@slop-lab/dim-cli", "@slop-lab/dim-core", "@slop-lab/dim-managed"].some((name) => selected.has(name))) {
-    throw new Error("control-plane bundle closure must not include host CLI, core or managed packages");
+  if (runtime === "@slop-lab/dim-control-plane-core" && [...selected].some((name) => ["@slop-lab/dim-cli", "@slop-lab/dim-host-core", "@slop-lab/dim-control-plane-admin"].includes(name) || name.startsWith("@slop-lab/dim-host-plugin-"))) {
+    throw new Error("control-plane bundle closure must not include host CLI, core, admin or host plugin packages");
   }
   const entries = [...packages.values()].filter(({ name }) => selected.has(name));
   const specifiers = entries.map(({ file }) => path.join(bundleDirectory, file));

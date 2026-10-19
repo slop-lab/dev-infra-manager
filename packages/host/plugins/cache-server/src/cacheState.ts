@@ -1,5 +1,5 @@
 import path from "node:path";
-import { MissingRecordError, acquireLifecycleLock, atomicWrite, readJson } from "@slop-lab/dim-core";
+import { MissingRecordError, acquireLifecycleLock, atomicWrite, readJson } from "@slop-lab/dim-host-core";
 import { parseHostMirrorOwnership, type HostMirrorOwnership } from "./hostMirrorOwnership.js";
 /** The optional mirror service owns cache identity and reconciliation locks. */
 export class MirrorState {

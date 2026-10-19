@@ -1,12 +1,15 @@
 {
-  "name": "@slop-lab/dim-tests",
+  "name": "@this-project/tests",
   "version": "0.10.0",
   "private": true,
   "type": "module",
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm --dir ../packages/host/core run build && pnpm --dir ../packages/control-plane/plugins/native-git run build && pnpm --dir ../packages/control-plane/plugins/ci-workflows run build && pnpm --dir ../core/packages/managed run build && vitest run --maxWorkers=2 packages/core/test packages/native-git/test packages/web/test packages/control-plane/test packages/installer/test packages/contracts/external-url/test plugins && pnpm run test:cli",
-    "test:cli": "pnpm --dir ../packages/host/core run build && pnpm --dir ../packages/control-plane/plugins/native-git run build && pnpm --dir ../packages/control-plane/plugins/ci-workflows run build && pnpm --dir ../core/packages/managed run build && pnpm --dir ../packages/cli run build && tsx --test --test-reporter=./support/node-failure-reporter.ts packages/cli/test/*.test.ts"
+    "test": "pnpm run test:unit && pnpm run test:cli && pnpm run test:scenarios",
+    "test:unit": "vitest run host control-plane contracts installer web cli/host --exclude 'scenarios/**' --maxWorkers=2",
+    "test:cli": "tsx --test --test-reporter=./support/node-failure-reporter.ts cli/*.test.ts",
+    "test:scenarios": "vitest run scenarios/harness scenarios/llm-router scenarios/ci --no-file-parallelism --exclude 'scenarios/harness/qemu*.test.ts' --exclude 'scenarios/harness/kvm*.test.ts' --exclude 'scenarios/harness/bootstrapInstallerSafety.test.ts'",
+    "test:qemu-service": "node -e 'if (process.getuid?.() !== 0) { console.error(\"QEMU service fixtures require a disposable root environment; see docs/development/verification.md\"); process.exit(2); }' && vitest run --config vitest.privileged.config.ts"
   },
   "engines": {
     "node": "^24.0.0 || ^26.0.0",
@@ -21,6 +24,8 @@
     "typescript": "5.8.3",
     "vitest": "3.2.4",
     "ws": "8.22.0",
-    "@types/ws": "8.18.2"
+    "@types/ws": "8.18.2",
+    "verdaccio": "6.8.0",
+    "yaml": "2.8.3"
   }
 }

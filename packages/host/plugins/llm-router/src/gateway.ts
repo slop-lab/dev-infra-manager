@@ -3,8 +3,8 @@ import { createServer, request as httpRequest, type ServerResponse } from "node:
 import { request as httpsRequest } from "node:https";
 import { lstat, mkdir, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { WorkspaceRecord, WorkspaceStore } from "@slop-lab/dim-core/workspace";
-import { tryAcquireKernelGuard } from "@slop-lab/dim-core";
+import type { WorkspaceRecord, WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
+import { tryAcquireKernelGuard } from "@slop-lab/dim-host-core";
 import { object, privateFile, text, type HostRouterConfig } from "./config.js";
 import type { IssuedPrincipal, PrincipalScope } from "./client.js";
 

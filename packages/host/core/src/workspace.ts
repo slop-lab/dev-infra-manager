@@ -12,7 +12,7 @@ export { ContainerWorkspaceRuntime, workspaceRuntimeResources } from "./workspac
 
 export { checkWorkspaceHost } from "./workspace/doctor.js";
 export type { HostCheck } from "./workspace/doctor.js";
-export type { WorkspaceHostPlugin, WorkspaceHostPluginContext, WorkspaceRuntimeFactoryContext } from "./workspace/hostPlugin.js";
+export type { WorkspaceHostPlugin, WorkspaceHostPluginContext, WorkspaceRuntimeFactoryContext, HostExecutionRouting } from "./workspace/hostPlugin.js";
 export { workspacePortBridge, workspacePortCleanup, workspacePortBridgeMarker } from "./workspace/portBridge.js";
 export { workspaceGuestAssets } from "./workspace/guestAssets.js";
 export { deployGuestIntegration, execGuestIntegrationTarget } from "./workspace/guestIntegration.js";

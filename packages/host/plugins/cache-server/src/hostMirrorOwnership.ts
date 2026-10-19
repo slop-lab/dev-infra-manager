@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { UserError } from "@slop-lab/dim-core";
+import { UserError } from "@slop-lab/dim-host-core";
 
 export type HostMirrorResource = string;
 export interface HostMirrorOwnership {

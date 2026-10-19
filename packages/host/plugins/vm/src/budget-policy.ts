@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { request } from "node:http";
 import path from "node:path";
 import { budgetValues } from "./budget.js";
-import type { WorkspaceResources } from "@slop-lab/dim-core/workspace";
+import type { WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 
 export interface RootVmConfig { schemaVersion: 1; project: string; incusSocket: string; cgroupRoot: string; qemuExecutable: string }
 export interface DesiredVmBudget { image: string; resources: WorkspaceResources }

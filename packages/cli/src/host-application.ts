@@ -3,24 +3,29 @@ import path from "node:path";
 import {
   acquireWorkspaceSource, buildWorkspaceImage, checkWorkspaceHost, ProcessRunner, UserError,
   WorkspaceService, WorkspaceStore
-} from "@slop-lab/dim-core/workspace";
+} from "@slop-lab/dim-host-core/workspace";
 import { createWorkspaceOnHost, ensureWorkspaceIntegration, type WorkspaceHostCreateInput } from "./workspace-composition.js";
 import { decodeHostRequest } from "./host-transport.js";
-import { composeWorkspaceRuntime, loadHostPlugins } from "./host-plugins.js";
+import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
 import { installRequiredPlugins, workspaceRequirements } from "./workspace-requirements.js";
 
 /** All filesystem/runtime work happens here, on the host selected by the client. */
 export async function runHostRequest(encoded: string): Promise<void> {
   const request = decodeHostRequest(encoded);
-  if (request.operation === "managed.cli") {
+  if (request.operation === "controlPlane.cli" || request.operation === "controller.cli") {
     const args = request.input?.args;
     if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string" || arg.includes("\0"))) {
-      throw new UserError("managed command must be an argument array");
+      throw new UserError("control-plane command must be an argument array");
     }
-    // Managed long-running commands own their signal/cleanup policy.
-    const { runManagedApplication } = await import("./managed-application.js");
-    await runManagedApplication(args as string[]);
+    // Operator commands own their signal/cleanup policy.
+    if (request.operation === "controller.cli") {
+      const { runControllerApplication } = await import("./controller-application.js");
+      await runControllerApplication(args as string[]);
+    } else {
+      const { runControlPlaneApplication } = await import("./control-plane-application.js");
+      await runControlPlaneApplication(args as string[]);
+    }
     return;
   }
   const abort = new AbortController();
@@ -38,9 +43,9 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
   const processRunner = new ProcessRunner();
   const requirements = workspaceRequirements(input.expectedSourceCommit === undefined ? undefined : string(input.expectedSourceCommit, "expectedSourceCommit"));
   const runner = {
-    run: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
+    run: (command: string, args: string[], options: import("@slop-lab/dim-host-core/workspace").RunOptions = {}) =>
       processRunner.run(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal }),
-    runStreaming: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
+    runStreaming: (command: string, args: string[], options: import("@slop-lab/dim-host-core/workspace").RunOptions = {}) =>
       processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal })
   };
   const store = new WorkspaceStore(path.resolve(process.env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")), { signal });
@@ -48,9 +53,9 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
   const cleanupWorkspace = async (name: string, workspaceId?: string) => {
     const cleanupSignal = AbortSignal.timeout(30_000);
     const cleanupRunner = {
-      run: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
+      run: (command: string, args: string[], options: import("@slop-lab/dim-host-core/workspace").RunOptions = {}) =>
         processRunner.run(command, args, { ...options, signal: options.signal ? AbortSignal.any([cleanupSignal, options.signal]) : cleanupSignal }),
-      runStreaming: (command: string, args: string[], options: import("@slop-lab/dim-core/workspace").RunOptions = {}) =>
+      runStreaming: (command: string, args: string[], options: import("@slop-lab/dim-host-core/workspace").RunOptions = {}) =>
         processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([cleanupSignal, options.signal]) : cleanupSignal })
     };
     const cleanupRuntime = composeWorkspaceRuntime({ runner: cleanupRunner, cleanupRunner: processRunner, stateRoot: store.root });
@@ -58,9 +63,10 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
       async () => { throw new UserError("cleanup cannot acquire source"); });
     await cleanup.discard(name, workspaceId);
   };
-  const context = { store, runner, cleanupRunner: processRunner, signal, runtime: composition.runtime, cleanupWorkspace,
+  const executionRouting = async () => resolveHostExecutionRouting(await loadHostPlugins(), { runner, cleanupRunner: processRunner, stateRoot: store.root, signal });
+  const context = { executionRouting, store, runner, cleanupRunner: processRunner, signal, runtime: composition.runtime, cleanupWorkspace,
     validateCheckout: requirements.validateCheckout,
-    hostGateway: (workspace: import("@slop-lab/dim-core/workspace").WorkspaceRecord) => {
+    hostGateway: (workspace: import("@slop-lab/dim-host-core/workspace").WorkspaceRecord) => {
       if (!composition.runtime.hostGateway) throw new UserError(`runtime '${workspace.runtime}' does not provide a private host gateway`);
       return composition.runtime.hostGateway(workspace);
     } };

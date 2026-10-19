@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   workspaceGuestAssets, workspacePortBridge, workspacePortBridgeMarker, workspacePortCleanup,
   type RunOptions, type WorkspaceConnectOptions, type WorkspaceRecord, type WorkspaceResources, type WorkspaceRuntime
-} from "@slop-lab/dim-core/workspace";
+} from "@slop-lab/dim-host-core/workspace";
 import { IncusMachines } from "./incus.js";
 
 export class IncusWorkspaceRuntime implements WorkspaceRuntime {

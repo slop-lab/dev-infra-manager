@@ -3,17 +3,17 @@
 Required components: matching managed administration installed with
 `dim installer install core --with-managed`, connected native Git/CI services,
 and a private generation-bound worker connection. The managed service composes
-`@slop-lab/dim-plugin-control-plane-ci-workflows`; this compiler and the
-`@slop-lab/dim-plugin-control-plane-native-git` service are control-plane plugins,
+`@slop-lab/dim-control-plane-plugin-ci-workflows`; this compiler and the
+`@slop-lab/dim-control-plane-plugin-native-git` service are control-plane plugins,
 installed using `dim installer install control-plane plugin PACKAGE@EXACT_VERSION`.
 Their standalone runtime needs no workspace core; see
-[plugin locations](../../../specification/docs/plugin-scopes.md). No
+[plugin locations](../../../docs/guides/plugin-scopes.md). No
 optional host plugin is required. Host mirrors are optional. Container slots
 require Docker/Sysbox; VM slots require Docker and functional KVM. Both require
 operator-reviewed runner/job image digests, not the placeholders below.
 
 Prepare/install/connect the optional control plane as described in
-[managed administration](../../../core/packages/managed/docs/cli.md). Edit the
+[managed administration](../../../packages/host/plugins/native-git/docs/cli.md). Edit the
 private execution service configuration before deployment to add a worker and
 its slots. Each slot selects `container` or `vm` plus reviewed image digests and
 resource bounds. A worker may serve jobs from multiple Projects.
@@ -61,7 +61,7 @@ dim --host devbox managed ci worker /srv/dim/worker-a.json
 ```
 
 A QEMU slot uses the same shape with `runtime: "vm"`. Its runner image is the
-trusted QEMU supervisor built with `dim managed ci qemu-image IMAGE:TAG`; its job
+trusted QEMU supervisor built with `dim ci qemu-image IMAGE:TAG`; its job
 image supplies the guest root and reviewed tools. That host requires functional
 KVM. Hardware absence does not enable a fallback.
 

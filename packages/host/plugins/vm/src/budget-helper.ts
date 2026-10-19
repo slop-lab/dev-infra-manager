@@ -1,7 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { UserError, type CommandRunner, type WorkspaceResources } from "@slop-lab/dim-core/workspace";
+import { UserError, type CommandRunner, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import type { VmBudget } from "./budget.js";
 
 /** Host-selected helper only: no shell, arbitrary executable, target path or project is sent to root. */

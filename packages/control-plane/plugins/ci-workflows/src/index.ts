@@ -1,4 +1,4 @@
-import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane/plugin";
+import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
 import { isScalar, parseDocument, visit } from "yaml";
 import { z } from "zod";
 export const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;

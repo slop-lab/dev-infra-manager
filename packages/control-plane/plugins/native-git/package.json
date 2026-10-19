@@ -1,5 +1,5 @@
 {
-  "name": "@slop-lab/dim-plugin-control-plane-native-git",
+  "name": "@slop-lab/dim-control-plane-plugin-native-git",
   "version": "0.10.0",
   "description": "DIM control-plane plugin for Project Git repositories, review and promotion",
   "license": "MIT",
@@ -22,17 +22,19 @@
       "types": "./src/service.ts",
       "import": "./dist/service.js"
     },
-    "./workflow": {
-      "types": "./src/workflowCompiler.ts",
-      "import": "./dist/workflowCompiler.js"
-    },
-    "./execution": {
-      "types": "./src/execution-protocol.ts",
-      "import": "./dist/execution-protocol.js"
-    },
     "./config": {
       "types": "./src/bundle-config.ts",
       "import": "./dist/bundle-config.js"
+    },
+    "./deployment": {
+      "types": "./src/service-pair.ts",
+      "import": "./dist/service-pair.js",
+      "default": "./dist/service-pair.js"
+    },
+    "./deployment-cli": {
+      "types": "./src/deployment-cli.ts",
+      "import": "./dist/deployment-cli.js",
+      "default": "./dist/deployment-cli.js"
     }
   },
   "bin": {
@@ -50,15 +52,17 @@
     "access": "public"
   },
   "dependencies": {
-    "zod": "4.1.11"
+    "zod": "4.1.11",
+    "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-ci-workflows": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
     "typescript": "5.8.3",
-    "@slop-lab/dim-control-plane": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-core": "workspace:0.10.0"
   },
   "peerDependencies": {
-    "@slop-lab/dim-control-plane": "0.10.0"
+    "@slop-lab/dim-control-plane-core": "0.10.0"
   }
 }

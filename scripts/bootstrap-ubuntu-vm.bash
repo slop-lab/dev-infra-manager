@@ -2,9 +2,9 @@
 set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-host_installer="$repo_root/verification/scripts/install-host-ubuntu.bash"
-tool_installer="$repo_root/verification/scripts/lib/install-source-tools-ubuntu.bash"
-kvm_installer="$repo_root/verification/scripts/lib/install-bootstrap-kvm-ubuntu.bash"
+host_installer="$repo_root/scripts/checks/install-host-ubuntu.bash"
+tool_installer="$repo_root/scripts/checks/lib/install-source-tools-ubuntu.bash"
+kvm_installer="$repo_root/scripts/checks/lib/install-bootstrap-kvm-ubuntu.bash"
 facade_installer="$repo_root/scripts/lib/install-candidate-facade.bash"
 pins_helper="$repo_root/scripts/lib/bootstrap-ubuntu-pins.bash"
 preflight_helper="$repo_root/scripts/lib/bootstrap-host-preflight.bash"

@@ -3,7 +3,7 @@
 This optional host plugin attaches existing workspaces to a separately operated [control-plane LLM router](../../../control-plane/plugins/llm-router/README.md). It owns local workspace liveness checks, a persistent gateway and the OpenCode adapter. It never hosts provider credentials, project ledgers or account management. The host package depends on workspace core; the CP package does not.
 
 ```sh
-dim installer install plugin @slop-lab/dim-plugin-host-llm-router@0.10.0
+dim installer install plugin @slop-lab/dim-host-plugin-llm-router@0.10.0
 dim llm prepare /home/operator/.config/dim/llm-host \
   --control-plane https://llm.example.test \
   --issuer development-host --issuer-key-file /home/operator/.config/dim/host-issuer.key \
@@ -44,7 +44,7 @@ fingerprint restarts only that owned process while retaining Web credentials.
 Unchanged configuration reuses the process. Open TUI/run/resume sessions read the
 new configuration at their next launch; an already active session is not killed.
 `DIM_LLM_ROUTER_CONNECTION_FILE` can select another private guest connection.
-The adapter is also exported at `@slop-lab/dim-plugin-host-llm-router/opencode`.
+The adapter is also exported at `@slop-lab/dim-host-plugin-llm-router/opencode`.
 
 No repository `.dim` declaration is required. After attachment, the installed
 host plugin repairs its small OpenCode helpers whenever the workspace becomes

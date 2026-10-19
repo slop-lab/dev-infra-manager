@@ -51,7 +51,7 @@ grouping is helpful.
 A repository may declare exact host plugin packages in `.dim/workspace.json`:
 
 ```json
-{"plugins":["@slop-lab/dim-plugin-host-mirrors@0.10.0"]}
+{"plugins":["@slop-lab/dim-host-plugin-mirrors@0.10.0"]}
 ```
 
 Ordinary repositories need no declaration. Installed, enabled packages at the
@@ -114,36 +114,18 @@ stdin/stdout for protocol clients such as SSH ProxyCommand. It never allocates
 a terminal or writes status messages into the protocol stream. These commands
 do not require managed Git, external URL plugins or host-published Docker ports.
 
-## Optional managed administration
+## Optional host and service capabilities
 
 ```bash
 dim installer install core --with-managed
-dim managed --help
+dim project --help
+dim ci --help
+dim control-plane --help
 ```
 
-The additional exact-version `@slop-lab/dim-managed` package owns managed
-workspaces, native Git, review, CI, controller services and their plugins.
-Installing the base CLI does not install or import it. Selecting an unavailable
-managed command reports how to add the component.
-
-`dim installer install control-plane` configures native services separately;
-ordinary development does not require either the managed component or those
-services. See the managed package's administration documentation for reviewed
-Project bootstrap and service configuration.
-
-Managed administration also follows the selected host:
-
-```bash
-dim --host devbox managed control-plane connect /srv/dim/deployment
-dim --host devbox managed project list --json
-dim --host devbox create dim://PROJECT dev
-```
-
-The remote host holds Project state and private role files. The client can have
-only the base CLI; optional code is loaded on the host that executes the
-operation. `dim host use devbox` selects that host for subsequent commands.
-The global `--host` option can appear before or after the managed command.
-Arguments after `--` are passed literally.
-The root `dim controller ...` entry point stays local for installer activation,
-including with a `--host` override; use
-`dim --host devbox managed controller ...` for remote administration.
+The installer profile selects Native Git and CI worker host plugins together
+with control-plane operator tools. Base workspace commands run without these
+integrations. Plugins own feature commands and the host core owns the generic
+controller. `dim installer install control-plane` installs shared services
+separately. See the [Native Git guide](../host/plugins/native-git/docs/cli.md)
+for Project bootstrap and service connections.

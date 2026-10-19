@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { UserError, type CommandRunner } from "@slop-lab/dim-core/workspace";
+import { UserError, type CommandRunner } from "@slop-lab/dim-host-core/workspace";
 import { fingerprint, object, type VmHostConfig } from "./config.js";
 
 export interface ReviewedImageDownload { url: string; sha256: string; rootfs?: { url: string; sha256: string } }

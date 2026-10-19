@@ -5,8 +5,8 @@
 `dev-infra-manager` (DIM) provides persistent development workspaces on local
 or SSH-selected Linux hosts. The base product creates an isolated workspace
 from an ordinary Git repository and owns its lifecycle, data and runtime
-resources. Managed Git, review, CI and the host controller are optional
-integrations owned by `core/packages/managed` and related packages.
+resources. The host core owns the generic controller; Native Git, review, CI and shared
+services belong to explicit host and control-plane plugins.
 
 The coding agent and containers it starts are untrusted. DIM owns their host
 boundary; it does not own agent reasoning, project-specific tools or product
@@ -32,7 +32,7 @@ runtime adapters execute on the selected host without a required daemon.
 
 Changes to host access, data ownership, optional secret access, protected refs,
 resource enforcement or deployment authority require careful review against
-`specification/specs/` and the owning managed package's design documents.
+`docs/specs/` and the owning package's design documents.
 
 ## Pull requests
 
@@ -45,14 +45,17 @@ provider-specific tools; do not assume that `origin` is GitHub.
 - Track current issues and pull requests in the canonical GitHub repository.
   Imported issue numbers identify historical backup records; they do not
   select a live forge or an issue destination.
-- This root repository is the canonical monorepo. Production package source is
-  under `core/` and `plugin-*/`; centralized package and plugin tests are under
-  `tests/`; cross-component checks are under `verification/`; and Project-level
-  normative contracts are under `specification/`.
-- Put package-specific changelogs, maintenance notes, and design documents with
-  their owning production package or package group. Keep the core package-group
-  changelog at `core/CHANGELOG.md`; keep a plugin changelog in that plugin's
-  root. Keep cross-package release outcomes in the root `CHANGELOG.md`.
+- This root repository is the canonical monorepo. Production packages live in
+  `packages/{host,control-plane}/{core,plugins}` and `packages/contracts`, with
+  CLI, installer and web packages alongside them. See
+  `docs/guides/repository-layout.md` for ownership and dependency boundaries.
+- Keep all tests and test-only fixtures in the single `tests/` workspace;
+  cross-component and privileged fixtures live in `tests/scenarios/`.
+  Shared runners belong in `scripts/checks/`, package helpers in
+  `scripts/packages/`, and normative contracts in `docs/specs/`.
+- Keep package design notes with their owner. Record current release outcomes
+  in the root `CHANGELOG.md`; old package-group notes are archived in
+  `docs/history/`. Nonpublishable workspaces use the `@this-project/` namespace.
 - Keep test implementation and test-only fixtures in `tests/`, even when their
   package changelog or design contract lives with production source.
 
@@ -64,7 +67,7 @@ provider-specific tools; do not assume that `origin` is GitHub.
   fixes and refinements into that entry instead of documenting intermediate
   defects that users never received.
 - Add a separate fix entry when the affected behavior was already released.
-- Follow the normative policy in `specification/docs/releasing.md` and the
+- Follow the normative policy in `docs/guides/releasing.md` and the
   repository ownership rules above.
 
 ## Pre-stable compatibility

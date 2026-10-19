@@ -1,8 +1,5 @@
 import { isIP } from "node:net";
-import {
-  DIM_PLUGIN_API_VERSION,
-  type DimPlugin
-} from "@slop-lab/dim-managed";
+import { DIM_PLUGIN_API_VERSION, type DimPlugin } from "@slop-lab/dim-host-core/controller";
 import {
   EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
   type ExternalUrlDnsProviderDriver,
@@ -330,7 +327,7 @@ function operationArguments(operation: ExternalUrlDnsOperation): [
 }
 
 const plugin: DimPlugin = {
-  name: "@slop-lab/dim-plugin-dns-cloudflare",
+  name: "@slop-lab/dim-host-plugin-dns-cloudflare",
   apiVersion: DIM_PLUGIN_API_VERSION,
   register(host) {
     host.registerExtension(

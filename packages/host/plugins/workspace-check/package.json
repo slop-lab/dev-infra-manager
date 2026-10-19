@@ -1,5 +1,5 @@
 {
-  "name": "@slop-lab/dim-plugin-workspace-check",
+  "name": "@slop-lab/dim-host-plugin-workspace-check",
   "version": "0.10.0",
   "description": "Disposable lifecycle and persistent-data verification for DIM workspaces",
   "private": true,
@@ -13,6 +13,6 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {"node": "^24.0.0 || ^26.0.0"},
-  "peerDependencies": {"@slop-lab/dim-core": "0.10.0"},
-  "devDependencies": {"@slop-lab/dim-core": "workspace:0.10.0", "@types/node": "24.13.3", "typescript": "5.8.3"}
+  "peerDependencies": {"@slop-lab/dim-host-core": "0.10.0"},
+  "devDependencies": {"@slop-lab/dim-host-core": "workspace:0.10.0", "@types/node": "24.13.3", "typescript": "5.8.3"}
 }

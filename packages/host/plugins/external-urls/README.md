@@ -1,13 +1,13 @@
-# `@slop-lab/dim-plugin-external-urls`
+# `@slop-lab/dim-host-plugin-external-urls`
 
 Workspace-scoped development endpoints for DIM. The plugin provides shared
 direct HTTP ingresses, controller-managed Caddy HTTPS ingresses, and opt-in raw
 TCP listeners, then routes each endpoint to a container or nested container
 selected by the authenticated workspace.
 
-This plugin extends the optional `@slop-lab/dim-managed` component. Install it
-at the same exact version with `dim installer install core --with-managed`
-before installing the plugin; base ordinary-Git workspaces do not require it.
+This host plugin uses the controller in `@slop-lab/dim-host-core`. Install the
+base runtime, then select the plugin. Its guest helpers are discovered and
+delivered through the shared host integration mechanism.
 
 ## Installation
 
@@ -15,13 +15,13 @@ Install the plugin at the same exact version as DIM:
 
 ```bash
 npx '@slop-lab/dim-installer@0.10.0' installer install plugin \
-  '@slop-lab/dim-plugin-external-urls@0.10.0'
-dim plugin list
+  '@slop-lab/dim-host-plugin-external-urls@0.10.0'
+dim plugins
 ```
 
-Restart the managed DIM controller after changing installed plugins. A Caddy
+Restart the DIM host controller after changing installed plugins. A Caddy
 HTTPS ingress also requires a separately installed DNS provider such as
-[`@slop-lab/dim-plugin-dns-cloudflare`](https://www.npmjs.com/package/@slop-lab/dim-plugin-dns-cloudflare).
+[`@slop-lab/dim-host-plugin-dns-cloudflare`](https://www.npmjs.com/package/@slop-lab/dim-host-plugin-dns-cloudflare).
 
 ## Direct HTTP ingress
 
@@ -164,7 +164,7 @@ controller APIs.
 
 
 See the complete
-[External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/specification/docs/external-urls.md),
+[External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/guides/external-urls.md),
 [feature example](https://github.com/slop-lab/dev-infra-manager/tree/main/examples/features/external-urls),
 and [source repository](https://github.com/slop-lab/dev-infra-manager).
 

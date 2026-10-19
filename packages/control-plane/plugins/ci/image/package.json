@@ -1,5 +1,5 @@
 {
-  "name": "dim-ordinary-ci-service-image",
+  "name": "@slop-lab/dim-control-plane-ci-image",
   "private": true,
   "type": "module",
   "dependencies": {

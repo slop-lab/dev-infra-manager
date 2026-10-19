@@ -1,12 +1,12 @@
-# `@slop-lab/dim-plugin-dns-cloudflare`
+# `@slop-lab/dim-host-plugin-dns-cloudflare`
 
 Cloudflare DNS provider for DIM's External URLs plugin. It idempotently
 creates, verifies, updates, and removes the wildcard DNS record used by a
 managed HTTPS ingress.
 
-This plugin extends the optional `@slop-lab/dim-managed` component. Install it
-at the same exact version with `dim installer install core --with-managed`
-before installing the plugin; base ordinary-Git workspaces do not require it.
+This host plugin registers a DNS driver with the generic
+`@slop-lab/dim-host-core/controller` extension registry. The External URLs host
+plugin selects that driver; no control-plane service is required.
 
 ## Installation
 
@@ -14,15 +14,15 @@ Install the provider and External URLs plugin at the same exact DIM version:
 
 ```bash
 npx '@slop-lab/dim-installer@0.10.0' installer install plugin \
-  '@slop-lab/dim-plugin-external-urls@0.10.0' \
-  '@slop-lab/dim-plugin-dns-cloudflare@0.10.0'
+  '@slop-lab/dim-host-plugin-external-urls@0.10.0' \
+  '@slop-lab/dim-host-plugin-dns-cloudflare@0.10.0'
 ```
 
-Restart the managed DIM controller after changing installed plugins. Confirm
+Restart the DIM host controller after changing installed plugins. Confirm
 discovery with:
 
 ```bash
-dim plugin list
+dim plugins
 ```
 
 ## Configure Cloudflare
@@ -66,5 +66,5 @@ endpoint. Leave it unset in normal use so the plugin calls Cloudflare's public
 v4 API.
 
 See the complete
-[Cloudflare and Caddy setup](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md#http-and-https-with-cloudflare-dns-and-caddy)
+[Cloudflare and Caddy setup](https://github.com/slop-lab/dev-infra-manager/blob/development/docs/guides/external-urls.md#http-and-https-with-cloudflare-dns-and-caddy)
 and the [source repository](https://github.com/slop-lab/dev-infra-manager).

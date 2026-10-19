@@ -15,5 +15,5 @@ An interactive operator may approve installation on the selected host. Paths,
 URLs, version ranges and executable hooks are not declaration inputs.
 
 Developer commands live in [`scripts/development.md`](../scripts/development.md) and `scripts/dev.bash`.
-Host-run QEMU verification mechanics live in [`verification/qemu`](../verification/qemu).
+Host-run QEMU verification mechanics live in [`tests/scenarios/qemu`](../tests/scenarios/qemu).
 Those helpers are explicit repository tooling, not DIM Project configuration.

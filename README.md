@@ -13,14 +13,12 @@ not a claim that arbitrary hostile workloads cannot escape the host kernel.
 
 Managed Git, proposal/review workflows, CI and development URL integrations are
 optional. They are separated from the base workspace dependency and startup path;
-see the [preserved issue implementation](specification/docs/preserved-issues-implementation.md)
+see the [preserved issue implementation](docs/guides/preserved-issues-implementation.md)
 for the issue-by-issue implementation and verification evidence.
 
 ## Install and start
 
-This `development` branch contains the new base workspace flow. Published
-`0.10.0` packages still contain the earlier managed-only architecture. To use
-these commands, install a prepared source build:
+Install matching development artifacts from a prepared source build:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
@@ -34,11 +32,11 @@ The preparation builds the package bundle and base workspace image. The install
 selects the base CLI and its dependencies; optional managed packages in the same
 bundle are not automatically installed. It retains the matching source installer and selects it through mise when
 available. Without mise, it prints the persistent facade path to add to PATH.
-See the [source installation workflow](specification/docs/usage.md#install-development-sources) for
+See the [source installation workflow](docs/guides/usage.md#install-development-sources) for
 artifact provenance and prerequisites.
 
 A runtime host needs Linux, Docker and `sysbox-runc`. For a new disposable Ubuntu
-VM, the [role bootstrap](verification/bootstrap-ubuntu-vm.md) installs host
+VM, the [role bootstrap](docs/development/bootstrap-ubuntu-vm.md) installs host
 prerequisites. Installing the CLI does not grant Docker access or replace a
 host runtime installation.
 
@@ -128,22 +126,22 @@ dim installer install control-plane plugin PACKAGE@EXACT_VERSION
 dim installer install control-plane --config /absolute/operator/install.json
 ```
 
-Managed Git/review/CI operations remain available under `dim managed ...` in the optional managed component. The installer integration also keeps
-`dim controller restart` directly reachable. The normal workspace path uses no
-managed-Git role files and does not load its service implementation.
+Host plugins own `dim project` and `dim ci worker`; control-plane operator tools
+own `dim control-plane`. The generic controller is available through
+`dim controller`. Ordinary Git workspaces need no service role credentials.
 
-Use `dim managed control-plane prepare` to generate private deployment
+Use `dim control-plane prepare` to generate private deployment
 configuration and `connect` to validate and save host connections. The advanced
 installer configuration remains available. The operations and review web service
 is a separate optional package with explicit account roles. DIM does not embed
 an issue tracker.
 
 Control-plane plugins run in the standalone
-[`@slop-lab/dim-control-plane`](packages/control-plane/core/README.md) runtime.
+[`@slop-lab/dim-control-plane-core`](packages/control-plane/core/README.md) runtime.
 Native Git, the CI workflow compiler and the LLM router have explicit
-`dim-plugin-control-plane-*` package names. They install in a separate tree
-without `dim-core`, the workspace CLI or managed host integration. See
-[plugin locations and installation](specification/docs/plugin-scopes.md).
+`dim-control-plane-plugin-*` package names. They install in a separate tree
+without `dim-host-core`, the workspace CLI or managed host integration. See
+[plugin locations and installation](docs/guides/plugin-scopes.md).
 
 ## Optional workspace plugins
 
@@ -151,7 +149,7 @@ Host plugins prepare their small workspace clients without repository `.dim`
 configuration. Inside the workspace, `dim-workspace plugins` lists available
 commands and setup status. Authentication, shared-service configuration and
 large tool installations remain explicit operations. See
-[guest preparation and plugin locations](specification/docs/plugin-scopes.md).
+[guest preparation and plugin locations](docs/guides/plugin-scopes.md).
 
 Install only the integrations needed on the selected host. `dim plugins` lists
 the host's installed commands and runtime providers; remote clients need only
@@ -193,11 +191,11 @@ just build-packages
 use `// @ts-check`; run `pnpm check:js` for that check alone.
 
 Tests are under `tests/`; deployment and cross-component checks are under
-`verification/`. The source gate and fresh VM bootstrap describe their own
+`scripts/checks/` and `tests/scenarios/`. The source gate and fresh VM bootstrap describe their own
 host requirements. Targeted runtime verification with an already built image:
 
 ```bash
-pnpm --dir tests exec tsx ../verification/scripts/base-workspace-runtime-smoke.mts IMAGE
+pnpm --dir tests exec tsx ../scripts/checks/base-workspace-runtime-smoke.mts IMAGE
 ```
 
 This check creates disposable Sysbox resources, exercises nested Docker and
@@ -210,13 +208,13 @@ local HTTP tests do not establish either.
 Managed administration also follows the selected host:
 
 ```bash
-dim --host devbox managed control-plane connect /srv/dim/deployment
-dim --host devbox managed project list --json
+dim --host devbox control-plane connect /srv/dim/deployment
+dim --host devbox project list --json
 dim --host devbox create dim://PROJECT dev
 ```
 
 The remote host holds Project state and private role files. The client can have
 only the base CLI; optional code is loaded on the host that executes the
 operation. `dim host use devbox` selects that host for subsequent commands.
-The root `dim controller ...` entry point stays local for installer activation;
-use `dim --host devbox managed controller ...` for remote administration.
+Bare `dim controller ...` stays local for installer activation. An explicit
+`dim --host devbox controller ...` administers that remote controller.

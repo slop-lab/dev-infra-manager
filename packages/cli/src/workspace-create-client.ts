@@ -1,4 +1,4 @@
-import { UserError, parseWorkspaceRecord, type WorkspaceRecord } from "@slop-lab/dim-core/workspace";
+import { UserError, parseWorkspaceRecord, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import type { HostTarget } from "./host-context.js";
 import { callHost, type HostRequest } from "./host-transport.js";
 import { pluginSpecs, type RequiredPlugins } from "./workspace-requirements.js";

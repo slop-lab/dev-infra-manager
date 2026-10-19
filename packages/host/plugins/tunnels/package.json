@@ -1,5 +1,5 @@
 {
-  "name": "@slop-lab/dim-plugin-tunnels",
+  "name": "@slop-lab/dim-host-plugin-tunnels",
   "version": "0.10.0",
   "description": "Persistent workspace-scoped TCP and UDP tunnels with an operator interface",
   "private": true,
@@ -21,10 +21,10 @@
     "node": "^24.0.0 || ^26.0.0"
   },
   "peerDependencies": {
-    "@slop-lab/dim-core": "0.10.0"
+    "@slop-lab/dim-host-core": "0.10.0"
   },
   "devDependencies": {
-    "@slop-lab/dim-core": "workspace:0.10.0",
+    "@slop-lab/dim-host-core": "workspace:0.10.0",
     "@types/node": "24.13.3",
     "typescript": "5.8.3"
   }

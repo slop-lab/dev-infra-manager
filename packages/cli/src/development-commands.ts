@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { type Command } from "commander";
-import { UserError, type WorkspaceRecord, type WorkspaceView } from "@slop-lab/dim-core/workspace";
+import { UserError, type WorkspaceRecord, type WorkspaceView } from "@slop-lab/dim-host-core/workspace";
 import { HostContextStore, type HostTarget } from "./host-context.js";
 import { callHost, streamHost } from "./host-transport.js";
 import { forwardWorkspace } from "./port-forward.js";

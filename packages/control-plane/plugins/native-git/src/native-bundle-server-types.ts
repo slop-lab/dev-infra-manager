@@ -9,7 +9,7 @@ import type { NativeHumanReviewerHooks } from "./native-human-reviewer-http.js";
 import type { ReviewPublicationFaults } from "./review-record-storage.js";
 import type { NativeInstalledPromotionHooks } from "./native-installed-promotion.js";
 
-import type { WorkflowCompiler } from "./workflowCompiler.js";
+import type { WorkflowCompiler } from "@slop-lab/dim-contracts-ci/workflow";
 
 export type NativeGitBundleServerOptions = {
   readonly workflowCompiler: WorkflowCompiler;

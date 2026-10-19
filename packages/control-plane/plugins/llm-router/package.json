@@ -1,5 +1,5 @@
 {
-  "name": "@slop-lab/dim-plugin-control-plane-llm-router",
+  "name": "@slop-lab/dim-control-plane-plugin-llm-router",
   "version": "0.10.0",
   "private": true,
   "description": "Standalone project LLM routing, private provider credentials and durable usage",
@@ -29,7 +29,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-control-plane": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-core": "workspace:0.10.0"
   },
   "bin": {
     "dim-control-plane-llm-router": "./dist/main.js"

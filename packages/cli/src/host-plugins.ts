@@ -5,8 +5,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   ContainerWorkspaceRuntime, UserError, type WorkspaceHostPlugin, type WorkspaceRuntime,
-  type WorkspaceRuntimeFactoryContext
-} from "@slop-lab/dim-core/workspace";
+  type WorkspaceRuntimeFactoryContext, type HostExecutionRouting
+} from "@slop-lab/dim-host-core/workspace";
 
 /** Only explicitly installed host modules execute. Repository files never select host code. */
 export function hostPluginHome(): string {
@@ -56,6 +56,7 @@ function parseHostPlugin(value: unknown): WorkspaceHostPlugin {
     !isObject(command) || !identifier(command.name) || typeof command.description !== "string"))) {
     throw new UserError(`invalid commands in host plugin '${value.name}'`);
   }
+  if (value.executionRouting !== undefined && typeof value.executionRouting !== "function") throw new UserError(`invalid execution routing provider in '${value.name}'`);
   if (value.run !== undefined && typeof value.run !== "function") throw new UserError(`invalid command handler in '${value.name}'`);
   if (value.workspaceReady !== undefined && typeof value.workspaceReady !== "function") throw new UserError(`invalid workspace integration in '${value.name}'`);
   if (Array.isArray(value.commands) && value.commands.length && value.run === undefined) throw new UserError(`missing command handler in '${value.name}'`);
@@ -130,3 +131,18 @@ function isObject(value: unknown): value is Record<string, unknown> { return val
 function hasCode(error: unknown, code: string): boolean { return isObject(error) && error.code === code; }
 
 function description(value: unknown): value is string { return typeof value === "string" && value.length > 0 && value.length <= 2000; }
+
+/** Optional providers select actual configured routes, rather than claiming routing merely by installation. */
+export async function resolveHostExecutionRouting(
+  plugins: readonly WorkspaceHostPlugin[],
+  context: WorkspaceRuntimeFactoryContext & { readonly signal: AbortSignal }
+): Promise<HostExecutionRouting | undefined> {
+  let selected: { name: string; routing: HostExecutionRouting } | undefined;
+  for (const plugin of plugins) {
+    const routing = await plugin.executionRouting?.(context);
+    if (routing === undefined) continue;
+    if (selected) throw new UserError(`conflicting host execution routing providers '${selected.name}' and '${plugin.name}'`);
+    selected = { name: plugin.name, routing };
+  }
+  return selected?.routing;
+}

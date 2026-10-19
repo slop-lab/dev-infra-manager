@@ -1,13 +1,16 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { deployGuestIntegration, type WorkspaceHostPlugin } from "@slop-lab/dim-core/workspace";
-import { UserError, workspacePluginRequest } from "@slop-lab/dim-managed";
+import { deployGuestIntegration, type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import { UserError } from "@slop-lab/dim-host-core";
+import { workspacePluginRequest } from "@slop-lab/dim-host-core/controller";
 import { readExternalUrlConfig } from "@slop-lab/dim-contracts-external-url";
 
 /** The agent can request a named loopback service, but cannot choose an admin
  * socket, another workspace, nested container, arbitrary hostname or approval. */
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "external-urls",
+  commands: [{ name: "external-url", description: "Configure ingress, DNS and workspace URLs" }],
+  async run(args) { const { runExternalUrlCli } = await import("./cli/index.js"); await runExternalUrlCli(args); },
   async workspaceReady(workspace, context) {
     await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
       name: "external-urls",

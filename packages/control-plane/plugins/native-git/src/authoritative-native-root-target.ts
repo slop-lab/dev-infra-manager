@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 import { z } from "zod";
 import { assertNativeGitBundleStateActive, readNativeProjectRegistrations,
   type NativeGitBundleState } from "./native-bundle-state.js";
-import { CandidateExecutionError } from "./candidate-execution-schema.js";
+import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
 import { verifyLiveImportedRepository } from "./native-imported-root-verifier.js";
 import type { NativeProjectRootImportInstalled } from "./native-project-root-import-codec.js";
 import type { NativeProjectRootCurrentHead } from "./native-project-root-promotion-state.js";
@@ -13,7 +13,7 @@ const selectorSchema = z.object({
   repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)
 }).strict().readonly();
 
-import type { WorkflowCompiler } from "./workflowCompiler.js";
+import type { WorkflowCompiler } from "@slop-lab/dim-contracts-ci/workflow";
 
 export type AuthoritativeNativeCandidateRuntime = {
   readonly workflowCompiler: WorkflowCompiler;

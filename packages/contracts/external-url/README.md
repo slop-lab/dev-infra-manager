@@ -4,7 +4,7 @@ Shared TypeScript contracts for DIM External URL configuration and DNS-provider
 extensions. Install this package when implementing a DNS provider or when a
 trusted tool must read and validate DIM's External URL configuration. End users
 normally install
-[`@slop-lab/dim-plugin-external-urls`](https://www.npmjs.com/package/@slop-lab/dim-plugin-external-urls)
+[`@slop-lab/dim-host-plugin-external-urls`](https://www.npmjs.com/package/@slop-lab/dim-host-plugin-external-urls)
 instead.
 
 ## Installation
@@ -32,7 +32,7 @@ A provider plugin registers an `ExternalUrlDnsProviderDriver` under
 import {
   DIM_PLUGIN_API_VERSION,
   type DimPlugin
-} from "@slop-lab/dim-core";
+} from "@slop-lab/dim-host-core";
 import {
   EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
   type ExternalUrlDnsProviderDriver

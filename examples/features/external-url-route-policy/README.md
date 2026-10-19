@@ -7,7 +7,7 @@
 The standalone server below exercises the still-supported trusted route-policy
 webhook protocol. It requires Node.js 24/26 and a private host Unix socket.
 Integrating it requires managed administration plus
-`@slop-lab/dim-plugin-external-urls@0.10.0` on the workspace host and an
+`@slop-lab/dim-host-plugin-external-urls@0.10.0` on the workspace host and an
 operator-configured ingress referencing that socket. Native Git, CI and a DNS
 plugin are not required for a local HTTP ingress. This directory is not a source
 repository template and declares no workspace plugins of its own.

@@ -1,5 +1,5 @@
 {
-  "name": "dim-native-git-service-image",
+  "name": "@this-project/native-git-image",
   "private": true,
   "type": "module",
   "dependencies": {

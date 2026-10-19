@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { externalWebhookSubscriberSchema } from "./external-webhook-config.js";
-import { executionSourceCredentialsSchema } from "./execution-protocol.js";
+import { executionSourceCredentialsSchema } from "@slop-lab/dim-contracts-ci/execution";
 
 const identifier = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const credentialUsername = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/);

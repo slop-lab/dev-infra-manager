@@ -2,7 +2,7 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { UserError, type WorkspaceHostPlugin, type WorkspaceHostPluginContext } from "@slop-lab/dim-core/workspace";
+import { UserError, type WorkspaceHostPlugin, type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/workspace";
 import { LinuxVmBudget } from "./budget.js";
 import { CommandVmBudget } from "./budget-helper.js";
 import { parseVmHostConfig, readVmHostConfig } from "./config.js";
@@ -97,7 +97,7 @@ async function runVmCommand(args: string[], context: WorkspaceHostPluginContext)
     }
     case "resources": {
       if (!name || args.length < 4 || args.length % 2 !== 0) throw new UserError("usage: dim vm resources NAME [--cpus VALUE] [--memory VALUE] [--pids VALUE]");
-      const changes: Partial<import("@slop-lab/dim-core/workspace").WorkspaceResources> = {};
+      const changes: Partial<import("@slop-lab/dim-host-core/workspace").WorkspaceResources> = {};
       for (let index = 2; index < args.length; index += 2) {
         const flag = args[index], value = args[index + 1];
         const key = flag === "--cpus" ? "cpuCount" : flag === "--memory" ? "memory" : flag === "--pids" ? "pidsLimit" : undefined;
@@ -148,7 +148,7 @@ async function runVmCommand(args: string[], context: WorkspaceHostPluginContext)
   }
 }
 
-function configuredBudget(config: import("./config.js").VmHostConfig, runner: import("@slop-lab/dim-core/workspace").CommandRunner): CommandVmBudget {
+function configuredBudget(config: import("./config.js").VmHostConfig, runner: import("@slop-lab/dim-host-core/workspace").CommandRunner): CommandVmBudget {
   if (!config.budgetHelper) throw new UserError("VM host requires the reviewed root budget helper and Incus QEMU admission setup; configure budgetHelper before creating VMs");
   return new CommandVmBudget(runner, config.budgetHelper);
 }

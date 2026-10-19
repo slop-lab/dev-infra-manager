@@ -1,7 +1,7 @@
 set shell := ["bash", "-uc"]
 
 mod runner 'just/runner.just'
-mod verify 'verification/verify.just'
+mod verify 'just/verify.just'
 
 default:
     just --list --list-submodules
@@ -24,15 +24,15 @@ build-packages:
 
 # Run the complete source gate in its pinned, isolated container.
 check-source:
-    @bash verification/scripts/source-gate-container.bash
+    @bash scripts/checks/source-gate-container.bash
 
 # Run the isolated source gate explicitly.
 check-source-container:
-    @bash verification/scripts/source-gate-container.bash
+    @bash scripts/checks/source-gate-container.bash
 
 # Run the complete source gate directly in an already pinned native environment.
 check-source-native:
-    @bash verification/scripts/check-source-native.bash
+    @bash scripts/checks/check-source-native.bash
 
 # Prepare matched package and image candidates from one reviewed monorepo commit.
 prepare-local:
@@ -48,7 +48,7 @@ restart-controller:
 
 # Build the base core, then run the local CLI from source without installation.
 run-cli *args:
-    pnpm --filter @slop-lab/dim-core run build
+    pnpm --filter @slop-lab/dim-host-core run build
     pnpm --dir tests exec tsx ../packages/cli/src/cli.ts {{ args }}
 
 # Check that the local CLI source can be executed without installing it.
@@ -65,4 +65,4 @@ build-workspace-image:
 
 # Build the Docker-compatible Project workspace runtime image for local sources.
 build-local-workspace-image:
-    image_version="$(bash verification/scripts/local-build-version.bash)"; DIM_LOCAL_BUILD_VERSION="$image_version" DIM_WORKSPACE_IMAGE="dev-infra-project-workspace:$image_version" just run-cli workspace image build
+    image_version="$(bash scripts/checks/local-build-version.bash)"; DIM_LOCAL_BUILD_VERSION="$image_version" DIM_WORKSPACE_IMAGE="dev-infra-project-workspace:$image_version" just run-cli workspace image build

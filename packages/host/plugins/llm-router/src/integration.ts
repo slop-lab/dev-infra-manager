@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 import { readFile } from "node:fs/promises";
-import { deployGuestIntegration, type WorkspaceHostPluginContext, type WorkspaceRecord } from "@slop-lab/dim-core/workspace";
+import { deployGuestIntegration, type WorkspaceHostPluginContext, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 
 export async function deployRouterHelpers(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void> {
   const adapterPath = await routerAdapterPath(workspace, context);

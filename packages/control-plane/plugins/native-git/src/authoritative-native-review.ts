@@ -16,7 +16,7 @@ import {
 } from "./authoritative-native-review-schema.js";
 import { saveAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
 import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";
-import { CandidateExecutionError, executionInputsSchema } from "./candidate-execution-schema.js";
+import { CandidateExecutionError, executionInputsSchema } from "@slop-lab/dim-contracts-ci/descriptor";
 import { loadAuthoritativeNativeCandidateJobInputs } from "./authoritative-native-candidate-job-inputs.js";
 import type { AuthoritativeNativePlanning } from "./authoritative-native-review-schema.js";
 

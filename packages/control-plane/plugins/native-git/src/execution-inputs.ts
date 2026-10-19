@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { CandidateExecutionError, executionInputsSchema, type ExecutionInputs } from "./candidate-execution-schema.js";
+import { CandidateExecutionError, executionInputsSchema, type ExecutionInputs } from "@slop-lab/dim-contracts-ci/descriptor";
 import { resolveAuthoritativeNativeRepositoryTarget, type AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 
 /** Resolve candidate-requested repositories only inside the imported, trusted allowlist. */

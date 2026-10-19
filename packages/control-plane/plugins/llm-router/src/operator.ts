@@ -2,7 +2,7 @@ import { backup } from "node:sqlite";
 import { constants } from "node:fs";
 import { chmod, mkdir, open, readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
-import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane/lock";
+import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import { object, parseConfig, privateFile, text, type RouterConfig } from "./config.js";
 import { RouterLedger, hash } from "./ledger.js";
 

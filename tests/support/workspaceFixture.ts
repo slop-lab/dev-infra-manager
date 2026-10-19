@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { type WorkspaceRecord } from "@slop-lab/dim-core/workspace";
+import { type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 
 export function workspaceRecord(name = "work-a", overrides: Partial<WorkspaceRecord> = {}): WorkspaceRecord {
   const digest = createHash("sha256").update(name).digest("hex").slice(0, 32);

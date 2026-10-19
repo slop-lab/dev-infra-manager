@@ -1,5 +1,5 @@
 {
-  "extends": "./tsconfig.base.json",
+  "extends": "./tsconfig.source.json",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
@@ -8,63 +8,6 @@
     "types": [
       "node"
     ],
-    "baseUrl": ".",
-    "paths": {
-      "@slop-lab/dim-core": [
-        "packages/host/core/src/index.ts"
-      ],
-      "@slop-lab/dim-contracts-external-url": [
-        "packages/contracts/external-url/src/index.ts"
-      ],
-      "@slop-lab/dim-core/workspace": [
-        "packages/host/core/src/workspace.ts"
-      ],
-      "@slop-lab/dim-managed": [
-        "core/packages/managed/src/index.ts"
-      ],
-      "@slop-lab/dim-managed/cli": [
-        "core/packages/managed/src/cli/managed-cli.ts"
-      ],
-      "@slop-lab/dim-plugin-control-plane-ci-workflows": [
-        "packages/control-plane/plugins/ci-workflows/src/index.ts"
-      ],
-      "@slop-lab/dim-plugin-control-plane-native-git/config": [
-        "packages/control-plane/plugins/native-git/src/bundle-config.ts"
-      ],
-      "@slop-lab/dim-plugin-control-plane-native-git/service": [
-        "packages/control-plane/plugins/native-git/src/service.ts"
-      ],
-      "@slop-lab/dim-plugin-control-plane-native-git/workflow": [
-        "packages/control-plane/plugins/native-git/src/workflowCompiler.ts"
-      ],
-      "@slop-lab/dim-plugin-control-plane-native-git/execution": [
-        "packages/control-plane/plugins/native-git/src/execution-protocol.ts"
-      ],
-      "@slop-lab/dim-plugin-vm": [
-        "packages/host/plugins/vm/src/index.ts"
-      ],
-      "@slop-lab/dim-plugin-host-llm-router": [
-        "packages/host/plugins/llm-router/src/index.ts"
-      ],
-      "@slop-lab/dim-plugin-workspace-check": [
-        "packages/host/plugins/workspace-check/src/index.ts"
-      ],
-      "@slop-lab/dim-plugin-agent-tools": [
-        "packages/host/plugins/agent-tools/src/index.ts"
-      ],
-      "@slop-lab/dim-plugin-tunnels": [
-        "packages/host/plugins/tunnels/src/index.ts"
-      ],
-      "@slop-lab/dim-control-plane": [
-        "packages/control-plane/core/src/index.ts"
-      ],
-      "@slop-lab/dim-control-plane/plugin": [
-        "packages/control-plane/core/src/plugin.ts"
-      ],
-      "@slop-lab/dim-control-plane/lock": [
-        "packages/control-plane/core/src/lock.ts"
-      ]
-    },
     "typeRoots": [
       "./tests/node_modules/@types"
     ]

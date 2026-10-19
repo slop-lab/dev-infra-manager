@@ -1,0 +1,146 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@slop-lab/dim-contracts-ci": [
+        "packages/contracts/ci/src/index.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/execution": [
+        "packages/contracts/ci/src/execution-protocol.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/aggregate": [
+        "packages/contracts/ci/src/aggregate.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/config": [
+        "packages/contracts/ci/src/config.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/worker": [
+        "packages/contracts/ci/src/worker.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/query": [
+        "packages/contracts/ci/src/query.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/connections": [
+        "packages/contracts/ci/src/connections.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/http": [
+        "packages/contracts/ci/src/http.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/workflow": [
+        "packages/contracts/ci/src/workflow.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/descriptor": [
+        "packages/contracts/ci/src/candidate-execution-schema.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/digest": [
+        "packages/contracts/ci/src/candidate-execution.ts"
+      ],
+      "@slop-lab/dim-contracts-ci/events": [
+        "packages/contracts/ci/src/events.ts"
+      ],
+      "@slop-lab/dim-contracts-external-url": [
+        "packages/contracts/external-url/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-admin": [
+        "packages/control-plane/admin/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-admin/cli": [
+        "packages/control-plane/admin/src/cli/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-admin/ci": [
+        "packages/control-plane/admin/src/ci/operations.ts"
+      ],
+      "@slop-lab/dim-control-plane-core": [
+        "packages/control-plane/core/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-core/plugin": [
+        "packages/control-plane/core/src/plugin.ts"
+      ],
+      "@slop-lab/dim-control-plane-core/lock": [
+        "packages/control-plane/core/src/lock.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-ci": [
+        "packages/control-plane/plugins/ci/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-ci-workflows": [
+        "packages/control-plane/plugins/ci-workflows/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-llm-router": [
+        "packages/control-plane/plugins/llm-router/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-native-git": [
+        "packages/control-plane/plugins/native-git/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-native-git/service": [
+        "packages/control-plane/plugins/native-git/src/service.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-native-git/config": [
+        "packages/control-plane/plugins/native-git/src/bundle-config.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-native-git/deployment": [
+        "packages/control-plane/plugins/native-git/src/service-pair.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-native-git/deployment-cli": [
+        "packages/control-plane/plugins/native-git/src/deployment-cli.ts"
+      ],
+      "@slop-lab/dim-host-core": [
+        "packages/host/core/src/index.ts"
+      ],
+      "@slop-lab/dim-host-core/workspace": [
+        "packages/host/core/src/workspace.ts"
+      ],
+      "@slop-lab/dim-host-core/controller": [
+        "packages/host/core/src/controller/index.ts"
+      ],
+      "@slop-lab/dim-host-core/controller/cli": [
+        "packages/host/core/src/controller/cli/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-agent-tools": [
+        "packages/host/plugins/agent-tools/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-cache-server": [
+        "packages/host/plugins/cache-server/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-ci-worker": [
+        "packages/host/plugins/ci-worker/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-dns-cloudflare": [
+        "packages/host/plugins/dns-cloudflare/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-external-urls": [
+        "packages/host/plugins/external-urls/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-llm-router": [
+        "packages/host/plugins/llm-router/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-llm-router/opencode": [
+        "packages/host/plugins/llm-router/src/opencode.ts"
+      ],
+      "@slop-lab/dim-host-plugin-mirrors": [
+        "packages/host/plugins/mirrors/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-native-git": [
+        "packages/host/plugins/native-git/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-native-git/host": [
+        "packages/host/plugins/native-git/src/nativeWorkspaceHost.ts"
+      ],
+      "@slop-lab/dim-host-plugin-native-git/cli": [
+        "packages/host/plugins/native-git/src/cli/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-tunnels": [
+        "packages/host/plugins/tunnels/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-vm": [
+        "packages/host/plugins/vm/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-workspace-check": [
+        "packages/host/plugins/workspace-check/src/index.ts"
+      ],
+      "@slop-lab/dim-web": [
+        "packages/web/src/index.ts"
+      ]
+    }
+  }
+}

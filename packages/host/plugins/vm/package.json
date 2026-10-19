@@ -1,5 +1,5 @@
 {
-  "name": "@slop-lab/dim-plugin-vm",
+  "name": "@slop-lab/dim-host-plugin-vm",
   "version": "0.10.0",
   "description": "Persistent Incus VM workspaces and scoped browser consoles for DIM",
   "private": true,
@@ -22,10 +22,10 @@
     "node": "^24.0.0 || ^26.0.0"
   },
   "peerDependencies": {
-    "@slop-lab/dim-core": "0.10.0"
+    "@slop-lab/dim-host-core": "0.10.0"
   },
   "devDependencies": {
-    "@slop-lab/dim-core": "workspace:*",
+    "@slop-lab/dim-host-core": "workspace:*",
     "@types/node": "24.13.3",
     "typescript": "5.8.3",
     "@types/ws": "8.18.2"

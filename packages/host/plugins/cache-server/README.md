@@ -1,13 +1,13 @@
-# `@slop-lab/dim-plugin-cache-server`
+# `@slop-lab/dim-host-plugin-cache-server`
 
 Optionally run host-owned Docker Hub, npm, PyPI and APT cache services. This
 server plugin owns deployment and persistent cache storage; the separate
 [`host-mirrors`](../mirrors/README.md) client owns workspace and CI
-configuration. Neither requires the managed control plane, and the server does
+configuration. Neither requires a control-plane service, and the server does
 not require the client plugin.
 
 ```sh
-dim installer install plugin '@slop-lab/dim-plugin-cache-server@0.10.0'
+dim installer install plugin '@slop-lab/dim-host-plugin-cache-server@0.10.0'
 dim cache-server ensure
 dim cache-server endpoints
 ```
@@ -59,7 +59,7 @@ An operator can deploy remote services with suitable storage/networking and
 change client URLs without changing consumer code or relying on a workspace's
 lifetime. Existing cache data transfer is a separate operator operation.
 
-Lifecycle tests live in `tests/plugins/cache-server/test`; disposable real npm
+Lifecycle tests live in `tests/host/plugins/cache-server/`; disposable real npm
 and PyPI cold/warm/offline consumer checks live in
-`verification/scripts/package-cache-smoke.mts`. Runtime gates use random owned
+`scripts/checks/package-cache-smoke.mts`. Runtime gates use random owned
 resources and must not be aimed at installed cache volumes.

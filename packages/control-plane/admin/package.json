@@ -1,0 +1,54 @@
+{
+  "name": "@slop-lab/dim-control-plane-admin",
+  "version": "0.10.0",
+  "description": "Optional DIM control-plane deployment and operator clients",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./src/cli/index.ts",
+      "import": "./dist/cli/index.js",
+      "default": "./dist/cli/index.js"
+    },
+    "./ci": {
+      "types": "./src/ci/operations.ts",
+      "import": "./dist/ci/operations.js",
+      "default": "./dist/ci/operations.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
+    "directory": "packages/control-plane/admin"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node ../../../scripts/packages/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "dependencies": {
+    "@slop-lab/dim-host-core": "workspace:0.10.0",
+    "@slop-lab/dim-host-plugin-native-git": "workspace:0.10.0",
+    "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-native-git": "workspace:0.10.0",
+    "commander": "14.0.0",
+    "zod": "4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  }
+}

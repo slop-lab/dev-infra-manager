@@ -93,35 +93,22 @@ GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$sou
   LICENSE \
   tsconfig.base.json \
   pnpm-lock.yaml \
-  core \
+  package.json \
   packages \
   scripts/packages
 tar -xf "$source_archive" -C "$source_root"
 
-cat >"$source_root/package.json" <<'EOF'
-{"name":"dim-production-source-build","private":true}
-EOF
 cat >"$source_root/pnpm-workspace.yaml" <<'EOF'
 packages:
   - packages/host/core
+  - packages/host/plugins/*
   - packages/control-plane/core
-  - core/packages/managed
+  - packages/control-plane/admin
+  - packages/control-plane/plugins/*
+  - packages/contracts/*
   - packages/cli
   - packages/installer
-  - packages/control-plane/plugins/native-git
   - packages/web
-  - packages/contracts/*
-  - packages/host/plugins/dns-cloudflare
-  - packages/host/plugins/external-urls
-  - packages/host/plugins/mirrors
-  - packages/host/plugins/cache-server
-  - packages/control-plane/plugins/ci-workflows
-  - packages/host/plugins/llm-router
-  - packages/control-plane/plugins/llm-router
-  - packages/host/plugins/vm
-  - packages/host/plugins/workspace-check
-  - packages/host/plugins/agent-tools
-  - packages/host/plugins/tunnels
 linkWorkspacePackages: true
 EOF
 
@@ -130,7 +117,7 @@ if [[ ! -f "$aggregate_lock" || -L "$aggregate_lock" ]]; then
   echo "aggregate source-build lock is missing from reviewed commit $commit" >&2
   exit 1
 fi
-source_version="$(node -p 'JSON.parse(require("node:fs").readFileSync(require("node:path").join(process.argv[1], "core/package.json"), "utf8")).version' "$source_root")"
+source_version="$(node -p 'JSON.parse(require("node:fs").readFileSync(require("node:path").join(process.argv[1], "package.json"), "utf8")).version' "$source_root")"
 aggregate_lock_sha="$(sha256sum "$aggregate_lock" | cut -d ' ' -f 1)"
 [[ "$aggregate_lock_sha" =~ ^[0-9a-f]{64}$ ]]
 aggregate_sha="$({

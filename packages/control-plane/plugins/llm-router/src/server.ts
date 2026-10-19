@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane/lock";
+import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import { identifier, object, privateFile, text, type RouterConfig } from "./config.js";
 import { AdmissionError, hash, RouterLedger } from "./ledger.js";
 import { ArchiveError, ExchangeArchive, captureBody, captureManifest } from "./archive.js";

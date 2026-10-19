@@ -11,18 +11,17 @@ RUN apt-get update \
   && test "$(git --version)" = "git version 2.39.5" \
   && rm -rf /var/lib/apt/lists/*
 
-COPY packages/control-plane/core/dist ./node_modules/@slop-lab/dim-control-plane
-COPY packages/control-plane/plugins/native-git/dist ./node_modules/@slop-lab/dim-plugin-control-plane-native-git
-COPY packages/control-plane/plugins/ci-workflows/dist ./node_modules/@slop-lab/dim-plugin-control-plane-ci-workflows
-COPY core/packages/managed/dist/nativeGitServiceCli.js core/packages/managed/dist/controlPlaneServicePair.js ./
-COPY core/packages/managed/dist/ci/config.js ./ci/config.js
+COPY packages/control-plane/core/dist ./node_modules/@slop-lab/dim-control-plane-core
+COPY packages/control-plane/plugins/native-git/dist ./node_modules/@slop-lab/dim-control-plane-plugin-native-git
+COPY packages/control-plane/plugins/ci-workflows/dist ./node_modules/@slop-lab/dim-control-plane-plugin-ci-workflows
+COPY packages/contracts/ci/dist ./node_modules/@slop-lab/dim-contracts-ci
 COPY packages/control-plane/plugins/native-git/image/dim-service /usr/local/bin/dim-service
 
 RUN groupadd --gid 10001 dim-service \
   && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin dim-service \
   && install -d -o 10001 -g 10001 -m 0750 /var/lib/dim-native-git \
-  && chmod 0444 /usr/local/lib/dim/*.js /usr/local/lib/dim/package.json /usr/local/lib/dim/package-lock.json \
-  && chmod 0555 /usr/local/lib/dim/nativeGitServiceCli.js \
+  && chmod 0444 /usr/local/lib/dim/package.json /usr/local/lib/dim/package-lock.json \
+  && chmod 0555 /usr/local/lib/dim/node_modules/@slop-lab/dim-control-plane-plugin-native-git/deployment-cli.js \
   && chmod 0555 /usr/local/bin/dim-service
 
 ENV HOME=/nonexistent \

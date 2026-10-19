@@ -2,20 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
-import {
-  DIM_PLUGIN_API_VERSION,
-  requireControllerWorkspace,
-  workspacePluginRequest,
-  UserError,
-  type AdminRouteContext,
-  type ControllerRouteContext,
-  type ControllerRuntimeContext,
-  type ControllerWorkspace,
-  type DimPlugin,
-  type DimPluginHost,
-  type ResolvedWorkspaceTarget,
-  type WorkspaceTarget
-} from "@slop-lab/dim-managed";
+import { DIM_PLUGIN_API_VERSION, requireControllerWorkspace, workspacePluginRequest, type AdminRouteContext, type ControllerRouteContext, type ControllerRuntimeContext, type ControllerWorkspace, type DimPlugin, type DimPluginHost, type ResolvedWorkspaceTarget, type WorkspaceTarget } from "@slop-lab/dim-host-core/controller";
+import { UserError } from "@slop-lab/dim-host-core";
 import {
   readExternalUrlConfig,
   writeExternalUrlConfig,
@@ -122,7 +110,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
   validateOptions(options);
 
   return {
-    name: "@slop-lab/dim-plugin-external-urls",
+    name: "@slop-lab/dim-host-plugin-external-urls",
     apiVersion: DIM_PLUGIN_API_VERSION,
     async register(host) {
       host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale", tailscaleIngressDriver);
@@ -781,7 +769,7 @@ function parseHttpIngressArgument(driver: string, argument: string): {
 }
 
 const INGRESS_DOCUMENTATION_URL =
-  "https://github.com/slop-lab/dev-infra-manager/blob/main/specification/docs/external-urls.md#host-configuration-and-route-approval";
+  "https://github.com/slop-lab/dev-infra-manager/blob/main/docs/guides/external-urls.md#host-configuration-and-route-approval";
 
 function httpIngressArgumentError(detail: string): UserError {
   return new UserError(`http ingress arguments ${detail}. See ${INGRESS_DOCUMENTATION_URL}`);
@@ -1138,7 +1126,7 @@ function normalizeDomain(value: string): string {
 
 
 const plugin: DimPlugin = {
-  name: "@slop-lab/dim-plugin-external-urls",
+  name: "@slop-lab/dim-host-plugin-external-urls",
   apiVersion: DIM_PLUGIN_API_VERSION,
   async register(host) {
     return (await externalUrlsPluginFromConfig()).register(host);

@@ -11,8 +11,8 @@ import { fileURLToPath } from "node:url";
 import {
   ProcessRunner, UserError, WorkspaceService, WorkspaceStore, deployGuestIntegration, workspaceGuestAssets,
   type WorkspaceHostPluginContext, type WorkspaceRecord, type WorkspaceRuntime
-} from "@slop-lab/dim-core/workspace";
-import { atomicWrite } from "@slop-lab/dim-core";
+} from "@slop-lab/dim-host-core/workspace";
+import { atomicWrite } from "@slop-lab/dim-host-core";
 import { composeWorkspaceRuntime, loadHostPlugins, hostPluginHome } from "./host-plugins.js";
 import { ensureWorkspaceIntegration } from "./workspace-composition.js";
 

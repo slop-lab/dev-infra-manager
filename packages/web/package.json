@@ -40,13 +40,13 @@
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
     "typescript": "5.8.3",
-    "@slop-lab/dim-managed": "workspace:*"
+    "@slop-lab/dim-control-plane-admin": "workspace:*"
   },
   "peerDependencies": {
-    "@slop-lab/dim-managed": "0.10.0"
+    "@slop-lab/dim-control-plane-admin": "0.10.0"
   },
   "peerDependenciesMeta": {
-    "@slop-lab/dim-managed": {
+    "@slop-lab/dim-control-plane-admin": {
       "optional": true
     }
   }

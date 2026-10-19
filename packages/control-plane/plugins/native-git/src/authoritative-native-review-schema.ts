@@ -1,8 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { executionInputsSchema } from "./candidate-execution-schema.js";
-import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
+import { executionInputsSchema } from "@slop-lab/dim-contracts-ci/descriptor";
+import { authoritativeNativeReviewEventSchema } from "@slop-lab/dim-contracts-ci/events";
+export { authoritativeNativeReviewEventSchema } from "@slop-lab/dim-contracts-ci/events";
+import { isCandidatePath, isCandidateArgv } from "@slop-lab/dim-contracts-ci/workflow";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
@@ -50,14 +52,6 @@ const identityObjectSchema = z.object({
 
 export const authoritativeNativeReviewSchema = identityObjectSchema.extend({
   reviewId: digest, createdAt: z.string().datetime()
-}).strict().readonly();
-
-export const authoritativeNativeReviewEventSchema = z.object({
-  schemaVersion: z.literal(3), type: z.literal("dim.native.review-job.available"), eventId: digest,
-  envelopeId: digest, projectId: identifier, repositoryId: identifier, protectedRef: z.string(),
-  reviewId: digest, expectedProtectedHead: objectId, candidateCommit: objectId, candidateTree: objectId,
-  policyRevision: digest, requiredReviewRevision: digest, qualityRevision: digest,
-  executionKind: z.enum(["ordinary-sysbox", "qemu"]), jobName, evidenceClass: z.literal("candidate-controlled"), inputs: executionInputsSchema
 }).strict().readonly();
 
 export const authoritativeNativeReviewEnvelopeSchema = z.object({

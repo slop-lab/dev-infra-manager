@@ -8,7 +8,7 @@ to the optional tools plugin.
 dim create /path/on/selected/host/to/dev-infra-manager dev
 dim exec dev -- bash scripts/dev.bash setup
 dim exec dev -- bash scripts/dev.bash check
-dim installer install plugin '@slop-lab/dim-plugin-agent-tools@0.10.0'
+dim installer install plugin '@slop-lab/dim-host-plugin-agent-tools@0.10.0'
 dim tools setup dev codex
 dim tools run dev codex --resume-on-restart
 ```
