@@ -1,0 +1,30 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { chromium, type Browser } from "playwright-core";
+import { TunnelStore } from "../../../../plugin-tunnels/src/store.js";
+import { serveTunnels } from "../../../../plugin-tunnels/src/server.js";
+const directory = await mkdtemp(path.join(tmpdir(), "dim-tunnel-browser-"));
+const store = new TunnelStore(path.join(directory, "private.json"));
+await store.initialize("operator");
+const config = await store.read();
+const server = await serveTunnels(store, { async current() { return true; } }, { relayHost: "127.0.0.1", relayPort: 0, operatorPort: 0 });
+let browser: Browser | undefined;
+try {
+  browser = await chromium.launch({ executablePath: process.env.DIM_CHROMIUM ?? "/usr/bin/google-chrome", headless: true });
+  const page = await browser.newPage({ httpCredentials: config.operator }); const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`http://127.0.0.1:${server.operatorPort}`);
+  await page.locator('[name="name"]').fill("database"); await page.locator('[name="host"]').fill("database.internal"); await page.locator('[name="port"]').fill("5432");
+  await page.getByRole("button", { name: "Add route", exact: true }).click();
+  await page.getByText("database → tcp database.internal:5432").waitFor();
+  assert.equal((await store.read()).routes.database?.port, 5432);
+  await store.update((value) => { value.grants["a".repeat(43)] = { workspaceId: "uuid-one", workspaceName: "dev", route: "database", localPort: 5432 }; });
+  await page.reload(); await page.getByText("dev → database (localhost:5432)").waitFor();
+  await page.getByRole("button", { name: "Revoke", exact: true }).click(); await page.getByText("dev → database (localhost:5432)").waitFor({ state: "detached" });
+  assert.deepEqual((await store.read()).grants, {});
+  await page.getByRole("button", { name: "Remove", exact: true }).click(); await page.getByText("database → tcp database.internal:5432").waitFor({ state: "detached" });
+  assert.deepEqual((await store.read()).routes, {}); assert.deepEqual(errors, []);
+  console.log("Actual Chromium tunnel UI route add/remove and workspace grant revoke passed");
+} finally { await browser?.close(); await server.close(); await rm(directory, { recursive: true, force: true }); }

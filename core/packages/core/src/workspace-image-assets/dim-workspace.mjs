@@ -268,7 +268,9 @@ async function superviseService(name) {
   if (!ticks) throw new Error("cannot identify service supervisor");
   const identity = { pid: process.pid, ticks, boot, nonce, child: 0, childTicks: "" };
   try {
-    await writeFile(ownerFile, JSON.stringify(identity), { flag: "wx", mode: 0o600 });
+    const firstOwner = `${ownerFile}.${nonce}.tmp`;
+    await writeFile(firstOwner, JSON.stringify(identity), { flag: "wx", mode: 0o600 });
+    await rename(firstOwner, ownerFile);
     const saved = await privateJson(serviceFile(name));
     if (!record(saved) || saved.schemaVersion !== 1 || !Array.isArray(saved.argv) || !saved.argv.length
       || !saved.argv.every((arg) => typeof arg === "string" && !arg.includes("\0")) || !saved.argv[0]
