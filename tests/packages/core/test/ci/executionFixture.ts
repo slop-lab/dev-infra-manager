@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { executionGrantSchema, type ExecutionEvent, type ExecutionGrant } from "../../../../../plugin-control-plane-native-git/src/execution-protocol.js";
-import { descriptorDigest } from "../../../../../plugin-control-plane-native-git/src/candidate-execution.js";
+import { executionGrantSchema, type ExecutionEvent, type ExecutionGrant } from "../../../../../packages/control-plane/plugins/native-git/src/execution-protocol.js";
+import { descriptorDigest } from "../../../../../packages/control-plane/plugins/native-git/src/candidate-execution.js";
 import type { ExecutionAssignment, WorkerSlot } from "../../../../../core/packages/managed/src/ci/execution.js";
 export const generation = "a".repeat(64);
 export const slot: WorkerSlot = { id: "primary", kind: "ordinary-sysbox", profile: {

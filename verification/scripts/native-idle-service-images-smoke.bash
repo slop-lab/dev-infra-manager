@@ -23,9 +23,9 @@ docker info >/dev/null
 "$repo_root/verification/scripts/lib/check-installation-docker-version.bash" "$(docker version --format '{{.Server.Version}}')"
 # Callers with a protected, matched build can verify those exact artifacts without cleaning dist.
 if [[ "${DIM_VERIFY_SKIP_BUILD:-0}" != 1 ]]; then
-  pnpm --dir core/packages/core run build >/dev/null
-  pnpm --dir plugin-control-plane-native-git run build >/dev/null
-  pnpm --dir plugin-control-plane-ci-workflows run build >/dev/null
+  pnpm --dir packages/host/core run build >/dev/null
+  pnpm --dir packages/control-plane/plugins/native-git run build >/dev/null
+  pnpm --dir packages/control-plane/plugins/ci-workflows run build >/dev/null
   pnpm --dir core/packages/managed run build >/dev/null
 fi
 node --input-type=module - "$work_dir" <<'JS'
@@ -46,8 +46,8 @@ for (const [name, source] of [['native', 'native-git'], ['ci', 'ordinary-ci']]) 
 await writeFile(join(root, 'generation'), randomBytes(32).toString('hex'));
 JS
 generation="$(cat "$work_dir/generation")"
-docker build --tag "$native_image" --file core/images/native-git/Dockerfile . >/dev/null
-docker build --tag "$ci_image" --file core/images/ordinary-ci/Dockerfile . >/dev/null
+docker build --tag "$native_image" --file packages/control-plane/plugins/native-git/image/Dockerfile . >/dev/null
+docker build --tag "$ci_image" --file packages/control-plane/plugins/ci/image/Dockerfile . >/dev/null
 docker network create "$network" >/dev/null
 docker volume create "$native_state" >/dev/null
 docker volume create "$ci_state" >/dev/null

@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createHostMirrorOwnership,
   parseHostMirrorOwnership
-} from "../../../../plugin-cache-server/src/hostMirrorOwnership.js";
-import { MirrorState as LifecycleState } from "../../../../plugin-cache-server/src/cacheState.js";
+} from "../../../../packages/host/plugins/cache-server/src/hostMirrorOwnership.js";
+import { MirrorState as LifecycleState } from "../../../../packages/host/plugins/cache-server/src/cacheState.js";
 
 const roots: string[] = [];
 

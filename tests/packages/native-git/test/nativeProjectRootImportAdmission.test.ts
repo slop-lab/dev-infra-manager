@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
-import { configuredNativeGitBundleServer } from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
+import { parseNativeGitBundleConfig } from "../../../../packages/control-plane/plugins/native-git/src/bundle-config.js";
+import { configuredNativeGitBundleServer } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-server.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
 
 const generationId = "a".repeat(64);

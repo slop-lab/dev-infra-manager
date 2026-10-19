@@ -13,7 +13,7 @@ than repeating the common `@slop-lab/dim-*` npm prefix:
 Nested directory segments follow the remainder of the package name. For
 example, `contracts/external-url` publishes as
 `@slop-lab/dim-contracts-external-url`, while the root-level
-`plugin-dns-cloudflare` publishes as `@slop-lab/dim-plugin-dns-cloudflare`.
+`packages/host/plugins/dns-cloudflare` publishes as `@slop-lab/dim-plugin-dns-cloudflare`.
 
 The root `tests/` workspace holds package integration suites and their shared
 fixtures. `verification/` owns cross-package, container, host, and QEMU gates;

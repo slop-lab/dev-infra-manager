@@ -5,11 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { assertGitVersion } from "../../../../plugin-control-plane-native-git/src/repository.js";
+import { assertGitVersion } from "../../../../packages/control-plane/plugins/native-git/src/repository.js";
 import {
   assertNativeRootCommitGraph,
   assertNativeRootObjectFormat
-} from "../../../../plugin-control-plane-native-git/src/native-root-import-git.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/native-root-import-git.js";
 
 const run = promisify(execFile);
 const roots: string[] = [];

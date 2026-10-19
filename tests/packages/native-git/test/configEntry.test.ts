@@ -24,7 +24,7 @@ it("configuration parsing and host preparation do not load the SQLite authority 
     await import(${JSON.stringify(cli)});
     console.log(JSON.stringify({ serviceId: parsed.serviceId, rejected }));
   `], {
-    cwd: fileURLToPath(new URL("../../../../plugin-control-plane-native-git/", import.meta.url)),
+    cwd: fileURLToPath(new URL("../../../../packages/control-plane/plugins/native-git", import.meta.url)),
     env: { ...process.env, DIM_TEST_CONFIG: JSON.stringify(idleNativeConfig()) }, encoding: "utf8"
   });
   expect(JSON.parse(output)).toEqual({ serviceId: "native-main", rejected: true });

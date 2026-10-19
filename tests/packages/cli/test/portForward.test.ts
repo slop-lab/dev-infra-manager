@@ -7,7 +7,7 @@ import path from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { forwardWorkspace } from "../../../../core/packages/cli/src/port-forward.js";
+import { forwardWorkspace } from "../../../../packages/cli/src/port-forward.js";
 
 const peer = fileURLToPath(new URL("./fixtures/host-peer.mjs", import.meta.url));
 

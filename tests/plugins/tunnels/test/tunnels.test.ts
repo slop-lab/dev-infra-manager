@@ -4,9 +4,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
-import { TunnelStore } from "../../../../plugin-tunnels/src/store.js";
-import { serveTunnels } from "../../../../plugin-tunnels/src/server.js";
-import { startGuest, parseGuestConfiguration } from "../../../../plugin-tunnels/src/assets/guest.mjs";
+import { TunnelStore } from "../../../../packages/host/plugins/tunnels/src/store.js";
+import { serveTunnels } from "../../../../packages/host/plugins/tunnels/src/server.js";
+import { startGuest, parseGuestConfiguration } from "../../../../packages/host/plugins/tunnels/src/assets/guest.mjs";
 
 async function listen(server: Server): Promise<number> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

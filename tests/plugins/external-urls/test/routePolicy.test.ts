@@ -9,7 +9,7 @@ import {
   applyRoutePolicy,
   workspacePermalinkSubdomain,
   workspaceSubdomainPrefix
-} from "../../../../plugin-external-urls/src/routePolicy.js";
+} from "../../../../packages/host/plugins/external-urls/src/routePolicy.js";
 
 describe("external URL route policies", () => {
   const cleanup: Array<() => Promise<void>> = [];

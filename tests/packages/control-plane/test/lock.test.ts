@@ -2,7 +2,7 @@ import { chmod, link, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/prom
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
-import { tryAcquireKernelGuard } from "../../../../core/packages/control-plane/src/lock.js";
+import { tryAcquireKernelGuard } from "../../../../packages/control-plane/core/src/lock.js";
 
 it("standalone guard serializes contenders on one permanent inode and releases idempotently", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-cp-guard-"));

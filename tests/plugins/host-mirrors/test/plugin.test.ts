@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { registerPlugin } from "@slop-lab/dim-managed";
-import plugin, { hostMirrorProvider } from "../../../../plugin-host-mirrors/src/index.js";
+import plugin, { hostMirrorProvider } from "../../../../packages/host/plugins/mirrors/src/index.js";
 
 describe("host mirror plugin", () => {
   it("registers client routing without installing cache services", async () => {

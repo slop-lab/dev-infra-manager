@@ -6,14 +6,14 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-/** @type {typeof import("../../core/packages/core/src/workspace.js")} */
-const { WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, ProcessRunner, workspaceRuntimeResources } = await import(new URL("../../core/packages/core/dist/workspace.js", import.meta.url).href);
+/** @type {typeof import("../../packages/host/core/src/workspace.js")} */
+const { WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, ProcessRunner, workspaceRuntimeResources } = await import(new URL("../../packages/host/core/dist/workspace.js", import.meta.url).href);
 /** @type {typeof import("../../core/packages/managed/src/controllerWorkspace.js")} */
 const { ControllerWorkspaces } = await import(new URL("../../core/packages/managed/dist/controllerWorkspace.js", import.meta.url).href);
 /** @type {typeof import("../../core/packages/managed/src/index.js")} */
 const { registerPlugins, createDimController } = await import(new URL("../../core/packages/managed/dist/index.js", import.meta.url).href);
-/** @type {typeof import("../../plugin-external-urls/src/index.js")} */
-const { createExternalUrlsPlugin } = await import(new URL("../../plugin-external-urls/dist/index.js", import.meta.url).href);
+/** @type {typeof import("../../packages/host/plugins/external-urls/src/index.js")} */
+const { createExternalUrlsPlugin } = await import(new URL("../../packages/host/plugins/external-urls/dist/index.js", import.meta.url).href);
 
 const image = process.argv[2];
 if (!image) throw new Error("usage: node verification/scripts/controller-workspace-relay-smoke.mjs WORKSPACE_IMAGE");
@@ -26,7 +26,7 @@ const service = new WorkspaceService(store, runtime, async ({ destination }) => 
   return { url: "https://example.invalid/relay-smoke.git", ref: "refs/heads/main", commit: "a".repeat(40) };
 });
 const controller = new ControllerWorkspaces({ stateRoot: join(root, "managed") }, runner, store.root);
-/** @type {import("../../core/packages/core/src/workspace.js").WorkspaceRecord | undefined} */
+/** @type {import("../../packages/host/core/src/workspace.js").WorkspaceRecord | undefined} */
 let record;
 /** @type {Awaited<ReturnType<typeof registerPlugins>> | undefined} */
 let plugin;
@@ -154,7 +154,7 @@ function exchange(target, input) {
   });
 }
 
-/** @param {import("../../core/packages/core/src/workspace.js").WorkspaceRecord} workspace */
+/** @param {import("../../packages/host/core/src/workspace.js").WorkspaceRecord} workspace */
 function workspaceNetwork(workspace) { return workspaceRuntimeResources(workspace).network; }
 async function availablePort() {
   const listener = createServer(); await listen(listener);

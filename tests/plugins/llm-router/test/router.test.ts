@@ -5,11 +5,11 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { createRouter } from "../../../../plugin-control-plane-llm-router/src/server.js";
-import { parseConfig, parsePolicy, defaultLimits, backendProfile, type RouterConfig } from "../../../../plugin-control-plane-llm-router/src/config.js";
-import { RouterLedger } from "../../../../plugin-control-plane-llm-router/src/ledger.js";
-import { backupRouter, restoreRouter, accountHealth, effectivePolicy } from "../../../../plugin-control-plane-llm-router/src/operator.js";
-import { captureBody, captureManifest, exportCapture, removeCapture } from "../../../../plugin-control-plane-llm-router/src/archive.js";
+import { createRouter } from "../../../../packages/control-plane/plugins/llm-router/src/server.js";
+import { parseConfig, parsePolicy, defaultLimits, backendProfile, type RouterConfig } from "../../../../packages/control-plane/plugins/llm-router/src/config.js";
+import { RouterLedger } from "../../../../packages/control-plane/plugins/llm-router/src/ledger.js";
+import { backupRouter, restoreRouter, accountHealth, effectivePolicy } from "../../../../packages/control-plane/plugins/llm-router/src/operator.js";
+import { captureBody, captureManifest, exportCapture, removeCapture } from "../../../../packages/control-plane/plugins/llm-router/src/archive.js";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
 
 type Backend = (request: IncomingMessage, response: ServerResponse) => void;
@@ -251,7 +251,7 @@ it("backs up private credentials, ledger, captures and unresolved reservations w
   await expect(backupRouter(fx.config, snapshot)).rejects.toThrow(/stop configured backend credential writers/);
   await backupRouter(fx.config, snapshot, { backendStateQuiesced: true });
   const file = await restoreRouter(snapshot, join(fx.root, "restored"));
-  const restoredConfig = await (await import("../../../../plugin-control-plane-llm-router/src/config.js")).loadConfig(file);
+  const restoredConfig = await (await import("../../../../packages/control-plane/plugins/llm-router/src/config.js")).loadConfig(file);
   expect(await readFile(join(restoredConfig.accounts[0]!.credentialDirectory!, "account.json"), "utf8")).toContain("inert-test-token");
   const restored = await createRouter(restoredConfig); cleanup.push(() => restored.close()); const origin = await listen(restored.server);
   expect(restored.ledger.request(id)).toMatchObject({ execution: "outcome_unknown", occupied: 1, accounting: "reconciliation_required" });
@@ -310,8 +310,8 @@ it("recovers a real killed router process without replaying or freeing ambiguous
   await fx.router.close();
   const configuration = join(fx.root, "router.json"); await writeFile(configuration, JSON.stringify(fx.config), { mode: 0o600 });
   const child = spawn(process.execPath, ["--input-type=module", "-e", `
-    const {loadConfig}=await import(${JSON.stringify(new URL("../../../../plugin-control-plane-llm-router/dist/config.js", import.meta.url).href)});
-    const {createRouter}=await import(${JSON.stringify(new URL("../../../../plugin-control-plane-llm-router/dist/server.js", import.meta.url).href)});
+    const {loadConfig}=await import(${JSON.stringify(new URL("../../../../packages/control-plane/plugins/llm-router/dist/config.js", import.meta.url).href)});
+    const {createRouter}=await import(${JSON.stringify(new URL("../../../../packages/control-plane/plugins/llm-router/dist/server.js", import.meta.url).href)});
     const router=await createRouter(await loadConfig(process.argv[1]));router.server.listen(0,'127.0.0.1',()=>console.log(router.server.address().port));
   `, configuration], { stdio: ["ignore", "pipe", "pipe"] });
   let diagnostic = ""; child.stderr.setEncoding("utf8").on("data", (chunk: string) => { diagnostic += chunk; });

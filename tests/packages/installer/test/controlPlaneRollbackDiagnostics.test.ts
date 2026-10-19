@@ -6,11 +6,11 @@ import {
   ControlPlaneInstallError,
   controlPlaneFailureCode,
   formatControlPlaneInstallError
-} from "../../../../core/packages/installer/src/controlPlaneInstallError.js";
+} from "../../../../packages/installer/src/controlPlaneInstallError.js";
 import {
   ControlPlaneStateFilesystemError,
   replaceStateFile
-} from "../../../../core/packages/installer/src/controlPlaneStateFs.js";
+} from "../../../../packages/installer/src/controlPlaneStateFs.js";
 import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 import {
   deterministicRandom,

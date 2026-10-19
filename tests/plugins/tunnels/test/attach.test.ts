@@ -8,12 +8,12 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { type WorkspaceService } from "@slop-lab/dim-core/workspace";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
-import { runTunnels } from "../../../../plugin-tunnels/src/index.js";
-import { TunnelStore } from "../../../../plugin-tunnels/src/store.js";
-import { serveTunnels } from "../../../../plugin-tunnels/src/server.js";
+import { runTunnels } from "../../../../packages/host/plugins/tunnels/src/index.js";
+import { TunnelStore } from "../../../../packages/host/plugins/tunnels/src/store.js";
+import { serveTunnels } from "../../../../packages/host/plugins/tunnels/src/server.js";
 
 const execute = promisify(execFile);
-const client = fileURLToPath(new URL("../../../../core/packages/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
+const client = fileURLToPath(new URL("../../../../packages/host/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
 it("host attachment installs private UUID-fenced guest payload and independent restartable service", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "dim-tunnel-attach-"));
   const record = workspaceRecord("dev"), controller = new AbortController();

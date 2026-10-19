@@ -1,4 +1,4 @@
-import { acquireControlPlaneStateLock } from "../../../../core/packages/installer/src/controlPlaneLock.js";
+import { acquireControlPlaneStateLock } from "../../../../packages/installer/src/controlPlaneLock.js";
 
 const root = process.argv[2];
 if (root === undefined) throw new Error("state root argument is required");

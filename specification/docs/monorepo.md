@@ -6,11 +6,11 @@ that shared source identity. There is no required sibling checkout.
 
 | Path | Responsibility |
 | --- | --- |
-| `core/packages/core` | Base workspace application, state, runtime/source primitives |
-| `core/packages/cli` | Commands, presentation, host contexts and SSH transport |
+| `packages/host/core` | Base workspace application, state, runtime/source primitives |
+| `packages/cli` | Commands, presentation, host contexts and SSH transport |
 | `core/packages/managed` | Optional Project/source attachment, controller and execution composition |
-| `plugin-control-plane-native-git` | Optional repository, proposal, review and protected-ref authority |
-| `core/packages/installer` | Exact component installation, activation and recovery behind the facade |
+| `packages/control-plane/plugins/native-git` | Optional repository, proposal, review and protected-ref authority |
+| `packages/installer` | Exact component installation, activation and recovery behind the facade |
 | `plugin-*/` | Explicitly selected integrations and workflow language |
 | `tests/` | Centralized behavior tests and fixtures |
 | `verification/` | Disposable cross-component, packaging and physical runtime checks |

@@ -19,8 +19,8 @@ import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workf
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-plugin-control-plane-native-git/service";
 import { parseNativeGitBundleConfig } from "@slop-lab/dim-plugin-control-plane-native-git/config";
 import { prepareControlPlane, connectControlPlane } from "../../../../core/packages/managed/src/controlPlaneSetup.js";
-import { readControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
-import { readControlPlaneSources } from "../../../../core/packages/installer/src/controlPlaneSources.js";
+import { readControlPlaneConfig } from "../../../../packages/installer/src/controlPlaneConfig.js";
+import { readControlPlaneSources } from "../../../../packages/installer/src/controlPlaneSources.js";
 import { loadNativeControlPlaneConnection } from "../../../../core/packages/managed/src/nativeControlPlaneConnection.js";
 import { createNodeNativeGitRootImporterClient } from "../../../../core/packages/managed/src/nativeGitRootImporterClient.js";
 import { bootstrapNativeProjectRepository } from "../../../../core/packages/managed/src/nativeProjectBootstrap.js";

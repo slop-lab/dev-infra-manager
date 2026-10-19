@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { initializeNativeGitBundleState } from "../../../../plugin-control-plane-native-git/src/index.js";
-import { activationTokenSha256 } from "../../../../plugin-control-plane-native-git/src/native-bundle-activation.js";
-import { assertGitVersion } from "../../../../plugin-control-plane-native-git/src/repository.js";
+import { initializeNativeGitBundleState } from "../../../../packages/control-plane/plugins/native-git/src/index.js";
+import { activationTokenSha256 } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-activation.js";
+import { assertGitVersion } from "../../../../packages/control-plane/plugins/native-git/src/repository.js";
 import {
   activateFinalizeService,
   activationToken,

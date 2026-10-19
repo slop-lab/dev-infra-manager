@@ -1,4 +1,4 @@
-import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../../core/packages/core/src/types.js";
+import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../../packages/host/core/src/types.js";
 export class ExecutorRunner implements StreamingCommandRunner {
   readonly calls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
   failRemoval = false;

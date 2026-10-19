@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { ControllerWorkspaces, requireControllerWorkspace, createDimController, ProcessRunner, registerPlugins, type WorkspaceTarget } from "@slop-lab/dim-managed";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
-import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
+import { createExternalUrlsPlugin } from "../../../../packages/host/plugins/external-urls/src/index.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); vi.unstubAllEnvs(); });

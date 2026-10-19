@@ -104,7 +104,7 @@ dim installer control-plane remove-plugin '@slop-lab/dim-plugin-control-plane-na
 Restart the control-plane process after changing its enabled plugin selection.
 Run its private service configuration with `dim-control-plane run FILE`, using
 the executable path printed by installation. See the
-[runtime configuration](../../core/packages/control-plane/README.md).
+[runtime configuration](../../packages/control-plane/core/README.md).
 The existing `dim installer install control-plane --config FILE` command owns
 the separate Docker deployment/activation transaction.
 

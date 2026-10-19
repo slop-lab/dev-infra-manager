@@ -6,10 +6,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import WebSocket, { WebSocketServer } from "ws";
 import { afterEach, describe, expect, it } from "vitest";
-import { WorkspaceStore } from "../../../../core/packages/core/src/workspace/store.js";
-import { IncusMachines } from "../../../../plugin-vm/src/incus.js";
-import { PersistentVmService } from "../../../../plugin-vm/src/store.js";
-import { serveVmConsole } from "../../../../plugin-vm/src/console.js";
+import { WorkspaceStore } from "../../../../packages/host/core/src/workspace/store.js";
+import { IncusMachines } from "../../../../packages/host/plugins/vm/src/incus.js";
+import { PersistentVmService } from "../../../../packages/host/plugins/vm/src/store.js";
+import { serveVmConsole } from "../../../../packages/host/plugins/vm/src/console.js";
 import { config, FakeIncus, workspace } from "./fixture.js";
 
 const cleanup: Array<() => Promise<void>> = [];

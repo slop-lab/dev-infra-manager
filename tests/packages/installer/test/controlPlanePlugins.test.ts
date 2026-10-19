@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, it, vi } from "vitest";
-import { installPlugins, defaultControlPlanePluginHome, defaultPluginHome } from "../../../../core/packages/installer/src/install.js";
-import { installerCommand } from "../../../../core/packages/installer/src/installerCommands.js";
+import { installPlugins, defaultControlPlanePluginHome, defaultPluginHome } from "../../../../packages/installer/src/install.js";
+import { installerCommand } from "../../../../packages/installer/src/installerCommands.js";
 
 const exec = promisify(execFile), roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

@@ -6,10 +6,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, request, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProcessRunner } from "../../core/packages/core/src/runner.js";
-import { ensureCacheServices, cacheServiceNames } from "../../plugin-cache-server/src/cache-services.js";
-import { MirrorState } from "../../plugin-cache-server/src/cacheState.js";
-import { npmCacheDefinition, pypiCacheDefinition } from "../../plugin-cache-server/src/packageCaches.js";
+import { ProcessRunner } from "../../packages/host/core/src/runner.js";
+import { ensureCacheServices, cacheServiceNames } from "../../packages/host/plugins/cache-server/src/cache-services.js";
+import { MirrorState } from "../../packages/host/plugins/cache-server/src/cacheState.js";
+import { npmCacheDefinition, pypiCacheDefinition } from "../../packages/host/plugins/cache-server/src/packageCaches.js";
 
 const [npmImage, pypiImage] = process.argv.slice(2);
 if (!npmImage || !pypiImage || [npmImage, pypiImage].some((image) => !/^\S+@sha256:[a-f0-9]{64}$/.test(image))) {

@@ -6,18 +6,18 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
+import { parseNativeGitBundleConfig } from "../../../../packages/control-plane/plugins/native-git/src/bundle-config.js";
 import {
   activationTokenSha256,
   bindExactActivation
-} from "../../../../plugin-control-plane-native-git/src/native-bundle-activation.js";
-import { initializeNativeGitBundleState } from "../../../../plugin-control-plane-native-git/src/native-bundle-state.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-activation.js";
+import { initializeNativeGitBundleState } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-state.js";
 import {
   configuredNativeGitBundleServer,
   type NativeGitBundleServer,
   type NativeGitBundleServerOptions
-} from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
-import { beginNativeProjectPreparation } from "../../../../plugin-control-plane-native-git/src/native-project-registry-state.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-server.js";
+import { beginNativeProjectPreparation } from "../../../../packages/control-plane/plugins/native-git/src/native-project-registry-state.js";
 import { idleNativeConfig } from "./bundleConfigFixture.js";
 import { isExitError, refValue } from "../../../support/gitHelpers.js";
 

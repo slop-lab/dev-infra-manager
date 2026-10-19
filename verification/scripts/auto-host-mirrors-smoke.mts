@@ -6,16 +6,16 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProcessRunner } from "../../core/packages/core/src/runner.js";
-import { WorkspaceStore } from "../../core/packages/core/src/workspace/store.js";
-import { WorkspaceService } from "../../core/packages/core/src/workspace/service.js";
-import { ContainerWorkspaceRuntime } from "../../core/packages/core/src/workspace/runtime.js";
-import { acquireWorkspaceSource } from "../../core/packages/core/src/workspace/source.js";
-import type { WorkspaceHostPluginContext } from "../../core/packages/core/src/workspace/hostPlugin.js";
+import { ProcessRunner } from "../../packages/host/core/src/runner.js";
+import { WorkspaceStore } from "../../packages/host/core/src/workspace/store.js";
+import { WorkspaceService } from "../../packages/host/core/src/workspace/service.js";
+import { ContainerWorkspaceRuntime } from "../../packages/host/core/src/workspace/runtime.js";
+import { acquireWorkspaceSource } from "../../packages/host/core/src/workspace/source.js";
+import type { WorkspaceHostPluginContext } from "../../packages/host/core/src/workspace/hostPlugin.js";
 const image = process.argv[2]; if (!image) throw new Error("usage: tsx auto-host-mirrors-smoke.mts WORKSPACE_IMAGE");
-const artifact: typeof import("../../plugin-host-mirrors/src/attachment.js") = await import(new URL("../../plugin-host-mirrors/dist/attachment.js", import.meta.url).href);
-const packageCaches: typeof import("../../plugin-cache-server/src/packageCaches.js") = await import(new URL("../../plugin-cache-server/dist/packageCaches.js", import.meta.url).href);
-const pins: unknown = JSON.parse(await readFile(new URL("../../plugin-cache-server/dist/cache-images.json", import.meta.url), "utf8"));
+const artifact: typeof import("../../packages/host/plugins/mirrors/src/attachment.js") = await import(new URL("../../packages/host/plugins/mirrors/dist/attachment.js", import.meta.url).href);
+const packageCaches: typeof import("../../packages/host/plugins/cache-server/src/packageCaches.js") = await import(new URL("../../packages/host/plugins/cache-server/dist/packageCaches.js", import.meta.url).href);
+const pins: unknown = JSON.parse(await readFile(new URL("../../packages/host/plugins/cache-server/dist/cache-images.json", import.meta.url), "utf8"));
 function pin(kind: string): string {
   assert(pins !== null && typeof pins === "object" && !Array.isArray(pins));
   const image: unknown = Reflect.get(pins, kind);
@@ -36,7 +36,7 @@ const registryImage = "registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7
 const aptImage = "sameersbn/apt-cacher-ng@sha256:58e74113cfac7e593201444648c105351cbfce7538bfb36dcafdc9479b2aefcc";
 async function address(name: string) { return (await run(["inspect", name, "--format", `{{(index .NetworkSettings.Networks "${network}").IPAddress}}`])).stdout.trim(); }
 async function startApt() { await run(["create", "--name", apt, "--network", network, "--mount", `type=volume,src=${volumes[1]},dst=/var/cache/apt-cacher-ng`, aptImage]); await run(["network", "connect", egress, apt]); await run(["start", apt]); }
-async function startPackageCache(name: string, definition: import("../../plugin-cache-server/src/cache-services.js").CacheServiceDefinition, volume: string) {
+async function startPackageCache(name: string, definition: import("../../packages/host/plugins/cache-server/src/cache-services.js").CacheServiceDefinition, volume: string) {
   const configuration = join(root, name); await mkdir(configuration);
   const mounts: string[] = [];
   for (const file of definition.configFiles ?? []) {

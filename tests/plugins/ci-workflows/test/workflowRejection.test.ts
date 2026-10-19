@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dimWorkflowCompiler, WorkflowSyntaxError } from "../../../../plugin-control-plane-ci-workflows/src/index.js";
+import { dimWorkflowCompiler, WorkflowSyntaxError } from "../../../../packages/control-plane/plugins/ci-workflows/src/index.js";
 
 describe("DIM workflow input boundaries", () => {
   it.each([

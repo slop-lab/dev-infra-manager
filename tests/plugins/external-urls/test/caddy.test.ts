@@ -4,7 +4,7 @@ import {
   CADDY_VERSION,
   parseCaddyIngressArgument,
   renderCaddyDeployment
-} from "../../../../plugin-external-urls/src/caddy.js";
+} from "../../../../packages/host/plugins/external-urls/src/caddy.js";
 
 describe("Caddy ingress deployment", () => {
   it("links argument validation errors to the Caddy ingress documentation", () => {

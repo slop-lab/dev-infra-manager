@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   ControlPlaneDockerCommand,
   ControlPlaneDockerCommandResult
-} from "../../../../core/packages/installer/src/controlPlaneDockerTypes.js";
+} from "../../../../packages/installer/src/controlPlaneDockerTypes.js";
 import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 import {
   deterministicRandom,

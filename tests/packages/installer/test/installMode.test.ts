@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { localBinPrompt } from "../../../../core/packages/installer/src/installMode.js";
+import { localBinPrompt } from "../../../../packages/installer/src/installMode.js";
 
 // Contract: ../../../specs/14-installer-facade.md#installation-modes
 describe("recommended interactive installation mode", () => {

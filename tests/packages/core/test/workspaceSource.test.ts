@@ -2,8 +2,8 @@ import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { acquireWorkspaceSource } from "../../../../core/packages/core/src/workspace/source.js";
-import { ProcessRunner } from "../../../../core/packages/core/src/runner.js";
+import { acquireWorkspaceSource } from "../../../../packages/host/core/src/workspace/source.js";
+import { ProcessRunner } from "../../../../packages/host/core/src/runner.js";
 
 const roots: string[] = [];
 const runner = new ProcessRunner();

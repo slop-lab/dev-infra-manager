@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ProcessRunner } from "../../../../core/packages/core/src/runner.js";
+import { ProcessRunner } from "../../../../packages/host/core/src/runner.js";
 
 describe("process runner cancellation", () => {
   it("escalates from SIGTERM to SIGKILL when a command ignores graceful termination", async () => {

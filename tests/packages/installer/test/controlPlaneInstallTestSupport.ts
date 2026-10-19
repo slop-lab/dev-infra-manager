@@ -3,8 +3,8 @@ import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach } from "vitest";
-import { readControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
-export { installControlPlane, installFirstControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
+import { readControlPlaneConfig } from "../../../../packages/installer/src/controlPlaneConfig.js";
+export { installControlPlane, installFirstControlPlane } from "../../../../packages/installer/src/controlPlaneInstall.js";
 import { writeControlPlaneFixture, writePrivate } from "./controlPlaneFixture.js";
 import type { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 

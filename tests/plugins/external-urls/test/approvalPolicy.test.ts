@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ingressPolicyRevision } from "../../../../plugin-external-urls/src/approvalPolicy.js";
+import { ingressPolicyRevision } from "../../../../packages/host/plugins/external-urls/src/approvalPolicy.js";
 
 const direct = {
   scheme: "http" as const,

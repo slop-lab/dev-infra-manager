@@ -144,9 +144,9 @@ services. The `0.10.0` target is internal and pre-stable, not a public release.
 ## Repository layout
 
 [docs/architecture.md](specification/docs/architecture.md) covers workspace boundaries and
-dependency direction. In short: `core/packages/core` has no CLI dependency,
-`core/packages/cli` is a thin executable adapter over it, and
-`core/packages/installer` is the separate installer facade — see
+dependency direction. In short: `packages/host/core` has no CLI dependency,
+`packages/cli` is a thin executable adapter over it, and
+`packages/installer` is the separate installer facade — see
 [docs/README.md](specification/docs/README.md) for the full documentation index and
 [specs/README.md](specification/specs/README.md) for the normative, implementation-facing
 specifications that changes should stay consistent with.

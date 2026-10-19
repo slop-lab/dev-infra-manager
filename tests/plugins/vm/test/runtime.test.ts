@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { IncusMachines } from "../../../../plugin-vm/src/incus.js";
-import { IncusWorkspaceRuntime } from "../../../../plugin-vm/src/runtime.js";
-import { budgetValues, type VmBudget } from "../../../../plugin-vm/src/budget.js";
+import { IncusMachines } from "../../../../packages/host/plugins/vm/src/incus.js";
+import { IncusWorkspaceRuntime } from "../../../../packages/host/plugins/vm/src/runtime.js";
+import { budgetValues, type VmBudget } from "../../../../packages/host/plugins/vm/src/budget.js";
 import { config, FakeIncus, workspace } from "./fixture.js";
-import { parseVmHostConfig } from "../../../../plugin-vm/src/config.js";
+import { parseVmHostConfig } from "../../../../packages/host/plugins/vm/src/config.js";
 
 const id = "12345678-1234-1234-1234-123456789abc";
 function fixture(budget: VmBudget = { apply: async () => {}, verify: async () => {} }) {

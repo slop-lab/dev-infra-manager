@@ -60,7 +60,7 @@ workspace-user-setup:
 package-packs:
     cd .. && pnpm --filter @slop-lab/dim-core run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-managed run pack:dry-run
-    cd .. && bash core/scripts/pnpm-pack-dry-run.bash plugin-control-plane-ci-workflows/dist
+    cd .. && bash scripts/packages/pnpm-pack-dry-run.bash packages/control-plane/plugins/ci-workflows/dist
     cd .. && pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-plugin-control-plane-native-git run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-web run pack:dry-run

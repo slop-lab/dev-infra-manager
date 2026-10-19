@@ -2,10 +2,10 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { startControlPlanePlugins } from "../../../../core/packages/control-plane/src/runtime.js";
-import { controlPlanePlugin as native } from "../../../../plugin-control-plane-native-git/src/controlPlanePlugin.js";
-import { controlPlanePlugin as workflows } from "../../../../plugin-control-plane-ci-workflows/src/index.js";
-import { inspectNativeGitBundleState } from "../../../../plugin-control-plane-native-git/src/native-bundle-state.js";
+import { startControlPlanePlugins } from "../../../../packages/control-plane/core/src/runtime.js";
+import { controlPlanePlugin as native } from "../../../../packages/control-plane/plugins/native-git/src/controlPlanePlugin.js";
+import { controlPlanePlugin as workflows } from "../../../../packages/control-plane/plugins/ci-workflows/src/index.js";
+import { inspectNativeGitBundleState } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-state.js";
 import { idleNativeConfig } from "../../native-git/test/bundleConfigFixture.js";
 
 it("native plugin fails before opening state when its workflow capability is missing, then starts and closes a real standalone service", async () => {

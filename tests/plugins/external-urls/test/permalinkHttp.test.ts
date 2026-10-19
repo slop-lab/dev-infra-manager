@@ -6,7 +6,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { WorkspaceRouteRegistry } from "../../../../plugin-external-urls/src/httpRouteRegistry.js";
+import { WorkspaceRouteRegistry } from "../../../../packages/host/plugins/external-urls/src/httpRouteRegistry.js";
 import {
   adminAction,
   availablePort,

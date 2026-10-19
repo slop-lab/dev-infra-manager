@@ -6,10 +6,10 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { importReviewedImage } from "../../../../plugin-vm/src/images.js";
+import { importReviewedImage } from "../../../../packages/host/plugins/vm/src/images.js";
 import { config } from "./fixture.js";
 
-const helper = path.resolve(import.meta.dirname, "../../../../plugin-vm/scripts/artifact-cache.bash");
+const helper = path.resolve(import.meta.dirname, "../../../../packages/host/plugins/vm/scripts/artifact-cache.bash");
 const bytes = Buffer.from("reviewed image bytes for resumable host cache");
 const digest = createHash("sha256").update(bytes).digest("hex");
 function download(url: string, cache: string, checksum = digest) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candidateArgv, dimWorkflowCompiler } from "../../../../plugin-control-plane-ci-workflows/src/index.js";
+import { candidateArgv, dimWorkflowCompiler } from "../../../../packages/control-plane/plugins/ci-workflows/src/index.js";
 
 describe("DIM workflow language", () => {
   it("compiles a script job with Sysbox defaults and an explicit QEMU job", () => {

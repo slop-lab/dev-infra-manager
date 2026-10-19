@@ -1,12 +1,12 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
-import { ProcessControlPlaneDockerRunner } from "../../../../core/packages/installer/src/controlPlaneDocker.js";
+import { readControlPlaneConfig } from "../../../../packages/installer/src/controlPlaneConfig.js";
+import { ProcessControlPlaneDockerRunner } from "../../../../packages/installer/src/controlPlaneDocker.js";
 import {
   ControlPlaneInstallError,
   formatControlPlaneInstallError
-} from "../../../../core/packages/installer/src/controlPlaneInstallError.js";
+} from "../../../../packages/installer/src/controlPlaneInstallError.js";
 import { controlPlaneSecrets } from "./controlPlaneFixture.js";
 import { installControlPlane, installFixture } from "./controlPlaneInstallTestSupport.js";
 

@@ -30,7 +30,7 @@ describe("exact source plugin compilation", () => {
     expect(pnpmInvocations).toHaveLength(2);
     expect(pnpmInvocations[1]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+ --recursive --workspace-concurrency=1 run build version=/);
     expect(invocations.at(-1)).toMatch(/^node .*pack-local-packages\.mjs /);
-    for (const repository of ["plugin-dns-cloudflare", "plugin-external-urls", "plugin-host-mirrors"]) {
+    for (const repository of ["packages/host/plugins/dns-cloudflare", "packages/host/plugins/external-urls", "packages/host/plugins/mirrors"]) {
       expect(await readFile(resolve(fixture.root, `output/${repository}.package.json`), "utf8")).toBe(fixturePackageManifest);
     }
   });

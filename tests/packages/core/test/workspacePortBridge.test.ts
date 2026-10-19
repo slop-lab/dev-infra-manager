@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer, type Socket } from "node:net";
 import { describe, expect, it } from "vitest";
-import { workspacePortBridge, workspacePortBridgeMarker, workspacePortCleanup } from "../../../../core/packages/core/src/workspace/portBridge.js";
+import { workspacePortBridge, workspacePortBridgeMarker, workspacePortCleanup } from "../../../../packages/host/core/src/workspace/portBridge.js";
 
 describe("workspace loopback byte bridge", () => {
   it("preserves binary bytes and receives a response after the client half-closes", async () => {

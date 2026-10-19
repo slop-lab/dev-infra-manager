@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { NativeCandidateRequiredJob } from "../../../../plugin-control-plane-native-git/src/workflowCompiler.js";
-import type { CandidateGitReader } from "../../../../plugin-control-plane-native-git/src/candidate-execution-git.js";
-import { assertGitVersion, type GitRepositoryRuntime } from "../../../../plugin-control-plane-native-git/src/repository.js";
+import type { NativeCandidateRequiredJob } from "../../../../packages/control-plane/plugins/native-git/src/workflowCompiler.js";
+import type { CandidateGitReader } from "../../../../packages/control-plane/plugins/native-git/src/candidate-execution-git.js";
+import { assertGitVersion, type GitRepositoryRuntime } from "../../../../packages/control-plane/plugins/native-git/src/repository.js";
 import { git, gitExecutable } from "../../../support/gitCommands.js";
 
 export const nativeRequiredJobs = [

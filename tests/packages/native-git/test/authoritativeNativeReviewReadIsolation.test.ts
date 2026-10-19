@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   assertAuthoritativeNativeReviewStore,
   readAuthoritativeNativeReviewEnvelope
-} from "../../../../plugin-control-plane-native-git/src/authoritative-native-review-store.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/authoritative-native-review-store.js";
 import {
   createBundleReview,
   nativeBundleReviewFixture

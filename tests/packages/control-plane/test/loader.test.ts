@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
-import { startControlPlaneFile } from "../../../../core/packages/control-plane/src/cli.js";
+import { startControlPlaneFile } from "../../../../packages/control-plane/core/src/cli.js";
 
 it("loads only enabled modules from the independent CP tree and rejects disabled selections before importing any module", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-cp-enabled-"));

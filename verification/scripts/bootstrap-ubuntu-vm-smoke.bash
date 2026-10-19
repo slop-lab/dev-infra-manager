@@ -74,7 +74,7 @@ trap 'exit 143' TERM
 
 bootstrap_source_verify_bundle "$BOOTSTRAP_WORK_ROOT/source.git"
 BOOTSTRAP_BASE_IMAGE="$(timeout --signal=TERM --kill-after=15s 1800s bash \
-  "$script_dir/../../plugin-vm/scripts/artifact-cache.bash" "$BOOTSTRAP_IMAGE_URL" "$BOOTSTRAP_IMAGE_SHA256")"
+  "$script_dir/../../packages/host/plugins/vm/scripts/artifact-cache.bash" "$BOOTSTRAP_IMAGE_URL" "$BOOTSTRAP_IMAGE_SHA256")"
 printf '%s  %s\n' "$BOOTSTRAP_IMAGE_SHA256" "$BOOTSTRAP_BASE_IMAGE" | sha256sum --check --strict
 printf 'image-url=%s\nimage-sha256=%s\nsource-sha=%s\nsource-tree=%s\n' \
   "$BOOTSTRAP_IMAGE_URL" "$BOOTSTRAP_IMAGE_SHA256" "$SOURCE_SHA" "$SOURCE_TREE" \

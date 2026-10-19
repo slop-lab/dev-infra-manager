@@ -8,7 +8,7 @@ import {
   sysboxExecutionCheck,
   userLingerCheck
 } from "../../../../core/packages/managed/src/doctor.js";
-import type { CommandResult, CommandRunner, RunOptions } from "../../../../core/packages/core/src/types.js";
+import type { CommandResult, CommandRunner, RunOptions } from "../../../../packages/host/core/src/types.js";
 
 class QueueRunner implements CommandRunner {
   readonly calls: Array<{ command: string; args: string[]; sudo: boolean }> = [];

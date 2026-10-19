@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProcessRunner } from "../../core/packages/core/src/runner.js";
+import { ProcessRunner } from "../../packages/host/core/src/runner.js";
 import { nativeRunnerScript } from "../../core/packages/managed/src/ci/backends/containers.js";
 
 const [runtime, supervisor, image] = process.argv.slice(2);

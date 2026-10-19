@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { WorkspaceStore } from "../../../../core/packages/core/src/workspace/store.js";
+import { WorkspaceStore } from "../../../../packages/host/core/src/workspace/store.js";
 
 test("cancelling a queued lifecycle mutation preserves the active owner and permits a later mutation", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-lock-cancel-"));

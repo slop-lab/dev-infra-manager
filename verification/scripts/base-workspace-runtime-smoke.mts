@@ -5,10 +5,10 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProcessRunner } from "../../core/packages/core/src/runner.js";
-import type { WorkspaceRecord } from "../../core/packages/core/src/workspace/models.js";
-import { ContainerWorkspaceRuntime, workspaceRuntimeResources } from "../../core/packages/core/src/workspace/runtime.js";
-import { acquireWorkspaceSource } from "../../core/packages/core/src/workspace/source.js";
+import { ProcessRunner } from "../../packages/host/core/src/runner.js";
+import type { WorkspaceRecord } from "../../packages/host/core/src/workspace/models.js";
+import { ContainerWorkspaceRuntime, workspaceRuntimeResources } from "../../packages/host/core/src/workspace/runtime.js";
+import { acquireWorkspaceSource } from "../../packages/host/core/src/workspace/source.js";
 
 const image = process.argv[2];
 if (image === undefined) throw new Error("usage: tsx base-workspace-runtime-smoke.mts IMAGE");

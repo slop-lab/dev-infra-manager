@@ -10,8 +10,8 @@ import {
   type LifecycleOptions,
 } from "@slop-lab/dim-managed";
 import { vi } from "vitest";
-import { createExternalUrlsPlugin } from "../../../../../plugin-external-urls/src/index.js";
-import type { ExternalUrlRoutePolicyConfig } from "../../../../../plugin-external-urls/src/routePolicy.js";
+import { createExternalUrlsPlugin } from "../../../../../packages/host/plugins/external-urls/src/index.js";
+import type { ExternalUrlRoutePolicyConfig } from "../../../../../packages/host/plugins/external-urls/src/routePolicy.js";
 import { workspaceRecord as coreWorkspaceRecord } from "../../../../support/workspaceFixture.js";
 import type { WorkspaceRecord } from "@slop-lab/dim-core/workspace";
 

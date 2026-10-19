@@ -5,7 +5,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "./support.js";
 
-const packageRoot = fileURLToPath(new URL("../../../../core/packages/installer", import.meta.url));
+const packageRoot = fileURLToPath(new URL("../../../../packages/installer", import.meta.url));
 const launcherSource = join(packageRoot, "src", "dim");
 
 interface Result {

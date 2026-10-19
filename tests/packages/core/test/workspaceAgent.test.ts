@@ -8,8 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceService, WorkspaceStore, type WorkspaceRuntime } from "@slop-lab/dim-core/workspace";
-import { loadHostPlugins } from "../../../../core/packages/cli/src/host-plugins.js";
-import { createWorkspaceAgentServer, ensureWorkspaceAgent, runWorkspaceAgent, workspaceAgentGeneration } from "../../../../core/packages/cli/src/workspace-agent.js";
+import { loadHostPlugins } from "../../../../packages/cli/src/host-plugins.js";
+import { createWorkspaceAgentServer, ensureWorkspaceAgent, runWorkspaceAgent, workspaceAgentGeneration } from "../../../../packages/cli/src/workspace-agent.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(cleanup.splice(0).map((action) => action())); });
@@ -203,7 +203,7 @@ it("discovers the installed tools, router and external URLs together over the ac
   for (const name of selections) {
     const installed = path.join(f.root, "plugins", "node_modules", "@slop-lab", `dim-plugin-${name}`);
     await mkdir(path.dirname(installed), { recursive: true });
-    await symlink(new URL(`../../../../plugin-${name}`, import.meta.url).pathname, installed);
+    await symlink(new URL(`../../../../packages/host/plugins/${name.replace(/^host-/, "")}`, import.meta.url).pathname, installed);
   }
   await writeFile(path.join(f.root, "plugins", "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: selections.map((name) => `@slop-lab/dim-plugin-${name}`) }));
   const response = await f.request("/v1/plugins"); expect(response.status).toBe(200);

@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from "../../core/packages/core/src/workspace/models.js";
+import type { WorkspaceRecord } from "../../packages/host/core/src/workspace/models.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -9,11 +9,11 @@ import { pathToFileURL } from "node:url";
 
 const repo = path.resolve(import.meta.dirname, "../..");
 const load = (file: string): Promise<unknown> => import(pathToFileURL(path.join(repo, file)).href);
-const { ProcessRunner, WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, workspaceRuntimeResources } = await load("core/packages/core/dist/workspace.js") as typeof import("../../core/packages/core/src/workspace.js");
+const { ProcessRunner, WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, workspaceRuntimeResources } = await load("packages/host/core/dist/workspace.js") as typeof import("../../packages/host/core/src/workspace.js");
 const { prepareControlPlane, connectControlPlane } = await load("core/packages/managed/dist/controlPlaneSetup.js") as typeof import("../../core/packages/managed/src/controlPlaneSetup.js");
-const { configuredNativeGitBundleServer } = await load("plugin-control-plane-native-git/dist/service.js") as typeof import("../../plugin-control-plane-native-git/src/service.js");
-const { parseNativeGitBundleConfig } = await load("plugin-control-plane-native-git/dist/bundle-config.js") as typeof import("../../plugin-control-plane-native-git/src/bundle-config.js");
-const { dimWorkflowCompiler } = await load("plugin-control-plane-ci-workflows/dist/index.js") as typeof import("../../plugin-control-plane-ci-workflows/src/index.js");
+const { configuredNativeGitBundleServer } = await load("packages/control-plane/plugins/native-git/dist/service.js") as typeof import("../../packages/control-plane/plugins/native-git/src/service.js");
+const { parseNativeGitBundleConfig } = await load("packages/control-plane/plugins/native-git/dist/bundle-config.js") as typeof import("../../packages/control-plane/plugins/native-git/src/bundle-config.js");
+const { dimWorkflowCompiler } = await load("packages/control-plane/plugins/ci-workflows/dist/index.js") as typeof import("../../packages/control-plane/plugins/ci-workflows/src/index.js");
 const { bootstrapNativeProjectRepository } = await load("core/packages/managed/dist/nativeProjectBootstrap.js") as typeof import("../../core/packages/managed/src/nativeProjectBootstrap.js");
 const { NativeProjectPendingStore } = await load("core/packages/managed/dist/nativeProjectPendingStore.js") as typeof import("../../core/packages/managed/src/nativeProjectPendingStore.js");
 const { createNodeNativeGitRootImporterClient } = await load("core/packages/managed/dist/nativeGitRootImporterClient.js") as typeof import("../../core/packages/managed/src/nativeGitRootImporterClient.js");

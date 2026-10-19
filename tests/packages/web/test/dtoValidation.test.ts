@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { reviewDto } from "../../../../core/packages/web/src/dto.js";
+import { reviewDto } from "../../../../packages/web/src/dto.js";
 import { installedReviewerFixture, type ReviewFixture } from "./webHarness.js";
 
 const fixtures: ReviewFixture[] = [];

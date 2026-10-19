@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-const rendererUrl = new URL("../../../../core/packages/web/src/assets/review-renderer.js", import.meta.url).href;
+const rendererUrl = new URL("../../../../packages/web/src/assets/review-renderer.js", import.meta.url).href;
 
 class FakeElement {
   readonly children: FakeElement[] = [];

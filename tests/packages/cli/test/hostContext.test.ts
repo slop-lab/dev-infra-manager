@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { HostContextStore } from "../../../../core/packages/cli/src/host-context.js";
+import { HostContextStore } from "../../../../packages/cli/src/host-context.js";
 
 test("local host inspection works without creating configuration", async () => {
   await withStore(async (store) => {

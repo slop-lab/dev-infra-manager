@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const patchPositionUrl = new URL("../../../../core/packages/web/src/assets/patch-position.js", import.meta.url).href;
+const patchPositionUrl = new URL("../../../../packages/web/src/assets/patch-position.js", import.meta.url).href;
 
 describe("patch horizontal position", () => {
   it("hides the position track when the patch fits", async () => {

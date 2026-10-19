@@ -12,8 +12,8 @@ import {
   createNodeNativeGitProjectRegistrarClient,
   NativeGitProjectRegistrarClientError
 } from "../../../../core/packages/managed/src/nativeGitProjectRegistrarClient.js";
-import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
-import { configuredNativeGitBundleServer, type NativeGitBundleServer } from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
+import { parseNativeGitBundleConfig } from "../../../../packages/control-plane/plugins/native-git/src/bundle-config.js";
+import { configuredNativeGitBundleServer, type NativeGitBundleServer } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-server.js";
 import { idleNativeConfig } from "../../native-git/test/bundleConfigFixture.js";
 
 const run = promisify(execFile);

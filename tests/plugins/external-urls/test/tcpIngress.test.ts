@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDimController, registerPlugins } from "@slop-lab/dim-managed";
-import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
-import { tailscaleIngressDriver, tailscaleSelfAddress } from "../../../../plugin-external-urls/src/tailscale.js";
+import { createExternalUrlsPlugin } from "../../../../packages/host/plugins/external-urls/src/index.js";
+import { tailscaleIngressDriver, tailscaleSelfAddress } from "../../../../packages/host/plugins/external-urls/src/tailscale.js";
 
 describe("TCP external ingress", () => {
   const cleanup: Array<() => Promise<void>> = [];

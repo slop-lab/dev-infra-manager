@@ -1,4 +1,4 @@
-import type { NativeGitBundleServer } from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
+import type { NativeGitBundleServer } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-server.js";
 
 export type GitBundle = { readonly bytes: Buffer; readonly commit: string; readonly tree: string };
 

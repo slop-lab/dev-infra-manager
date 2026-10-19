@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const coordinatorUrl = new URL("../../../../core/packages/web/src/assets/operation-coordinator.js", import.meta.url).href;
+const coordinatorUrl = new URL("../../../../packages/web/src/assets/operation-coordinator.js", import.meta.url).href;
 
 describe("reviewer operation coordination", () => {
   it("allows only the newest operation to commit", async () => {

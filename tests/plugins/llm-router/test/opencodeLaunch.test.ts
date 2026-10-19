@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { parse } from "jsonc-parser";
-import { prepareOpenCode } from "../../../../plugin-host-llm-router/src/opencode-launch.js";
+import { prepareOpenCode } from "../../../../packages/host/plugins/llm-router/src/opencode-launch.js";
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 async function fixture() {

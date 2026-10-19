@@ -13,7 +13,7 @@ import {
   registerPlugins,
   type LifecycleOptions
 } from "@slop-lab/dim-managed";
-import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../../../plugin-external-urls/src/index.js";
+import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../../../packages/host/plugins/external-urls/src/index.js";
 
 const workspace = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work", projectId: "project", projectName: "project" };
 

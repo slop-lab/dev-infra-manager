@@ -1,9 +1,9 @@
-import { readNativeCandidateJobInputsFromGit } from "../../../../plugin-control-plane-native-git/src/native-candidate-job-inputs.js";
+import { readNativeCandidateJobInputsFromGit } from "../../../../packages/control-plane/plugins/native-git/src/native-candidate-job-inputs.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CandidateExecutionError } from "../../../../plugin-control-plane-native-git/src/index.js";
+import { CandidateExecutionError } from "../../../../packages/control-plane/plugins/native-git/src/index.js";
 import { git } from "../../../support/gitCommands.js";
 import {
   nativeCandidateJobInputsFixture,

@@ -5,7 +5,7 @@ import {
   type InstallerProgressStream,
   type ProgressScheduler,
   type ProgressTimer
-} from "../../../../core/packages/installer/src/installProgress.js";
+} from "../../../../packages/installer/src/installProgress.js";
 
 class Timer implements ProgressTimer {
   cancelled = false;

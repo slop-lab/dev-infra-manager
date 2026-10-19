@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../../../packages/cli", import.meta.url));
 
 export interface PublishedCliFixture { readonly metadataVersion: string; readonly publishedVersion: string; }
 export interface PublishedCliResult { readonly status: number | null; readonly stdout: string; readonly stderr: string; }
@@ -14,12 +14,12 @@ export interface PublishedCliResult { readonly status: number | null; readonly s
 function isolatedPackage(): { root: string; directory: string } {
   const root = mkdtempSync(path.join(tmpdir(), "dim-published-cli-"));
   try {
-    const directory = path.join(root, "core/packages/cli");
+    const directory = path.join(root, "packages/cli");
     mkdirSync(path.join(directory, "scripts"), { recursive: true });
-    mkdirSync(path.join(root, "core/scripts"), { recursive: true });
+    mkdirSync(path.join(root, "scripts/packages"), { recursive: true });
     cpSync(path.join(packageDirectory, "dist"), path.join(directory, "dist"), { recursive: true });
     for (const file of ["package.json", "README.md", "scripts/build-publish-package.mjs"]) copyFileSync(path.join(packageDirectory, file), path.join(directory, file));
-    copyFileSync(path.resolve(packageDirectory, "../../scripts/publish-package-version.mjs"), path.join(root, "core/scripts/publish-package-version.mjs"));
+    copyFileSync(path.resolve(packageDirectory, "../../scripts/publish-package-version.mjs"), path.join(root, "scripts/packages/publish-package-version.mjs"));
     copyFileSync(path.resolve(packageDirectory, "../../LICENSE"), path.join(root, "core/LICENSE"));
     symlinkSync(path.join(packageDirectory, "node_modules"), path.join(directory, "node_modules"), "dir");
     return { root, directory };

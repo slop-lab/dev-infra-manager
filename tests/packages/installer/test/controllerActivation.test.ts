@@ -4,8 +4,8 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { managedControllerIsActive } from "../../../../core/packages/installer/src/controllerActivation.js";
-import { installDimCli } from "../../../../core/packages/installer/src/cliInstall.js";
+import { managedControllerIsActive } from "../../../../packages/installer/src/controllerActivation.js";
+import { installDimCli } from "../../../../packages/installer/src/cliInstall.js";
 import { writeFakeCliNpm, writeStubCli } from "./support.js";
 import { readFile } from "node:fs/promises";
 

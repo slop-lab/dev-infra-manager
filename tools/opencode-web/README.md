@@ -12,7 +12,7 @@ The default URL is:
 
 Pinned versions also have stable URLs under `opencode-web/v/1.18.31/#/`.
 OpenCode runs separately inside the workspace with `opencode serve`, not
-`opencode web`. Use the [optional tools plugin](../../plugin-agent-tools/README.md)
+`opencode web`. Use the [optional tools plugin](../../packages/host/plugins/agent-tools/README.md)
 to configure it. HTTPS Pages requires an HTTPS/WSS backend; an HTTP-only
 remote server will be blocked by browser mixed-content rules. CORS must allow
 `https://slop-lab.github.io`, the origin without repository/version paths.

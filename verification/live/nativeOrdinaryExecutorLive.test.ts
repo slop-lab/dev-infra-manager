@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sysboxBackend } from "../../core/packages/managed/src/ci/backends/sysbox.js";
 import type { NativeCandidateReadAuthority } from "../../core/packages/managed/src/ci/candidate.js";
-import { executionDescriptorDigest } from "../../plugin-control-plane-native-git/src/execution-protocol.js";
-import { ProcessRunner } from "../../core/packages/core/src/runner.js";
+import { executionDescriptorDigest } from "../../packages/control-plane/plugins/native-git/src/execution-protocol.js";
+import { ProcessRunner } from "../../packages/host/core/src/runner.js";
 import { assignment, grant } from "../../tests/packages/core/test/ci/executionFixture.js";
 
 const runner = new ProcessRunner();

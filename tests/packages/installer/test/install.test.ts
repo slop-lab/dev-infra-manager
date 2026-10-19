@@ -16,7 +16,7 @@ import {
   readLocalPackageBundle,
   readUserConfig,
   validateConfiguredCli
-} from "../../../../core/packages/installer/src/install.js";
+} from "../../../../packages/installer/src/install.js";
 import { makeTempDir, writeFailingStub, writeFakeCliNpm, writeFakePluginNpm, writeStubCli } from "./support.js";
 
 describe("@slop-lab/dim-installer", () => {

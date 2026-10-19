@@ -12,8 +12,8 @@ import {
   type NativeFixture
 } from "./nativeProjectCommandsFixture.js";
 
-const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", import.meta.url));
+const cli = fileURLToPath(new URL("../../../../packages/cli/src/cli.ts", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../../../packages/cli", import.meta.url));
 const tsxImport = import.meta.resolve("tsx");
 const runFile = promisify(execFile);
 afterEach(cleanupNativeProjectFixtures);

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { once } from "node:events";
 import net from "node:net";
 import { afterEach, expect, it } from "vitest";
-import { TcpIngressListener } from "../../../../plugin-external-urls/src/tcpIngress.js";
+import { TcpIngressListener } from "../../../../packages/host/plugins/external-urls/src/tcpIngress.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });

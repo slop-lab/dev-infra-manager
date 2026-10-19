@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createSysboxBackend, sysboxBackend } from "../../../../../core/packages/managed/src/ci/backends/sysbox.js";
-import { executionDescriptorDigest } from "../../../../../plugin-control-plane-native-git/src/execution-protocol.js";
+import { executionDescriptorDigest } from "../../../../../packages/control-plane/plugins/native-git/src/execution-protocol.js";
 import { verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from "../../../../../core/packages/managed/src/ci/candidate.js";
 import { assignment, grant, hash } from "./executionFixture.js";
 import { ExecutorRunner } from "./sysboxFixture.js";

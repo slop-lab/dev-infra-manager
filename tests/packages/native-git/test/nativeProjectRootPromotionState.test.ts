@@ -4,19 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNativeGitBundleDatabase } from "../../../../plugin-control-plane-native-git/src/native-bundle-state-validation.js";
+import { createNativeGitBundleDatabase } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-state-validation.js";
 import {
   nativeProjectRootPromotionEvidenceDigest,
   nativeProjectRootPromotionTransitionId,
   type NativeProjectRootPromotionEvidence,
   type NativeProjectRootPromotionTransition
-} from "../../../../plugin-control-plane-native-git/src/native-project-root-promotion-codec.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/native-project-root-promotion-codec.js";
 import {
   assertNativeProjectRootPromotionRows,
   finalizeNativeProjectRootPromotion,
   readNativeProjectRootPromotionIntents,
   readNativeProjectRootCurrentHeadFromDatabase
-} from "../../../../plugin-control-plane-native-git/src/native-project-root-promotion-state.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/native-project-root-promotion-state.js";
 
 const roots: string[] = [];
 const projectId = "project-a";

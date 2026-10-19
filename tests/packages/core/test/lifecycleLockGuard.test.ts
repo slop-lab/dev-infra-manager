@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { tryAcquireKernelGuard, type KernelGuard } from "../../../../core/packages/core/src/lifecycleLockGuard.js";
+import { tryAcquireKernelGuard, type KernelGuard } from "../../../../packages/host/core/src/lifecycleLockGuard.js";
 
 const roots: string[] = [], guards: KernelGuard[] = [];
 afterEach(async () => {

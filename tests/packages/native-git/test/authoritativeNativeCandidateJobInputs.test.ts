@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CandidateExecutionError,
   loadAuthoritativeNativeCandidateJobInputs
-} from "../../../../plugin-control-plane-native-git/src/index.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/index.js";
 import {
   authoritativePolicy,
   candidateContext,

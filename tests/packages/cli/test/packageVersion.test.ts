@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { buildPublishedCli } from "./publishedCliFixture.js";
 
-const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", import.meta.url));
-const sourceCli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../../../packages/cli", import.meta.url));
+const sourceCli = fileURLToPath(new URL("../../../../packages/cli/src/cli.ts", import.meta.url));
 const tsxImport = import.meta.resolve("tsx");
 
 test("normal published CLI reports its package metadata version", () => {

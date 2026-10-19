@@ -39,16 +39,16 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
-pnpm --dir core/packages/control-plane/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir plugin-control-plane-native-git/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir plugin-control-plane-ci-workflows/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/control-plane/core/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/control-plane/plugins/native-git/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/control-plane/plugins/ci-workflows/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir core/packages/managed/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir core/packages/core/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir core/packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir plugin-dns-cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir plugin-host-mirrors/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir core/packages/cli/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir core/packages/installer/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/host/core/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/host/plugins/dns-cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/host/plugins/mirrors/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/cli/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/installer/dist pack --pack-destination "$source_dir" --json >/dev/null
 core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-installer*.tgz' -print -quit)"
@@ -264,7 +264,7 @@ echo "mise-install-smoke-ok"
 SCRIPT
 chmod +x "$source_dir/run.sh"
 
-package_version="$(node -e "console.log(require('$repo_root/core/packages/installer/package.json').version)")"
+package_version="$(node -e "console.log(require('$repo_root/packages/installer/package.json').version)")"
 verdaccio_package_dir="$(basename "$(dirname "$(dirname "$(readlink -f "$repo_root/verification/node_modules/verdaccio")")")")"
 
 echo "[mise-smoke] run in $image (mise $mise_version)"

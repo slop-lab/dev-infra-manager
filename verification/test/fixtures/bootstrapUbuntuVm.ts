@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../..");
 const bootstrapSource = resolve(workspaceRoot, "scripts/bootstrap-ubuntu-vm.bash");
-const realLauncher = resolve(workspaceRoot, "core/packages/installer/src/dim");
+const realLauncher = resolve(workspaceRoot, "packages/installer/src/dim");
 const roots: string[] = [];
 const reviewedSha = "a".repeat(40);
 export const bundleVersion = `0.10.0-local-${"b".repeat(64)}`;

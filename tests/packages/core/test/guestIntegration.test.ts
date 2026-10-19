@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
-import { deployGuestIntegration, type GuestIntegrationContext } from "../../../../core/packages/core/src/workspace/guestIntegration.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/workspace/models.js";
-import type { WorkspaceExecOptions } from "../../../../core/packages/core/src/workspace/service.js";
+import { deployGuestIntegration, type GuestIntegrationContext } from "../../../../packages/host/core/src/workspace/guestIntegration.js";
+import type { WorkspaceRecord } from "../../../../packages/host/core/src/workspace/models.js";
+import type { WorkspaceExecOptions } from "../../../../packages/host/core/src/workspace/service.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });

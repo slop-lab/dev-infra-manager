@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
-import { renderControlPlaneCompose } from "../../../../core/packages/installer/src/controlPlaneCompose.js";
+import { parseControlPlaneConfig } from "../../../../packages/installer/src/controlPlaneConfig.js";
+import { renderControlPlaneCompose } from "../../../../packages/installer/src/controlPlaneCompose.js";
 import { controlPlaneSecrets } from "./controlPlaneFixture.js";
 
 const config = parseControlPlaneConfig({

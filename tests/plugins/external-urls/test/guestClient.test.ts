@@ -6,11 +6,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
-import { hostPlugin } from "../../../../plugin-external-urls/src/index.js";
+import { hostPlugin } from "../../../../packages/host/plugins/external-urls/src/index.js";
 
 const execute = promisify(execFile);
-const client = fileURLToPath(new URL("../../../../plugin-external-urls/src/guest/dim-expose.mjs", import.meta.url));
-const transport = fileURLToPath(new URL("../../../../core/packages/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
+const client = fileURLToPath(new URL("../../../../packages/host/plugins/external-urls/src/guest/dim-expose.mjs", import.meta.url));
+const transport = fileURLToPath(new URL("../../../../packages/host/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
 
 it("the plugin-owned expose CLI uses the common scoped transport and rejects selectors before making requests", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "dim-expose-client-"));

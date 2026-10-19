@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDimController, registerPlugins, UserError, ControllerWorkspaces } from "@slop-lab/dim-managed";
 import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import type { WorkspaceRecord } from "@slop-lab/dim-core/workspace";
-import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
+import { createExternalUrlsPlugin } from "../../../../packages/host/plugins/external-urls/src/index.js";
 import { workspaceRecord as coreWorkspaceRecord } from "../../../support/workspaceFixture.js";
 
 describe("workspace instance route authority", () => {

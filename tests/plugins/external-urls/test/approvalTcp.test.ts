@@ -16,8 +16,8 @@ import {
 } from "@slop-lab/dim-managed";
 import { vi } from "vitest";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
-import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
-import { ExternalUrlStore } from "../../../../plugin-external-urls/src/routeStore.js";
+import { createExternalUrlsPlugin } from "../../../../packages/host/plugins/external-urls/src/index.js";
+import { ExternalUrlStore } from "../../../../packages/host/plugins/external-urls/src/routeStore.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => Promise.all(cleanup.splice(0).reverse().map((operation) => operation())).then(() => {}));

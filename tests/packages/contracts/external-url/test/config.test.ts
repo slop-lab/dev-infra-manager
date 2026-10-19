@@ -9,7 +9,7 @@ import {
   workspaceServiceSubdomain,
   validateExternalUrlConfig,
   writeExternalUrlConfig
-} from "../../../../../core/packages/contracts/external-url/src/index.js";
+} from "../../../../../packages/contracts/external-url/src/index.js";
 
 describe("external URL config", () => {
   const roots: string[] = [];

@@ -29,5 +29,5 @@ workspace attachment. Project `.dim` files are ordinary repository content:
 DIM does not automatically execute setup, entrypoint or teardown hooks. Run
 selected development tasks explicitly through `dim exec`.
 
-See [the base API](../../core/README.md) and the
-[CLI reference](../../cli/README.md) for runtime and remote-host behavior.
+See [the base API](../../../../packages/host/core/README.md) and the
+[CLI reference](../../../../packages/cli/README.md) for runtime and remote-host behavior.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { waitForControlPlaneServiceReady } from "../../../../core/packages/installer/src/controlPlaneReadiness.js";
-import type { ControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
-import type { ControlPlaneDockerRunner } from "../../../../core/packages/installer/src/controlPlaneDockerTypes.js";
+import { waitForControlPlaneServiceReady } from "../../../../packages/installer/src/controlPlaneReadiness.js";
+import type { ControlPlaneConfig } from "../../../../packages/installer/src/controlPlaneConfig.js";
+import type { ControlPlaneDockerRunner } from "../../../../packages/installer/src/controlPlaneDockerTypes.js";
 
 const config: ControlPlaneConfig = {
   schemaVersion: 1,

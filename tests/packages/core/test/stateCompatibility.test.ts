@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { preflightStateCompatibility } from "../../../../core/packages/core/src/stateCompatibility.js";
-import { WorkspaceStore } from "../../../../core/packages/core/src/workspace/store.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/workspace/models.js";
+import { preflightStateCompatibility } from "../../../../packages/host/core/src/stateCompatibility.js";
+import { WorkspaceStore } from "../../../../packages/host/core/src/workspace/store.js";
+import type { WorkspaceRecord } from "../../../../packages/host/core/src/workspace/models.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

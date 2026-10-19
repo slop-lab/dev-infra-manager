@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it, vi } from "vitest";
-import { atomicWrite } from "../../../../core/packages/core/src/lifecycleRecord.js";
+import { atomicWrite } from "../../../../packages/host/core/src/lifecycleRecord.js";
 
 it("publishes complete records for concurrent writes in the same clock tick", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dim-atomic-write-"));

@@ -1,4 +1,4 @@
-import type { ControlPlaneDockerCommandResult } from "../../../../core/packages/installer/src/controlPlaneDocker.js";
+import type { ControlPlaneDockerCommandResult } from "../../../../packages/installer/src/controlPlaneDocker.js";
 
 export function ownedNetwork(foreign = false): ControlPlaneDockerCommandResult {
   return ok(`${"c".repeat(64)}\nbridge\n${JSON.stringify({

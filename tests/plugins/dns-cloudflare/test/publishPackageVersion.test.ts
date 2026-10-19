@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const helper = pathToFileURL(new URL("../../../../plugin-dns-cloudflare/scripts/publish-package-version.mjs", import.meta.url).pathname).href;
+const helper = pathToFileURL(new URL("../../../../packages/host/plugins/dns-cloudflare/scripts/publish-package-version.mjs", import.meta.url).pathname).href;
 
 function resolveVersion(sourceVersion: string, localVersion?: string): ReturnType<typeof spawnSync> {
   return spawnSync(process.execPath, ["--input-type=module", "--eval", `

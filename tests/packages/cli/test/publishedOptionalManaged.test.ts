@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 const run = promisify(execFile);
-const cliPackage = fileURLToPath(new URL("../../../../core/packages/cli/", import.meta.url));
-const corePackage = fileURLToPath(new URL("../../../../core/packages/core/", import.meta.url));
+const cliPackage = fileURLToPath(new URL("../../../../packages/cli", import.meta.url));
+const corePackage = fileURLToPath(new URL("../../../../packages/host/core", import.meta.url));
 
 test("published base CLI works without managed services and gives an installation hint only when selected", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "dim-published-base-"));

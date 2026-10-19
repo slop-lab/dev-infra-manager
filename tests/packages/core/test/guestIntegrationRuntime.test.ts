@@ -5,15 +5,15 @@ import { join } from "node:path";
 import { Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import type { Server } from "node:http";
-import { ProcessRunner } from "../../../../core/packages/core/src/runner.js";
-import { MissingRecordError } from "../../../../core/packages/core/src/errors.js";
-import { ContainerWorkspaceRuntime } from "../../../../core/packages/core/src/workspace/runtime.js";
-import { WorkspaceService } from "../../../../core/packages/core/src/workspace/service.js";
-import { WorkspaceStore } from "../../../../core/packages/core/src/workspace/store.js";
-import { deployGuestIntegration } from "../../../../core/packages/core/src/workspace/guestIntegration.js";
-import { workspaceGuestAssets } from "../../../../core/packages/core/src/workspace/guestAssets.js";
-import { createWorkspaceAgentServer } from "../../../../core/packages/cli/src/workspace-agent.js";
-import { loadHostPlugins } from "../../../../core/packages/cli/src/host-plugins.js";
+import { ProcessRunner } from "../../../../packages/host/core/src/runner.js";
+import { MissingRecordError } from "../../../../packages/host/core/src/errors.js";
+import { ContainerWorkspaceRuntime } from "../../../../packages/host/core/src/workspace/runtime.js";
+import { WorkspaceService } from "../../../../packages/host/core/src/workspace/service.js";
+import { WorkspaceStore } from "../../../../packages/host/core/src/workspace/store.js";
+import { deployGuestIntegration } from "../../../../packages/host/core/src/workspace/guestIntegration.js";
+import { workspaceGuestAssets } from "../../../../packages/host/core/src/workspace/guestAssets.js";
+import { createWorkspaceAgentServer } from "../../../../packages/cli/src/workspace-agent.js";
+import { loadHostPlugins } from "../../../../packages/cli/src/host-plugins.js";
 
 const image = process.env.DIM_GUEST_INTEGRATION_IMAGE;
 
@@ -46,7 +46,7 @@ describe("guest integrations in an ordinary disposable workspace", () => {
       const pluginHome = join(root, "plugins");
       const enabled = ["agent-tools", "external-urls"];
       await mkdir(join(pluginHome, "node_modules/@slop-lab"), { recursive: true });
-      for (const plugin of enabled) await symlink(new URL(`../../../../plugin-${plugin}`, import.meta.url).pathname,
+      for (const plugin of enabled) await symlink(new URL(`../../../../packages/host/plugins/${plugin.replace(/^host-/, "")}`, import.meta.url).pathname,
         join(pluginHome, "node_modules/@slop-lab", `dim-plugin-${plugin}`));
       const manifest = (plugins: string[]) => JSON.stringify({ schemaVersion: 1, plugins: plugins.map((name) => `@slop-lab/dim-plugin-${name}`) });
       await writeFile(join(pluginHome, "plugins.json"), manifest(enabled));

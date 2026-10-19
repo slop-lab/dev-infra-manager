@@ -4,14 +4,14 @@ import { chmod, link, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { activationTokenSha256, bindExactActivation } from "../../../../plugin-control-plane-native-git/src/native-bundle-activation.js";
+import { activationTokenSha256, bindExactActivation } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-activation.js";
 import {
   claimNativeProjectRootImport,
   initializeNativeGitBundleState,
   inspectNativeGitBundleState,
   markNativeProjectRootBundleDurable
-} from "../../../../plugin-control-plane-native-git/src/native-bundle-state.js";
-import { executeNativeProjectPreparation } from "../../../../plugin-control-plane-native-git/src/native-project-registration.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-state.js";
+import { executeNativeProjectPreparation } from "../../../../packages/control-plane/plugins/native-git/src/native-project-registration.js";
 
 const roots: string[] = [];
 const generationId = "a".repeat(64);

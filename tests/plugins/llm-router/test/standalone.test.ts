@@ -6,15 +6,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { backendProfile, defaultLimits } from "../../../../plugin-control-plane-llm-router/src/config.js";
+import { backendProfile, defaultLimits } from "../../../../packages/control-plane/plugins/llm-router/src/config.js";
 
 it("starts the published control-plane plugin and operator CLI with only its SDK, without workspace core", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-llm-standalone-"));
   try {
     const modules = join(root, "node_modules/@slop-lab"); await mkdir(modules, { recursive: true });
     const plugin = join(modules, "dim-plugin-control-plane-llm-router");
-    await cp(fileURLToPath(new URL("../../../../plugin-control-plane-llm-router/dist", import.meta.url)), plugin, { recursive: true });
-    await cp(fileURLToPath(new URL("../../../../core/packages/control-plane/dist", import.meta.url)), join(modules, "dim-control-plane"), { recursive: true });
+    await cp(fileURLToPath(new URL("../../../../packages/control-plane/plugins/llm-router/dist", import.meta.url)), plugin, { recursive: true });
+    await cp(fileURLToPath(new URL("../../../../packages/control-plane/core/dist", import.meta.url)), join(modules, "dim-control-plane"), { recursive: true });
     await expect(stat(join(modules, "dim-core"))).rejects.toMatchObject({ code: "ENOENT" });
     const metadata: unknown = JSON.parse(await readFile(join(plugin, "package.json"), "utf8"));
     expect(metadata).toMatchObject({ dependencies: { "@slop-lab/dim-control-plane": expect.any(String) } });

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   rollForwardControlPlane
-} from "../../../../core/packages/installer/src/controlPlaneInstall.js";
+} from "../../../../packages/installer/src/controlPlaneInstall.js";
 import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 import {
   deterministicRandom,

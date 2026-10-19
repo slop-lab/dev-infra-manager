@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createDimController, registerPlugins } from "@slop-lab/dim-managed";
-import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
+import { createExternalUrlsPlugin } from "../../../../packages/host/plugins/external-urls/src/index.js";
 import { within } from "./support/within.js";
 
 const cleanup: Array<() => Promise<void>> = [];

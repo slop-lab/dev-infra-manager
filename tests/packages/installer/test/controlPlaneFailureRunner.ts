@@ -1,7 +1,7 @@
 import type {
   ControlPlaneDockerCommand,
   ControlPlaneDockerCommandResult
-} from "../../../../core/packages/installer/src/controlPlaneDocker.js";
+} from "../../../../packages/installer/src/controlPlaneDocker.js";
 import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 
 type ProbeFailure =

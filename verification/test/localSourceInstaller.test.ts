@@ -68,7 +68,7 @@ describe("local source installation", () => {
     const installer = manifest.packages.find((entry) => entry.name === "@slop-lab/dim-installer");
     expect(installer).toBeDefined();
     const aggregateVersion = installer?.version ?? "";
-    const builtInstaller = JSON.parse(await readFile(resolve(workspaceRoot, "core/packages/installer/dist/package.json"), "utf8")) as { version: string };
+    const builtInstaller = JSON.parse(await readFile(resolve(workspaceRoot, "packages/installer/dist/package.json"), "utf8")) as { version: string };
     expect(aggregateVersion).toBe(builtInstaller.version);
     expect(new Set(manifest.packages.map((entry) => entry.version))).toEqual(new Set([aggregateVersion]));
 

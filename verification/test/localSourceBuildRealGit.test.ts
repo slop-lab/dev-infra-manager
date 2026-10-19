@@ -33,25 +33,25 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
   await writeFile(resolve(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
 
   const packageDirectories = [
-    "core/packages/core",
-    "core/packages/control-plane",
+    "packages/host/core",
+    "packages/control-plane/core",
     "core/packages/managed",
-    "core/packages/cli",
-    "core/packages/installer",
-    "plugin-control-plane-native-git",
-    "core/packages/web",
-    "core/packages/contracts/external-url",
-    "plugin-dns-cloudflare",
-    "plugin-external-urls",
-    "plugin-host-mirrors",
-    "plugin-cache-server",
-    "plugin-control-plane-ci-workflows",
-    "plugin-host-llm-router",
-    "plugin-control-plane-llm-router",
-    "plugin-vm",
-    "plugin-workspace-check",
-    "plugin-agent-tools",
-    "plugin-tunnels"
+    "packages/cli",
+    "packages/installer",
+    "packages/control-plane/plugins/native-git",
+    "packages/web",
+    "packages/contracts/external-url",
+    "packages/host/plugins/dns-cloudflare",
+    "packages/host/plugins/external-urls",
+    "packages/host/plugins/mirrors",
+    "packages/host/plugins/cache-server",
+    "packages/control-plane/plugins/ci-workflows",
+    "packages/host/plugins/llm-router",
+    "packages/control-plane/plugins/llm-router",
+    "packages/host/plugins/vm",
+    "packages/host/plugins/workspace-check",
+    "packages/host/plugins/agent-tools",
+    "packages/host/plugins/tunnels"
   ] as const;
   await Promise.all(
     packageDirectories.map(async (directory) => {
@@ -60,7 +60,7 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
     })
   );
   await writeFile(resolve(root, "core/package.json"), '{"name":"core-fixture","version":"0.8.0"}\n');
-  await writeFile(resolve(root, "core/packages/core/source-marker"), "selected-commit\n");
+  await writeFile(resolve(root, "packages/host/core/source-marker"), "selected-commit\n");
 
   const toolsSource = {
     docker: "#!/usr/bin/env bash\nprintf 'sha256:%064d\\n' 1\n",
@@ -68,7 +68,7 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
       "#!/usr/bin/env bash",
       `if [[ "$1" == '-p' ]]; then exec '${process.execPath.replaceAll("'", "'\\''")}' "$@"; fi`,
       "printf 'node version=%s\\n' \"$DIM_LOCAL_BUILD_VERSION\" >>\"$DIM_INVOCATIONS\"",
-      "cp \"$2/core/packages/core/source-marker\" \"$3/source-marker\""
+      "cp \"$2/packages/host/core/source-marker\" \"$3/source-marker\""
     ].join("\n"),
     pnpm: "#!/usr/bin/env bash\nprintf 'pnpm %s\\n' \"$*\" >>\"$DIM_INVOCATIONS\"\nexit \"${DIM_PNPM_FAILURE:-0}\"\n"
   } as const;
@@ -108,7 +108,7 @@ describe("real Git local source build safety", () => {
   it("archives selected commit bytes through a quoted staging path when a replacement ref exists", async () => {
     // Given
     const fixture = await createRealGitFixture();
-    await writeFile(resolve(fixture.root, "core/packages/core/source-marker"), "replacement-commit\n");
+    await writeFile(resolve(fixture.root, "packages/host/core/source-marker"), "replacement-commit\n");
     expect(git(fixture.root, "add", ".").status).toBe(0);
     expect(git(fixture.root, "commit", "--quiet", "-m", "replacement source").status).toBe(0);
     const replacementCommit = git(fixture.root, "rev-parse", "HEAD").stdout.trim();
@@ -181,7 +181,7 @@ describe("real Git local source build safety", () => {
   it.each(["production-source", "output"])("rejects a symlinked %s path without changing its target", async (pathKind) => {
     // Given
     const fixture = await createRealGitFixture();
-    const target = resolve(fixture.root, "core/packages/core");
+    const target = resolve(fixture.root, "packages/host/core");
     const trackedManifest = await readFile(resolve(target, "package.json"), "utf8");
     const output = resolve(fixture.root, "candidate");
     if (pathKind === "production-source") {

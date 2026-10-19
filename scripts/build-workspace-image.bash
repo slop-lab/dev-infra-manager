@@ -23,5 +23,5 @@ docker buildx build \
   --build-arg "DIM_UID=$(id -u)" \
   --build-arg "DIM_GID=$(id -g)" \
   --tag "$image_build_ref" \
-  --file "$source_root/core/packages/core/src/workspace-image-assets/Dockerfile" \
-  "$source_root/core/packages/core/src/workspace-image-assets" >/dev/null
+  --file "$source_root/packages/host/core/src/workspace-image-assets/Dockerfile" \
+  "$source_root/packages/host/core/src/workspace-image-assets" >/dev/null

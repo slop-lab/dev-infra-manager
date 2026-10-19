@@ -20,12 +20,12 @@ import { makeTempDir, writeFakeCliNpm, writeStubCli } from "./support.js";
  */
 
 const testDir = dirname(fileURLToPath(import.meta.url));
-const cliEntry = fileURLToPath(new URL("../../../../core/packages/installer/src/cli.ts", import.meta.url));
+const cliEntry = fileURLToPath(new URL("../../../../packages/installer/src/cli.ts", import.meta.url));
 const workspaceRoot = join(testDir, "..", "..", "..");
 
 const tsxCandidates = [
   join(workspaceRoot, "node_modules", ".bin", "tsx"),
-  fileURLToPath(new URL("../../../../core/packages/cli/node_modules/.bin/tsx", import.meta.url))
+  fileURLToPath(new URL("../../../../packages/cli/node_modules/.bin/tsx", import.meta.url))
 ];
 
 async function locateTsx(): Promise<string | undefined> {

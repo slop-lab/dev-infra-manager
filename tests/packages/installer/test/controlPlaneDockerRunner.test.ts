@@ -6,11 +6,11 @@ import {
   ControlPlaneDockerExecutionError,
   ControlPlaneDockerUncertainError,
   ProcessControlPlaneDockerRunner
-} from "../../../../core/packages/installer/src/controlPlaneDocker.js";
+} from "../../../../packages/installer/src/controlPlaneDocker.js";
 import {
   dockerExecutableTrustFailure,
   dockerParentTrustFailure
-} from "../../../../core/packages/installer/src/trustedDockerExecutable.js";
+} from "../../../../packages/installer/src/trustedDockerExecutable.js";
 
 const temporaryDirectories: string[] = [];
 const descendantPids: number[] = [];

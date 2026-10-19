@@ -7,7 +7,7 @@ import {
   createDimController,
   initializeControllerRoutes
 } from "../../../../core/packages/managed/src/controller.js";
-import { UserError } from "../../../../core/packages/core/src/errors.js";
+import { UserError } from "../../../../packages/host/core/src/errors.js";
 import { lifecycleOptions } from "../../../../core/packages/managed/src/lifecycleOptions.js";
 import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/managed/src/plugin.js";

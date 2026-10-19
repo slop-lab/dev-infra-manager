@@ -1,7 +1,7 @@
 import { expect } from "vitest";
-import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/workspace/models.js";
-import { parseVmHostConfig } from "../../../../plugin-vm/src/config.js";
+import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../packages/host/core/src/types.js";
+import type { WorkspaceRecord } from "../../../../packages/host/core/src/workspace/models.js";
+import { parseVmHostConfig } from "../../../../packages/host/plugins/vm/src/config.js";
 const id = "12345678-1234-1234-1234-123456789abc";
 export const config = parseVmHostConfig({ schemaVersion: 1, project: "dim", storagePool: "vm", network: "vmbr0",
   guest: { cpuCount: 4, memory: "8GiB", disk: "32GiB" }, cgroupRoot: "/sys/fs/cgroup/dim", incusSocket: "/var/lib/incus/unix.socket" });

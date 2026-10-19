@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { startControlPlanePlugins } from "../../../../core/packages/control-plane/src/runtime.js";
-import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "../../../../core/packages/control-plane/src/plugin.js";
+import { startControlPlanePlugins } from "../../../../packages/control-plane/core/src/runtime.js";
+import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "../../../../packages/control-plane/core/src/plugin.js";
 
 function plugin(name: string, configure: () => PreparedControlPlanePlugin): ControlPlanePlugin {
   return { apiVersion: 1, name, configure };

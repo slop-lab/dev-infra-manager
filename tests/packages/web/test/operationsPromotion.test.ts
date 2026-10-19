@@ -5,8 +5,8 @@ import { expect, it } from "vitest";
 import { nativeBundleReviewFixture, createBundleReview } from "../../native-git/test/nativeBundleReviewFixture.js";
 import { authoritativePolicy } from "../../native-git/test/authoritativeNativeCandidateFixture.js";
 import { hostPromoter, rootRepository, runGit } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
-import { createReviewerWebServerFromConfigFile } from "../../../../core/packages/web/src/server.js";
-import { parseReviewerWebConfig } from "../../../../core/packages/web/src/config.js";
+import { createReviewerWebServerFromConfigFile } from "../../../../packages/web/src/server.js";
+import { parseReviewerWebConfig } from "../../../../packages/web/src/config.js";
 import { availablePort, WEB_PASSWORD, webConfig } from "./webHarness.js";
 it("discovers authoritative proposals and separates reviewer decisions from operator protected-ref promotion", async () => {
   const native = await nativeBundleReviewFixture("web-operations-promotion", undefined, authoritativePolicy(["owner"], [], []));

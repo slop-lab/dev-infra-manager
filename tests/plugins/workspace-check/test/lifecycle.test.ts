@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { MissingRecordError, type WorkspaceService } from "@slop-lab/dim-core/workspace";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
-import { checkWorkspace } from "../../../../plugin-workspace-check/src/index.js";
+import { checkWorkspace } from "../../../../packages/host/plugins/workspace-check/src/index.js";
 
 type Operations = Parameters<typeof checkWorkspace>[0];
 function fixture(failure?: "create" | "recreate") {

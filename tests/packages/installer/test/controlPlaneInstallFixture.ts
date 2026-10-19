@@ -4,8 +4,8 @@ import type {
   ControlPlaneDockerCommand,
   ControlPlaneDockerCommandResult,
   ControlPlaneDockerRunner
-} from "../../../../core/packages/installer/src/controlPlaneDocker.js";
-import { ControlPlaneDockerUncertainError } from "../../../../core/packages/installer/src/controlPlaneDocker.js";
+} from "../../../../packages/installer/src/controlPlaneDocker.js";
+import { ControlPlaneDockerUncertainError } from "../../../../packages/installer/src/controlPlaneDocker.js";
 import {
   ownedContainer,
   ownedNetwork,

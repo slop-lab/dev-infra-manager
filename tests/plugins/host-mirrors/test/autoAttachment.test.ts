@@ -7,8 +7,8 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
-import { createGuestDockerProxy, type GuestProxyConfig } from "../../../../plugin-host-mirrors/src/guest-proxy.js";
-import { createMirrorRelay } from "../../../../plugin-host-mirrors/src/relay.js";
+import { createGuestDockerProxy, type GuestProxyConfig } from "../../../../packages/host/plugins/mirrors/src/guest-proxy.js";
+import { createMirrorRelay } from "../../../../packages/host/plugins/mirrors/src/relay.js";
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 async function root() { const value = await mkdtemp(join(tmpdir(), "dim-auto-mirrors-")); cleanup.push(() => rm(value, { recursive: true, force: true })); return value; }
@@ -105,7 +105,7 @@ it("flushes Docker wait response headers before body bytes so container startup 
 });
 
 it("reuses a detached UUID relay across pause/resume and atomically refreshes cache targets without changing guest ports", async () => {
-  const { ensureWorkspaceRelay }: typeof import("../../../../plugin-host-mirrors/src/attachment.js") = await import(new URL("../../../../plugin-host-mirrors/dist/attachment.js", import.meta.url).href);
+  const { ensureWorkspaceRelay }: typeof import("../../../../packages/host/plugins/mirrors/src/attachment.js") = await import(new URL("../../../../packages/host/plugins/mirrors/dist/attachment.js", import.meta.url).href);
   const { tryAcquireKernelGuard } = await import("@slop-lab/dim-core");
   const directory = await root(), store = new WorkspaceStore(join(directory, "workspaces")), workspace = workspaceRecord(); await store.write(workspace);
   const a = new URL(await listen(createServer((_request, response) => response.end("first cache"))));

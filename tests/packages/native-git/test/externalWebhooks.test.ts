@@ -4,10 +4,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { externalWebhookSubscriberSchema } from "../../../../plugin-control-plane-native-git/src/external-webhook-config.js";
-import { createExternalWebhookDispatcher } from "../../../../plugin-control-plane-native-git/src/external-webhook-dispatcher.js";
-import { ExternalWebhookStore, externalWebhookEventSchema } from "../../../../plugin-control-plane-native-git/src/external-webhook-store.js";
-import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
+import { externalWebhookSubscriberSchema } from "../../../../packages/control-plane/plugins/native-git/src/external-webhook-config.js";
+import { createExternalWebhookDispatcher } from "../../../../packages/control-plane/plugins/native-git/src/external-webhook-dispatcher.js";
+import { ExternalWebhookStore, externalWebhookEventSchema } from "../../../../packages/control-plane/plugins/native-git/src/external-webhook-store.js";
+import { parseNativeGitBundleConfig } from "../../../../packages/control-plane/plugins/native-git/src/bundle-config.js";
 import { nativeBundleReviewFixture, createBundleReview } from "./nativeBundleReviewFixture.js";
 import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
 import { cleanupFinalizeFixtures, closeFinalizeService, startFinalizeService, generationId,

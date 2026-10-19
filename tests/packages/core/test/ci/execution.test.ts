@@ -7,7 +7,7 @@ import { ExecutionStore } from "../../../../../core/packages/managed/src/ci/stor
 import { runExecutionWorker } from "../../../../../core/packages/managed/src/ci/worker.js";
 import type { ExecutionWorkerClient } from "../../../../../core/packages/managed/src/ci/client.js";
 import type { ExecutionBackend } from "../../../../../core/packages/managed/src/ci/backend.js";
-import { ProcessRunner } from "../../../../../core/packages/core/src/runner.js";
+import { ProcessRunner } from "../../../../../packages/host/core/src/runner.js";
 import { generation, event, grant, result, slot, assignment } from "./executionFixture.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });

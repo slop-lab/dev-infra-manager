@@ -3,9 +3,9 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
-import { acquireControlPlaneStateLock, type ControlPlaneStateLock } from "../../../../core/packages/installer/src/controlPlaneLock.js";
-import { completeControlPlaneSourcePreflight, readControlPlaneSources } from "../../../../core/packages/installer/src/controlPlaneSources.js";
+import { parseControlPlaneConfig } from "../../../../packages/installer/src/controlPlaneConfig.js";
+import { acquireControlPlaneStateLock, type ControlPlaneStateLock } from "../../../../packages/installer/src/controlPlaneLock.js";
+import { completeControlPlaneSourcePreflight, readControlPlaneSources } from "../../../../packages/installer/src/controlPlaneSources.js";
 import {
   assertControlPlaneStagedSources,
   discardControlPlaneStaging,
@@ -16,7 +16,7 @@ import {
   publishControlPlaneInstalledState,
   readControlPlaneInstalledState,
   stageControlPlaneSources
-} from "../../../../core/packages/installer/src/controlPlaneState.js";
+} from "../../../../packages/installer/src/controlPlaneState.js";
 import { controlPlaneSecrets, writeControlPlaneFixture } from "./controlPlaneFixture.js";
 
 const temporaryDirectories: string[] = [];

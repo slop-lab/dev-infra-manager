@@ -47,7 +47,7 @@ For an operator-owned remote host, configure `dim host add NAME --ssh SSH_TARGET
 select it with `dim host use NAME`, then run the same root commands. Git source
 paths refer to the selected host. Verify stdin, stdout, stderr and nonzero exit
 codes, and verify that the workspace resources exist on the selected host.
-See the [CLI reference](../core/packages/cli/README.md) for forwarding and host
+See the [CLI reference](../packages/cli/README.md) for forwarding and host
 configuration.
 
 ## Optional managed Git and review

@@ -1,4 +1,4 @@
-import { readNativeCandidateJobInputsFromGit } from "../../../../plugin-control-plane-native-git/src/native-candidate-job-inputs.js";
+import { readNativeCandidateJobInputsFromGit } from "../../../../packages/control-plane/plugins/native-git/src/native-candidate-job-inputs.js";
 import { candidateArgv } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { dimWorkflowCompiler } from "@slop-lab/dim-plugin-control-plane-ci-workflows";
 import { createHash } from "node:crypto";

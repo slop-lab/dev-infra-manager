@@ -14,7 +14,7 @@ import {
   type ControllerWorkspace,
   type LifecycleOptions,
 } from "@slop-lab/dim-managed";
-import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
+import { createExternalUrlsPlugin } from "../../../../packages/host/plugins/external-urls/src/index.js";
 import { workspaceRecord as coreWorkspaceRecord } from "../../../support/workspaceFixture.js";
 
 const workspaces = [

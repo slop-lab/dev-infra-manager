@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProcessRunner } from "@slop-lab/dim-core/workspace";
-import { composeWorkspaceRuntime, loadHostPlugins } from "../../../../core/packages/cli/src/host-plugins.js";
+import { composeWorkspaceRuntime, loadHostPlugins } from "../../../../packages/cli/src/host-plugins.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -37,7 +37,7 @@ it("discovers explicit host commands without a managed controller and rejects co
 it.each([["host-mirrors", "mirrors"], ["cache-server", "cache-server"]])("discovers the installed %s package using its host command identity", async (pluginName, commandName) => {
   const root = await fixture();
   await mkdir(path.join(root, "node_modules", "@slop-lab"), { recursive: true });
-  await symlink(new URL(`../../../../plugin-${pluginName}`, import.meta.url).pathname,
+  await symlink(new URL(`../../../../packages/host/plugins/${pluginName.replace(/^host-/, "")}`, import.meta.url).pathname,
     path.join(root, "node_modules", "@slop-lab", `dim-plugin-${pluginName}`));
   await writeFile(path.join(root, "plugins.json"), JSON.stringify({
     schemaVersion: 1, plugins: [`@slop-lab/dim-plugin-${pluginName}`]
@@ -58,7 +58,7 @@ it("loads the actual tools, router and external URL guest descriptors together",
   for (const [directory, name] of selections) {
     const installed = path.join(root, "node_modules", name);
     await mkdir(path.dirname(installed), { recursive: true });
-    await symlink(new URL(`../../../../plugin-${directory}`, import.meta.url).pathname, installed);
+    await symlink(new URL(`../../../../packages/host/plugins/${directory.replace(/^host-/, "")}`, import.meta.url).pathname, installed);
   }
   await writeFile(path.join(root, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: selections.map(([, name]) => name) }));
   const loaded = await loadHostPlugins();

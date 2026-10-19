@@ -7,8 +7,8 @@ import { promisify } from "node:util";
 import { expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const agent = fileURLToPath(new URL("../../../../plugin-agent-tools/src/assets/agent.mjs", import.meta.url));
-const guest = fileURLToPath(new URL("../../../../core/packages/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
+const agent = fileURLToPath(new URL("../../../../packages/host/plugins/agent-tools/src/assets/agent.mjs", import.meta.url));
+const guest = fileURLToPath(new URL("../../../../packages/host/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
 
 it("tool launch forwards exact arguments and registers tool-owned noninteractive continuation", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-agent-tools-")), home = path.join(root, "home"), bin = path.join(home, ".local/bin");

@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const client = fileURLToPath(new URL("../../../../core/packages/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
+const client = fileURLToPath(new URL("../../../../packages/host/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
 
 it("guest commands use only scoped routes, preserve resource allocation and reject host selectors", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "dim-guest-client-"));

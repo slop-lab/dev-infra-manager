@@ -6,8 +6,8 @@ import { nativeBundleReviewFixture, createBundleReview } from "../../native-git/
 import { authoritativePolicy } from "../../native-git/test/authoritativeNativeCandidateFixture.js";
 import { cleanupFinalizeFixtures, createRootBundle, uploadRootBundle, parseImportReceipt, finalizeRootImport,
   generationId, importer, projectInput } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
-import { createReviewerWebServerFromConfigFile } from "../../../../core/packages/web/src/server.js";
-import { parseReviewerWebConfig } from "../../../../core/packages/web/src/config.js";
+import { createReviewerWebServerFromConfigFile } from "../../../../packages/web/src/server.js";
+import { parseReviewerWebConfig } from "../../../../packages/web/src/config.js";
 import { availablePort, WEB_PASSWORD, webConfig } from "./webHarness.js";
 
 afterEach(cleanupFinalizeFixtures);

@@ -8,7 +8,7 @@ import {
   createReviewerWebServerFromConfigFile,
   type ReviewerWebServer,
   type ReviewerWebServerOptions
-} from "../../../../core/packages/web/src/index.js";
+} from "../../../../packages/web/src/index.js";
 import {
   readJsonObject,
   stringField,

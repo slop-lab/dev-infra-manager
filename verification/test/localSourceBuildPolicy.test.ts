@@ -20,9 +20,9 @@ const fixtureRoots: string[] = [];
 const sourceCommit = { DIM_SOURCE_ROOT_COMMIT: fixtureRootCommit } as const;
 
 const publishPackageVersionHelpers = [
-  resolve(import.meta.dirname, "../../core/scripts/publish-package-version.mjs"),
-  resolve(import.meta.dirname, "../../plugin-dns-cloudflare/scripts/publish-package-version.mjs"),
-  resolve(import.meta.dirname, "../../plugin-external-urls/scripts/publish-package-version.mjs")
+  resolve(import.meta.dirname, "../../scripts/packages/publish-package-version.mjs"),
+  resolve(import.meta.dirname, "../../packages/host/plugins/dns-cloudflare/scripts/publish-package-version.mjs"),
+  resolve(import.meta.dirname, "../../packages/host/plugins/external-urls/scripts/publish-package-version.mjs")
 ] as const;
 
 async function sourceBuildFixture(): Promise<SourceBuildFixture> {
@@ -365,8 +365,8 @@ describe("local source build policy", () => {
     expect(packaging).toContain('git -C "$repo_root" archive');
     expect(packaging).toContain("  LICENSE \\");
     expect(packaging).toContain('cat >"$source_root/pnpm-workspace.yaml"');
-    expect(packaging).toContain("  - plugin-control-plane-native-git");
-    expect(packaging).toContain("  - core/packages/web");
+    expect(packaging).toContain("  - packages/control-plane/plugins/native-git");
+    expect(packaging).toContain("  - packages/web");
     expect(packaging).toContain('pnpm --dir "$source_root" install --frozen-lockfile');
     expect(packaging).toContain("aggregate-lock-sha256=%s");
     expect(installation).not.toMatch(/(?:systemctl|dim)\s+(?:restart|controller restart)/);
@@ -404,7 +404,7 @@ fi
 exec "$DIM_TEST_REAL_PNPM" "$@"
 `, { mode: 0o755 });
     const sharedArtifacts = ["package.json", "package-version.js"].map((file) =>
-      resolve(workspaceRoot, "core/packages/core/dist", file));
+      resolve(workspaceRoot, "packages/host/core/dist", file));
     const before = await Promise.all(sharedArtifacts.map((file) => readFile(file)));
     await writeFile(
       resolve(tools, "docker"),

@@ -2,12 +2,12 @@ import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
+import { parseControlPlaneConfig } from "../../../../packages/installer/src/controlPlaneConfig.js";
 import {
   completeControlPlaneSourcePreflight,
   readControlPlaneSources
-} from "../../../../core/packages/installer/src/controlPlaneSources.js";
-import { controlPlaneGenerationId } from "../../../../core/packages/installer/src/controlPlaneGenerationId.js";
+} from "../../../../packages/installer/src/controlPlaneSources.js";
+import { controlPlaneGenerationId } from "../../../../packages/installer/src/controlPlaneGenerationId.js";
 import {
   controlPlaneSecrets,
   nativeServiceConfig,

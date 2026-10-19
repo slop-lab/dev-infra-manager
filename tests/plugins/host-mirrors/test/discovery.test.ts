@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { atomicWrite } from "@slop-lab/dim-core";
 import { ContainerWorkspaceRuntime, ProcessRunner, WorkspaceService, WorkspaceStore, type WorkspaceHostPluginContext } from "@slop-lab/dim-core/workspace";
-import { hostPlugin } from "../../../../plugin-host-mirrors/src/index.js";
-import { findCacheEndpoints, readCacheEndpoints } from "../../../../plugin-host-mirrors/src/provider.js";
+import { hostPlugin } from "../../../../packages/host/plugins/mirrors/src/index.js";
+import { findCacheEndpoints, readCacheEndpoints } from "../../../../packages/host/plugins/mirrors/src/provider.js";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
 
 it("skips unconfigured automatic attachment and reports connection configuration without provisioning or hiding malformed explicit configuration", async () => {

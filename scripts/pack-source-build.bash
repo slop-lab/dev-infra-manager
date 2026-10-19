@@ -94,18 +94,8 @@ GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$sou
   tsconfig.base.json \
   pnpm-lock.yaml \
   core \
-  plugin-dns-cloudflare \
-  plugin-external-urls \
-  plugin-host-mirrors \
-  plugin-cache-server \
-  plugin-control-plane-native-git \
-  plugin-control-plane-ci-workflows \
-  plugin-host-llm-router \
-  plugin-control-plane-llm-router \
-  plugin-vm \
-  plugin-workspace-check \
-  plugin-agent-tools \
-  plugin-tunnels
+  packages \
+  scripts/packages
 tar -xf "$source_archive" -C "$source_root"
 
 cat >"$source_root/package.json" <<'EOF'
@@ -113,25 +103,25 @@ cat >"$source_root/package.json" <<'EOF'
 EOF
 cat >"$source_root/pnpm-workspace.yaml" <<'EOF'
 packages:
-  - core/packages/core
-  - core/packages/control-plane
+  - packages/host/core
+  - packages/control-plane/core
   - core/packages/managed
-  - core/packages/cli
-  - core/packages/installer
-  - plugin-control-plane-native-git
-  - core/packages/web
-  - core/packages/contracts/*
-  - plugin-dns-cloudflare
-  - plugin-external-urls
-  - plugin-host-mirrors
-  - plugin-cache-server
-  - plugin-control-plane-ci-workflows
-  - plugin-host-llm-router
-  - plugin-control-plane-llm-router
-  - plugin-vm
-  - plugin-workspace-check
-  - plugin-agent-tools
-  - plugin-tunnels
+  - packages/cli
+  - packages/installer
+  - packages/control-plane/plugins/native-git
+  - packages/web
+  - packages/contracts/*
+  - packages/host/plugins/dns-cloudflare
+  - packages/host/plugins/external-urls
+  - packages/host/plugins/mirrors
+  - packages/host/plugins/cache-server
+  - packages/control-plane/plugins/ci-workflows
+  - packages/host/plugins/llm-router
+  - packages/control-plane/plugins/llm-router
+  - packages/host/plugins/vm
+  - packages/host/plugins/workspace-check
+  - packages/host/plugins/agent-tools
+  - packages/host/plugins/tunnels
 linkWorkspacePackages: true
 EOF
 

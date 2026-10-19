@@ -139,7 +139,7 @@ is a separate optional package with explicit account roles. DIM does not embed
 an issue tracker.
 
 Control-plane plugins run in the standalone
-[`@slop-lab/dim-control-plane`](core/packages/control-plane/README.md) runtime.
+[`@slop-lab/dim-control-plane`](packages/control-plane/core/README.md) runtime.
 Native Git, the CI workflow compiler and the LLM router have explicit
 `dim-plugin-control-plane-*` package names. They install in a separate tree
 without `dim-core`, the workspace CLI or managed host integration. See
@@ -159,13 +159,13 @@ the base CLI.
 
 | Package | Responsibility |
 | --- | --- |
-| [agent-tools](plugin-agent-tools/README.md) | Codex/OpenCode setup, launch, session continuation and OpenCode server |
-| [cache-server](plugin-cache-server/README.md) | Optional host-owned Docker, npm, PyPI and APT cache services |
-| [host-mirrors](plugin-host-mirrors/README.md) | Workspace clients for local or remote package caches |
-| [host-llm-router](plugin-host-llm-router/README.md) | Workspace identity fencing, private gateway and OpenCode connection to a control-plane router |
-| [vm](plugin-vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped browser consoles |
-| [tunnels](plugin-tunnels/README.md) | Persistent TCP/UDP routes, workspace grants and operator web UI |
-| [workspace-check](plugin-workspace-check/README.md) | Disposable lifecycle/data-preservation checks for ordinary repositories |
+| [agent-tools](packages/host/plugins/agent-tools/README.md) | Codex/OpenCode setup, launch, session continuation and OpenCode server |
+| [cache-server](packages/host/plugins/cache-server/README.md) | Optional host-owned Docker, npm, PyPI and APT cache services |
+| [host-mirrors](packages/host/plugins/mirrors/README.md) | Workspace clients for local or remote package caches |
+| [host-llm-router](packages/host/plugins/llm-router/README.md) | Workspace identity fencing, private gateway and OpenCode connection to a control-plane router |
+| [vm](packages/host/plugins/vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped browser consoles |
+| [tunnels](packages/host/plugins/tunnels/README.md) | Persistent TCP/UDP routes, workspace grants and operator web UI |
+| [workspace-check](packages/host/plugins/workspace-check/README.md) | Disposable lifecycle/data-preservation checks for ordinary repositories |
 
 Install the matching agent-tools tarball from the prepared source bundle with
 `dim installer install plugin /absolute/path/to/plugin.tgz`, then run
@@ -176,7 +176,7 @@ or initialize a VM host.
 Inside a workspace, `dim-workspace resources`, `dim-nproc`, `dim-workspace restart`
 and `dim-workspace recreate` use a connection scoped to that workspace's immutable
 identity. Registered sessions and independent background services resume from
-the persistent home. See the [guest client documentation](core/packages/core/docs/workspace-client.md)
+the persistent home. See the [guest client documentation](packages/host/core/docs/workspace-client.md)
 for public-key SSH access and HTTP service publication.
 
 ## Development and verification

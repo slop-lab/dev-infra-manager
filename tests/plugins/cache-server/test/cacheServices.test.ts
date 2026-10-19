@@ -4,10 +4,10 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import type { CommandResult, StreamingCommandRunner } from "@slop-lab/dim-core";
-import { cacheServiceNames, ensureCacheServices, type CacheServiceDefinition } from "../../../../plugin-cache-server/src/cache-services.js";
-import { MirrorState } from "../../../../plugin-cache-server/src/cacheState.js";
-import { dockerCacheDefinition } from "../../../../plugin-cache-server/src/registryCache.js";
-import { aptCacheDefinition } from "../../../../plugin-cache-server/src/aptCache.js";
+import { cacheServiceNames, ensureCacheServices, type CacheServiceDefinition } from "../../../../packages/host/plugins/cache-server/src/cache-services.js";
+import { MirrorState } from "../../../../packages/host/plugins/cache-server/src/cacheState.js";
+import { dockerCacheDefinition } from "../../../../packages/host/plugins/cache-server/src/registryCache.js";
+import { aptCacheDefinition } from "../../../../packages/host/plugins/cache-server/src/aptCache.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

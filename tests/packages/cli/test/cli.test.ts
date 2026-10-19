@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { HostContextStore } from "../../../../core/packages/cli/src/host-context.js";
-import { encodeHostRequest } from "../../../../core/packages/cli/src/host-transport.js";
+import { HostContextStore } from "../../../../packages/cli/src/host-context.js";
+import { encodeHostRequest } from "../../../../packages/cli/src/host-transport.js";
 
-const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
+const cli = fileURLToPath(new URL("../../../../packages/cli/src/cli.ts", import.meta.url));
 
 test("base help describes ordinary Git development and local or SSH hosts", async () => {
   await withFixture(async (fixture) => {

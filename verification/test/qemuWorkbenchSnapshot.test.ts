@@ -20,9 +20,9 @@ describe("trusted QEMU workbench snapshot", () => {
     const snapshot = join(root, "snapshot");
     const children = [
       "core",
-      "plugin-dns-cloudflare",
-      "plugin-external-urls",
-      "plugin-host-mirrors",
+      "packages/host/plugins/dns-cloudflare",
+      "packages/host/plugins/external-urls",
+      "packages/host/plugins/mirrors",
       "tests",
       "verification",
       "examples",

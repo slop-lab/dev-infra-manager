@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createReviewerWebServerFromConfigFile } from "../../../../core/packages/web/src/index.js";
+import { createReviewerWebServerFromConfigFile } from "../../../../packages/web/src/index.js";
 import { installedReviewerFixture, type ReviewFixture } from "./webHarness.js";
 import { webConfig } from "./webHarness.js";
 

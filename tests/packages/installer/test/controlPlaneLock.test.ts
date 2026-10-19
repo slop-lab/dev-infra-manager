@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   acquireControlPlaneStateLock,
   assertControlPlaneStateLock
-} from "../../../../core/packages/installer/src/controlPlaneLock.js";
+} from "../../../../packages/installer/src/controlPlaneLock.js";
 
 const temporaryDirectories: string[] = [];
 const children: ChildProcess[] = [];

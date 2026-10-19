@@ -1,4 +1,4 @@
-import type { CommandRunner, CommandResult, RunOptions } from "../../core/packages/core/src/types.js";
+import type { CommandRunner, CommandResult, RunOptions } from "../../packages/host/core/src/types.js";
 
 export class RecordingRunner implements CommandRunner {
   readonly commands: Array<{ command: string; args: string[]; sudo: boolean }> = [];

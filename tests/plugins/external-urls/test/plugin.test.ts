@@ -19,8 +19,8 @@ import {
   EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
   type ExternalUrlDnsProviderDriver
 } from "@slop-lab/dim-contracts-external-url";
-import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../../../plugin-external-urls/src/index.js";
-import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION } from "../../../../plugin-external-urls/src/tailscale.js";
+import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../../../packages/host/plugins/external-urls/src/index.js";
+import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION } from "../../../../packages/host/plugins/external-urls/src/tailscale.js";
 
 describe("external URLs plugin", () => {
   const close: Array<() => Promise<void>> = [];

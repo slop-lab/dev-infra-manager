@@ -1,9 +1,9 @@
-import { parseControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
+import { parseControlPlaneConfig } from "../../../../packages/installer/src/controlPlaneConfig.js";
 import type {
   ControlPlaneDockerCommand,
   ControlPlaneDockerCommandResult,
   ControlPlaneDockerRunner
-} from "../../../../core/packages/installer/src/controlPlaneDocker.js";
+} from "../../../../packages/installer/src/controlPlaneDocker.js";
 
 export const nativeImage = `registry.example/dim/native-git@sha256:${"a".repeat(64)}`;
 export const ordinaryImage = `registry.example/dim/ordinary-ci@sha256:${"b".repeat(64)}`;

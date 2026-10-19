@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   parseControlPlaneConfig,
   readControlPlaneConfig
-} from "../../../../core/packages/installer/src/controlPlaneConfig.js";
+} from "../../../../packages/installer/src/controlPlaneConfig.js";
 import { writeControlPlaneFixture, writePrivate } from "./controlPlaneFixture.js";
 
 const temporaryDirectories: string[] = [];

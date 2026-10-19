@@ -2,9 +2,9 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { WorkspaceService, type WorkspaceRuntime } from "../../../../core/packages/core/src/workspace/service.js";
-import { parseWorkspaceRecord, WorkspaceStore } from "../../../../core/packages/core/src/workspace/store.js";
-import type { WorkspaceRecord } from "../../../../core/packages/core/src/workspace/models.js";
+import { WorkspaceService, type WorkspaceRuntime } from "../../../../packages/host/core/src/workspace/service.js";
+import { parseWorkspaceRecord, WorkspaceStore } from "../../../../packages/host/core/src/workspace/store.js";
+import type { WorkspaceRecord } from "../../../../packages/host/core/src/workspace/models.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

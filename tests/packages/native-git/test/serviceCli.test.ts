@@ -8,7 +8,7 @@ import { bundleSecrets, idleNativeConfig, idleOrdinaryConfig } from "./bundleCon
 
 const run = promisify(execFile);
 const workspaceRoot = resolve(import.meta.dirname, "../../../..");
-const packageRoot = join(workspaceRoot, "plugin-control-plane-native-git");
+const packageRoot = join(workspaceRoot, "packages/control-plane/plugins/native-git");
 const serviceCli = join(workspaceRoot, "core/packages/managed/dist/nativeGitServiceCli.js");
 const stateProbe = join(import.meta.dirname, "fixtures/nativeStateProbeProcess.mjs");
 const roots: string[] = [];
@@ -355,7 +355,7 @@ describe("native Git image configuration preflight CLI", () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-native-cli-state-"));
     roots.push(root);
-    const initialize = await import("../../../../plugin-control-plane-native-git/src/native-bundle-state.js");
+    const initialize = await import("../../../../packages/control-plane/plugins/native-git/src/native-bundle-state.js");
     const state = await initialize.initializeNativeGitBundleState(root);
     await state.owner.release();
     const before = await stateTree(root);

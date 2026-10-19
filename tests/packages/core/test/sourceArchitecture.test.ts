@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { runtimeSourceSccs } from "./sourceArchitecture.js";
 
 const coreSourceDirectory = fileURLToPath(
-  new URL("../../../../core/packages/core/src", import.meta.url)
+  new URL("../../../../packages/host/core/src", import.meta.url)
 );
 
 describe("core source architecture", () => {

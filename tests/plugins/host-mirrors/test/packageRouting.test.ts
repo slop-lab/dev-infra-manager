@@ -3,8 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomicWrite, type StreamingCommandRunner } from "@slop-lab/dim-core";
-import { dockerTarget, packageTarget, rewritePackageMetadata } from "../../../../plugin-host-mirrors/src/package-routing.js";
-import { hostMirrorProvider, parseCacheCatalog } from "../../../../plugin-host-mirrors/src/provider.js";
+import { dockerTarget, packageTarget, rewritePackageMetadata } from "../../../../packages/host/plugins/mirrors/src/package-routing.js";
+import { hostMirrorProvider, parseCacheCatalog } from "../../../../packages/host/plugins/mirrors/src/provider.js";
 
 it("uses the same fixed URL catalog for local, NAS and externally operated caches", () => {
   const endpoints = { docker: "https://nas.example/docker/", npm: "https://npm.example/cache/", pypi: "https://nas.example/root/pypi/+simple/", apt: "http://mirror.example:3142/" };

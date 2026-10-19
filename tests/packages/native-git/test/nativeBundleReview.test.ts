@@ -26,7 +26,7 @@ import {
 } from "./nativeBundleReviewFixture.js";
 import { seedRootPromotion } from "./nativeCurrentRootProofFixture.js";
 import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
-import { createAuthoritativeNativeReviewEnvelope } from "../../../../plugin-control-plane-native-git/src/index.js";
+import { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/native-git/src/index.js";
 
 afterEach(cleanupFinalizeFixtures);
 

@@ -11,13 +11,13 @@
     "baseUrl": ".",
     "paths": {
       "@slop-lab/dim-core": [
-        "core/packages/core/src/index.ts"
+        "packages/host/core/src/index.ts"
       ],
       "@slop-lab/dim-contracts-external-url": [
-        "core/packages/contracts/external-url/src/index.ts"
+        "packages/contracts/external-url/src/index.ts"
       ],
       "@slop-lab/dim-core/workspace": [
-        "core/packages/core/src/workspace.ts"
+        "packages/host/core/src/workspace.ts"
       ],
       "@slop-lab/dim-managed": [
         "core/packages/managed/src/index.ts"
@@ -26,43 +26,43 @@
         "core/packages/managed/src/cli/managed-cli.ts"
       ],
       "@slop-lab/dim-plugin-control-plane-ci-workflows": [
-        "plugin-control-plane-ci-workflows/src/index.ts"
+        "packages/control-plane/plugins/ci-workflows/src/index.ts"
       ],
       "@slop-lab/dim-plugin-control-plane-native-git/config": [
-        "plugin-control-plane-native-git/src/bundle-config.ts"
+        "packages/control-plane/plugins/native-git/src/bundle-config.ts"
       ],
       "@slop-lab/dim-plugin-control-plane-native-git/service": [
-        "plugin-control-plane-native-git/src/service.ts"
+        "packages/control-plane/plugins/native-git/src/service.ts"
       ],
       "@slop-lab/dim-plugin-control-plane-native-git/workflow": [
-        "plugin-control-plane-native-git/src/workflowCompiler.ts"
+        "packages/control-plane/plugins/native-git/src/workflowCompiler.ts"
       ],
       "@slop-lab/dim-plugin-control-plane-native-git/execution": [
-        "plugin-control-plane-native-git/src/execution-protocol.ts"
+        "packages/control-plane/plugins/native-git/src/execution-protocol.ts"
       ],
       "@slop-lab/dim-plugin-vm": [
-        "plugin-vm/src/index.ts"
+        "packages/host/plugins/vm/src/index.ts"
       ],
       "@slop-lab/dim-plugin-host-llm-router": [
-        "plugin-host-llm-router/src/index.ts"
+        "packages/host/plugins/llm-router/src/index.ts"
       ],
       "@slop-lab/dim-plugin-workspace-check": [
-        "plugin-workspace-check/src/index.ts"
+        "packages/host/plugins/workspace-check/src/index.ts"
       ],
       "@slop-lab/dim-plugin-agent-tools": [
-        "plugin-agent-tools/src/index.ts"
+        "packages/host/plugins/agent-tools/src/index.ts"
       ],
       "@slop-lab/dim-plugin-tunnels": [
-        "plugin-tunnels/src/index.ts"
+        "packages/host/plugins/tunnels/src/index.ts"
       ],
       "@slop-lab/dim-control-plane": [
-        "core/packages/control-plane/src/index.ts"
+        "packages/control-plane/core/src/index.ts"
       ],
       "@slop-lab/dim-control-plane/plugin": [
-        "core/packages/control-plane/src/plugin.ts"
+        "packages/control-plane/core/src/plugin.ts"
       ],
       "@slop-lab/dim-control-plane/lock": [
-        "core/packages/control-plane/src/lock.ts"
+        "packages/control-plane/core/src/lock.ts"
       ]
     },
     "typeRoots": [

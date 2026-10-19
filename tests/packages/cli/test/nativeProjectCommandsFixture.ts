@@ -11,9 +11,9 @@ import {
   NativeProjectDraftStore, NativeProjectPendingStore, parseNativeControlPlaneConnection
 } from "../../../../core/packages/managed/src/index.js";
 import { compileNativeRepositoryBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
-import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
+import { parseNativeGitBundleConfig } from "../../../../packages/control-plane/plugins/native-git/src/bundle-config.js";
 import { configuredNativeGitBundleServer,
-  type NativeGitBundleServer } from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
+  type NativeGitBundleServer } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-server.js";
 import { bundleSecrets, idleNativeConfig } from "../../native-git/test/bundleConfigFixture.js";
 import { prepareNativeProjectFixtureRootForRemoval } from "./nativeProjectFixtureCleanup.js";
 import type { NativeFixture, NativeFixtureOptions } from "./nativeProjectCommandsFixtureTypes.js";
@@ -21,8 +21,8 @@ import type { NativeFixture, NativeFixtureOptions } from "./nativeProjectCommand
 export type { NativeFixture } from "./nativeProjectCommandsFixtureTypes.js";
 
 const runFile = promisify(execFile);
-const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", import.meta.url));
+const cli = fileURLToPath(new URL("../../../../packages/cli/src/cli.ts", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../../../packages/cli", import.meta.url));
 const tsxImport = createRequire(import.meta.url).resolve("tsx");
 const roots: string[] = [];
 const services: NativeGitBundleServer[] = [];

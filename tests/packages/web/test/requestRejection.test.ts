@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
-import { createReviewerWebServerFromConfigFile, type ReviewerWebServer } from "../../../../core/packages/web/src/index.js";
+import { createReviewerWebServerFromConfigFile, type ReviewerWebServer } from "../../../../packages/web/src/index.js";
 import { readJsonObject, stringField } from "./httpFixture.js";
 import { WEB_PASSWORD, WEB_USERNAME, webConfig } from "./webHarness.js";
 

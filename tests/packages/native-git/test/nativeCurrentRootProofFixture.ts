@@ -6,8 +6,8 @@ import {
   nativeProjectRootPromotionTransitionId,
   type NativeProjectRootPromotionEvidence,
   type NativeProjectRootPromotionTransition
-} from "../../../../plugin-control-plane-native-git/src/native-project-root-promotion-codec.js";
-import { parseAuthoritativeImportedRootPolicy } from "../../../../plugin-control-plane-native-git/src/native-imported-root-policy.js";
+} from "../../../../packages/control-plane/plugins/native-git/src/native-project-root-promotion-codec.js";
+import { parseAuthoritativeImportedRootPolicy } from "../../../../packages/control-plane/plugins/native-git/src/native-imported-root-policy.js";
 import { generationId, rootRepository, runGit } from "./nativeRootImportFinalizeFixture.js";
 import { reviewProposalRef } from "./nativeBundleReviewFixture.js";
 

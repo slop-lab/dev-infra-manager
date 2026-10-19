@@ -2,8 +2,8 @@ import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
-import { configureNpmUserFile, mergeNpmRegistry, mergePipIndex, parseGuestMirrorPayload } from "../../../../plugin-host-mirrors/src/guest-setup.js";
-import { injectMirrorMounts, type GuestProxyConfig } from "../../../../plugin-host-mirrors/src/guest-proxy.js";
+import { configureNpmUserFile, mergeNpmRegistry, mergePipIndex, parseGuestMirrorPayload } from "../../../../packages/host/plugins/mirrors/src/guest-setup.js";
+import { injectMirrorMounts, type GuestProxyConfig } from "../../../../packages/host/plugins/mirrors/src/guest-proxy.js";
 
 const config: GuestProxyConfig = { socket: "/run/docker.sock", engineSocket: "/run/engine.sock", blockedHostnames: ["registry-1.docker.io"],
   files: [{ source: "/home/dim/cache/apt.conf", target: "/etc/apt/apt.conf.d/99dim-mirrors" },

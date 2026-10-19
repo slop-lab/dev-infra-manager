@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { parseNativeGitBundleConfig } from "../../../../plugin-control-plane-native-git/src/bundle-config.js";
-import { configuredNativeGitBundleServer } from "../../../../plugin-control-plane-native-git/src/native-bundle-server.js";
+import { parseNativeGitBundleConfig } from "../../../../packages/control-plane/plugins/native-git/src/bundle-config.js";
+import { configuredNativeGitBundleServer } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-server.js";
 import { idleNativeConfig } from "./bundleConfigFixture.js";
 import { isExitError } from "../../../support/gitHelpers.js";
 

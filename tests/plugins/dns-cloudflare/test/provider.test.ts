@@ -9,7 +9,7 @@ import cloudflarePlugin, {
   parseCloudflareDnsProviderArgument,
   parseCloudflareDnsRecordArgument,
   verifyCloudflareWildcard
-} from "../../../../plugin-dns-cloudflare/src/index.js";
+} from "../../../../packages/host/plugins/dns-cloudflare/src/index.js";
 
 const dnsProvider = {
   driver: "cloudflare" as const,

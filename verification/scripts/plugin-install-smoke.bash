@@ -129,7 +129,7 @@ printf '%s\n' \
   > "$plugin_source/index.js"
 
 plugin_tarball="$(pnpm --dir "$plugin_source" pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
-installer_tarball="$(pnpm --dir core/packages/installer/dist pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
+installer_tarball="$(pnpm --dir packages/installer/dist pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
 npm install --prefix "$installer_prefix" "$root/$installer_tarball" >/dev/null
 mkdir -p "$(dirname "$config_path")" "$plugin_home"
 printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"sysbox"}' > "$config_path"
@@ -143,7 +143,7 @@ DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/nod
   "$root/$plugin_tarball" \
   >/dev/null
 
-result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node core/packages/cli/dist/cli.js plugin list --json)"
+result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node packages/cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
 # The installer owns a durable copy; replacing the CLI must not depend on the
@@ -151,7 +151,7 @@ test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smo
 rm "$root/$plugin_tarball"
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   installer install core --with-managed --local-packages "$package_bundle" --no-local-bin >/dev/null
-result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node core/packages/cli/dist/cli.js plugin list --json)"
+result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node packages/cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
 incompatible_source="$root/incompatible-source"

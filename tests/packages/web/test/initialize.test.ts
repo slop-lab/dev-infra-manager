@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { createReviewerWebServerFromConfigFile } from "../../../../core/packages/web/src/server.js";
+import { createReviewerWebServerFromConfigFile } from "../../../../packages/web/src/server.js";
 import { humanReviewer, generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 import { installedReviewerFixture, availablePort } from "./webHarness.js";
 
@@ -14,7 +14,7 @@ it("initializes a private reviewer configuration from a live generated connectio
   const root = await mkdtemp(join(tmpdir(), "dim-web-init-"));
   const connection = join(root, "reviewer.json"), output = join(root, "web.json");
   const config = { schemaVersion: 1, serviceId: "native-main", baseUrl: native.baseUrl(), generationId, ...humanReviewer };
-  const cli = fileURLToPath(new URL("../../../../core/packages/web/src/cli.ts", import.meta.url));
+  const cli = fileURLToPath(new URL("../../../../packages/web/src/cli.ts", import.meta.url));
   const run = (path = output) => promisify(execFile)(process.execPath, ["--import", "tsx", cli, "init", connection,
     "--project", "project-a", "--repository", "root", "--output", path, "--port", String(port)]);
   const port = await availablePort();
@@ -47,7 +47,7 @@ it("initializes an ordinary host operations account through the public CLI witho
   try {
     const settings = join(root, "operations.json"), output = join(root, "web.json");
     await writeFile(settings, JSON.stringify({ hosts: [{ id: "devbox", selector: "saved-host", executable: "/trusted/dim" }] }), { mode: 0o600 });
-    const cli = fileURLToPath(new URL("../../../../core/packages/web/src/cli.ts", import.meta.url));
+    const cli = fileURLToPath(new URL("../../../../packages/web/src/cli.ts", import.meta.url));
     const args = ["--import", "tsx", cli, "init-operations", settings, "--output", output];
     const { stdout } = await promisify(execFile)(process.execPath, args);
     const password = /Browser password: (\S+)/.exec(stdout)?.[1]; expect(password).toBeTruthy();

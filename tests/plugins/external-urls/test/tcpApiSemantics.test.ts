@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDimController, registerPlugins } from "@slop-lab/dim-managed";
-import { createExternalUrlsPlugin } from "../../../../plugin-external-urls/src/index.js";
+import { createExternalUrlsPlugin } from "../../../../packages/host/plugins/external-urls/src/index.js";
 
 const workspace = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "work", projectId: "project", projectName: "project" };
 

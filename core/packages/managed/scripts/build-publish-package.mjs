@@ -2,7 +2,7 @@
 import source from "../package.json" with { type: "json" };
 import { cp, copyFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
-import { publishPackageVersion } from "../../../scripts/publish-package-version.mjs";
+import { publishPackageVersion } from "../../../../scripts/packages/publish-package-version.mjs";
 
 const outputPath = new URL("../dist/package.json", import.meta.url);
 const versionModulePath = new URL("../dist/package-version.js", import.meta.url);
