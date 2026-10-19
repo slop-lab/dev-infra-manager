@@ -56,7 +56,7 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     // Copy a workspace-only adapter. Host config, provider keys and OAuth files never enter this payload.
     const adapter = await readFile(new URL("./opencode.js", import.meta.url), "utf8");
     const status = await context.service.exec(workspace.name, ["node", "--input-type=commonjs", "-e", attachScript], {
-      signal: context.signal, stdin: Readable.from(JSON.stringify({ connection, adapter })) });
+      signal: context.signal, workspaceId: workspace.id, stdin: Readable.from(JSON.stringify({ connection, adapter })) });
     if (status !== 0) { ledger.revoke(workspace.id); throw new Error("workspace LLM attachment failed; access revoked"); }
     console.log(`Attached LLM route '${route.id}' to ${workspace.name}. OpenCode providers: ${[...new Set(route.models.map((model) => `dim-${model.api}`))].join(", ")}`);
   } finally { ledger.close(); }

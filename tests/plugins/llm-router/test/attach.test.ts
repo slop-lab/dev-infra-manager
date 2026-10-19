@@ -25,9 +25,10 @@ it("prepares private configuration and installs a self-contained OpenCode adapte
   await expect(runLlmCommand(prepare, context)).rejects.toThrow();
   const configPath = join(prepared, "router.json"), config = await loadConfig(configPath);
   // Execute only the workspace-side script in a disposable home; no host Docker or user config is touched.
-  vi.spyOn(service, "exec").mockImplementation(async (_name, command, options = {}) => runner.runStreaming(command[0]!, command.slice(1), {
-    ...options, env: { ...process.env, HOME: home }
-  }));
+  vi.spyOn(service, "exec").mockImplementation(async (_name, command, options = {}) => {
+    expect(options.workspaceId).toBe(workspace.id);
+    return runner.runStreaming(command[0]!, command.slice(1), { ...options, env: { ...process.env, HOME: home } });
+  });
   await runLlmCommand(["llm", "attach", workspace.name, "--config", configPath, "--endpoint", "http://172.20.0.1:8318"], context);
   const connectionPath = join(home, ".config/dim/llm-router.json");
   const connection: unknown = JSON.parse(await readFile(connectionPath, "utf8"));
