@@ -123,6 +123,14 @@ async function assertKnownEntries(
 ): Promise<void> {
   for (const entry of entries) {
     if (stateEntries.has(entry)) continue;
+    if (entry === "external-webhooks.sqlite3" || entry === "external-webhooks.sqlite3-journal") {
+      const metadata = await lstat(join(stateDirectory, entry));
+      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.uid !== process.getuid?.()
+        || (metadata.mode & 0o077) !== 0) {
+        throw new NativeGitBundleStateError("external webhook database ownership is invalid");
+      }
+      continue;
+    }
     if (!projectIds.has(entry)) throw new NativeGitBundleStateError(`unknown native Git state entry '${basename(entry)}'`);
     const metadata = await lstat(join(stateDirectory, entry));
     if (!metadata.isDirectory() || metadata.isSymbolicLink()) {

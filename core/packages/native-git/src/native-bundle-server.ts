@@ -1,3 +1,5 @@
+import { createExternalWebhookDispatcher, type ExternalWebhookDispatcher } from "./external-webhook-dispatcher.js";
+import { readExternalWebhookEvents } from "./external-webhook-events.js";
 import { createExecutionHttpService } from "./execution-http.js";
 import { once } from "node:events";
 import { createNativeBundleShutdown } from "./native-bundle-shutdown.js";
@@ -92,6 +94,7 @@ export async function configuredNativeGitBundleServer(
     ...(options.authoritativeReviewHooks === undefined ? {} : { hooks: options.authoritativeReviewHooks })
   });
   let eventDispatcher: AuthoritativeNativeEventDispatcher;
+  let externalWebhooks: ExternalWebhookDispatcher | undefined;
   try {
     eventDispatcher = await createAuthoritativeNativeEventDispatcher({
       webhook: config.ci.webhook,
@@ -102,6 +105,11 @@ export async function configuredNativeGitBundleServer(
       serialize: reviewController.run,
       ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })
     });
+    if ((config.webhooks?.length ?? 0) > 0) {
+      externalWebhooks = createExternalWebhookDispatcher({ stateDirectory: options.stateDirectory,
+        subscribers: config.webhooks ?? [],
+        events: (source) => reviewController.run(() => readExternalWebhookEvents(state, source)) });
+    }
 
   } catch (error) {
     await state.owner.release();
@@ -110,6 +118,7 @@ export async function configuredNativeGitBundleServer(
   const reconcileAllProposals = async (): Promise<void> => {
     await reconcileRegisteredNativeProposals(authoritativeRuntime, options.authoritativeReviewHooks ?? {});
     eventDispatcher.wake();
+    externalWebhooks?.wake();
   };
   const proposalReconciliation = createNativeProposalReconciliationLoop({
     reconcile: () => reviewController.run(reconcileAllProposals),
@@ -124,6 +133,7 @@ export async function configuredNativeGitBundleServer(
         authoritativeRuntime, projectId, proposalRefs, options.authoritativeReviewHooks ?? {}
       );
       eventDispatcher.wake();
+      externalWebhooks?.wake();
     } catch (error) {
       proposalReconciliation.wake();
       throw error;
@@ -135,6 +145,7 @@ export async function configuredNativeGitBundleServer(
       businessReady = true;
     } catch (error) {
       await eventDispatcher.close();
+      await externalWebhooks?.close();
       await state.owner.release();
       throw error;
     }
@@ -182,12 +193,17 @@ export async function configuredNativeGitBundleServer(
   });
   const hostPromoterService = createNativeHostPromoterService({ config, knownCredentials,
     runtime: authoritativeRuntime,
-    promote: (projectId, reviewId) => reviewController.run(() => promoteInstalledNativeReview({
-      config,
-      runtime: authoritativeRuntime,
-      stateDirectory: options.stateDirectory,
-      ...(options.nativePromotionHooks === undefined ? {} : { hooks: options.nativePromotionHooks })
-    }, projectId, reviewId))
+    ...(externalWebhooks === undefined ? {} : { webhooks: externalWebhooks }),
+    promote: async (projectId, reviewId) => {
+      const result = await reviewController.run(() => promoteInstalledNativeReview({
+        config,
+        runtime: authoritativeRuntime,
+        stateDirectory: options.stateDirectory,
+        ...(options.nativePromotionHooks === undefined ? {} : { hooks: options.nativePromotionHooks })
+      }, projectId, reviewId));
+      externalWebhooks?.wake();
+      return result;
+    }
   });
   const prepareProject = (generationId: string, ownerHostId: string, input: unknown): Promise<NativeGitPreparedProject> => {
     if (closed) return Promise.reject(new NativeGitBundleServerError("native Git bundle server is closed"));
@@ -242,9 +258,15 @@ export async function configuredNativeGitBundleServer(
   const server = createNativeBundleHttpServer({
     closed: () => closed,
     handle,
-    onListening: eventDispatcher.start
+    onListening() { eventDispatcher.start(); externalWebhooks?.start(); }
   });
-  const close = createNativeBundleShutdown({ server, eventDispatcher, state,
+  const close = createNativeBundleShutdown({ server, eventDispatcher: {
+    ...eventDispatcher,
+    async close() {
+      const results = await Promise.allSettled([eventDispatcher.close(), externalWebhooks?.close()]);
+      for (const result of results) if (result.status === "rejected") throw result.reason;
+    }
+  }, state,
     stopAdmission() {
       closed = true;
       rootReadService.close();
@@ -273,6 +295,7 @@ export async function configuredNativeGitBundleServer(
     async createReview(input) {
       const review = await reviewController.create(input);
       eventDispatcher.wake();
+      externalWebhooks?.wake();
       return review;
     },
 

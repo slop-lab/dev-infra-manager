@@ -93,3 +93,9 @@ real Git repositories, publication recovery, short-lived credential boundaries,
 review decisions, terminal evidence and compare-and-swap promotion. Low-level
 Git materialization tests use a minimal test smart-HTTP transport to cover
 object identity, byte budgets and filesystem path safety independently.
+
+## External webhooks
+
+Private service configuration can allowlist signed external subscribers for
+authoritative review creation and finalized promotion. Delivery/retry history is
+durable and independent of CI. See [configuration and operator recovery](docs/external-webhooks.md).

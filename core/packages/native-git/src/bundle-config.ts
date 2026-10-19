@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { z } from "zod";
+import { externalWebhookSubscriberSchema } from "./external-webhook-config.js";
 import { executionSourceCredentialsSchema } from "./execution-protocol.js";
 
 const identifier = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
@@ -61,6 +62,7 @@ const nativeBundleConfigSchema = z.object({
   workspaceWriteIssuers: z.array(workspaceWriteIssuer).readonly(),
   humanReviewers: z.array(humanReviewer).readonly(),
   hostPromoters: z.array(hostPromoter).readonly(),
+  webhooks: z.array(externalWebhookSubscriberSchema).max(32).readonly().optional(),
   ci: executionSourceCredentialsSchema.extend({
     webhook: z.object({ endpoint: z.literal("http://ordinary-ci:8080/v1/jobs"),
       username: credentialUsername, password: bundleToken }).strict().readonly()
@@ -73,6 +75,9 @@ export function parseNativeGitBundleConfig(input: unknown): NativeGitBundleConfi
   const result = nativeBundleConfigSchema.safeParse(input);
   if (!result.success) throw new NativeGitBundleConfigError("invalid native Git bundle configuration");
   const config = result.data;
+  if (new Set((config.webhooks ?? []).map(({ id }) => id)).size !== (config.webhooks ?? []).length) {
+    throw new NativeGitBundleConfigError("external webhook subscriber ids must be distinct");
+  }
   if (config.host !== "0.0.0.0" || config.port !== 8080) {
     throw new NativeGitBundleConfigError("native Git bundle listener must be 0.0.0.0:8080");
   }

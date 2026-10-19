@@ -1,3 +1,4 @@
+import type { ExternalWebhookDispatcher } from "./external-webhook-dispatcher.js";
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
@@ -14,6 +15,7 @@ type Input = {
   readonly config: NativeGitBundleConfig;
   readonly knownCredentials: readonly Credential[];
   readonly runtime: AuthoritativeNativeCandidateRuntime;
+  readonly webhooks?: ExternalWebhookDispatcher;
   readonly promote: (projectId: string, reviewId: string) => Promise<NativeInstalledPromotionResult>;
 };
 
@@ -28,7 +30,11 @@ export function createNativeHostPromoterService(input: Input): NativeHostPromote
   return { async handle(request, response, url) {
     const identity = request.method === "GET" && url.pathname === "/v1/host-promoter-identity" && url.search === "";
     const promoteMatch = request.method === "POST" && url.search === "" ? promotionRoute.exec(url.pathname) : null;
-    if (!identity && promoteMatch === null) return false;
+    const webhookMatch = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/webhook-deliveries(?:\/([a-z0-9][a-z0-9-]{0,63})\/([0-9a-f]{64})\/retry)?$/.exec(url.pathname);
+    const webhookRoute = webhookMatch !== null && url.search === ""
+      && (request.method === "GET" && webhookMatch[2] === undefined
+        || request.method === "POST" && webhookMatch[2] !== undefined);
+    if (!identity && promoteMatch === null && !webhookRoute) return false;
     const promoter = input.config.hostPromoters.find((candidate) => basicAuthorized(request, candidate));
     if (promoter === undefined) {
       const known = input.knownCredentials.some((credential) => basicAuthorized(request, credential));
@@ -40,7 +46,7 @@ export function createNativeHostPromoterService(input: Input): NativeHostPromote
         hostId: promoter.hostId, generationId: input.runtime.expectedGenerationId });
       return true;
     }
-    const projectId = promoteMatch?.[1];
+    const projectId = webhookRoute ? webhookMatch?.[1] : promoteMatch?.[1];
     if (projectId === undefined || !authorizedProject(input, promoter, projectId)) {
       sendNotFound(response);
       return true;
@@ -55,6 +61,22 @@ export function createNativeHostPromoterService(input: Input): NativeHostPromote
       return true;
     }
     try {
+      if (webhookRoute) {
+        if (input.webhooks === undefined) { sendNotFound(response); return true; }
+        if (request.method === "GET") {
+          sendJson(response, 200, { healthy: input.webhooks.healthy(), deliveries: input.webhooks.store.list(projectId) });
+          return true;
+        }
+        const { requestId } = z.object({ requestId: z.string().uuid() }).strict().parse(await readBoundedJson(request));
+        const subscriber = input.config.webhooks?.find(({ id }) => id === webhookMatch?.[2]);
+        const eventId = webhookMatch?.[3];
+        if (subscriber === undefined || eventId === undefined || !subscriber.projects.includes(projectId)) {
+          sendNotFound(response); return true;
+        }
+        input.webhooks.store.retry(projectId, subscriber, eventId, requestId);
+        sendJson(response, 200, { requestId, accepted: true });
+        return true;
+      }
       promoteSchema.parse(await readBoundedJson(request));
       const reviewId = promoteMatch?.[2];
       if (reviewId === undefined) return true;
