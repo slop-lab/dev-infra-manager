@@ -1,144 +1,220 @@
-# Host LLM router
+# Shared LLM access router
 
-Optional, base-workspace-only plugin for issue #51. Install it explicitly with
-`dim installer install plugin @slop-lab/dim-plugin-llm-router@0.10.0`.
-It adds `dim llm`; it does not install managed Git, a controller, or a backend.
+Install the optional base-workspace plugin explicitly:
 
-The trusted host process owns provider access, request admission, a SQLite usage
-ledger, and private request/response captures. A workspace receives a random
-route-scoped token bound to its actual DIM workspace UUID. It never receives the
-backend key, provider key, OAuth tokens, account directory, or host sockets.
+```sh
+dim installer install plugin @slop-lab/dim-plugin-llm-router@0.10.0
+```
 
-## Backend and ChatGPT subscriptions
+The host owns stable application projects, principals, policy admission,
+account references, durable usage and private exchange archives. These projects
+are accounting identities; they do not require DIM managed Git or a controller.
+Several workspaces/principals can share one project's allowance. Rotating a
+principal preserves project history. Guest credentials never contain upstream
+keys, OAuth tokens, an account directory or a host administration socket.
+Applications keep their conversations, tools, prompts and tracing systems.
 
-Use an existing reviewed CLIProxyAPI **v8.0.33** instance, bound to loopback, or an
-operator-controlled HTTPS endpoint. Supply its client access key in an owned
-mode-0600 file. The backend is intentionally a separately operated dependency;
-DIM neither downloads an unverified binary nor logs in to an account implicitly.
+## Backend boundary
 
-CLIProxyAPI owns OAuth login and token refresh. Its tagged source implements
-`-config /absolute/config.yaml -codex-login` and `-codex-device-login` for a
-host-side operator login. Keep `oauth.auth-dir` under an owned private host
-folder. For an account-specific route, use a dedicated backend instance/auth
-directory containing only the permitted account; aliases are not account
-permissions. Disable backend retries and do not configure a paid-provider
-fallback. DIM makes one backend call; a backend that retries independently has
-multiple opaque provider attempts and is not an attempt-audited route.
+Use a separately operated **CLIProxyAPI v8.0.33** instance for each eligible
+account partition. CLIProxyAPI owns login and refresh; this plugin makes no
+parallel refresh loop and never reads a user's Codex authentication implicitly.
+Its configuration records an explicit `exclusive-worker` account binding,
+`request-only` attempt visibility and `best-effort` cancellation. Other profiles
+are rejected. Operator account references are stable identifiers, not inferred
+from model names, array positions or filenames.
 
-OpenAI also documents eligible ChatGPT plan inference through Sign in with
-ChatGPT: an issued OAuth client and `chatgpt.tokens.use.direct` permission are
-required. A subscription alone does not establish entitlement for every model
-or request. This plugin does not copy Codex credentials or impersonate a first
-party client. A real authenticated backend inference is the acceptance check;
-unit tests with a local backend do not prove subscription access.
+An exclusive binding means the selected backend endpoint contains only the
+permitted account, with retries and paid-provider fallback disabled. Model
+aliases do not establish that boundary. The operator must verify the running
+backend's version and partition; this wrapper cannot attest its internal account
+selection or hidden retries. Recorded attribution explicitly says configured
+exclusive binding rather than an observed provider account identity. Unsupported
+attempt-exact accounting, strict token/currency ceilings, stateful continuation
+and asynchronous provider work are not enabled.
 
-Reviewed primary references:
+CLIProxyAPI's tagged host-side login flags are `-config /absolute/config.yaml
+-codex-login` and `-codex-device-login`. Keep its `oauth.auth-dir` private and
+persistent. Reauthorization concerns the relevant backend account only. Backend
+configuration, OAuth access and real provider inference remain operator-managed.
+No live ChatGPT account was used in repository verification.
 
-- [CLIProxyAPI v8.0.33 login flags](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.33/cmd/server/main.go)
+Primary references reviewed for this integration:
+
+- [Pinned CLIProxyAPI login source](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.33/cmd/server/main.go)
 - [CLIProxyAPI configuration](https://help.router-for.me/configuration/options)
-- [OpenAI registration and scopes](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
-- [OpenAI plan inference limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
+- [Current management API v8](https://help.router-for.me/management/apiv8)
 - [OpenCode custom providers](https://opencode.ai/docs/providers/)
 - [OpenCode local plugins](https://opencode.ai/docs/plugins/)
 
-## Prepare and run
+## Prepare, create a project and attach
 
-After the operator's backend login and a real inference have succeeded:
-
-```bash
+```sh
 dim llm prepare /home/operator/.config/dim/llm \
   --backend http://127.0.0.1:8317 \
-  --backend-key-file /home/operator/.config/cliproxy/router-access.key \
+  --backend-key-file /home/operator/.config/cliproxy/access.key \
+  --exclusive-account-reference personal-account \
   --model YOUR_REVIEWED_MODEL --context-tokens 128000 --output-tokens 16384 \
-  --listen-host 0.0.0.0 --port 8318
-# Review router.json, its model metadata and limits.
+  --listen-host 10.0.0.1 --port 8318
+dim llm project-add application --config /home/operator/.config/dim/llm/router.json
+dim llm policy application --config /home/operator/.config/dim/llm/router.json
 dim llm serve /home/operator/.config/dim/llm/router.json
 ```
 
-Model names and context/output limits above are operator-reviewed inputs, not an
-entitlement claim or a built-in universal model profile. `--api chat` selects
-Chat Completions instead of Responses. Add explicitly reviewed routes/models in
-`router.json` before restarting the service. Existing setup directories are
-never replaced. Start this long-running command through your host service
-manager if persistence across logouts is needed; its lifetime is independent of
-workspace create/recreate/discard.
+Review the private schema-2 configuration before serving. Accounts contain
+`id`, `reference`, `endpoint`, `keyFile` and optionally `credentialDirectory` for
+explicit local backend-state backup. Routes select one account ID and reviewed
+model/API/context/output metadata. Additional accounts require distinct backend
+endpoints. Route/model/config changes take effect at service restart; project
+policy changes are transactional and affect new admissions immediately.
 
-The default listener is loopback. To reach it from isolated containers, choose a
-specific host bridge IP (preferred) or an explicit all-interface bind, and apply
-your host firewall. The listener exposes only the scoped inference, model and
-usage API, never account login, backend management or configuration writes.
-Remote untrusted networks require HTTPS termination. Upstream HTTP is allowed
-only on loopback. Transport reachability never grants model access by itself.
+Use a private numeric address reachable from the guest, or an operator-provided
+HTTPS endpoint. Upstream HTTP is loopback-only. Client HTTP requires an explicit
+IP origin and a trusted private network; use HTTPS for untrusted networks. The
+listener exposes inference and scoped reads, not operator mutations or OAuth
+management. Run `serve` under the host service manager for persistence.
 
-## Attach a workspace and use OpenCode
-
-```bash
-dim llm attach my-workspace --config /home/operator/.config/dim/llm/router.json \
-  --endpoint http://WORKSPACE_REACHABLE_HOST_IP:8318
+```sh
+dim llm attach development --config /home/operator/.config/dim/llm/router.json \
+  --project application --principal development-agent \
+  --endpoint http://10.0.0.1:8318
 ```
 
-Use a numeric reachable host address for HTTP. `attach` executes through the
-selected workspace runtime and installs only its scoped connection plus a
-self-contained OpenCode adapter in `~/.config/opencode/plugins/`. It does not
-replace `opencode.json` or the user's model choice. Start OpenCode normally
-(including through the optional agent-tools plugin), then select a model from
-`dim-responses` or `dim-chat`. Both the nested directory and the workspace home
-survive ordinary recreation. Unrelated configuration is preserved; conflicting
-provider IDs are rejected rather than overwritten. The adapter is also exported
-as `@slop-lab/dim-plugin-llm-router/opencode` for explicit integrations.
+Attachment pins the actual workspace UUID before delivering its credential.
+Omitting `--principal` uses that UUID as the principal ID. Reattaching the same
+principal rotates it; another principal can share the same project budget.
+Reusing a workspace display name cannot adopt an old grant. Attach installs a
+private connection at `~/.config/dim/llm-router.json` and a self-contained
+OpenCode adapter at `~/.config/opencode/plugins/dim-llm-router.js`, preserving
+unrelated configuration. Start OpenCode normally and select a model from
+`dim-responses` or `dim-chat`. Conflicting provider IDs are rejected.
+`DIM_LLM_ROUTER_CONNECTION_FILE` can select another private guest connection.
+The adapter is also exported at `@slop-lab/dim-plugin-llm-router/opencode`.
 
-`DIM_LLM_ROUTER_CONNECTION_FILE` can select another workspace-side connection
-file. That file contains a revocable DIM access token, not provider credentials.
-Nested tools can read it: possession permits that workspace's configured route
-and budget, not another workspace's usage or upstream account administration.
+Codex may use an explicitly configured custom Responses provider with this same
+scoped bearer token. No TLS interception or copying of ChatGPT authentication is
+needed. DIM does not rewrite an existing Codex provider configuration.
 
-```bash
-dim llm usage my-workspace --config /home/operator/.config/dim/llm/router.json
-dim llm revoke my-workspace --config /home/operator/.config/dim/llm/router.json
+## Policy and accounting
+
+Defaults are two active calls, 1000 admissions per UTC calendar day, 1 MiB input,
+16 MiB response, 1 MiB per observed SSE event, five-minute deadline and 256 MiB retained capture per project.
+Service request/concurrency ceilings apply in addition to project ceilings.
+Requests book their UTC day at admission, even when they finish after midnight.
+There is no scheduling queue and no automatic retry or fallback.
+
+A private policy file can be applied with:
+
+```sh
+dim llm project-policy application --config CONFIG --policy-file PRIVATE_JSON
 ```
 
-Reattaching rotates the token but does not reset usage. Discard or UUID
-replacement denies new requests; active calls recheck identity/revocation once
-per second and request best-effort upstream cancellation. The agent can also
-inspect its own `GET /v1/usage` using its scoped token. Host administrators can
-inspect the private captures under `state/captures/REQUEST_UUID/`.
+Its shape is `{allowedRoutes:["default"],limits:{...},captureMode:"required",
+tokenMode:"observe"}`. `limits` has the same complete fields as the configuration:
+`concurrent`, `requestsPerUtcDay`, `requestBytes`, `responseBytes`,
+`captureBytesPerProject`, `deadlineMilliseconds`. `captureMode` may also be
+`best-effort` or `metadata`. `tokenMode:"estimate"` requires positive
+`tokensPerUtcDay` and `estimatedTokensPerRequest`. Estimated reservations are
+atomic with other admission checks; overshoot remains possible. Unknown usage
+retains its reservation. `tokenMode:"strict"` is explicitly rejected because
+this backend binding has no verified consumption/attempt upper bound.
 
-Codex can use an explicit custom Responses provider pointed at the same router
-with the scoped bearer token; no HTTPS interception, host certificate authority
-or copying of ChatGPT authentication files is needed. This is optional client
-configuration; DIM does not rewrite an existing Codex configuration.
+Only observed request-level backend token totals are normalized. Cache/reasoning
+subfields are retained without double addition. Missing/unverified usage is
+unknown, not zero. Provider remaining subscription allowance and monetary costs
+are not inferred. Usage includes requested/observed model, account binding,
+principal, one backend-call attempt ID, freshness and observation limitations.
+Hidden backend retries cannot be represented as exactly observed attempts.
 
-## Accounting and capture contract
+Execution, delivery, accounting and capture are separate states. Disconnect,
+timeout, cancellation or crash after dispatch can retain uncertain physical
+occupancy and token reservations. Restart never blindly replays inference or
+refunds uncertain work. A normal complete response releases physical occupancy;
+missing final usage can still require accounting reconciliation. Delivery means
+the server's write boundary, not proof that a remote application consumed it.
 
-- Model allowlists and route selection come from the authenticated grant.
-  Arbitrary backend paths, stateful response lookups/continuations and
-  caller-selected accounts are rejected. Caller headers are not forwarded.
-- Request/concurrency admission is atomic. Defaults: two active calls and 1000
-  admitted requests per UTC day, 1 MiB request, 16 MiB response, five-minute
-  deadline, 256 MiB retained capture allowance per workspace. These are local
-  limits, not provider subscription limits or strict token/currency ceilings.
-- Every admitted request has a durable record before dispatch. Request capture
-  is synced before dispatch; received response chunks are synced before being
-  forwarded. Capture exhaustion fails closed. Raw bodies are host-private;
-  authorization headers are excluded. This is an application-body capture,
-  not a complete HTTP/TLS wire capture or proof of client delivery.
-- Only observed backend-reported usage is normalized; provider billing provenance
-  is not independently verified. Cached/reasoning details remain in
-  raw usage and are not added twice. Missing usage stays `null`/unknown.
-  Requested and observed model names are separate. No account identity or
-  provider remaining allowance is guessed from a model name.
-- The router does not replay failed/partial requests. Disconnect and timeout
-  abort its backend request; provider cancellation remains best effort. A
-  restart marks unfinished dispatch uncertain and preserves its request count,
-  capture bytes and unknown usage. Administrative readers do not recover a live
-  service's requests. One kernel guard owns service recovery.
-- Capture retention is deliberately explicit: existing captures are not silently
-  deleted. Reaching the allowance blocks more inference. Choose a new reviewed
-  archival/retention policy rather than deleting the accounting database to
-  recover quota. Account login, refresh, management UI, multi-account balancing,
-  token-price estimates and application conversation memory remain outside DIM.
+```sh
+dim llm usage application --config CONFIG
+dim llm active CONFIG
+dim llm pause application --config CONFIG
+dim llm resume application --config CONFIG
+dim llm disable application --config CONFIG
+dim llm enable application --config CONFIG
+dim llm principal-revoke development-agent --config CONFIG
+dim llm cancel REQUEST_ID --config CONFIG
+dim llm resolve REQUEST_ID --config CONFIG [--usage-file PRIVATE_JSON]
+dim llm usage-export application --config CONFIG --output PRIVATE_NDJSON
+```
 
-No live ChatGPT account was accessed by the repository tests. The real HTTP
-suite verifies isolated credentials, exact streaming bodies, tool-call data,
-usage, quotas, cancellation, revocation and restart uncertainty with a local
-backend. Operator login and one real provider request remain deployment checks.
+Pause stops new admissions while preserving active policy snapshots. Disable or
+principal revocation requests cancellation of active work. Cancellation is
+requested, never misreported as confirmed upstream termination. After inspecting
+an uncertain execution, `resolve` releases its physical occupancy; without
+usage it retains unknown token reservations. An optional resolution file with
+nonnegative `inputTokens`/`outputTokens` is an audited **operator** observation.
+Resolution cannot alter active requests. Policy, credential, resolution and
+archive operations append audit events rather than deleting accounting history.
+
+`projects`, `principals`, `health` and `active` take a configuration path.
+`health` checks backend `/v1/models` authentication without billable inference;
+it does not claim provider reachability, refreshed OAuth or remaining quota.
+
+## Exchange capture, retrieval and retention
+
+Required full recording syncs the request before durable dispatch intent and
+syncs ordered response chunks before forwarding. Archive failure prevents new
+work or aborts affected output. Best-effort mode continues with explicit failure
+or gaps. Metadata mode intentionally promises no payload capture. Content is
+never masked, summarized or semantically deduplicated; token-like text and
+repeated context remain byte-for-byte data. Remote images/files referenced in a
+request are not fetched by the recorder.
+
+The boundary is **client application-protocol bodies**, not HTTP/TLS packets,
+authentication headers, translated upstream payloads or provider-internal
+reasoning. Every manifest names this boundary, account attribution quality,
+integrity hashes and completeness. Completed output may coexist with failed
+capture or unknown usage. Exports and payload downloads treat content as inert
+attachments and never run tools or replay inference.
+
+```sh
+dim llm capture REQUEST_ID --config CONFIG --output NEW_PRIVATE_DIRECTORY
+dim llm capture-delete REQUEST_ID --config CONFIG
+dim llm retention application --config CONFIG --before 2026-10-01T00:00:00Z
+```
+
+Deletion and retention expiry are distinct durable states. Accounting remains;
+retained-storage allowance is reclaimed. Existing backups retain their copies
+until the operator expires those backups separately. Private archives, exports
+and backups may contain real secrets from application content; permission to
+read an archive therefore grants access to those secrets. They are owned mode
+0600 files in private directories, with bounded retrieval/export operations.
+
+Authenticated projects can read `GET /v1/usage`, `/v1/capabilities`,
+`/v1/requests/ID/capture`, `/v1/requests/ID/request` and
+`/v1/requests/ID/response`, or request `POST /v1/requests/ID/cancel`.
+Another project's IDs return no record. Payload downloads use an inert MIME
+and attachment disposition. Model bodies pass unchanged; unsupported provider
+continuation/account-routing fields fail explicitly. `x-dim-request-id` supplies
+a service ID without overwriting provider response or tool IDs.
+
+## Backup and restore
+
+```sh
+# Stop this router first. If credentialDirectory is configured, also stop that
+# backend's credential writers before affirming the explicit acknowledgement.
+dim llm backup CONFIG --output NEW_PRIVATE_BACKUP --backend-state-quiesced yes
+dim llm restore PRIVATE_BACKUP --output NEW_PRIVATE_INSTALLATION
+```
+
+Backup uses SQLite's consistent snapshot, private captures, access keys,
+configuration and checksummed inventory. Explicitly configured local backend
+credential directories are copied with strict ownership/no-symlink checks;
+otherwise the manifest labels that account's backend credentials
+`external-not-included`. Back up a remote backend with its own operator tools.
+Restore validates hashes, reconstructs private paths and preserves unknown
+reservations without replaying old inference. It does not start a backend or
+log in to an account. Protect backups as credentials and transcripts; this
+implementation does not claim encrypted storage or a hidden decryption key.
+
+See [attachment acceptance](docs/attachment-acceptance.md) for tested guarantees
+and the remaining authenticated-backend integration boundaries.

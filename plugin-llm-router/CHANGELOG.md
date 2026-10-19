@@ -2,6 +2,8 @@
 
 ## 0.10.0 — Unreleased
 
-- Add an optional host LLM router with workspace-scoped access, durable usage and
-  private body captures, explicit CLIProxyAPI OAuth backend integration, and an
-  OpenCode adapter that keeps provider credentials outside workspaces.
+- Provide optional shared LLM access with stable project/principal accounting,
+  atomic local allowances, durable uncertainty, private faithful exchange capture
+  and retention/export, account health, operator cancellation and backup/restore.
+  The OpenCode adapter keeps upstream credentials outside workspaces; the pinned
+  CLIProxyAPI backend retains account login and refresh ownership.

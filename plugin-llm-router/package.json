@@ -8,15 +8,33 @@
   "main": "./dist/index.js",
   "types": "./src/index.ts",
   "exports": {
-    ".": { "types": "./src/index.ts", "import": "./dist/index.js" },
-    "./opencode": { "types": "./src/opencode.ts", "import": "./dist/opencode.js" }
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./opencode": {
+      "types": "./src/opencode.ts",
+      "import": "./dist/opencode.js",
+      "default": "./dist/opencode.js"
+    }
   },
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit",
     "build": "node ../core/scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs"
   },
-  "engines": { "node": "^24.0.0 || ^26.0.0" },
-  "peerDependencies": { "@slop-lab/dim-core": "0.10.0" },
-  "devDependencies": { "@slop-lab/dim-core": "workspace:0.10.0", "@types/node": "24.13.3", "typescript": "5.8.3" },
-  "publishConfig": { "access": "public" }
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "peerDependencies": {
+    "@slop-lab/dim-core": "0.10.0"
+  },
+  "devDependencies": {
+    "@slop-lab/dim-core": "workspace:0.10.0",
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
