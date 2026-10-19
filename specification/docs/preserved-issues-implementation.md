@@ -37,8 +37,8 @@ not establish actual KVM, account authentication, or deployed service behavior.
 | #47 | .dim 수정 시 workspace 재시작 등의 동작을 간단히 테스트할 방법 추가 | `plugin-workspace-check` creates only a new disposable workspace, checks checkout/home/nested Docker through restart/recreate and discards even after failure/cancellation with fresh UUID-fenced cleanup. Four behavioral tests passed. |
 | #48 | self workspace restart 등의 api를 통해 workspace만 재시작하는 게 아니라 에이전트 세션도 이어서 진행할 수 있어야 함 | Generic saved session and independent service registry live in persistent home. Agent-tools owns Codex `exec resume --last` and OpenCode `run --continue`; actual generic restart/recreate resume passed. Provider login is explicit. |
 | #49 | rootlesskit 아래의 좀비 containerd-shim 프로세스 누수 | Base image uses its own rootful nested dockerd under tini rather than the leaking rootlesskit topology. Actual repeated nested container execution left no rootlesskit/containerd-shim zombies; discard removed all owned resources. |
-| #50 | opencode web 헬퍼 스크립트 cors origin 변경 | Agent-tools runs `opencode serve`; separate pinned static web client uses the explicit GitHub Pages CORS origin. Actual upstream static build and Chromium no-implicit-backend/Add-server checks passed. Public gh-pages publication has not been performed. |
-| #51 | 호스트 llm api router 플러그인 추가 | `plugin-llm-router` owns stable application projects, multiple/rotated principals, UUID grants, host keys, atomic allowances and estimated-token reservations, durable uncertainty, pause/cancel/audited resolution, private capture/export/retention, account health, credential-aware backup/restore and the OpenCode adapter. 32 real HTTP/SQLite/compiled-CLI checks passed, including SIGKILL recovery without replay. See its [attachment acceptance matrix](../../plugin-llm-router/docs/attachment-acceptance.md). Actual operator OAuth/refresh, provider inference and dedicated-account selection require authenticated backend verification. Unsupported strict token/currency ceilings and provider continuation are explicitly rejected. |
+| #50 | opencode web 헬퍼 스크립트 cors origin 변경 | Agent-tools runs `opencode serve`; separate pinned static web client uses the explicit GitHub Pages CORS origin. Actual upstream static build and Chromium no-implicit-backend/Add-server checks passed. Main/development Actions deployments preserve versioned URLs; the development deployment and public-site Chromium acceptance passed. |
+| #51 | 호스트 llm api router 플러그인 추가 | `plugin-llm-router` owns stable application projects, multiple/rotated principals, UUID grants, host keys, atomic allowances and estimated-token reservations, durable uncertainty, pause/cancel/audited resolution, private capture/export/retention, account health, credential-aware backup/restore and the OpenCode adapter. 35 real HTTP/SQLite/compiled-CLI checks passed, including SIGKILL recovery without replay. See its [attachment acceptance matrix](../../plugin-llm-router/docs/attachment-acceptance.md). A dedicated CLIProxyAPI account completed operator-approved device OAuth, real Codex inference, OMO tool follow-up and public Pages UI chat through the installed workspace router. Forced credential refresh and switching between multiple real account partitions remain unverified. Unsupported strict token/currency ceilings and provider continuation are explicitly rejected. |
 | #52 | external-urls AI 에이전트가 사용하기 좋게 문서화 | External-urls package ships an agent-facing skill and concrete expose/URLs/approval instructions; plugin build includes the skills directory; installing the package does not automatically register a skill in every agent. |
 | #53 | persist VM 플러그인 및 웹 ip-KVM 추가 | `plugin-vm` owns persistent auxiliary VMs, workspace UUID-scoped grants and SPICE browser console, with host credentials outside guests. Actual KVM/Docker, browser SPICE display and keyboard input, helper rejection boundaries, reboot limits and scoped discard passed. Persistent boot services resumed the registered service/session exactly once. |
 | #54 | 터널 플러그인 추가 | `plugin-tunnels` owns durable TCP/UDP routes, scoped grants, guest service attachment and separate authenticated operator UI. Seven real socket/process/HTTP tests and actual Chromium add/remove/revoke flow passed. |
@@ -47,9 +47,10 @@ not establish actual KVM, account authentication, or deployed service behavior.
 
 ## Verification record
 
-The production source checkpoint is `f4d40475`. Later documentation-only commits
-retain that production source. Verification uses disposable resources rather
-than replacing the installed DIM services or changing the stopped Gitea data.
+The structural-refactor production source checkpoint is `f4d40475`; the record
+below describes that checkpoint. Its verification used disposable resources
+without replacing the installed DIM services or changing the stopped Gitea data.
+The subsequent installed-router and Pages acceptance is recorded separately below.
 
 - Pinned Node 24.19.0 and 26.5.0 source checks both pass strict JS/TS checks,
   production builds, 1,268 central behavioral tests, 96 CLI tests and 150
@@ -74,7 +75,22 @@ than replacing the installed DIM services or changing the stopped Gitea data.
 - Separate actual KVM/Incus and container/KVM CI checks cover the evidence in
   the table above; source tests alone are not used to claim those results.
 
-The LLM attachment's live OAuth/refresh/provider-inference/account-selection
-checks need an authenticated backend. The separate OpenCode static site has
-been built and exercised locally in Chromium, but has not been published to
-GitHub Pages. These external checks are not represented as completed deployment.
+## Installed router and public Pages acceptance
+
+The follow-up production checkpoint `a644825d` was installed locally using the
+matching source installer selected by mise. Agent-tools and LLM-router are
+optional plugins; the old managed controller is disabled, while existing
+control-plane services and stopped Gitea data remain intact.
+
+Development's Pages deployment succeeded in Actions run `39190026587` and serves
+[pinned OpenCode 1.18.31](https://slop-lab.github.io/dev-infra-manager/opencode-web/).
+Actual Chromium interaction connected the workspace server, selected `/workspace`,
+opened a session and sent a prompt through the composer. The visible assistant
+reply was `DIM_PAGES_ROUTER_OK`, with no model override or browser errors.
+
+The user completed a separate device OAuth login for CLIProxyAPI 8.0.33. Real
+installed OpenCode/OMO helpers used the reviewed `gpt-6-luna` route for file-read
+tool execution and follow-up. Host Codex credentials were not reused. See the
+plugin's [live acceptance record](../../plugin-llm-router/docs/attachment-acceptance.md)
+for lifecycle and accounting evidence. Forced refresh and multiple real account
+partitions are not claimed by this single-account verification.

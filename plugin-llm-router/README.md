@@ -37,7 +37,10 @@ CLIProxyAPI's tagged host-side login flags are `-config /absolute/config.yaml
 -codex-login` and `-codex-device-login`. Keep its `oauth.auth-dir` private and
 persistent. Reauthorization concerns the relevant backend account only. Backend
 configuration, OAuth access and real provider inference remain operator-managed.
-No live ChatGPT account was used in repository verification.
+A separate operator-approved live check completed device login and real Codex
+inference through OpenCode inside a Sysbox workspace. Automated source tests
+continue to use isolated fake backends. Forced token refresh and multiple real
+account switching are separate checks; see [attachment acceptance](docs/attachment-acceptance.md).
 
 Primary references reviewed for this integration:
 

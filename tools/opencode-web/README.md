@@ -17,6 +17,11 @@ to configure it. HTTPS Pages requires an HTTPS/WSS backend; an HTTP-only
 remote server will be blocked by browser mixed-content rules. CORS must allow
 `https://slop-lab.github.io`, the origin without repository/version paths.
 
+For a local client, `dim forward WORKSPACE 4096:4096` provides
+`http://127.0.0.1:4096`. Chromium's local-network permission allowed this loopback
+connection in the deployed Pages acceptance check; grant that permission when
+prompted. A remote HTTP address still needs an approved HTTPS endpoint.
+
 ## Publish with GitHub Actions
 
 [OpenCode Web Pages](../../.github/workflows/opencode-pages.yml) builds and deploys

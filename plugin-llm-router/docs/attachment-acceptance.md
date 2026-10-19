@@ -4,7 +4,10 @@ The preserved issue attachment specifies logical responsibilities rather than
 mandatory transports. This plugin implements one HTTP binding and a small
 operator CLI; it does not own application agents, conversations, Langfuse or
 provider refresh. The backend is a separately operated pinned CLIProxyAPI
-partition. No live provider account or OAuth secret was accessed by these tests.
+partition. Automated tests use isolated fake providers. A separate operator-approved live
+check on 2026-10-19 used a dedicated CLIProxyAPI account partition, device OAuth
+login and real `gpt-6-luna` inference through the installed OpenCode workspace
+helper; upstream credentials stayed on the host.
 
 | Criterion | Implemented proof / explicit boundary |
 | --- | --- |
@@ -36,3 +39,36 @@ captured output/usage remains recorded. Account health does not make hidden
 billable inference. Raw observations, operator corrections and unknowns remain
 distinct. Calendar budgets use UTC and admission booking; physical uncertainty
 can survive any period boundary.
+
+
+## Live workspace verification
+
+On 2026-10-19, the exact source checkpoint `a644825d` was prepared and installed
+through `just prepare-local` and `just install-local`, with only the optional
+agent-tools and LLM-router workspace integrations enabled. The user completed a
+separate CLIProxyAPI 8.0.33 device login; the existing host Codex credential store
+was not reused. A private user service runs the loopback-only backend, and a
+separate private-address user service runs the DIM router.
+
+An unqualified `dim tools run ... opencode run` performed an actual file-read
+tool call and completed its follow-up using the returned tool output. All three
+requests (including small-model work) used the reviewed `gpt-6-luna` route,
+`store:false`, full history and no provider continuation ID. Captures completed,
+usage settled and physical occupancy returned to zero. The effective server
+main/small models and loaded OMO agents/categories selected that same route.
+After emitting OMO 4.19.4’s canonical `models` chains, repeated helper launches
+also completed a real OMO file-read and tool-output follow-up. The deployed
+Pages client connected to that server and completed project selection, a new
+session and a real composer submission with the expected assistant response;
+no model override or API-based prompt injection was used.
+
+Actual workspace restart and container recreation both preserved the scoped
+workspace identity, web credentials and conversation history.
+`opencode run --continue` completed a real response after each. The final ledger contained
+11 completed requests for this workspace, all on the reviewed model with
+complete captures, settled accounting and zero occupied slots. Plain npm cache
+verification and `flock` remained usable after recreation.
+
+This establishes this account/model/workspace path; it does not establish
+forced credential refresh, entitlement to every listed model or switching
+between multiple real account partitions.

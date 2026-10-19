@@ -31,7 +31,9 @@ is implied by these source changes.
 - Keep LLM routing/account governance, Incus VM workspaces and SPICE consoles,
   durable TCP/UDP tunnels, mirrors, agent tools and disposable workspace checks
   in optional plugins. Fence guest capabilities by current workspace UUID;
-  credentials remain on the selected host.
+  credentials remain on the selected host. Configured workspace OpenCode/OMO
+  helpers use that router by default. Publish the versioned OpenCode static UI
+  automatically from `main` and `development` through GitHub Pages.
 - Align documentation and disposable verification with the current architecture;
   remove tests and gates that enforce retired internal contracts. Preserve the
   exported issue backup and map its 32 open issues into the architecture plan.
