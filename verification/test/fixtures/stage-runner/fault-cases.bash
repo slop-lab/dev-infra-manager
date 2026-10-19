@@ -8,6 +8,9 @@ grep -Fq 'verification-stage-summary passed=6 failed=1 blocked=0' \
   "$work_dir/independent.out"
 ! grep -Fq 'errexit-broken=independent' "$work_dir/independent.out"
 
+grep -Fqx 'fixture-output=independent' "$work_dir/independent.out"
+! grep -Fq 'fixture-output=foundation' "$work_dir/independent.out"
+
 run_case prerequisite capability
 test "$(<"$work_dir/prerequisite.status")" -ne 0
 test "$(tr '\n' ' ' <"$work_dir/prerequisite.execution")" = \
@@ -25,6 +28,21 @@ run_case success ""
 test "$(<"$work_dir/success.status")" -eq 0
 grep -Fq 'verification-stage-summary passed=7 failed=0 blocked=0' \
   "$work_dir/success.out"
+
+! grep -Fq 'PASS ' "$work_dir/success.out"
+! grep -Fq 'fixture-output=' "$work_dir/success.out"
+for stage in foundation capability independent dependent-a dependent-b dependent-c dependent-d; do
+  grep -Fqx "[check] $stage" "$work_dir/success.out"
+  grep -Fqx "fixture-output=$stage" "$work_dir/success.logs/$stage.log"
+  test "$(stat -c %a "$work_dir/success.logs/$stage.log")" = 600
+done
+test "$(stat -c %a "$work_dir/success.logs")" = 700
+
+run_case verbose "" "" "" 1
+test "$(<"$work_dir/verbose.status")" -eq 0
+grep -Fqx 'fixture-output=foundation' "$work_dir/verbose.out"
+grep -Fqx 'PASS foundation status=0 log='"$work_dir/verbose.logs/foundation.log" \
+  "$work_dir/verbose.out"
 
 run_case cleanup "" capability
 test "$(<"$work_dir/cleanup.status")" -eq 125

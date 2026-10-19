@@ -21,6 +21,7 @@ run_case() {
     DIM_VERIFICATION_EVIDENCE_FAILURES="$evidence_failures" \
     DIM_VERIFICATION_EXECUTION_LOG="$execution" \
     DIM_VERIFICATION_LOG_ROOT="$logs" \
+    DIM_CHECK_VERBOSE="${5:-0}" \
     bash "$runner_fixture" >"$output" 2>&1 || status=$?
   printf '%s' "$status" >"$work_dir/$name.status"
 }

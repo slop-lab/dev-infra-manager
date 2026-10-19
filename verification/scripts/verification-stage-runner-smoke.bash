@@ -16,6 +16,7 @@ run_fixture_stage() {
     return 97
   fi
   printf '%s\n' "$stage" >>"${DIM_VERIFICATION_EXECUTION_LOG:?}"
+  printf 'fixture-output=%s\n' "$stage"
   case ",${DIM_VERIFICATION_CLEANUP_FAILURES:-}," in
     *,"$stage",*)
       fixture_cleanup_uncertain() {

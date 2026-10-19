@@ -166,7 +166,11 @@ verification_stage_run_one() {
   VERIFICATION_STAGE_ACTIVE_GROUP_OWNED=0
   if ((errexit_enabled != 0)); then set -e; fi
   chmod 0600 "$log_file" || evidence_status=1
-  cat "$log_file" || evidence_status=1
+  if ((status != 0 || evidence_status != 0)) || [[ "${DIM_CHECK_VERBOSE:-0}" == 1 ]]; then
+    cat "$log_file" || evidence_status=1
+  else
+    cat "$log_file" >/dev/null || evidence_status=1
+  fi
   if ((status == 0 && evidence_status != 0)); then status=1; fi
   VERIFICATION_STAGE_RESULT="$status"
 }
@@ -201,12 +205,15 @@ verification_stage_run() {
       continue
     fi
     VERIFICATION_STAGE_CURRENT_NAME="$name"
+    printf '[check] %s\n' "$name"
     verification_stage_run_one "$name"
     if ((VERIFICATION_STAGE_RESULT == 0)); then
       VERIFICATION_STAGE_STATUSES["$name"]=PASS
       ((passed += 1))
-      printf 'PASS %s status=0 log=%s/%s.log\n' \
-        "$name" "$DIM_VERIFICATION_LOG_ROOT" "$name"
+      if [[ "${DIM_CHECK_VERBOSE:-0}" == 1 ]]; then
+        printf 'PASS %s status=0 log=%s/%s.log\n' \
+          "$name" "$DIM_VERIFICATION_LOG_ROOT" "$name"
+      fi
     else
       VERIFICATION_STAGE_STATUSES["$name"]=FAIL
       ((failed += 1))
