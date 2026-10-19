@@ -82,7 +82,7 @@ export type WebFixture = {
 export async function reviewerWebFixture(options: WebFixtureOptions = {}): Promise<WebFixture> {
   const native = await installedReviewerFixture();
   const reviewId = native.reviewId;
-  const root = await mkdtemp(join(tmpdir(), "dim-reviewer-web-"));
+  const root = await mkdtemp(join(tmpdir(), "dim-web-"));
   const port = await availablePort();
   const origin = options.secureOrigin === true ? "https://reviewer.example" : `http://127.0.0.1:${port}`;
   const configPath = join(root, "reviewer-web.json");

@@ -200,9 +200,9 @@ configuration rather than copying service credentials into browser code:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
-dim-reviewer-web init "$HOME/dim-control-plane/connections/reviewer.json" \
+dim-web init "$HOME/dim-control-plane/connections/reviewer.json" \
   --project demo-root --output "$HOME/dim-reviewer.json" --port 8789
-dim-reviewer-web serve "$HOME/dim-reviewer.json"
+dim-web serve "$HOME/dim-reviewer.json"
 ```
 
 Review approval and protected-ref promotion remain separate authority roles.

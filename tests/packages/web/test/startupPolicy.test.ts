@@ -97,7 +97,7 @@ async function startNative(): Promise<ReviewFixture> {
 }
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "dim-reviewer-web-policy-"));
+  const root = await mkdtemp(join(tmpdir(), "dim-web-policy-"));
   roots.push(root);
   return root;
 }

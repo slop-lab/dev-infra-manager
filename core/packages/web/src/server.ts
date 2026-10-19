@@ -113,7 +113,7 @@ function createReviewerWebServer(config: ReviewerWebConfig, native: NativeGitCli
 }
 
 async function handleRequest(context: RequestContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
-  const url = new URL(request.url ?? "/", "http://dim-reviewer-web");
+  const url = new URL(request.url ?? "/", "http://dim-web");
   if (url.search !== "") throw new HttpResponseError(404, "not found");
   if (request.method === "GET" && await serveStaticAsset(url.pathname, response)) return;
   if (request.method === "GET" && url.pathname === "/healthz") return sendJson(response, { status: 200, body: { status: "ok" } });

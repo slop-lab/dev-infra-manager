@@ -30,8 +30,8 @@ or fragment. They open separately and retain their own service authentication.
 
 ```sh
 mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
-dim-reviewer-web init-operations /absolute/operations.json --output /absolute/web.json --port 9081
-dim-reviewer-web serve /absolute/web.json
+dim-web init-operations /absolute/operations.json --output /absolute/web.json --port 9081
+dim-web serve /absolute/web.json
 ```
 
 Save the generated browser password. Initialization creates a new private
@@ -77,7 +77,7 @@ mutate executions. There is no browser worker-token or arbitrary HTTP proxy.
 Initialize combined operations and review from generated private role files:
 
 ```sh
-dim-reviewer-web init SETUP/connections/reviewer.json --project my-project \
+dim-web init SETUP/connections/reviewer.json --project my-project \
   --operations /absolute/operations.json \
   --promoter SETUP/connections/promoter.json \
   --output /absolute/web.json --port 9081

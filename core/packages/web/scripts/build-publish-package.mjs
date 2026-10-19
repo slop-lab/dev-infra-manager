@@ -13,7 +13,7 @@ output.peerDependencies = { "@slop-lab/dim-managed": output.version };
 output.peerDependenciesMeta = { "@slop-lab/dim-managed": { optional: true } };
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
-output.bin = { "dim-reviewer-web": "cli.js" };
+output.bin = { "dim-web": "cli.js" };
 delete output.private;
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));

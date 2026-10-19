@@ -20,7 +20,7 @@
     }
   },
   "bin": {
-    "dim-reviewer-web": "./dist/cli.js"
+    "dim-web": "./dist/cli.js"
   },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",

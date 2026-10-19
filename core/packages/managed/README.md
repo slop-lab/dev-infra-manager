@@ -107,9 +107,9 @@ copying credentials from service JSON:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
-dim-reviewer-web init "$HOME/dim-control-plane/connections/reviewer.json" \
+dim-web init "$HOME/dim-control-plane/connections/reviewer.json" \
   --project example --output "$HOME/dim-reviewer.json"
-dim-reviewer-web serve "$HOME/dim-reviewer.json"
+dim-web serve "$HOME/dim-reviewer.json"
 ```
 
 The web package generates its own browser login; raw operator and service role

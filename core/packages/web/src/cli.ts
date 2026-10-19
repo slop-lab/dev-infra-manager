@@ -24,7 +24,7 @@ async function main(): Promise<void> {
     return;
   }
   if (operation !== "serve" || configPath === undefined || process.argv.length !== 4) {
-    process.stderr.write("usage: dim-reviewer-web init CONNECTION --project PROJECT --output CONFIG [--port PORT] [--operations FILE] [--promoter CONNECTION]\n       dim-reviewer-web init-operations OPERATIONS --output CONFIG [--port PORT]\n       dim-reviewer-web serve /absolute/path/to/config.json\n");
+    process.stderr.write("usage: dim-web init CONNECTION --project PROJECT --output CONFIG [--port PORT] [--operations FILE] [--promoter CONNECTION]\n       dim-web init-operations OPERATIONS --output CONFIG [--port PORT]\n       dim-web serve /absolute/path/to/config.json\n");
     process.exitCode = 2;
     return;
   }
