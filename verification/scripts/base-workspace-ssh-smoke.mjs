@@ -13,7 +13,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { connect } from "node:net";
+import { connect, createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 
 const [modeInput, directoryInput, image] = process.argv.slice(2);
@@ -68,10 +68,19 @@ async function setup() {
     source: `/tmp/dim-ssh-source-${id}`, repository };
   await save(state);
   try {
+    const probe = createServer();
+    await new Promise((resolve) => probe.listen(0, "127.0.0.1", () => resolve(undefined)));
+    const address = probe.address();
+    if (!address || typeof address === "string") throw new Error("expected a loopback SSH test port");
+    const port = address.port;
+    await new Promise((resolve, reject) => probe.close((error) => error ? reject(error) : resolve(undefined)));
     await run("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", path.join(directory, "key")]);
     // This is a trusted host administrator, not a workspace: only this disposable
     // SSH test host receives the host Docker socket. Runtime containers receive none.
-    await docker(["run", "--detach", "--name", state.container, "--publish", "127.0.0.1::22",
+    // The simulated remote administrator and its Docker daemon must share the
+    // host network namespace, as on an actual Linux host. Guest services bind
+    // the daemon's private bridge address. SSH itself binds loopback only.
+    await docker(["run", "--detach", "--init", "--name", state.container, "--network", "host",
       "--mount", `type=bind,source=${repository},target=/opt/dim,readonly`,
       "--mount", "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
       "alpine:3.23", "sleep", "infinity"]);
@@ -83,12 +92,11 @@ async function setup() {
     const wrapper = '#!/bin/sh\nexport DIM_STATE_ROOT=/var/lib/dim-test/state\nexport XDG_RUNTIME_DIR=/var/lib/dim-test/run\nexec node /opt/dim/core/packages/cli/dist/cli.js "$@"\n';
     await writeFile(path.join(directory, "dim"), wrapper, { mode: 0o755 });
     await docker(["cp", path.join(directory, "dim"), `${state.container}:/usr/local/bin/dim`]);
-    const config = "Port 22\nListenAddress 0.0.0.0\nHostKey /etc/ssh/ssh_host_ed25519_key\nPermitRootLogin prohibit-password\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\nAuthorizedKeysFile /root/.ssh/authorized_keys\nPrintMotd no\nLogLevel VERBOSE\n";
+    const config = `Port ${port}\nListenAddress 127.0.0.1\nHostKey /etc/ssh/ssh_host_ed25519_key\nPermitRootLogin prohibit-password\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\nAuthorizedKeysFile /root/.ssh/authorized_keys\nPrintMotd no\nLogLevel VERBOSE\n`;
     await writeFile(path.join(directory, "sshd_config"), config);
     await docker(["cp", path.join(directory, "sshd_config"), `${state.container}:/etc/ssh/sshd_config`]);
     await docker(["exec", state.container, "chown", "root:root", "/etc/ssh/sshd_config", "/usr/local/bin/dim"]);
     await docker(["exec", "--detach", state.container, "/usr/sbin/sshd", "-D", "-E", "/tmp/sshd.log"]);
-    const port = (await docker(["port", state.container, "22/tcp"])).stdout.toString().trim().split(":").at(-1);
     const hostKey = (await docker(["exec", state.container, "cat", "/etc/ssh/ssh_host_ed25519_key.pub"])).stdout.toString().trim();
     await writeFile(path.join(directory, "known_hosts"), `[127.0.0.1]:${port} ${hostKey}\n`);
     await writeFile(path.join(directory, "ssh_config"), `Host dim-smoke-host\n  HostName 127.0.0.1\n  Port ${port}\n  User root\n  IdentityFile ${directory}/key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  UserKnownHostsFile ${directory}/known_hosts\n  LogLevel ERROR\n  BatchMode yes\n  ConnectTimeout 2\n`);
@@ -153,9 +161,14 @@ async function verify(state) {
     assert.equal(streamed.stdout.toString().trim(), "remote:stdin-preserved");
     console.log("real SSH host selection, remote-only source and exec stdin/exit: passed");
     await cli(["exec", state.name, "--", "sh", "-c", 'printf preserved > local.txt; printf home-preserved > /home/dim/remote-smoke.txt']);
+    const guestSsh = await prepareGuestSsh(state, env, cli);
+    await verifyGuestSsh(guestSsh, env);
     await cli(["stop", state.name, "--json"]);
     await cli(["start", state.name, "--json"]);
+    await verifyGuestSsh(guestSsh, env);
     await cli(["recreate", state.name, "--json"]);
+    await verifyGuestSsh(guestSsh, env);
+    console.log("public-key guest SSH through dim connect ProxyCommand before/after restart and recreate: passed");
     assert.equal((await cli(["exec", state.name, "--", "cat", "local.txt"])).stdout.toString(), "preserved");
     assert.equal((await cli(["exec", state.name, "--", "cat", "/home/dim/remote-smoke.txt"])).stdout.toString(), "home-preserved");
     const prefix = `dim-workspace-${createHash("sha256").update(record.id).digest("hex").slice(0, 24)}`;
@@ -165,7 +178,8 @@ async function verify(state) {
     const mounts = array(runtime.Mounts);
     assert.equal(hostConfig.Runtime, "sysbox-runc");
     assert.equal(hostConfig.Privileged, false);
-    assert.equal(mounts.length, 3);
+    assert.equal(mounts.length, 4);
+    assert.equal(hostConfig.OomScoreAdj, 500);
     assert.ok(mounts.every((mount) => object(mount).Type === "volume"));
     await assert.rejects(access(path.join(client, "state")));
     console.log("remote lifecycle, persistent data and absence of host mounts in workspace: passed");
@@ -173,6 +187,31 @@ async function verify(state) {
     assert.deepEqual(parseJson((await cli(["ls", "--json"])).stdout.toString()), []);
     console.log("remote discard: passed");
   } finally { await cleanup(state); }
+}
+
+/** @param {string} value */
+function shellArgument(value) { return `'${value.replaceAll("'", "'\\''")}'`; }
+
+/** @param {State} state @param {NodeJS.ProcessEnv} env @param {Cli} cli */
+async function prepareGuestSsh(state, env, cli) {
+  const identity = path.join(directory, "guest-key"), knownHosts = path.join(directory, "guest-known-hosts"), config = path.join(directory, "guest-ssh-config");
+  await run("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", identity]);
+  await cli(["exec", state.name, "--", "dim-workspace-ssh", "setup"], { input: await readFile(`${identity}.pub`) });
+  const key = (await cli(["exec", state.name, "--", "dim-workspace-ssh", "host-key"])).stdout.toString().trim();
+  assert.match(key, /^ssh-ed25519 [A-Za-z0-9+/]+={0,3}(?: .*)?$/);
+  const alias = `dim-guest-${state.workspaceId}`;
+  await writeFile(knownHosts, `${alias} ${key}\n`, { mode: 0o600 });
+  const proxy = [process.execPath, path.join(repository, "core/packages/cli/dist/cli.js"), "--host", "smoke", "connect", state.name, "2222"].map(shellArgument).join(" ");
+  await writeFile(config, `Host dim-smoke-guest\n  HostName ${state.name}\n  Port 2222\n  User dim\n  IdentityFile ${identity}\n  IdentitiesOnly yes\n  HostKeyAlias ${alias}\n  StrictHostKeyChecking yes\n  UserKnownHostsFile ${knownHosts}\n  ProxyCommand ${proxy}\n  BatchMode yes\n  ConnectTimeout 5\n  LogLevel ERROR\n`, { mode: 0o600 });
+  return config;
+}
+
+/** @param {string} config @param {NodeJS.ProcessEnv} env */
+async function verifyGuestSsh(config, env) {
+  // The client key stays outside both the host and workspace; only its public
+  // counterpart is installed. Strict host-key checks also prove identity persists.
+  const result = await run("/usr/bin/ssh", ["-F", config, "dim-smoke-guest", "cd /workspace && id -un && pwd && cat remote.txt"], { env, timeout: 30_000 });
+  assert.equal(result.stdout.toString(), "dim\n/workspace\nremote-only checkout\n", result.stderr);
 }
 
 /** @param {State} state @param {NodeJS.ProcessEnv} env @param {Cli} cli @param {string} prefix */
@@ -269,10 +308,10 @@ async function cleanup(state) {
     const prefix = `dim-workspace-${createHash("sha256").update(state.workspaceId).digest("hex").slice(0, 24)}`;
     await docker(["rm", "--force", prefix], { allowFailure: true });
     await docker(["network", "rm", prefix], { allowFailure: true });
-    for (const role of ["home", "checkout", "docker"]) await docker(["volume", "rm", `${prefix}-${role}`], { allowFailure: true });
+    for (const role of ["home", "checkout", "docker", "tmp"]) await docker(["volume", "rm", `${prefix}-${role}`], { allowFailure: true });
     assert.notEqual((await docker(["container", "inspect", prefix], { allowFailure: true })).code, 0, "workspace container survived cleanup");
     assert.notEqual((await docker(["network", "inspect", prefix], { allowFailure: true })).code, 0, "workspace network survived cleanup");
-    for (const role of ["home", "checkout", "docker"]) {
+    for (const role of ["home", "checkout", "docker", "tmp"]) {
       assert.notEqual((await docker(["volume", "inspect", `${prefix}-${role}`], { allowFailure: true })).code, 0, `${role} volume survived cleanup`);
     }
   }
