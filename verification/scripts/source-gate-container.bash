@@ -78,6 +78,7 @@ check_output_run container-start docker run --detach --init --name "$container" 
   --label "org.dim.resource=source-gate" \
   --security-opt no-new-privileges \
   "$image_id"
+printf '[check] container: %s\n' "$container"
 
 check_output_run source-copy bash -o pipefail -c 'bash "$1" "$2" | docker container cp - "$3:/workspace"' \
   _ "$repository_root/verification/source-gate/archive.bash" "$repository_root" "$container"

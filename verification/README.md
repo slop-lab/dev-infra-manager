@@ -15,8 +15,10 @@ Failures print the command's exit status, log path and last 160 lines; the
 complete output remains in the file. Container logs are copied back before the
 owned container is removed, including on failure. `DIM_CHECK_LOG_DIR=/path`
 selects a different log parent. `DIM_CHECK_VERBOSE=1` also replays successful
-stage output and enables the test runners' full reports. For a live detail view,
-use `tail -f` on the active stage log in the printed directory.
+stage output and enables the test runners' full reports. Outer-stage logs can
+be tailed on the host immediately. Inner logs remain in the printed container
+and `/tmp/dim-source-checks` directory until export; use `docker exec` with that
+container name to inspect them while checks are running.
 
 Direct Vitest commands omit passing test names and successful-test console
 output by default, while retaining failure diagnostics and final counts. The
