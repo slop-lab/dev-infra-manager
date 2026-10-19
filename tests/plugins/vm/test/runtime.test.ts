@@ -49,6 +49,11 @@ describe("Incus VM workspace runtime", () => {
     expect(runner.running).toBe(false);
     expect(runner.calls).toContainEqual(["stop", `dim-${id}`, "--force"]);
   });
+  it("rejects live guest allocation changes before Incus can partially apply unsupported memory hotplug", async () => {
+    const { runner, machines } = fixture(); await machines.create(workspace()); await machines.start(workspace());
+    await expect(machines.updateAllocation(workspace(), { cpuCount: 8, memory: "16GiB" })).rejects.toThrow("stop the VM");
+    expect(runner.calls.some((call) => call[0] === "config")).toBe(false);
+  });
   it("uses one exec path for streams and does not wrap arbitrary commands in a shell", async () => {
     const { runner, machines } = fixture(); await machines.create(workspace()); await machines.start(workspace());
     const runtime = new IncusWorkspaceRuntime(machines);

@@ -95,8 +95,10 @@ dim stop dev
 dim start dev
 dim recreate dev
 dim resources dev --cpus 1.5 --memory 10g --pids 2048
-# Guest allocation is an independent optional-provider operation:
+# Guest allocation is independent and requires a stopped VM:
+dim stop dev
 dim vm allocation workspace dev --cpus 4 --memory 8GiB
+dim start dev
 ```
 
 The ordinary lifecycle, Git source acquisition, remote host selection and

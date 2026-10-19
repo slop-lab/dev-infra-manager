@@ -82,7 +82,8 @@ export class IncusMachines {
     await this.budget.release?.(this.name(record));
   }
   async updateAllocation(record: VmIdentity, changes: { cpuCount?: number; memory?: string }): Promise<{ cpuCount: number; memory: string }> {
-    await this.require(record);
+    const actual = await this.require(record);
+    if (actual.running && (changes.cpuCount !== undefined || changes.memory !== undefined)) throw new UserError("stop the VM before changing guest CPU or memory allocation; host ceilings can change while running");
     const instance = object(await this.query(`/1.0/instances/${this.name(record)}`)), current = object(instance.config);
     const cpuCount = changes.cpuCount ?? Number(current["limits.cpu"]), memory = changes.memory ?? current["limits.memory"];
     // Allocation belongs to Incus, independently from core host resource ceilings.
