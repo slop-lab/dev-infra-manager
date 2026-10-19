@@ -660,7 +660,7 @@ describe("@slop-lab/dim-installer", () => {
         { name: "@slop-lab/dim-contracts-external-url", file: "contract.tgz", version, requires: {} },
         { name: "@slop-lab/dim-native-git", file: "native-git.tgz", version, requires: { "@slop-lab/dim-contracts-external-url": version } },
         { name: "@slop-lab/dim-managed", file: "managed.tgz", version, requires: { "@slop-lab/dim-core": version, "@slop-lab/dim-native-git": version } },
-        { name: "@slop-lab/dim-plugin-host-mirrors", file: "mirrors.tgz", version, requires: { "@slop-lab/dim-managed": version } },
+        { name: "@slop-lab/dim-plugin-host-mirrors", file: "mirrors.tgz", version, requires: { "@slop-lab/dim-core": version } },
         { name: "@slop-lab/dim-installer", file: "installer.tgz", version, requires: {} }
       ];
       await Promise.all(entries.map(({ file }) => writeFile(join(root, file), "fixture archive")));
@@ -689,11 +689,10 @@ describe("@slop-lab/dim-installer", () => {
       expect(selected.packageSpecifiers).not.toContain(join(root, "installer.tgz"));
     });
 
-    it("resolves an enabled plugin's required component peers from the bundle", async () => {
+    it("installs a base workspace plugin without optional managed components", async () => {
       const { root } = await bundleFixture();
       expect((await readLocalPackageBundle(root, ["@slop-lab/dim-plugin-host-mirrors"])).packageNames).toEqual([
-        "@slop-lab/dim-core", "@slop-lab/dim-cli", "@slop-lab/dim-contracts-external-url",
-        "@slop-lab/dim-native-git", "@slop-lab/dim-managed", "@slop-lab/dim-plugin-host-mirrors"
+        "@slop-lab/dim-core", "@slop-lab/dim-cli", "@slop-lab/dim-plugin-host-mirrors"
       ]);
     });
 

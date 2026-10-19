@@ -175,7 +175,7 @@ test("native selectors and legacy state collisions fail closed before mutation",
   }
   assert.equal(optionBearing.status, 1, optionBearing.stderr);
   assert.match(optionBearing.stderr, /unknown option '--repos'/);
-  assert.equal(repository.status, 1, repository.stderr);
+  assert.equal(repository.status, 2, repository.stderr);
   assert.equal(await readFile(projectPath, "utf8"), collision);
   assert.deepEqual(await readFile(databasePath), databaseBefore);
   assert.equal(await remoteHead(fixture), remoteBefore);
