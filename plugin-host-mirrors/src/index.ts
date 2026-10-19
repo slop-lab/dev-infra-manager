@@ -14,7 +14,7 @@ export const plugin = {
 export default plugin;
 
 export const hostPlugin: WorkspaceHostPlugin = {
-  name: "@slop-lab/dim-plugin-host-mirrors",
+  name: "host-mirrors",
   commands: [{ name: "mirrors", description: "Reconcile optional host Docker and APT caches" }],
   async run(args, context) {
     if (args.length !== 2 || args[1] !== "ensure") throw new Error("usage: dim mirrors ensure");
