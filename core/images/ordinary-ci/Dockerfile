@@ -6,9 +6,14 @@ COPY core/images/ordinary-ci/package.json core/images/ordinary-ci/package-lock.j
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 
-COPY core/packages/core/dist ./node_modules/@slop-lab/dim-core
 COPY plugin-control-plane-native-git/dist ./node_modules/@slop-lab/dim-plugin-control-plane-native-git
-COPY core/packages/managed/dist/ci ./ci
+COPY core/packages/managed/dist/ci/config.js \
+  core/packages/managed/dist/ci/execution.js \
+  core/packages/managed/dist/ci/query.js \
+  core/packages/managed/dist/ci/service.js \
+  core/packages/managed/dist/ci/source.js \
+  core/packages/managed/dist/ci/state.js \
+  core/packages/managed/dist/ci/store.js ./ci/
 COPY core/packages/managed/dist/nativeGitAdmissionHttpClient.js \
   core/packages/managed/dist/nativeOrdinaryServiceCli.js \
   core/packages/managed/dist/nativeOrdinaryServiceReadiness.js ./

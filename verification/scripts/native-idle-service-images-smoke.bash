@@ -68,6 +68,13 @@ for container in "$native_container" "$ci_container"; do
     sleep 1
   done
   if [[ "$ready" != true ]]; then docker logs "$container" >&2; exit 1; fi
+  docker exec "$container" node --input-type=module -e '
+    import assert from "node:assert/strict";
+    import { existsSync } from "node:fs";
+    for (const name of ["dim-core", "dim-cli", "dim-managed"]) {
+      assert.equal(existsSync(`/usr/local/lib/dim/node_modules/@slop-lab/${name}`), false);
+    }
+  '
 done
 ci_port="$(docker port "$ci_container" 8080/tcp)"
 node --input-type=module - "$work_dir" "http://$ci_port" <<'JS'

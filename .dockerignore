@@ -9,10 +9,12 @@ core/images/*
 !core/images/ordinary-ci/**
 !core/packages/
 core/packages/*
-!core/packages/core/
-core/packages/core/*
-!core/packages/core/dist/
-!core/packages/core/dist/**
+!core/packages/control-plane/
+core/packages/control-plane/*
+!core/packages/control-plane/dist/
+core/packages/control-plane/dist/*
+!core/packages/control-plane/dist/*.js
+!core/packages/control-plane/dist/package.json
 !core/packages/managed/
 core/packages/managed/*
 !core/packages/managed/dist/
