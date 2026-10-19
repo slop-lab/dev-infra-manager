@@ -8,9 +8,9 @@ KVM, this package, its WebSocket dependency or graphical console assets.
 The trusted host needs Incus, its guest-agent-capable reviewed VM image, an
 existing private Incus project, a storage pool, a managed IPv4 bridge and a
 writable cgroup-v2 delegation with CPU, memory and PID controllers enabled. The
-VM guest image must provide UID/GID 1000 `dim`, `/home/dim`, Git, Node.js and
+VM guest image must provide UID/GID 1000 `dim`, `/home/dim`, Git, Node.js 24 or 26 and
 Docker, util-linux `runuser` and a boot service for Docker. Saved agent sessions
-resume through guest systemd; workspace SSH additionally needs OpenSSH and
+resume through DIM-owned persistent guest systemd units, including guest-initiated reboots; workspace SSH additionally needs OpenSSH and
 passwordless sudo inside the guest. Install Docker **inside the guest**. Do not expose the Incus socket,
 host Docker socket, host filesystem or host operator credentials to it.
 No host KVM device is injected. Nested virtualization is not required by the
@@ -168,6 +168,17 @@ host quota enforcement, measured demand-paging/free-page return, and a real
 browser SPICE handshake. A fake command runner does not establish these
 hardware/runtime properties. See the recorded physical test evidence before
 calling a host/image supported.
+
+The development acceptance run used Incus 6.0, Ubuntu 24.04 guests, Node.js 26,
+KVM and a private disposable Incus host. It exercised normal-user sudo-helper
+admission, stdin/exit status, nested Docker, retained home/checkout/Docker data,
+stop/start/recreate and a browser SPICE display. Four busy guest vCPUs under a
+one-host-CPU ceiling consumed 4.15 CPU seconds over a four-second workload with
+41 throttled periods. Touching and releasing 512 MiB returned 282.7 MB to the
+host without swap. Guest-initiated reboot changed the QEMU PID while retaining
+CPU/memory/task limits, OOM preference 500, data, and exactly one resumed
+registered service and saved session. These measurements establish that tested
+host/image combination; repeat the checks for a different image or host.
 
 Backend facts: [Incus VM creation](https://linuxcontainers.org/incus/docs/main/howto/instances_create/),
 [resource options](https://linuxcontainers.org/incus/docs/main/reference/instance_options/),
