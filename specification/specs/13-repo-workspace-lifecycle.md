@@ -5,7 +5,10 @@ committed source identity, image, resource budget, Git author, timestamps,
 initialization result and lifecycle phase. The current record schema is 10.
 The exact parser validates the complete record before resource access. Managed
 Project registration has separate state; its workspaces use this same record
-and lifecycle with a host-side source attachment.
+and lifecycle with a host-side source attachment. An acquired multi-checkout
+layout records independent source identities, immediate-child checkout paths
+and a selected working directory. Its top-level source identifies the
+configuration snapshot, which need not be seeded into the guest.
 
 Creation serializes mutation, acquires a committed source snapshot, records
 creation intent, creates owned runtime resources, starts the agent and private

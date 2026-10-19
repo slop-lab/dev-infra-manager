@@ -2,7 +2,7 @@
 export { UserError, MissingRecordError } from "./errors.js";
 export { ProcessRunner } from "./runner.js";
 export type { RunOptions, CommandRunner, StreamingCommandRunner } from "./types.js";
-export type { WorkspaceRecord, WorkspaceView, WorkspaceSource, WorkspaceResources, AcquiredWorkspaceSource } from "./workspace/models.js";
+export type { WorkspaceRecord, WorkspaceView, WorkspaceSource, WorkspaceResources, AcquiredWorkspaceSource, WorkspaceCheckout } from "./workspace/models.js";
 export { WorkspaceStore, parseWorkspaceRecord, validateResources } from "./workspace/store.js";
 export { WorkspaceService } from "./workspace/service.js";
 export type { CreateWorkspaceInput, AcquireSource, WorkspaceRuntime, WorkspaceConnectOptions, WorkspaceExecOptions } from "./workspace/service.js";

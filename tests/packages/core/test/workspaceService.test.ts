@@ -140,3 +140,22 @@ describe("workspace application lifecycle", () => {
     expect((await f.service.show("dev")).phase).toBe("running");
   });
 });
+
+
+it("persists independent checkout identities and rejects ambiguous or escaping layouts", async () => {
+  const f = await fixture();
+  const base = await f.service.create(create);
+  const publicSource = { url: "dim://app/public", ref: "refs/heads/main", commit: "b".repeat(40) };
+  const privateSource = { url: "dim://app/private", ref: "refs/heads/main", commit: "c".repeat(64) };
+  const source = { ...privateSource, checkouts: [{ directory: "public", source: publicSource }], workingDirectory: "public" };
+  const record = { ...base, source };
+  await f.store.write(record);
+  expect((await f.store.read("dev")).source).toEqual(source);
+  for (const checkouts of [
+    [{ directory: "../private", source: publicSource }],
+    [{ directory: "public", source: publicSource }, { directory: "public", source: privateSource }],
+    [{ directory: "public/nested", source: publicSource }], []
+  ]) expect(() => parseWorkspaceRecord({ ...record, source: { ...source, checkouts } })).toThrow();
+  expect(() => parseWorkspaceRecord({ ...record, source: { ...source, workingDirectory: "private" } })).toThrow();
+  expect(() => parseWorkspaceRecord({ ...record, source: { ...source, checkouts: [{ directory: "public", source: { ...publicSource, commit: "invalid" } }] } })).toThrow();
+});

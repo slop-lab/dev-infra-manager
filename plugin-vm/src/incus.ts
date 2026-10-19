@@ -5,7 +5,7 @@ import { UserError, type CommandRunner, type StreamingCommandRunner, type RunOpt
 import { fingerprint, object, uuid, parseVmHostConfig, type VmHostConfig } from "./config.js";
 import type { VmBudget } from "./budget.js";
 
-export interface VmIdentity { id: string; image: string; initialized: boolean; resources: WorkspaceResources }
+export interface VmIdentity { source?: { workingDirectory?: string; checkouts?: readonly { directory: string }[] }; id: string; image: string; initialized: boolean; resources: WorkspaceResources }
 export interface VmInspection { running: boolean; pid: number }
 
 /** Incus owns the durable root disk and machine definition; DIM owns the UUID labels and admission. */
@@ -107,7 +107,7 @@ export class IncusMachines {
     if (command.length === 0 || command.some((argument) => argument.includes("\0"))) throw new UserError("provide a VM command");
     await this.enforce(record);
     return this.runner.runStreaming("incus", this.args(["exec", this.name(record),
-      "--cwd", "/workspace", "--env", "HOME=/home/dim", "--env", "TMPDIR=/mnt/dim-tmp", "--env", "DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp",
+      "--cwd", `/workspace${record.source?.workingDirectory ? `/${record.source.workingDirectory}` : ""}`, "--env", "HOME=/home/dim", "--env", "TMPDIR=/mnt/dim-tmp", "--env", "DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp",
       "--mode", options.terminal ? "interactive" : "non-interactive", "--", "runuser", "--user", "dim", "--preserve-environment", "--", ...command]), options);
   }
   async waitForAgent(record: VmIdentity, timeoutMilliseconds = 120_000): Promise<void> {
@@ -148,9 +148,11 @@ export class IncusMachines {
       await this.checked(["file", "push", "--recursive", ...entries.slice(index, index + 64).map((entry) => path.join(directory, entry)), `${this.name(record)}/workspace/`]);
     }
     await this.rootExec(record, ["chown", "-R", "1000:1000", "/workspace"]);
-    const result = await this.exec(record, ["git", "config", "--local", "user.name", git.name]);
-    if (result !== 0) throw new UserError("could not configure VM checkout Git name");
-    if (await this.exec(record, ["git", "config", "--local", "user.email", git.email]) !== 0) throw new UserError("could not configure VM checkout Git email");
+    for (const directory of record.source?.checkouts?.map((checkout) => checkout.directory) ?? ["."]) {
+      const result = await this.exec(record, ["git", "-C", `/workspace/${directory}`, "config", "--local", "user.name", git.name]);
+      if (result !== 0) throw new UserError("could not configure VM checkout Git name");
+      if (await this.exec(record, ["git", "-C", `/workspace/${directory}`, "config", "--local", "user.email", git.email]) !== 0) throw new UserError("could not configure VM checkout Git email");
+    }
   }
   async hostGateway(record: VmIdentity): Promise<string> {
     await this.require(record);

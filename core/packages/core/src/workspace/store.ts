@@ -3,7 +3,7 @@ import path from "node:path";
 import { MissingRecordError, UserError } from "../errors.js";
 import { atomicWrite, validateLifecycleName } from "../lifecycleRecord.js";
 import { acquireLifecycleLock } from "../lifecycleLock.js";
-import type { WorkspaceRecord, WorkspaceResources } from "./models.js";
+import type { AcquiredWorkspaceSource, WorkspaceRecord, WorkspaceResources } from "./models.js";
 
 export function workspaceName(value: string): string {
   return validateLifecycleName(value, "workspace");
@@ -29,14 +29,12 @@ export function parseWorkspaceRecord(value: unknown): WorkspaceRecord {
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(text(record.id))
     || !/^[a-z][a-z0-9-]{0,31}$/.test(text(record.runtime)) || typeof record.initialized !== "boolean"
     || !["creating", "running", "stopped", "error", "discarding"].includes(text(record.phase))
-    || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(text(source.commit))
-    || Object.keys(source).sort().join() !== "commit,ref,url"
     || Object.keys(resources).sort().join() !== "cpuCount,memory,pidsLimit"
     || Object.keys(git).sort().join() !== "email,name"
     || !Number.isFinite(Date.parse(text(record.createdAt))) || !Number.isFinite(Date.parse(text(record.updatedAt)))) throw invalid();
   return {
     schemaVersion: 10, id: text(record.id), name: workspaceName(text(record.name)),
-    source: { url: text(source.url), ref: text(source.ref), commit: text(source.commit) },
+    source: parseAcquiredSource(source),
     runtime: text(record.runtime), image: text(record.image), initialized: record.initialized,
     resources: validateResources({ cpuCount: text(resources.cpuCount), memory: text(resources.memory), pidsLimit: text(resources.pidsLimit) }),
     git: { name: text(git.name), email: text(git.email) },
@@ -87,3 +85,27 @@ export class WorkspaceStore {
 function text(value: unknown): string { if (typeof value !== "string" || value.length === 0 || value.includes("\0")) throw invalid(); return value; }
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== "object" || Array.isArray(value)) throw invalid(); return value as Record<string, unknown>; }
 function invalid(): UserError { return new UserError("unsupported workspace state; expected a current standalone workspace record"); }
+
+/** Layout paths are immediate children: no traversal, overlapping checkout, or hidden host path. */
+export function parseAcquiredSource(value: unknown): AcquiredWorkspaceSource {
+  const source = object(value);
+  if (Object.keys(source).some((key) => !["url", "ref", "commit", "checkouts", "workingDirectory"].includes(key))
+    || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(text(source.commit))) throw invalid();
+  const identity = { url: text(source.url), ref: text(source.ref), commit: text(source.commit) };
+  if (source.checkouts === undefined && source.workingDirectory === undefined) return identity;
+  if (!Array.isArray(source.checkouts) || source.checkouts.length === 0 || source.checkouts.length > 64) throw invalid();
+  const directories = new Set<string>();
+  const checkouts = source.checkouts.map((entry: unknown) => {
+    const checkout = object(entry);
+    const directory = text(checkout.directory);
+    if (Object.keys(checkout).sort().join() !== "directory,source"
+      || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(directory) || directories.has(directory)) throw invalid();
+    directories.add(directory);
+    const nested = object(checkout.source);
+    if (Object.keys(nested).sort().join() !== "commit,ref,url") throw invalid();
+    return { directory, source: parseAcquiredSource(nested) };
+  });
+  const workingDirectory = text(source.workingDirectory);
+  if (!directories.has(workingDirectory)) throw invalid();
+  return { ...identity, checkouts, workingDirectory };
+}

@@ -164,9 +164,11 @@ export class ContainerWorkspaceRuntime {
     }
     await this.checked(["exec", "--user", "root", container.id,
       "chown", "-R", "--no-dereference", "dim:dim", "/workspace"]);
-    for (const [key, value] of [["user.name", record.git.name], ["user.email", record.git.email]] as const) {
-      const result = await this.run(record, ["git", "config", "--local", key, value]);
-      if (result.exitCode !== 0) throw new UserError(`cannot configure workspace Git identity: ${result.stderr.trim()}`);
+    for (const directory of record.source.checkouts?.map((checkout) => checkout.directory) ?? ["."]) {
+      for (const [key, value] of [["user.name", record.git.name], ["user.email", record.git.email]] as const) {
+        const result = await this.run(record, ["git", "-C", `/workspace/${directory}`, "config", "--local", key, value]);
+        if (result.exitCode !== 0) throw new UserError(`cannot configure workspace Git identity: ${result.stderr.trim()}`);
+      }
     }
   }
 
@@ -222,12 +224,12 @@ export class ContainerWorkspaceRuntime {
 
   async run(record: WorkspaceRecord, command: string[], options: RunOptions = {}): Promise<CommandResult> {
     const container = await this.requireRunning(record);
-    return this.runner.run("docker", this.execArguments(container.id, command, options), options);
+    return this.runner.run("docker", this.execArguments(record, container.id, command, options), options);
   }
 
   async exec(record: WorkspaceRecord, command: string[], options: RunOptions = {}): Promise<number> {
     const container = await this.requireRunning(record);
-    return this.runner.runStreaming("docker", this.execArguments(container.id, command, options), options);
+    return this.runner.runStreaming("docker", this.execArguments(record, container.id, command, options), options);
   }
 
   async connect(record: WorkspaceRecord, port: number, options: WorkspaceConnectOptions = {}): Promise<number> {
@@ -236,7 +238,7 @@ export class ContainerWorkspaceRuntime {
     const token = randomUUID();
     let exitCode: number | undefined;
     try {
-      exitCode = await this.runner.runStreaming("docker", this.execArguments(container.id, [
+      exitCode = await this.runner.runStreaming("docker", this.execArguments(record, container.id, [
         "node", "--input-type=commonjs", "-e", workspacePortBridge, String(port), workspacePortBridgeMarker, token
       ], options), options);
       return exitCode;
@@ -254,9 +256,9 @@ export class ContainerWorkspaceRuntime {
     }
   }
 
-  private execArguments(container: string, command: string[], options: RunOptions): string[] {
+  private execArguments(record: WorkspaceRecord, container: string, command: string[], options: RunOptions): string[] {
     if (command.length === 0) throw new UserError("workspace exec requires a command");
-    return ["exec", "--user", "dim", "--workdir", "/workspace",
+    return ["exec", "--user", "dim", "--workdir", `/workspace${record.source.workingDirectory ? `/${record.source.workingDirectory}` : ""}`,
       ...(options.stdin || options.terminal ? ["--interactive"] : []),
       ...(options.terminal ? ["--tty"] : []), container, ...command];
   }

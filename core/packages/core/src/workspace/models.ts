@@ -4,10 +4,18 @@ export interface WorkspaceSource {
   ref?: string;
 }
 
+export interface WorkspaceCheckout {
+  directory: string;
+  source: { url: string; ref: string; commit: string };
+}
+
 export interface AcquiredWorkspaceSource {
   url: string;
   ref: string;
   commit: string;
+  /** Optional multi-checkout layout. Top-level identity is the configuration source. */
+  checkouts?: readonly WorkspaceCheckout[];
+  workingDirectory?: string;
 }
 
 export interface WorkspaceResources {
