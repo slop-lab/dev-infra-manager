@@ -24,18 +24,15 @@ build-packages:
 
 # Run the complete source gate in its pinned, isolated container.
 check-source:
-    bash verification/scripts/source-gate-container.bash
+    @bash verification/scripts/source-gate-container.bash
 
 # Run the isolated source gate explicitly.
 check-source-container:
-    bash verification/scripts/source-gate-container.bash
+    @bash verification/scripts/source-gate-container.bash
 
 # Run the complete source gate directly in an already pinned native environment.
 check-source-native:
-    bash verification/scripts/source-gate-preflight.bash
-    just typecheck
-    just build-packages
-    just test
+    @bash verification/scripts/check-source-native.bash
 
 # Prepare matched package and image candidates from one reviewed monorepo commit.
 prepare-local:

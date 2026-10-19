@@ -37,6 +37,8 @@ is implied by these source changes.
 - Align documentation and disposable verification with the current architecture;
   remove tests and gates that enforce retired internal contracts. Preserve the
   exported issue backup and map its 32 open issues into the architecture plan.
+  Local and CI source checks show concise failure reports and retain private
+  per-stage logs for diagnosis.
 
 ## [0.8.0] - 2026-08-19
 

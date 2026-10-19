@@ -16,7 +16,7 @@ test ! -e .gitcredentials
 test ! -e .local
 
 if (( $# == 0 )); then
-  just check-source-native
-  exec pnpm --dir verification test:qemu-service
+  export DIM_CHECK_LOG_DIR=/tmp/dim-source-checks
+  exec bash verification/scripts/check-source-native.bash --ci
 fi
 exec "$@"

@@ -42,8 +42,9 @@ provider-specific tools; do not assume that `origin` is GitHub.
 
 ## Work tracking and repository ownership
 
-- Record DIM-managed Gitea issues only in the Project `root` repository. Pull
-  requests may reference the root issue in their body.
+- Track current issues and pull requests in the canonical GitHub repository.
+  Preserved Gitea issue numbers identify historical backup records; they do not
+  select a live forge or an issue destination.
 - This root repository is the canonical monorepo. Production package source is
   under `core/` and `plugin-*/`; centralized package and plugin tests are under
   `tests/`; cross-component checks are under `verification/`; and Project-level

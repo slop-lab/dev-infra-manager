@@ -9,6 +9,9 @@ case "$node_major" in
 esac
 container="dim-source-gate-$(printf '%s' "$$-$(date +%s%N)" | sha256sum | cut -c1-12)"
 verification_id="$container"
+source "$repository_root/verification/scripts/lib/check-output.bash"
+check_output_init "${DIM_CHECK_LOG_DIR:-$repository_root/.local/checks}"
+collect_logs=0
 
 command -v docker >/dev/null 2>&1 || {
   printf 'Docker is required for the isolated source gate.\n' >&2
@@ -33,6 +36,13 @@ remove_owned_container() {
     printf 'preserving source-gate container with foreign or malformed ownership: %s\n' "$container" >&2
     return 1
   fi
+  local evidence_status=0
+  if (( collect_logs )) && ! docker container cp "$id:/tmp/dim-source-checks" "$CHECK_OUTPUT_ROOT/container" >"$CHECK_OUTPUT_ROOT/log-export.log" 2>&1; then
+    printf '[check] could not export container logs: %s/log-export.log\n' "$CHECK_OUTPUT_ROOT" >&2
+    evidence_status=1
+  elif (( collect_logs )); then
+    printf '[check] container logs: %s/container\n' "$CHECK_OUTPUT_ROOT"
+  fi
   removed="$(docker container rm --force "$id" 2>&1)" || {
     printf 'failed to remove owned source-gate container %s: %s\n' "$id" "$removed" >&2
     return 1
@@ -41,11 +51,13 @@ remove_owned_container() {
     printf 'owned source-gate container removal returned unexpected identity: %s\n' "$removed" >&2
     return 1
   }
+  return "$evidence_status"
 }
 
 cleanup() {
   local status=$?
   trap - EXIT
+  check_output_stop
   rm -f -- "$iid_file"
   if ! remove_owned_container; then
     (( status != 0 )) || status=1
@@ -54,32 +66,34 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker build --target "source-node-$node_major" --iidfile "$iid_file" "$repository_root/verification/source-gate"
+check_output_run image-build docker build --target "source-node-$node_major" --iidfile "$iid_file" "$repository_root/verification/source-gate"
 image_id="$(tr -d '\r\n' <"$iid_file")"
 [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || {
   printf 'source-gate build returned malformed image ID: %s\n' "$image_id" >&2
   exit 1
 }
 printf 'source-gate Node.js lane: %s; image ID: %s\n' "$node_major" "$image_id"
-docker run --detach --init --name "$container" \
+check_output_run container-start docker run --detach --init --name "$container" \
   --label "org.dim.verification=$verification_id" \
   --label "org.dim.resource=source-gate" \
   --security-opt no-new-privileges \
-  "$image_id" >/dev/null
+  "$image_id"
 
-bash "$repository_root/verification/source-gate/archive.bash" "$repository_root" \
-  | docker container cp - "$container:/workspace"
-
-docker exec "$container" chmod --recursive a+rX /workspace
-docker exec "$container" git init --quiet /workspace
-docker exec "$container" git config --global user.name dim-source-gate
-docker exec "$container" git config --global user.email source-gate@invalid
-docker exec "$container" git -C /workspace add --all
-docker exec "$container" git -C /workspace commit --quiet --message source-gate-snapshot
-docker exec "$container" pnpm install --frozen-lockfile
+check_output_run source-copy bash -o pipefail -c 'bash "$1" "$2" | docker container cp - "$3:/workspace"' \
+  _ "$repository_root/verification/source-gate/archive.bash" "$repository_root" "$container"
+check_output_run source-initialize docker exec "$container" bash -e -c '
+  chmod --recursive a+rX /workspace
+  git init --quiet /workspace
+  git config --global user.name dim-source-gate
+  git config --global user.email source-gate@invalid
+  git -C /workspace add --all
+  git -C /workspace commit --quiet --message source-gate-snapshot
+'
+check_output_run dependencies docker exec "$container" pnpm install --frozen-lockfile
 
 if (( $# == 0 )); then
+  collect_logs=1
   docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" "$container" /usr/local/bin/dim-source-gate-run
 else
-  docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" "$container" /usr/local/bin/dim-source-gate-run "$@"
+  check_output_run command docker exec --env "DIM_SOURCE_NODE_MAJOR=$node_major" "$container" /usr/local/bin/dim-source-gate-run "$@"
 fi

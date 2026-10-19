@@ -1,5 +1,31 @@
 # Verification profiles
 
+## Source checks and logs
+
+`just check-source` runs the same complete gate as GitHub CI in a disposable,
+pinned Node 24 container: type checks, builds, tests, privileged service
+fixtures, package shapes and the production dependency audit. Select the other
+supported lane with `DIM_SOURCE_NODE_MAJOR=26 just check-source`.
+`just check-source-native` runs type checks, builds and ordinary tests directly
+with the installed supported toolchain; it does not run privileged fixtures.
+
+The terminal shows the current stage and a heartbeat every 30 seconds. Passing
+command output stays in private per-stage logs under `.local/checks/run.*`.
+Failures print the command's exit status, log path and last 160 lines; the
+complete output remains in the file. Container logs are copied back before the
+owned container is removed, including on failure. `DIM_CHECK_LOG_DIR=/path`
+selects a different log parent. `DIM_CHECK_VERBOSE=1` also replays successful
+stage output and enables the test runners' full reports. For a live detail view,
+use `tail -f` on the active stage log in the printed directory.
+
+Direct Vitest commands omit passing test names and successful-test console
+output by default, while retaining failure diagnostics and final counts. The
+CLI’s Node reporter omits passing rows but preserves stdout/stderr that Node
+cannot reliably attribute to a test result.
+GitHub uploads per-lane source-check logs even on failure, separately from the
+exact-source evidence. No installed DIM service or provider credential is needed
+for this source gate.
+
 `pnpm --dir verification test` runs cross-package checks on an ordinary developer
 host. It packages existing matched `dist` outputs when testing installation; it
 does not rebuild shared packages. Run `just build-packages` first.

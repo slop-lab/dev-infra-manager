@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -110,6 +110,22 @@ describe("source gate container behavior", () => {
     }
   });
 
+  it("exports failed gate logs before removing the owned container", async () => {
+    const fixture = await fakeDockerFixture(false);
+    try {
+      const result = runWrapper(fixture, "24", [], { DIM_FAKE_GATE_FAILURE: "1" });
+      expect(result.status).toBe(23);
+      expect(result.stderr).toContain("intentional gate failure");
+      const log = await readFile(fixture.log, "utf8");
+      const exportAt = log.indexOf(`${containerId}:/tmp/dim-source-checks`);
+      const removeAt = log.indexOf(`container\trm\t--force\t${containerId}`);
+      expect(exportAt).toBeGreaterThan(-1);
+      expect(removeAt).toBeGreaterThan(exportAt);
+      const [run] = await readdir(resolve(fixture.root, "checks"));
+      expect(await readFile(resolve(fixture.root, "checks", run!, "container/failure.log"), "utf8")).toContain("failed-stage-detail");
+    } finally { await rm(fixture.root, { recursive: true, force: true }); }
+  });
+
   it("preserves a foreign replacement even when inspect output has trailing newlines", async () => {
     // Given
     const fixture = await fakeDockerFixture(true);
@@ -156,10 +172,19 @@ case "$command" in
     exit 1
     ;;
   run) printf '${containerId}\\n' ;;
-  exec) exit 0 ;;
+  exec)
+    if [[ "\${DIM_FAKE_GATE_FAILURE:-}" == 1 && " $* " == *" /usr/local/bin/dim-source-gate-run "* ]]; then
+      printf 'intentional gate failure\\n' >&2
+      exit 23
+    fi
+    exit 0 ;;
+
   container)
     case "$1" in
-      cp) cat >/dev/null ;;
+      cp)
+        if [[ "$2" == - ]]; then cat >/dev/null
+        else mkdir -p "$3"; printf 'failed-stage-detail\\n' >"$3/failure.log"; fi
+        ;;
       inspect)
         owner="${foreign ? "foreign" : "${@: -1}"}"
         printf '${containerId}|%s|source-gate\\n\\n' "$owner"
@@ -173,14 +198,16 @@ esac
   return { root, tools, log, foreign };
 }
 
-function runWrapper(fixture: FakeDockerFixture, major = "24") {
-  return spawnSync("bash", [wrapperPath, "true"], {
+function runWrapper(fixture: FakeDockerFixture, major = "24", args: string[] = ["true"], extraEnv: Record<string, string> = {}) {
+  return spawnSync("bash", [wrapperPath, ...args], {
     encoding: "utf8",
     env: {
       ...process.env,
       DIM_SOURCE_NODE_MAJOR: major,
       PATH: `${fixture.tools}:${process.env.PATH ?? "/usr/bin:/bin"}`,
-      DIM_FAKE_DOCKER_LOG: fixture.log
+      DIM_FAKE_DOCKER_LOG: fixture.log,
+      DIM_CHECK_LOG_DIR: resolve(fixture.root, "checks"),
+      ...extraEnv
     }
   });
 }

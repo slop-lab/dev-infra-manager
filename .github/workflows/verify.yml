@@ -31,9 +31,16 @@ jobs:
       - name: Verify source and package shapes in the pinned disposable lane
         env:
           DIM_SOURCE_NODE_MAJOR: ${{ matrix.node }}
-        run: >-
-          bash verification/scripts/source-gate-container.bash
-          bash -lc 'just check-source-native && pnpm --dir verification test:qemu-service && just verify package-packs && pnpm audit --prod'
+          DIM_CHECK_LOG_DIR: ${{ runner.temp }}/dim-source-checks
+        run: bash verification/scripts/source-gate-container.bash
+      - name: Upload source check logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: source-check-logs-node-${{ matrix.node }}-${{ github.sha }}
+          path: ${{ runner.temp }}/dim-source-checks
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload exact-tree evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2 (Node 20)

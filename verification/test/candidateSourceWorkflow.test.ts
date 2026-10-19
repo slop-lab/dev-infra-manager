@@ -55,7 +55,7 @@ function expectEvidenceArtifact(job: WorkflowJob, expectedCommit: string): void 
 }
 
 describe("candidate source workflows", () => {
-  it("binds source verification to the event commit and uploads only its exact-tree evidence", async () => {
+  it("binds source verification to the event commit and retains source evidence and check logs", async () => {
     // Given
     const { source, workflow } = await readWorkflow("verify");
     const sourceJob = workflow.jobs.source;
@@ -66,8 +66,12 @@ describe("candidate source workflows", () => {
     expectExactCheckout(sourceJob, "${{ github.sha }}");
     expectEvidenceArtifact(sourceJob, "${{ github.sha }}");
     expect(sourceJob.steps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ run: expect.stringContaining("just verify package-packs") }),
+      expect.objectContaining({ run: "bash verification/scripts/source-gate-container.bash" }),
     ]));
+    expect(sourceJob.steps).toContainEqual(expect.objectContaining({
+      if: "always()",
+      with: expect.objectContaining({ path: "${{ runner.temp }}/dim-source-checks", "retention-days": 7 }),
+    }));
     expect(source).not.toMatch(/\.monorepo-candidate|monorepo-candidate|sources\.tsv|overlay|gitea/i);
   });
 
