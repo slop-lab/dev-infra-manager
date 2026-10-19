@@ -49,6 +49,7 @@ docker info >/dev/null 2>&1 || { cat /var/log/dockerd.log >&2; exit 1; }
 if [[ -f /home/dim/.config/dim/ssh-enabled ]]; then
   /usr/local/bin/dim-workspace-ssh start
 fi
+sudo -H -E -u dim env HOME=/home/dim /usr/local/bin/dim-workspace service resume
 sudo -H -E -u dim env HOME=/home/dim sh -c \
   'mkdir -p "$HOME/.local/state/dim"; exec /usr/local/bin/dim-workspace session resume >>"$HOME/.local/state/dim/session.log" 2>&1' &
 

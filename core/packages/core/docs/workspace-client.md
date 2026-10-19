@@ -90,3 +90,19 @@ The enabled service restarts with its workspace and preserves its key through
 recreation. A discarded/replaced workspace gets a different key and requires
 an explicit known-host update. `dim-workspace-ssh stop` stops the current guest
 listener; remove `~/.config/dim/ssh-enabled` as well to disable future starts.
+
+Register background services separately from the coding agent session:
+
+```sh
+dim-workspace service register --name tunnel -- node /home/dim/tunnel.mjs
+dim-workspace service resume
+dim-workspace service list
+dim-workspace service remove tunnel
+```
+
+Registered commands keep exact arguments and working directories in private
+`~/.local/state/dim/services/NAME.json` files. Boot resumes them as the workspace
+user. Repeating `resume` does not start another copy of a running service;
+identities include the kernel boot identifier and process start time. Services
+run in the foreground under detached supervisors, with logs beside registrations.
+Removing a service stops its supervised process.

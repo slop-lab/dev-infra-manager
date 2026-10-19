@@ -11,6 +11,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
     if (operation === "setup") {
       const tool = rest[0] ?? "opencode";
       if (!["opencode", "codex"].includes(tool) || rest.length > 1) throw new UserError("setup accepts opencode or codex");
+      const record = await context.service.show(workspace);
       const directory = '"$HOME/.local/share/dim-agent-tools"';
       const payload = ["set -euo pipefail", `mkdir -p ${directory}`, `chmod 0700 ${directory}`];
       for (const file of ["tool-setup.bash", "agent.mjs", "opencode-server.bash"]) {
@@ -19,7 +20,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
       }
       payload.push(`exec bash ${directory}/tool-setup.bash ${tool}`);
       process.exitCode = await context.service.exec(workspace, ["bash", "-s"], { stdin: Readable.from([payload.join("\n")]),
-        stdout: process.stdout, stderr: process.stderr, signal: context.signal });
+        stdout: process.stdout, stderr: process.stderr, signal: context.signal, workspaceId: record.id });
       return;
     }
     const command = operation === "server" ? ["dim-opencode-server", ...rest]

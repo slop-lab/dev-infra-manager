@@ -70,3 +70,25 @@ it("local session registration preserves exact argv and cwd and resumes after an
     await expect(readFile(path.join(home, ".local/state/dim/session.json"))).rejects.toMatchObject({ code: "ENOENT" });
   } finally { await rm(home, { recursive: true, force: true }); }
 });
+
+it("registered services resume independently of sessions without duplicate processes", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "dim-guest-services-"));
+  const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env: { ...process.env, HOME: home } });
+  try {
+    const marker = path.join(home, "starts");
+    await run("session", "register", "--", "coding-agent", "resume");
+    await run("service", "register", "--name", "tunnel", "--", process.execPath, "-e", `require('node:fs').appendFileSync(process.argv[1],process.pid+'\\n');setInterval(()=>{},1000)`, marker);
+    await Promise.all([run("service", "resume"), run("service", "resume")]);
+    await expect.poll(async () => (await readFile(marker, "utf8")).trim().split("\n").length).toBe(1);
+    await run("service", "resume");
+    expect(JSON.parse((await run("service", "list")).stdout)).toEqual([{ name: "tunnel", running: true }]);
+    expect((await readFile(marker, "utf8")).trim().split("\n")).toHaveLength(1);
+    expect(JSON.parse(await readFile(path.join(home, ".local/state/dim/session.json"), "utf8")).argv).toEqual(["coding-agent", "resume"]);
+    await run("service", "remove", "tunnel");
+    expect(JSON.parse((await run("service", "list")).stdout)).toEqual([]);
+    await run("service", "register", "--name", "oneshot", "--", process.execPath, "-e", "process.exit(0)");
+    await run("service", "resume");
+    await expect.poll(async () => JSON.parse((await run("service", "list")).stdout)).toEqual([{ name: "oneshot", running: false }]);
+    await expect(run("service", "register", "--name", "../escape", "--", "true")).rejects.toThrow();
+  } finally { await run("service", "remove", "tunnel").catch(() => {}); await rm(home, { recursive: true, force: true }); }
+});
