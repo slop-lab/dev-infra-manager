@@ -1,14 +1,16 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { LifecycleOptions } from "../../../../core/packages/managed/src/lifecycleTypes.js";
+import { hostMirrorProvider } from "../../../../plugin-host-mirrors/src/index.js";
 import {
   hostMirrorInspection,
   type HostMirrorOwnership
-} from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
+} from "../../../../plugin-host-mirrors/src/hostMirrorOwnership.js";
 
 export const TEST_HOST_MIRROR_PROVIDER = {
   dockerImage: "registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33",
-  aptImage: "sameersbn/apt-cacher-ng@sha256:58e74113cfac7e593201444648c105351cbfce7538bfb36dcafdc9479b2aefcc"
+  aptImage: "sameersbn/apt-cacher-ng@sha256:58e74113cfac7e593201444648c105351cbfce7538bfb36dcafdc9479b2aefcc",
+  ensure: hostMirrorProvider.ensure
 } as const;
 
 export const TEST_HOST_MIRROR_OWNERSHIP = {

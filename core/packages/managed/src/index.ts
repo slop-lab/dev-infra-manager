@@ -1,5 +1,4 @@
 export * from "./doctor.js";
-export * from "./aptCache.js";
 export * from "./adminController.js";
 export * from "./controller.js";
 

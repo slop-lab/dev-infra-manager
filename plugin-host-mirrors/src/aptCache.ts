@@ -1,7 +1,7 @@
 import { UserError } from "@slop-lab/dim-core";
 import { requireHostMirrorProvider } from "./hostMirrorProvider.js";
-import { LifecycleState } from "./lifecycleState.js";
-import type { LifecycleOptions } from "./lifecycleTypes.js";
+import { MirrorState as LifecycleState } from "./cacheState.js";
+import type { MirrorOptions as LifecycleOptions } from "./cacheState.js";
 import { CONTROL_NETWORK } from "./registryCache.js";
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 import {

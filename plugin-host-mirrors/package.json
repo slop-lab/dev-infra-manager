@@ -32,11 +32,18 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@slop-lab/dim-managed": "0.10.0"
+    "@slop-lab/dim-managed": "0.10.0",
+    "@slop-lab/dim-core": "0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
     "typescript": "5.8.3",
-    "@slop-lab/dim-managed": "workspace:0.10.0"
+    "@slop-lab/dim-managed": "workspace:0.10.0",
+    "@slop-lab/dim-core": "workspace:0.10.0"
+  },
+  "peerDependenciesMeta": {
+    "@slop-lab/dim-managed": {
+      "optional": true
+    }
   }
 }

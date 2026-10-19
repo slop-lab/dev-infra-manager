@@ -33,7 +33,7 @@ export async function runCiWorker(path: string, signal: AbortSignal, options: { 
   }
   const lifecycle = options.lifecycle ?? lifecycleOptions();
   const routing = config.slots.some((slot) => slot.runtime === "container")
-    ? await lifecycle.hostMirrorProvider?.ensure(runner, lifecycle.stateRoot) : undefined;
+    ? await lifecycle.hostMirrorProvider?.ensure(runner) : undefined;
   const stop = new AbortController(), workerSignal = AbortSignal.any([signal, stop.signal]);
   const workers = config.slots.map((slot) => runExecutionWorker({
     directory: join(config.stateDirectory, slot.id), client: executionWorkerClient({ endpoint: config.endpoint,

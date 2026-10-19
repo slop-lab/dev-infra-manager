@@ -8,10 +8,10 @@ import {
   APT_CACHE_VOLUME,
   aptCacheContainerArgs,
   ensureAptCache
-} from "../../../../core/packages/managed/src/aptCache.js";
+} from "../../../../plugin-host-mirrors/src/aptCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { hostMirrorInspection } from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
-import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { hostMirrorInspection } from "../../../../plugin-host-mirrors/src/hostMirrorOwnership.js";
+import { MirrorState as LifecycleState } from "../../../../plugin-host-mirrors/src/cacheState.js";
 import { hostMirrorOptions, TEST_HOST_MIRROR_OWNERSHIP } from "./hostMirrorFixture.js";
 
 const APT_IMAGE = `registry.example/apt-cache@sha256:${"b".repeat(64)}`;
@@ -86,7 +86,7 @@ describe("APT cache", () => {
     const ensure = ensureAptCache(runner, options);
 
     // Then
-    await expect(ensure).rejects.toThrow(/requires one enabled host mirror provider/);
+    await expect(ensure).rejects.toThrow(/installed host plugin/);
     expect(runner.calls).toEqual([]);
   });
 

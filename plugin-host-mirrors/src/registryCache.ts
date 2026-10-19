@@ -1,7 +1,7 @@
 import { UserError } from "@slop-lab/dim-core";
 import { requireHostMirrorProvider } from "./hostMirrorProvider.js";
-import { LifecycleState } from "./lifecycleState.js";
-import type { LifecycleOptions } from "./lifecycleTypes.js";
+import { MirrorState as LifecycleState } from "./cacheState.js";
+import type { MirrorOptions as LifecycleOptions } from "./cacheState.js";
 import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 import {
   createHostMirrorOwnership,
@@ -112,27 +112,6 @@ export async function ensureRegistryCache(
   } finally {
     await release();
   }
-}
-
-export async function configureSysboxRegistryMirror(
-  runner: StreamingCommandRunner,
-  volumeName: string,
-  options: LifecycleOptions
-): Promise<void> {
-  const image = requireHostMirrorProvider(options.hostMirrorProvider).dockerImage;
-  assertCommand(await runner.run("docker", sysboxRegistryConfigArgs(volumeName, image)), "configure CI runner registry mirror");
-}
-
-export function sysboxRegistryConfigArgs(volumeName: string, image: string): string[] {
-  const config = Buffer.from(sysboxRegistryDaemonConfig()).toString("base64");
-  return [
-    "run", "--rm",
-    "--mount", `type=volume,source=${volumeName},target=/data`,
-    "--env", `DIM_REGISTRY_DAEMON_CONFIG=${config}`,
-    "--entrypoint", "sh",
-    image,
-    "-c", "printf %s \"$DIM_REGISTRY_DAEMON_CONFIG\" | base64 -d > /data/docker-daemon.json && chmod 0444 /data/docker-daemon.json"
-  ];
 }
 
 export function sysboxRegistryDaemonConfig(): string {

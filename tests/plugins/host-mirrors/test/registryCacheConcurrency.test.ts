@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ensureRegistryCache
-} from "../../../../core/packages/managed/src/registryCache.js";
+} from "../../../../plugin-host-mirrors/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { hostMirrorInspection } from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
+import { hostMirrorInspection } from "../../../../plugin-host-mirrors/src/hostMirrorOwnership.js";
 import { registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostMirrorFixture.js";
-import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { MirrorState as LifecycleState } from "../../../../plugin-host-mirrors/src/cacheState.js";
 
 const REGISTRY_CACHE_IMAGE = `registry.example/docker-cache@sha256:${"a".repeat(64)}`;
 

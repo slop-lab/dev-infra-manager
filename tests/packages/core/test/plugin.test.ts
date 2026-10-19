@@ -147,7 +147,8 @@ describe("plugin contract", () => {
     // Given
     const provider = {
       dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
-      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`
+      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`,
+      async ensure() { throw new Error("registration must not start services"); }
     };
 
     // When
@@ -166,7 +167,8 @@ describe("plugin contract", () => {
     // Given
     const immutable = {
       dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
-      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`
+      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`,
+      async ensure() { throw new Error("registration must not start services"); }
     };
 
     // When / Then
@@ -195,7 +197,8 @@ describe("plugin contract", () => {
     // Given
     const provider = {
       dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
-      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`
+      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`,
+      async ensure() { throw new Error("registration must not start services"); }
     };
 
     // When

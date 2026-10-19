@@ -1,5 +1,6 @@
 import { UserError } from "@slop-lab/dim-core";
 import type { DimPluginHost } from "./plugin.js";
+import type { StreamingCommandRunner } from "@slop-lab/dim-core";
 
 export const HOST_MIRROR_PROVIDER_EXTENSION = "dim.host-mirror-provider";
 const HOST_MIRROR_PROVIDER_NAME = "host";
@@ -8,6 +9,10 @@ const IMMUTABLE_IMAGE = /^[a-z0-9]+(?:[._/-][a-z0-9]+)*(?::[a-zA-Z0-9._-]+)?@sha
 export type HostMirrorProvider = {
   readonly dockerImage: string;
   readonly aptImage: string;
+  ensure(runner: StreamingCommandRunner): Promise<{
+    readonly network: string; readonly dockerDaemonConfig: string;
+    readonly blockedHostnames: readonly string[]; readonly aptEndpoint: string;
+  }>;
 };
 
 export function validateHostMirrorProvider(provider: object): HostMirrorProvider {
@@ -16,7 +21,8 @@ export function validateHostMirrorProvider(provider: object): HostMirrorProvider
     || !IMMUTABLE_IMAGE.test(provider.dockerImage) || !IMMUTABLE_IMAGE.test(provider.aptImage)) {
     throw new UserError("host mirror provider images must use an immutable digest");
   }
-  return { dockerImage: provider.dockerImage, aptImage: provider.aptImage };
+  if (!("ensure" in provider) || typeof provider.ensure !== "function") throw new UserError("host mirror provider must own cache service reconciliation");
+  return provider as HostMirrorProvider;
 }
 
 export function registerHostMirrorProvider(host: DimPluginHost, provider: HostMirrorProvider): void {
@@ -29,11 +35,4 @@ export function registerHostMirrorProvider(host: DimPluginHost, provider: HostMi
 
 export function resolveHostMirrorProvider(host: DimPluginHost): HostMirrorProvider | undefined {
   return host.extensionsOfKind<HostMirrorProvider>(HOST_MIRROR_PROVIDER_EXTENSION)[0];
-}
-
-export function requireHostMirrorProvider(provider: HostMirrorProvider | undefined): HostMirrorProvider {
-  if (provider === undefined) {
-    throw new UserError("workspace and CI mirror routing requires one enabled host mirror provider");
-  }
-  return provider;
 }

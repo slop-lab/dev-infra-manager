@@ -8,13 +8,12 @@ import {
   REGISTRY_CACHE_CONTAINER,
   REGISTRY_CACHE_ENDPOINT,
   REGISTRY_CACHE_VOLUME,
-  registryCacheContainerArgs,
-  sysboxRegistryConfigArgs
-} from "../../../../core/packages/managed/src/registryCache.js";
+  registryCacheContainerArgs
+} from "../../../../plugin-host-mirrors/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { hostMirrorInspection } from "../../../../core/packages/managed/src/hostMirrorOwnership.js";
+import { hostMirrorInspection } from "../../../../plugin-host-mirrors/src/hostMirrorOwnership.js";
 import { hostMirrorOptions, registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostMirrorFixture.js";
-import { LifecycleState } from "../../../../core/packages/managed/src/lifecycleState.js";
+import { MirrorState as LifecycleState } from "../../../../plugin-host-mirrors/src/cacheState.js";
 
 const REGISTRY_CACHE_IMAGE = `registry.example/docker-cache@sha256:${"a".repeat(64)}`;
 
@@ -72,7 +71,7 @@ describe("registry cache", () => {
     const reconciliation = ensureRegistryCache(runner, options);
 
     // Then
-    await expect(reconciliation).rejects.toThrow(/requires one enabled host mirror provider/);
+    await expect(reconciliation).rejects.toThrow(/installed host plugin/);
     expect(runner.calls).toEqual([]);
   });
 
@@ -226,16 +225,4 @@ describe("registry cache", () => {
     expect(calls.some((call) => call.includes("rm"))).toBe(false);
   });
 
-  it("writes the Sysbox daemon mirror into its existing runner volume", () => {
-    const args = sysboxRegistryConfigArgs("runner-data", REGISTRY_CACHE_IMAGE);
-    expect(args).toContain("type=volume,source=runner-data,target=/data");
-    const encoded = args.find((argument) => argument.startsWith("DIM_REGISTRY_DAEMON_CONFIG="));
-    expect(encoded).toBeDefined();
-    if (encoded === undefined) throw new TypeError("expected an encoded registry daemon configuration");
-    const config = JSON.parse(Buffer.from(encoded.slice(encoded.indexOf("=") + 1), "base64").toString("utf8"));
-    expect(config).toEqual({
-      "registry-mirrors": ["http://dim-registry-cache:5000"],
-      "insecure-registries": ["dim-registry-cache:5000"]
-    });
-  });
 });
