@@ -5,10 +5,10 @@
 Target: `0.10.0` internal-development candidate. The plugin remains part of the
 matched unpublished source package set.
 
-- Let a reviewed, host-installed plugin select the exact digest-pinned Docker
-  registry and APT cache images for DIM-managed workspaces and CI. Projects and
-  workspaces cannot choose host packages. The host refuses missing or conflicting
-  providers, validates cache ownership before adoption or replacement, and
-  rejects persisted workspaces that cannot reach the selected mirror network.
-  Real nested APT routing still requires verification on a host with delegated
-  container cgroups before the mirror outcome can be considered complete.
+- Automatically attach host-owned Docker/APT caches to ordinary Git workspaces
+  when the exact optional plugin is installed. Keep cache ownership and image
+  selection in the plugin, preserve internal application HTTP routing, and
+  supply read-only defaults to nested containers and shared CI. Stable private
+  relays survive pause/resume and cache replacement while workspace UUID fencing
+  closes discarded routes. Verify real nested Debian/Ubuntu cold, warm and
+  unavailable-cache behavior without changing installed services.

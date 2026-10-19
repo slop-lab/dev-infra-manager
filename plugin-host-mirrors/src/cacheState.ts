@@ -9,6 +9,7 @@ export interface MirrorRouting {
   readonly dockerDaemonConfig: string;
   readonly blockedHostnames: readonly string[];
   readonly aptEndpoint: string;
+  readonly jobFiles?: readonly { readonly target: string; readonly contents: string }[];
 }
 
 /** The optional mirror service owns cache identity and reconciliation locks. */
