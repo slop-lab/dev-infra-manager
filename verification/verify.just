@@ -116,6 +116,10 @@ workspace-runtime:
 workspace-agent image:
     cd .. && node --import ./tests/node_modules/tsx/dist/loader.mjs verification/scripts/base-workspace-agent-smoke.mts "{{image}}"
 
+# Exercise ordinary CI job images and dependency installation in a real runtime.
+ci-runtime runtime supervisor image:
+    cd .. && node --import ./tests/node_modules/tsx/dist/loader.mjs verification/scripts/native-ci-runtime-smoke.mts "{{runtime}}" "{{supervisor}}" "{{image}}"
+
 # Exercise optional workspace capabilities through the bounded base transport.
 controller-workspace-relay-smoke image:
     cd .. && node verification/scripts/controller-workspace-relay-smoke.mjs "{{image}}"

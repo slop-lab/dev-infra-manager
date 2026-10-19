@@ -19,6 +19,21 @@ CLI and actual in-guest capability for assigned resources, CPU concurrency,
 self restart/recreate and session continuation. Both create disposable resources
 and discard their own workspace/storage. They do not modify installed DIM services.
 
+CI execution has a separate live gate for both public runtime names:
+
+```bash
+pnpm --dir tests exec tsx ../verification/scripts/native-ci-runtime-smoke.mts container DIND_SUPERVISOR_IMAGE UBUNTU_IMAGE@sha256:DIGEST
+pnpm --dir tests exec tsx ../verification/scripts/native-ci-runtime-smoke.mts vm QEMU_SUPERVISOR_IMAGE UBUNTU_IMAGE@sha256:DIGEST
+```
+
+Use the reviewed Docker-in-Docker base for the container supervisor. Build the
+VM supervisor with `dim managed ci qemu-image IMAGE:TAG` or its source Dockerfile
+under `core/packages/managed/src/native-qemu-runner-assets`. The VM lane requires
+KVM. Both lanes use an ordinary Ubuntu job image, install an OS package through
+real DNS/egress, deliver read-only plugin configuration and verify workspace
+output. The VM lane also checks that job root cannot remove its PID fence.
+Image archives are extracted only inside the VM; the host never unpacks them.
+
 The QEMU service ownership and process-safety fixtures require a root-owned,
 canonical Node interpreter and root filesystem operations. Run
 `pnpm --dir verification test:qemu-service` only in a disposable root environment.

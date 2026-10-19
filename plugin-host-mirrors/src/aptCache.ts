@@ -13,7 +13,6 @@ import {
 
 export const APT_CACHE_CONTAINER = "dim-apt-cache";
 export const APT_CACHE_VOLUME = "dim-apt-cache-data";
-export const APT_CACHE_ENDPOINT = `${APT_CACHE_CONTAINER}:3142`;
 
 export async function ensureAptCache(
   runner: StreamingCommandRunner,

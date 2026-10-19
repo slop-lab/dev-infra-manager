@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   APT_CACHE_CONTAINER,
-  APT_CACHE_ENDPOINT,
   APT_CACHE_VOLUME,
   aptCacheContainerArgs,
   ensureAptCache
@@ -49,7 +48,6 @@ describe("APT cache", () => {
     const args = aptCacheContainerArgs(APT_IMAGE, TEST_HOST_MIRROR_OWNERSHIP);
 
     // Then
-    expect(APT_CACHE_ENDPOINT).toBe("dim-apt-cache:3142");
     expect(args).toEqual(expect.arrayContaining([
       "--name", APT_CACHE_CONTAINER,
       "--network-alias", APT_CACHE_CONTAINER,

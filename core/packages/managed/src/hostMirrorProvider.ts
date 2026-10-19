@@ -11,7 +11,7 @@ export type HostMirrorProvider = {
   readonly aptImage: string;
   ensure(runner: StreamingCommandRunner): Promise<{
     readonly network: string; readonly dockerDaemonConfig: string;
-    readonly blockedHostnames: readonly string[]; readonly aptEndpoint: string;
+    readonly blockedHostnames: readonly string[];
     readonly jobFiles?: readonly { readonly target: string; readonly contents: string }[];
   }>;
 };

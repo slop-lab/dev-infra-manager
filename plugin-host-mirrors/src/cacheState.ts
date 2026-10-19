@@ -8,7 +8,6 @@ export interface MirrorRouting {
   readonly network: string;
   readonly dockerDaemonConfig: string;
   readonly blockedHostnames: readonly string[];
-  readonly aptEndpoint: string;
   readonly jobFiles?: readonly { readonly target: string; readonly contents: string }[];
 }
 
