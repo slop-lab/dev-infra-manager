@@ -203,10 +203,13 @@ process.send?.({ kind: "ready", remote: remote.toString() });`;
     // Given
     let failPublication = false;
     let attempts = 0;
+    let reachedFinalAttempt: (() => void) | undefined;
+    const finalAttempt = new Promise<void>((resolve) => { reachedFinalAttempt = resolve; });
     const fixture = await nativeBundleReviewFixture("bundle-review-persistent-publication-failure", {
       beforeFinalVerification() {
         if (!failPublication) return;
         attempts += 1;
+        if (attempts === 7) reachedFinalAttempt?.();
         throw new Error("persistent proposal publication failure");
       }
     });
@@ -221,15 +224,19 @@ process.send?.({ kind: "ready", remote: remote.toString() });`;
     // Then
     expect((await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root), "rev-parse", reviewProposalRef]))
       .stdout.trim()).toBe(candidate);
+    // The retry loop's 6.6 seconds of backoff exclude seven real Git/storage
+    // attempts. Observe their completion before checking the readiness change;
+    // the integration budget includes both backoff and shared-runner I/O.
+    await finalAttempt;
     await vi.waitFor(async () => {
       const readiness = await fetch(`${fixture.service.origin}/readyz`, {
         headers: { authorization: `Bearer ${finalizeReadinessToken}` }
       });
       expect(readiness.status).toBe(503);
-    }, { timeout: 10_000, interval: 100 });
+    }, { timeout: 2_000, interval: 20 });
     expect(attempts).toBe(7);
     expect(await publishedReviewNames(fixture.root)).toHaveLength(1);
-  }, 15_000);
+  }, 30_000);
 
   it("drains an active proposal retry before releasing storage ownership", async () => {
     // Given

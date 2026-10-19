@@ -10,8 +10,15 @@ describe("native proposal reconciliation loop", () => {
   it("fails closed after the bounded retry schedule is exhausted", async () => {
     // Given
     vi.useFakeTimers();
+    vi.setSystemTime(0);
     const failure = new Error("persistent proposal store failure");
-    const reconcile = vi.fn(async () => Promise.reject(failure));
+    const started: number[] = [];
+    const reconcile = vi.fn(async () => {
+      started.push(Date.now());
+      // Retry delays do not bound the time spent in Git/storage itself.
+      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      throw failure;
+    });
     const unavailable = vi.fn();
     const loop = createNativeProposalReconciliationLoop({ reconcile, unavailable });
 
@@ -25,6 +32,8 @@ describe("native proposal reconciliation loop", () => {
     expect(reconcile).toHaveBeenCalledTimes(6);
     expect(unavailable).toHaveBeenCalledOnce();
     expect(unavailable).toHaveBeenCalledWith(failure);
+    expect(started).toEqual([0, 1_000, 2_100, 3_600, 5_600, 11_600]);
+    expect(Date.now()).toBe(12_600);
     await loop.close();
     expect(vi.getTimerCount()).toBe(0);
   });
