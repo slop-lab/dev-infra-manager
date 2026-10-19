@@ -22,7 +22,10 @@ export function parseSession(value) {
   const reviewerId = text(input?.reviewerId);
   const csrfToken = text(input?.csrfToken);
   if (input?.authenticated !== true || projectId === null || reviewerId === null || csrfToken === null) return null;
-  return { projectId, reviewerId, csrfToken };
+  const capabilities = record(input.capabilities);
+  const roles = textList(input.roles);
+  if (!capabilities || !roles || typeof capabilities.review !== "boolean" || typeof capabilities.operations !== "boolean" || typeof capabilities.promotion !== "boolean") return null;
+  return { projectId, reviewerId, csrfToken, roles, capabilities: { review: capabilities.review, operations: capabilities.operations, promotion: capabilities.promotion } };
 }
 
 /** @param {unknown} value */

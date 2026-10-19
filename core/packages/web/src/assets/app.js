@@ -6,6 +6,7 @@ import { clearReview, renderReview } from "./review-renderer.js";
 import { createOperationCoordinator } from "./operation-coordinator.js";
 import { updatePatchPosition } from "./patch-position.js";
 import { createReviewActions } from "./review-actions.js";
+import { clearOperations, showOperations } from "./operations-panel.js";
 import { reviewerElements } from "./reviewer-elements.js";
 
 const elements = reviewerElements();
@@ -40,6 +41,7 @@ async function request(path, operation, options = {}) {
 
 function showSignedOut(message = "") {
   session = null;
+  clearOperations();
   startOperation();
   retryAction = null;
   clearReview(elements);
@@ -59,11 +61,12 @@ function showWorkspace(activeSession) {
   session = activeSession;
   elements.restore.hidden = true;
   elements.loginView.hidden = true;
-  elements.workspace.hidden = false;
+  elements.workspace.hidden = !activeSession.capabilities.review;
+  showOperations(activeSession, (id) => { elements.reviewId.value = id; elements.openForm.requestSubmit(); });
   elements.sessionActions.hidden = false;
   elements.scopeProject.textContent = activeSession.projectId;
   elements.scopeReviewer.textContent = activeSession.reviewerId;
-  elements.reviewerLabel.textContent = activeSession.reviewerId;
+  elements.reviewerLabel.textContent = activeSession.reviewerId || "Operations";
   elements.alertAnnouncer.textContent = "";
   elements.password.value = "";
   elements.username.removeAttribute("aria-invalid");

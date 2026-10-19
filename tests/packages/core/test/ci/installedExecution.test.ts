@@ -83,10 +83,19 @@ it("runs grant, candidate lease and durable result through installed services; p
     const stored = JSON.parse(await readFile(join(rootRepository(native.root), "dim-execution-evidence", `${claim.id}.json`), "utf8"));
     expect(stored.logs).toBeUndefined();
     // A later grant invalidates a prior successful attempt until its own result arrives.
-    const nextGrant = await source.authorize({ ...claim, id: randomUUID(), requestId: randomUUID() });
+    const retried = await fetch(`${ciOrigin}/v1/operator/jobs/${claim.id}/retry`, { method: "POST", headers: {
+      authorization: `Basic ${Buffer.from(`${config.credentials.operator.username}:${config.credentials.operator.password}`).toString("base64")}`,
+      "content-type": "application/json", "X-Dim-Generation-Id": generationId
+    }, body: JSON.stringify({ requestId: randomUUID() }) });
+    expect(retried.status).toBe(200);
+    const nextClaim = await worker.claim(randomUUID());
+    if (!nextClaim?.grant) throw new Error("retry grant missing");
+    const nextGrant = nextClaim.grant;
+    expect(nextGrant.attempt).toBe(claim.grant.attempt + 1);
     await expect(source.publish(claim.grant, evidence)).rejects.toBeInstanceOf(StaleExecutionSourceError);
     expect((await post(promotionPath, hostPromoterAuthorization, { schemaVersion: 1 })).status).toBe(409);
-    await source.publish(nextGrant, result(nextGrant));
+    await worker.report(nextClaim, result(nextGrant));
+    await waitFor(() => ci.store.get(nextClaim.id).publication === "accepted");
     expect((await post(promotionPath, hostPromoterAuthorization, { schemaVersion: 1 })).status).toBe(201);
     expect((await runGit("/usr/bin/git", ["--git-dir", rootRepository(native.root), "rev-parse", "refs/heads/main"])).stdout.trim())
       .toBe(envelope.review.candidateCommit);

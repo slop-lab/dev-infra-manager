@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Review immutable DIM repository evidence in the configured Project scope">
-    <title>DIM Reviewer</title>
+    <title>DIM Console</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/assets/tokens.css">
     <link rel="stylesheet" href="/assets/app.css">
@@ -14,12 +14,13 @@
     <a class="skip-link" href="#main">Skip to reviewer workspace</a>
     <header class="site-header">
       <div class="header-inner">
-        <div class="identity" aria-label="DIM Reviewer">
+        <div class="identity" aria-label="DIM Console">
           <span class="wordmark">DIM</span>
           <span class="identity-divider" aria-hidden="true"></span>
-          <span>Reviewer</span>
+          <span>Development console</span>
         </div>
         <div id="session-actions" class="session-actions" hidden>
+          <nav id="view-navigation" aria-label="Workspace views" hidden><button id="show-review" class="button button-secondary" type="button" aria-pressed="true">Review evidence</button><button id="show-operations" class="button button-secondary" type="button" aria-pressed="false">Operations</button></nav>
           <span id="reviewer-label" class="badge badge-neutral"></span>
           <button id="logout-button" class="button button-secondary" type="button">Sign out</button>
         </div>
@@ -32,7 +33,7 @@
           <span class="spinner" aria-hidden="true"></span>
           <span class="busy-label">Working</span>
           <p class="eyebrow">Secure session</p>
-          <h1 id="restore-title">Opening reviewer workspace</h1>
+          <h1 id="restore-title">Opening DIM session</h1>
           <p>Checking this browser's local session.</p>
         </div>
       </section>
@@ -41,8 +42,8 @@
         <div class="auth-card">
           <div class="auth-intro">
             <p class="eyebrow">Reviewer access</p>
-            <h1 id="login-title">Evidence before authority.</h1>
-            <p>Sign in with a local reviewer account. Credentials stay on this origin and native Git credentials are never sent to the browser.</p>
+            <h1 id="login-title">Sign in to DIM</h1>
+            <p>Use your configured browser account to access development hosts, execution results and reviewed changes.</p>
           </div>
           <form id="login-form" class="panel login-form" novalidate>
             <div class="field">
@@ -64,6 +65,14 @@
         </div>
       </section>
 
+      <section id="operations-panel" class="operations-panel" aria-labelledby="operations-title" hidden>
+        <div class="section-heading"><h1 id="operations-title">Development operations</h1><button id="operations-refresh" class="button button-secondary" type="button">Refresh services</button></div>
+        <p id="operations-message" role="status"></p>
+        <div id="operations-hosts"></div>
+        <section id="operations-ci-section" hidden><h2>CI executions and capacity</h2><div id="operations-jobs"></div>
+        <pre id="operations-details" class="operations-diagnostics" aria-label="Execution diagnostics"></pre></section>
+        <section id="operations-review-section" hidden><h2>Git proposals and reviews</h2><div id="operations-reviews"></div></section>
+      </section>
       <section id="workspace" class="review-shell" aria-labelledby="workspace-title" hidden>
         <aside class="context-rail" aria-label="Review context and controls">
           <div class="rail-heading">

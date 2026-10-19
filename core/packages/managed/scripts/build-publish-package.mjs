@@ -29,6 +29,7 @@ output.exports = {
     types: "./index.d.ts",
     import: "./index.js"
   },
+  "./ci": { types: "./ci/operations.d.ts", import: "./ci/operations.js" },
   "./host": { types: "./nativeWorkspaceHost.d.ts", import: "./nativeWorkspaceHost.js" },
   "./cli": { types: "./cli/managed-cli.d.ts", import: "./cli/managed-cli.js" }
 };

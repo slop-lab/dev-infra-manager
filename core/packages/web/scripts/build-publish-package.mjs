@@ -7,8 +7,10 @@ import { publishPackageVersion } from "../../../scripts/publish-package-version.
 const outputPath = new URL("../dist/package.json", import.meta.url);
 
 if (source.private !== true) throw new Error("The source package.json must remain private");
-const output = minifyPackageJson(source, { stripPackagePathPrefix: "./dist/", includeFields: ["exports", "types", "publishConfig"] });
+const output = minifyPackageJson(source, { stripPackagePathPrefix: "./dist/", includeFields: ["exports", "types", "publishConfig", "peerDependenciesMeta"] });
 output.version = publishPackageVersion(source.version);
+output.peerDependencies = { "@slop-lab/dim-managed": output.version };
+output.peerDependenciesMeta = { "@slop-lab/dim-managed": { optional: true } };
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
 output.bin = { "dim-reviewer-web": "cli.js" };

@@ -10,7 +10,7 @@ const identitySchema = z.object({
   schemaVersion: z.literal(1), serviceId: z.literal("native-main"), role: z.literal("human-reviewer"),
   reviewerId: z.string(), generationId: z.string().regex(/^[0-9a-f]{64}$/)
 }).strict();
-type NativeConfig = ReviewerWebConfig["nativeGit"];
+type NativeConfig = NonNullable<ReviewerWebConfig["nativeGit"]>;
 type NativeRequest = { readonly method: "GET" | "POST"; readonly path: string; readonly body?: unknown };
 
 export class NativeGitClient {
@@ -21,6 +21,23 @@ export class NativeGitClient {
     const identity = identitySchema.parse(await this.request({ method: "GET", path: "/v1/human-reviewer-identity" }));
     if (identity.reviewerId !== this.config.reviewerId || identity.generationId !== this.config.generationId) throw new NativeGitClientError("native Git human reviewer identity or control-plane generation does not match connection");
     this.generationId = identity.generationId;
+    if (this.config.promoter !== undefined) {
+      const promoter = z.object({ schemaVersion: z.literal(1), serviceId: z.literal("native-main"), role: z.literal("host-promoter"), hostId: z.string(), generationId: z.string() }).strict()
+        .parse(await this.request({ method: "GET", path: "/v1/host-promoter-identity" }, this.config.promoter));
+      if (promoter.generationId !== identity.generationId || promoter.hostId !== this.config.promoter.hostId) throw new NativeGitClientError("promoter identity or generation conflicts");
+    }
+  }
+
+  async listReviews(projectId: string) {
+    return z.array(z.object({ reviewId: z.string().regex(/^[0-9a-f]{64}$/), proposalRef: z.string().max(1024), protectedRef: z.string().max(1024),
+      candidateCommit: z.string().regex(/^[0-9a-f]{40,64}$/), createdAt: z.string().datetime(), status: z.string().max(64) }).strict()).max(100)
+      .parse(await this.request({ method: "GET", path: `/v1/projects/${projectId}/repositories/root/reviews` }));
+  }
+  async promote(projectId: string, reviewId: string) {
+    if (!this.config.promoter) throw new NativeGitHttpError(403);
+    return z.object({ schemaVersion: z.literal(1), outcome: z.enum(["promoted", "already-current"]), reviewId: z.string(),
+      protectedRef: z.string(), expectedProtectedHead: z.string(), candidateCommit: z.string(), candidateTree: z.string() }).strip()
+      .parse(await this.request({ method: "POST", path: `/v1/projects/${projectId}/repositories/root/reviews/${reviewId}/promotions`, body: { schemaVersion: 1 } }, this.config.promoter));
   }
 
   async getReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
@@ -60,7 +77,7 @@ export class NativeGitClient {
     catch (cause) { throw new NativeGitClientError("native Git returned invalid review evidence", { cause }); }
   }
 
-  private async request(input: NativeRequest): Promise<unknown> {
+  private async request(input: NativeRequest, credential = { username: this.config.username, password: this.config.password }): Promise<unknown> {
     const url = new URL(input.path, this.config.baseUrl);
     const body = input.body === undefined ? undefined : Buffer.from(JSON.stringify(input.body), "utf8");
     const response = await new Promise<{ readonly status: number; readonly bytes: Buffer }>((resolve, reject) => {
@@ -68,7 +85,7 @@ export class NativeGitClient {
       const outgoing = requester(url, {
         method: input.method,
         headers: {
-          Authorization: `Basic ${Buffer.from(`${this.config.username}:${this.config.password}`).toString("base64")}`,
+          Authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`,
           Accept: "application/json",
           ...(this.generationId === undefined ? {} : { "X-Dim-Generation-Id": this.generationId }),
           ...(body === undefined ? {} : { "Content-Type": "application/json", "Content-Length": String(body.length) })

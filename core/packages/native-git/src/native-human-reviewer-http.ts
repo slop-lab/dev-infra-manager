@@ -49,6 +49,7 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
     async handle(request, response, url) {
       const identity = request.method === "GET" && url.pathname === "/v1/human-reviewer-identity"
         && url.search === "";
+      const listing = request.method === "GET" && url.search === "" ? /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/root\/reviews$/.exec(url.pathname) : null;
       const resolve = request.method === "POST" && url.search === ""
         && /^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/repositories\/root\/reviews\/resolve$/
           .test(url.pathname);
@@ -57,7 +58,7 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
       const review = request.method === "GET" && url.search === "" && match !== null && match[3] === undefined;
       const approval = request.method === "POST" && url.search === "" && match?.[3] === "/approvals";
       const revocation = request.method === "POST" && url.search === "" && match?.[3] === "/revocations";
-      if (!identity && !resolve && !review && !approval && !revocation) return false;
+      if (!identity && listing === null && !resolve && !review && !approval && !revocation) return false;
       const reviewer = input.config.humanReviewers.find((candidate) => basicAuthorized(request, candidate));
       if (reviewer === undefined) {
         const known = input.knownCredentials.some((credential) => basicAuthorized(request, credential));
@@ -72,6 +73,10 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
           reviewerId: reviewer.reviewerId,
           generationId: input.runtime.expectedGenerationId
         });
+        return true;
+      }
+      if (listing?.[1] !== undefined) {
+        await listReviewSummaries(input, reviewer, listing[1], request, response);
         return true;
       }
       if (resolve) {
@@ -310,4 +315,27 @@ function basicAuthorized(request: IncomingMessage, credential: Credential): bool
   const supplied = Buffer.from(request.headers.authorization ?? "");
   const expected = Buffer.from(`Basic ${Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")}`);
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+async function listReviewSummaries(input: HumanReviewerHttpInput, reviewer: HumanReviewer, projectId: string,
+  request: IncomingMessage, response: ServerResponse): Promise<void> {
+  await input.serialize(async () => {
+    if (request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId) return sendJson(response, 409, { error: "review generation is stale" });
+    if (!input.runtime.activated() || !exactActivationIsBound(input.runtime.state, input.runtime.expectedGenerationId, input.runtime.activationTokenDigest)) return sendJson(response, 503, { error: "human review is unavailable" });
+    let target: Awaited<ReturnType<typeof resolveAuthoritativeNativeRootTarget>>;
+    try { target = await resolveAuthoritativeNativeRootTarget(input.runtime, { projectId }); }
+    catch { return sendNotFound(response); }
+    const envelopes = (await readAuthoritativeNativeReviewEnvelopes(target.repository))
+      .filter((entry) => entry.review.projectId === projectId && entry.review.requiredReviewerIds.includes(reviewer.reviewerId))
+      .sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt)).slice(0, 100);
+    const summaries = [];
+    for (const { review } of envelopes) {
+      const staleReasons = await nativeHumanReviewStaleReasons(input.runtime, target, review);
+      const decisions = await readAuthoritativeNativeDecisions(target.repository, review.reviewId);
+      summaries.push({ reviewId: review.reviewId, proposalRef: review.proposalRef, protectedRef: review.protectedRef,
+        candidateCommit: review.candidateCommit, createdAt: review.createdAt,
+        status: nativeHumanReviewStatus(review.requiredReviewerIds, staleReasons, decisions) });
+    }
+    sendJson(response, 200, summaries);
+  });
 }

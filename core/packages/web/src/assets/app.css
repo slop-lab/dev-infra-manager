@@ -133,3 +133,10 @@
   .patch-thumb { background: Highlight; }
   .patch-line, .patch-line-add, .patch-line-del, .patch-line-hunk { background: Canvas; color: CanvasText; }
 }
+
+.operations-panel { inline-size: min(100%, var(--content-max)); margin-inline: auto; padding: var(--space-6); }
+.operations-row, .operations-card { margin-block: var(--space-3); padding: var(--space-4); border: var(--line) solid var(--color-border-subtle); border-radius: var(--space-2); }
+.operations-row .button { margin: var(--space-1); }
+.operations-row label { display: inline-block; margin: var(--space-2); }
+.operations-row input { max-inline-size: 8rem; }
+.operations-diagnostics { white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 30rem; overflow: auto; }

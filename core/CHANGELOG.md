@@ -24,9 +24,10 @@ Target: `0.10.0` internal development candidate; this is not a published release
   status and bounded logs through a dedicated query role and CLI commands;
   authorize cancellation and idempotent retries separately, retaining worker
   cleanup fences and exact Git attempt authority.
-- Connect reviewer web to the installed human-review APIs for proposal discovery,
-  diffs, approval and revocation. Generate private browser configuration from the
-  reviewer role rather than maintain a parallel review backend.
+- Provide an optional authenticated operations web UI for ordinary Git hosts,
+  bounded CI diagnostics, worker capacity, cancellation/retry, and authoritative
+  Git proposal review/promotion. Separate read, operator and reviewer roles; keep
+  credentials server-side and fence workspace actions by their current UUID.
 - Resolve optional controller/plugin operations against core workspace UUIDs.
   Check ownership and current state for each published service connection;
   discard/name reuse cannot redirect an existing grant to another workspace.

@@ -1,169 +1,164 @@
 # `@slop-lab/dim-web`
 
-`@slop-lab/dim-web` is the authenticated service for the first bounded DIM
-reviewer-web slice. It serves a same-origin reviewer page and exposes one
-configured native Git reviewer identity to one explicitly bound local reviewer
-account without returning the native Basic credential or a raw native review
-response to the browser. Other configured accounts can inspect evidence but
-cannot mutate reviewer decisions.
+Optional authenticated operations UI for local or SSH development hosts, shared
+CI, and managed Git review. Ordinary Git hosts need no control plane. CI clients
+load the optional managed package only when CI is configured. Browser accounts
+have explicit `read`, `operator`, and `reviewer` roles. Host selectors, executable
+paths, service credentials and worker leases remain on the server.
 
-The browser page signs in, resolves existing immutable review evidence from a proposal ref,
-opens an exact review ID, displays allowlisted metadata, changed paths, and
-literal patch text, approves that exact review, revokes only the configured
-reviewer's active approval, and signs out. It keeps the CSRF token in memory and
-the session cookie remains HttpOnly. The service does not expose rejection,
-administrator revocation, host administration, promotion, CI reporting,
-arbitrary native operations, or a generic proxy. Deployment integration remains
-outside this slice.
+## Ordinary Git hosts
 
-## First use
-
-Install the optional web package separately; `--with-managed` does not install
-a browser service. After `dim managed control-plane connect SETUP --endpoint ORIGIN`,
-use its private reviewer connection to generate a browser login and service configuration:
-
-```sh
-mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
-dim-reviewer-web init SETUP/connections/reviewer.json --project my-project --output ~/.config/dim/reviewer-web.json --port 9081
-dim-reviewer-web serve ~/.config/dim/reviewer-web.json
-```
-
-Save the generated browser password. Initialization verifies the live reviewer
-and generation, writes a new mode-0600 configuration without overwriting an
-existing file, and stores only a password hash for browser login. Forward client
-loopback port 9081 over SSH when running this service on a remote host. To publish
-it through HTTPS, set the private configuration's `publicOrigin` to that exact
-origin and use a trusted reverse proxy.
-
-## Security boundary
-
-The service binds only to `127.0.0.1` or `::1`. Before binding, it authenticates
-to native `GET /v1/human-reviewer-identity` and requires the configured human
-reviewer ID to match. Every review operation pins the attested generation using
-`X-Dim-Generation-Id`; a control-plane generation change fails closed until a new connection is initialized and the
-web service restarts. The configured Project limits browser
-access to its `root` repository; native Git checks that the authenticated human
-is required by each exact review's policy. Identity attestation does not grant
-Project access. Native credential failure or unavailability fails startup.
-
-The absolute startup configuration path must name a caller-owned, non-symlink,
-mode-`0600` regular file no larger than 64 KiB. Local account passwords are
-stored only as `scrypt` hashes. The native Basic username and password exist
-only in that trusted file and server memory.
-
-Password verification uses one process-global token bucket with a burst of five
-derivations and a refill of one token per second, plus a maximum of two
-concurrent derivations. It neither queues excess work nor partitions capacity
-by attacker-controlled account names. Every admitted attempt consumes one token
-without refund. A login rejected by either bound receives `429` with
-`Retry-After: 1`. Unknown accounts and known accounts with a wrong password
-both perform one full derivation and constant-time hash comparison.
-
-Successful login creates an opaque random in-memory session and invalidates
-every prior session for that account. The cookie is `HttpOnly`,
-`SameSite=Strict`, and scoped to `/`; an HTTPS `publicOrigin` also sets
-`Secure`. Sessions have independent idle and absolute expiries. Expired
-sessions are pruned before login and session creation, and the process holds at
-most 256 sessions. A valid login receives bounded `429` with `Retry-After: 1`
-when that capacity is occupied by other accounts. Restarting the process
-invalidates every session.
-
-Every unsafe request requires both an exact `Origin` equal to `publicOrigin`
-and the session's synchronizer token in `X-DIM-CSRF`. Loopback HTTP origins are
-accepted only for local development and verification; other origins must use
-HTTPS. The server follows no redirects and bounds request bodies, native
-responses, native request time, headers, and HTTP request lifetime.
-
-Approval and revocation use only the startup-attested reviewer credential.
-The required `reviewerAccountId` must match exactly one configured local
-account. Decision routes compare that identifier with the authenticated
-session before native dispatch; authorized and read-only review DTOs expose
-`canDecide: true` and `false`, respectively.
-Native Git remains the authority for required-reviewer membership, stale tuple
-denial, approval ownership, serialization, and persistence. The browser sends
-an empty action body and cannot select an approval ID. Self-revocation derives
-the configured reviewer's active approval from a fresh exact-review response,
-then native Git independently verifies ownership. Successful actions return a
-fresh allowlisted review DTO. Administrator revocation remains absent because
-the service has no separately configured and attested administrator identity.
-
-Review responses are constructed field by field. Printable `patch` and path
-strings remain untrusted JSON data. Raw `patchBytes`, raw path-byte fields,
-writer/reviewer/reporter Basic usernames, passwords, and unrecognized native
-fields are omitted. Every response is `Cache-Control: no-store` and carries a
-deny-all CSP and framing/content-type protections.
-
-Loopback HTTP between this service and native Git does not authenticate the
-native server as a network peer. The Basic credential authenticates this
-client to whichever process owns the configured loopback listener. This
-transport is therefore not a supported shared-host production boundary. Such
-a deployment requires peer-authenticated TLS or a permission-protected Unix
-socket; neither transport is implemented by this slice.
-
-## Configuration
-
-Start the service with exactly one absolute configuration path:
-
-```bash
-dim-reviewer-web serve /etc/dim/reviewer-web.json
-```
-
-Schema 1 has this shape:
+Install the optional package and create a mode-0600 operations settings file:
 
 ```json
 {
-  "schemaVersion": 1,
-  "host": "127.0.0.1",
-  "port": 9081,
-  "publicOrigin": "https://review.example.internal",
-  "reviewerAccountId": "local-reviewer",
-  "nativeGit": {
-    "baseUrl": "http://127.0.0.1:9080",
-    "username": "human-reviewer-owner",
-    "password": "replace-with-native-random-secret",
-    "projectId": "project-a",
-    "generationId": "CONTROL_PLANE_GENERATION_SHA256",
-    "reviewerId": "owner"
-  },
-  "accounts": [{
-    "username": "local-reviewer",
-    "passwordHash": "scrypt$16384$8$1$BASE64_SALT$BASE64_32_BYTE_HASH"
+  "hosts": [{
+    "id": "devbox",
+    "selector": "configured-ssh-host",
+    "executable": "/absolute/path/to/dim"
   }],
-  "session": {
-    "idleSeconds": 900,
-    "absoluteSeconds": 28800
+  "consoles": [{ "name": "Agent console", "url": "https://agents.example.internal/" }]
+}
+```
+
+`selector` names an existing DIM host configuration belonging to the service
+account. `executable` is a trusted installed public DIM CLI. It is executed with
+separate allowlisted arguments, without a shell. The browser cannot change it,
+choose an SSH address, execute arbitrary commands, or select a state directory.
+Console URLs must use HTTPS or loopback HTTP and contain no credentials, query
+or fragment. They open separately and retain their own service authentication.
+
+```sh
+mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
+dim-reviewer-web init-operations /absolute/operations.json --output /absolute/web.json --port 9081
+dim-reviewer-web serve /absolute/web.json
+```
+
+Save the generated browser password. Initialization creates a new private
+configuration and stores only its scrypt hash. Existing files are never
+replaced. The UI lists workspaces and their observed runtime status, starts,
+stops, restarts and recreates them, updates CPU/memory/PID limits, and discards
+persistent data after explicit browser confirmation. Mutations pass the selected
+workspace UUID through the public CLI's `--expect-id` guard; the host checks it
+inside its workspace lock before changing state. A reused name cannot redirect
+an action to a replacement workspace.
+
+## Shared CI and managed Git
+
+After installing the optional managed package and connecting the control plane,
+add these settings to the operations file:
+
+```json
+{
+  "hosts": [],
+  "ci": {
+    "queryConnection": "/absolute/SETUP/connections/ci-query.json",
+    "operatorConnection": "/absolute/SETUP/connections/ci-operator.json"
   }
 }
 ```
 
-The supported password-hash parameters are exactly scrypt `N=16384`, `r=8`,
-`p=1` with a 32-byte derived key. Generate salts independently for each account.
+The CI package is an optional peer; install the same exact managed package
+version alongside web when selecting this backend. The two connection files
+are separate owner-only credentials bound to the connected generation. CI can
+be offline while browser configuration is initialized. The UI shows at most 100
+recent execution summaries, one execution's bounded stdout/stderr diagnostics,
+and configured worker slot occupancy. Occupancy does not assert worker liveness.
+Cancellation fences running capacity until owned cleanup; explicit retries use
+a stable request UUID and preserve intake uniqueness. Query accounts cannot
+mutate executions. There is no browser worker-token or arbitrary HTTP proxy.
 
-## HTTP API
+Initialize combined operations and review from generated private role files:
 
-| Method | Path | Result |
-| --- | --- | --- |
-| `GET` | `/healthz` | Minimal unauthenticated process liveness only |
-| `POST` | `/v1/session` | Verify local credentials and create a session |
-| `GET` | `/v1/session` | Return the attested scope and CSRF token |
-| `DELETE` | `/v1/session` | Invalidate the current session |
-| `GET` | `/v1/projects/:project/repositories/:repository/reviews/:review` | Return a scoped review DTO |
-| `POST` | `/v1/projects/:project/repositories/root/reviews/resolve` | Find current published review evidence for a proposal ref |
-| `POST` | `/v1/projects/:project/repositories/:repository/reviews/:review/approvals` | Approve the exact review as the attested reviewer |
-| `POST` | `/v1/projects/:project/repositories/:repository/reviews/:review/revocations` | Revoke only the attested reviewer's active approval |
+```sh
+dim-reviewer-web init SETUP/connections/reviewer.json --project my-project \
+  --operations /absolute/operations.json \
+  --promoter SETUP/connections/promoter.json \
+  --output /absolute/web.json --port 9081
+```
 
-All other paths, methods, query strings, encoded path extensions, foreign
-Projects, and foreign repositories are rejected. `/healthz` contains no
-identity or dependency detail; every `/v1` operation either establishes or
-requires authenticated reviewer state.
+Both extra flags are optional. The reviewer and optional promoter identities
+are attested against the live native Git service and exact generation before
+writing configuration. The promoter must have the same endpoint and generation
+as the reviewer. Protected promotion retains native Git's human approvals,
+current job evidence, freshness and atomic protected-ref comparison.
 
-Only the session whose account ID equals `reviewerAccountId` may call the two
-decision routes. Other authenticated accounts receive `403` and receive review
-DTOs with `canDecide: false`; the browser therefore renders evidence without
-approval or revocation controls. While a decision is in flight, in-page review
-navigation and sign-out remain locked until the fresh native result is rendered.
+The browser discovers the latest 100 authoritative review envelopes, resolves
+an existing proposal, opens exact immutable evidence, displays literal patches,
+approves and self-revokes with the configured human identity. It does not invent
+reviews or CI evidence. Promotion is a distinct operator action using a distinct
+private promoter credential. A reviewer role alone cannot promote; an operator
+role alone cannot approve. Native Git checks Project ownership and required
+reviewer membership independently.
 
-Review responses expose the authoritative review identity, quality revision,
-changed paths, literal patch, and human decisions. They do not synthesize CI
-statuses. Review creation and candidate evaluation belong to the installed
-control plane; this service only resolves and reviews its published evidence.
+## Accounts and deployment
+
+The generated account has the roles needed for the selected features. Add more
+accounts by explicitly assigning roles in the private web configuration:
+
+```json
+"accounts": [
+  { "username": "observer", "passwordHash": "scrypt$16384$8$1$BASE64_SALT$BASE64_32_BYTE_HASH", "roles": ["read"] },
+  { "username": "operator", "passwordHash": "scrypt$16384$8$1$BASE64_SALT$BASE64_32_BYTE_HASH", "roles": ["read", "operator"] },
+  { "username": "reviewer", "passwordHash": "scrypt$16384$8$1$BASE64_SALT$BASE64_32_BYTE_HASH", "roles": ["read", "reviewer"] }
+]
+```
+
+Use independently generated salts (at least 16 bytes), scrypt `N=16384, r=8,
+p=1`, and a 32-byte derived key. Accounts with reviewer authority deliberately
+share the configured native reviewer identity; separate native reviewer
+identities require separately scoped service configurations.
+
+The listener binds only to loopback. Forward port 9081 over SSH or publish it
+through a trusted HTTPS reverse proxy and set `publicOrigin` to that exact
+origin in the private configuration. Service configuration, selected DIM host
+configuration, SSH keys and CI connections must belong to the service account.
+Never bind privileged host credentials into development containers.
+
+For a system service installed by an administrator, use resource bounds and a
+lower OOM victim priority than development containers, for example:
+
+```ini
+[Service]
+Type=simple
+User=dim-web
+ExecStart=/absolute/node /absolute/dim-web/cli.js serve /absolute/web.json
+Restart=on-failure
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=128
+OOMScoreAdjust=-500
+```
+
+Negative OOM adjustment requires appropriate host privileges; an unprivileged
+user service cannot be assumed to lower its score. DIM workspace and CI
+containers use positive victim priority. Configure actual paths and account
+access before installing the unit; this package does not deploy it implicitly.
+
+## Authentication boundary
+
+Startup requires an absolute owner-only mode-0600 regular configuration file,
+without symlinks or multiple hard links, at most 64 KiB. Native credential failure
+fails startup; optional host/CI failures are reported per operation.
+
+Password verification has a process-global five-token burst, one-token/second
+refill, and at most two simultaneous scrypt derivations. It does not allocate
+per-attacker account queues. Unknown users perform the same derivation work.
+Sessions are random in-memory HttpOnly SameSite=Strict cookies, Secure under
+HTTPS, bounded to 256 active sessions with independent idle/absolute expiry.
+Signing in invalidates prior sessions for that account; restart invalidates all.
+
+Every mutation checks exact Origin, synchronizer CSRF token, current session,
+and account role before upstream dispatch. Reads require an authenticated role.
+Request bodies, subprocess output/time, upstream responses and diagnostics are
+bounded. Secrets and backend errors are not reflected to the browser. Logout
+clears rendered operations and diagnostics; requests from an earlier session
+cannot populate a later session's view.
+
+The operations API lives under `/v1/operations`: `status`,
+`hosts/:configuredId/workspaces` (GET and POST allowlisted action), `ci/jobs`,
+`ci/jobs/:uuid`, `ci/jobs/:uuid/cancel`, `ci/jobs/:uuid/retry`, and `ci/workers`.
+Review APIs are scoped to `/v1/projects/:project/repositories/root/reviews`:
+collection GET, proposal `/resolve`, exact review GET, `/approvals`,
+`/revocations`, and operator-only `/promotions`. Query strings, unknown methods,
+arbitrary proxies, foreign Projects and repositories are rejected.

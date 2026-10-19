@@ -144,7 +144,6 @@ export function webConfig(input: {
     host: "127.0.0.1",
     port: input.port,
     publicOrigin: input.publicOrigin,
-    reviewerAccountId: input.reviewerAccountId ?? WEB_USERNAME,
     nativeGit: {
       baseUrl: input.nativeBaseUrl,
       username: humanReviewer.username,
@@ -155,6 +154,7 @@ export function webConfig(input: {
     },
     accounts: (input.accounts ?? [WEB_USERNAME]).map((username) => ({
       username,
+      roles: username === (input.reviewerAccountId ?? WEB_USERNAME) ? ["read", "reviewer"] : ["read"],
       passwordHash: `scrypt$16384$8$1$${salt.toString("base64")}$${hash.toString("base64")}`
     })),
     session: { idleSeconds: 10, absoluteSeconds: 30 }

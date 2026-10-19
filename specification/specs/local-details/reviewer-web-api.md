@@ -4,13 +4,13 @@
 
 ## Scope
 
-`@slop-lab/dim-web` supplies the separately authenticated backend API for the
-first reviewer-web slice. It provides local login, memory-backed browser
-sessions, session inspection/logout, and Project-scoped authoritative review
-resolution and inspection in the installed native bundle’s root repository. The service ships a same-origin browser
-frontend for those operations plus exact-review approval and self-revocation.
-Host deployment, durable rejection, administrator revocation, promotion, CI
-reporting, host-admin routes, and generic proxying remain absent.
+`@slop-lab/dim-web` supplies an optional authenticated operations UI and
+Project-scoped human review frontend. It owns browser sessions and a fixed
+projection of existing host, CI and Git authority ports. Ordinary Git host
+operations require no managed control plane. The backend may configure host
+operations, CI query/operator connections, managed reviewer/promoter identities,
+and authenticated service-console links independently. It must never expose a
+generic command, selectable upstream URL, or credential proxy.
 
 ## Trusted startup and identity binding
 
@@ -19,10 +19,11 @@ JSON file. The service accepts only loopback bind addresses and an explicit
 public HTTP(S) origin. Plain HTTP is limited to loopback origins for local
 verification; production origins use HTTPS.
 
-The file contains scrypt hashes for local web accounts, one required
-`reviewerAccountId`, and one native Git Basic credential. The reviewer account
-identifier must match exactly one configured account or startup fails. Before
-opening its listener, the service calls `GET /v1/human-reviewer-identity`
+The file contains scrypt hashes and explicit `read`, `operator`, and `reviewer`
+roles for local accounts. There is no singleton reviewer-account alias. Optional
+native Git configuration selects a single reviewer identity shared deliberately
+by accounts granted the reviewer role. When native Git is selected, before
+opening its listener the service calls `GET /v1/human-reviewer-identity`
 without redirects. Startup requires role `human-reviewer`, service `native-main`,
 and the reviewer ID and generation ID from the private configuration. Every
 business request carries that `X-Dim-Generation-Id`. A generation change rejects
@@ -74,12 +75,15 @@ nosniff, and framing denial.
 
 ## Fixed review surface and browser DTO
 
-The service accepts only these native-backed routes:
+The service accepts these native-backed routes:
+
+- `GET /v1/projects/PROJECT/repositories/root/reviews` (at most 100 summaries)
 
 - `GET /v1/projects/PROJECT/repositories/root/reviews/REVIEW_ID`
 - `POST /v1/projects/PROJECT/repositories/root/reviews/resolve`
 - `POST /v1/projects/PROJECT/repositories/root/reviews/REVIEW_ID/approvals`
 - `POST /v1/projects/PROJECT/repositories/root/reviews/REVIEW_ID/revocations`
+- `POST /v1/projects/PROJECT/repositories/root/reviews/REVIEW_ID/promotions`
 
 The path Project must equal the configured Project and the repository must be root.
 Foreign and malformed paths return `404` without native dispatch. Query strings,
@@ -93,8 +97,8 @@ review ID. Review creation belongs to the control plane.
 
 Both action POSTs accept only an empty JSON object and require the same session,
 exact Origin, CSRF, Project, repository, and exact review-ID checks. Before
-native dispatch, the session account ID must exactly equal the configured
-`reviewerAccountId`; every other authenticated account receives `403`. Approval
+native dispatch, the session account must have the explicit `reviewer` role;
+other authenticated accounts receive `403`. Approval
 generates a UUID request ID and delegates to the native human-reviewer route, which revalidates required-reviewer and
 stale-evidence authority. Self-revocation first selects only the configured
 reviewer ID's active approval from a freshly read exact-review DTO, then delegates
@@ -148,3 +152,54 @@ hard session capacity. They additionally cover required reviewer-account
 binding, two-account review DTO and action authorization, read-only control
 omission, and delayed mutation responses that cannot be superseded by in-page
 navigation before the committed native result is rendered.
+
+## Host and CI operations
+
+`init-operations SETTINGS --output CONFIG` creates a new private configuration
+and browser operator login without contacting or loading managed Git/CI.
+Reviewer initialization may add `--operations SETTINGS` and `--promoter FILE`.
+The optional promoter connection must share the reviewer endpoint/generation;
+its distinct `host-promoter` identity is attested before startup.
+
+Authenticated status exposes only configured host IDs, selected capabilities,
+configured generation and credential-free console URLs. Host IDs map to trusted
+server-side DIM executables and existing host selectors. GET workspace lists
+project only immutable ID, name, runtime, phase, observed runtime status and
+resource limits. POST workspace actions allow only start, stop, restart,
+recreate, discard and resources; each requires `operator` role, Origin/CSRF and
+an expected workspace UUID. The adapter invokes the public CLI without a shell;
+the core host application verifies the UUID under its lifecycle lock before
+mutation. Executable paths, state locations and host selectors cannot come from
+the browser. Subprocess time and output are bounded.
+
+CI read endpoints return bounded recent summaries or one execution's diagnostics
+using a private generation-bound query connection. Worker occupancy and mutation
+use a separate private operator connection. Browser cancellation/retry additionally
+requires the operator account role. Cancel does not free running capacity before
+owned cleanup; racing success diagnostics do not become published Git evidence.
+Retry accepts an explicit UUID request key and returns the same new aggregate on
+replay. Only the latest cleaned finished execution may be retried. Webhook intake
+identity remains unique, and a newly issued grant replaces the prior latest Git
+attempt. No separate browser or operator execution authority exists.
+
+Configured worker occupancy must not be presented as live heartbeat status.
+Raw logs remain bounded to the execution service's retained prefixes and
+truncation metadata. The service never returns grants, worker leases or credentials.
+Backend failures are sanitized. Responses from an earlier browser session cannot
+populate a later account's rendered view.
+
+Promotion requires the browser operator role and the separately attested promoter
+credential. It does not grant reviewer authority. Native Git remains responsible
+for required human decisions, current execution evidence, freshness and protected
+ref compare-and-swap. Approval and promotion roles must never be conflated.
+
+Operations and review use separate browser views; opening the optional operations
+panel must not push the fixed evidence/review controls below the supported
+viewport or weaken existing literal-patch navigation and accessibility behavior.
+
+## Resource priority
+
+Development containers and CI supervisors have positive OOM victim adjustment.
+An administrator-installed web system service may set `OOMScoreAdjust=-500`
+with explicit memory/CPU/task bounds. An unprivileged user process must not be
+assumed able to lower its own OOM score. Deployment does not occur implicitly.

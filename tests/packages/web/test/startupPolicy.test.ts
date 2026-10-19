@@ -79,22 +79,14 @@ describe("DIM reviewer web startup policy", () => {
     await expect(fetch("http://127.0.0.1:40103/healthz")).rejects.toThrow();
   });
 
-  it("rejects a reviewer account identifier that does not match exactly one configured account", async () => {
-    // Given
+  it("rejects unknown or empty account roles", async () => {
     const native = await startNative();
-    const base = webConfig({
-      accounts: ["alice", "bob"],
-      nativeBaseUrl: native.baseUrl(),
-      publicOrigin: "http://127.0.0.1:40104",
-      port: 40104
-    });
-
-    // When / Then
-    await expect(createReviewerWebServerFromConfigFile(await writeConfig({ ...base, reviewerAccountId: "charlie" })))
-      .rejects.toThrow("configuration is invalid");
-    const { reviewerAccountId: _omitted, ...withoutReviewerAccount } = base;
-    await expect(createReviewerWebServerFromConfigFile(await writeConfig(withoutReviewerAccount)))
-      .rejects.toThrow("configuration is invalid");
+    const base = webConfig({ nativeBaseUrl: native.baseUrl(), publicOrigin: "http://127.0.0.1:40104", port: 40104 });
+    const account = Array.isArray(base.accounts) ? base.accounts[0] : undefined;
+    for (const roles of [[], ["administrator"]]) {
+      await expect(createReviewerWebServerFromConfigFile(await writeConfig({ ...base, accounts: [{ ...account, roles }] })))
+        .rejects.toThrow("configuration is invalid");
+    }
   });
 });
 

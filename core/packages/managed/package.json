@@ -32,6 +32,10 @@
     "./host": {
       "types": "./src/nativeWorkspaceHost.ts",
       "import": "./dist/nativeWorkspaceHost.js"
+    },
+    "./ci": {
+      "types": "./src/ci/operations.ts",
+      "import": "./dist/ci/operations.js"
     }
   },
   "bin": {

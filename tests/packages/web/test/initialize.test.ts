@@ -41,3 +41,21 @@ it("initializes a private reviewer configuration from a live generated connectio
     await expect(run(join(root, "public.json"))).rejects.toThrow();
   } finally { await native.close(); await rm(root, { recursive: true, force: true }); }
 });
+
+it("initializes an ordinary host operations account through the public CLI without a native Git connection", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-web-operations-init-"));
+  try {
+    const settings = join(root, "operations.json"), output = join(root, "web.json");
+    await writeFile(settings, JSON.stringify({ hosts: [{ id: "devbox", selector: "saved-host", executable: "/trusted/dim" }] }), { mode: 0o600 });
+    const cli = fileURLToPath(new URL("../../../../core/packages/web/src/cli.ts", import.meta.url));
+    const args = ["--import", "tsx", cli, "init-operations", settings, "--output", output];
+    const { stdout } = await promisify(execFile)(process.execPath, args);
+    const password = /Browser password: (\S+)/.exec(stdout)?.[1]; expect(password).toBeTruthy();
+    const bytes = await readFile(output, "utf8"); expect(bytes).not.toContain(password!);
+    const config: unknown = JSON.parse(bytes);
+    expect(config).toMatchObject({ accounts: [{ username: "operator", roles: ["read", "operator"] }], operations: { hosts: [{ id: "devbox" }] } });
+    expect(config).not.toHaveProperty("nativeGit"); expect((await stat(output)).mode & 0o777).toBe(0o600);
+    await expect(promisify(execFile)(process.execPath, args)).rejects.toThrow();
+    expect(await readFile(output, "utf8")).toBe(bytes);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
+import { operationsConfigSchema } from "./operations.js";
 
 const MAX_CONFIG_BYTES = 64 * 1024;
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
@@ -30,18 +31,20 @@ const configSchema = z.object({
   host: z.enum(["127.0.0.1", "::1"]),
   port: z.number().int().min(0).max(65_535),
   publicOrigin: exactOrigin,
-  reviewerAccountId: z.string().min(1).max(256),
   nativeGit: z.object({
     baseUrl: exactOrigin,
     username: z.string().min(1).max(256),
     password: z.string().min(16).max(1024),
     projectId: identifier,
     generationId: z.string().regex(/^[0-9a-f]{64}$/),
-    reviewerId: identifier
-  }).strict().readonly(),
+    reviewerId: identifier,
+    promoter: z.object({ username: z.string().min(1).max(256), password: z.string().min(16).max(1024), hostId: identifier }).strict().optional()
+  }).strict().readonly().optional(),
+  operations: operationsConfigSchema.optional(),
   accounts: z.array(z.object({
     username: z.string().min(1).max(256),
-    passwordHash
+    passwordHash,
+    roles: z.array(z.enum(["read", "operator", "reviewer"])).min(1).max(3).refine((roles) => new Set(roles).size === roles.length).readonly()
   }).strict().readonly()).min(1).max(256).readonly(),
   session: z.object({
     idleSeconds: z.number().int().positive().max(86_400),
@@ -54,8 +57,8 @@ const configSchema = z.object({
   if (new Set(config.accounts.map(({ username }) => username)).size !== config.accounts.length) {
     context.addIssue({ code: "custom", path: ["accounts"], message: "contains duplicate usernames" });
   }
-  if (config.accounts.filter(({ username }) => username === config.reviewerAccountId).length !== 1) {
-    context.addIssue({ code: "custom", path: ["reviewerAccountId"], message: "must match exactly one configured account" });
+  if (config.nativeGit === undefined && config.operations === undefined) {
+    context.addIssue({ code: "custom", message: "configure at least one service" });
   }
 
 }).readonly();
@@ -83,7 +86,7 @@ export async function loadPrivateJson(path: string): Promise<unknown> {
   try {
     const stat = await handle.stat();
     const uid = process.getuid?.();
-    if (uid === undefined || !stat.isFile() || stat.uid !== uid || (stat.mode & 0o777) !== 0o600 || stat.size > MAX_CONFIG_BYTES) {
+    if (uid === undefined || !stat.isFile() || stat.nlink !== 1 || stat.uid !== uid || (stat.mode & 0o777) !== 0o600 || stat.size > MAX_CONFIG_BYTES) {
       throw new ReviewerWebConfigError("reviewer web configuration must be a caller-owned mode-0600 regular file");
     }
     return JSON.parse(await handle.readFile("utf8")) as unknown;
