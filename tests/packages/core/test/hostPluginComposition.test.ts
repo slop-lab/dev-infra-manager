@@ -34,16 +34,16 @@ it("discovers explicit host commands without a managed controller and rejects co
   await expect(loadHostPlugins()).rejects.toThrow("duplicate host plugin command");
 });
 
-it("discovers the installed host-mirrors package using its host command identity", async () => {
+it.each([["host-mirrors", "mirrors"], ["cache-server", "cache-server"]])("discovers the installed %s package using its host command identity", async (pluginName, commandName) => {
   const root = await fixture();
   await mkdir(path.join(root, "node_modules", "@slop-lab"), { recursive: true });
-  await symlink(new URL("../../../../plugin-host-mirrors", import.meta.url).pathname,
-    path.join(root, "node_modules", "@slop-lab", "dim-plugin-host-mirrors"));
+  await symlink(new URL(`../../../../plugin-${pluginName}`, import.meta.url).pathname,
+    path.join(root, "node_modules", "@slop-lab", `dim-plugin-${pluginName}`));
   await writeFile(path.join(root, "plugins.json"), JSON.stringify({
-    schemaVersion: 1, plugins: ["@slop-lab/dim-plugin-host-mirrors"]
+    schemaVersion: 1, plugins: [`@slop-lab/dim-plugin-${pluginName}`]
   }));
   const loaded = await loadHostPlugins();
-  expect(loaded.map(({ name, commands }) => ({ name, commands }))).toEqual([{
-    name: "host-mirrors", commands: [{ name: "mirrors", description: "Reconcile optional host Docker and APT caches" }]
+  expect(loaded.map(({ name, commands }) => ({ name, commands: commands?.map(({ name }) => name) }))).toEqual([{
+    name: pluginName, commands: [commandName]
   }]);
 });
