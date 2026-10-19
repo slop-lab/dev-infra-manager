@@ -96,7 +96,12 @@ GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$sou
   plugin-dns-cloudflare \
   plugin-external-urls \
   plugin-host-mirrors \
-  plugin-ci-workflows
+  plugin-ci-workflows \
+  plugin-llm-router \
+  plugin-vm \
+  plugin-workspace-check \
+  plugin-agent-tools \
+  plugin-tunnels
 tar -xf "$source_archive" -C "$source_root"
 
 cat >"$source_root/package.json" <<'EOF'
@@ -115,6 +120,11 @@ packages:
   - plugin-external-urls
   - plugin-host-mirrors
   - plugin-ci-workflows
+  - plugin-llm-router
+  - plugin-vm
+  - plugin-workspace-check
+  - plugin-agent-tools
+  - plugin-tunnels
 linkWorkspacePackages: true
 EOF
 

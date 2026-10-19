@@ -42,7 +42,12 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
     "plugin-dns-cloudflare",
     "plugin-external-urls",
     "plugin-host-mirrors",
-    "plugin-ci-workflows"
+    "plugin-ci-workflows",
+    "plugin-llm-router",
+    "plugin-vm",
+    "plugin-workspace-check",
+    "plugin-agent-tools",
+    "plugin-tunnels"
   ] as const;
   await Promise.all(
     packageDirectories.map(async (directory) => {

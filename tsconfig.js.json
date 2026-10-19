@@ -39,6 +39,21 @@
       ],
       "@slop-lab/dim-native-git/execution": [
         "core/packages/native-git/src/execution-protocol.ts"
+      ],
+      "@slop-lab/dim-plugin-vm": [
+        "plugin-vm/src/index.ts"
+      ],
+      "@slop-lab/dim-plugin-llm-router": [
+        "plugin-llm-router/src/index.ts"
+      ],
+      "@slop-lab/dim-plugin-workspace-check": [
+        "plugin-workspace-check/src/index.ts"
+      ],
+      "@slop-lab/dim-plugin-agent-tools": [
+        "plugin-agent-tools/src/index.ts"
+      ],
+      "@slop-lab/dim-plugin-tunnels": [
+        "plugin-tunnels/src/index.ts"
       ]
     },
     "typeRoots": [

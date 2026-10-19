@@ -119,12 +119,27 @@ importers:
         specifier: 4.1.11
         version: 4.1.11
     devDependencies:
+      '@slop-lab/dim-managed':
+        specifier: workspace:*
+        version: link:../managed
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       package.json-minifier:
         specifier: 0.0.6
         version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  plugin-agent-tools:
+    devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3
@@ -185,9 +200,67 @@ importers:
 
   plugin-host-mirrors:
     devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/core
       '@slop-lab/dim-managed':
         specifier: workspace:0.10.0
         version: link:../core/packages/managed
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  plugin-llm-router:
+    devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  plugin-tunnels:
+    devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  plugin-vm:
+    dependencies:
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:*
+        version: link:../core/packages/core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      '@types/ws':
+        specifier: 8.18.2
+        version: 8.18.2
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  plugin-workspace-check:
+    devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/core
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -200,6 +273,9 @@ importers:
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
+      '@types/ws':
+        specifier: 8.18.2
+        version: 8.18.2
       playwright-core:
         specifier: 1.64.1
         version: 1.64.1
@@ -212,6 +288,9 @@ importers:
       vitest:
         specifier: 3.2.4
         version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
 
   verification:
     devDependencies:
@@ -708,6 +787,9 @@ packages:
 
   '@types/responselike@1.0.0':
     resolution: {integrity: sha512-85Y2BjiufFzaMIlvJDvTTB8Fxl2xfLo4HgmHzVBz08w4wDePCTjYw66PdrolO0kzli3yam/YCgRufyo1DdQVTA==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@verdaccio/auth@8.0.4':
     resolution: {integrity: sha512-hB7LU0Et6l3zkVmGV2SBEcMLCixUR26otiJVb7CpxnU1/j8BxWNVX9/HnwG16vLwXsSICUq4Ez+qROE/GdxLgQ==}
@@ -2081,6 +2163,18 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  ws@8.22.0:
+    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
@@ -2383,6 +2477,10 @@ snapshots:
       undici-types: 7.18.2
 
   '@types/responselike@1.0.0':
+    dependencies:
+      '@types/node': 24.13.3
+
+  '@types/ws@8.18.2':
     dependencies:
       '@types/node': 24.13.3
 
@@ -3998,6 +4096,8 @@ snapshots:
   wordwrap@1.0.0: {}
 
   wrappy@1.0.2: {}
+
+  ws@8.22.0: {}
 
   xtend@4.0.2: {}
 

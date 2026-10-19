@@ -10,6 +10,11 @@ packages:
   - plugin-external-urls
   - plugin-ci-workflows
   - plugin-host-mirrors
+  - plugin-llm-router
+  - plugin-vm
+  - plugin-workspace-check
+  - plugin-agent-tools
+  - plugin-tunnels
   - tests
   - verification
 

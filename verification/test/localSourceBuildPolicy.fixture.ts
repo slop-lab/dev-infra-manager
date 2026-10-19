@@ -23,6 +23,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
   await mkdir(scripts, { recursive: true });
   await mkdir(tools, { recursive: true });
   await writeFile(log, "");
+  await writeFile(resolve(root, "LICENSE"), "fixture license\n");
   await writeFile(resolve(root, "pnpm-lock.yaml"), fixtureLockfile);
   await writeFile(resolve(root, ".head"), `${fixtureRootCommit}\n`);
   const productionPackageDirectories = [
@@ -30,11 +31,18 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
     "core/packages/managed",
     "core/packages/cli",
     "core/packages/installer",
+    "core/packages/native-git",
+    "core/packages/web",
     "core/packages/contracts/external-url",
     "plugin-dns-cloudflare",
     "plugin-external-urls",
     "plugin-host-mirrors",
-    "plugin-ci-workflows"
+    "plugin-ci-workflows",
+    "plugin-llm-router",
+    "plugin-vm",
+    "plugin-workspace-check",
+    "plugin-agent-tools",
+    "plugin-tunnels"
   ] as const;
   await Promise.all(
     productionPackageDirectories.map(async (directory) => {
@@ -77,7 +85,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "    'status --porcelain ') ;;",
       "    'archive --format=tar --output')",
       "      output=\"$4\"",
-      "      /usr/bin/tar -C \"$directory\" -cf \"$output\" pnpm-lock.yaml core plugin-dns-cloudflare plugin-external-urls plugin-host-mirrors",
+      "      /usr/bin/tar -C \"$directory\" -cf \"$output\" \"${@:7}\"",
       "      ;;",
       "    *) exit 91 ;;",
       "  esac",

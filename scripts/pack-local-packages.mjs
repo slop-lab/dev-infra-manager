@@ -14,6 +14,11 @@ const packageDirectories = [
   "plugin-dns-cloudflare/dist",
   "plugin-external-urls/dist",
   "plugin-host-mirrors/dist",
+  "plugin-llm-router/dist",
+  "plugin-vm/dist",
+  "plugin-workspace-check/dist",
+  "plugin-agent-tools/dist",
+  "plugin-tunnels/dist",
   "core/packages/cli/dist",
   "core/packages/installer/dist",
 ];
