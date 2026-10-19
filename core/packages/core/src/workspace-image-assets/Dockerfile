@@ -3,7 +3,7 @@ FROM docker:29.1.3-dind@sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c
 ARG DIM_UID=1000
 ARG DIM_GID=1000
 
-RUN apk add --no-cache bash ca-certificates coreutils curl git jq just nodejs npm openssh-client openssh-server python3 shadow sudo tini \
+RUN apk add --no-cache bash ca-certificates coreutils curl git jq just nodejs npm openssh-client openssh-server python3 shadow sudo tini flock \
   && groupadd --non-unique --gid "${DIM_GID}" dim \
   && useradd --non-unique --uid "${DIM_UID}" --gid dim --create-home --shell /bin/bash dim \
   && echo "dim ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dim \
@@ -20,7 +20,7 @@ ENV HOME=/home/dim \
 RUN npm install --global pnpm@10.13.1
 RUN mkdir -p /mnt/dim-tmp && chown dim:dim /mnt/dim-tmp && chmod 0700 /mnt/dim-tmp
 ENV TMPDIR=/mnt/dim-tmp DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp
-RUN docker buildx version && docker compose version
+RUN docker buildx version && docker compose version && flock --version
 COPY agent-entrypoint.bash /usr/local/bin/dim-agent-entrypoint
 COPY dim-workspace.mjs /usr/local/bin/dim-workspace
 COPY dim-nproc /usr/local/bin/dim-nproc
