@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { idleNativeConfig } from "./bundleConfigFixture.js";
 import {
   addCandidateCommit,
@@ -22,11 +22,12 @@ import {
   workspaceWriteIssuerAuthorization
 } from "./nativeRootImportFinalizeFixture.js";
 
+let fixture: Awaited<ReturnType<typeof nativeBundleReviewFixture>>;
+beforeEach(async () => { fixture = await nativeBundleReviewFixture("human-revocation"); }, 30_000);
 afterEach(cleanupFinalizeFixtures);
 
 describe("installed native human approval self-revocation", () => {
-  it("revokes one immutable approval, safely reapproves, and ignores a delayed old revocation across restart", { timeout: 15_000 }, async () => {
-    const fixture = await nativeBundleReviewFixture("human-revocation-lifecycle");
+  it("revokes and replays an immutable approval without changing its review or protected ref", async () => {
     const created = await createBundleReview(fixture.service);
     const { review } = created;
     const endpoint = reviewEndpoint(fixture.service.origin, review.reviewId);
@@ -44,6 +45,21 @@ describe("installed native human approval self-revocation", () => {
     const replayA = await approve(endpoint, approvalA.body.requestId);
     expect(replayA.response.status).toBe(200);
     expect(replayA.body).toMatchObject({ approvalId: approvalA.body.approvalId, status: "revoked" });
+
+    expect(await protectedHead(fixture.root)).toBe(protectedBefore);
+    expect(await readFile(reviewPath)).toEqual(reviewBefore);
+    const records = join(rootRepository(fixture.root), "dim-authoritative-revocations", "records");
+    expect(await readdir(records)).toHaveLength(1);
+    expect((await stat(join(records, `${stringField(await revokedA.json(), "revocationId")}.json`))).mode & 0o777)
+      .toBe(0o600);
+  });
+
+  it("preserves a new approval when an older approval is revoked again across restart", async () => {
+    const { review } = await createBundleReview(fixture.service);
+    const endpoint = reviewEndpoint(fixture.service.origin, review.reviewId);
+    const approvalA = await approve(endpoint, randomUUID());
+    expect(approvalA.response.status).toBe(201);
+    expect((await revoke(endpoint, approvalA.body.approvalId)).status).toBe(201);
 
     const approvalB = await approve(endpoint, randomUUID());
     expect(approvalB.response.status).toBe(201);
@@ -64,16 +80,10 @@ describe("installed native human approval self-revocation", () => {
       revocations: [expect.objectContaining({ approvalId: approvalA.body.approvalId, reviewerId: "owner" })]
     });
     expect((await revoke(restartedEndpoint, approvalA.body.approvalId)).status).toBe(200);
-    expect(await protectedHead(fixture.root)).toBe(protectedBefore);
-    expect(await readFile(reviewPath)).toEqual(reviewBefore);
-    const records = join(rootRepository(fixture.root), "dim-authoritative-revocations", "records");
-    expect(await readdir(records)).toHaveLength(1);
-    expect((await stat(join(records, `${stringField(await revokedA.json(), "revocationId")}.json`))).mode & 0o777)
-      .toBe(0o600);
+    expect(await status(restartedEndpoint)).toMatchObject({ status: "approved", staleReasons: [] });
   });
 
   it("allows the owner to revoke a stale historical approval but denies other authorities and non-exact requests", async () => {
-    const fixture = await nativeBundleReviewFixture("human-revocation-auth");
     const { review } = await createBundleReview(fixture.service);
     const endpoint = reviewEndpoint(fixture.service.origin, review.reviewId);
     const approval = await approve(endpoint, randomUUID());
@@ -117,7 +127,6 @@ describe("installed native human approval self-revocation", () => {
   });
 
   it("rejects tampered immutable revocation bytes at startup without rewriting them", async () => {
-    const fixture = await nativeBundleReviewFixture("human-revocation-tamper");
     const { review } = await createBundleReview(fixture.service);
     const endpoint = reviewEndpoint(fixture.service.origin, review.reviewId);
     const approval = await approve(endpoint, randomUUID());

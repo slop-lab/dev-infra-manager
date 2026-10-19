@@ -64,7 +64,9 @@ intentionally download packages. The gate runs the complete recursive source
 unit, verification, and CLI suites; hardware and live-runtime verification
 remain explicit separate gates.
 
-The centralized package Vitest suite uses a 15-second default per-test harness
+The centralized package Vitest suite runs at most two file workers, matching
+the source gate's CPU budget; each worker can also start real Git and service
+processes. It uses a 15-second default per-test harness
 budget because its fixtures include real Git imports, HTTP services, fsync, and
 service restart recovery on shared CI CPUs. Production deadlines, lease expiry,
 and explicitly shorter test-operation limits are unchanged. Use explicit

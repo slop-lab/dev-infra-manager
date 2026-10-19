@@ -15,20 +15,23 @@ let fixture: MultiRepositoryExecutionFixture;
 beforeEach(async () => { fixture = await multiRepositoryExecutionFixture(); }, 30_000);
 afterEach(cleanupFinalizeFixtures);
 
-it("materializes exact joint inputs while public-only leases cannot read private Git", async () => {
-  const f = fixture;
-  const joint = await f.authorize("joint"), publicOnly = await f.authorize("public-check");
-  expect(Object.keys(joint.descriptor.inputs)).toEqual(["private", "public"]);
-  expect(joint.descriptor.inputs.private).toEqual({ commit: f.privateBundle.commit, tree: f.privateBundle.tree });
+it("isolates public-only Git leases and scopes approvals to the selected repository", async () => {
+  const f = fixture, publicOnly = await f.authorize("public-check");
   expect(Object.keys(publicOnly.descriptor.inputs)).toEqual(["public"]);
   expect((await f.post(`/v1/projects/project-a/repositories/private/reviews/${f.envelope.review.reviewId}/approvals`,
     humanReviewerAuthorization, { requestId: randomUUID() })).status).toBe(404);
-  const jointCredential = executionCandidateCredential(() => f.source.candidate(joint), f.now);
-  const signal = new AbortController().signal;
-  const publicRead = await f.source.candidate(publicOnly), firstJoint = await jointCredential(signal);
+  const publicRead = await f.source.candidate(publicOnly);
   expect((await fetch(`${f.native.service.origin}/v1/projects/project-a/repositories/private.git/info/refs?service=git-upload-pack`, {
     headers: { authorization: `Basic ${Buffer.from(`${publicRead.username}:${publicRead.password}`).toString("base64")}` }
   })).status).toBe(403);
+}, 30_000);
+
+it("materializes the exact joint snapshot and disposes trusted Git acquisition before handoff", async () => {
+  const f = fixture, joint = await f.authorize("joint");
+  expect(Object.keys(joint.descriptor.inputs)).toEqual(["private", "public"]);
+  expect(joint.descriptor.inputs.private).toEqual({ commit: f.privateBundle.commit, tree: f.privateBundle.tree });
+  const jointCredential = executionCandidateCredential(() => f.source.candidate(joint), f.now);
+  const signal = new AbortController().signal, firstJoint = await jointCredential(signal);
   const directory = await createFinalizeRoot("joint-materialized");
   await withNativeGitExecutionReadAuthority({ descriptor: joint.descriptor, gitExecutable: "/usr/bin/git",
     serviceEndpoint: f.native.service.origin, temporaryRoot: directory, credential: firstJoint, credentialProvider: jointCredential }, signal, (authority) => verifyAndMaterializeCandidate({ descriptor: joint.descriptor, descriptorDigest: joint.descriptorDigest, authority,

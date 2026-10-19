@@ -182,19 +182,15 @@ process.send?.({ kind: "ready", remote: remote.toString() });`;
       .rejects.toThrow();
     expect((await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root), "rev-parse", reviewProposalRef]))
       .stdout.trim()).toBe(candidate);
-    await Promise.race([
-      retryObserved,
-      once(AbortSignal.timeout(1_000), "abort").then(() => { throw new Error("proposal retry was not observed"); })
-    ]);
+    await retryObserved;
+    // The retry has entered final verification. Drain that active operation
+    // before inspecting publication, rather than racing real Git/fsync work
+    // against an unrelated one-second scheduling deadline.
+    await closeFinalizeService(fixture.service);
 
     // Then
-    let recovered = (await publishedReviewEnvelopes(fixture.root))
+    const recovered = (await publishedReviewEnvelopes(fixture.root))
       .filter(({ review }) => review.candidateCommit === candidate);
-    await vi.waitFor(async () => {
-      recovered = (await publishedReviewEnvelopes(fixture.root))
-        .filter(({ review }) => review.candidateCommit === candidate);
-      expect(recovered).toHaveLength(1);
-    });
     expect(recovered).toHaveLength(1);
     expect(new Set(recovered[0]?.events.map(({ eventId }) => eventId)).size).toBe(2);
   });
