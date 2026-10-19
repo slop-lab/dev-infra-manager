@@ -52,7 +52,8 @@ or `26` and selects an independently checked Node.js 24.19.0 or 26.5.0 runtime.
 The wrapper builds an image from digest-pinned Node.js and
 Python 3.13.7 bases with Git and checksum-pinned Just 1.43.1, plus
 exact-version pnpm 10.13.1. It copies the current worktree, including tracked and untracked changes,
-into a disposable container;
+into a disposable container with a fixed two-CPU limit in both local and hosted
+lanes, so a large development host does not mask shared-runner contention;
 it excludes Git metadata, generated `node_modules` and `dist` trees, user state,
 and conventional local credential files and directories. This is not a general
 secret scanner: submit only a reviewed checkout without other secret-bearing
@@ -68,7 +69,8 @@ budget because its fixtures include real Git imports, HTTP services, fsync, and
 service restart recovery on shared CI CPUs. Production deadlines, lease expiry,
 and explicitly shorter test-operation limits are unchanged. Use explicit
 barriers or controlled clocks for ordering/expiry assertions; this scheduling
-budget is not a substitute for those checks.
+budget is not a substitute for those checks. Installed-service and multi-repository integration scenarios run independently,
+with fresh fixture setup and explicit 30-second setup and scenario budgets.
 
 Run the real native ordinary executor Docker integration separately on a host
 with a reachable Docker daemon, `sysbox-runc`, and both digest-pinned fixture

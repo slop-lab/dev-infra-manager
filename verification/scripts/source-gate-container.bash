@@ -72,8 +72,8 @@ image_id="$(tr -d '\r\n' <"$iid_file")"
   printf 'source-gate build returned malformed image ID: %s\n' "$image_id" >&2
   exit 1
 }
-printf 'source-gate Node.js lane: %s; image ID: %s\n' "$node_major" "$image_id"
-check_output_run container-start docker run --detach --init --name "$container" \
+printf 'source-gate Node.js lane: %s; image ID: %s; CPU limit: 2\n' "$node_major" "$image_id"
+check_output_run container-start docker run --detach --init --cpus 2 --name "$container" \
   --label "org.dim.verification=$verification_id" \
   --label "org.dim.resource=source-gate" \
   --security-opt no-new-privileges \

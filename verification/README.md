@@ -5,7 +5,8 @@
 `just check-source` runs the same complete gate as GitHub CI in a disposable,
 pinned Node 24 container: type checks, builds, tests, privileged service
 fixtures, package shapes and the production dependency audit. Select the other
-supported lane with `DIM_SOURCE_NODE_MAJOR=26 just check-source`.
+supported lane with `DIM_SOURCE_NODE_MAJOR=26 just check-source`. Both lanes use
+a fixed two-CPU container limit on local hosts and GitHub runners.
 `just check-source-native` runs type checks, builds and ordinary tests directly
 with the installed supported toolchain; it does not run privileged fixtures.
 

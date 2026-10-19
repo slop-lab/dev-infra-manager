@@ -78,6 +78,7 @@ describe("source gate container behavior", () => {
       // Then
       expect(result.status, result.stderr).toBe(0);
       expect(log).toMatch(new RegExp(`^run\\t.*${imageId}$`, "m"));
+      expect(log).toMatch(/^run\t.*\t--cpus\t2\t/m);
       expect(log).toContain(`container\trm\t--force\t${containerId}`);
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
