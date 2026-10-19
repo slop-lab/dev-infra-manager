@@ -64,10 +64,31 @@ describe("existing managed controller activation", () => {
     const npm = path.join(root, "npm.mjs");
     await writeFakeCliNpm(npm, { argsFile: path.join(root, "npm-args.json"), versionOutput: "2.0.0",
       controllerArgsFile: targetCalls, controllerExitCode: 9 });
-    await expect(installDimCli({ version: "2.0.0", exposeOnPath: false, npmCommand: npm,
+    await expect(installDimCli({ version: "2.0.0", packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-managed@2.0.0"], exposeOnPath: false, npmCommand: npm,
       dataHome: root, configPath: path.join(root, "config.json") })).rejects.toThrow(/controller restart/);
     expect(JSON.parse(await readFile(targetCalls, "utf8"))).toEqual([["controller", "restart"]]);
     expect(JSON.parse(await readFile(priorCalls, "utf8"))).toMatchObject({ argv: ["controller", "restart"] });
+  });
+
+  it.each([undefined, false])("refuses base-only replacement of an active controller before promotion, even with restart=%s", async (restartController) => {
+    const { root, runtime, env } = await runningFixture();
+    for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DIM_STATE_ROOT"] as const) vi.stubEnv(name, env[name]);
+    const previous = path.join(runtime, "node_modules/.bin/dim");
+    const previousCalls = path.join(root, "previous-calls.json"), targetCalls = path.join(root, "target-calls.json");
+    await mkdir(path.dirname(previous), { recursive: true });
+    await writeStubCli(previous, { versionOutput: "1.0.0", echoFile: previousCalls });
+    await writeFile(path.join(runtime, "sentinel"), "preserved installation");
+    const configPath = path.join(root, "dim-config.json"); await writeFile(configPath, "preserved configuration");
+    const npm = path.join(root, "npm.mjs");
+    await writeFakeCliNpm(npm, { argsFile: path.join(root, "args.json"), versionOutput: "2.0.0", controllerArgsFile: targetCalls });
+    await expect(installDimCli({ version: "2.0.0", exposeOnPath: false, npmCommand: npm,
+      dataHome: root, configPath, ...(restartController === undefined ? {} : { restartController }) }))
+      .rejects.toThrow(/base-only.*dim controller stop.*disable --now.*--with-managed/);
+    expect(await readFile(path.join(runtime, "sentinel"), "utf8")).toBe("preserved installation");
+    expect(await readFile(configPath, "utf8")).toBe("preserved configuration");
+    expect(await managedControllerIsActive(runtime, env)).toBe(true);
+    await expect(readFile(previousCalls)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(targetCalls)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("does not mistake a recycled PID marker for a managed controller", async () => {

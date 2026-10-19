@@ -43,9 +43,15 @@ plugin graph, runs the candidate core's read-only compatibility preflight, and
 only then promotes it. Base installation requires no control plane, mirror
 plugin, configured container backend, or running controller. It installs the
 CLI without starting a controller service. A controller already active for this
-managed installation is restarted against the promoted runtime; failed readiness
-restores the previous runtime and restarts its controller. Plugin installation
-uses the same activation rule.
+managed installation is restarted only when the selected runtime includes the
+managed component; failed readiness restores the previous runtime and restarts
+its controller. If an existing owned controller is active and the target is
+base-only, installation fails before promotion or controller mutation. Stop it
+with `dim controller stop` and, for the owned user service,
+`systemctl --user disable --now dim-controller.service`, then retry. Select
+`--with-managed` instead to retain managed administration. Deferred restart does
+not bypass this profile check. Separate control-plane containers are untouched.
+Plugin installation uses the same activation rule.
 
 Host mirrors are optional. To select the reviewed integration explicitly:
 

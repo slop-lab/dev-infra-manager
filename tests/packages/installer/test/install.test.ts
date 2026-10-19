@@ -158,6 +158,7 @@ describe("@slop-lab/dim-installer", () => {
       // When
       await installDimCli({
         restartController: true,
+        packageSpecifiers: ["@slop-lab/dim-cli@9.9.9", "@slop-lab/dim-managed@9.9.9"],
         version: "9.9.9",
         plugins: [{
           name: "@slop-lab/dim-plugin-host-mirrors",
@@ -422,6 +423,7 @@ describe("@slop-lab/dim-installer", () => {
       // When
       const installation = installDimCli({
         restartController: true,
+        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-managed@2.0.0"],
         version: "2.0.0",
         exposeOnPath: true,
         npmCommand: npm,
@@ -467,6 +469,7 @@ describe("@slop-lab/dim-installer", () => {
       // When
       const installation = installDimCli({
         restartController: true,
+        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-managed@2.0.0"],
         version: "2.0.0",
         exposeOnPath: true,
         npmCommand: npm,
@@ -507,6 +510,7 @@ describe("@slop-lab/dim-installer", () => {
       // When
       const installation = installDimCli({
         restartController: true,
+        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-managed@2.0.0"],
         version: "2.0.0",
         exposeOnPath: false,
         npmCommand: npm,
@@ -553,6 +557,7 @@ describe("@slop-lab/dim-installer", () => {
       // When
       const installation = installDimCli({
         restartController: true,
+        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-managed@2.0.0"],
         version: "2.0.0",
         exposeOnPath: true,
         npmCommand: npm,
@@ -598,6 +603,7 @@ describe("@slop-lab/dim-installer", () => {
 
       await expect(installDimCli({
         restartController: true,
+        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-managed@2.0.0"],
         version: "2.0.0",
         plugins: [{
           name: "@slop-lab/dim-plugin-host-mirrors",
@@ -632,6 +638,7 @@ describe("@slop-lab/dim-installer", () => {
 
       await expect(installDimCli({
         restartController: true,
+        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-managed@2.0.0"],
         version: "2.0.0",
         exposeOnPath: false,
         npmCommand: npm,

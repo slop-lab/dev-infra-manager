@@ -65,6 +65,11 @@ for (const specifier of args.slice(prefixIndex + 2).filter((value) => !value.sta
   }
 }
 writeFileSync(packagePath, JSON.stringify(packageJson));
+if (packageJson.dependencies["@slop-lab/dim-managed"]) {
+  const managedDirectory = path.join(versionDirectory, "node_modules", "@slop-lab", "dim-managed");
+  mkdirSync(managedDirectory, { recursive: true });
+  writeFileSync(path.join(managedDirectory, "package.json"), JSON.stringify({ name: "@slop-lab/dim-managed", version: packageJson.dependencies["@slop-lab/dim-managed"] }));
+}
 const binDirectory = path.join(versionDirectory, "node_modules", ".bin");
 mkdirSync(binDirectory, { recursive: true });
 const coreDirectory = path.join(versionDirectory, "node_modules", "@slop-lab", "dim-core");
