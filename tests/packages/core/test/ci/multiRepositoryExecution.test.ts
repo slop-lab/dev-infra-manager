@@ -107,4 +107,6 @@ it("binds joint CI to exact repository snapshots, denies private reads to public
     return fetch(`${fixture.service.origin}${path}`, { method: "POST", headers: { authorization,
       "content-type": "application/json", "x-dim-generation-id": generationId }, body: JSON.stringify(body) });
   }
-}, 30_000);
+// This scenario imports, materializes and promotes independent repositories on shared CI CPUs.
+// Production request and lease deadlines stay independently bounded.
+}, 60_000);
