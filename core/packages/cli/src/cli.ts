@@ -66,9 +66,16 @@ async function main(): Promise<void> {
     if (managedArgs[0] && !managedArgs[0].startsWith("-")
       && !program.commands.some((command) => command.name() === managedArgs[0] || command.aliases().includes(managedArgs[0]!))) {
       const target = await new HostContextStore().resolve(selectedHost);
-      process.exitCode = await streamHost(target, { operation: "plugin.cli", input: { args: managedArgs } }, {
-        terminal: Boolean(process.stdin.isTTY && process.stdout.isTTY), stdin: process.stdin
-      });
+      const abort = new AbortController();
+      const stop = () => abort.abort();
+      process.once("SIGINT", stop); process.once("SIGTERM", stop); process.once("SIGHUP", stop);
+      try {
+        process.exitCode = await streamHost(target, { operation: "plugin.cli", input: { args: managedArgs } }, {
+          signal: abort.signal, terminal: Boolean(process.stdin.isTTY && process.stdout.isTTY)
+        });
+      } finally {
+        process.off("SIGINT", stop); process.off("SIGTERM", stop); process.off("SIGHUP", stop);
+      }
       return;
     }
     program.addHelpText("after", `
@@ -91,6 +98,9 @@ ${process.env.DIM_INVOKED_VIA_INSTALLER === "1" ? "\nInstaller: dim installer in
       process.exitCode = error.exitCode; return;
     }
     console.error(error instanceof Error ? error.message : String(error));
+    if (error instanceof UserError && /^workspace (?:create|start|stop|restart|recreate|resources|discard) '/.test(error.message)) {
+      console.error("Run 'dim doctor' on the selected host to check runtime prerequisites.");
+    }
     process.exitCode = error instanceof UserError || error instanceof HostContextError ? 2 : 1;
   }
 }
