@@ -28,16 +28,16 @@ export class NativeGitClient {
     }
   }
 
-  async listReviews(projectId: string) {
+  async listReviews(projectId: string, repositoryId: string) {
     return z.array(z.object({ reviewId: z.string().regex(/^[0-9a-f]{64}$/), proposalRef: z.string().max(1024), protectedRef: z.string().max(1024),
       candidateCommit: z.string().regex(/^[0-9a-f]{40,64}$/), createdAt: z.string().datetime(), status: z.string().max(64) }).strict()).max(100)
-      .parse(await this.request({ method: "GET", path: `/v1/projects/${projectId}/repositories/root/reviews` }));
+      .parse(await this.request({ method: "GET", path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews` }));
   }
-  async promote(projectId: string, reviewId: string) {
+  async promote(projectId: string, repositoryId: string, reviewId: string) {
     if (!this.config.promoter) throw new NativeGitHttpError(403);
     return z.object({ schemaVersion: z.literal(1), outcome: z.enum(["promoted", "already-current"]), reviewId: z.string(),
       protectedRef: z.string(), expectedProtectedHead: z.string(), candidateCommit: z.string(), candidateTree: z.string() }).strip()
-      .parse(await this.request({ method: "POST", path: `/v1/projects/${projectId}/repositories/root/reviews/${reviewId}/promotions`, body: { schemaVersion: 1 } }, this.config.promoter));
+      .parse(await this.request({ method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}/promotions`, body: { schemaVersion: 1 } }, this.config.promoter));
   }
 
   async getReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
@@ -47,12 +47,12 @@ export class NativeGitClient {
     }));
   }
 
-  async resolveReview(projectId: string, body: { proposalRef: string }): Promise<ReviewDto> {
+  async resolveReview(projectId: string, repositoryId: string, body: { proposalRef: string }): Promise<ReviewDto> {
     const result = z.object({ review: z.object({ reviewId: z.string().regex(/^[0-9a-f]{64}$/) }) }).parse(await this.request({
-      method: "POST", path: `/v1/projects/${projectId}/repositories/root/reviews/resolve`,
+      method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/resolve`,
       body: { schemaVersion: 1, proposalRef: body.proposalRef }
     }));
-    return this.getReview(projectId, "root", result.review.reviewId);
+    return this.getReview(projectId, repositoryId, result.review.reviewId);
   }
 
   async approveReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {

@@ -52,3 +52,9 @@ Managed administration is loaded only when selected and requires the optional
 guidance. The base help and workspace lifecycle work without that package or
 its service dependencies. Managed-specific commands are documented by their
 [owning package](../../core/packages/managed/docs/cli.md).
+
+Managed workspace creation accepts repeated `--repository ID` and `--workdir ID`
+with a `dim://PROJECT` source. Selection defaults to the Project's default working
+repository; an explicit selection must include the working repository. Ordinary
+Git sources reject these managed selection options. Native operator review
+commands require both Project and repository before the proposal or review ID.

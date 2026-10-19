@@ -6,7 +6,7 @@ export type ImportReceipt = {
   readonly schemaVersion: 1;
   readonly serviceId: "native-main";
   readonly projectId: string;
-  readonly rootRepositoryId: "root";
+  readonly repositoryId: string;
   readonly generationId: string;
   readonly importNonce: string;
   readonly protectedRef: string;

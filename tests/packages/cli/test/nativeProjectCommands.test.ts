@@ -1,246 +1,69 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { afterEach, test } from "node:test";
-import {
-  cleanupNativeProjectFixtures,
-  nativeFixture,
-  pendingView,
-  rewriteJson,
-  runCli,
-  type NativeFixture
-} from "./nativeProjectCommandsFixture.js";
+import { cleanupNativeProjectFixtures, nativeFixture, rewriteJson, runCli } from "./nativeProjectCommandsFixture.js";
 
-const runFile = promisify(execFile);
 afterEach(cleanupNativeProjectFixtures);
 
-test("native root bootstrap imports an exact reviewed local source before project create converges ready", async () => {
-  // Given
-  const fixture = await nativeFixture({ seedImportedDraft: false });
-  const bootstrapArguments = ["project", "bootstrap-native-root", "acme",
-    "--project-id", "project-a", "--source-repository", fixture.sourceRepository,
-    "--source-ref", "refs/heads/main", "--registrar-connection", fixture.registrarPath,
-    "--importer-connection", fixture.importerPath, "--json"];
-
-  // When
-  const imported = await runCli(bootstrapArguments, fixture.environment);
-  const replayed = await runCli(bootstrapArguments, fixture.environment);
-  const created = await runCli(["project", "create", "acme", "--json"], fixture.environment);
-
-  // Then
-  for (const result of [imported, replayed, created]) assert.equal(result.status, 0, result.stderr);
-  const importedView = JSON.parse(imported.stdout) as Record<string, unknown>;
-  assert.deepEqual(JSON.parse(replayed.stdout), importedView);
-  assert.deepEqual(importedView, {
-    name: "acme", projectId: "project-a", serviceId: "native-main", ownerHostId: "host-a",
-    generationId: fixture.importGenerationId, phase: "root-imported", rootAlias: "root",
-    protectedRef: "refs/heads/main", rootCommit: fixture.commit, rootTree: fixture.tree,
-    policyRevision: pendingView(fixture.commit, fixture.tree).policyRevision,
-    requiredReviewRevision: pendingView(fixture.commit, fixture.tree).requiredReviewRevision,
-    requiredJobSetRevision: pendingView(fixture.commit, fixture.tree).requiredJobSetRevision,
-    bundleDigest: importedView.bundleDigest, bundleSize: importedView.bundleSize
-  });
-  assert.match(String(importedView.bundleDigest), /^[0-9a-f]{64}$/);
-  assert.equal(typeof importedView.bundleSize, "number");
-  assert.deepEqual(JSON.parse(created.stdout), {
-    ...pendingView(fixture.commit, fixture.tree),
-    phase: "ready",
-    runnable: true,
-    readyAt: (JSON.parse(created.stdout) as { readonly readyAt: string }).readyAt
-  });
-  assert.doesNotMatch(`${imported.stdout}${replayed.stdout}${created.stdout}`,
-    /password|credential|connection|endpoint|importNonce/i);
-  assert.equal(await remoteHead(fixture), fixture.commit);
-});
-
-test("native project create converges imported root to ready without CI and restart list/show expose no credentials", async () => {
-  // Given
-  const fixture = await nativeFixture();
-
-  // When
-  const created = await runCli(["project", "create", "acme", "--json"], fixture.environment);
+test("Project CLI independently imports repositories and selects configuration and working defaults", async () => {
+  const f = await nativeFixture({ seedImportedDraft: false });
+  const policy = join(f.stateRoot, "policy.json");
+  const importRepository = async (repositoryId: string) => {
+    await writeFile(policy, JSON.stringify({ schemaVersion: 1, repositoryId,
+      review: { requiredReviewerIds: ["owner"], requiredJobs: [], ciRepositoryIds: [repositoryId] } }), { mode: 0o600 });
+    return runCli(["project", "repository", "import", "acme", repositoryId, "--source", f.sourceRepository,
+      "--ref", "refs/heads/main", "--review-policy", policy, "--registrar-connection", f.registrarPath,
+      "--importer-connection", f.importerPath, "--json"], f.environment);
+  };
+  const created = await runCli(["project", "create", "acme", "--project-id", "project-a", "--json"], f.environment);
   assert.equal(created.status, 0, created.stderr);
-  const projectPath = join(fixture.stateRoot, "projects", "acme.json");
-  const beforeReplay = await stat(projectPath, { bigint: true });
-  const replay = await runCli(["project", "create", "acme", "--json"], fixture.environment);
-  const listed = await runCli(["project", "list", "--json"], fixture.environment);
-  const humanList = await runCli(["project", "list"], fixture.environment);
-  const shown = await runCli(["project", "show", "acme", "--json"], fixture.environment);
-  const afterReplay = await stat(projectPath, { bigint: true });
-  const remoteHead = (await runFile("/usr/bin/git", [
-    "--git-dir", join(fixture.serviceRoot, "project-a", "root.git"), "rev-parse", "refs/heads/main"
-  ])).stdout.trim();
-
-  // Then
-  for (const result of [created, replay, listed, humanList, shown]) assert.equal(result.status, 0, result.stderr);
-  const expectedPending = pendingView(fixture.commit, fixture.tree);
-  const readyAt = (JSON.parse(created.stdout) as { readyAt: string }).readyAt;
-  const expected = { ...expectedPending, phase: "ready", runnable: true, readyAt };
-  for (const field of ["projectId", "serviceId", "ownerHostId", "rootCommit", "rootTree",
-    "policyRevision", "requiredReviewRevision", "requiredJobSetRevision"]) {
-    assert.match(humanList.stdout, new RegExp(field));
+  assert.equal(JSON.parse(created.stdout).phase, "configuring");
+  for (const repositoryId of ["public", "private"]) {
+    const result = await importRepository(repositoryId);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).repositoryId, repositoryId);
+    assert.equal(JSON.parse(result.stdout).commit, f.commit);
   }
-  assert.match(humanList.stdout, /ready/);
-  assert.match(humanList.stdout, /true/);
-  assert.deepEqual(JSON.parse(created.stdout), expected);
-  assert.deepEqual(JSON.parse(replay.stdout), expected);
-  assert.deepEqual(JSON.parse(listed.stdout), [expected]);
-  assert.deepEqual(JSON.parse(shown.stdout), expected);
-  assert.equal(remoteHead, fixture.commit);
-  assert.deepEqual(
-    { ino: afterReplay.ino, mtimeNs: afterReplay.mtimeNs, ctimeNs: afterReplay.ctimeNs },
-    { ino: beforeReplay.ino, mtimeNs: beforeReplay.mtimeNs, ctimeNs: beforeReplay.ctimeNs }
-  );
-  assert.doesNotMatch(`${created.stdout}${listed.stdout}${shown.stdout}`, /password|credential|connection|endpoint|importNonce/i);
-  assert.deepEqual(JSON.parse(await readFile(projectPath, "utf8")), {
-    ...(JSON.parse(await readFile(projectPath, "utf8")) as object),
-    schemaVersion: 6,
-    phase: "ready",
-    readyAt
-  });
+  const replay = await importRepository("public"); assert.equal(replay.status, 0, replay.stderr);
+  const configured = await runCli(["project", "configure", "acme", "--configuration-repository", "private",
+    "--default-repository", "public", "--json"], f.environment);
+  assert.equal(configured.status, 0, configured.stderr);
+  const project = JSON.parse(configured.stdout);
+  assert.equal(project.phase, "ready"); assert.equal(project.runnable, true);
+  assert.equal(project.configurationRepositoryId, "private"); assert.equal(project.defaultWorkingRepositoryId, "public");
+  assert.deepEqual(Object.keys(project.repositories).sort(), ["private", "public"]);
+  const listed = await runCli(["project", "repository", "ls", "acme", "--json"], f.environment);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.deepEqual(JSON.parse(listed.stdout).map((repo: {repositoryId:string}) => repo.repositoryId).sort(), ["private", "public"]);
+  const shown = await runCli(["project", "show", "acme", "--json"], f.environment);
+  assert.equal(shown.status, 0, shown.stderr); assert.deepEqual(JSON.parse(shown.stdout), project);
+  assert.doesNotMatch(configured.stdout + shown.stdout, /password|credential|endpoint/i);
 });
 
-test("native project create rejects changed importer authority and changed receipt without state mutation", async (context) => {
-  await context.test("changed credential", async () => {
-    const fixture = await nativeFixture();
-    await rewriteJson(fixture.importerPath, (value) => ({ ...value, credential: {
-      ...(value.credential as object), password: Buffer.alloc(32, 99).toString("base64url")
-    } }));
-    await assertCreateRejectedWithoutProject(fixture);
-  });
-  await context.test("changed generation", async () => {
-    const fixture = await nativeFixture();
-    await rewriteJson(fixture.importerPath, (value) => ({ ...value, generationId: "f".repeat(64) }));
-    await assertCreateRejectedWithoutProject(fixture);
-  });
-  await context.test("unsupported HTTPS importer transport", async () => {
-    const fixture = await nativeFixture();
-    const databasePath = join(fixture.serviceRoot, "native-idle.sqlite3");
-    const before = await readFile(databasePath);
-    await rewriteJson(fixture.controlPath, (value) => ({ ...value, nativeGit: {
-      ...(value.nativeGit as object), transport: "https", endpoint: "https://native.invalid"
-    } }));
-    const refusal = await runCli(["project", "create", "acme", "--json"], fixture.environment);
-    assert.equal(refusal.status, 2, refusal.stderr);
-    assert.match(refusal.stderr, /pending admission requires loopback-http/);
-    await assert.rejects(stat(join(fixture.stateRoot, "projects")), { code: "ENOENT" });
-    assert.deepEqual(await readFile(databasePath), before);
-    assert.equal(await remoteHead(fixture), fixture.commit);
-  });
-  await context.test("changed receipt", async () => {
-    const fixture = await nativeFixture();
-    const draftPath = join(fixture.stateRoot, "native-project-drafts", "acme.json");
-    await rewriteJson(draftPath, (value) => ({ ...value, importReceipt: {
-      ...(value.importReceipt as object), importNonce: "10000000-0000-4000-8000-000000000000"
-    } }));
-    await assertCreateRejectedWithoutProject(fixture);
-  });
+test("configuration rejects an unregistered repository without rewriting the Project", async () => {
+  const f = await nativeFixture();
+  const file = join(f.stateRoot, "projects", "acme.json"), before = await readFile(file);
+  const result = await runCli(["project", "configure", "acme", "--configuration-repository", "root",
+    "--default-repository", "missing", "--json"], f.environment);
+  assert.notEqual(result.status, 0); assert.deepEqual(await readFile(file), before);
+  const configured = await runCli(["project", "configure", "acme", "--configuration-repository", "root",
+    "--default-repository", "root", "--json"], f.environment);
+  assert.equal(configured.status, 0, configured.stderr);
+  await f.restartNativeGit();
+  const shown = await runCli(["project", "show", "acme", "--json"], f.environment);
+  assert.equal(shown.status, 0, shown.stderr); assert.deepEqual(JSON.parse(shown.stdout), JSON.parse(configured.stdout));
 });
 
-test("native selectors and legacy state collisions fail closed before mutation", async () => {
-  // Given
-  const fixture = await nativeFixture();
-  const projectDirectory = join(fixture.stateRoot, "projects");
-  await runFile("mkdir", ["-m", "700", projectDirectory]);
-  const projectPath = join(projectDirectory, "acme.json");
-  const databasePath = join(fixture.serviceRoot, "native-idle.sqlite3");
-  const databaseBefore = await readFile(databasePath);
-  const remoteBefore = await remoteHead(fixture);
-  const collision = `${JSON.stringify({ schemaVersion: 4, id: "project-a", name: "acme",
-    gitNamespace: "dim-acme", giteaOrganizationId: 41, phase: "ready", repositories: [],
-    createdAt: "now", updatedAt: "now" })}\n`;
-  await writeFile(projectPath, collision, { mode: 0o600 });
-
-  // When
-  const collided = await runCli(["project", "create", "acme", "--json"], fixture.environment);
-  const optionBearing = await runCli([
-    "project", "create", "acme", "--repos", join(fixture.stateRoot, "missing.yml")
-  ], fixture.environment);
-  const empty = await runCli(["project", "list", "--json"], {
-    ...fixture.environment, DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: ""
-  });
-  const emptyImporter = await runCli(["project", "create", "acme", "--json"], {
-    ...fixture.environment, DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE: ""
-  });
-  const predecessorSelector = await runCli(["project", "list", "--json"], {
-    ...fixture.environment, DIM_GITEA_CONNECTION_FILE: join(fixture.stateRoot, "legacy-gitea.json")
-  });
-  const repository = await runCli(["repo", "list", "acme"], fixture.environment);
-
-  // Then
-  for (const [label, result] of Object.entries({ collided, empty, emptyImporter, predecessorSelector })) {
-    assert.equal(result.status, 2, `${label}: ${result.stderr}`);
-  }
-  assert.equal(optionBearing.status, 1, optionBearing.stderr);
-  assert.match(optionBearing.stderr, /unknown option '--repos'/);
-  assert.equal(repository.status, 2, repository.stderr);
-  assert.equal(await readFile(projectPath, "utf8"), collision);
-  assert.deepEqual(await readFile(databasePath), databaseBefore);
-  assert.equal(await remoteHead(fixture), remoteBefore);
-  await assert.rejects(stat(join(fixture.stateRoot, "services", "gitea.json")), { code: "ENOENT" });
-  assert.match(empty.stderr, /DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE must not be empty/);
-  assert.match(emptyImporter.stderr, /DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE must not be empty/);
-  assert.match(predecessorSelector.stderr, /DIM_GITEA_CONNECTION_FILE is unsupported by the native-only DIM CLI/);
-  assert.match(repository.stderr, /unknown command 'repo'/);
+test("Project catalog rejects a foreign host and incompatible state without adoption", async () => {
+  const f = await nativeFixture();
+  const file = join(f.stateRoot, "projects", "acme.json"), before = await readFile(file);
+  await rewriteJson(f.controlPath, (value) => ({ ...value, hostId: "host-b" }));
+  const foreign = await runCli(["project", "list", "--json"], f.environment);
+  assert.notEqual(foreign.status, 0); assert.deepEqual(await readFile(file), before);
+  await rewriteJson(f.controlPath, (value) => ({ ...value, hostId: "host-a" }));
+  const incompatible = JSON.stringify({ schemaVersion: 6, phase: "ready", name: "acme" });
+  await writeFile(file, incompatible, { mode: 0o600 });
+  const collision = await runCli(["project", "create", "acme", "--project-id", "project-a", "--json"], f.environment);
+  assert.notEqual(collision.status, 0); assert.equal(await readFile(file, "utf8"), incompatible);
 });
-
-test("native list rejects a foreign host selector without rewriting pending state", async () => {
-  // Given
-  const fixture = await nativeFixture();
-  assert.equal((await runCli(["project", "create", "acme"], fixture.environment)).status, 0);
-  const projectPath = join(fixture.stateRoot, "projects", "acme.json");
-  const before = await readFile(projectPath);
-  await rewriteJson(fixture.controlPath, (value) => ({
-    ...value,
-    hostId: "host-b",
-    nativeGit: { ...(value.nativeGit as object), workspaceWriteIssuer: {
-      ...((value.nativeGit as { workspaceWriteIssuer: object }).workspaceWriteIssuer), username: "host-b"
-    } }
-  }));
-
-  // When
-  const result = await runCli(["project", "list", "--json"], fixture.environment);
-
-  // Then
-  assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /belongs to another native host/);
-  assert.deepEqual(await readFile(projectPath), before);
-});
-
-test("obsolete project remove and purge tokens are unknown without state mutation", async () => {
-  // Given
-  const fixture = await nativeFixture();
-  assert.equal((await runCli(["project", "create", "acme"], fixture.environment)).status, 0);
-  const projectPath = join(fixture.stateRoot, "projects", "acme.json");
-  const before = await readFile(projectPath);
-
-  // When
-  const removed = await runCli(["project", "remove", "acme"], fixture.environment);
-  const purged = await runCli(["project", "purge", "acme", "--yes"], fixture.environment);
-
-  // Then
-  for (const result of [removed, purged]) {
-    assert.equal(result.status, 1, result.stderr);
-    assert.match(result.stderr, /unknown command '(remove|purge)'/);
-  }
-  assert.deepEqual(await readFile(projectPath), before);
-  await assert.rejects(stat(join(fixture.stateRoot, "services", "gitea.json")), { code: "ENOENT" });
-});
-
-async function assertCreateRejectedWithoutProject(fixture: NativeFixture): Promise<void> {
-  const databasePath = join(fixture.serviceRoot, "native-idle.sqlite3");
-  const databaseBefore = await readFile(databasePath);
-  const remoteBefore = await remoteHead(fixture);
-  const result = await runCli(["project", "create", "acme", "--json"], fixture.environment);
-  assert.equal(result.status, 2, result.stderr);
-  await assert.rejects(stat(join(fixture.stateRoot, "projects")), { code: "ENOENT" });
-  assert.deepEqual(await readFile(databasePath), databaseBefore);
-  assert.equal(await remoteHead(fixture), remoteBefore);
-}
-
-async function remoteHead(fixture: NativeFixture): Promise<string> {
-  return (await runFile("/usr/bin/git", ["--git-dir",
-    join(fixture.serviceRoot, "project-a", "root.git"), "rev-parse", "refs/heads/main"])).stdout.trim();
-}

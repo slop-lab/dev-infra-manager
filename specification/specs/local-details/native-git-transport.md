@@ -15,9 +15,9 @@ Idle service startup does not register a Project or create workload capacity.
 
 Registrar, importer, protected-source reader, workspace writer, reviewer,
 promoter and execution roles use distinct credentials. Registration prepares an
-owned repository identity. The importer can publish a verified initial root to
+owned repository identity. The importer can publish a verified initial repository snapshot to
 an unborn protected ref through a checked operation; it cannot replace a later
-protected head. Root-read and workspace-write issuers mint short-lived scoped
+protected head. Repository-read and workspace-write issuers mint short-lived scoped
 transport leases. Workspace writes only create or fast-forward that workspace's
 proposal namespace. Protected writes, tags, deletion, force and foreign access
 are denied at the Git boundary.
@@ -70,3 +70,29 @@ Internal formats evolve with the implementation. Preserve required user data
 before replacing incompatible state; do not migrate old role or runtime
 identities implicitly. See [shared execution](../../docs/ci-runners.md) and the
 [installer facade](../14-installer-facade.md) for their separate responsibilities.
+
+## Multiple repositories in one Project
+
+A Project is the ownership and configuration group. Each named repository has
+its own bare object database, protected ref, import proof, policy, proposal
+namespace, human reviews and promotion sequence. All repository operations and
+transport leases bind both Project and repository identities. A lease for one
+repository must not authorize any other repository, even under the same owner.
+
+The host Project catalog separately selects a configuration repository and a
+default working repository. Workspace creation selects an explicit subset,
+defaulting only to the default working repository. Each selected repository is
+seeded under `/workspace/<repositoryId>`. The configuration repository may be
+read in private host staging without entering the guest or granting guest access.
+
+Imported policy contains a canonical `ciRepositoryIds` allowlist including its
+own repository. Workflow jobs may request a subset of that allowlist; an omitted
+selection means only the candidate repository. Review creation resolves exact
+commit and tree tuples once. Plans, execution descriptors and results bind that
+snapshot, and retries never replace it with moving heads. The trusted worker
+acquires only selected inputs; candidate jobs receive materialized trees without
+Git transport credentials. Dependency head drift makes evidence stale.
+
+Promotion remains an independent compare-and-swap for one protected ref.
+Multi-repository atomic publication and cross-repository change sets are outside
+this contract.

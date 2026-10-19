@@ -58,11 +58,12 @@ describe("native Git root read issuer host client", () => {
     await activateFinalizeService(service.origin);
     await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));
     const importerClient = await createNodeNativeGitRootImporterClient(await importerConnection(service.origin));
-    await importerClient.importRoot({
-      serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root",
+    await importerClient.importRepository({
+      serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
       policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-      policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+      ciRepositoryIds: ["root"],
+      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
         requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
         requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
         requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
@@ -71,10 +72,10 @@ describe("native Git root read issuer host client", () => {
     }, AbortSignal.timeout(20_000));
     const client = await createNodeNativeGitRootReadIssuerClient(await connection(service.origin));
 
-    const lease = await client.issueRootReadLease("project-a", AbortSignal.timeout(5_000));
+    const lease = await client.issueRepositoryReadLease("project-a", "root", AbortSignal.timeout(5_000));
 
     expect(lease).toMatchObject({ schemaVersion: 1, serviceId: "native-main", projectId: "project-a",
-      rootRepositoryId: "root", generationId });
+      repositoryId: "root", generationId });
     expect(lease.expiresAt).toBeGreaterThan(Date.now());
     expect(lease.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000);
     const clone = await createFinalizeRoot("issuer-client-clone");
@@ -111,7 +112,7 @@ describe("native Git root read issuer host client", () => {
     ["cacheable", { cacheControl: "private" }],
     ["extra response field", { bodyChange: { extra: true } }],
     ["foreign Project", { bodyChange: { projectId: "project-b" } }],
-    ["wrong root", { bodyChange: { rootRepositoryId: "other" } }],
+    ["wrong root", { bodyChange: { repositoryId: "other" } }],
     ["wrong generation", { bodyChange: { generationId: "b".repeat(64) } }],
     ["noncanonical username", { bodyChange: { username: "reader" } }],
     ["noncanonical password", { bodyChange: { password: "secret" } }],
@@ -121,7 +122,7 @@ describe("native Git root read issuer host client", () => {
   ] as const)("rejects a %s lease response", async (_label, change) => {
     vi.spyOn(Date, "now").mockReturnValue(leaseNow);
     const responseBody = {
-      schemaVersion: 1, serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root",
+      schemaVersion: 1, serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       generationId, username: `root-read-${Buffer.alloc(18, 1).toString("base64url")}`,
       password: Buffer.alloc(32, 2).toString("base64url"), expiresAt: Date.now() + 25_000,
       ...("bodyChange" in change ? change.bodyChange : {})
@@ -135,7 +136,7 @@ describe("native Git root read issuer host client", () => {
     };
     const client = createNativeGitRootReadIssuerClient(issuerConnection("http://127.0.0.1:1"), httpClient);
 
-    await expect(client.issueRootReadLease("project-a", AbortSignal.timeout(5_000)))
+    await expect(client.issueRepositoryReadLease("project-a", "root", AbortSignal.timeout(5_000)))
       .rejects.toThrow(NativeGitRootReadIssuerClientError);
   });
 
@@ -154,14 +155,14 @@ describe("native Git root read issuer host client", () => {
 
     let message = "";
     try {
-      await client.issueRootReadLease("project-a", AbortSignal.timeout(5_000));
+      await client.issueRepositoryReadLease("project-a", "root", AbortSignal.timeout(5_000));
     } catch (error) {
       message = String(error);
     }
 
     expect(message).not.toContain(secret);
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ method: "POST", path: "/v1/projects/project-a/root-read-leases",
+    expect(requests[0]).toMatchObject({ method: "POST", path: "/v1/projects/project-a/repositories/root/read-leases",
       body: JSON.stringify({ schemaVersion: 1, generationId }) });
   });
 
@@ -176,7 +177,7 @@ describe("native Git root read issuer host client", () => {
     };
     const client = createNativeGitRootReadIssuerClient(issuerConnection("http://127.0.0.1:1"), httpClient);
 
-    const pending = client.issueRootReadLease("project-a", controller.signal);
+    const pending = client.issueRepositoryReadLease("project-a", "root", controller.signal);
     controller.abort();
 
     await expect(pending).rejects.toThrow(NativeGitRootReadIssuerClientError);

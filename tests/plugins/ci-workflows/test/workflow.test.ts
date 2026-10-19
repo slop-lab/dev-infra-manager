@@ -26,3 +26,10 @@ describe("DIM workflow language", () => {
     expect(dimWorkflowCompiler.compile(Buffer.from("jobs: {}\n"))).toEqual([]);
   });
 });
+
+it("keeps an explicit finite repository request for authority-side allowlist resolution", () => {
+  const jobs = dimWorkflowCompiler.compile(Buffer.from("jobs:\n  joint: {script: test.sh, repositories: [public, private]}\n"));
+  expect(jobs[0]?.repositories).toEqual(["public", "private"]);
+  expect(() => dimWorkflowCompiler.compile(Buffer.from("jobs:\n  joint: {script: test.sh, repositories: [public, public]}\n"))).toThrow();
+  expect(() => dimWorkflowCompiler.compile(Buffer.from("jobs:\n  joint: {script: test.sh, repositories: [../private]}\n"))).toThrow();
+});

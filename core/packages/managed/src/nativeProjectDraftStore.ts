@@ -1,16 +1,16 @@
 import { lstat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { LifecycleState } from "./lifecycleState.js";
 import type { NativeGitRootImportResult } from "./nativeGitRootImporterClient.js";
 import { parseNativeProjectDraft, type NativeProjectDraft } from "./nativeProjectDraftCodec.js";
 import { assertPrivateDraftDirectory, copyPrivateBundle, ensurePrivateDraftDirectory,
   inspectPrivateBundle, NativeProjectDraftStoreError, publishPrivateDraft,
   readPrivateDraftJson, replacePrivateDraft } from "./nativeProjectDraftFiles.js";
-import type { NativeRootBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
+import type { NativeRepositoryBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
 
 export { NativeProjectDraftStoreError } from "./nativeProjectDraftFiles.js";
 
-export type NativeProjectDraftClaim = NativeRootBootstrapPolicy & {
+export type NativeProjectDraftClaim = NativeRepositoryBootstrapPolicy & {
   readonly name: string;
   readonly projectId: string;
   readonly ownerHostId: string;
@@ -31,11 +31,13 @@ export class NativeProjectDraftStore {
     this.#artifactRoot = join(this.#draftDirectory, "artifacts");
   }
 
-  async read(name: string): Promise<NativeProjectDraft | undefined> {
-    const recordPath = this.#draftPath(name);
+  async read(name: string, repositoryId: string): Promise<NativeProjectDraft | undefined> {
+    const recordPath = this.#draftPath(name, repositoryId);
     await assertPrivateDraftDirectory(this.root);
     if (!await pathExists(this.#draftDirectory)) return undefined;
     await assertPrivateDraftDirectory(this.#draftDirectory);
+    if (!await pathExists(join(this.#draftDirectory, name))) return undefined;
+    await assertPrivateDraftDirectory(join(this.#draftDirectory, name));
     const raw = await readPrivateDraftJson(recordPath);
     if (raw === undefined) return undefined;
     let draft: NativeProjectDraft;
@@ -44,7 +46,7 @@ export class NativeProjectDraftStore {
     } catch (error) {
       throw new NativeProjectDraftStoreError("native Project draft record is invalid", { cause: error });
     }
-    if (draft.name !== name) {
+    if (draft.name !== name || draft.repositoryId !== repositoryId) {
       throw new NativeProjectDraftStoreError("native Project draft record name conflicts with its path");
     }
     await this.#assertArtifact(draft);
@@ -52,12 +54,11 @@ export class NativeProjectDraftStore {
   }
 
   async claim(input: NativeProjectDraftClaim): Promise<NativeProjectDraft> {
-    const recordPath = this.#draftPath(input.name);
+    const recordPath = this.#draftPath(input.name, input.repositoryId);
     await assertPrivateDraftDirectory(this.root);
     const release = await this.#state.acquireProjectLock(input.name);
     try {
-      await this.#assertProjectNameAvailable(input.name);
-      const existing = await this.read(input.name);
+      const existing = await this.read(input.name, input.repositoryId);
       if (existing !== undefined) {
         const source = await inspectPrivateBundle(input.bundlePath);
         const candidate = this.#pending(input, source.digest, source.size);
@@ -70,7 +71,9 @@ export class NativeProjectDraftStore {
       const candidate = this.#pending(input, source.digest, source.size);
       await ensurePrivateDraftDirectory(this.#draftDirectory);
       await ensurePrivateDraftDirectory(this.#artifactRoot);
-      const artifactDirectory = join(this.#artifactRoot, candidate.projectId);
+      await ensurePrivateDraftDirectory(join(this.#draftDirectory, input.name));
+      await ensurePrivateDraftDirectory(join(this.#artifactRoot, candidate.projectId));
+      const artifactDirectory = join(this.#artifactRoot, candidate.projectId, candidate.repositoryId);
       const bundle = await copyPrivateBundle(input.bundlePath, artifactDirectory);
       if (bundle.digest !== source.digest || bundle.size !== source.size) {
         throw new NativeProjectDraftStoreError("native Project draft source bundle changed before publication");
@@ -83,18 +86,18 @@ export class NativeProjectDraftStore {
     }
   }
 
-  async markRootImported(
+  async markRepositoryImported(
     name: string,
+    repositoryId: string,
     importReceipt: NativeGitRootImportResult
   ): Promise<NativeProjectDraft> {
-    const recordPath = this.#draftPath(name);
+    const recordPath = this.#draftPath(name, repositoryId);
     await assertPrivateDraftDirectory(this.root);
     const release = await this.#state.acquireProjectLock(name);
     try {
-      await this.#assertProjectNameAvailable(name);
-      const current = await this.read(name);
+      const current = await this.read(name, repositoryId);
       if (current === undefined) throw new NativeProjectDraftStoreError("native Project draft does not exist");
-      if (current.phase === "root-imported") {
+      if (current.phase === "repository-imported") {
         if (JSON.stringify(current.importReceipt) !== JSON.stringify(importReceipt)) {
           throw new NativeProjectDraftStoreError("native Project draft receipt replay changes immutable receipt");
         }
@@ -102,7 +105,7 @@ export class NativeProjectDraftStore {
       }
       let imported: NativeProjectDraft;
       try {
-        imported = parseNativeProjectDraft({ ...current, phase: "root-imported", importReceipt });
+        imported = parseNativeProjectDraft({ ...current, phase: "repository-imported", importReceipt });
       } catch (error) {
         throw new NativeProjectDraftStoreError("native Project draft receipt does not match pending intent", { cause: error });
       }
@@ -113,16 +116,17 @@ export class NativeProjectDraftStore {
     }
   }
 
-  #draftPath(name: string): string {
-    return join(this.#draftDirectory, basename(this.#state.projectPath(name)));
+  #draftPath(name: string, repositoryId: string): string {
+    this.#state.projectPath(name);
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)) throw new NativeProjectDraftStoreError("invalid repository ID");
+    return join(this.#draftDirectory, name, `${repositoryId}.json`);
   }
 
   #pending(input: NativeProjectDraftClaim, bundleDigest: string, bundleSize: number): NativeProjectDraft {
     try {
-      return parseNativeProjectDraft({ schemaVersion: 2, recordType: "native-project-draft",
+      return parseNativeProjectDraft({ schemaVersion: 3, recordType: "native-project-draft",
         phase: "import-pending", name: input.name, projectId: input.projectId, serviceId: "native-main",
-        ownerHostId: input.ownerHostId, generationId: input.generationId, rootRepositoryId: "root",
-        rootAlias: input.rootAlias, protectedRef: input.protectedRef, expectedCommit: input.expectedCommit,
+        ownerHostId: input.ownerHostId, generationId: input.generationId, repositoryId: input.repositoryId, protectedRef: input.protectedRef, expectedCommit: input.expectedCommit,
         expectedTree: input.expectedTree, reviewPolicy: input.reviewPolicy,
         bundleDigest, bundleSize });
     } catch (error) {
@@ -132,7 +136,8 @@ export class NativeProjectDraftStore {
 
   async #assertArtifact(draft: NativeProjectDraft): Promise<void> {
     await assertPrivateDraftDirectory(this.#artifactRoot);
-    const directory = join(this.#artifactRoot, draft.projectId);
+    await assertPrivateDraftDirectory(join(this.#artifactRoot, draft.projectId));
+    const directory = join(this.#artifactRoot, draft.projectId, draft.repositoryId);
     await assertPrivateDraftDirectory(directory);
     const artifact = await inspectPrivateBundle(join(directory, `${draft.bundleDigest}.bundle`));
     if (artifact.digest !== draft.bundleDigest || artifact.size !== draft.bundleSize) {
@@ -140,20 +145,12 @@ export class NativeProjectDraftStore {
     }
   }
 
-  async #assertProjectNameAvailable(name: string): Promise<void> {
-    try {
-      await lstat(this.#state.projectPath(name));
-    } catch (error) {
-      if (errorCode(error) === "ENOENT") return;
-      throw new NativeProjectDraftStoreError("same-name Project record cannot be inspected", { cause: error });
-    }
-    throw new NativeProjectDraftStoreError("same-name Project record already exists");
-  }
+
 }
 
 function sameIntent(left: NativeProjectDraft, right: NativeProjectDraft): boolean {
   const leftPending = { ...left, phase: "import-pending" };
-  if (left.phase === "root-imported") {
+  if (left.phase === "repository-imported") {
     Reflect.deleteProperty(leftPending, "importReceipt");
     return JSON.stringify({ ...leftPending, generationId: right.generationId }) === JSON.stringify(right);
   }

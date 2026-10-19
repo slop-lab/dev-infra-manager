@@ -30,7 +30,7 @@ describe("native proposal ref reconciliation bounds", () => {
     const opened = await candidateContext(fixture.root);
 
     // When / Then
-    await expect(readNativeProposalRefs(opened.context, "project-a"))
+    await expect(readNativeProposalRefs(opened.context, "project-a", "root"))
       .rejects.toThrow("native proposal ref capacity is exceeded");
     await opened.close();
   }, 60_000);
@@ -48,7 +48,7 @@ describe("native proposal ref reconciliation bounds", () => {
     const opened = await candidateContext(fixture.root);
 
     // When / Then
-    await expect(readNativeProposalRefs(opened.context, "project-a"))
+    await expect(readNativeProposalRefs(opened.context, "project-a", "root"))
       .rejects.toThrow(/stdout maxBuffer length exceeded/);
     await opened.close();
   }, 60_000);

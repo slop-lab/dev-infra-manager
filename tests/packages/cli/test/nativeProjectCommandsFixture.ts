@@ -8,9 +8,9 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
   createNodeNativeGitRootImporterClient,
-  NativeProjectDraftStore
+  NativeProjectDraftStore, NativeProjectPendingStore, parseNativeControlPlaneConnection
 } from "../../../../core/packages/managed/src/index.js";
-import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
+import { compileNativeRepositoryBootstrapPolicy } from "../../../../core/packages/managed/src/nativeRootBootstrapPolicy.js";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
 import { configuredNativeGitBundleServer,
   type NativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
@@ -32,9 +32,9 @@ const activationToken = Buffer.alloc(32, 42).toString("base64url");
 const nextActivationToken = Buffer.alloc(32, 43).toString("base64url");
 const importer = { hostId: "host-a", username: "project-root-importer-a",
   password: bundleSecrets.projectRootImporter } as const;
-const policy = compileNativeRootBootstrapPolicy({ rootAlias: "root", protectedRef: "refs/heads/main",
+const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main",
   review: { requiredReviewerIds: ["owner"], pathReviewerRules: [],
-    requiredJobs: [] } });
+    requiredJobs: [], ciRepositoryIds: ["root"] } });
 
 export async function cleanupNativeProjectFixtures(): Promise<void> {
   await Promise.all(services.splice(0).map((service) => service.close()));
@@ -75,18 +75,21 @@ export async function nativeFixture(options: NativeFixtureOptions = {}): Promise
   await writeFile(importerPath, JSON.stringify({ schemaVersion: 1, endpoint: service.origin,
     serviceId: "native-main", role: "operator-root-importer", hostId: importer.hostId, generationId,
     credential: { username: importer.username, password: importer.password } }), { mode: 0o600 });
+  const projects = new NativeProjectPendingStore(stateRoot);
+  await projects.create({ name: "acme", projectId: "project-a", ownerHostId: importer.hostId });
   if (options.seedImportedDraft !== false) {
     await service.prepareProject(generationId, importer.hostId, {
-      serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root"
+      serviceId: "native-main", projectId: "project-a", repositoryId: "root"
     });
     const client = await createNodeNativeGitRootImporterClient(importerPath);
-    const receipt = await client.importRoot({ serviceId: "native-main", projectId: "project-a",
-      rootRepositoryId: "root", protectedRef: policy.protectedRef, expectedCommit: bundle.commit,
+    const receipt = await client.importRepository({ serviceId: "native-main", projectId: "project-a",
+      repositoryId: "root", protectedRef: policy.protectedRef, expectedCommit: bundle.commit,
       policy: policy.reviewPolicy, bundlePath }, AbortSignal.timeout(20_000));
     const drafts = new NativeProjectDraftStore(stateRoot);
     await drafts.claim({ name: "acme", projectId: "project-a", ownerHostId: importer.hostId,
       generationId, expectedCommit: bundle.commit, expectedTree: bundle.tree, bundlePath, ...policy });
-    await drafts.markRootImported("acme", receipt);
+    await drafts.markRepositoryImported("acme", "root", receipt);
+    await projects.admitRepository("acme", "root", client, parseNativeControlPlaneConnection(controlConnection(service.origin, importer.hostId, generationId)), AbortSignal.timeout(20_000));
   }
   const controlPath = join(root, "control.json");
   await writeFile(controlPath,
@@ -94,6 +97,7 @@ export async function nativeFixture(options: NativeFixtureOptions = {}): Promise
   const environment = cleanEnvironment();
   environment.XDG_CONFIG_HOME = configHome;
   environment.DIM_STATE_ROOT = stateRoot;
+  environment.DIM_MANAGED_STATE_ROOT = stateRoot;
   environment.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE = controlPath;
   environment.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE = importerPath;
   return { stateRoot, serviceRoot, sourceRepository: bundle.source, registrarPath, importerPath, controlPath,
@@ -129,14 +133,6 @@ export async function nativeFixture(options: NativeFixtureOptions = {}): Promise
       await writeFile(controlPath,
         JSON.stringify(controlConnection(service.origin, importer.hostId, nextGenerationId)), { mode: 0o600 });
     } };
-}
-
-export function pendingView(commit: string, tree: string): object {
-  return { name: "acme", projectId: "project-a", serviceId: "native-main", ownerHostId: "host-a",
-    phase: "admission-pending", rootAlias: "root", protectedRef: "refs/heads/main",
-    rootCommit: commit, rootTree: tree, policyRevision: policy.reviewPolicy.policyRevision,
-    requiredReviewRevision: policy.reviewPolicy.requiredReviewRevision,
-    requiredJobSetRevision: policy.reviewPolicy.requiredJobSetRevision, runnable: false };
 }
 
 export async function rewriteJson(
@@ -225,6 +221,7 @@ nativeReview:
   requiredReviewerIds: [owner]
   pathReviewerRules: []
   requiredJobs: []
+  ciRepositoryIds: [root]
 `);
   await writeFile(join(source, "README.md"), "native CLI root\n");
   await runFile("/usr/bin/git", ["-C", source, "add", "."]);

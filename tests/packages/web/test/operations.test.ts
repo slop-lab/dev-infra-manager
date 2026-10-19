@@ -96,6 +96,11 @@ it("executes only configured public DIM host ports, projects safe summaries and 
     runtime: "container", image: "registry.example.test/team/dev@sha256:" + "a".repeat(64), resources: { cpuCount: "unlimited", memory: "4g", pidsLimit: "512" } }));
   expect(JSON.parse(await readFile(argv, "utf8"))).toEqual(["--host", "ssh-development", "create", "https://example.test/repo;literal.git", "new-dev", "--runtime", "container", "--ref", "main",
     "--image", "registry.example.test/team/dev@sha256:" + "a".repeat(64), "--cpus", "unlimited", "--memory", "4g", "--pids", "512", "--json"]);
+  await operations.workspaceCreate("devbox", workspaceCreateSchema.parse({ name: "joint", source: "dim://app",
+    repositories: ["public", "private"], workingDirectory: "public" }));
+  expect(JSON.parse(await readFile(argv, "utf8"))).toEqual(["--host", "ssh-development", "create", "dim://app", "joint", "--runtime", "container",
+    "--repository", "public", "--repository", "private", "--workdir", "public", "--json"]);
+  expect(() => workspaceCreateSchema.parse({ name: "bad", source: "https://example.test/repo.git", repositories: ["private"] })).toThrow();
   await expect(operations.workspaceCreate("attacker-host", { name: "new-dev", source: "git://example.test/repo.git", runtime: "container" })).rejects.toThrow("host not found");
   await expect(operations.workspaces("attacker-host")).rejects.toThrow("host not found");
 });

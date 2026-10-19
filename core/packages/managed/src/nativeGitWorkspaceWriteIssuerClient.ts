@@ -19,7 +19,7 @@ const leaseFields = [
 
 export type NativeGitWorkspaceWriteLeaseRequest = {
   readonly projectId: string;
-  readonly repositoryId: "root";
+  readonly repositoryId: string;
   readonly workspaceId: string;
 };
 
@@ -27,7 +27,7 @@ export type NativeGitWorkspaceWriteLease = {
   readonly schemaVersion: 1;
   readonly serviceId: "native-main";
   readonly projectId: string;
-  readonly repositoryId: "root";
+  readonly repositoryId: string;
   readonly generationId: string;
   readonly workspaceId: string;
   readonly username: string;
@@ -87,7 +87,7 @@ export function createNativeGitWorkspaceWriteIssuerClient(
         response = await httpClient.request({
           endpoint: connection.endpoint,
           method: "POST",
-          path: `/v1/projects/${request.projectId}/workspace-write-leases`,
+          path: `/v1/projects/${request.projectId}/repositories/${request.repositoryId}/workspace-write-leases`,
           authorization,
           body: JSON.stringify({
             schemaVersion: 1,
@@ -108,10 +108,10 @@ export function createNativeGitWorkspaceWriteIssuerClient(
 
 function parseRequest(input: NativeGitWorkspaceWriteLeaseRequest): NativeGitWorkspaceWriteLeaseRequest {
   const request = exactRecord(input, ["projectId", "repositoryId", "workspaceId"]);
-  if (request.repositoryId !== "root") invalid();
+
   return {
     projectId: projectIdentifier(request.projectId),
-    repositoryId: "root",
+    repositoryId: projectIdentifier(request.repositoryId),
     workspaceId: workspaceIdentifier(request.workspaceId)
   };
 }
@@ -145,7 +145,7 @@ function parseLease(
     schemaVersion: 1,
     serviceId: "native-main",
     projectId: request.projectId,
-    repositoryId: "root",
+    repositoryId: request.repositoryId,
     generationId: connection.generationId,
     workspaceId: request.workspaceId,
     username: leaseUsername(lease.username),

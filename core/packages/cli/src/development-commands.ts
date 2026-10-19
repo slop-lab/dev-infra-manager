@@ -8,6 +8,8 @@ import { createWorkspaceWithPlugins } from "./workspace-create-client.js";
 
 interface OutputFlags { json?: boolean; expectId?: string }
 interface CreateFlags extends OutputFlags {
+  repository?: string[];
+  workdir?: string;
   ref?: string;
   image?: string;
   runtime?: string;
@@ -88,6 +90,8 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
     .argument("<source>")
     .argument("<name>")
     .option("--ref <ref>", "source branch, tag or commit")
+    .option("--repository <id>", "select a managed repository (repeat for multiple)", (value: string, selected: string[]) => [...selected, value], [])
+    .option("--workdir <id>", "selected managed repository used as the working directory")
     .option("--image <image>", "workspace image")
     .option("--runtime <name>", "workspace runtime (container by default; optional providers come from plugins)")
     .option("--cpus <count>", "workspace CPU limit")
@@ -104,6 +108,8 @@ function registerWorkspaceOperations(parent: Command, hosts: HostContextStore): 
       const target = await selectedHost(command, hosts);
       const record = await withConnectionSignals((signal) => createWorkspaceWithPlugins(target, {
         name,
+        ...(flags.repository?.length ? { repositories: flags.repository } : {}),
+        ...(flags.workdir === undefined ? {} : { workingDirectory: flags.workdir }),
         source: { url: source, ...(flags.ref === undefined ? {} : { ref: flags.ref }) },
         ...(flags.image === undefined ? {} : { image: flags.image }),
         ...(flags.runtime === undefined ? {} : { runtime: flags.runtime }),

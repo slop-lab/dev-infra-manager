@@ -17,6 +17,32 @@ returned after durable result acceptance while a Git outage is retried. Git
 accepts only exact candidate evidence for the current execution attempt. Results
 remain candidate-controlled and do not approve or promote their own source.
 
+## Repository inputs
+
+A workflow job may request `repositories: [public, private]`. Its own repository
+is always selected, even when the field is omitted. The source repository's
+trusted imported `ciRepositoryIds` allowlist bounds these requests. A candidate
+cannot grant itself another repository by changing workflow YAML.
+
+Review creation freezes a canonical map of repository IDs to exact commit/tree
+pairs. The primary repository contributes its proposal candidate; dependencies
+contribute their protected heads. Each job binds its selected subset into its
+event and descriptor. The review identity binds the complete input combination,
+so reconciliation with unchanged inputs returns the same immutable review.
+A dependency advancing creates a new review identity; old integration evidence
+and approvals cannot silently apply to the new combination. Promotion still
+performs a compare-and-swap on only the reviewed repository's protected ref.
+There is no atomic cross-repository promotion transaction.
+
+Trusted workers acquire short-lived read capabilities for selected repositories,
+refreshing expiring capabilities against the same immutable execution grant.
+Changed dependencies deny refresh. Jobs receive only materialized trees under
+`/workspace/<repositoryId>`, and their current directory is the primary
+repository's directory. Git credentials, refs and `.git` remain outside runtime
+mounts. Single-repository jobs use the same layout. Execution diagnostics and
+joint-job results remain Project-private through existing operator/query roles;
+there is no automatic public artifact export.
+
 ## Configure capacity
 
 The control-plane facade retains its `nativeGit` and `ordinaryCi` deployment

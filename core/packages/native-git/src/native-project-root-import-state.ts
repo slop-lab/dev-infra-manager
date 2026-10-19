@@ -19,9 +19,9 @@ import {
 } from "./native-project-root-import-codec.js";
 
 export const nativeProjectRootImportSchema = `CREATE TABLE native_project_root_import (
-  project_id TEXT PRIMARY KEY REFERENCES native_project_registration(project_id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  project_id TEXT NOT NULL,
   service_id TEXT NOT NULL CHECK (service_id = 'native-main'),
-  root_repository_id TEXT NOT NULL CHECK (root_repository_id = 'root'),
+  repository_id TEXT NOT NULL,
   owner_host_id TEXT NOT NULL
     CHECK (length(owner_host_id) BETWEEN 1 AND 128
       AND owner_host_id NOT GLOB '*[^a-z0-9._-]*'
@@ -42,11 +42,13 @@ export const nativeProjectRootImportSchema = `CREATE TABLE native_project_root_i
   resolved_tree TEXT
     CHECK (resolved_tree IS NULL OR ((length(resolved_tree) = 40 OR length(resolved_tree) = 64)
       AND resolved_tree NOT GLOB '*[^0-9a-f]*')),
-  phase TEXT NOT NULL CHECK (phase IN ('intent', 'bundle-durable', 'installing', 'objects-installed', 'root-imported')),
+  phase TEXT NOT NULL CHECK (phase IN ('intent', 'bundle-durable', 'installing', 'objects-installed', 'repository-imported')),
+  PRIMARY KEY (project_id, repository_id),
+  FOREIGN KEY (project_id, repository_id) REFERENCES native_repository_registration(project_id, repository_id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   CHECK ((phase = 'intent' AND bundle_sha256 IS NULL AND bundle_size IS NULL AND resolved_tree IS NULL)
     OR (phase IN ('bundle-durable', 'installing') AND bundle_sha256 IS NOT NULL
       AND bundle_size IS NOT NULL AND resolved_tree IS NULL)
-    OR (phase IN ('objects-installed', 'root-imported') AND bundle_sha256 IS NOT NULL
+    OR (phase IN ('objects-installed', 'repository-imported') AND bundle_sha256 IS NOT NULL
       AND bundle_size IS NOT NULL AND resolved_tree IS NOT NULL))
 ) STRICT`;
 
@@ -64,9 +66,9 @@ export function claimNativeProjectRootImportInDatabase(
     database.exec("BEGIN IMMEDIATE");
     try {
       assertActivatedGeneration(database, requestedGenerationId);
-      const registration = selectRegistration(database, requested.projectId);
+      const registration = selectRegistration(database, requested.projectId, requested.repositoryId);
       assertPreparedRegistration(registration, requested, ownerHostId);
-      const existing = selectImport(database, requested.projectId);
+      const existing = selectImport(database, requested.projectId, requested.repositoryId);
       const policyJson = JSON.stringify(requested.policy);
       const policyDigest = createHash("sha256").update(policyJson, "utf8").digest("hex");
       if (existing !== undefined) {
@@ -75,13 +77,13 @@ export function claimNativeProjectRootImportInDatabase(
         return existing;
       }
       database.prepare(`INSERT INTO native_project_root_import
-        (project_id, service_id, root_repository_id, owner_host_id, generation_id, import_nonce,
+        (project_id, service_id, repository_id, owner_host_id, generation_id, import_nonce,
           protected_ref, expected_commit, policy_json, policy_sha256, phase)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'intent')`
-      ).run(requested.projectId, requested.serviceId, requested.rootRepositoryId, ownerHostId,
+      ).run(requested.projectId, requested.serviceId, requested.repositoryId, ownerHostId,
         requestedGenerationId, randomUUID(), requested.protectedRef, requested.expectedCommit,
         policyJson, policyDigest);
-      const claimed = selectImport(database, requested.projectId);
+      const claimed = selectImport(database, requested.projectId, requested.repositoryId);
       if (claimed === undefined) throw new NativeProjectRootImportStateError("native Project root import intent was not stored");
       database.exec("COMMIT");
       return claimed;
@@ -97,19 +99,20 @@ export function claimNativeProjectRootImportInDatabase(
 export function markNativeProjectRootBundleDurableInDatabase(
   databasePath: string,
   projectId: string,
+  repositoryId: string,
   importNonce: string,
   bundleDigest: string,
   bundleSize: number
 ): NativeProjectRootImportDurable | NativeProjectRootImportInstalled {
-  const metadata = parseBundleMetadata({ projectId, importNonce, bundleDigest, bundleSize });
+  const metadata = parseBundleMetadata({ projectId, repositoryId, importNonce, bundleDigest, bundleSize });
   const database = new DatabaseSync(databasePath, { defensive: true });
   try {
     database.exec("PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL; BEGIN IMMEDIATE");
-    const existing = selectImport(database, metadata.projectId);
+    const existing = selectImport(database, metadata.projectId, metadata.repositoryId);
     if (existing === undefined || existing.importNonce !== metadata.importNonce) {
       throw new NativeProjectRootImportConflictError(metadata.projectId);
     }
-    if (existing.phase === "bundle-durable" || existing.phase === "root-imported") {
+    if (existing.phase === "bundle-durable" || existing.phase === "repository-imported") {
       if (existing.bundleDigest !== metadata.bundleDigest || existing.bundleSize !== metadata.bundleSize) {
         throw new NativeProjectRootImportConflictError(metadata.projectId);
       }
@@ -118,9 +121,9 @@ export function markNativeProjectRootBundleDurableInDatabase(
     }
     database.prepare(`UPDATE native_project_root_import
       SET bundle_sha256 = ?, bundle_size = ?, phase = 'bundle-durable'
-      WHERE project_id = ? AND import_nonce = ? AND phase = 'intent'`
-    ).run(metadata.bundleDigest, metadata.bundleSize, metadata.projectId, metadata.importNonce);
-    const durable = selectImport(database, metadata.projectId);
+      WHERE project_id = ? AND repository_id = ? AND import_nonce = ? AND phase = 'intent'`
+    ).run(metadata.bundleDigest, metadata.bundleSize, metadata.projectId, metadata.repositoryId, metadata.importNonce);
+    const durable = selectImport(database, metadata.projectId, metadata.repositoryId);
     if (durable === undefined || durable.phase !== "bundle-durable") {
       throw new NativeProjectRootImportStateError("native Project root bundle durability was not stored");
     }
@@ -135,39 +138,39 @@ export function markNativeProjectRootBundleDurableInDatabase(
 }
 
 export function assertNativeProjectRootImportRows(database: DatabaseSync): readonly NativeProjectRootImport[] {
-  const rows = database.prepare(`SELECT service_id, project_id, root_repository_id, owner_host_id,
+  const rows = database.prepare(`SELECT service_id, project_id, repository_id, owner_host_id,
     generation_id, import_nonce, protected_ref, expected_commit, policy_json, policy_sha256,
     bundle_sha256, bundle_size, resolved_tree, phase
-    FROM native_project_root_import ORDER BY project_id`).all();
+    FROM native_project_root_import ORDER BY project_id, repository_id`).all();
   const imports: NativeProjectRootImport[] = [];
   for (const row of rows) {
     const intent = parseNativeProjectRootImportRow(row);
     assertActivatedGeneration(database, intent.generationId);
-    const registration = selectRegistration(database, intent.projectId);
+    const registration = selectRegistration(database, intent.projectId, intent.repositoryId);
     assertPreparedRegistration(registration, intent, intent.ownerHostId);
     imports.push(intent);
   }
   return imports;
 }
 
-function selectImport(database: DatabaseSync, projectId: string): NativeProjectRootImport | undefined {
-  const row = database.prepare(`SELECT service_id, project_id, root_repository_id, owner_host_id,
+function selectImport(database: DatabaseSync, projectId: string, repositoryId: string): NativeProjectRootImport | undefined {
+  const row = database.prepare(`SELECT service_id, project_id, repository_id, owner_host_id,
     generation_id, import_nonce, protected_ref, expected_commit, policy_json, policy_sha256,
     bundle_sha256, bundle_size, resolved_tree, phase
-    FROM native_project_root_import WHERE project_id = ?`).get(projectId);
+    FROM native_project_root_import WHERE project_id = ? AND repository_id = ?`).get(projectId, repositoryId);
   return row === undefined ? undefined : parseNativeProjectRootImportRow(row);
 }
 
 function assertPreparedRegistration(
   registration: NativeProjectRegistration | undefined,
-  requested: Pick<NativeProjectRootImportIntent, "serviceId" | "projectId" | "rootRepositoryId">,
+  requested: Pick<NativeProjectRootImportIntent, "serviceId" | "projectId" | "repositoryId">,
   ownerHostId: string
 ): asserts registration is NativeProjectRegistration {
-  if (registration === undefined || registration.phase !== "root-prepared") {
+  if (registration === undefined || registration.phase !== "repository-prepared") {
     throw new NativeProjectRootImportStateError("native Project root import requires a prepared root");
   }
   if (registration.ownerHostId !== ownerHostId) throw new NativeProjectRootImportOwnershipError();
-  if (registration.serviceId !== requested.serviceId || registration.rootRepositoryId !== requested.rootRepositoryId) {
+  if (registration.serviceId !== requested.serviceId || registration.repositoryId !== requested.repositoryId) {
     throw new NativeProjectRootImportConflictError(requested.projectId);
   }
 }
@@ -182,7 +185,7 @@ function assertSameIntent(
 ): void {
   if (existing.ownerHostId !== ownerHostId) throw new NativeProjectRootImportOwnershipError();
   if (existing.generationId !== requestedGenerationId || existing.serviceId !== requested.serviceId
-    || existing.rootRepositoryId !== requested.rootRepositoryId || existing.protectedRef !== requested.protectedRef
+    || existing.repositoryId !== requested.repositoryId || existing.protectedRef !== requested.protectedRef
     || existing.expectedCommit !== requested.expectedCommit || JSON.stringify(existing.policy) !== policyJson
     || existing.policyDigest !== policyDigest) {
     throw new NativeProjectRootImportConflictError(requested.projectId);
@@ -190,20 +193,22 @@ function assertSameIntent(
 }
 
 function parseBundleMetadata(value: unknown): {
-  readonly projectId: string; readonly importNonce: string; readonly bundleDigest: string; readonly bundleSize: number;
+  readonly projectId: string; readonly repositoryId: string; readonly importNonce: string; readonly bundleDigest: string; readonly bundleSize: number;
 } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new NativeProjectRootImportStateError();
   const projectId = Reflect.get(value, "projectId");
+  const repositoryId = Reflect.get(value, "repositoryId");
   const importNonce = Reflect.get(value, "importNonce");
   const bundleDigest = Reflect.get(value, "bundleDigest");
   const bundleSize = Reflect.get(value, "bundleSize");
   if (typeof projectId !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(projectId)
+    || typeof repositoryId !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)
     || typeof importNonce !== "string" || !/^[0-9a-f-]{36}$/.test(importNonce)
     || typeof bundleDigest !== "string" || !/^[0-9a-f]{64}$/.test(bundleDigest)
     || typeof bundleSize !== "number" || !Number.isInteger(bundleSize) || bundleSize < 1 || bundleSize > 256 * 1024 * 1024) {
     throw new NativeProjectRootImportStateError("native Project root bundle metadata is invalid");
   }
-  return { projectId, importNonce, bundleDigest, bundleSize };
+  return { projectId, repositoryId, importNonce, bundleDigest, bundleSize };
 }
 
 export {

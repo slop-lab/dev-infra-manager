@@ -4,14 +4,14 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { UserError, WorkspaceStore } from "@slop-lab/dim-core/workspace";
 import { createNativeWorkspaceBroker } from "./nativeWorkspaceBroker.js";
-import { nativeWorkspaceAttachmentFile, nativeWorkspaceBrokerHealth, readNativeWorkspaceAttachment,
+import { nativeWorkspaceAttachmentFile, nativeWorkspaceBrokerHealth, nativeWorkspaceBrokerCredential, readNativeWorkspaceAttachment,
   type NativeWorkspaceAttachment } from "./nativeWorkspaceAttachment.js";
 
 export async function ensureNativeWorkspaceBroker(attachment: NativeWorkspaceAttachment, signal?: AbortSignal): Promise<void> {
   const ready = async (): Promise<boolean> => {
     try {
       const response = await fetch(`http://${attachment.gateway}:${attachment.port}/health`, {
-        headers: { authorization: `Basic ${Buffer.from(`dim:${attachment.grant}`).toString("base64")}` },
+        headers: { authorization: `Basic ${Buffer.from(`dim:${nativeWorkspaceBrokerCredential(attachment)}`).toString("base64")}` },
         signal: AbortSignal.timeout(500)
       });
       return response.status === 200 && await response.text() === nativeWorkspaceBrokerHealth(attachment);

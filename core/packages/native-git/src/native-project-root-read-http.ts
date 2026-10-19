@@ -16,7 +16,7 @@ import type { NativeGitBundleState } from "./native-bundle-state.js";
 import {
   NativeImportedRootInactiveError,
   NativeImportedRootNotFoundError,
-  verifyLiveImportedRoot
+  verifyLiveImportedRepository
 } from "./native-imported-root-verifier.js";
 import { NativeProjectRootImportStateError } from "./native-project-root-import-codec.js";
 import { NativeProjectRootPromotionStateError } from "./native-project-root-promotion-state.js";
@@ -65,7 +65,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
       leases.clear();
     },
     async handleLeaseRequest(request, response, url) {
-      const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/root-read-leases$/
+      const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/read-leases$/
         .exec(url.pathname);
       if (match === null) return false;
       if (request.method !== "POST" || url.search !== "") {
@@ -73,7 +73,8 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
         return true;
       }
       const projectId = match[1];
-      if (projectId === undefined) return false;
+      const repositoryId = match[2];
+      if (projectId === undefined || repositoryId === undefined) return false;
       if (input.issuers.length === 0) {
         sendNotFound(response);
         return true;
@@ -112,7 +113,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
         await input.hooks?.beforeVerification?.();
         if (!operations.isOpen()) return true;
         try {
-          await verify(input, projectId, issuer.hostId);
+          await verify(input, projectId, repositoryId, issuer.hostId);
         } catch (error) {
           if (!operations.isOpen()) return true;
           return sendVerificationFailure(response, error);
@@ -121,7 +122,8 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
         const lease = leases.issue({
           generationId: input.expectedGenerationId,
           ownerHostId: issuer.hostId,
-          projectId
+          projectId,
+          repositoryId
         });
         if (lease === undefined) {
           sendJson(response, 503, { error: "native Git root read lease capacity is exhausted" });
@@ -131,7 +133,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
           schemaVersion: 1,
           serviceId: "native-main",
           projectId,
-          rootRepositoryId: "root",
+          repositoryId,
           generationId: input.expectedGenerationId,
           username: lease.username,
           password: lease.password,
@@ -151,7 +153,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
         sendEmpty(response, known ? 403 : 401, { "WWW-Authenticate": 'Basic realm="DIM Git"' });
         return;
       }
-      if (route.projectId !== lease.projectId || route.repositoryId !== "root") {
+      if (route.projectId !== lease.projectId || route.repositoryId !== lease.repositoryId) {
         sendNotFound(response);
         return;
       }
@@ -168,7 +170,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
         await input.hooks?.beforeVerification?.();
         if (!operations.isOpen()) return;
         try {
-          await verify(input, route.projectId, lease.ownerHostId);
+          await verify(input, route.projectId, route.repositoryId, lease.ownerHostId);
         } catch (error) {
           if (operations.isOpen()) sendVerificationFailure(response, error);
           return;
@@ -195,11 +197,11 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
 }
 
 function leaseMatchesRoute(lease: RootReadLeaseScope, route: NativeGitRoute, generationId: string): boolean {
-  return lease.generationId === generationId && lease.projectId === route.projectId && route.repositoryId === "root";
+  return lease.generationId === generationId && lease.projectId === route.projectId && route.repositoryId === lease.repositoryId;
 }
 
-function verify(input: RootReadServiceInput, projectId: string, ownerHostId: string) {
-  return verifyLiveImportedRoot({
+function verify(input: RootReadServiceInput, projectId: string, repositoryId: string, ownerHostId: string) {
+  return verifyLiveImportedRepository({
     activated: input.activated(),
     activationTokenDigest: input.activationTokenDigest,
     expectedGenerationId: input.expectedGenerationId,
@@ -207,6 +209,7 @@ function verify(input: RootReadServiceInput, projectId: string, ownerHostId: str
     gitIdentity: input.gitIdentity,
     ownerHostId,
     projectId,
+    repositoryId,
     state: input.state,
     stateDirectory: input.stateDirectory
   });

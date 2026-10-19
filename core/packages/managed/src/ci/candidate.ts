@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { chmod, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { UserError } from "@slop-lab/dim-core";
 import { executionDescriptorSchema, executionDescriptorDigest, type ExecutionDescriptor } from "@slop-lab/dim-native-git/execution";
 
@@ -55,12 +56,20 @@ export async function verifyAndMaterializeCandidate(input: NativeCandidateVerifi
     signal: input.signal
   });
   assertBlob(script, descriptor.script, 1024 * 1024, "script");
-  const materialized = await input.authority.materializeTree({
-    ...identity, commitObjectId: descriptor.candidateCommit, treeObjectId: descriptor.candidateTree,
-    destination: input.workspace, signal: input.signal
-  });
-  if (materialized.commitObjectId !== descriptor.candidateCommit || materialized.treeObjectId !== descriptor.candidateTree) {
-    throw new NativeHostVerificationError("materialized candidate identity does not match the descriptor");
+  const primary = descriptor.inputs[descriptor.repositoryId];
+  if (!Object.hasOwn(descriptor.inputs, descriptor.repositoryId) || primary?.commit !== descriptor.candidateCommit || primary.tree !== descriptor.candidateTree) {
+    throw new NativeHostVerificationError("primary repository is missing from execution inputs");
+  }
+  await mkdir(input.workspace, { mode: 0o700 });
+  for (const [repositoryId, snapshot] of Object.entries(descriptor.inputs)) {
+    const selected = { projectId: descriptor.projectId, repositoryId };
+    const commit = await input.authority.readCommit({ ...selected, objectId: snapshot.commit, signal: input.signal });
+    if (commit.objectId !== snapshot.commit || commit.treeObjectId !== snapshot.tree) throw new NativeHostVerificationError("input repository commit does not match snapshot");
+    const materialized = await input.authority.materializeTree({ ...selected, commitObjectId: snapshot.commit,
+      treeObjectId: snapshot.tree, destination: join(input.workspace, repositoryId), signal: input.signal });
+    if (materialized.commitObjectId !== snapshot.commit || materialized.treeObjectId !== snapshot.tree) {
+      throw new NativeHostVerificationError("materialized input identity does not match descriptor");
+    }
   }
   await writeFile(input.scriptFile, script.bytes, { mode: 0o400, flag: "wx" });
   await chmod(input.scriptFile, 0o400);

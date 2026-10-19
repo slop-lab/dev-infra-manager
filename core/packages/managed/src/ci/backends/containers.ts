@@ -63,7 +63,8 @@ export async function cleanupNativeContainer(runner: StreamingCommandRunner, cla
   return removed.exitCode === 0 || isMissing(removed.stderr, id);
 }
 
-export function nativeRunnerScript(targets: readonly string[] = [], defaults?: Readonly<Record<string, string>>): string {
+export function nativeRunnerScript(repositoryId: string, targets: readonly string[] = [], defaults?: Readonly<Record<string, string>>): string {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)) throw new Error("invalid job working repository");
   const mounts = validateJobConfigTargets(targets).map((target, index) => {
     return `--mount type=bind,source=/run/dim/job/config-${index},target=${target},readonly`;
   }).join(" ");
@@ -85,7 +86,7 @@ docker image pull "$DIM_JOB_IMAGE" >/dev/null
 job_digests="$(docker image inspect "$DIM_JOB_IMAGE" --format '{{json .RepoDigests}}')"
 printf '%s\n' "$job_digests" | grep -Fq -- "\"$DIM_JOB_IMAGE\""
 docker run --rm --oom-score-adj 500 --network bridge --cpus "$DIM_JOB_CPUS" --memory "$DIM_JOB_MEMORY" --pids-limit "$DIM_JOB_PIDS" \
-  --workdir /workspace --mount type=bind,source=/workspace,target=/workspace \
+  --workdir /workspace/${repositoryId} --mount type=bind,source=/workspace,target=/workspace \
   --mount type=bind,source=/run/dim/job/script,target=/run/dim/job/script,readonly \
   ${mounts} \
   --entrypoint /bin/bash "$DIM_JOB_IMAGE" --noprofile --norc -c ${shellQuote(jobEnvironmentScript(defaults) + 'exec /bin/bash --noprofile --norc /run/dim/job/script\n')}

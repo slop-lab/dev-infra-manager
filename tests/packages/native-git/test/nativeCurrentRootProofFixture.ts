@@ -44,7 +44,7 @@ export async function seedRootPromotion(input: SeedPromotionInput): Promise<void
     const evidenceJson = JSON.stringify(evidence);
     const evidenceDigest = nativeProjectRootPromotionEvidenceDigest(evidence);
     const identity: Omit<NativeProjectRootPromotionTransition, "transitionId" | "evidence"> = {
-      projectId: "project-a",
+      projectId: "project-a", repositoryId: "root",
       importNonce: stringField(imported, "import_nonce"),
       sequence: 1,
       reviewId: evidence.reviewId,
@@ -65,11 +65,11 @@ export async function seedRootPromotion(input: SeedPromotionInput): Promise<void
       ? "native_project_root_promotion_intent"
       : "native_project_root_promotion_finalized";
     database.prepare(`INSERT INTO ${table}
-      (project_id, transition_id, import_nonce, sequence, review_id, protected_ref, proposal_ref,
+      (project_id, repository_id, transition_id, import_nonce, sequence, review_id, protected_ref, proposal_ref,
        expected_commit, expected_tree, candidate_commit, candidate_tree, decision_generation,
        policy_sha256, policy_revision, required_review_revision, required_job_set_revision,
-       evidence_json, evidence_sha256) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(identity.projectId, nativeProjectRootPromotionTransitionId(identity), identity.importNonce,
+       evidence_json, evidence_sha256) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(identity.projectId, identity.repositoryId, nativeProjectRootPromotionTransitionId(identity), identity.importNonce,
         identity.sequence, identity.reviewId, identity.protectedRef, identity.proposalRef,
         identity.expectedCommit, identity.expectedTree, identity.candidateCommit, identity.candidateTree,
         identity.decisionGeneration, identity.policyDigest, identity.policyRevision,

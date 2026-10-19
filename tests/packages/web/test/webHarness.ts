@@ -149,6 +149,7 @@ export function webConfig(input: {
       username: humanReviewer.username,
       password: humanReviewer.password,
       projectId: "project-a",
+      repositoryIds: ["root"],
       generationId,
       reviewerId: humanReviewer.reviewerId
     },

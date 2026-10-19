@@ -3,6 +3,7 @@ export type WorkflowJob = {
   readonly name: string;
   readonly kind: "ordinary-sysbox" | "qemu";
   readonly script: string;
+  readonly repositories?: readonly string[];
   readonly argv: readonly string[];
 };
 

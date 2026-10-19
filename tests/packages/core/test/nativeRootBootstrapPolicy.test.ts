@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
-  compileNativeRootBootstrapPolicy,
+  compileNativeRepositoryBootstrapPolicy,
   parseNativeRootBootstrapManifestYaml
 } from "../../../../core/packages/managed/src/index.js";
 import { parseRepositorySetYaml } from "../../../../core/packages/managed/src/repositorySet.js";
 import { parseNativeProjectRootImportInput } from "../../../../core/packages/native-git/src/native-project-root-import-codec.js";
 
-const review = {
+const review = { ciRepositoryIds: ["root"],
   requiredReviewerIds: ["owner", "security"],
   pathReviewerRules: [{ pathPrefix: ".dim/", reviewerIds: ["security"] }],
   requiredJobs: [{ name: "source", kind: "ordinary-sysbox" }, { name: "integration", kind: "qemu" }]
@@ -22,6 +22,7 @@ repositories:
     ref: main
     protect: [main]
 nativeReview:
+  ciRepositoryIds: [root]
   requiredReviewerIds: [owner, security]
   pathReviewerRules:
     - pathPrefix: .dim/
@@ -34,9 +35,9 @@ ${override}`;
 
 describe("native root bootstrap policy", () => {
   it("binds reviewed manifest and explicit input to the same canonical policy", () => {
-    const fromManifest = parseNativeRootBootstrapManifestYaml(manifest(), "refs/heads/main");
-    const fromExplicit = compileNativeRootBootstrapPolicy({
-      rootAlias: "root", protectedRef: "refs/heads/main", review: {
+    const fromManifest = parseNativeRootBootstrapManifestYaml(manifest(), "refs/heads/main", "root");
+    const fromExplicit = compileNativeRepositoryBootstrapPolicy({
+      repositoryId: "root", protectedRef: "refs/heads/main", review: {
         ...review, requiredReviewerIds: ["security", "owner"],
         requiredJobs: [...review.requiredJobs].reverse()
       }
@@ -51,7 +52,7 @@ describe("native root bootstrap policy", () => {
       requiredReviewerIds: ["owner", "security"]
     });
     expect(parseNativeProjectRootImportInput({ serviceId: "native-main", projectId: "project-a",
-      rootRepositoryId: "root", protectedRef: fromManifest.protectedRef,
+      repositoryId: "root", protectedRef: fromManifest.protectedRef,
       expectedCommit: "a".repeat(40), policy: fromManifest.reviewPolicy }).policy)
       .toEqual(fromManifest.reviewPolicy);
     for (const revision of [fromManifest.reviewPolicy.policyRevision,
@@ -64,8 +65,8 @@ describe("native root bootstrap policy", () => {
     expect(fromManifest.reviewPolicy.requiredJobSetRevision).toBe(createHash("sha256")
       .update("dim-native-jobs-v2\0").update(JSON.stringify(jobs)).digest("hex"));
     expect(fromManifest.reviewPolicy.policyRevision).toBe(createHash("sha256")
-      .update("dim-native-policy-v3\0").update(JSON.stringify({
-        protectedRef: "refs/heads/main", ...reviewers
+      .update("dim-native-policy-v4\0").update(JSON.stringify({
+        protectedRef: "refs/heads/main", ciRepositoryIds: ["root"], ...reviewers
       })).digest("hex"));
     expect(fromManifest.reviewPolicy.requiredReviewRevision).toBe(createHash("sha256")
       .update("dim-native-reviewers-v1\0").update(JSON.stringify(reviewers)).digest("hex"));
@@ -79,8 +80,8 @@ describe("native root bootstrap policy", () => {
     ["both execution kinds", review.requiredJobs]
   ] as const)("accepts %s as an explicit quality policy", (_label, requiredJobs) => {
     // Given / When
-    const compiled = compileNativeRootBootstrapPolicy({
-      rootAlias: "root", protectedRef: "refs/heads/main", review: { ...review, requiredJobs }
+    const compiled = compileNativeRepositoryBootstrapPolicy({
+      repositoryId: "root", protectedRef: "refs/heads/main", review: { ...review, requiredJobs }
     });
 
     // Then
@@ -89,11 +90,11 @@ describe("native root bootstrap policy", () => {
 
   it("keeps the security policy revision stable across quality-only jobset changes", () => {
     // Given
-    const input = { rootAlias: "root", protectedRef: "refs/heads/main", review } as const;
+    const input = { repositoryId: "root", protectedRef: "refs/heads/main", review } as const;
 
     // When
-    const dual = compileNativeRootBootstrapPolicy(input).reviewPolicy;
-    const disabled = compileNativeRootBootstrapPolicy({ ...input,
+    const dual = compileNativeRepositoryBootstrapPolicy(input).reviewPolicy;
+    const disabled = compileNativeRepositoryBootstrapPolicy({ ...input,
       review: { ...review, requiredJobs: [] } }).reviewPolicy;
 
     // Then
@@ -103,53 +104,53 @@ describe("native root bootstrap policy", () => {
   });
 
   it("rejects mismatched or unprotected reviewed root refs and unknown manifest fields", () => {
-    expect(() => parseNativeRootBootstrapManifestYaml(manifest(), "refs/heads/development")).toThrow();
+    expect(() => parseNativeRootBootstrapManifestYaml(manifest(), "refs/heads/development", "root")).toThrow();
     expect(() => parseNativeRootBootstrapManifestYaml(manifest().replace("protect: [main]", "protect: []"),
-      "refs/heads/main")).toThrow();
-    expect(() => parseNativeRootBootstrapManifestYaml(manifest("unknown: true\n"), "refs/heads/main"))
+      "refs/heads/main", "root")).toThrow();
+    expect(() => parseNativeRootBootstrapManifestYaml(manifest("unknown: true\n"), "refs/heads/main", "root"))
       .toThrow(/unknown/);
   });
 
   it("rejects unsafe refs, duplicate or untyped jobs, and unsafe reviewer rules", () => {
-    const base = { rootAlias: "root", protectedRef: "refs/heads/main", review };
-    expect(() => compileNativeRootBootstrapPolicy({ ...base, protectedRef: "refs/heads/proposals/agent/a" }))
+    const base = { repositoryId: "root", protectedRef: "refs/heads/main", review };
+    expect(() => compileNativeRepositoryBootstrapPolicy({ ...base, protectedRef: "refs/heads/proposals/agent/a" }))
       .toThrow();
-    expect(() => compileNativeRootBootstrapPolicy({ ...base, protectedRef: "refs/heads/.hidden" }))
+    expect(() => compileNativeRepositoryBootstrapPolicy({ ...base, protectedRef: "refs/heads/.hidden" }))
       .toThrow();
-    expect(() => compileNativeRootBootstrapPolicy({ ...base,
+    expect(() => compileNativeRepositoryBootstrapPolicy({ ...base,
       review: { ...review, requiredJobs: [...review.requiredJobs, review.requiredJobs[0]] } })).toThrow();
-    expect(() => compileNativeRootBootstrapPolicy({ ...base,
+    expect(() => compileNativeRepositoryBootstrapPolicy({ ...base,
       review: { ...review, requiredJobs: [{ name: "source", kind: "independent" }] } })).toThrow();
-    expect(() => compileNativeRootBootstrapPolicy({ ...base,
+    expect(() => compileNativeRepositoryBootstrapPolicy({ ...base,
       review: { ...review, pathReviewerRules: [{ pathPrefix: "../secret", reviewerIds: ["owner"] }] } })).toThrow();
-    expect(() => compileNativeRootBootstrapPolicy({ ...base,
+    expect(() => compileNativeRepositoryBootstrapPolicy({ ...base,
       review: { ...review, extra: "untrusted" } })).toThrow();
   });
 
   it("accepts no path-specific reviewers but rejects nonportable reviewed origins", () => {
-    const compiled = compileNativeRootBootstrapPolicy({
-      rootAlias: "root", protectedRef: "refs/heads/main", review: { ...review, pathReviewerRules: [] }
+    const compiled = compileNativeRepositoryBootstrapPolicy({
+      repositoryId: "root", protectedRef: "refs/heads/main", review: { ...review, pathReviewerRules: [] }
     });
     expect(compiled.reviewPolicy.pathReviewerRules).toEqual([]);
     expect(() => parseNativeRootBootstrapManifestYaml(
-      manifest().replace("https://example.test/team/root.git", "../root.git"), "refs/heads/main"
+      manifest().replace("https://example.test/team/root.git", "../root.git"), "refs/heads/main", "root"
     )).toThrow(/relative filesystem path/);
   });
 
   it("uses native Git's exact rule order and binds each job's execution kind", () => {
-    const input = { rootAlias: "root", protectedRef: "refs/heads/main", review: {
+    const input = { repositoryId: "root", protectedRef: "refs/heads/main", review: {
       ...review, pathReviewerRules: [
         { pathPrefix: "a/", reviewerIds: ["owner"] },
         { pathPrefix: "Z/", reviewerIds: ["security"] }
       ]
     } } as const;
-    const compiled = compileNativeRootBootstrapPolicy(input);
+    const compiled = compileNativeRepositoryBootstrapPolicy(input);
     expect(compiled.reviewPolicy.pathReviewerRules.map(({ pathPrefix }) => pathPrefix)).toEqual(["Z/", "a/"]);
     expect(parseNativeProjectRootImportInput({ serviceId: "native-main", projectId: "project-a",
-      rootRepositoryId: "root", protectedRef: compiled.protectedRef,
+      repositoryId: "root", protectedRef: compiled.protectedRef,
       expectedCommit: "a".repeat(40), policy: compiled.reviewPolicy }).policy)
       .toEqual(compiled.reviewPolicy);
-    const wrongKind = compileNativeRootBootstrapPolicy({ ...input, review: {
+    const wrongKind = compileNativeRepositoryBootstrapPolicy({ ...input, review: {
       ...input.review, requiredJobs: [
         { name: "source", kind: "qemu" }, { name: "integration", kind: "ordinary-sysbox" }
       ]

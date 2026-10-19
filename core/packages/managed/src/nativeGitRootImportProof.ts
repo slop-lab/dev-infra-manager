@@ -3,15 +3,16 @@ import type { NativeGitRootImporterConnection } from "./nativeGitRootImporterCon
 
 const proofFields = ["schemaVersion", "servingGenerationId", "ownerHostId", "importReceipt",
   "currentHead"] as const;
-const receiptFields = ["schemaVersion", "serviceId", "projectId", "rootRepositoryId", "generationId",
+const receiptFields = ["schemaVersion", "serviceId", "projectId", "repositoryId", "generationId",
   "importNonce", "protectedRef", "expectedCommit", "resolvedTree", "policyDigest", "bundleDigest",
   "bundleSize", "phase"] as const;
 const objectIdPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const digestPattern = /^[0-9a-f]{64}$/;
-const currentHeadFields = ["projectId", "sequence", "protectedRef", "commit", "tree", "policyDigest"] as const;
+const currentHeadFields = ["projectId", "repositoryId", "sequence", "protectedRef", "commit", "tree", "policyDigest"] as const;
 
 export type NativeGitCurrentRootHead = {
   readonly projectId: string;
+  readonly repositoryId: string;
   readonly sequence: number;
   readonly protectedRef: string;
   readonly commit: string;
@@ -34,15 +35,16 @@ export class NativeGitRootImportProofError extends Error {
 export function parseNativeGitImportedRootProof(
   input: unknown,
   connection: NativeGitRootImporterConnection,
-  projectId: string
+  projectId: string,
+  repositoryId: string
 ): NativeGitImportedRootProof {
   const proof = exactRecord(input, proofFields);
   if (proof.schemaVersion !== 3 || proof.servingGenerationId !== connection.generationId
     || proof.ownerHostId !== connection.hostId) invalid();
   const receipt = exactRecord(proof.importReceipt, receiptFields);
   if (receipt.schemaVersion !== 1 || receipt.serviceId !== connection.serviceId
-    || receipt.projectId !== projectId || receipt.rootRepositoryId !== "root"
-    || receipt.phase !== "root-imported") invalid();
+    || receipt.projectId !== projectId || receipt.repositoryId !== repositoryId
+    || receipt.phase !== "repository-imported") invalid();
   const protectedRef = field(receipt.protectedRef, /^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/);
   if (protectedRef.startsWith("refs/heads/proposals/") || protectedRef.includes("..")
     || protectedRef.endsWith("/") || protectedRef.endsWith(".") || protectedRef.endsWith(".lock")
@@ -56,7 +58,7 @@ export function parseNativeGitImportedRootProof(
   const sequence = current.sequence;
   const currentCommit = field(current.commit, objectIdPattern);
   const currentTree = field(current.tree, objectIdPattern);
-  if (current.projectId !== projectId || current.protectedRef !== protectedRef
+  if (current.projectId !== projectId || current.repositoryId !== repositoryId || current.protectedRef !== protectedRef
     || current.policyDigest !== receipt.policyDigest || typeof sequence !== "number"
     || !Number.isSafeInteger(sequence) || sequence < 0
     || currentCommit.length !== expectedCommit.length || currentTree.length !== expectedCommit.length
@@ -69,7 +71,7 @@ export function parseNativeGitImportedRootProof(
       schemaVersion: 1,
       serviceId: "native-main",
       projectId,
-      rootRepositoryId: "root",
+      repositoryId,
       generationId: field(receipt.generationId, digestPattern),
       importNonce: field(receipt.importNonce,
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
@@ -79,9 +81,9 @@ export function parseNativeGitImportedRootProof(
       policyDigest: field(receipt.policyDigest, digestPattern),
       bundleDigest: field(receipt.bundleDigest, digestPattern),
       bundleSize: receipt.bundleSize,
-      phase: "root-imported"
+      phase: "repository-imported"
     },
-    currentHead: { projectId, sequence, protectedRef, commit: currentCommit, tree: currentTree,
+    currentHead: { projectId, repositoryId, sequence, protectedRef, commit: currentCommit, tree: currentTree,
       policyDigest: field(current.policyDigest, digestPattern) }
   };
 }

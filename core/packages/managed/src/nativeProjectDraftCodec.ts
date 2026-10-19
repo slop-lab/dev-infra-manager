@@ -1,22 +1,22 @@
 import { createHash } from "node:crypto";
 import { UserError } from "@slop-lab/dim-core";
 import type { NativeGitRootImportResult } from "./nativeGitRootImporterClient.js";
-import { compileNativeRootBootstrapPolicy, type NativeRootBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
+import { compileNativeRepositoryBootstrapPolicy, type NativeRepositoryBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
 import { validateLifecycleName } from "@slop-lab/dim-core";
 
 const commonFields = ["recordType", "phase", "name", "projectId", "serviceId", "ownerHostId", "generationId",
-  "rootRepositoryId", "rootAlias", "protectedRef", "expectedCommit", "expectedTree", "reviewPolicy",
+  "repositoryId", "protectedRef", "expectedCommit", "expectedTree", "reviewPolicy",
   "bundleDigest", "bundleSize"] as const;
 const draftFields = ["schemaVersion", ...commonFields] as const;
-const receiptFields = ["schemaVersion", "serviceId", "projectId", "rootRepositoryId", "generationId",
+const receiptFields = ["schemaVersion", "serviceId", "projectId", "repositoryId", "generationId",
   "importNonce", "protectedRef", "expectedCommit", "policyDigest", "bundleDigest", "bundleSize",
   "resolvedTree", "phase"] as const;
 const digestPattern = /^[0-9a-f]{64}$/;
 const objectIdPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 type DraftBase = DraftIdentity & {
-  readonly schemaVersion: 2;
-  readonly reviewPolicy: NativeRootBootstrapPolicy["reviewPolicy"];
+  readonly schemaVersion: 3;
+  readonly reviewPolicy: NativeRepositoryBootstrapPolicy["reviewPolicy"];
 };
 type DraftIdentity = {
   readonly recordType: "native-project-draft";
@@ -25,9 +25,8 @@ type DraftIdentity = {
   readonly serviceId: "native-main";
   readonly ownerHostId: string;
   readonly generationId: string;
-  readonly rootRepositoryId: "root";
-  readonly rootAlias: string;
-  readonly protectedRef: string;
+  readonly repositoryId: string;
+    readonly protectedRef: string;
   readonly expectedCommit: string;
   readonly expectedTree: string;
   readonly bundleDigest: string;
@@ -36,7 +35,7 @@ type DraftIdentity = {
 
 export type NativeProjectDraft = DraftBase & (
   | { readonly phase: "import-pending" }
-  | { readonly phase: "root-imported"; readonly importReceipt: NativeGitRootImportResult }
+  | { readonly phase: "repository-imported"; readonly importReceipt: NativeGitRootImportResult }
 );
 
 export class NativeProjectDraftError extends UserError {
@@ -45,13 +44,13 @@ export class NativeProjectDraftError extends UserError {
 
 export function parseNativeProjectDraft(input: unknown): NativeProjectDraft {
   if (!isRecord(input)) invalid();
-  if (input.schemaVersion !== 2) invalid();
+  if (input.schemaVersion !== 3) invalid();
   const phase = input.phase;
-  if (phase !== "import-pending" && phase !== "root-imported") invalid();
-  const record = exactRecord(input, phase === "root-imported" ? [...draftFields, "importReceipt"] : draftFields);
+  if (phase !== "import-pending" && phase !== "repository-imported") invalid();
+  const record = exactRecord(input, phase === "repository-imported" ? [...draftFields, "importReceipt"] : draftFields);
   const identity = parseIdentity(record);
   const policy = parsePolicy(record, identity);
-  const base: DraftBase = { schemaVersion: 2, ...identity, reviewPolicy: policy };
+  const base: DraftBase = { schemaVersion: 3, ...identity, reviewPolicy: policy };
   if (phase === "import-pending") return { ...base, phase };
   return { ...base, phase, importReceipt: parseReceipt(record.importReceipt, base, policy) };
 }
@@ -59,25 +58,25 @@ export function parseNativeProjectDraft(input: unknown): NativeProjectDraft {
 function parsePolicy(
   record: Readonly<Record<string, unknown>>,
   identity: DraftIdentity
-): NativeRootBootstrapPolicy["reviewPolicy"] {
+): NativeRepositoryBootstrapPolicy["reviewPolicy"] {
   const review = exactRecord(record.reviewPolicy, ["schemaVersion", "protectedRef", "policyRevision",
-    "requiredReviewRevision", "requiredJobSetRevision", "requiredJobs", "requiredReviewerIds", "pathReviewerRules"]);
+    "requiredReviewRevision", "requiredJobSetRevision", "requiredJobs", "requiredReviewerIds", "pathReviewerRules", "ciRepositoryIds"]);
   if (!Array.isArray(review.requiredJobs)) invalid();
   const jobs = review.requiredJobs.map((value) => {
     const job = exactRecord(value, ["name", "kind", "evidenceClass"]);
     if (job.evidenceClass !== "candidate-controlled") invalid();
     return { name: job.name, kind: job.kind };
   });
-  const compiled = compilePolicy(identity, review.requiredReviewerIds, review.pathReviewerRules, jobs);
+  const compiled = compilePolicy(identity, review.requiredReviewerIds, review.pathReviewerRules, jobs, review.ciRepositoryIds);
   if (JSON.stringify(record.reviewPolicy) !== JSON.stringify(compiled)) invalid();
   return compiled;
 }
 
 function compilePolicy(identity: DraftIdentity, requiredReviewerIds: unknown,
-  pathReviewerRules: unknown, requiredJobs: unknown): NativeRootBootstrapPolicy["reviewPolicy"] {
+  pathReviewerRules: unknown, requiredJobs: unknown, ciRepositoryIds: unknown): NativeRepositoryBootstrapPolicy["reviewPolicy"] {
   try {
-    return compileNativeRootBootstrapPolicy({ rootAlias: identity.rootAlias, protectedRef: identity.protectedRef,
-      review: { requiredReviewerIds, pathReviewerRules, requiredJobs } }).reviewPolicy;
+    return compileNativeRepositoryBootstrapPolicy({ repositoryId: identity.repositoryId, protectedRef: identity.protectedRef,
+      review: { requiredReviewerIds, pathReviewerRules, requiredJobs, ciRepositoryIds } }).reviewPolicy;
   } catch (error) {
     if (error instanceof UserError) invalid();
     throw error;
@@ -86,7 +85,7 @@ function compilePolicy(identity: DraftIdentity, requiredReviewerIds: unknown,
 
 function parseIdentity(record: Readonly<Record<string, unknown>>): DraftIdentity {
   if (record.recordType !== "native-project-draft" || record.serviceId !== "native-main"
-    || record.rootRepositoryId !== "root" || typeof record.name !== "string") invalid();
+    || typeof record.name !== "string") invalid();
   let name: string;
   try {
     name = validateLifecycleName(record.name, "project");
@@ -102,8 +101,7 @@ function parseIdentity(record: Readonly<Record<string, unknown>>): DraftIdentity
   return { recordType: "native-project-draft", name,
     projectId: field(record.projectId, /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/), serviceId: "native-main",
     ownerHostId: field(record.ownerHostId, /^[a-z0-9][a-z0-9._-]{0,127}$/),
-    generationId: field(record.generationId, digestPattern), rootRepositoryId: "root",
-    rootAlias: field(record.rootAlias, /^[a-z][a-z0-9-]{0,62}$/),
+    generationId: field(record.generationId, digestPattern), repositoryId: field(record.repositoryId, /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
     protectedRef: field(record.protectedRef, /^refs\/heads\//), expectedCommit, expectedTree,
     bundleDigest: field(record.bundleDigest, digestPattern), bundleSize };
 }
@@ -112,17 +110,17 @@ function parseReceipt(value: unknown, base: DraftIdentity, policy: unknown): Nat
   const receipt = exactRecord(value, receiptFields);
   const policyDigest = createHash("sha256").update(JSON.stringify(policy)).digest("hex");
   if (receipt.schemaVersion !== 1 || receipt.serviceId !== base.serviceId || receipt.projectId !== base.projectId
-    || receipt.rootRepositoryId !== base.rootRepositoryId || receipt.generationId !== base.generationId
+    || receipt.repositoryId !== base.repositoryId || receipt.generationId !== base.generationId
     || receipt.protectedRef !== base.protectedRef || receipt.expectedCommit !== base.expectedCommit
     || receipt.policyDigest !== policyDigest || receipt.bundleDigest !== base.bundleDigest
     || receipt.bundleSize !== base.bundleSize || receipt.resolvedTree !== base.expectedTree
-    || receipt.phase !== "root-imported") invalid();
-  return { schemaVersion: 1, serviceId: "native-main", projectId: base.projectId, rootRepositoryId: "root",
+    || receipt.phase !== "repository-imported") invalid();
+  return { schemaVersion: 1, serviceId: "native-main", projectId: base.projectId, repositoryId: base.repositoryId,
     generationId: base.generationId, importNonce: field(receipt.importNonce,
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
     protectedRef: base.protectedRef, expectedCommit: base.expectedCommit, policyDigest,
     bundleDigest: base.bundleDigest, bundleSize: base.bundleSize, resolvedTree: base.expectedTree,
-    phase: "root-imported" };
+    phase: "repository-imported" };
 }
 
 function exactRecord(value: unknown, fields: readonly string[]): Readonly<Record<string, unknown>> {

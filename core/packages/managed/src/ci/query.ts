@@ -4,7 +4,7 @@ import { executionSchema, executionResultSchema, type Execution } from "./execut
 
 const event = executionEventSchema.unwrap().shape;
 const state = executionSchema.shape;
-export const executionSummarySchema = z.object({ id: state.id, eventId: event.eventId, projectId: event.projectId,
+export const executionSummarySchema = z.object({ id: state.id, eventId: event.eventId, projectId: event.projectId, repositoryId: event.repositoryId,
   jobName: event.jobName, executionKind: event.executionKind, phase: state.phase, generationId: state.generationId,
   createdAt: state.createdAt, retryOf: state.retryOf, cancelRequestedAt: state.cancelRequestedAt, workerId: state.workerId, slotId: state.slotId, publication: state.publication,
   outcome: executionResultSchema.shape.result.optional(), completion: executionResultSchema.shape.completion.optional(),
@@ -16,7 +16,7 @@ export const executionDetailSchema = z.object({ job: executionSummarySchema, res
 /** This projection contains no worker lease, execution grant, script or raw diagnostics. */
 export function executionSummary(job: Pick<Execution, "id" | "event" | "phase" | "generationId" | "createdAt" | "workerId" | "slotId" | "publication" | "retryOf" | "cancelRequestedAt">
   & { result?: Pick<NonNullable<Execution["result"]>, "result" | "completion" | "finishedAt"> | undefined }): ExecutionSummary {
-  return executionSummarySchema.parse({ id: job.id, eventId: job.event.eventId, projectId: job.event.projectId,
+  return executionSummarySchema.parse({ id: job.id, eventId: job.event.eventId, projectId: job.event.projectId, repositoryId: job.event.repositoryId,
     jobName: job.event.jobName, executionKind: job.event.executionKind, phase: job.phase, generationId: job.generationId,
     createdAt: job.createdAt, ...(job.retryOf === undefined ? {} : { retryOf: job.retryOf }),
     ...(job.cancelRequestedAt === undefined ? {} : { cancelRequestedAt: job.cancelRequestedAt }), ...(job.workerId === undefined ? {} : { workerId: job.workerId }),

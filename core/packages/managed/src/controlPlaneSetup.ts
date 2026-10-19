@@ -10,7 +10,7 @@ import { UserError } from "@slop-lab/dim-core";
 import { parseNativeGitBundleConfig } from "@slop-lab/dim-native-git/config";
 import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
 import type { NativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
-import { compileNativeRootBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
+import { compileNativeRepositoryBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
 import { parseNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import { parseNativeGitProjectRegistrarConnection } from "./nativeGitProjectRegistrarConnection.js";
 import { parseNativeGitRootImporterConnection } from "./nativeGitRootImporterConnection.js";
@@ -69,9 +69,9 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
       token: randomBytes(32).toString("base64url"), slots }]
   };
   parseControlPlaneServicePair(native, ordinary);
-  const reviewPolicy = { schemaVersion: 1, rootAlias: "root",
-    review: { requiredReviewerIds: ["owner"], requiredJobs: [] } };
-  compileNativeRootBootstrapPolicy({ rootAlias: reviewPolicy.rootAlias, protectedRef: "refs/heads/main", review: reviewPolicy.review });
+  const reviewPolicy = { schemaVersion: 1, repositoryId: "root",
+    review: { requiredReviewerIds: ["owner"], requiredJobs: [], ciRepositoryIds: ["root"] } };
+  compileNativeRepositoryBootstrapPolicy({ repositoryId: reviewPolicy.repositoryId, protectedRef: "refs/heads/main", review: reviewPolicy.review });
   const service = (name: string, image: string, publishedPort: number) => ({ image,
     configFile: path.join(directory, `${name}.json`), readinessTokenFile: path.join(directory, `${name}-readiness.token`),
     publish: { host: "127.0.0.1", port: publishedPort } });

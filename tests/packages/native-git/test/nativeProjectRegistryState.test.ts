@@ -6,14 +6,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   initializeNativeGitBundleState,
   inspectNativeGitBundleState,
-  NativeProjectRegistrationConflictError,
   readNativeProjectRegistrations,
   registerNativeProject
 } from "../../../../core/packages/native-git/src/native-bundle-state.js";
 
 const roots: string[] = [];
-const projectA = { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root", ownerHostId: "host-a" } as const;
-const projectB = { serviceId: "native-main", projectId: "project-b", rootRepositoryId: "root", ownerHostId: "host-b" } as const;
+const projectA = { serviceId: "native-main", projectId: "project-a", repositoryId: "root", ownerHostId: "host-a" } as const;
+const projectB = { serviceId: "native-main", projectId: "project-b", repositoryId: "root", ownerHostId: "host-b" } as const;
 const generationId = "a".repeat(64);
 
 afterEach(async () => {
@@ -21,6 +20,21 @@ afterEach(async () => {
 });
 
 describe("native Project registry state", () => {
+  it("registers independent repositories under one Project owner and durable storage identity", async () => {
+    const root = await temporaryRoot();
+    const state = await initializeNativeGitBundleState(root); activate(state);
+    try {
+      registerNativeProject(state, generationId, { ...projectA, repositoryId: "public" });
+      registerNativeProject(state, generationId, { ...projectA, repositoryId: "private" });
+      const repositories = readNativeProjectRegistrations(state);
+      expect(repositories.map(({ repositoryId }) => repositoryId)).toEqual(["private", "public"]);
+      expect(new Set(repositories.map(({ provisioningNonce }) => provisioningNonce)).size).toBe(1);
+      const before = await stateTree(root);
+      expect(() => registerNativeProject(state, generationId, { ...projectA, repositoryId: "third", ownerHostId: "host-b" })).toThrow(/host does not match/);
+      expect(await stateTree(root)).toEqual(before);
+    } finally { await state.owner.release(); }
+    await expect(inspectNativeGitBundleState(root)).resolves.toEqual({ stateFormat: 9 });
+  });
   it("refuses registration before the installed generation is activated", async () => {
     const root = await temporaryRoot();
     const state = await initializeNativeGitBundleState(root);
@@ -51,7 +65,7 @@ describe("native Project registry state", () => {
     await restarted.owner.release();
 
     // Then
-    expect(inspected).toEqual({ stateFormat: 8 });
+    expect(inspected).toEqual({ stateFormat: 9 });
     expect(registrations).toEqual([
       expect.objectContaining({ ...projectA, phase: "provisioning", provisioningNonce: expect.any(String) }),
       expect.objectContaining({ ...projectB, phase: "provisioning", provisioningNonce: expect.any(String) })
@@ -80,7 +94,7 @@ describe("native Project registry state", () => {
     await state.owner.release();
   });
 
-  it("rejects changed tuple reuse without changing the exact registration", async () => {
+  it("rejects another owner without changing the Project registration", async () => {
     // Given
     const root = await temporaryRoot();
     const state = await initializeNativeGitBundleState(root);
@@ -89,10 +103,10 @@ describe("native Project registry state", () => {
     const before = await stateTree(root);
 
     // When
-    const changed = () => registerNativeProject(state, generationId, { ...projectA, rootRepositoryId: "other-root" });
+    const changed = () => registerNativeProject(state, generationId, { ...projectA, ownerHostId: "host-b" });
 
     // Then
-    expect(changed).toThrow(NativeProjectRegistrationConflictError);
+    expect(changed).toThrow(/host does not match/);
     expect(readNativeProjectRegistrations(state)).toEqual([
       expect.objectContaining({ ...projectA, phase: "provisioning", provisioningNonce: expect.any(String) })
     ]);
@@ -127,7 +141,7 @@ describe("native Project registry state", () => {
   it.each([
     ["a malformed row", "native-main", "INVALID", "root"],
     ["a foreign row", "foreign-native", "project-a", "root"]
-  ])("rejects %s byte-identically during read-only inspection", async (_label, serviceId, projectId, rootRepositoryId) => {
+  ])("rejects %s byte-identically during read-only inspection", async (_label, serviceId, projectId, repositoryId) => {
     // Given
     const root = await temporaryRoot();
     const state = await initializeNativeGitBundleState(root);
@@ -135,9 +149,10 @@ describe("native Project registry state", () => {
     const database = new DatabaseSync(join(root, "native-idle.sqlite3"));
     database.exec("PRAGMA ignore_check_constraints = ON");
     database.prepare(`INSERT INTO native_project_registration
-      (service_id, project_id, root_repository_id, owner_host_id, provisioning_nonce, phase)
-      VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(serviceId, projectId, rootRepositoryId, "host-a", "00000000-0000-4000-8000-000000000000", "provisioning");
+      (service_id, project_id, owner_host_id, provisioning_nonce)
+      VALUES (?, ?, ?, ?)`
+    ).run(serviceId, projectId, "host-a", "00000000-0000-4000-8000-000000000000");
+    database.prepare("INSERT INTO native_repository_registration (project_id, repository_id, phase) VALUES (?, ?, 'provisioning')").run(projectId, repositoryId);
     database.close();
     const before = await stateTree(root);
 

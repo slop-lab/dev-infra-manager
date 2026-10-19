@@ -109,12 +109,12 @@ describe("activated native Git bundle transport", () => {
 
     // Then
     expect([registeredA, replayA]).toEqual([
-      { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root", state: "root-prepared" },
-      { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root", state: "root-prepared" }
+      { serviceId: "native-main", projectId: "project-a", repositoryId: "root", state: "repository-prepared" },
+      { serviceId: "native-main", projectId: "project-a", repositoryId: "root", state: "repository-prepared" }
     ]);
     expect(await readFile(join(root, "native-idle.sqlite3"))).toEqual(beforeReplay);
     expect(registeredB.projectId).toBe("project-b");
-    await expect(first.prepareProject(generationId, "host-a", { ...projectA, rootRepositoryId: "other" }))
+    await expect(first.prepareProject(generationId, "host-a", { ...projectA, repositoryId: "../other" }))
       .rejects.toThrow(/invalid/i);
     await expect(start(root)).rejects.toThrow(/active server/i);
     const databaseBytes = await readFile(join(root, "native-idle.sqlite3"));
@@ -158,8 +158,8 @@ describe("activated native Git bundle transport", () => {
 
     // Then
     const database = new DatabaseSync(join(root, "native-idle.sqlite3"), { readOnly: true });
-    expect(database.prepare("SELECT phase FROM native_project_registration WHERE project_id = ?")
-      .get(projectA.projectId)).toEqual({ phase: "root-prepared" });
+    expect(database.prepare("SELECT phase FROM native_repository_registration WHERE project_id = ? AND repository_id = ?")
+      .get(projectA.projectId, projectA.repositoryId)).toEqual({ phase: "repository-prepared" });
     expect(database.prepare("SELECT name FROM sqlite_schema WHERE name = 'native_project_writer'").get()).toBeUndefined();
     database.close();
     await expect(git(root, ["ls-remote", url(recovered.origin, "project-a")]))
@@ -168,7 +168,7 @@ describe("activated native Git bundle transport", () => {
       .toContain(projectA.projectId);
 
     const replay = await recovered.prepareProject(generationId, "host-a", projectA);
-    expect(replay.state).toBe("root-prepared");
+    expect(replay.state).toBe("repository-prepared");
     await expect(git(root, ["ls-remote", url(recovered.origin, "project-a")]))
       .rejects.toSatisfy((error: unknown) => isExitError(error) && /Authentication failed/.test(error.stderr));
   });
@@ -211,7 +211,7 @@ async function pendingRegistration(input: Registration): Promise<string> {
   beginNativeProjectPreparation(state.database, generationId, {
     serviceId: input.serviceId,
     projectId: input.projectId,
-    rootRepositoryId: input.rootRepositoryId,
+    repositoryId: input.repositoryId,
     ownerHostId: "host-a"
   });
   await state.owner.release();
@@ -267,7 +267,7 @@ function preparation(projectId: string) {
   return {
     serviceId: "native-main",
     projectId,
-    rootRepositoryId: "root"
+    repositoryId: "root"
   } as const;
 }
 

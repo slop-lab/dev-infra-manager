@@ -56,8 +56,9 @@ describe("installed native protected promotion", () => {
     // Then
     expect(promoted.response.status, JSON.stringify(promoted.body)).toBe(201);
     expect(await protectedHead(fixture.root)).not.toBe(before);
-    const proofResponse = await fetch(`${fixture.service.origin}/v1/projects/project-a/root-import/proof`, {
-      headers: { authorization }
+    const proofResponse = await fetch(`${fixture.service.origin}/v1/projects/project-a/repositories/root/import/proof`, {
+      method: "POST", headers: { authorization, "content-type": "application/json" },
+      body: JSON.stringify({ schemaVersion: 1, generationId })
     });
     expect(proofResponse.status).toBe(200);
     expect(field(await proofResponse.json(), "currentHead")).toMatchObject({ sequence: 1,
@@ -189,12 +190,12 @@ describe("installed native protected promotion", () => {
     ]);
 
     // When
-    const created = await cli(["resolve", reviewerPath, "project-a", reviewProposalRef]);
+    const created = await cli(["resolve", reviewerPath, "project-a", "root", reviewProposalRef]);
     const reviewId = field(JSON.parse(created), "review").reviewId;
     if (typeof reviewId !== "string") throw new TypeError("review ID is missing");
-    await cli(["inspect", reviewerPath, "project-a", reviewId]);
-    const approved = await cli(["approve", reviewerPath, "project-a", reviewId]);
-    const promoted = await cli(["promote", promoterPath, "project-a", reviewId]);
+    await cli(["inspect", reviewerPath, "project-a", "root", reviewId]);
+    const approved = await cli(["approve", reviewerPath, "project-a", "root", reviewId]);
+    const promoted = await cli(["promote", promoterPath, "project-a", "root", reviewId]);
 
     // Then
     expect(JSON.parse(approved)).toMatchObject({ reviewerId: "owner", status: "approved" });

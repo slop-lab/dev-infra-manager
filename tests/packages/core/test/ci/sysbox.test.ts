@@ -48,6 +48,7 @@ it("delivers host plugin configuration read-only to networked jobs without placi
     expect(args).toContain(`type=bind,source=${join(options.root, "config-0")},target=/run/dim/job/config-0,readonly`);
     const launcher = await readFile(join(options.root, "runner.bash"), "utf8");
     expect(launcher).toContain("--network bridge");
+    expect(launcher).toContain("--workdir /workspace/root");
     expect(launcher).toContain("source=/run/dim/job/config-0,target=/etc/apt/apt.conf.d/99dim-mirrors,readonly");
     expect(launcher).not.toContain("HTTP_PROXY");
     expect(launcher).toContain("NPM_CONFIG_GLOBALCONFIG");

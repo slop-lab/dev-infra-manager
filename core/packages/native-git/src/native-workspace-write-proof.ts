@@ -1,5 +1,5 @@
 import type { NativeGitBundleState } from "./native-bundle-state.js";
-import { verifyLiveImportedRoot } from "./native-imported-root-verifier.js";
+import { verifyLiveImportedRepository } from "./native-imported-root-verifier.js";
 import { NativeProjectRootImportStateError } from "./native-project-root-import-codec.js";
 import type { WorkspaceWriteLeaseScope } from "./native-workspace-write-lifecycle.js";
 import type { GitExecutableIdentity } from "./repository.js";
@@ -17,7 +17,7 @@ export type WorkspaceWriteVerificationInput = {
 
 export type WorkspaceWriteLeaseRequest = {
   readonly generationId: string;
-  readonly repositoryId: "root";
+  readonly repositoryId: string;
   readonly workspaceId: string;
 };
 
@@ -26,7 +26,8 @@ export function parseWorkspaceWriteLeaseRequest(value: unknown): WorkspaceWriteL
     || Reflect.get(value, "schemaVersion") !== 1
     || typeof Reflect.get(value, "generationId") !== "string"
     || !/^[0-9a-f]{64}$/.test(Reflect.get(value, "generationId"))
-    || Reflect.get(value, "repositoryId") !== "root"
+    || (typeof Reflect.get(value, "repositoryId") !== "string"
+      || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(Reflect.get(value, "repositoryId")))
     || typeof Reflect.get(value, "workspaceId") !== "string"
     || !/^[A-Za-z0-9_-]{43}$/.test(Reflect.get(value, "workspaceId"))) {
     throw new NativeProjectRootImportStateError("native Project workspace write lease request is invalid");
@@ -38,7 +39,7 @@ export function parseWorkspaceWriteLeaseRequest(value: unknown): WorkspaceWriteL
   }
   return {
     generationId: Reflect.get(value, "generationId"),
-    repositoryId: "root",
+    repositoryId: Reflect.get(value, "repositoryId"),
     workspaceId
   };
 }
@@ -55,9 +56,10 @@ export function workspaceWriteLeaseMatchesRoute(
 export async function verifyAuthoritativeWorkspaceRoot(
   input: WorkspaceWriteVerificationInput,
   projectId: string,
+  repositoryId: string,
   ownerHostId: string
 ): Promise<void> {
-  await verifyLiveImportedRoot({
+  await verifyLiveImportedRepository({
     activated: input.activated(),
     activationTokenDigest: input.activationTokenDigest,
     expectedGenerationId: input.expectedGenerationId,
@@ -65,6 +67,7 @@ export async function verifyAuthoritativeWorkspaceRoot(
     gitIdentity: input.gitIdentity,
     ownerHostId,
     projectId,
+    repositoryId,
     state: input.state,
     stateDirectory: input.stateDirectory
   });

@@ -230,6 +230,7 @@ function fakeDocument() {
 
 function review(patch: string) {
   return {
+    inputs: [{ repositoryId: "source", commit: "b".repeat(40), tree: "c".repeat(40) }],
     input: {
       status: "pending",
       projectId: "project-a",

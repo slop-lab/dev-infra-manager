@@ -30,7 +30,7 @@ export function nativeGitExecutionSource(config: {
         profile: assignment.profile }, config.grantIssuer));
     },
     async candidate(grant) {
-      const result = await post(`/v1/executions/${grant.event.projectId}/${grant.executionId}/read-lease`, {}, config.candidateReader);
+      const result = await post(`/v1/executions/${grant.event.projectId}/${grant.event.repositoryId}/${grant.executionId}/read-lease`, {}, config.candidateReader);
       if (result === null || typeof result !== "object" || typeof Reflect.get(result, "username") !== "string"
         || typeof Reflect.get(result, "password") !== "string" || typeof Reflect.get(result, "expiresAt") !== "number") {
         throw new Error("Git candidate credential is invalid");
@@ -39,7 +39,7 @@ export function nativeGitExecutionSource(config: {
     },
     async publish(grant, result) {
       const { logs: _logs, ...evidence } = result;
-      executionResultSchema.parse(await post(`/v1/executions/${grant.event.projectId}/${grant.executionId}/evidence`, evidence, config.resultReporter));
+      executionResultSchema.parse(await post(`/v1/executions/${grant.event.projectId}/${grant.event.repositoryId}/${grant.executionId}/evidence`, evidence, config.resultReporter));
     }
   };
 }

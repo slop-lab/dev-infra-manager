@@ -52,8 +52,8 @@ describe("native root import serving-generation rollover", () => {
       schemaVersion: 3,
       servingGenerationId: generationB,
       ownerHostId: importer.hostId,
-      importReceipt: { ...fixture.receipt, resolvedTree: fixture.bundle.tree, phase: "root-imported" },
-      currentHead: { projectId: "project-a", sequence: 0, protectedRef: "refs/heads/main",
+      importReceipt: { ...fixture.receipt, resolvedTree: fixture.bundle.tree, phase: "repository-imported" },
+      currentHead: { projectId: "project-a", repositoryId: "root", sequence: 0, protectedRef: "refs/heads/main",
         commit: fixture.receipt.expectedCommit, tree: fixture.bundle.tree,
         policyDigest: fixture.receipt.policyDigest }
     });
@@ -159,7 +159,7 @@ async function importArtifacts(root: string, receipt: ImportReceipt): Promise<{
   const importRow = database.prepare("SELECT * FROM native_project_root_import").get();
   database.close();
   const [bundle, protectedRef] = await Promise.all([
-    readFile(join(root, "project-a", ".dim-root-import", `${receipt.importNonce}.bundle`)),
+    readFile(join(root, "project-a", ".dim-import-root", `${receipt.importNonce}.bundle`)),
     readFile(refPath).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return Buffer.alloc(0);
       throw error;
@@ -169,13 +169,15 @@ async function importArtifacts(root: string, receipt: ImportReceipt): Promise<{
 }
 
 function rootProof(origin: string): Promise<Response> {
-  return fetch(`${origin}/v1/projects/project-a/root-import/proof`, {
-    headers: { authorization }
+  return fetch(`${origin}/v1/projects/project-a/repositories/root/import/proof`, {
+    method: "POST",
+    headers: { authorization, "content-type": "application/json" },
+    body: JSON.stringify({ schemaVersion: 1, generationId: generationB })
   });
 }
 
 function rootLease(origin: string, requestedGeneration: string): Promise<Response> {
-  return fetch(`${origin}/v1/projects/project-a/root-read-leases`, {
+  return fetch(`${origin}/v1/projects/project-a/repositories/root/read-leases`, {
     method: "POST",
     headers: { authorization: rootReadIssuerAuthorization, "content-type": "application/json" },
     body: JSON.stringify({ schemaVersion: 1, generationId: requestedGeneration })

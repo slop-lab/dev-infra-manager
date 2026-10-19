@@ -1,6 +1,7 @@
+import { captureExecutionInputs, assertExecutionInputsCurrent } from "./execution-inputs.js";
 import { z } from "zod";
 import {
-  resolveAuthoritativeNativeRootTarget,
+  resolveAuthoritativeNativeRepositoryTarget,
   type AuthoritativeNativeCandidateRuntime
 } from "./authoritative-native-root-target.js";
 import {
@@ -15,7 +16,7 @@ import {
 } from "./authoritative-native-review-schema.js";
 import { saveAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
 import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";
-import { CandidateExecutionError } from "./candidate-execution-schema.js";
+import { CandidateExecutionError, executionInputsSchema } from "./candidate-execution-schema.js";
 import { loadAuthoritativeNativeCandidateJobInputs } from "./authoritative-native-candidate-job-inputs.js";
 import type { AuthoritativeNativePlanning } from "./authoritative-native-review-schema.js";
 
@@ -26,7 +27,7 @@ const proposalName = z.string().min(1).max(1024).refine((value) => !value.starts
   && !value.endsWith(".") && !value.endsWith(".lock") && /^[A-Za-z0-9._/-]+$/.test(value));
 const selectorSchema = z.object({
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
-  repositoryId: z.literal("root"),
+  repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   proposalRef: z.string()
 }).strict().readonly().transform((selector, context) => {
   const match = /^refs\/heads\/proposals\/([^/]+)\/(.+)$/.exec(selector.proposalRef);
@@ -55,7 +56,7 @@ export async function createAuthoritativeNativeReview(
         cause: selector.error
       });
     }
-    const target = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.data.projectId });
+    const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId });
     const signal = AbortSignal.timeout(30_000);
     const evidence = await inspectAuthoritativeNativeReviewGit({
       gitExecutable: runtime.gitExecutable,
@@ -73,11 +74,12 @@ export async function createAuthoritativeNativeReview(
       evidenceClass
     })).sort((left, right) => left.executionKind.localeCompare(right.executionKind)
       || left.jobName.localeCompare(right.jobName));
-    const identity: AuthoritativeNativeReviewIdentity = {
+    let identity: AuthoritativeNativeReviewIdentity = {
       schemaVersion: 2,
       serviceId: "native-main",
       projectId: selector.data.projectId,
       repositoryId: selector.data.repositoryId,
+      inputs: { [selector.data.repositoryId]: { commit: evidence.candidateCommit, tree: evidence.candidateTree } },
       protectedRef: policy.protectedRef,
       proposalRef: selector.data.proposalRef,
       ...evidence,
@@ -89,26 +91,37 @@ export async function createAuthoritativeNativeReview(
     let planning: AuthoritativeNativePlanning;
     try {
       const inputs = await loadAuthoritativeNativeCandidateJobInputs(runtime, {
-        projectId: selector.data.projectId,
+        projectId: selector.data.projectId, repositoryId: selector.data.repositoryId,
         candidateCommit: evidence.candidateCommit,
         candidateTree: evidence.candidateTree
       });
       planning = { status: "valid", configBlob: inputs.configBlob,
-        jobs: inputs.plan.map((job) => ({ executionKind: job.kind, jobName: job.name,
-          evidenceClass: "candidate-controlled" as const, script: job.script, argv: job.argv })) };
+        jobs: await Promise.all(inputs.plan.map(async (job) => ({ executionKind: job.kind, jobName: job.name,
+          evidenceClass: "candidate-controlled" as const, script: job.script, argv: job.argv,
+          inputs: await captureExecutionInputs(runtime, { projectId: selector.data.projectId,
+            repositoryId: selector.data.repositoryId, candidateCommit: evidence.candidateCommit,
+            candidateTree: evidence.candidateTree, repositories: job.repositories }) }))) };
     } catch (error) {
       if (!(error instanceof CandidateExecutionError)) throw error;
       planning = { status: "invalid", reason: "invalid-candidate-job-plan" };
+    }
+    if (planning.status === "valid") {
+      const combined = Object.assign({}, identity.inputs, ...planning.jobs.map((job) => job.inputs));
+      identity = { ...identity, inputs: executionInputsSchema.parse(Object.fromEntries(Object.entries(combined).sort(([left], [right]) => left.localeCompare(right)))) };
     }
     const envelope = createAuthoritativeNativeReviewEnvelope({ identity,
       qualityRevision: policy.requiredJobSetRevision, policyDigest: target.imported.policyDigest,
       requiredJobs, planning, createdAt: new Date().toISOString() });
     await hooks.beforeFinalVerification?.();
-    const current = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.data.projectId });
+    const current = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId });
     if (current.repository !== target.repository
       || JSON.stringify(current.imported) !== JSON.stringify(target.imported)
       || JSON.stringify(current.currentHead) !== JSON.stringify(target.currentHead)) {
-      throw new AuthoritativeNativeReviewError("authoritative imported root changed during review creation");
+      throw new AuthoritativeNativeReviewError("authoritative imported repository changed during review creation");
+    }
+    if (planning.status === "valid") for (const job of planning.jobs) {
+      await assertExecutionInputsCurrent(runtime, { projectId: identity.projectId, repositoryId: identity.repositoryId,
+        candidateCommit: identity.candidateCommit, candidateTree: identity.candidateTree, inputs: job.inputs });
     }
     await assertAuthoritativeNativeReviewRefs({
       gitExecutable: runtime.gitExecutable,

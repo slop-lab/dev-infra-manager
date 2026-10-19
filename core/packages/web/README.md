@@ -77,7 +77,7 @@ mutate executions. There is no browser worker-token or arbitrary HTTP proxy.
 Initialize combined operations and review from generated private role files:
 
 ```sh
-dim-web init SETUP/connections/reviewer.json --project my-project \
+dim-web init SETUP/connections/reviewer.json --project my-project --repository public --repository private \
   --operations /absolute/operations.json \
   --promoter SETUP/connections/promoter.json \
   --output /absolute/web.json --port 9081
@@ -165,7 +165,12 @@ The operations API lives under `/v1/operations`: `status`,
 `hosts/:configuredId/workspaces` (GET and POST allowlisted action),
 `hosts/:configuredId/workspaces/create` (operator-only POST with origin and CSRF checks), `ci/jobs`,
 `ci/jobs/:uuid`, `ci/jobs/:uuid/cancel`, `ci/jobs/:uuid/retry`, and `ci/workers`.
-Review APIs are scoped to `/v1/projects/:project/repositories/root/reviews`:
+Review APIs are scoped to `/v1/projects/:project/repositories/:repository/reviews`:
 collection GET, proposal `/resolve`, exact review GET, `/approvals`,
 `/revocations`, and operator-only `/promotions`. Query strings, unknown methods,
 arbitrary proxies, foreign Projects and repositories are rejected.
+
+Reviewer configuration explicitly lists `nativeGit.repositoryIds`. The browser
+selector and proposal list use that scope; every resolve, decision and promotion
+request includes the selected repository. Add each repository with a repeated
+`--repository` when initializing the web configuration.

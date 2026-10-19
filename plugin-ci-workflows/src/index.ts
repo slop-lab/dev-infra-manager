@@ -9,6 +9,7 @@ const jobSchema = z.object({
   script: z.string().refine((path) => path.length > 0 && path.length <= 4096 && !path.startsWith("/")
     && !/[\\\x00-\x1f\x7f]/.test(path)
     && path.split("/").every((part) => part.length > 0 && part !== "." && part !== ".." && part !== ".git")),
+  repositories: z.array(z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)).max(64).refine((ids) => new Set(ids).size === ids.length).optional(),
   runtime: z.enum(["container", "vm"]).default("container")
 }).strict().readonly();
 const configSchema = z.object({ jobs: z.record(jobNameSchema, jobSchema) }).strict().readonly();
@@ -17,6 +18,7 @@ export type WorkflowJob = {
   readonly name: string;
   readonly kind: "ordinary-sysbox" | "qemu";
   readonly script: string;
+  readonly repositories?: readonly string[];
   readonly argv: typeof candidateArgv;
 };
 
@@ -31,7 +33,7 @@ export const dimWorkflowCompiler = {
     if (jobs.length > 64) throw new WorkflowSyntaxError("workflow exceeds 64 jobs");
     return jobs.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
       .map(([name, job]) => ({ name, kind: job.runtime === "vm" ? "qemu" : "ordinary-sysbox",
-        script: job.script, argv: candidateArgv }));
+        script: job.script, argv: candidateArgv, ...(job.repositories === undefined ? {} : { repositories: job.repositories }) }));
   }
 };
 

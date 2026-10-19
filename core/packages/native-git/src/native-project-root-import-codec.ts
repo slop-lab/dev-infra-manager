@@ -20,7 +20,7 @@ const finalizeSelector = z.object({
 const importInput = z.object({
   serviceId: z.literal("native-main"),
   projectId: identifier,
-  rootRepositoryId: z.literal("root"),
+  repositoryId: identifier,
   protectedRef: z.string(),
   expectedCommit: objectId,
   policy: nativeImportedRootPolicySchema
@@ -28,7 +28,7 @@ const importInput = z.object({
 const storedRow = z.object({
   serviceId: z.literal("native-main"),
   projectId: identifier,
-  rootRepositoryId: z.literal("root"),
+  repositoryId: identifier,
   ownerHostId: hostIdentifier,
   generationId,
   importNonce: z.string().uuid(),
@@ -41,14 +41,14 @@ const storedRow = z.object({
   resolvedTree: objectId.nullable(),
   phase: z.union([
     z.literal("intent"), z.literal("bundle-durable"), z.literal("installing"),
-    z.literal("objects-installed"), z.literal("root-imported")
+    z.literal("objects-installed"), z.literal("repository-imported")
   ])
 }).strict().readonly();
 
 type NativeProjectRootImportCommon = {
   readonly serviceId: "native-main";
   readonly projectId: string;
-  readonly rootRepositoryId: "root";
+  readonly repositoryId: string;
   readonly ownerHostId: string;
   readonly generationId: string;
   readonly importNonce: string;
@@ -74,7 +74,7 @@ export type NativeProjectRootImportInstalled = NativeProjectRootImportBase & {
   readonly bundleDigest: string;
   readonly bundleSize: number;
   readonly resolvedTree: string;
-  readonly phase: "objects-installed" | "root-imported";
+  readonly phase: "objects-installed" | "repository-imported";
 };
 export type NativeProjectRootImport =
   | NativeProjectRootImportIntent
@@ -106,7 +106,7 @@ export function parseNativeProjectRootImportInput(value: unknown): NativeProject
   } catch (error) {
     throw new NativeProjectRootImportStateError("native Project root import policy is invalid", { cause: error });
   }
-  if (result.data.protectedRef !== policy.protectedRef) {
+  if (!policy.ciRepositoryIds.includes(result.data.repositoryId) || result.data.protectedRef !== policy.protectedRef) {
     throw new NativeProjectRootImportStateError("native Project root import protected ref conflicts with policy");
   }
   return { ...result.data, policy };
@@ -115,7 +115,7 @@ export function parseNativeProjectRootImportInput(value: unknown): NativeProject
 export function parseNativeProjectRootImportRow(row: unknown): NativeProjectRootImport {
   if (!isRecord(row)) throw new NativeProjectRootImportStateError("native Project root import intent row is invalid");
   const result = storedRow.safeParse({
-    serviceId: row.service_id, projectId: row.project_id, rootRepositoryId: row.root_repository_id,
+    serviceId: row.service_id, projectId: row.project_id, repositoryId: row.repository_id,
     ownerHostId: row.owner_host_id, generationId: row.generation_id, importNonce: row.import_nonce,
     protectedRef: row.protected_ref, expectedCommit: row.expected_commit, policyJson: row.policy_json,
     policyDigest: row.policy_sha256, bundleDigest: row.bundle_sha256, bundleSize: row.bundle_size,
@@ -140,7 +140,7 @@ export function parseNativeProjectRootImportRow(row: unknown): NativeProjectRoot
   }
   const policyJson = JSON.stringify(policy);
   const policyDigest = createHash("sha256").update(policyJson, "utf8").digest("hex");
-  if (result.data.protectedRef !== policy.protectedRef || result.data.policyJson !== policyJson
+  if (!policy.ciRepositoryIds.includes(result.data.repositoryId) || result.data.protectedRef !== policy.protectedRef || result.data.policyJson !== policyJson
     || result.data.policyDigest !== policyDigest) {
     throw new NativeProjectRootImportStateError("native Project root import intent policy binding is invalid");
   }

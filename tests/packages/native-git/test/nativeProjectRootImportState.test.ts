@@ -23,11 +23,12 @@ import { refValue } from "../../../support/gitHelpers.js";
 const roots: string[] = [];
 const generationId = "a".repeat(64);
 const otherGenerationId = "b".repeat(64);
-const project = { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root" } as const;
+const project = { serviceId: "native-main", projectId: "project-a", repositoryId: "root" } as const;
 const policy = {
   schemaVersion: 1,
   protectedRef: "refs/heads/main",
-  policyRevision: "634a32b9b5077e16b05d2ca1d309f754dfc0b2f1bbc0085179a13dffe4eb8043",
+  ciRepositoryIds: ["root"],
+  policyRevision: "71237248e29c65428b9e5ffa9c50f7d36631cd0a7bdb6e4908490c22e1007035",
   requiredReviewRevision: "ff16b06bda98a4c379e4b5134f68f6ff5892908e71adc784236d74fe796905a9",
   requiredJobSetRevision: "0ad50d5aeb109a11fa76caa3fcd0614d39d69331d2e27520078dc814bb1426c1",
   requiredJobs: [
@@ -84,12 +85,12 @@ describe("native Project root import intent state", () => {
       policyDigest: expect.stringMatching(/^[0-9a-f]{64}$/)
     });
     const database = new DatabaseSync(restarted.database, { readOnly: true });
-    expect(database.prepare(`SELECT service_id, project_id, root_repository_id, owner_host_id,
+    expect(database.prepare(`SELECT service_id, project_id, repository_id, owner_host_id,
       generation_id, protected_ref, expected_commit, policy_sha256, phase
       FROM native_project_root_import`).get()).toEqual({
       service_id: "native-main",
       project_id: "project-a",
-      root_repository_id: "root",
+      repository_id: "root",
       owner_host_id: "host-a",
       generation_id: generationId,
       protected_ref: "refs/heads/main",
@@ -102,7 +103,7 @@ describe("native Project root import intent state", () => {
     ).all()).toEqual([]);
     expect(database.prepare("SELECT name FROM pragma_table_info('native_project_root_import') ORDER BY cid").all())
       .toEqual([
-        "project_id", "service_id", "root_repository_id", "owner_host_id", "generation_id", "import_nonce",
+        "project_id", "service_id", "repository_id", "owner_host_id", "generation_id", "import_nonce",
         "protected_ref", "expected_commit", "policy_json", "policy_sha256", "bundle_sha256", "bundle_size",
         "resolved_tree", "phase"
       ].map((name) => ({ name })));
@@ -175,7 +176,7 @@ describe("native Project root import intent state", () => {
     await state.owner.release();
   });
 
-  it("requires the registered Project to be root-prepared", async () => {
+  it("requires the registered Project to be repository-prepared", async () => {
     const root = await temporaryRoot();
     const state = await initializeNativeGitBundleState(root);
     activate(state);
@@ -210,16 +211,16 @@ describe("native Project root import intent state", () => {
     const claimed = claimNativeProjectRootImport(state, generationId, "host-a", intent);
     const bytes = Buffer.from("durable private bundle bytes");
     const digest = createHash("sha256").update(bytes).digest("hex");
-    const path = rootBundlePath(root, project.projectId, claimed.importNonce);
-    await mkdir(join(root, project.projectId, ".dim-root-import"), { mode: 0o700 });
+    const path = rootBundlePath(root, project.projectId, project.repositoryId, claimed.importNonce);
+    await mkdir(join(root, project.projectId, ".dim-import-root"), { mode: 0o700 });
     await writeFile(path, bytes, { mode: 0o600 });
 
     // When
     const durable = markNativeProjectRootBundleDurable(
-      state, project.projectId, claimed.importNonce, digest, bytes.length
+      state, project.projectId, project.repositoryId, claimed.importNonce, digest, bytes.length
     );
     const replay = markNativeProjectRootBundleDurable(
-      state, project.projectId, claimed.importNonce, digest, bytes.length
+      state, project.projectId, project.repositoryId, claimed.importNonce, digest, bytes.length
     );
     await state.owner.release();
     const restarted = await initializeNativeGitBundleState(root);
@@ -228,7 +229,7 @@ describe("native Project root import intent state", () => {
     expect(replay).toEqual(durable);
     expect(durable).toMatchObject({ phase: "bundle-durable", bundleDigest: digest, bundleSize: bytes.length });
     expect(() => markNativeProjectRootBundleDurable(
-      restarted, project.projectId, claimed.importNonce, "d".repeat(64), bytes.length
+      restarted, project.projectId, project.repositoryId, claimed.importNonce, "d".repeat(64), bytes.length
     )).toThrow(/conflict/i);
     await restarted.owner.release();
     await writeFile(path, "changed", { mode: 0o600 });

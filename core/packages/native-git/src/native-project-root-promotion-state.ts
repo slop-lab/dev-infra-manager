@@ -9,15 +9,16 @@ import { assertNativeProjectRootImportRows } from "./native-project-root-import-
 import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-import-transitions.js";
 
 type PromotableNativeProjectRoot = NativeProjectRootImportInstalled & {
-  readonly phase: "root-imported";
+  readonly phase: "repository-imported";
 };
 
-const transitionColumns = `project_id, transition_id, import_nonce, sequence, review_id, protected_ref,
+const transitionColumns = `project_id, repository_id, transition_id, import_nonce, sequence, review_id, protected_ref,
   proposal_ref, expected_commit, expected_tree, candidate_commit, candidate_tree, decision_generation,
   policy_sha256, policy_revision, required_review_revision, required_job_set_revision,
   evidence_json, evidence_sha256`;
 const transitionSchemaColumns = `
-  project_id TEXT NOT NULL REFERENCES native_project_root_import(project_id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  project_id TEXT NOT NULL,
+  repository_id TEXT NOT NULL,
   transition_id TEXT NOT NULL UNIQUE
     CHECK (length(transition_id) = 64 AND transition_id NOT GLOB '*[^0-9a-f]*'),
   import_nonce TEXT NOT NULL REFERENCES native_project_root_import(import_nonce) ON UPDATE RESTRICT ON DELETE RESTRICT
@@ -51,19 +52,21 @@ const transitionSchemaColumns = `
   evidence_json TEXT NOT NULL,
   evidence_sha256 TEXT NOT NULL
     CHECK (length(evidence_sha256) = 64 AND evidence_sha256 NOT GLOB '*[^0-9a-f]*'),
-  authorization_verified INTEGER NOT NULL DEFAULT 0 CHECK (authorization_verified IN (0, 1))`;
+  authorization_verified INTEGER NOT NULL DEFAULT 0 CHECK (authorization_verified IN (0, 1)),
+  FOREIGN KEY (project_id, repository_id) REFERENCES native_project_root_import(project_id, repository_id) ON UPDATE RESTRICT ON DELETE RESTRICT`;
 
 export const nativeProjectRootPromotionIntentSchema = `CREATE TABLE native_project_root_promotion_intent (${transitionSchemaColumns},
-  PRIMARY KEY (project_id)
+  PRIMARY KEY (project_id, repository_id)
 ) STRICT`;
 
 export const nativeProjectRootPromotionFinalizedSchema = `CREATE TABLE native_project_root_promotion_finalized (${transitionSchemaColumns},
-  PRIMARY KEY (project_id, sequence),
-  UNIQUE (project_id, review_id)
+  PRIMARY KEY (project_id, repository_id, sequence),
+  UNIQUE (project_id, repository_id, review_id)
 ) STRICT`;
 
 export type NativeProjectRootCurrentHead = {
   readonly projectId: string;
+  readonly repositoryId: string;
   readonly sequence: number;
   readonly protectedRef: string;
   readonly commit: string;
@@ -73,14 +76,14 @@ export type NativeProjectRootCurrentHead = {
 
 export function assertNativeProjectRootPromotionRows(database: DatabaseSync): void {
   assertAllTransitionsVerified(database);
-  const imports = new Map(assertNativeProjectRootImportRows(database).map((entry) => [entry.projectId, entry]));
+  const imports = new Map(assertNativeProjectRootImportRows(database).map((entry) => [`${entry.projectId}/${entry.repositoryId}`, entry]));
   const generations = activatedGenerations(database);
   const finalized = selectTransitions(database, "native_project_root_promotion_finalized");
   const byProject = new Map<string, NativeProjectRootPromotionTransition[]>();
   for (const transition of finalized) {
-    const projectTransitions = byProject.get(transition.projectId) ?? [];
+    const projectTransitions = byProject.get(`${transition.projectId}/${transition.repositoryId}`) ?? [];
     projectTransitions.push(transition);
-    byProject.set(transition.projectId, projectTransitions);
+    byProject.set(`${transition.projectId}/${transition.repositoryId}`, projectTransitions);
   }
   const heads = new Map<string, NativeProjectRootCurrentHead>();
   for (const [projectId, transitions] of byProject) {
@@ -88,24 +91,25 @@ export function assertNativeProjectRootPromotionRows(database: DatabaseSync): vo
   }
   const intents = selectTransitions(database, "native_project_root_promotion_intent");
   for (const intent of intents) {
-    const imported = requirePromotableImport(imports.get(intent.projectId));
-    const current = heads.get(intent.projectId) ?? initialHead(imported);
+    const imported = requirePromotableImport(imports.get(`${intent.projectId}/${intent.repositoryId}`));
+    const current = heads.get(`${intent.projectId}/${intent.repositoryId}`) ?? initialHead(imported);
     assertNextTransition(imported, current, intent, generations);
   }
 }
 
 export function readNativeProjectRootCurrentHeadFromDatabase(
   databasePath: string,
-  projectId: string
+  projectId: string,
+  repositoryId: string
 ): NativeProjectRootCurrentHead {
   const imported = requirePromotableImport(readNativeProjectRootImportsFromDatabase(databasePath)
-    .find((entry) => entry.projectId === projectId));
+    .find((entry) => entry.projectId === projectId && entry.repositoryId === repositoryId));
   const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
   try {
-    assertAllTransitionsVerified(database, projectId);
+    assertAllTransitionsVerified(database, projectId, repositoryId);
     const generations = activatedGenerations(database);
-    const intents = selectTransitions(database, "native_project_root_promotion_intent", projectId);
-    const finalized = selectTransitions(database, "native_project_root_promotion_finalized", projectId);
+    const intents = selectTransitions(database, "native_project_root_promotion_intent", projectId, repositoryId);
+    const finalized = selectTransitions(database, "native_project_root_promotion_finalized", projectId, repositoryId);
     const current = foldCurrentHead(imported, finalized, generations);
     for (const intent of intents) {
       assertNextTransition(imported, current, intent, generations);
@@ -123,7 +127,7 @@ export function saveNativeProjectRootPromotionIntent(
 ): void {
   const database = new DatabaseSync(databasePath);
   try {
-    const existing = selectTransitions(database, "native_project_root_promotion_intent", transition.projectId)[0];
+    const existing = selectTransitions(database, "native_project_root_promotion_intent", transition.projectId, transition.repositoryId)[0];
     if (existing !== undefined) {
       if (existing.transitionId !== transition.transitionId) {
         throw new NativeProjectRootPromotionStateError("native Project root promotion intent conflicts");
@@ -141,13 +145,13 @@ export function finalizeNativeProjectRootPromotion(
   const database = new DatabaseSync(databasePath);
   database.exec("BEGIN IMMEDIATE");
   try {
-    const intent = selectTransitions(database, "native_project_root_promotion_intent", transition.projectId)[0];
+    const intent = selectTransitions(database, "native_project_root_promotion_intent", transition.projectId, transition.repositoryId)[0];
     if (intent === undefined || intent.transitionId !== transition.transitionId) {
       throw new NativeProjectRootPromotionStateError("native Project root promotion intent is missing");
     }
     insertTransition(database, "native_project_root_promotion_finalized", transition);
-    database.prepare("DELETE FROM native_project_root_promotion_intent WHERE project_id = ?")
-      .run(transition.projectId);
+    database.prepare("DELETE FROM native_project_root_promotion_intent WHERE project_id = ? AND repository_id = ?")
+      .run(transition.projectId, transition.repositoryId);
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");
@@ -168,12 +172,13 @@ export function readNativeProjectRootPromotionIntents(
 
 export function readNativeProjectRootPromotionFinalized(
   databasePath: string,
-  projectId?: string
+  projectId?: string,
+  repositoryId?: string
 ): readonly NativeProjectRootPromotionTransition[] {
   const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
   try {
-    assertAllTransitionsVerified(database, projectId);
-    return selectTransitions(database, "native_project_root_promotion_finalized", projectId);
+    assertAllTransitionsVerified(database, projectId, repositoryId);
+    return selectTransitions(database, "native_project_root_promotion_finalized", projectId, repositoryId);
   }
   finally { database.close(); }
 }
@@ -204,7 +209,7 @@ function assertNextTransition(
   })).sort((left, right) => left.executionKind.localeCompare(right.executionKind)
     || left.jobName.localeCompare(right.jobName));
   const actualJobs = transition.evidence.jobs.map(({ evidenceDigest: _evidenceDigest, ...job }) => job);
-  if (transition.projectId !== imported.projectId || transition.importNonce !== imported.importNonce
+  if (transition.projectId !== imported.projectId || transition.repositoryId !== imported.repositoryId || transition.importNonce !== imported.importNonce
     || transition.sequence !== current.sequence + 1 || transition.expectedCommit !== current.commit
     || transition.expectedTree !== current.tree || transition.protectedRef !== imported.protectedRef
     || transition.policyDigest !== imported.policyDigest || transition.policyRevision !== policy.policyRevision
@@ -221,27 +226,29 @@ function initialHead(imported: PromotableNativeProjectRoot): NativeProjectRootCu
   if (imported.expectedCommit.length !== imported.resolvedTree.length) {
     throw new NativeProjectRootPromotionStateError("native Project imported root object formats conflict");
   }
-  return { projectId: imported.projectId, sequence: 0, protectedRef: imported.protectedRef,
+  return { projectId: imported.projectId, repositoryId: imported.repositoryId, sequence: 0, protectedRef: imported.protectedRef,
     commit: imported.expectedCommit, tree: imported.resolvedTree, policyDigest: imported.policyDigest };
 }
 
 function requirePromotableImport(
   imported: NativeProjectRootImport | undefined
 ): PromotableNativeProjectRoot {
-  if (imported === undefined || imported.phase !== "root-imported") {
+  if (imported === undefined || imported.phase !== "repository-imported") {
     throw new NativeProjectRootPromotionStateError("native Project root promotion requires an authoritative import");
   }
-  return { ...imported, phase: "root-imported" };
+  return { ...imported, phase: "repository-imported" };
 }
 
 function selectTransitions(
   database: DatabaseSync,
   table: "native_project_root_promotion_finalized" | "native_project_root_promotion_intent",
-  projectId?: string
+  projectId?: string,
+  repositoryId?: string
 ): readonly NativeProjectRootPromotionTransition[] {
-  const where = projectId === undefined ? "" : " WHERE project_id = ?";
-  return database.prepare(`SELECT ${transitionColumns} FROM ${table}${where} ORDER BY project_id, sequence`)
-    .all(...(projectId === undefined ? [] : [projectId])).map(parseNativeProjectRootPromotionRow);
+  if ((projectId === undefined) !== (repositoryId === undefined)) throw new NativeProjectRootPromotionStateError("repository selector requires Project and repository IDs");
+  const where = projectId === undefined ? "" : " WHERE project_id = ? AND repository_id = ?";
+  return database.prepare(`SELECT ${transitionColumns} FROM ${table}${where} ORDER BY project_id, repository_id, sequence`)
+    .all(...(projectId === undefined ? [] : [projectId, repositoryId!])).map(parseNativeProjectRootPromotionRow);
 }
 
 function insertTransition(
@@ -250,8 +257,8 @@ function insertTransition(
   transition: NativeProjectRootPromotionTransition
 ): void {
   database.prepare(`INSERT INTO ${table}
-    (${transitionColumns}, authorization_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
-    .run(transition.projectId, transition.transitionId, transition.importNonce, transition.sequence,
+    (${transitionColumns}, authorization_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+    .run(transition.projectId, transition.repositoryId, transition.transitionId, transition.importNonce, transition.sequence,
       transition.reviewId, transition.protectedRef, transition.proposalRef, transition.expectedCommit,
       transition.expectedTree, transition.candidateCommit, transition.candidateTree,
       transition.decisionGeneration, transition.policyDigest, transition.policyRevision,
@@ -259,13 +266,13 @@ function insertTransition(
       JSON.stringify(transition.evidence), transition.evidenceDigest);
 }
 
-function assertAllTransitionsVerified(database: DatabaseSync, projectId?: string): void {
+function assertAllTransitionsVerified(database: DatabaseSync, projectId?: string, repositoryId?: string): void {
   const where = projectId === undefined
     ? " WHERE authorization_verified != 1"
-    : " WHERE project_id = ? AND authorization_verified != 1";
+    : " WHERE project_id = ? AND repository_id = ? AND authorization_verified != 1";
   for (const table of ["native_project_root_promotion_finalized", "native_project_root_promotion_intent"] as const) {
     const row = database.prepare(`SELECT 1 FROM ${table}${where} LIMIT 1`)
-      .get(...(projectId === undefined ? [] : [projectId]));
+      .get(...(projectId === undefined ? [] : [projectId, repositoryId!]));
     if (row !== undefined) {
       throw new NativeProjectRootPromotionStateError("native Project root promotion evidence is not yet verified");
     }

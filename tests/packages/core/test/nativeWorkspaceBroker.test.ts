@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkspaceStore, type WorkspaceRecord } from "@slop-lab/dim-core/workspace";
 import { createNativeWorkspaceBroker } from "../../../../core/packages/managed/src/nativeWorkspaceBroker.js";
+import { attachmentRecord, repositoryBinding, repositoryRecord } from "./nativeProjectFixture.js";
 import type { NativeWorkspaceAttachment } from "../../../../core/packages/managed/src/nativeWorkspaceAttachment.js";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -19,22 +20,17 @@ async function fixture() {
     resources: { cpuCount: "1", memory: "1g", pidsLimit: "256" }, git: { name: "Test", email: "test@example.invalid" },
     initialized: true, phase: "running", createdAt: now, updatedAt: now };
   await store.write(workspace);
-  const attachment: NativeWorkspaceAttachment = { schemaVersion: 1, workspaceId: workspace.id, workspaceName: workspace.name,
-    nativeWorkspaceId: randomBytes(32).toString("base64url"), projectName: "example", projectId: "example",
-    protectedRef: workspace.source.ref, commit: workspace.source.commit, tree: "b".repeat(40), policyRevision: "policy",
-    requiredReviewRevision: "review", requiredJobSetRevision: "jobs", connectionFile: path.join(root, "never-read.json"),
-    workspaceStateRoot: root, managedStateRoot: root, gateway: "127.0.0.1", port: 19419,
-    grant: randomBytes(32).toString("base64url") };
+  const attachment: NativeWorkspaceAttachment = { ...attachmentRecord(root, workspace.id, workspace.name), projectName: "example", projectId: "example" };
   const server = createNativeWorkspaceBroker(attachment);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   cleanups.push(() => new Promise((resolve, reject) => { server.close((error) => error ? reject(error) : resolve()); server.closeAllConnections(); }));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("broker test has no listener");
   const endpoint = `http://127.0.0.1:${address.port}`;
-  const headers = { authorization: `Basic ${Buffer.from(`dim:${attachment.grant}`).toString("base64")}` };
+  const headers = { authorization: `Basic ${Buffer.from(`dim:${attachment.repositories.public!.grant}`).toString("base64")}` };
   return { store, workspace, endpoint, headers, attachment };
 }
-const gitPath = "/v1/projects/example/repositories/root.git/info/refs?service=git-upload-pack";
+const gitPath = "/v1/projects/example/repositories/public.git/info/refs?service=git-upload-pack";
 
 describe("native workspace broker authority", () => {
   it("requires its own scoped credential and exposes only the selected Project Git protocol", async () => {
@@ -45,11 +41,11 @@ describe("native workspace broker authority", () => {
     expect((await fetch(`${endpoint}/health`, { headers: { authorization: "Basic invalid" } })).status).toBe(401);
     expect((await fetch(`${endpoint}/health`, { headers })).status).toBe(200);
     for (const request of ["/api/host-inputs/secret", "/v1/call/workspace.discard", "/health?extra=true",
-      "/v1/projects/foreign/repositories/root.git/info/refs?service=git-upload-pack",
+      "/v1/projects/foreign/repositories/public.git/info/refs?service=git-upload-pack",
       `${gitPath}&service=git-receive-pack`]) {
       expect((await fetch(`${endpoint}${request}`, { headers })).status).toBe(404);
     }
-    expect((await fetch(`${endpoint}/v1/projects/example/repositories/root.git/git-receive-pack`, {
+    expect((await fetch(`${endpoint}/v1/projects/example/repositories/public.git/git-receive-pack`, {
       method: "POST", headers: { ...headers, "content-type": "application/json" }, body: "{}"
     })).status).toBe(404);
   });
@@ -70,4 +66,18 @@ describe("native workspace broker authority", () => {
     expect((await fetch(`${endpoint}/health`, { headers })).status).toBe(410);
     expect((await fetch(`${endpoint}${gitPath}`, { headers })).status).toBe(410);
   });
+});
+
+it("fences each selected repository credential independently and never routes an unselected repository", async () => {
+  const { attachment, store, workspace } = await fixture();
+  attachment.repositories.private = { ...repositoryBinding(repositoryRecord("private")), nativeWorkspaceId: randomBytes(32).toString("base64url"), grant: randomBytes(32).toString("base64url") };
+  const server = createNativeWorkspaceBroker(attachment);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  cleanups.push(() => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); }));
+  const address = server.address(); if (!address || typeof address === "string") throw new Error("missing broker address");
+  const headers = { authorization: `Basic ${Buffer.from(`dim:${attachment.repositories.public!.grant}`).toString("base64")}` };
+  expect((await fetch(`http://127.0.0.1:${address.port}/v1/projects/example/repositories/private.git/info/refs?service=git-upload-pack`, { headers })).status).toBe(401);
+  expect((await fetch(`http://127.0.0.1:${address.port}/v1/projects/example/repositories/unselected.git/info/refs?service=git-upload-pack`, { headers })).status).toBe(404);
+  await store.write({ ...workspace, id: randomUUID() });
+  expect((await fetch(`http://127.0.0.1:${address.port}/health`, { headers })).status).toBe(410);
 });

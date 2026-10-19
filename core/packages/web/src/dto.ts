@@ -24,6 +24,7 @@ const revocation = z.object({ approvalId: digest, revokedAt: z.string().datetime
 const nativeReview = z.object({
   schemaVersion: z.literal(2), projectId: identifier, repositoryId: identifier,
   protectedRef: printableText(1024).min(1), proposalRef: printableText(1024).min(1), expectedProtectedHead: objectId,
+  inputs: z.record(identifier, z.object({ commit: objectId, tree: objectId }).strict()),
   candidateCommit: objectId, candidateTree: objectId, policyRevision: revision,
   requiredReviewRevision: revision, qualityRevision: revision, workspaceId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   requiredReviewerIds: z.array(identifier).max(256).readonly(), changes: z.array(changedPath).max(MAX_CHANGES).readonly(),
@@ -53,7 +54,7 @@ export function reviewDto(input: unknown) {
     schemaVersion: review.schemaVersion, projectId: review.projectId, repositoryId: review.repositoryId,
     protectedRef: review.protectedRef, proposalRef: review.proposalRef,
     expectedProtectedHead: review.expectedProtectedHead, candidateCommit: review.candidateCommit,
-    candidateTree: review.candidateTree, policyRevision: review.policyRevision,
+    inputs: review.inputs, candidateTree: review.candidateTree, policyRevision: review.policyRevision,
     requiredReviewRevision: review.requiredReviewRevision, qualityRevision: review.qualityRevision,
     workspaceId: review.workspaceId, requiredReviewerIds: review.requiredReviewerIds,
     changes: review.changes.map((change) => ({

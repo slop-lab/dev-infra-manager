@@ -13,6 +13,8 @@ import {
 } from "../../../../core/packages/native-git/src/native-project-root-promotion-codec.js";
 import {
   assertNativeProjectRootPromotionRows,
+  finalizeNativeProjectRootPromotion,
+  readNativeProjectRootPromotionIntents,
   readNativeProjectRootCurrentHeadFromDatabase
 } from "../../../../core/packages/native-git/src/native-project-root-promotion-state.js";
 
@@ -29,7 +31,8 @@ const candidateTree = "d".repeat(40);
 const policy = {
   schemaVersion: 1,
   protectedRef,
-  policyRevision: "634a32b9b5077e16b05d2ca1d309f754dfc0b2f1bbc0085179a13dffe4eb8043",
+  ciRepositoryIds: ["root"],
+  policyRevision: "71237248e29c65428b9e5ffa9c50f7d36631cd0a7bdb6e4908490c22e1007035",
   requiredReviewRevision: "ff16b06bda98a4c379e4b5134f68f6ff5892908e71adc784236d74fe796905a9",
   requiredJobSetRevision: "0ad50d5aeb109a11fa76caa3fcd0614d39d69331d2e27520078dc814bb1426c1",
   requiredJobs: [
@@ -62,16 +65,48 @@ afterEach(async () => {
 });
 
 describe("native Project root promotion state", () => {
+  it("keeps imports, pending promotions and protected-head sequences independent within one Project", async () => {
+    const databasePath = await seededDatabase();
+    const privatePolicy = { ...policy, ciRepositoryIds: ["private"], policyRevision: createHash("sha256")
+      .update("dim-native-policy-v4\0").update(JSON.stringify({ protectedRef, ciRepositoryIds: ["private"],
+        requiredReviewerIds: policy.requiredReviewerIds, pathReviewerRules: policy.pathReviewerRules })).digest("hex") };
+    const privateJson = JSON.stringify(privatePolicy), privateDigest = createHash("sha256").update(privateJson).digest("hex");
+    const database = new DatabaseSync(databasePath);
+    try {
+      database.prepare("INSERT INTO native_repository_registration (project_id, repository_id, phase) VALUES (?, 'private', 'repository-prepared')").run(projectId);
+      database.prepare(`INSERT INTO native_project_root_import
+        (project_id, service_id, repository_id, owner_host_id, generation_id, import_nonce, protected_ref,
+          expected_commit, policy_json, policy_sha256, bundle_sha256, bundle_size, resolved_tree, phase)
+        SELECT project_id, service_id, 'private', owner_host_id, generation_id, ?, protected_ref,
+          ?, ?, ?, bundle_sha256, bundle_size, ?, phase FROM native_project_root_import WHERE repository_id = 'root'`)
+        .run(randomUUID(), "e".repeat(40), privateJson, privateDigest, "f".repeat(40));
+    } finally { database.close(); }
+    insertTransition(databasePath, "native_project_root_promotion_intent", {
+      sequence: 1, expectedCommit: initialCommit, candidateCommit, candidateTree, transitionPolicyDigest: policyDigest
+    });
+    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "root")).toThrow(/unresolved/);
+    expect(readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "private")).toMatchObject({
+      repositoryId: "private", sequence: 0, commit: "e".repeat(40), tree: "f".repeat(40)
+    });
+    const [intent] = readNativeProjectRootPromotionIntents(databasePath);
+    if (!intent) throw new Error("missing root promotion fixture");
+    finalizeNativeProjectRootPromotion(databasePath, intent);
+    expect(readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "root")).toMatchObject({ sequence: 1, commit: candidateCommit });
+    expect(readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "private")).toMatchObject({ sequence: 0, commit: "e".repeat(40) });
+    const verified = new DatabaseSync(databasePath, { readOnly: true });
+    try { expect(() => assertNativeProjectRootPromotionRows(verified)).not.toThrow(); } finally { verified.close(); }
+  });
+
   it("returns the immutable imported root as sequence zero when no promotion exists", async () => {
     // Given
     const databasePath = await seededDatabase();
 
     // When
-    const current = readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId);
+    const current = readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "root");
 
     // Then
     expect(current).toEqual({
-      projectId,
+      projectId, repositoryId: "root",
       sequence: 0,
       protectedRef,
       commit: initialCommit,
@@ -96,7 +131,7 @@ describe("native Project root promotion state", () => {
     database.close();
 
     // When / Then
-    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId))
+    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "root"))
       .toThrow(/evidence is not yet verified/);
   });
 
@@ -114,7 +149,7 @@ describe("native Project root promotion state", () => {
     });
 
     // When / Then
-    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId)).toThrow(/chain/i);
+    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "root")).toThrow(/chain/i);
   });
 
   it("rejects an unresolved promotion intent", async () => {
@@ -132,7 +167,7 @@ describe("native Project root promotion state", () => {
     database.close();
 
     // When / Then
-    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId)).toThrow(/unresolved/i);
+    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "root")).toThrow(/unresolved/i);
   });
 
   it("rejects a broken finalized chain during startup row inspection", async () => {
@@ -164,7 +199,7 @@ describe("native Project root promotion state", () => {
     });
 
     // When / Then
-    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId)).toThrow(/object formats/i);
+    expect(() => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, "root")).toThrow(/object formats/i);
   });
 
   it.each([
@@ -218,13 +253,14 @@ async function seededDatabase(): Promise<string> {
   database.prepare("INSERT INTO bundle_activation (generation_id, activation_token_sha256) VALUES (?, ?)")
     .run("1".repeat(64), "2".repeat(64));
   database.prepare(`INSERT INTO native_project_registration
-    (service_id, project_id, root_repository_id, owner_host_id, provisioning_nonce, phase)
-    VALUES ('native-main', ?, 'root', 'host-a', ?, 'root-prepared')`).run(projectId, randomUUID());
+    (service_id, project_id, owner_host_id, provisioning_nonce)
+    VALUES ('native-main', ?, 'host-a', ?)`).run(projectId, randomUUID());
+  database.prepare("INSERT INTO native_repository_registration (project_id, repository_id, phase) VALUES (?, 'root', 'repository-prepared')").run(projectId);
   database.prepare(`INSERT INTO native_project_root_import
-    (project_id, service_id, root_repository_id, owner_host_id, generation_id, import_nonce,
+    (project_id, service_id, repository_id, owner_host_id, generation_id, import_nonce,
       protected_ref, expected_commit, policy_json, policy_sha256, bundle_sha256, bundle_size,
       resolved_tree, phase)
-    VALUES (?, 'native-main', 'root', 'host-a', ?, ?, ?, ?, ?, ?, ?, 1, ?, 'root-imported')`)
+    VALUES (?, 'native-main', 'root', 'host-a', ?, ?, ?, ?, ?, ?, ?, 1, ?, 'repository-imported')`)
     .run(projectId, decisionGeneration, importNonce, protectedRef, initialCommit, policyJson,
       policyDigest, "3".repeat(64), initialTree);
   database.close();
@@ -250,7 +286,7 @@ function insertTransition(
   const evidenceDigest = fixture.transitionEvidenceDigest
     ?? nativeProjectRootPromotionEvidenceDigest(evidence);
   const identity: Omit<NativeProjectRootPromotionTransition, "transitionId" | "evidence"> = {
-    projectId,
+    projectId, repositoryId: "root",
     importNonce: fixture.transitionImportNonce ?? importNonce,
     sequence: fixture.sequence,
     reviewId: evidence.reviewId,
@@ -270,12 +306,12 @@ function insertTransition(
   const database = new DatabaseSync(databasePath);
   if (fixture.transitionImportNonce !== undefined) database.exec("PRAGMA foreign_keys = OFF");
   database.prepare(`INSERT INTO ${table}
-    (project_id, transition_id, import_nonce, sequence, review_id, protected_ref, proposal_ref,
+    (project_id, repository_id, transition_id, import_nonce, sequence, review_id, protected_ref, proposal_ref,
       expected_commit, expected_tree, candidate_commit, candidate_tree, decision_generation,
       policy_sha256, policy_revision, required_review_revision, required_job_set_revision,
       evidence_json, evidence_sha256, authorization_verified)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(projectId, fixture.transitionId ?? nativeProjectRootPromotionTransitionId(identity),
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(projectId, "root", fixture.transitionId ?? nativeProjectRootPromotionTransitionId(identity),
       identity.importNonce, identity.sequence, identity.reviewId, identity.protectedRef, identity.proposalRef,
       identity.expectedCommit, identity.expectedTree, identity.candidateCommit, identity.candidateTree,
       identity.decisionGeneration, identity.policyDigest, identity.policyRevision,

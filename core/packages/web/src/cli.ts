@@ -6,9 +6,9 @@ import { createReviewerWebServerFromConfigFile } from "./index.js";
 async function main(): Promise<void> {
   const [operation, configPath, ...flags] = process.argv.slice(2);
   if (operation === "init" && configPath !== undefined) {
-    const { values } = parseArgs({ args: flags, options: { project: { type: "string" }, output: { type: "string" }, port: { type: "string" }, operations: { type: "string" }, promoter: { type: "string" } } });
-    if (!values.project || !values.output) throw new Error("init requires --project PROJECT --output CONFIG");
-    const result = await initializeReviewerWeb({ connection: configPath, project: values.project, output: values.output,
+    const { values } = parseArgs({ args: flags, options: { project: { type: "string" }, repository: { type: "string", multiple: true }, output: { type: "string" }, port: { type: "string" }, operations: { type: "string" }, promoter: { type: "string" } } });
+    if (!values.project || !values.output || !values.repository?.length) throw new Error("init requires --project PROJECT --repository REPO [--repository REPO] --output CONFIG");
+    const result = await initializeReviewerWeb({ connection: configPath, project: values.project, repositories: values.repository, output: values.output,
       ...(values.operations === undefined ? {} : { operations: values.operations }),
       ...(values.promoter === undefined ? {} : { promoter: values.promoter }),
       ...(values.port === undefined ? {} : { port: /^\d+$/.test(values.port) ? Number(values.port) : NaN }) });
@@ -24,7 +24,7 @@ async function main(): Promise<void> {
     return;
   }
   if (operation !== "serve" || configPath === undefined || process.argv.length !== 4) {
-    process.stderr.write("usage: dim-web init CONNECTION --project PROJECT --output CONFIG [--port PORT] [--operations FILE] [--promoter CONNECTION]\n       dim-web init-operations OPERATIONS --output CONFIG [--port PORT]\n       dim-web serve /absolute/path/to/config.json\n");
+    process.stderr.write("usage: dim-web init CONNECTION --project PROJECT --repository REPO [--repository REPO] --output CONFIG [--port PORT] [--operations FILE] [--promoter CONNECTION]\n       dim-web init-operations OPERATIONS --output CONFIG [--port PORT]\n       dim-web serve /absolute/path/to/config.json\n");
     process.exitCode = 2;
     return;
   }

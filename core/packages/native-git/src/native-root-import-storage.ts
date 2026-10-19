@@ -6,13 +6,14 @@ import { join } from "node:path";
 export async function assertDurableNativeRootBundle(
   stateDirectory: string,
   projectId: string,
+  repositoryId: string,
   importNonce: string,
   expectedDigest: string,
   expectedSize: number
 ): Promise<void> {
-  const path = rootBundlePath(stateDirectory, projectId, importNonce);
+  const path = rootBundlePath(stateDirectory, projectId, repositoryId, importNonce);
   await assertPrivateDirectory(join(stateDirectory, projectId));
-  await assertPrivateDirectory(rootBundleDirectory(stateDirectory, projectId));
+  await assertPrivateDirectory(rootBundleDirectory(stateDirectory, projectId, repositoryId));
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW).catch((error: unknown) => {
     throw new NativeRootImportBundleError("durable root bundle file is invalid", { cause: error });
   });
@@ -46,12 +47,12 @@ export async function assertDurableNativeRootBundle(
   }
 }
 
-export function rootBundleDirectory(stateDirectory: string, projectId: string): string {
-  return join(stateDirectory, projectId, ".dim-root-import");
+export function rootBundleDirectory(stateDirectory: string, projectId: string, repositoryId: string): string {
+  return join(stateDirectory, projectId, `.dim-import-${repositoryId}`);
 }
 
-export function rootBundlePath(stateDirectory: string, projectId: string, importNonce: string): string {
-  return join(rootBundleDirectory(stateDirectory, projectId), `${importNonce}.bundle`);
+export function rootBundlePath(stateDirectory: string, projectId: string, repositoryId: string, importNonce: string): string {
+  return join(rootBundleDirectory(stateDirectory, projectId, repositoryId), `${importNonce}.bundle`);
 }
 
 export async function assertPrivateDirectory(path: string): Promise<void> {

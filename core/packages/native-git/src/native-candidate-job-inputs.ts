@@ -22,6 +22,7 @@ export type NativeCandidateScriptIdentity = NativeCandidateBlobIdentity & {
 export type NativeCandidateJobInputPlanEntry = NativeCandidateRequiredJob & {
   readonly script: NativeCandidateScriptIdentity;
   readonly argv: readonly string[];
+  readonly repositories: readonly string[];
 };
 
 export type NativeCandidateJobInputs = {
@@ -46,6 +47,7 @@ export async function readNativeCandidateJobInputsFromGit(
     name: z.string().regex(/^[a-z][a-z0-9-]{0,62}$/),
     kind: z.enum(["ordinary-sysbox", "qemu"]),
     script: z.string().refine(isCandidatePath),
+    repositories: z.array(z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)).max(64).refine((ids) => new Set(ids).size === ids.length).optional(),
     argv: z.array(z.string()).refine(isCandidateArgv)
   }).strict()).max(64).parse(compiler.compile(configBlob.bytes));
   if (new Set(compiled.map((job) => job.name)).size !== compiled.length) {
@@ -59,7 +61,7 @@ export async function readNativeCandidateJobInputsFromGit(
       name: job.name,
       kind: job.kind,
       script: { path: job.script, objectId: scriptBlob.objectId, sha256: sha256(scriptBlob.bytes) },
-      argv: job.argv
+      argv: job.argv, repositories: job.repositories ?? []
     });
   }
   await assertCandidateObjects(reader, target);

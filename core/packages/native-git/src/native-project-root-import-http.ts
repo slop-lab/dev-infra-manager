@@ -93,7 +93,7 @@ export async function handleNativeProjectRootImportHttp(context: RootImportHttpC
   if (await handleNativeProjectRootImportFinalizeHttp(context)) return true;
   const identityRequest = context.request.method === "GET"
     && context.pathname === "/v1/operator-root-importer-identity";
-  const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/root-import$/.exec(context.pathname);
+  const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/import$/.exec(context.pathname);
   if (!identityRequest && (context.request.method !== "POST" || match === null)) return false;
   if (context.importers.length === 0) {
     sendNotFound(context.response);
@@ -116,8 +116,8 @@ export async function handleNativeProjectRootImportHttp(context: RootImportHttpC
     });
     return true;
   }
-  const projectId = match?.[1];
-  if (projectId === undefined) return false;
+  const projectId = match?.[1], repositoryId = match?.[2];
+  if (projectId === undefined || repositoryId === undefined) return false;
   const releaseImport = context.acquireImport();
   if (releaseImport === undefined) {
     sendJson(context.response, 503, { error: "native Git root import is busy" });
@@ -129,24 +129,24 @@ export async function handleNativeProjectRootImportHttp(context: RootImportHttpC
     const abortRequest = () => context.request.destroy(new NativeRootImportBundleError("root import request timed out"));
     signal.addEventListener("abort", abortRequest, { once: true });
     const bundle = await receiveNativeRootBundle({
-      request: context.request, stateDirectory: context.stateDirectory, projectId,
+      request: context.request, stateDirectory: context.stateDirectory, projectId, repositoryId,
       gitExecutable: context.gitExecutable, gitIdentity: context.gitIdentity, signal,
       async authorizePrelude(prelude) {
-        if (prelude.generationId !== context.expectedGenerationId || prelude.projectId !== projectId) {
+        if (prelude.generationId !== context.expectedGenerationId || prelude.projectId !== projectId || prelude.repositoryId !== repositoryId) {
           throw new NativeProjectRootImportConflictError(projectId);
         }
         const registration = readNativeProjectRegistrationsFromDatabase(context.state.database)
-          .find((entry) => entry.projectId === projectId);
+          .find((entry) => entry.projectId === projectId && entry.repositoryId === repositoryId);
         if (registration === undefined || registration.ownerHostId !== importer.hostId) {
           throw new NativeProjectRootImportOwnershipError();
         }
-        if (registration.phase !== "root-prepared") {
+        if (registration.phase !== "repository-prepared") {
           throw new NativeProjectRootImportStateError("native Project root import requires a prepared root");
         }
         await assertNativeRootObjectFormat({
           gitExecutable: context.gitExecutable,
           gitIdentity: context.gitIdentity,
-          repository: join(context.stateDirectory, projectId, "root.git"),
+          repository: join(context.stateDirectory, projectId, `${repositoryId}.git`),
           expectedCommit: prelude.expectedCommit,
           signal
         });
@@ -154,7 +154,7 @@ export async function handleNativeProjectRootImportHttp(context: RootImportHttpC
         intent = claimNativeProjectRootImport(context.state, prelude.generationId, importer.hostId, {
           serviceId: prelude.serviceId,
           projectId: prelude.projectId,
-          rootRepositoryId: prelude.rootRepositoryId,
+          repositoryId: prelude.repositoryId,
           protectedRef: prelude.protectedRef,
           expectedCommit: prelude.expectedCommit,
           policy: prelude.policy
@@ -165,13 +165,13 @@ export async function handleNativeProjectRootImportHttp(context: RootImportHttpC
     signal.throwIfAborted();
     if (intent === undefined) throw new NativeProjectRootImportStateError("native Project root import intent is missing");
     const durable = markNativeProjectRootBundleDurable(
-      context.state, projectId, intent.importNonce, bundle.bundleDigest, bundle.bundleSize
+      context.state, projectId, repositoryId, intent.importNonce, bundle.bundleDigest, bundle.bundleSize
     );
     sendJson(context.response, 200, {
       schemaVersion: 1,
       serviceId: durable.serviceId,
       projectId: durable.projectId,
-      rootRepositoryId: durable.rootRepositoryId,
+      repositoryId: durable.repositoryId,
       generationId: durable.generationId,
       importNonce: durable.importNonce,
       protectedRef: durable.protectedRef,

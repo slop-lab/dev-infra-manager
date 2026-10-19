@@ -56,7 +56,7 @@ stty -F /dev/console -onlcr
 set +e
 (
   . /guest/run/dim/job/job-environment
-  exec /guest-exec /guest /workspace 0 0 /bin/bash --noprofile --norc /run/dim/job/script
+  exec /guest-exec /guest "$(cat /guest/run/dim/job/working-directory)" 0 0 /bin/bash --noprofile --norc /run/dim/job/script
 )
 status=$?
 set -e

@@ -40,17 +40,18 @@ describe("native root import request admission", () => {
       });
       expect(activated.status).toBe(200);
       await service.prepareProject(generationId, "host-a", {
-        serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root"
+        serviceId: "native-main", projectId: "project-a", repositoryId: "root"
       });
-      const endpoint = `${origin}/v1/projects/project-a/root-import`;
+      const endpoint = `${origin}/v1/projects/project-a/repositories/root/import`;
       const finalizeEndpoint = `${endpoint}/finalize`;
       const authorization = `Basic ${Buffer.from(`${importer.username}:${importer.password}`).toString("base64")}`;
       const prelude = Buffer.from(`${JSON.stringify({
         schemaVersion: 1, generationId, serviceId: "native-main", projectId: "project-a",
-        rootRepositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: "c".repeat(40),
+        repositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: "c".repeat(40),
         policy: {
           schemaVersion: 1, protectedRef: "refs/heads/main",
-  policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+  ciRepositoryIds: ["root"],
+  policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
           requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
           requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
           requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],

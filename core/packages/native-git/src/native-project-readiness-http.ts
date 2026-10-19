@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { nativeBasicCredential, type NativeBasicCredential } from "./native-basic-auth.js";
 import { NativeGitBundleHttpError, readBoundedJson, sendJson, sendNotFound } from "./native-bundle-http.js";
 import type { NativeGitBundleState } from "./native-bundle-state.js";
-import { verifyLiveImportedRoot } from "./native-imported-root-verifier.js";
+import { verifyLiveImportedRepository } from "./native-imported-root-verifier.js";
 import { assertNativeRootSelectionFastForward } from "./native-root-import-proof-git.js";
 import type { GitExecutableIdentity } from "./repository.js";
 
@@ -26,7 +26,7 @@ export async function handleNativeProjectReadinessHttp(
   response: ServerResponse,
   url: URL
 ): Promise<boolean> {
-  const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/workspace-readiness$/
+  const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/workspace-readiness$/
     .exec(url.pathname);
   if (match === null) return false;
   if (request.method !== "POST" || url.search !== "") {
@@ -51,19 +51,20 @@ export async function handleNativeProjectReadinessHttp(
     throw error;
   }
   const projectId = match[1];
-  if (projectId === undefined || body.generationId !== input.expectedGenerationId || !input.activated()) {
+  const repositoryId = match[2];
+  if (projectId === undefined || repositoryId === undefined || body.repositoryId !== repositoryId || body.generationId !== input.expectedGenerationId || !input.activated()) {
     sendJson(response, 409, { error: "native Project workspace readiness is unavailable" });
     return true;
   }
   try {
-    const live = await verifyLiveImportedRoot({
+    const live = await verifyLiveImportedRepository({
       activated: input.activated(), activationTokenDigest: input.activationTokenDigest,
       expectedGenerationId: input.expectedGenerationId, gitExecutable: input.gitExecutable,
-      gitIdentity: input.gitIdentity, ownerHostId: issuer.hostId, projectId,
+      gitIdentity: input.gitIdentity, ownerHostId: issuer.hostId, projectId, repositoryId,
       state: input.state, stateDirectory: input.stateDirectory
     });
     const policy = live.imported.policy;
-    if (body.repositoryId !== live.imported.rootRepositoryId
+    if (body.repositoryId !== live.imported.repositoryId
       || body.protectedRef !== live.currentHead.protectedRef || body.policyRevision !== policy.policyRevision
       || body.requiredReviewRevision !== policy.requiredReviewRevision
       || body.requiredJobSetRevision !== policy.requiredJobSetRevision) {
@@ -74,10 +75,10 @@ export async function handleNativeProjectReadinessHttp(
       protectedRef: live.currentHead.protectedRef, importedCommit: live.imported.expectedCommit,
       importedTree: live.imported.resolvedTree, currentCommit: live.currentHead.commit,
       currentTree: live.currentHead.tree, signal: AbortSignal.timeout(30_000)
-    }, body.rootCommit, body.rootTree);
+    }, body.commit, body.tree);
     sendJson(response, 200, {
       schemaVersion: 1, serviceId: "native-main", ownerHostId: issuer.hostId, projectId,
-      repositoryId: "root", generationId: input.expectedGenerationId,
+      repositoryId, generationId: input.expectedGenerationId,
       protectedRef: live.currentHead.protectedRef, commit: live.currentHead.commit, tree: live.currentHead.tree,
       policyRevision: policy.policyRevision, requiredReviewRevision: policy.requiredReviewRevision,
       requiredJobSetRevision: policy.requiredJobSetRevision
@@ -94,10 +95,10 @@ export async function handleNativeProjectReadinessHttp(
 
 type ReadinessRequest = {
   readonly generationId: string;
-  readonly repositoryId: "root";
+  readonly repositoryId: string;
   readonly protectedRef: string;
-  readonly rootCommit: string;
-  readonly rootTree: string;
+  readonly commit: string;
+  readonly tree: string;
   readonly policyRevision: string;
   readonly requiredReviewRevision: string;
   readonly requiredJobSetRevision: string;
@@ -105,18 +106,18 @@ type ReadinessRequest = {
 
 function parseReadinessRequest(value: unknown): ReadinessRequest {
   if (!isRecord(value) || Object.keys(value).length !== 9 || value.schemaVersion !== 1
-    || value.repositoryId !== "root") throw new NativeProjectReadinessError();
+    || (typeof value.repositoryId !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(value.repositoryId))) throw new NativeProjectReadinessError();
   const generationId = stringField(value, "generationId");
   const protectedRef = stringField(value, "protectedRef");
-  const rootCommit = stringField(value, "rootCommit");
-  const rootTree = stringField(value, "rootTree");
+  const commit = stringField(value, "commit");
+  const tree = stringField(value, "tree");
   const policyRevision = stringField(value, "policyRevision");
   const requiredReviewRevision = stringField(value, "requiredReviewRevision");
   const requiredJobSetRevision = stringField(value, "requiredJobSetRevision");
   if (!/^[0-9a-f]{64}$/.test(generationId) || !/^refs\/heads\//.test(protectedRef)
-    || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(rootCommit)
-    || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(rootTree)) throw new NativeProjectReadinessError();
-  return { generationId, repositoryId: "root", protectedRef, rootCommit, rootTree,
+    || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit)
+    || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree)) throw new NativeProjectReadinessError();
+  return { generationId, repositoryId: stringField(value, "repositoryId"), protectedRef, commit, tree,
     policyRevision, requiredReviewRevision, requiredJobSetRevision };
 }
 

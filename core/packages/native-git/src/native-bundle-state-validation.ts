@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import {
   assertNativeProjectRegistrationRows,
   nativeProjectRegistrationSchema,
+  nativeRepositoryRegistrationSchema,
   type NativeProjectRegistration
 } from "./native-project-registry-state.js";
 import {
@@ -43,8 +44,8 @@ const stateEntries = new Set([ownerDatabaseName, databaseName, markerName]);
 export function createNativeGitBundleDatabase(path: string): DatabaseSync {
   const database = new DatabaseSync(path, { defensive: true });
   database.exec(`PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;
-    ${activationSchema}; ${nativeProjectRegistrationSchema}; ${nativeProjectRootImportSchema};
-    ${nativeProjectRootPromotionFinalizedSchema}; ${nativeProjectRootPromotionIntentSchema}; PRAGMA user_version = 8;`);
+    ${activationSchema}; ${nativeProjectRegistrationSchema}; ${nativeRepositoryRegistrationSchema}; ${nativeProjectRootImportSchema};
+    ${nativeProjectRootPromotionFinalizedSchema}; ${nativeProjectRootPromotionIntentSchema}; PRAGMA user_version = 9;`);
   return database;
 }
 
@@ -66,7 +67,7 @@ export async function validateNativeGitBundleStateFiles(
     const persisted = assertDatabaseSchema(database);
     await assertKnownEntries(stateDirectory, entries, nativeProjectStorageNames(persisted.registrations));
     await Promise.all(persisted.imports.filter((entry) => entry.phase !== "intent").map((entry) =>
-      assertDurableNativeRootBundle(stateDirectory, entry.projectId, entry.importNonce,
+      assertDurableNativeRootBundle(stateDirectory, entry.projectId, entry.repositoryId, entry.importNonce,
         entry.bundleDigest, entry.bundleSize)));
     if (marker.schemaManifestSha256 !== schemaManifestSha256()) {
       throw new NativeGitBundleStateError("native Git bundle marker does not match the database schema manifest");
@@ -81,7 +82,7 @@ export async function validateNativeGitBundleStateFiles(
 }
 
 export function expectedNativeGitBundleMarker(): NativeGitBundleMarker {
-  return { schemaVersion: 1, stateFormat: 8, database: databaseName, schemaManifestSha256: schemaManifestSha256() };
+  return { schemaVersion: 1, stateFormat: 9, database: databaseName, schemaManifestSha256: schemaManifestSha256() };
 }
 
 function assertDatabaseSchema(database: DatabaseSync): {
@@ -92,12 +93,13 @@ function assertDatabaseSchema(database: DatabaseSync): {
   const rows = database.prepare(
     "SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
   ).all();
-  if (version !== 8 || rows.length !== 5
+  if (version !== 9 || rows.length !== 6
     || !schemaRowEquals(rows[0], "bundle_activation", activationSchema)
     || !schemaRowEquals(rows[1], "native_project_registration", nativeProjectRegistrationSchema)
     || !schemaRowEquals(rows[2], "native_project_root_import", nativeProjectRootImportSchema)
     || !schemaRowEquals(rows[3], "native_project_root_promotion_finalized", nativeProjectRootPromotionFinalizedSchema)
-    || !schemaRowEquals(rows[4], "native_project_root_promotion_intent", nativeProjectRootPromotionIntentSchema)) {
+    || !schemaRowEquals(rows[4], "native_project_root_promotion_intent", nativeProjectRootPromotionIntentSchema)
+    || !schemaRowEquals(rows[5], "native_repository_registration", nativeRepositoryRegistrationSchema)) {
     throw new NativeGitBundleStateError("native Git idle database schema is unsupported");
   }
   const registrations = assertNativeProjectRegistrationRows(database);
@@ -141,8 +143,8 @@ async function assertKnownEntries(
 
 function schemaManifestSha256(): string {
   return `sha256:${createHash("sha256").update(
-    `8\n${normalizeSql(activationSchema)}\n${normalizeSql(nativeProjectRegistrationSchema)}\n`
-      + `${normalizeSql(nativeProjectRootImportSchema)}\n${normalizeSql(nativeProjectRootPromotionFinalizedSchema)}\n`
+    `9\n${normalizeSql(activationSchema)}\n${normalizeSql(nativeProjectRegistrationSchema)}\n`
+      + `${normalizeSql(nativeRepositoryRegistrationSchema)}\n${normalizeSql(nativeProjectRootImportSchema)}\n${normalizeSql(nativeProjectRootPromotionFinalizedSchema)}\n`
       + `${normalizeSql(nativeProjectRootPromotionIntentSchema)}\n`
   ).digest("hex")}`;
 }

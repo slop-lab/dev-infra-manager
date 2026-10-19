@@ -31,7 +31,7 @@ const roots: string[] = [];
 const generationId = "a".repeat(64);
 const uploadName = ".00000000-0000-4000-8000-000000000001.upload";
 const verifyName = ".verify-00000000-0000-4000-8000-000000000002";
-const project = { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root" } as const;
+const project = { serviceId: "native-main", projectId: "project-a", repositoryId: "root" } as const;
 const intentInput = {
   ...project,
   protectedRef: "refs/heads/main",
@@ -39,7 +39,8 @@ const intentInput = {
   policy: {
     schemaVersion: 1,
     protectedRef: "refs/heads/main",
-  policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+  ciRepositoryIds: ["root"],
+  policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
     requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
     requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
     requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
@@ -61,7 +62,7 @@ describe("native root import restart reconciliation", () => {
     const databaseBefore = await readFile(join(fixture.root, "native-idle.sqlite3"));
     const stagingBefore = await treeSnapshot(fixture.staging);
 
-    expect(await inspectNativeGitBundleState(fixture.root)).toEqual({ stateFormat: 8 });
+    expect(await inspectNativeGitBundleState(fixture.root)).toEqual({ stateFormat: 9 });
     expect(await treeSnapshot(fixture.staging)).toEqual(stagingBefore);
     const restarted = await initializeNativeGitBundleState(fixture.root);
 
@@ -79,7 +80,7 @@ describe("native root import restart reconciliation", () => {
     const finalPath = join(fixture.staging, `${fixture.importNonce}.bundle`);
     const state = await initializeNativeGitBundleState(fixture.root);
     await writeFile(finalPath, finalBytes, { mode: 0o600 });
-    markNativeProjectRootBundleDurable(state, "project-a", fixture.importNonce,
+    markNativeProjectRootBundleDurable(state, "project-a", "root", fixture.importNonce,
       createHash("sha256").update(finalBytes).digest("hex"), finalBytes.length);
     await state.owner.release();
     await writeFile(join(fixture.staging, uploadName), "partial upload", { mode: 0o600 });
@@ -95,7 +96,7 @@ describe("native root import restart reconciliation", () => {
 
   it("rejects an otherwise valid staging artifact without a bound import intent", async () => {
     const fixture = await preparedFixture();
-    const staging = join(fixture.root, "project-a", ".dim-root-import");
+    const staging = join(fixture.root, "project-a", ".dim-import-root");
     await mkdir(staging, { mode: 0o700 });
     await chmod(staging, 0o700);
     await writeFile(join(staging, uploadName), "unbound", { mode: 0o600 });
@@ -167,7 +168,7 @@ describe("native root import restart reconciliation", () => {
 async function intentFixture(): Promise<ImportFixture> {
   const fixture = await preparedFixture();
   const claimed = claimNativeProjectRootImport(fixture.state, generationId, "host-a", intentInput);
-  const staging = join(fixture.root, "project-a", ".dim-root-import");
+  const staging = join(fixture.root, "project-a", ".dim-import-root");
   await mkdir(staging, { mode: 0o700 });
   await chmod(staging, 0o700);
   await fixture.state.owner.release();

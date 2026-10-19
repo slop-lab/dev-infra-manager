@@ -36,6 +36,7 @@ const configSchema = z.object({
     username: z.string().min(1).max(256),
     password: z.string().min(16).max(1024),
     projectId: identifier,
+    repositoryIds: z.array(identifier).min(1).max(64).refine((ids) => new Set(ids).size === ids.length).readonly(),
     generationId: z.string().regex(/^[0-9a-f]{64}$/),
     reviewerId: identifier,
     promoter: z.object({ username: z.string().min(1).max(256), password: z.string().min(16).max(1024), hostId: identifier }).strict().optional()

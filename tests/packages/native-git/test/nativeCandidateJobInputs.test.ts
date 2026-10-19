@@ -42,7 +42,7 @@ describe("candidate job inputs", () => {
             objectId: await objectId(fixture, ".dim/ci/jobs/source.bash"),
             sha256: sha256(sourceScript())
           },
-          argv: candidateArgv
+          argv: candidateArgv, repositories: []
         },
         {
           name: "integration",
@@ -52,7 +52,7 @@ describe("candidate job inputs", () => {
             objectId: await objectId(fixture, ".dim/ci/jobs/integration.bash"),
             sha256: sha256(integrationScript())
           },
-          argv: candidateArgv
+          argv: candidateArgv, repositories: []
         }
       ]
     });

@@ -14,13 +14,13 @@ export type { NativeGitImportedRootProof } from "./nativeGitRootImportProof.js";
 
 const requestTimeoutMilliseconds = 5_000;
 const maximumResponseBytes = 64 * 1024;
-const receiptFields = ["schemaVersion", "serviceId", "projectId", "rootRepositoryId", "generationId",
+const receiptFields = ["schemaVersion", "serviceId", "projectId", "repositoryId", "generationId",
   "importNonce", "protectedRef", "expectedCommit", "policyDigest", "bundleDigest", "bundleSize", "phase"] as const;
 
 export type NativeGitRootImportRequest = {
   readonly serviceId: "native-main";
   readonly projectId: string;
-  readonly rootRepositoryId: "root";
+  readonly repositoryId: string;
   readonly protectedRef: string;
   readonly expectedCommit: string;
   readonly policy: unknown;
@@ -31,7 +31,7 @@ export type NativeGitRootImportResult = {
   readonly schemaVersion: 1;
   readonly serviceId: "native-main";
   readonly projectId: string;
-  readonly rootRepositoryId: "root";
+  readonly repositoryId: string;
   readonly generationId: string;
   readonly importNonce: string;
   readonly protectedRef: string;
@@ -40,15 +40,15 @@ export type NativeGitRootImportResult = {
   readonly bundleDigest: string;
   readonly bundleSize: number;
   readonly resolvedTree: string;
-  readonly phase: "root-imported";
+  readonly phase: "repository-imported";
 };
 
 export interface NativeGitRootImporterClient {
   readonly hostId: string;
   readonly generationId: string;
   attest(signal: AbortSignal): Promise<void>;
-  proveRoot(projectId: string, signal: AbortSignal): Promise<NativeGitImportedRootProof>;
-  importRoot(input: NativeGitRootImportRequest, signal: AbortSignal): Promise<NativeGitRootImportResult>;
+  proveRepository(projectId: string, repositoryId: string, signal: AbortSignal): Promise<NativeGitImportedRootProof>;
+  importRepository(input: NativeGitRootImportRequest, signal: AbortSignal): Promise<NativeGitRootImportResult>;
 }
 
 export class NativeGitRootImporterClientError extends Error {
@@ -104,21 +104,21 @@ export function createNativeGitRootImporterClient(
     hostId: connection.hostId,
     generationId: connection.generationId,
     attest,
-    async proveRoot(projectId, signal) {
-      if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(projectId)) invalid();
+    async proveRepository(projectId, repositoryId, signal) {
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(projectId) || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)) invalid();
       await attest(signal);
       const response = await jsonRequest(http, {
-        method: "GET", path: `/v1/projects/${projectId}/root-import/proof`, signal
+        method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/import/proof`, body: JSON.stringify({schemaVersion:1,generationId:connection.generationId}), signal
       });
       try {
-        return parseNativeGitImportedRootProof(response, connection, projectId);
+        return parseNativeGitImportedRootProof(response, connection, projectId, repositoryId);
       } catch (error) {
         if (error instanceof NativeGitRootImportProofError) invalid();
         throw error;
       }
     },
-    async importRoot(input, signal) {
-      if (input.serviceId !== "native-main" || input.rootRepositoryId !== "root"
+    async importRepository(input, signal) {
+      if (input.serviceId !== "native-main" || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(input.repositoryId)
         || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(input.projectId)
         || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(input.expectedCommit)) invalid();
       const policyJson = JSON.stringify(input.policy);
@@ -128,9 +128,9 @@ export function createNativeGitRootImporterClient(
       let upload;
       try {
         upload = await uploadNativeGitRootBundle({
-          connection, authorization, projectId: input.projectId, bundlePath: input.bundlePath,
+          connection, authorization, projectId: input.projectId, repositoryId: input.repositoryId, bundlePath: input.bundlePath,
           prelude: { schemaVersion: 1, generationId: connection.generationId, serviceId: input.serviceId,
-            projectId: input.projectId, rootRepositoryId: input.rootRepositoryId,
+            projectId: input.projectId, repositoryId: input.repositoryId,
             protectedRef: input.protectedRef, expectedCommit: input.expectedCommit, policy: input.policy },
           signal
         });
@@ -140,26 +140,26 @@ export function createNativeGitRootImporterClient(
       const uploaded = exactRecord(parseJsonResponse(upload.response), receiptFields);
       const expectation = { input, connection, policyDigest,
         bundleDigest: upload.bundleDigest, bundleSize: upload.bundleSize };
-      if (uploaded.phase !== "bundle-durable" && uploaded.phase !== "root-imported") invalid();
+      if (uploaded.phase !== "bundle-durable" && uploaded.phase !== "repository-imported") invalid();
       assertReceipt(uploaded, expectation, uploaded.phase);
       const nonce = requiredString(uploaded.importNonce, /^[0-9a-f-]{36}$/);
       await attest(signal);
       const finalized = exactRecord(await jsonRequest(http, {
-        method: "POST", path: `/v1/projects/${input.projectId}/root-import/finalize`, body: JSON.stringify({
+        method: "POST", path: `/v1/projects/${input.projectId}/repositories/${input.repositoryId}/import/finalize`, body: JSON.stringify({
           schemaVersion: 1, generationId: connection.generationId,
           importNonce: nonce, bundleDigest: upload.bundleDigest
         }), signal
       }), [...receiptFields, "resolvedTree"]);
-      assertReceipt(finalized, expectation, "root-imported");
+      assertReceipt(finalized, expectation, "repository-imported");
       for (const field of receiptFields) if (finalized[field] !== uploaded[field] && field !== "phase") invalid();
       return {
         schemaVersion: 1, serviceId: "native-main", projectId: input.projectId,
-        rootRepositoryId: "root", generationId: connection.generationId, importNonce: nonce,
+        repositoryId: input.repositoryId, generationId: connection.generationId, importNonce: nonce,
         protectedRef: input.protectedRef, expectedCommit: input.expectedCommit,
         policyDigest: requiredString(finalized.policyDigest, /^[0-9a-f]{64}$/),
         bundleDigest: upload.bundleDigest, bundleSize: upload.bundleSize,
         resolvedTree: requiredString(finalized.resolvedTree, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
-        phase: "root-imported"
+        phase: "repository-imported"
       };
     }
   };
@@ -193,10 +193,10 @@ function parseJsonResponse(response: NativeGitAdmissionHttpResponse): unknown {
 }
 
 function assertReceipt(value: Readonly<Record<string, unknown>>,
-  expectation: ReceiptExpectation, phase: "bundle-durable" | "root-imported"): void {
+  expectation: ReceiptExpectation, phase: "bundle-durable" | "repository-imported"): void {
   const { input, connection, policyDigest, bundleDigest, bundleSize } = expectation;
   if (value.schemaVersion !== 1 || value.serviceId !== input.serviceId || value.projectId !== input.projectId
-    || value.rootRepositoryId !== input.rootRepositoryId || value.generationId !== connection.generationId
+    || value.repositoryId !== input.repositoryId || value.generationId !== connection.generationId
     || value.protectedRef !== input.protectedRef || value.expectedCommit !== input.expectedCommit
     || value.policyDigest !== policyDigest || value.bundleDigest !== bundleDigest
     || value.bundleSize !== bundleSize || value.phase !== phase) invalid();

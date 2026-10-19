@@ -26,13 +26,13 @@ const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const preparationInput = z.object({
   serviceId: z.literal("native-main"),
   projectId: identifier,
-  rootRepositoryId: z.literal("root")
+  repositoryId: identifier
 }).strict().readonly();
 
 export type NativeProjectPreparationInput = z.infer<typeof preparationInput>;
 
 export type NativeGitProjectPreparationResult = NativeProjectPreparationInput & {
-  readonly state: "root-prepared";
+  readonly state: "repository-prepared";
 };
 
 export async function executeNativeProjectPreparation(
@@ -42,23 +42,23 @@ export async function executeNativeProjectPreparation(
   const begun = beginNativeProjectPreparation(operation.database, operation.generationId, {
     serviceId: requested.serviceId,
     projectId: requested.projectId,
-    rootRepositoryId: requested.rootRepositoryId,
+    repositoryId: requested.repositoryId,
     ownerHostId: operation.ownerHostId
   });
-  const repository = { projectId: begun.projectId, repositoryId: begun.rootRepositoryId };
-  if (begun.phase === "root-prepared") {
+  const repository = { projectId: begun.projectId, repositoryId: begun.repositoryId };
+  if (begun.phase === "repository-prepared") {
     await assertOwnedNativeProjectStorage(operation.stateDirectory, begun);
     await assertRegisteredRepository(operation.runtimeConfig, repository);
   } else {
     await prepareOwnedNativeProjectStorage(operation.stateDirectory, begun);
     await initializeNativeRepository(operation.runtimeConfig, repository);
-    completeNativeProjectPreparation(operation.database, operation.generationId, begun.projectId);
+    completeNativeProjectPreparation(operation.database, operation.generationId, begun.projectId, begun.repositoryId);
   }
   return {
     serviceId: requested.serviceId,
     projectId: requested.projectId,
-    rootRepositoryId: requested.rootRepositoryId,
-    state: "root-prepared"
+    repositoryId: requested.repositoryId,
+    state: "repository-prepared"
   };
 }
 

@@ -127,10 +127,10 @@ export async function configuredNativeGitBundleServer(
       businessReady = false;
     }
   });
-  const reconcileProposalRefs = async (projectId: string, proposalRefs: readonly string[]): Promise<void> => {
+  const reconcileProposalRefs = async (projectId: string, repositoryId: string, proposalRefs: readonly string[]): Promise<void> => {
     try {
       await reconcileNativeProposalRefs(
-        authoritativeRuntime, projectId, proposalRefs, options.authoritativeReviewHooks ?? {}
+        authoritativeRuntime, projectId, repositoryId, proposalRefs, options.authoritativeReviewHooks ?? {}
       );
       eventDispatcher.wake();
       externalWebhooks?.wake();
@@ -194,13 +194,13 @@ export async function configuredNativeGitBundleServer(
   const hostPromoterService = createNativeHostPromoterService({ config, knownCredentials,
     runtime: authoritativeRuntime,
     ...(externalWebhooks === undefined ? {} : { webhooks: externalWebhooks }),
-    promote: async (projectId, reviewId) => {
+    promote: async (projectId, repositoryId, reviewId) => {
       const result = await reviewController.run(() => promoteInstalledNativeReview({
         config,
         runtime: authoritativeRuntime,
         stateDirectory: options.stateDirectory,
         ...(options.nativePromotionHooks === undefined ? {} : { hooks: options.nativePromotionHooks })
-      }, projectId, reviewId));
+      }, projectId, repositoryId, reviewId));
       externalWebhooks?.wake();
       return result;
     }

@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import { sendJson, sendNotFound } from "./native-bundle-http.js";
+import { NativeGitBundleHttpError, readBoundedJson, sendJson, sendNotFound } from "./native-bundle-http.js";
 import { exactActivationIsBound } from "./native-bundle-activation.js";
 import type { RootImportHttpContext } from "./native-project-root-import-http.js";
 import { NativeProjectRootImportStateError } from "./native-project-root-import-codec.js";
@@ -10,7 +10,7 @@ import { NativeRootImportBundleError } from "./native-root-import-storage.js";
 import {
   NativeImportedRootInactiveError,
   NativeImportedRootNotFoundError,
-  verifyLiveImportedRoot
+  verifyLiveImportedRepository
 } from "./native-imported-root-verifier.js";
 
 type Credential = { readonly username: string; readonly password: string };
@@ -18,11 +18,11 @@ type Credential = { readonly username: string; readonly password: string };
 export async function handleNativeProjectRootImportProofHttp(
   context: RootImportHttpContext
 ): Promise<boolean> {
-  const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/root-import\/proof$/
+  const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/import\/proof$/
     .exec(context.pathname);
-  if (context.request.method !== "GET" || match === null) return false;
-  const projectId = match[1];
-  if (projectId === undefined) return false;
+  if (context.request.method !== "POST" || match === null) return false;
+  const projectId = match[1], repositoryId = match[2];
+  if (projectId === undefined || repositoryId === undefined) return false;
   if (context.importers.length === 0) {
     sendNotFound(context.response);
     return true;
@@ -39,15 +39,29 @@ export async function handleNativeProjectRootImportProofHttp(
     sendJson(context.response, known ? 403 : 401, { error: known ? "forbidden" : "unauthorized" });
     return true;
   }
+  let selector: unknown;
+  try { selector = await readBoundedJson(context.request); }
+  catch (error) {
+    if (!(error instanceof NativeGitBundleHttpError)) throw error;
+    sendJson(context.response, 400, { error: "repository proof selector is invalid" }); return true;
+  }
+  if (typeof selector !== "object" || selector === null || Array.isArray(selector) || Object.keys(selector).length !== 2
+    || !("schemaVersion" in selector) || selector.schemaVersion !== 1
+    || !("generationId" in selector) || typeof selector.generationId !== "string" || !/^[a-f0-9]{64}$/.test(selector.generationId)) {
+    sendJson(context.response, 400, { error: "repository proof selector is invalid" }); return true;
+  }
+  if (selector.generationId !== context.expectedGenerationId) {
+    sendJson(context.response, 409, { error: "repository proof generation conflicts with service startup" }); return true;
+  }
   try {
-    const { imported, currentHead } = await verifyLiveImportedRoot({
+    const { imported, currentHead } = await verifyLiveImportedRepository({
       activated: context.activated,
       activationTokenDigest: context.activationTokenDigest,
       expectedGenerationId: context.expectedGenerationId,
       gitExecutable: context.gitExecutable,
       gitIdentity: context.gitIdentity,
       ownerHostId: importer.hostId,
-      projectId,
+      projectId, repositoryId,
       state: context.state,
       stateDirectory: context.stateDirectory
     });
@@ -59,7 +73,7 @@ export async function handleNativeProjectRootImportProofHttp(
         schemaVersion: 1,
         serviceId: imported.serviceId,
         projectId: imported.projectId,
-        rootRepositoryId: imported.rootRepositoryId,
+        repositoryId: imported.repositoryId,
         generationId: imported.generationId,
         importNonce: imported.importNonce,
         protectedRef: imported.protectedRef,

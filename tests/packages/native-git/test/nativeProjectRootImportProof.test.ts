@@ -129,11 +129,12 @@ describe("native Project imported root proof", () => {
   });
 
   it.each([
-    ["query", (origin: string) => fetch(`${origin}/v1/projects/project-a/root-import/proof?view=live`, {
+    ["query", (origin: string) => fetch(`${origin}/v1/projects/project-a/repositories/root/import/proof?view=live`, {
+      method: "POST",
       headers: { authorization }
     })],
-    ["alternate method", (origin: string) => fetch(`${origin}/v1/projects/project-a/root-import/proof`, {
-      method: "POST", headers: { authorization }
+    ["alternate method", (origin: string) => fetch(`${origin}/v1/projects/project-a/repositories/root/import/proof`, {
+      method: "GET", headers: { authorization }
     })]
   ] as const)("returns not found for an exact-path %s variant", async (_label, request) => {
     // Given
@@ -148,11 +149,12 @@ describe("native Project imported root proof", () => {
   });
 
   it.each([
-    ["query", (origin: string) => fetch(`${origin}/v1/projects/project-a/root-import/proof?view=live`, {
+    ["query", (origin: string) => fetch(`${origin}/v1/projects/project-a/repositories/root/import/proof?view=live`, {
+      method: "POST",
       headers: { authorization }
     })],
-    ["alternate method", (origin: string) => fetch(`${origin}/v1/projects/project-a/root-import/proof`, {
-      method: "POST", headers: { authorization }
+    ["alternate method", (origin: string) => fetch(`${origin}/v1/projects/project-a/repositories/root/import/proof`, {
+      method: "GET", headers: { authorization }
     })]
   ] as const)("conceals an inactive exact-path %s variant", async (_label, request) => {
     // Given
@@ -261,8 +263,8 @@ async function expectExactProof(response: Response, receipt: ImportReceipt, reso
     schemaVersion: 3,
     servingGenerationId: generationId,
     ownerHostId: importer.hostId,
-    importReceipt: { ...receipt, resolvedTree, phase: "root-imported" },
-    currentHead: { projectId: "project-a", sequence: 0, protectedRef: "refs/heads/main",
+    importReceipt: { ...receipt, resolvedTree, phase: "repository-imported" },
+    currentHead: { projectId: "project-a", repositoryId: "root", sequence: 0, protectedRef: "refs/heads/main",
       commit: receipt.expectedCommit, tree: resolvedTree, policyDigest: receipt.policyDigest }
   });
 }
@@ -285,13 +287,15 @@ async function expectProofLeavesOwnedBytesUnchanged<T>(
 }
 
 function proof(origin: string, projectId: string, suppliedAuthorization: string): Promise<Response> {
-  return fetch(`${origin}/v1/projects/${projectId}/root-import/proof`, {
-    headers: { authorization: suppliedAuthorization }
+  return fetch(`${origin}/v1/projects/${projectId}/repositories/root/import/proof`, {
+    method: "POST",
+    headers: { authorization: suppliedAuthorization, "content-type": "application/json" },
+    body: JSON.stringify({ schemaVersion: 1, generationId })
   });
 }
 
 function bundlePath(root: string, receipt: ImportReceipt): string {
-  return join(root, "project-a", ".dim-root-import", `${receipt.importNonce}.bundle`);
+  return join(root, "project-a", ".dim-import-root", `${receipt.importNonce}.bundle`);
 }
 
 function basic(username: string, password: string): string {

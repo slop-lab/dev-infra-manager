@@ -62,7 +62,7 @@ describe("native Git workspace write issuer host client", () => {
     const origin = await finalizedService("workspace-write-client-role-denial");
 
     // When
-    const response = await fetch(`${origin}/v1/projects/project-a/workspace-write-leases`, {
+    const response = await fetch(`${origin}/v1/projects/project-a/repositories/root/workspace-write-leases`, {
       method: "POST",
       headers: { authorization: rootReadIssuerAuthorization, "content-type": "application/json" },
       body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId })
@@ -163,7 +163,7 @@ describe("native Git workspace write issuer host client", () => {
     expect(message).not.toContain(secret);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
-      method: "POST", path: "/v1/projects/project-a/workspace-write-leases",
+      method: "POST", path: "/v1/projects/project-a/repositories/root/workspace-write-leases",
       body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId })
     });
   });

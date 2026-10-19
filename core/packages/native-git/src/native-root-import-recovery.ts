@@ -6,7 +6,7 @@ import { NativeProjectRootImportStateError } from "./native-project-root-import-
 import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-import-transitions.js";
 import type { NativeProjectRegistration } from "./native-project-registry-state.js";
 import { assertNativeRootRefUnborn } from "./native-root-import-git.js";
-import { verifyImportedRootReadOnly } from "./native-imported-root-verifier.js";
+import { verifyImportedRepositoryReadOnly } from "./native-imported-root-verifier.js";
 
 type RecoveryOptions = {
   readonly state: NativeGitBundleState;
@@ -21,23 +21,23 @@ type RecoveryOptions = {
 export async function recoverNativeRootImports(options: RecoveryOptions): Promise<void> {
   for (const rootImport of readNativeProjectRootImportsFromDatabase(options.state.database)) {
     const originalGeneration = rootImport.generationId === options.expectedGenerationId;
-    if (!originalGeneration && rootImport.phase !== "root-imported") {
+    if (!originalGeneration && rootImport.phase !== "repository-imported") {
       throw new NativeProjectRootImportStateError("native Project root import belongs to another generation");
     }
-    const registration = options.registrations.find((entry) => entry.projectId === rootImport.projectId);
-    if (registration === undefined || registration.phase !== "root-prepared"
+    const registration = options.registrations.find((entry) => entry.projectId === rootImport.projectId && entry.repositoryId === rootImport.repositoryId);
+    if (registration === undefined || registration.phase !== "repository-prepared"
       || registration.ownerHostId !== rootImport.ownerHostId
-      || registration.rootRepositoryId !== rootImport.rootRepositoryId) {
+      || registration.repositoryId !== rootImport.repositoryId) {
       throw new NativeProjectRootImportStateError("native Project root import registration binding is invalid");
     }
     if (!originalGeneration) {
-      await verifyImportedRootReadOnly({
+      await verifyImportedRepositoryReadOnly({
         state: options.state,
         stateDirectory: options.stateDirectory,
         gitExecutable: options.gitExecutable,
         gitIdentity: options.gitIdentity,
         ownerHostId: rootImport.ownerHostId,
-        projectId: rootImport.projectId
+        projectId: rootImport.projectId, repositoryId: rootImport.repositoryId
       });
       continue;
     }
@@ -45,7 +45,7 @@ export async function recoverNativeRootImports(options: RecoveryOptions): Promis
       await assertNativeRootRefUnborn({
         gitExecutable: options.gitExecutable,
         gitIdentity: options.gitIdentity,
-        repository: join(options.stateDirectory, rootImport.projectId, "root.git"),
+        repository: join(options.stateDirectory, rootImport.projectId, `${rootImport.repositoryId}.git`),
         protectedRef: rootImport.protectedRef,
         signal: AbortSignal.timeout(5_000)
       });
@@ -60,7 +60,7 @@ export async function recoverNativeRootImports(options: RecoveryOptions): Promis
     await finalizeNativeProjectRootImport({
       state: options.state,
       stateDirectory: options.stateDirectory,
-      projectId: rootImport.projectId,
+      projectId: rootImport.projectId, repositoryId: rootImport.repositoryId,
       ownerHostId: rootImport.ownerHostId,
       selector: {
         schemaVersion: 1,

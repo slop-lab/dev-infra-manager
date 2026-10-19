@@ -20,17 +20,21 @@ export async function refreshNativeWorkspaceConnection(attachment: NativeWorkspa
       throw new UserError("the selected connection belongs to another control-plane authority");
     }
     const project = await new NativeProjectPendingStore(attachment.managedStateRoot).read(attachment.projectName, selected.hostId);
-    if (project?.phase !== "ready" || project.projectId !== attachment.projectId || project.protectedRef !== attachment.protectedRef
-      || project.reviewPolicy.policyRevision !== attachment.policyRevision
-      || project.reviewPolicy.requiredReviewRevision !== attachment.requiredReviewRevision
-      || project.reviewPolicy.requiredJobSetRevision !== attachment.requiredJobSetRevision) {
-      throw new UserError("the native Project no longer matches the workspace's pinned ref and review policy");
+    if (project?.phase !== "ready" || project.projectId !== attachment.projectId) throw new UserError("the native Project no longer matches this workspace");
+    const bindings = [attachment.configuration, ...Object.values(attachment.repositories)];
+    for (const binding of bindings) {
+      const repositoryId = binding.repositoryId;
+      const repository = project.repositories[repositoryId];
+      if (!repository || repository.protectedRef !== binding.protectedRef || repository.reviewPolicy.policyRevision !== binding.policyRevision
+        || repository.reviewPolicy.requiredReviewRevision !== binding.requiredReviewRevision || repository.reviewPolicy.requiredJobSetRevision !== binding.requiredJobSetRevision) {
+        throw new UserError(`repository '${repositoryId}' no longer matches the workspace's pinned ref and review policy`);
+      }
+      const proof = await proveNativeProjectReadiness(selected, project, repositoryId, signal, {
+        commit: binding.commit, tree: binding.tree, allowFastForward: true
+      });
+      if (proof.policyRevision !== binding.policyRevision || proof.requiredReviewRevision !== binding.requiredReviewRevision
+        || proof.requiredJobSetRevision !== binding.requiredJobSetRevision) throw new UserError("workspace readiness policy changed");
     }
-    const proof = await proveNativeProjectReadiness(selected, project, signal, {
-      commit: attachment.commit, tree: attachment.tree, allowFastForward: true
-    });
-    if (proof.policyRevision !== attachment.policyRevision || proof.requiredReviewRevision !== attachment.requiredReviewRevision
-      || proof.requiredJobSetRevision !== attachment.requiredJobSetRevision) throw new UserError("workspace readiness policy changed");
     const refreshed = { ...attachment, connectionFile };
     await writeNativeWorkspaceAttachment(refreshed);
     return refreshed;

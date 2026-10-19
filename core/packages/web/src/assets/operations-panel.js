@@ -12,7 +12,7 @@ let session = null;
 let epoch = 0;
 /** @type {Map<string,string>} */
 const retries = new Map();
-/** @type {(id:string)=>void} */
+/** @type {(id:string, repositoryId:string)=>void} */
 let openReview = () => {};
 /** @param {unknown} value @returns {Record<string,unknown>[]} */
 function rows(value) { return Array.isArray(value) ? value.map(record).filter((row) => row !== null) : []; }
@@ -38,7 +38,7 @@ async function request(path, body, timeout = 35_000) {
   /** @type {unknown} */ const value = await response.json(); return value;
 }
 export function clearOperations() { session = null; epoch++; retries.clear(); panel.hidden = true; hosts.replaceChildren(); jobs.replaceChildren(); reviews.replaceChildren(); details.textContent = ""; element("view-navigation").hidden = true; }
-/** @param {import("./types.js").Session} active @param {(id:string)=>void} open */
+/** @param {import("./types.js").Session} active @param {(id:string, repositoryId:string)=>void} open */
 export function showOperations(active, open) {
   clearOperations(); session = active; openReview = open; panel.hidden = !active.capabilities.operations && !active.capabilities.review;
   element("view-navigation").hidden = !active.capabilities.review;
@@ -76,14 +76,15 @@ async function refresh() {
     }
   })());
   if (active.capabilities.review) loads.push((async () => {
-    const list = rows(await request(`/v1/projects/${active.projectId}/repositories/root/reviews`)); if (selected !== epoch) return;
+    const lists = await Promise.all(active.repositoryIds.map(async (repositoryId) => rows(await request(`/v1/projects/${active.projectId}/repositories/${repositoryId}/reviews`)).map((review) => ({ ...review, repositoryId }))));
+    const list = rows(lists.flat()); if (selected !== epoch) return;
     for (const review of list) {
-      const id = text(review.reviewId); if (!id) continue;
+      const id = text(review.reviewId); const repositoryId = text(review.repositoryId); if (!id || !repositoryId) continue;
       const row = document.createElement("div"); row.className = "operations-row"; reviews.append(row);
-      line(row, `${text(review.proposalRef) ?? ""} — ${text(review.status) ?? ""}`);
-      button(row, "Open evidence", async () => { setOperationsView(false); openReview(id); });
+      line(row, `${repositoryId}: ${text(review.proposalRef) ?? ""} — ${text(review.status) ?? ""}`);
+      button(row, "Open evidence", async () => { setOperationsView(false); openReview(id, repositoryId); });
       if (active.capabilities.promotion && active.roles.includes("operator")) button(row, "Promote reviewed candidate", async () => {
-        await request(`/v1/projects/${active.projectId}/repositories/root/reviews/${id}/promotions`, {}); await refresh();
+        await request(`/v1/projects/${active.projectId}/repositories/${repositoryId}/reviews/${id}/promotions`, {}); await refresh();
       });
     }
   })());
@@ -100,8 +101,10 @@ function renderCreateWorkspace(parent, host) {
     field.textContent = `${label} `; control.name = name; control.value = value;
     control.setAttribute("aria-label", `${label} on ${host}`); field.append(control); form.append(field); return control;
   }
-  const source = input("source", "Git URL"); source.type = "url"; source.required = true; source.placeholder = "ssh://git@example.com/project.git";
+  const source = input("source", "Git URL or dim://PROJECT"); source.type = "url"; source.required = true; source.placeholder = "ssh://git@example.com/project.git";
   const name = input("name", "Workspace name"); name.required = true; name.pattern = "[a-z0-9][a-z0-9._-]{0,47}";
+  const repositories = input("repositories", "Managed repositories (comma separated, optional)");
+  const workingDirectory = input("workingDirectory", "Managed working repository (optional)");
   const ref = input("ref", "Git ref (optional)");
   const runtime = input("runtime", "Runtime", "container"); runtime.required = true; runtime.pattern = "[a-z][a-z0-9-]{0,31}";
   const image = input("image", "Image (optional)"); image.placeholder = "Container image or VM fingerprint";
@@ -112,6 +115,8 @@ function renderCreateWorkspace(parent, host) {
     /** @type {Record<string,string>} */ const resources = {};
     for (const field of [cpuCount, memory, pidsLimit]) if (field.value.trim()) resources[field.name] = field.value.trim();
     await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces/create`, {
+      ...(repositories.value.trim() ? { repositories: repositories.value.split(",").map((id) => id.trim()) } : {}),
+      ...(workingDirectory.value.trim() ? { workingDirectory: workingDirectory.value.trim() } : {}),
       source: source.value.trim(), name: name.value.trim(), runtime: runtime.value.trim(),
       ...(ref.value.trim() ? { ref: ref.value.trim() } : {}), ...(image.value.trim() ? { image: image.value.trim() } : {}),
       ...(Object.keys(resources).length ? { resources } : {})

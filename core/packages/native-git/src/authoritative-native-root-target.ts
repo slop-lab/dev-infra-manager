@@ -3,13 +3,14 @@ import { z } from "zod";
 import { assertNativeGitBundleStateActive, readNativeProjectRegistrations,
   type NativeGitBundleState } from "./native-bundle-state.js";
 import { CandidateExecutionError } from "./candidate-execution-schema.js";
-import { verifyLiveImportedRoot } from "./native-imported-root-verifier.js";
+import { verifyLiveImportedRepository } from "./native-imported-root-verifier.js";
 import type { NativeProjectRootImportInstalled } from "./native-project-root-import-codec.js";
 import type { NativeProjectRootCurrentHead } from "./native-project-root-promotion-state.js";
 import type { GitExecutableIdentity } from "./repository.js";
 
 const selectorSchema = z.object({
-  projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)
+  projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
+  repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)
 }).strict().readonly();
 
 import type { WorkflowCompiler } from "./workflowCompiler.js";
@@ -24,16 +25,16 @@ export type AuthoritativeNativeCandidateRuntime = {
   readonly state: NativeGitBundleState;
 };
 
-export type AuthoritativeNativeRootTarget = {
+export type AuthoritativeNativeRepositoryTarget = {
   readonly repository: string;
   readonly currentHead: NativeProjectRootCurrentHead;
   readonly imported: NativeProjectRootImportInstalled;
 };
 
-export async function resolveAuthoritativeNativeRootTarget(
+export async function resolveAuthoritativeNativeRepositoryTarget(
   runtime: AuthoritativeNativeCandidateRuntime,
   input: unknown
-): Promise<AuthoritativeNativeRootTarget> {
+): Promise<AuthoritativeNativeRepositoryTarget> {
   try {
     if ("stateDirectory" in runtime) {
       throw new CandidateExecutionError("authoritative native runtime cannot override its owned state directory");
@@ -43,11 +44,11 @@ export async function resolveAuthoritativeNativeRootTarget(
       throw new CandidateExecutionError("authoritative native root selector is invalid", { cause: selector.error });
     }
     const registration = readNativeProjectRegistrations(runtime.state)
-      .find((entry) => entry.projectId === selector.data.projectId);
+      .find((entry) => entry.projectId === selector.data.projectId && entry.repositoryId === selector.data.repositoryId);
     if (registration === undefined) {
       throw new CandidateExecutionError("authoritative native Project is not registered");
     }
-    const { imported, currentHead, repository } = await verifyLiveImportedRoot({
+    const { imported, currentHead, repository } = await verifyLiveImportedRepository({
       activated: runtime.activated(),
       activationTokenDigest: runtime.activationTokenDigest,
       expectedGenerationId: runtime.expectedGenerationId,
@@ -55,6 +56,7 @@ export async function resolveAuthoritativeNativeRootTarget(
       gitIdentity: runtime.gitIdentity,
       ownerHostId: registration.ownerHostId,
       projectId: selector.data.projectId,
+      repositoryId: selector.data.repositoryId,
       state: runtime.state,
       stateDirectory: dirname(runtime.state.database)
     });

@@ -132,7 +132,7 @@ function transientFilesystemError(error: unknown): boolean {
 async function pendingDelivery(options: AuthoritativeNativeEventDispatcherOptions,
   binding: ReturnType<typeof authoritativeNativeDeliveryBinding>): Promise<Pending | undefined> {
   const candidates = await Promise.all(readNativeProjectRegistrations(options.state).map(async (registration) => {
-    const repository = join(options.stateDirectory, registration.projectId, `${registration.rootRepositoryId}.git`);
+    const repository = join(options.stateDirectory, registration.projectId, `${registration.repositoryId}.git`);
     const delivery = (await readPendingAuthoritativeNativeDeliveries(repository, 1, binding, options.generationId))[0];
     return delivery === undefined ? undefined : { repository, delivery };
   }));

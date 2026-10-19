@@ -1,3 +1,4 @@
+import { repositoryBinding } from "./nativeProjectFixture.js";
 import { executionWorkerConfigSchema } from "../../../../core/packages/managed/src/ci/workerConfig.js";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises";
@@ -22,7 +23,7 @@ import { readControlPlaneConfig } from "../../../../core/packages/installer/src/
 import { readControlPlaneSources } from "../../../../core/packages/installer/src/controlPlaneSources.js";
 import { loadNativeControlPlaneConnection } from "../../../../core/packages/managed/src/nativeControlPlaneConnection.js";
 import { createNodeNativeGitRootImporterClient } from "../../../../core/packages/managed/src/nativeGitRootImporterClient.js";
-import { bootstrapNativeProjectRoot } from "../../../../core/packages/managed/src/nativeProjectBootstrap.js";
+import { bootstrapNativeProjectRepository } from "../../../../core/packages/managed/src/nativeProjectBootstrap.js";
 import { NativeProjectPendingStore } from "../../../../core/packages/managed/src/nativeProjectPendingStore.js";
 import { loadNativeGitProjectRegistrarConnection } from "../../../../core/packages/managed/src/nativeGitProjectRegistrarConnection.js";
 
@@ -127,27 +128,29 @@ describe("optional control-plane setup", () => {
       execFileSync("/usr/bin/git", ["-C", source, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "initial"]);
       const hostState = path.join(root, "host-state");
       await mkdir(hostState, { mode: 0o700 });
-      const draft = await bootstrapNativeProjectRoot({ name: "example", projectId: "example", stateRoot: hostState,
+      const store = new NativeProjectPendingStore(hostState);
+      await store.create({ name: "example", projectId: "example", ownerHostId: host.hostId });
+      const draft = await bootstrapNativeProjectRepository({ repositoryId: "root", name: "example", projectId: "example", stateRoot: hostState,
         scratchRoot: hostState, sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main",
         registrarConnectionFile: path.join(connected.directory, "registrar.json"), importerConnectionFile: path.join(connected.directory, "importer.json"),
-        policySource: { kind: "manifest-free", rootAlias: "root", review: { requiredReviewerIds: ["owner"], requiredJobs: [] } },
+        policySource: { kind: "manifest-free", review: { ciRepositoryIds: ["root"], requiredReviewerIds: ["owner"], requiredJobs: [] } },
         signal: AbortSignal.timeout(10000) });
-      expect(draft.phase).toBe("root-imported");
-      const store = new NativeProjectPendingStore(hostState);
-      await store.admit("example", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), AbortSignal.timeout(10000));
-      expect((await store.ready("example", host, AbortSignal.timeout(10000))).phase).toBe("ready");
+      expect(draft.phase).toBe("repository-imported");
+      await store.admitRepository("example", "root", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), host, AbortSignal.timeout(10000));
+      expect((await store.configure("example", { configurationRepositoryId: "root", defaultWorkingRepositoryId: "root" }, host, AbortSignal.timeout(10000))).phase).toBe("ready");
       await expect(connectControlPlane(directory, { endpoint })).rejects.toThrow(/refusing to replace/);
       // An already running broker must adopt only a proved credential refresh,
       // preserving its Git grant, proposal namespace and mutable checkout.
       const project = await store.read("example", "operator");
       if (!project || project.phase !== "ready") throw new Error("Project not ready");
-      const workspace = workspaceRecord("persistent", { source: { url: "dim://example", ref: project.protectedRef, commit: project.rootCommit } });
+      const repository = project.repositories.root;
+      if (!repository) throw new Error("repository not ready");
+      const binding = repositoryBinding(repository);
+      const workspace = workspaceRecord("persistent", { source: { url: "dim://example", ref: repository.protectedRef, commit: repository.commit } });
       const workspaceStore = new WorkspaceStore(path.join(root, "core-workspaces")); await workspaceStore.write(workspace);
-      const attachment: NativeWorkspaceAttachment = { schemaVersion: 1, workspaceId: workspace.id, workspaceName: workspace.name,
-        nativeWorkspaceId: randomBytes(32).toString("base64url"), grant: randomBytes(32).toString("base64url"),
-        projectName: "example", projectId: project.projectId, protectedRef: project.protectedRef, commit: project.rootCommit, tree: project.rootTree,
-        policyRevision: project.reviewPolicy.policyRevision, requiredReviewRevision: project.reviewPolicy.requiredReviewRevision,
-        requiredJobSetRevision: project.reviewPolicy.requiredJobSetRevision, connectionFile: path.join(connected.directory, "host.json"),
+      const attachment: NativeWorkspaceAttachment = { schemaVersion: 2, workspaceId: workspace.id, workspaceName: workspace.name,
+        configuration: binding, repositories: { root: { ...binding, nativeWorkspaceId: randomBytes(32).toString("base64url"), grant: randomBytes(32).toString("base64url") } },
+        projectName: "example", projectId: project.projectId, connectionFile: path.join(connected.directory, "host.json"),
         workspaceStateRoot: workspaceStore.root, managedStateRoot: hostState, gateway: "127.0.0.1", port: 19419 };
       await writeNativeWorkspaceAttachment(attachment);
       const broker = createNativeWorkspaceBroker(attachment);
@@ -155,7 +158,7 @@ describe("optional control-plane setup", () => {
       try {
         const address = broker.address(); if (!address || typeof address === "string") throw new Error("missing broker address");
         const brokerUrl = `http://127.0.0.1:${address.port}/v1/projects/example/repositories/root.git/info/refs?service=git-upload-pack`;
-        const headers = { authorization: `Basic ${Buffer.from(`dim:${attachment.grant}`).toString("base64")}` };
+        const headers = { authorization: `Basic ${Buffer.from(`dim:${attachment.repositories.root!.grant}`).toString("base64")}` };
         expect((await fetch(brokerUrl, { headers })).status).toBe(200);
         await service.close();
         const nextGeneration = "d".repeat(64);
@@ -176,7 +179,9 @@ describe("optional control-plane setup", () => {
         expect(refreshed).toEqual({ ...attachment, connectionFile: environment.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE });
         expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
         expect((await fetch(brokerUrl, { headers })).status).toBe(200);
-        for (const changedScope of [{ projectId: "another" }, { protectedRef: "refs/heads/other" }, { policyRevision: "changed" }]) {
+        for (const changedScope of [{ projectId: "another" },
+          { configuration: { ...attachment.configuration, protectedRef: "refs/heads/other" } },
+          { repositories: { ...attachment.repositories, root: { ...attachment.repositories.root!, policyRevision: "b".repeat(64) } } }]) {
           await expect(refreshNativeWorkspaceConnection({ ...attachment, ...changedScope }, AbortSignal.timeout(5000), environment))
             .rejects.toThrow(/cannot reconnect/);
           expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);

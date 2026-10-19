@@ -4,6 +4,11 @@
 
 Target: `0.10.0` internal development candidate; this is not a published release.
 
+- Manage independent Git repositories in one Project with separate imports,
+  proposal credentials, reviews and protected-ref promotion. Select workspace
+  checkouts and their default directory; CI binds allowed repository inputs to
+  exact commit/tree snapshots without granting unselected repository access.
+
 - Let repositories declare exact required workspace plugins as data. Creation
   checks installed packages before starting a runtime and offers explicit TTY
   approval to install missing host code on the selected local or SSH host;

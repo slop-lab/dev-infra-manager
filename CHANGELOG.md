@@ -7,6 +7,11 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
+- Manage independent Git repositories in one Project with separate imports,
+  proposal credentials, reviews and protected-ref promotion. Select workspace
+  checkouts and their default directory; CI binds allowed repository inputs to
+  exact commit/tree snapshots without granting unselected repository access.
+
 - Develop ordinary Git repositories on local or SSH hosts without installing a
   control plane. Use `dim ls`, `create`, `exec`, `connect` and `forward` directly.
   Persistent Sysbox workspaces preserve checkout, home, private Docker data

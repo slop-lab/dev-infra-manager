@@ -28,6 +28,7 @@ const promotionEvidence = z.object({
 }).strict().readonly();
 const storedTransition = z.object({
   projectId: identifier,
+  repositoryId: identifier,
   transitionId: digest,
   importNonce: z.string().uuid(),
   sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -53,19 +54,19 @@ export type NativeProjectRootPromotionTransition = Omit<z.infer<typeof storedTra
 };
 
 export function nativeProjectRootPromotionEvidenceDigest(evidence: NativeProjectRootPromotionEvidence): string {
-  return domainDigest("dim-native-root-promotion-evidence-v1\0", evidence);
+  return domainDigest("dim-native-repository-promotion-evidence-v1\0", evidence);
 }
 
 export function nativeProjectRootPromotionTransitionId(
   transition: Omit<NativeProjectRootPromotionTransition, "transitionId" | "evidence">
 ): string {
-  return domainDigest("dim-native-root-promotion-transition-v1\0", transition);
+  return domainDigest("dim-native-repository-promotion-transition-v1\0", transition);
 }
 
 export function parseNativeProjectRootPromotionRow(row: unknown): NativeProjectRootPromotionTransition {
   if (!isRecord(row)) throw new NativeProjectRootPromotionStateError("native Project root promotion row is invalid");
   const result = storedTransition.safeParse({
-    projectId: row.project_id, transitionId: row.transition_id, importNonce: row.import_nonce,
+    projectId: row.project_id, repositoryId: row.repository_id, transitionId: row.transition_id, importNonce: row.import_nonce,
     sequence: row.sequence, reviewId: row.review_id, protectedRef: row.protected_ref,
     proposalRef: row.proposal_ref, expectedCommit: row.expected_commit, expectedTree: row.expected_tree,
     candidateCommit: row.candidate_commit, candidateTree: row.candidate_tree,

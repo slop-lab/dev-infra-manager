@@ -2,7 +2,7 @@
 
 `@slop-lab/dim-managed` owns optional native Project/Git integration,
 review and CI workers, and explicitly selected host services. Base and native
-workspaces use the same core store, single Sysbox runtime and lifecycle.
+workspaces use the same core store, selected runtime and lifecycle.
 
 After preparing a native Project, create its workspace with the ordinary host
 commands:
@@ -17,8 +17,11 @@ dim recreate development
 dim discard development
 ```
 
-The selected local or SSH host acquires the attested protected root, seeds the
-workspace's persistent checkout, and attaches a scoped Git broker. The broker
+A Project owns independent repositories. Its configuration repository and default
+working repository are selected separately. The local or SSH host acquires only
+the chosen protected checkouts into `/workspace/REPOSITORY`, and attaches
+repository-scoped Git capabilities. A configuration-only checkout is inspected
+on the host and never seeded or granted to the guest. The broker
 binds only the workspace's private bridge gateway, checks its immutable core
 identity and current running state on every operation, and obtains short-lived
 native Git leases. Operator credentials remain on the host. Proposal pushes
@@ -27,7 +30,7 @@ discard or workspace-name reuse immediately invalidates the old broker grant.
 The broker exits after discard and is restored on managed workspace use after
 a host restart.
 
-Home, checkout and nested Docker data live in the same three volumes as an
+Home, checkout and nested Docker data use the same core-owned storage as an
 ordinary workspace. There is no privileged outer container, host socket mount,
 automatic Project setup hook, or separate native workspace image. Run Project
 setup and other tasks explicitly with `dim exec` inside that isolated runtime.
@@ -76,15 +79,31 @@ the active host/importer paths privately in managed state; Project commands and
 workspace host, connect on that host so its own filesystem owns the selection.
 
 ```bash
-dim managed project bootstrap-native-root example \
-  --project-id example \
-  --source-repository /absolute/path/to/repository \
-  --source-ref refs/heads/main \
-  --registrar-connection "$HOME/dim-control-plane/connections/registrar.json" \
-  --importer-connection "$HOME/dim-control-plane/connections/importer.json" \
-  --review-policy "$HOME/dim-control-plane/review-policy.json"
 dim managed project create example
+dim managed project repository import example root \
+  --source /absolute/path/to/repository \
+  --ref refs/heads/main \
+  --review-policy "$HOME/dim-control-plane/review-policy.json"
+dim managed project configure example \
+  --configuration-repository root --default-repository root
 ```
+
+Repeat `repository import` with distinct repository IDs and review-policy files
+for repositories such as `public` and `private`. Each policy names its repository
+and explicitly lists `ciRepositoryIds`, including itself. A CI job can request
+additional inputs only from that trusted allowlist. Import/readiness/review and
+protected-ref promotion remain independent for every repository.
+
+```bash
+dim create dim://example combined \
+  --repository public --repository private --workdir public
+```
+
+Without `--repository`, only the default working repository is checked out.
+`--workdir` must name a selected repository. If an explicit subset excludes the
+Project default, its first repository becomes the working directory. Configuration
+still comes from the separately selected configuration repository; choosing a
+working directory never changes the configuration authority.
 
 These commands run on the trusted managed host. For a remote service, use an
 SSH loopback forward and `connect --endpoint http://127.0.0.1:LOCAL_PORT`;

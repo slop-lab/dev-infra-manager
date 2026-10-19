@@ -51,7 +51,7 @@ type WorkspaceWriteServiceInput = WorkspaceWriteVerificationInput & {
   readonly now: () => number;
   readonly operations: RootReadOperationGate;
   readonly hooks?: NativeProjectWorkspaceWriteHooks;
-  readonly reconcileProposalRefs: (projectId: string, proposalRefs: readonly string[]) => Promise<void>;
+  readonly reconcileProposalRefs: (projectId: string, repositoryId: string, proposalRefs: readonly string[]) => Promise<void>;
   readonly serializeReceive: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 };
 
@@ -92,7 +92,7 @@ export function createNativeProjectWorkspaceWriteService(
         });
         return true;
       }
-      const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/workspace-write-leases$/
+      const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/workspace-write-leases$/
         .exec(url.pathname);
       if (match === null) return false;
       if (request.method !== "POST" || url.search !== "") {
@@ -100,7 +100,8 @@ export function createNativeProjectWorkspaceWriteService(
         return true;
       }
       const projectId = match[1];
-      if (projectId === undefined) return false;
+      const repositoryId = match[2];
+      if (projectId === undefined || repositoryId === undefined) return false;
       if (input.issuers.length === 0) {
         sendNotFound(response);
         return true;
@@ -134,14 +135,14 @@ export function createNativeProjectWorkspaceWriteService(
           throw error;
         }
         if (!input.operations.isOpen()) return true;
-        if (leaseRequest.generationId !== input.expectedGenerationId) {
+        if (leaseRequest.generationId !== input.expectedGenerationId || leaseRequest.repositoryId !== repositoryId) {
           sendJson(response, 409, { error: "workspace write lease generation conflicts with service startup" });
           return true;
         }
         await input.hooks?.beforeVerification?.();
         if (!input.operations.isOpen()) return true;
         try {
-          await verifyAuthoritativeWorkspaceRoot(input, projectId, issuer.hostId);
+          await verifyAuthoritativeWorkspaceRoot(input, projectId, repositoryId, issuer.hostId);
         } catch (error) {
           if (input.operations.isOpen()) sendVerificationFailure(response, error);
           return true;
@@ -186,12 +187,12 @@ export function createNativeProjectWorkspaceWriteService(
         await input.hooks?.beforeVerification?.();
         if (!input.operations.isOpen()) return true;
         try {
-          await verifyAuthoritativeWorkspaceRoot(input, route.projectId, lease.ownerHostId);
+          await verifyAuthoritativeWorkspaceRoot(input, route.projectId, route.repositoryId, lease.ownerHostId);
           await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
           await assertRegisteredRepository({
             gitExecutable: input.gitExecutable,
             storageRoot: input.stateDirectory
-          }, { projectId: route.projectId, repositoryId: "root" });
+          }, { projectId: route.projectId, repositoryId: route.repositoryId });
         } catch (error) {
           if (input.operations.isOpen()) sendVerificationFailure(response, error);
           return;
@@ -205,7 +206,7 @@ export function createNativeProjectWorkspaceWriteService(
         }
         let before: NativeProposalRefSnapshot | undefined;
         if (request.method === "POST" && route.pathInfo.endsWith("/git-receive-pack")) {
-          before = await readNativeProposalRefs(input, route.projectId, lease.workspaceId);
+          before = await readNativeProposalRefs(input, route.projectId, route.repositoryId, lease.workspaceId);
         }
         await serveGitBackend({
           config: { gitExecutable: input.gitExecutable, storageRoot: input.stateDirectory },
@@ -214,8 +215,8 @@ export function createNativeProjectWorkspaceWriteService(
           request,
           response,
           ...(before === undefined ? {} : { afterSuccessfulWrite: async () => {
-            const after = await readNativeProposalRefs(input, route.projectId, lease.workspaceId);
-            await input.reconcileProposalRefs(route.projectId, changedNativeProposalRefs(before, after));
+            const after = await readNativeProposalRefs(input, route.projectId, route.repositoryId, lease.workspaceId);
+            await input.reconcileProposalRefs(route.projectId, route.repositoryId, changedNativeProposalRefs(before, after));
           } })
         });
       });

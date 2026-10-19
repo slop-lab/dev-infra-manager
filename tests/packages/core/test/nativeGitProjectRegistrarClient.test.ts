@@ -58,8 +58,8 @@ describe("native Git Project registrar client", () => {
     expect(first).toEqual({
       schemaVersion: 1, generationId, hostId: "host-a",
       preparation: {
-        serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root",
-        state: "root-prepared"
+        serviceId: "native-main", projectId: "project-a", repositoryId: "root",
+        state: "repository-prepared"
       }
     });
     expect((await git(service.root, ["--git-dir", join(service.root, "project-a/root.git"), "for-each-ref", "--format=%(refname)"])).stdout).toBe("");
@@ -185,7 +185,7 @@ function connection(origin: string, credential = registrar) {
 }
 
 function projectPreparation() {
-  return { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root" } as const;
+  return { serviceId: "native-main", projectId: "project-a", repositoryId: "root" } as const;
 }
 
 async function malformedServer(): Promise<string> {

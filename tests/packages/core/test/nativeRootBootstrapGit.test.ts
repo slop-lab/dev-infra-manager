@@ -14,7 +14,7 @@ import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot, g
 const run = promisify(execFile);
 const roots: string[] = [];
 const gitExecutable = "/usr/bin/git";
-const review = { requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [
+const review = { ciRepositoryIds: ["root"], requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [
   { name: "source", kind: "ordinary-sysbox" }, { name: "integration", kind: "qemu" }
 ] } as const;
 
@@ -42,6 +42,7 @@ async function fixture(withManifest: boolean): Promise<{ readonly source: string
 repositories:
   root: {url: https://example.test/root.git, root: true, ref: main, protect: [main]}
 nativeReview:
+  ciRepositoryIds: [root]
   requiredReviewerIds: [owner]
   pathReviewerRules: []
   requiredJobs:
@@ -61,11 +62,11 @@ describe("native root bootstrap Git plan", () => {
     const { source, scratch } = await fixture(true);
     const commit = await git(["-C", source, "rev-parse", "HEAD"]);
     const tree = await git(["-C", source, "rev-parse", "HEAD^{tree}"]);
-    const plan = await prepareNativeRootBootstrapGit({ gitExecutable, sourceRepository: source,
+    const plan = await prepareNativeRootBootstrapGit({ repositoryId: "root", gitExecutable, sourceRepository: source,
       selectedRef: "refs/heads/main", scratchRoot: scratch,
       policySource: { kind: "reviewed-manifest" }, signal: AbortSignal.timeout(20_000) });
     expect(plan).toMatchObject({ expectedCommit: commit, resolvedTree: tree,
-      protectedRef: "refs/heads/main", rootAlias: "root" });
+      protectedRef: "refs/heads/main", repositoryId: "root" });
     expect(plan.reviewPolicy.requiredJobs.map(({ name }) => name)).toEqual(["integration", "source"]);
     expect((await stat(plan.bundlePath)).mode & 0o777).toBe(0o600);
 
@@ -82,13 +83,13 @@ describe("native root bootstrap Git plan", () => {
 
   it("supports explicit manifest-free policy and removes staging on invalid reviewed input", async () => {
     const { source, scratch } = await fixture(false);
-    await expect(prepareNativeRootBootstrapGit({ gitExecutable, sourceRepository: source,
+    await expect(prepareNativeRootBootstrapGit({ repositoryId: "root", gitExecutable, sourceRepository: source,
       selectedRef: "refs/heads/main", scratchRoot: scratch,
       policySource: { kind: "reviewed-manifest" }, signal: AbortSignal.timeout(20_000) })).rejects.toThrow();
     expect(await readdir(scratch)).toEqual([]);
-    const plan = await prepareNativeRootBootstrapGit({ gitExecutable, sourceRepository: source,
+    const plan = await prepareNativeRootBootstrapGit({ repositoryId: "root", gitExecutable, sourceRepository: source,
       selectedRef: "refs/heads/main", scratchRoot: scratch,
-      policySource: { kind: "manifest-free", rootAlias: "root", review },
+      policySource: { kind: "manifest-free", review },
       signal: AbortSignal.timeout(20_000) });
     expect(plan.reviewPolicy.requiredJobs.map(({ name }) => name)).toEqual(["integration", "source"]);
     await plan.cleanup();
@@ -97,7 +98,7 @@ describe("native root bootstrap Git plan", () => {
 
   it("imports the planned commit and canonical policy through the real service without Git transport", async () => {
     const { source, scratch } = await fixture(true);
-    const plan = await prepareNativeRootBootstrapGit({ gitExecutable, sourceRepository: source,
+    const plan = await prepareNativeRootBootstrapGit({ repositoryId: "root", gitExecutable, sourceRepository: source,
       selectedRef: "refs/heads/main", scratchRoot: scratch,
       policySource: { kind: "reviewed-manifest" }, signal: AbortSignal.timeout(20_000) });
     const state = await createFinalizeRoot("planned-import");
@@ -110,11 +111,11 @@ describe("native root bootstrap Git plan", () => {
       credential: { username: importer.username, password: importer.password } }), { mode: 0o600 });
     const client = await createNodeNativeGitRootImporterClient(connectionPath);
 
-    const imported = await client.importRoot({ serviceId: "native-main", projectId: "project-a",
-      rootRepositoryId: "root", protectedRef: plan.protectedRef, expectedCommit: plan.expectedCommit,
+    const imported = await client.importRepository({ serviceId: "native-main", projectId: "project-a",
+      repositoryId: "root", protectedRef: plan.protectedRef, expectedCommit: plan.expectedCommit,
       policy: plan.reviewPolicy, bundlePath: plan.bundlePath }, AbortSignal.timeout(20_000));
 
-    expect(imported).toMatchObject({ phase: "root-imported", expectedCommit: plan.expectedCommit,
+    expect(imported).toMatchObject({ phase: "repository-imported", expectedCommit: plan.expectedCommit,
       resolvedTree: plan.resolvedTree });
     expect(imported.policyDigest).toBe(createHash("sha256").update(JSON.stringify(plan.reviewPolicy)).digest("hex"));
     expect(await git(["--git-dir", rootRepository(state), "show-ref", "--hash", "refs/heads/main"]))

@@ -22,7 +22,7 @@ const preludeSchema = z.object({
   generationId: z.string().regex(/^[0-9a-f]{64}$/),
   serviceId: z.literal("native-main"),
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
-  rootRepositoryId: z.literal("root"),
+  repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   protectedRef: z.string(),
   expectedCommit: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
   policy: z.unknown()
@@ -40,6 +40,7 @@ type ReceiveOptions = {
   readonly request: IncomingMessage;
   readonly stateDirectory: string;
   readonly projectId: string;
+  readonly repositoryId: string;
   readonly gitExecutable: string;
   readonly gitIdentity: GitExecutableIdentity;
   readonly signal: AbortSignal;
@@ -87,13 +88,13 @@ export async function receiveNativeRootBundle(options: ReceiveOptions): Promise<
     }
     preludeChunks.push(chunk.subarray(0, newline));
     prelude = parsePrelude(Buffer.concat(preludeChunks));
-    if (prelude.projectId !== options.projectId) throw new NativeRootImportBundleError("root import Project path conflicts");
+    if (prelude.projectId !== options.projectId || prelude.repositoryId !== options.repositoryId) throw new NativeRootImportBundleError("root import Project path conflicts");
     importNonce = await options.authorizePrelude(prelude);
     firstBundleChunk = chunk.subarray(newline + 1);
   }
   const projectRoot = join(options.stateDirectory, options.projectId);
   await assertPrivateDirectory(projectRoot);
-  const directory = rootBundleDirectory(options.stateDirectory, options.projectId);
+  const directory = rootBundleDirectory(options.stateDirectory, options.projectId, options.repositoryId);
   const created = await mkdir(directory, { recursive: true, mode: 0o700 });
   if (created !== undefined) {
     await chmod(directory, 0o700);
@@ -136,13 +137,13 @@ export async function receiveNativeRootBundle(options: ReceiveOptions): Promise<
     throw error;
   }
   if (importNonce === undefined) throw new NativeRootImportBundleError("root import intent is missing");
-  const finalPath = rootBundlePath(options.stateDirectory, options.projectId, importNonce);
+  const finalPath = rootBundlePath(options.stateDirectory, options.projectId, options.repositoryId, importNonce);
   const bundleDigest = hash.digest("hex");
   try {
     await verifyNativeRootBundle({
       bundlePath: temporaryPath,
       directory,
-      canonicalRepository: join(projectRoot, "root.git"),
+      canonicalRepository: join(projectRoot, `${options.repositoryId}.git`),
       protectedRef: prelude.protectedRef,
       expectedCommit: prelude.expectedCommit,
       gitExecutable: options.gitExecutable,
@@ -153,7 +154,7 @@ export async function receiveNativeRootBundle(options: ReceiveOptions): Promise<
     try {
       await lstat(finalPath);
       await unlink(temporaryPath);
-      await assertDurableNativeRootBundle(options.stateDirectory, options.projectId, importNonce,
+      await assertDurableNativeRootBundle(options.stateDirectory, options.projectId, options.repositoryId, importNonce,
         bundleDigest, bundleSize);
       return { prelude, bundleDigest, bundleSize, bundlePath: finalPath };
     } catch (error) {

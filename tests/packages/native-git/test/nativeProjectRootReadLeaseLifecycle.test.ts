@@ -159,7 +159,7 @@ async function issueLease(origin: string): Promise<RootReadLease> {
 }
 
 function requestLease(origin: string): Promise<Response> {
-  return fetch(`${origin}/v1/projects/project-a/root-read-leases`, {
+  return fetch(`${origin}/v1/projects/project-a/repositories/root/read-leases`, {
     method: "POST",
     headers: { authorization: rootReadIssuerAuthorization, "content-type": "application/json" },
     body: JSON.stringify({ schemaVersion: 1, generationId })

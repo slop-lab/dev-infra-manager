@@ -21,28 +21,30 @@ export async function runNativeGitOperatorReview(arguments_: readonly string[]):
   const operation = arguments_[0];
   const connectionPath = arguments_[1];
   const projectId = arguments_[2];
+  const repositoryId = arguments_[3];
+  if (repositoryId === undefined || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)) return false;
   if (operation === undefined || connectionPath === undefined || projectId === undefined) return false;
   const connection = await loadConnection(connectionPath);
   const expectedRole = operation === "promote" ? "host-promoter" : "human-reviewer";
   if (connection.role !== expectedRole) throw new NativeGitOperatorReviewError(`operation requires ${expectedRole} connection`);
   await attest(connection);
-  const prefix = `/v1/projects/${encodeURIComponent(projectId)}/repositories/root/reviews`;
+  const prefix = `/v1/projects/${encodeURIComponent(projectId)}/repositories/${encodeURIComponent(repositoryId)}/reviews`;
   let request: Parameters<typeof requestReviewApi>[0];
-  if (operation === "resolve" && arguments_.length === 4) {
+  if (operation === "resolve" && arguments_.length === 5) {
     request = { baseUrl: connection.endpoint, method: "POST", path: `${prefix}/resolve`,
       credentials: connection, generationId: connection.generationId,
-      body: { schemaVersion: 1, proposalRef: arguments_[3] } };
-  } else if (operation === "inspect" && arguments_.length === 4) {
-    request = { baseUrl: connection.endpoint, method: "GET", path: `${prefix}/${arguments_[3]}`,
+      body: { schemaVersion: 1, proposalRef: arguments_[4] } };
+  } else if (operation === "inspect" && arguments_.length === 5) {
+    request = { baseUrl: connection.endpoint, method: "GET", path: `${prefix}/${arguments_[4]}`,
       credentials: connection, generationId: connection.generationId };
-  } else if (operation === "approve" && arguments_.length === 4) {
-    request = { baseUrl: connection.endpoint, method: "POST", path: `${prefix}/${arguments_[3]}/approvals`,
+  } else if (operation === "approve" && arguments_.length === 5) {
+    request = { baseUrl: connection.endpoint, method: "POST", path: `${prefix}/${arguments_[4]}/approvals`,
       credentials: connection, generationId: connection.generationId, body: { requestId: randomUUID() } };
-  } else if (operation === "revoke" && arguments_.length === 5) {
-    request = { baseUrl: connection.endpoint, method: "POST", path: `${prefix}/${arguments_[3]}/revocations`,
-      credentials: connection, generationId: connection.generationId, body: { approvalId: arguments_[4] } };
-  } else if (operation === "promote" && arguments_.length === 4) {
-    request = { baseUrl: connection.endpoint, method: "POST", path: `${prefix}/${arguments_[3]}/promotions`,
+  } else if (operation === "revoke" && arguments_.length === 6) {
+    request = { baseUrl: connection.endpoint, method: "POST", path: `${prefix}/${arguments_[4]}/revocations`,
+      credentials: connection, generationId: connection.generationId, body: { approvalId: arguments_[5] } };
+  } else if (operation === "promote" && arguments_.length === 5) {
+    request = { baseUrl: connection.endpoint, method: "POST", path: `${prefix}/${arguments_[4]}/promotions`,
       credentials: connection, generationId: connection.generationId, body: { schemaVersion: 1 } };
   } else return false;
   process.stdout.write(await requestReviewApi(request));

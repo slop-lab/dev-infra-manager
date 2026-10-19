@@ -1,12 +1,13 @@
+import { assertExecutionInputsCurrent } from "./execution-inputs.js";
 import { inspectAuthoritativeNativeReviewGit, readAuthoritativeNativeReviewRefs } from "./authoritative-native-review-git.js";
 import { isDeepStrictEqual } from "node:util";
 import type { AuthoritativeNativeReview } from "./authoritative-native-review-schema.js";
 import { requiredReviewers } from "./authoritative-native-review.js";
-import type { AuthoritativeNativeCandidateRuntime, AuthoritativeNativeRootTarget } from "./authoritative-native-root-target.js";
+import type { AuthoritativeNativeCandidateRuntime, AuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
 
 export async function nativeHumanReviewStaleReasons(
   runtime: AuthoritativeNativeCandidateRuntime,
-  target: AuthoritativeNativeRootTarget,
+  target: AuthoritativeNativeRepositoryTarget,
   review: AuthoritativeNativeReview
 ): Promise<readonly string[]> {
   const reasons: string[] = [];
@@ -14,6 +15,8 @@ export async function nativeHumanReviewStaleReasons(
   if (review.policyRevision !== policy.policyRevision
     || review.requiredReviewRevision !== policy.requiredReviewRevision) reasons.push("policy-changed");
   if (review.expectedProtectedHead !== target.currentHead.commit) reasons.push("protected-head-changed");
+  try { await assertExecutionInputsCurrent(runtime, review); }
+  catch { reasons.push("repository-inputs-changed"); }
   const git = { gitExecutable: runtime.gitExecutable, gitIdentity: runtime.gitIdentity,
     repository: target.repository, signal: AbortSignal.timeout(30_000),
     protectedRef: target.currentHead.protectedRef, proposalRef: review.proposalRef };
@@ -28,7 +31,7 @@ export async function nativeHumanReviewStaleReasons(
     const workspaceId = /^refs\/heads\/proposals\/([A-Za-z0-9_-]{43})\//.exec(review.proposalRef)?.[1];
     if (workspaceId === undefined) return ["review-identity-changed"];
     const reviewerIds = requiredReviewers(policy, evidence.changes);
-    if (review.projectId !== target.imported.projectId || review.repositoryId !== "root"
+    if (review.projectId !== target.imported.projectId || review.repositoryId !== target.imported.repositoryId
       || review.protectedRef !== policy.protectedRef || review.workspaceId !== workspaceId
       || review.patch !== evidence.patch || review.patchBytes !== evidence.patchBytes
       || !isDeepStrictEqual(review.changes, evidence.changes)

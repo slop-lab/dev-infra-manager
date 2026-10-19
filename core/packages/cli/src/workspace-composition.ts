@@ -3,6 +3,11 @@ import {
   type WorkspaceRecord, type WorkspaceService, type WorkspaceStore, type WorkspaceRuntime, type AcquiredWorkspaceSource
 } from "@slop-lab/dim-core/workspace";
 
+export interface WorkspaceHostCreateInput extends CreateWorkspaceInput {
+  readonly repositories?: readonly string[];
+  readonly workingDirectory?: string;
+}
+
 /** Optional features are composed on the selected host, outside the workspace kernel. */
 export interface WorkspaceHostContext {
   readonly store: WorkspaceStore;
@@ -14,8 +19,11 @@ export interface WorkspaceHostContext {
 }
 
 export async function createWorkspaceOnHost(
-  input: CreateWorkspaceInput, service: WorkspaceService, context: WorkspaceHostContext
+  input: WorkspaceHostCreateInput, service: WorkspaceService, context: WorkspaceHostContext
 ): Promise<WorkspaceRecord> {
+  if (!managedSource(input.source.url) && (input.repositories !== undefined || input.workingDirectory !== undefined)) {
+    throw new UserError("--repository and --workdir require a managed Project source (dim://PROJECT)");
+  }
   return managedSource(input.source.url)
     ? (await managedHost()).createManagedWorkspace(input, context)
     : service.create(input);

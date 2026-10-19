@@ -1,3 +1,4 @@
+import type { ExecutionDescriptor } from "@slop-lab/dim-native-git/execution";
 import type { NativeCandidateReadAuthority } from "./ci/candidate.js";
 import {
   materializeVerifiedTree,
@@ -14,8 +15,8 @@ import {
 export type NativeGitCandidateClaim = {
   readonly projectId: string;
   readonly repositoryId: string;
-  readonly protectedRef: string;
-  readonly expectedProtectedHead: string;
+  readonly protectedRef?: string;
+  readonly expectedProtectedHead?: string;
   readonly candidateCommit: string;
   readonly candidateTree: string;
 };
@@ -36,6 +37,7 @@ export type NativeGitCandidateReadOptions = {
     readonly username: string;
     readonly password: string;
   };
+  readonly credentialProvider?: (signal: AbortSignal) => Promise<{ readonly username: string; readonly password: string }>;
   readonly temporaryRoot: string;
   readonly claim: NativeGitCandidateClaim;
   readonly limits?: Partial<NativeGitReaderLimits>;
@@ -54,6 +56,7 @@ export function createNativeGitCandidateReadAuthority(
     async resolveProtectedHead(input) {
       assertScope(parsed.claim, input);
       if (input.protectedRef !== parsed.claim.protectedRef) throw new NativeGitCandidateReadError("protected ref is outside the claim");
+      if (parsed.claim.protectedRef === undefined) throw new NativeGitCandidateReadError("snapshot has no protected ref");
       return withGit(parsed, input.signal, (git) => resolveProtectedHead(git, parsed, input.signal));
     },
     async readCommit(input) {
@@ -110,13 +113,15 @@ const defaultLimits = {
 } as const satisfies NativeGitReaderLimits;
 
 function parseOptions(options: NativeGitCandidateReadOptions): ParsedOptions {
-  const protectedHeadFormat = objectIdFormat(options.claim.expectedProtectedHead);
+  const protectedHeadFormat = options.claim.expectedProtectedHead === undefined ? undefined : objectIdFormat(options.claim.expectedProtectedHead);
   const candidateCommitFormat = objectIdFormat(options.claim.candidateCommit);
   const candidateTreeFormat = objectIdFormat(options.claim.candidateTree);
   if (!options.gitExecutable.startsWith("/") || !identifier(options.claim.projectId)
-    || !identifier(options.claim.repositoryId) || !safeRef(options.claim.protectedRef)
-    || protectedHeadFormat === undefined || candidateCommitFormat !== protectedHeadFormat
-    || candidateTreeFormat !== protectedHeadFormat || !username(options.credential.username)
+    || !identifier(options.claim.repositoryId)
+    || (options.claim.protectedRef === undefined) !== (options.claim.expectedProtectedHead === undefined)
+    || options.claim.protectedRef !== undefined && (!safeRef(options.claim.protectedRef) || protectedHeadFormat === undefined || candidateCommitFormat !== protectedHeadFormat)
+    || candidateCommitFormat === undefined
+    || candidateTreeFormat !== candidateCommitFormat || !username(options.credential.username)
     || !password(options.credential.password)) {
     throw new NativeGitCandidateReadError("native Git candidate reader options are invalid");
   }
@@ -145,7 +150,7 @@ function parseOptions(options: NativeGitCandidateReadOptions): ParsedOptions {
     ...options,
     serviceEndpoint,
     repositoryUrl: `${serviceEndpoint}/v1/projects/${options.claim.projectId}/repositories/${options.claim.repositoryId}.git`,
-    objectFormat: protectedHeadFormat,
+    objectFormat: candidateCommitFormat,
     limits
   };
 }
@@ -168,12 +173,13 @@ async function withCandidate<T>(options: ParsedOptions, signal: AbortSignal, act
 }
 
 async function withGit<T>(options: ParsedOptions, signal: AbortSignal, action: (git: DisposableGit) => Promise<T>): Promise<T> {
+  const credential = await options.credentialProvider?.(signal) ?? options.credential;
   const git = await openDisposableGit({
     executable: options.gitExecutable,
     temporaryRoot: options.temporaryRoot,
     objectFormat: options.objectFormat,
-    username: options.credential.username,
-    password: options.credential.password,
+    username: credential.username,
+    password: credential.password,
     timeoutMilliseconds: options.limits.processTimeoutMilliseconds
   }, signal);
   try {
@@ -184,6 +190,7 @@ async function withGit<T>(options: ParsedOptions, signal: AbortSignal, action: (
 }
 
 async function resolveProtectedHead(git: DisposableGit, options: ParsedOptions, signal: AbortSignal): Promise<string> {
+  if (options.claim.protectedRef === undefined) throw new NativeGitCandidateReadError("snapshot has no protected ref");
   const output = (await git.runAuthenticated([
     "ls-remote", "--refs", options.repositoryUrl, options.claim.protectedRef
   ], 4096, signal)).toString("ascii");
@@ -196,6 +203,7 @@ async function resolveProtectedHead(git: DisposableGit, options: ParsedOptions, 
 }
 
 async function assertProtectedHead(options: ParsedOptions, signal: AbortSignal): Promise<void> {
+  if (options.claim.protectedRef === undefined) return;
   const head = await withGit(options, signal, (git) => resolveProtectedHead(git, options, signal));
   if (head !== options.claim.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed from the claim");
 }
@@ -239,4 +247,23 @@ function boundedPositiveInteger(value: number, maximum: number): boolean {
 
 export class NativeGitCandidateReadError extends Error {
   readonly name = "NativeGitCandidateReadError";
+}
+
+/** One credential stays on the trusted worker; guests receive only selected immutable trees. */
+export function createNativeGitExecutionReadAuthority(options: Omit<NativeGitCandidateReadOptions, "claim"> & {
+  readonly descriptor: ExecutionDescriptor;
+}): NativeCandidateReadAuthority {
+  const descriptor = options.descriptor;
+  const readers = new Map(Object.entries(descriptor.inputs).map(([repositoryId, snapshot]) => [repositoryId,
+    createNativeGitCandidateReadAuthority({ ...options, claim: { projectId: descriptor.projectId, repositoryId,
+      candidateCommit: snapshot.commit, candidateTree: snapshot.tree,
+      ...(repositoryId !== descriptor.repositoryId ? {} : { protectedRef: descriptor.protectedRef, expectedProtectedHead: descriptor.expectedProtectedHead }) } })]));
+  function select(input: { projectId: string; repositoryId: string }) {
+    const reader = readers.get(input.repositoryId);
+    if (input.projectId !== descriptor.projectId || reader === undefined) throw new NativeGitCandidateReadError("repository is outside execution inputs");
+    return reader;
+  }
+  return { resolveProtectedHead: (input) => select(input).resolveProtectedHead(input),
+    readCommit: (input) => select(input).readCommit(input), readBlob: (input) => select(input).readBlob(input),
+    materializeTree: (input) => select(input).materializeTree(input) };
 }

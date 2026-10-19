@@ -31,15 +31,15 @@ export type NativeGitBundleServerOptions = {
 
 export type AuthoritativeNativeReviewSelector = {
   readonly projectId: string;
-  readonly repositoryId: "root";
+  readonly repositoryId: string;
   readonly proposalRef: string;
 };
 
 export type NativeGitPreparedProject = {
   readonly serviceId: "native-main";
   readonly projectId: string;
-  readonly rootRepositoryId: "root";
-  readonly state: "root-prepared";
+  readonly repositoryId: string;
+  readonly state: "repository-prepared";
 };
 
 export type NativeGitBundleServer = {

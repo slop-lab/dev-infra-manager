@@ -1,3 +1,4 @@
+import { assertExecutionInputsCurrent } from "./execution-inputs.js";
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -19,6 +20,7 @@ export async function authorizeExecution(runtime: AuthoritativeNativeCandidateRu
   if (event === undefined || !isDeepStrictEqual(event, request.event)) throw new ExecutionConflictError("execution event is stale");
   const job = inputs.plan.find((job) => job.name === event.jobName && job.kind === event.executionKind);
   if (job === undefined || inputs.configBlob === null) throw new ExecutionConflictError("execution job is missing");
+  await assertExecutionInputsCurrent(runtime, { ...review, inputs: event.inputs });
   const root = join(snapshot.target.repository, "dim-execution-grants");
   await ownedReviewDirectory(root);
   const existing = await readOptional(join(root, `${request.executionId}.json`));
@@ -32,7 +34,7 @@ export async function authorizeExecution(runtime: AuthoritativeNativeCandidateRu
   const history = await grants(snapshot.target.repository);
   const attempt = history.filter((grant) => sameJob(grant, event)).reduce((max, grant) => Math.max(max, grant.attempt), 0) + 1;
   const descriptor = candidateExecutionDescriptorSchema.parse({
-    projectId: review.projectId, repositoryId: "root", protectedRef: review.protectedRef,
+    projectId: review.projectId, repositoryId: review.repositoryId, inputs: event.inputs, protectedRef: review.protectedRef,
     expectedProtectedHead: review.expectedProtectedHead, candidateCommit: review.candidateCommit, candidateTree: review.candidateTree,
     policyRevision: review.policyRevision, requiredReviewRevision: review.requiredReviewRevision,
     requiredJobSetRevision: snapshot.envelope.qualityRevision, generationId: runtime.expectedGenerationId,
@@ -68,6 +70,8 @@ export async function assertCurrentExecution(runtime: AuthoritativeNativeCandida
     throw new ExecutionConflictError("execution descriptor no longer matches reviewed inputs");
   }
   if (!snapshot.envelope.events.some((event) => isDeepStrictEqual(event, grant.event))) throw new ExecutionConflictError("execution envelope is stale");
+  if (!isDeepStrictEqual(grant.descriptor.inputs, grant.event.inputs)) throw new ExecutionConflictError("execution input snapshot conflicts");
+  await assertExecutionInputsCurrent(runtime, { ...review, inputs: grant.descriptor.inputs });
   const latest = (await grants(snapshot.target.repository)).filter((other) => sameJob(other, grant.event))
     .sort((left, right) => right.attempt - left.attempt)[0];
   if (latest?.executionId !== grant.executionId) throw new ExecutionConflictError("execution attempt was superseded");
@@ -114,7 +118,7 @@ async function grants(repository: string): Promise<ExecutionGrant[]> {
   return Promise.all(names.sort().map(async (name) => executionGrantSchema.parse(await readOptional(join(root, name)))));
 }
 function sameJob(grant: ExecutionGrant, event: ExecutionGrant["event"]): boolean {
-  return grant.event.projectId === event.projectId && grant.event.envelopeId === event.envelopeId
+  return grant.event.projectId === event.projectId && grant.event.repositoryId === event.repositoryId && grant.event.envelopeId === event.envelopeId
     && grant.event.executionKind === event.executionKind && grant.event.jobName === event.jobName;
 }
 export class ExecutionConflictError extends Error {}

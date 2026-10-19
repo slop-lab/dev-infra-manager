@@ -44,7 +44,7 @@ export async function finalizedCandidateRoot(label: string, runner: string, poli
     repository: rootRepository(root),
     bundle,
     context: opened.context,
-    selector: { projectId: "project-a", candidateCommit: bundle.commit, candidateTree: bundle.tree },
+    selector: { projectId: "project-a", repositoryId: "root", candidateCommit: bundle.commit, candidateTree: bundle.tree },
     close: opened.close
   };
 }
@@ -119,14 +119,15 @@ export function authoritativePolicy(
   }[] = [
     { name: "integration", kind: "qemu", evidenceClass: "candidate-controlled" },
     { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }
-  ]
+  ],
+  ciRepositoryIds: readonly string[] = ["root"]
 ) {
   const reviewers = { requiredReviewerIds, pathReviewerRules } as const;
   const revision = (domain: string, version: number, value: unknown) => createHash("sha256")
     .update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
   return {
-    schemaVersion: 1, protectedRef: "refs/heads/main",
-    policyRevision: revision("policy", 3, { protectedRef: "refs/heads/main", ...reviewers }),
+    schemaVersion: 1, protectedRef: "refs/heads/main", ciRepositoryIds,
+    policyRevision: revision("policy", 4, { protectedRef: "refs/heads/main", ciRepositoryIds, ...reviewers }),
     requiredReviewRevision: revision("reviewers", 1, reviewers),
     requiredJobSetRevision: revision("jobs", 2, requiredJobs),
     requiredJobs, ...reviewers

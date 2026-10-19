@@ -1,20 +1,19 @@
 import { createHash } from "node:crypto";
 import { parseDocument } from "yaml";
 import { UserError } from "@slop-lab/dim-core";
-import { validateLifecycleName } from "@slop-lab/dim-core";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
 import { assertRepositorySetUrlsArePortable, normalizeRepositorySet } from "./repositorySetValidation.js";
 
 const maximumManifestBytes = 64 * 1024;
 const reviewerPattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
-const jobPattern = /^[a-z][a-z0-9-]{0,62}$/;
+const jobPattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 type RequiredJob = { readonly name: string; readonly kind: "ordinary-sysbox" | "qemu" };
 type ImportedRequiredJob = RequiredJob & { readonly evidenceClass: "candidate-controlled" };
 type PathReviewerRule = { readonly pathPrefix: string; readonly reviewerIds: readonly string[] };
 
-export type NativeRootBootstrapPolicy = {
-  readonly rootAlias: string;
+export type NativeRepositoryBootstrapPolicy = {
+  readonly repositoryId: string;
   readonly protectedRef: string;
   readonly reviewPolicy: {
     readonly schemaVersion: 1;
@@ -23,23 +22,27 @@ export type NativeRootBootstrapPolicy = {
     readonly requiredReviewRevision: string;
     readonly requiredJobSetRevision: string;
     readonly requiredJobs: readonly ImportedRequiredJob[];
+    readonly ciRepositoryIds: readonly string[];
     readonly requiredReviewerIds: readonly string[];
     readonly pathReviewerRules: readonly PathReviewerRule[];
   };
 };
 
-export function compileNativeRootBootstrapPolicy(input: {
-  readonly rootAlias: string;
+export function compileNativeRepositoryBootstrapPolicy(input: {
+  readonly repositoryId: string;
   readonly protectedRef: string;
   readonly review: unknown;
-}): NativeRootBootstrapPolicy {
-  const rootAlias = validateLifecycleName(input.rootAlias, "native root alias");
+}): NativeRepositoryBootstrapPolicy {
+  const repositoryId = input.repositoryId;
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)) throw new UserError("repository ID must contain lowercase letters, digits and internal hyphens");
   const protectedRef = normalizeRepositoryRef(input.protectedRef);
   if (protectedRef !== input.protectedRef || !safeHeadRef(protectedRef)) {
     throw new UserError("native root protected ref must be a safe concrete branch outside proposals");
   }
-  const review = exactRecord(input.review, ["requiredReviewerIds", "requiredJobs"], ["pathReviewerRules"],
+  const review = exactRecord(input.review, ["requiredReviewerIds", "requiredJobs", "ciRepositoryIds"], ["pathReviewerRules"],
     "native root review policy");
+  const ciRepositoryIds = reviewerIds(review.ciRepositoryIds, "CI repository IDs").sort();
+  if (ciRepositoryIds.length > 64 || !ciRepositoryIds.includes(repositoryId)) throw new UserError("CI repository IDs must include the owning repository and contain at most 64 entries");
   const requiredReviewerIds = reviewerIds(review.requiredReviewerIds, "required reviewers").sort();
   const requiredJobs = entries(review.requiredJobs, "required jobs", true).map((value): RequiredJob => {
     const job = exactRecord(value, ["name", "kind"], [], "required job");
@@ -71,10 +74,10 @@ export function compileNativeRootBootstrapPolicy(input: {
   const importedJobs = requiredJobs.map((job): ImportedRequiredJob => ({
     ...job, evidenceClass: "candidate-controlled"
   }));
-  const policyRevision = revision("policy", 3, { protectedRef, ...reviews });
+  const policyRevision = revision("policy", 4, { protectedRef, ciRepositoryIds, ...reviews });
   return {
-    rootAlias, protectedRef,
-    reviewPolicy: { schemaVersion: 1, protectedRef, policyRevision,
+    repositoryId, protectedRef,
+    reviewPolicy: { schemaVersion: 1, protectedRef, ciRepositoryIds, policyRevision,
       requiredReviewRevision: revision("reviewers", 1, reviews),
       requiredJobSetRevision: revision("jobs", 2, importedJobs),
       requiredJobs: importedJobs, ...reviews }
@@ -83,8 +86,9 @@ export function compileNativeRootBootstrapPolicy(input: {
 
 export function parseNativeRootBootstrapManifestYaml(
   source: string,
-  selectedRef: string
-): NativeRootBootstrapPolicy {
+  selectedRef: string,
+  repositoryId: string
+): NativeRepositoryBootstrapPolicy {
   if (Buffer.byteLength(source, "utf8") > maximumManifestBytes) {
     throw new UserError("native bootstrap manifest exceeds 64 KiB");
   }
@@ -98,11 +102,8 @@ export function parseNativeRootBootstrapManifestYaml(
     schemaVersion: manifest.schemaVersion, repositories: manifest.repositories, upstreams: manifest.upstreams
   }, "native bootstrap manifest");
   assertRepositorySetUrlsArePortable(set, "native bootstrap manifest");
-  const roots = Object.entries(set.repositories).filter(([, entry]) => entry.root);
-  if (roots.length !== 1) throw new UserError("native bootstrap manifest must have exactly one root");
-  const root = roots[0];
-  if (root === undefined) throw new UserError("native bootstrap root is missing");
-  const [rootAlias, entry] = root;
+  const entry = set.repositories[repositoryId];
+  if (!entry) throw new UserError("native bootstrap manifest does not name the selected repository");
   const normalizedRef = normalizeRepositoryRef(selectedRef);
   if (entry.ref !== undefined && entry.ref !== normalizedRef) {
     throw new UserError("native bootstrap selected ref conflicts with the reviewed root ref");
@@ -111,7 +112,7 @@ export function parseNativeRootBootstrapManifestYaml(
   if (!entry.protectedPatterns.some((pattern) => matchesProtectionPattern(branch, pattern))) {
     throw new UserError("native bootstrap root branch is not protected by the reviewed manifest");
   }
-  return compileNativeRootBootstrapPolicy({ rootAlias, protectedRef: normalizedRef, review: manifest.nativeReview });
+  return compileNativeRepositoryBootstrapPolicy({ repositoryId, protectedRef: normalizedRef, review: manifest.nativeReview });
 }
 
 function safeHeadRef(ref: string): boolean {
@@ -155,6 +156,6 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function revision(domain: string, version: 1 | 2 | 3, input: unknown): string {
+function revision(domain: string, version: 1 | 2 | 3 | 4, input: unknown): string {
   return createHash("sha256").update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(input)).digest("hex");
 }

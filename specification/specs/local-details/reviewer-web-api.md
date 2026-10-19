@@ -77,13 +77,13 @@ nosniff, and framing denial.
 
 The service accepts these native-backed routes:
 
-- `GET /v1/projects/PROJECT/repositories/root/reviews` (at most 100 summaries)
+- `GET /v1/projects/PROJECT/repositories/REPOSITORY/reviews` (at most 100 summaries)
 
-- `GET /v1/projects/PROJECT/repositories/root/reviews/REVIEW_ID`
-- `POST /v1/projects/PROJECT/repositories/root/reviews/resolve`
-- `POST /v1/projects/PROJECT/repositories/root/reviews/REVIEW_ID/approvals`
-- `POST /v1/projects/PROJECT/repositories/root/reviews/REVIEW_ID/revocations`
-- `POST /v1/projects/PROJECT/repositories/root/reviews/REVIEW_ID/promotions`
+- `GET /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID`
+- `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews/resolve`
+- `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID/approvals`
+- `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID/revocations`
+- `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID/promotions`
 
 The path Project must equal the configured Project and the repository must be root.
 Foreign and malformed paths return `404` without native dispatch. Query strings,
@@ -203,3 +203,11 @@ Development containers and CI supervisors have positive OOM victim adjustment.
 An administrator-installed web system service may set `OOMScoreAdjust=-500`
 with explicit memory/CPU/task bounds. An unprivileged user process must not be
 assumed able to lower its own OOM score. Deployment does not occur implicitly.
+
+Reviewer web configuration explicitly allowlists `nativeGit.repositoryIds`
+within its Project. Sessions expose that list; the browser selects a repository
+for proposal resolution and every review action. Repository IDs are part of the
+API scope and must never be inferred from a review ID alone. Review evidence
+includes the canonical map of exact input commits and trees. A changed
+integration input makes the old review stale; explicit proposal resolution can
+create a new immutable review, requiring new decisions.

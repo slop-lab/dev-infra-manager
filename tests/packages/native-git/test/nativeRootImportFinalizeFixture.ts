@@ -180,13 +180,13 @@ export async function closeFinalizeService(service: NativeGitBundleServer): Prom
   await service.close();
 }
 
-export async function uploadRootBundle(origin: string, bundle: GitBundle, policy: object = importPolicy()): Promise<Response> {
+export async function uploadRootBundle(origin: string, bundle: GitBundle, policy: object = importPolicy(), repositoryId = "root"): Promise<Response> {
   const prelude = {
-    schemaVersion: 1, generationId, serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root",
+    schemaVersion: 1, generationId, serviceId: "native-main", projectId: "project-a", repositoryId,
     protectedRef: "refs/heads/main", expectedCommit: bundle.commit, policy
   } as const;
   const body = Buffer.concat([Buffer.from(`${JSON.stringify(prelude)}\n`), bundle.bytes]);
-  return fetch(`${origin}/v1/projects/project-a/root-import`, {
+  return fetch(`${origin}/v1/projects/project-a/repositories/${repositoryId}/import`, {
     method: "POST",
     headers: { authorization, "content-type": "application/octet-stream", "content-length": String(body.length) },
     body
@@ -196,9 +196,10 @@ export async function uploadRootBundle(origin: string, bundle: GitBundle, policy
 export async function finalizeRootImport(
   origin: string,
   selector: object,
-  suppliedAuthorization = authorization
+  suppliedAuthorization = authorization,
+  repositoryId = "root"
 ): Promise<Response> {
-  return fetch(`${origin}/v1/projects/project-a/root-import/finalize`, {
+  return fetch(`${origin}/v1/projects/project-a/repositories/${repositoryId}/import/finalize`, {
     method: "POST",
     headers: { authorization: suppliedAuthorization, "content-type": "application/json" },
     body: JSON.stringify(selector)
@@ -226,23 +227,24 @@ export async function createRootBundle(
   return { bytes: await readFile(path), commit, tree };
 }
 
-export function projectInput(projectId: string) {
-  return { serviceId: "native-main", projectId, rootRepositoryId: "root" } as const;
+export function projectInput(projectId: string, repositoryId = "root") {
+  return { serviceId: "native-main", projectId, repositoryId } as const;
 }
 
-export function rootRepository(root: string): string {
-  return join(root, "project-a", "root.git");
+export function rootRepository(root: string, repositoryId = "root"): string {
+  return join(root, "project-a", `${repositoryId}.git`);
 }
 
 export function parseImportReceipt(value: unknown): ImportReceipt {
   if (typeof value !== "object" || value === null || Array.isArray(value)
     || Reflect.get(value, "schemaVersion") !== 1
     || Reflect.get(value, "serviceId") !== "native-main"
-    || Reflect.get(value, "rootRepositoryId") !== "root"
     || Reflect.get(value, "phase") !== "bundle-durable") {
     throw new Error(`invalid root import receipt fixture: ${JSON.stringify(value)}`);
   }
   const projectId = stringField(value, "projectId");
+  const repositoryId = stringField(value, "repositoryId");
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)) throw new Error("invalid repository identity");
   const receiptGeneration = stringField(value, "generationId");
   const importNonce = stringField(value, "importNonce");
   const protectedRef = stringField(value, "protectedRef");
@@ -255,7 +257,7 @@ export function parseImportReceipt(value: unknown): ImportReceipt {
     schemaVersion: 1,
     serviceId: "native-main",
     projectId,
-    rootRepositoryId: "root",
+    repositoryId,
     generationId: receiptGeneration,
     importNonce,
     protectedRef,
@@ -270,7 +272,8 @@ export function parseImportReceipt(value: unknown): ImportReceipt {
 function importPolicy() {
   return {
     schemaVersion: 1, protectedRef: "refs/heads/main",
-    policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+    ciRepositoryIds: ["root"],
+    policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
     requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
     requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
     requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resolveAuthoritativeNativeRootTarget,
+import { resolveAuthoritativeNativeRepositoryTarget,
   type AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import { CandidateExecutionError } from "./candidate-execution-schema.js";
 import {
@@ -11,6 +11,7 @@ const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const selectorSchema = z.object({
   projectId: identifier,
+  repositoryId: identifier,
   candidateCommit: objectId,
   candidateTree: objectId
 }).strict().readonly();
@@ -30,7 +31,7 @@ export async function loadAuthoritativeNativeCandidateJobInputs(
         cause: selector.error
       });
     }
-    const verified = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.data.projectId });
+    const verified = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId });
     const target = {
       protectedRef: verified.currentHead.protectedRef,
       expectedProtectedHead: verified.currentHead.commit,
@@ -46,11 +47,11 @@ export async function loadAuthoritativeNativeCandidateJobInputs(
       target,
       runtime.workflowCompiler
     );
-    const current = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.data.projectId });
+    const current = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId });
     if (current.repository !== verified.repository
       || JSON.stringify(current.imported) !== JSON.stringify(verified.imported)
       || JSON.stringify(current.currentHead) !== JSON.stringify(verified.currentHead)) {
-      throw new CandidateExecutionError("authoritative imported root changed during candidate read");
+      throw new CandidateExecutionError("authoritative imported repository changed during candidate read");
     }
     return result;
   } catch (error) {

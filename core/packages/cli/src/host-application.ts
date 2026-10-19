@@ -2,9 +2,9 @@ import os from "node:os";
 import path from "node:path";
 import {
   acquireWorkspaceSource, buildWorkspaceImage, checkWorkspaceHost, ProcessRunner, UserError,
-  WorkspaceService, WorkspaceStore, type CreateWorkspaceInput
+  WorkspaceService, WorkspaceStore
 } from "@slop-lab/dim-core/workspace";
-import { createWorkspaceOnHost, ensureWorkspaceIntegration } from "./workspace-composition.js";
+import { createWorkspaceOnHost, ensureWorkspaceIntegration, type WorkspaceHostCreateInput } from "./workspace-composition.js";
 import { decodeHostRequest } from "./host-transport.js";
 import { composeWorkspaceRuntime, loadHostPlugins } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
@@ -167,12 +167,16 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
-function createInput(input: Record<string, unknown>): CreateWorkspaceInput {
+function createInput(input: Record<string, unknown>): WorkspaceHostCreateInput {
   const source = object(input.source, "source");
   const resources = input.resources === undefined ? {} : object(input.resources, "resources");
   const git = input.git === undefined ? undefined : object(input.git, "git");
+  if (input.repositories !== undefined && (!Array.isArray(input.repositories) || input.repositories.length === 0
+    || input.repositories.some((id: unknown) => typeof id !== "string"))) throw new UserError("repositories must be a nonempty array of repository IDs");
   return {
     name: string(input.name, "name"),
+    ...(input.repositories === undefined ? {} : { repositories: input.repositories as string[] }),
+    ...(input.workingDirectory === undefined ? {} : { workingDirectory: string(input.workingDirectory, "workingDirectory") }),
     source: { url: string(source.url, "source.url"), ...(source.ref === undefined ? {} : { ref: string(source.ref, "source.ref") }) },
     ...(input.image === undefined ? {} : { image: string(input.image, "image") }),
     ...(input.runtime === undefined ? {} : { runtime: string(input.runtime, "runtime") }),

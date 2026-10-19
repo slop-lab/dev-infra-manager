@@ -17,11 +17,11 @@ type Credential = { readonly username: string; readonly password: string };
 export async function handleNativeProjectRootImportFinalizeHttp(
   context: RootImportHttpContext
 ): Promise<boolean> {
-  const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/root-import\/finalize$/
+  const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/import\/finalize$/
     .exec(context.pathname);
   if (context.request.method !== "POST" || match === null) return false;
-  const projectId = match[1];
-  if (projectId === undefined) return false;
+  const projectId = match[1], repositoryId = match[2];
+  if (projectId === undefined || repositoryId === undefined) return false;
   if (context.importers.length === 0) {
     sendNotFound(context.response);
     return true;
@@ -37,12 +37,12 @@ export async function handleNativeProjectRootImportFinalizeHttp(
     return true;
   }
   const registration = readNativeProjectRegistrationsFromDatabase(context.state.database)
-    .find((entry) => entry.projectId === projectId);
+    .find((entry) => entry.projectId === projectId && entry.repositoryId === repositoryId);
   if (registration === undefined || registration.ownerHostId !== importer.hostId) {
     sendNotFound(context.response);
     return true;
   }
-  if (registration.phase !== "root-prepared") {
+  if (registration.phase !== "repository-prepared") {
     sendJson(context.response, 409, { error: "native Project root import conflicts" });
     return true;
   }
@@ -59,21 +59,21 @@ export async function handleNativeProjectRootImportFinalizeHttp(
     const finalized = await finalizeNativeProjectRootImport({
       state: context.state,
       stateDirectory: context.stateDirectory,
-      projectId,
+      projectId, repositoryId,
       ownerHostId: importer.hostId,
       selector,
       gitExecutable: context.gitExecutable,
       gitIdentity: context.gitIdentity,
       signal: AbortSignal.timeout(30_000)
     });
-    if (finalized.phase !== "root-imported") {
+    if (finalized.phase !== "repository-imported") {
       throw new NativeProjectRootImportStateError("native Project root import did not finalize");
     }
     sendJson(context.response, 200, {
       schemaVersion: 1,
       serviceId: finalized.serviceId,
       projectId: finalized.projectId,
-      rootRepositoryId: finalized.rootRepositoryId,
+      repositoryId: finalized.repositoryId,
       generationId: finalized.generationId,
       importNonce: finalized.importNonce,
       protectedRef: finalized.protectedRef,

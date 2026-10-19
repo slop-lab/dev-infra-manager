@@ -18,6 +18,7 @@ const pathRule = z.object({
 export const nativeImportedRootPolicySchema = z.object({
   schemaVersion: z.literal(1),
   protectedRef,
+  ciRepositoryIds: z.array(identifier).min(1).max(64).readonly(),
   policyRevision: revisionValue,
   requiredReviewRevision: revisionValue,
   requiredJobSetRevision: revisionValue,
@@ -34,11 +35,13 @@ export type NativeImportedRootPolicy = z.infer<typeof nativeImportedRootPolicySc
 export function parseAuthoritativeImportedRootPolicy(value: unknown): NativeImportedRootPolicy {
   const result = nativeImportedRootPolicySchema.safeParse(value);
   if (!result.success) throw result.error;
+  assertUnique(result.data.ciRepositoryIds);
   assertUnique(result.data.requiredJobs.map(({ name }) => name));
   assertUnique(result.data.requiredReviewerIds);
   for (const rule of result.data.pathReviewerRules) assertUnique(rule.reviewerIds);
   const normalized = {
     ...result.data,
+    ciRepositoryIds: [...result.data.ciRepositoryIds].sort(),
     requiredJobs: [...result.data.requiredJobs].sort((left, right) =>
       left.name < right.name ? -1 : left.name > right.name ? 1 : 0),
     requiredReviewerIds: [...result.data.requiredReviewerIds].sort(),
@@ -48,8 +51,8 @@ export function parseAuthoritativeImportedRootPolicy(value: unknown): NativeImpo
     pathReviewerRules: normalized.pathReviewerRules };
   if (normalized.requiredReviewRevision !== revision("reviewers", 1, reviewers)
     || normalized.requiredJobSetRevision !== revision("jobs", 2, normalized.requiredJobs)
-    || normalized.policyRevision !== revision("policy", 3, {
-      protectedRef: normalized.protectedRef, ...reviewers
+    || normalized.policyRevision !== revision("policy", 4, {
+      protectedRef: normalized.protectedRef, ciRepositoryIds: normalized.ciRepositoryIds, ...reviewers
     })) throw new ImportedRootPolicyError();
   return normalized;
 }
@@ -67,7 +70,7 @@ function assertUnique(values: readonly string[]): void {
   if (new Set(values).size !== values.length) throw new ImportedRootPolicyError();
 }
 
-function revision(domain: "policy" | "reviewers" | "jobs", version: 1 | 2 | 3, value: unknown): string {
+function revision(domain: "policy" | "reviewers" | "jobs", version: 1 | 2 | 3 | 4, value: unknown): string {
   return createHash("sha256").update(`dim-native-${domain}-v${version}\0`)
     .update(JSON.stringify(value)).digest("hex");
 }

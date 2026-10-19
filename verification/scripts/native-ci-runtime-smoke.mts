@@ -15,9 +15,10 @@ const name = `dim-ci-live-${randomUUID()}`, runner = new ProcessRunner();
 const uid = process.getuid?.(), gid = process.getgid?.(), kvm = runtime === "vm" ? await stat("/dev/kvm") : undefined;
 if (uid === undefined || gid === undefined || kvm && !kvm.isCharacterDevice()) throw new Error("Linux/KVM is required");
 try {
-  await mkdir(job, { mode: 0o755 }); await mkdir(workspace);
+  await mkdir(job, { mode: 0o755 }); await mkdir(workspace); await mkdir(join(workspace, "fixture"));
   await writeFile(join(job, "descriptor.json"), "{}\n", { mode: 0o444 });
   await writeFile(join(job, "config-0"), "read-only host plugin configuration\n", { mode: 0o444 });
+  await writeFile(join(job, "working-directory"), "/workspace/fixture", { mode: 0o444 });
   await writeFile(join(job, "job-environment"), "", { mode: 0o444 });
   await writeFile(join(job, "config-targets"), "config-0 /etc/dim-ci-smoke.conf\n", { mode: 0o444 });
   if (runtime === "vm") {
@@ -26,7 +27,7 @@ try {
   const archive = await runner.run("docker", ["export", "--output", join(job, "rootfs.tar"), prepared.stdout.trim()]);
   assert.equal(archive.exitCode, 0, archive.stderr);
   }
-  await writeFile(join(job, "runner"), nativeRunnerScript(["/etc/dim-ci-smoke.conf"]), { mode: 0o444 });
+  await writeFile(join(job, "runner"), nativeRunnerScript("fixture", ["/etc/dim-ci-smoke.conf"]), { mode: 0o444 });
   await writeFile(join(job, "daemon.json"), "{}\n", { mode: 0o444 });
   await writeFile(join(job, "script"), `set -euo pipefail
 test "$(id -u)" = 0

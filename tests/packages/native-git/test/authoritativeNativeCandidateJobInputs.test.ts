@@ -55,7 +55,7 @@ describe("authoritative imported-root candidate job inputs", () => {
             objectId: await objectId(fixture, ".dim/ci/jobs/source.bash"),
             sha256: digest("set -euo pipefail\nprintf 'source\\n'\n")
           },
-          argv: candidateArgv
+          argv: candidateArgv, repositories: []
         },
         {
           name: "integration", kind: "qemu",
@@ -64,7 +64,7 @@ describe("authoritative imported-root candidate job inputs", () => {
             objectId: await objectId(fixture, ".dim/ci/jobs/integration.bash"),
             sha256: digest("set -euo pipefail\nprintf 'integration\\n'\n")
           },
-          argv: candidateArgv
+          argv: candidateArgv, repositories: []
         }
       ]
     });

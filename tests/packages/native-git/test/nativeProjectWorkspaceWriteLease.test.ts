@@ -145,7 +145,7 @@ describe("native Project workspace write lease", () => {
   it("requires the exact route, issuer role, root repository, generation, and workspace ID", async () => {
     // Given
     const fixture = await finalizedFixture("workspace-write-boundary");
-    const endpoint = `${fixture.service.origin}/v1/projects/project-a/workspace-write-leases`;
+    const endpoint = `${fixture.service.origin}/v1/projects/project-a/repositories/root/workspace-write-leases`;
     const validBody = { schemaVersion: 1, generationId, repositoryId: "root", workspaceId };
     const hostAlias = `Basic ${Buffer.from(`${workspaceWriteIssuer.hostId}:${workspaceWriteIssuer.password}`).toString("base64")}`;
 
@@ -224,7 +224,7 @@ async function finalizedFixture(
 }
 
 async function issueLease(origin: string): Promise<WorkspaceWriteLease> {
-  const response = await fetch(`${origin}/v1/projects/project-a/workspace-write-leases`, {
+  const response = await fetch(`${origin}/v1/projects/project-a/repositories/root/workspace-write-leases`, {
     method: "POST",
     headers: { authorization: workspaceWriteIssuerAuthorization, "content-type": "application/json" },
     body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId })

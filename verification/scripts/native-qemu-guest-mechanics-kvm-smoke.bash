@@ -171,7 +171,7 @@ printf 'candidate-updated\n' >> /workspace/candidate-marker
 EOF
 printf '{"schemaVersion":1}\n' | docker run --rm --interactive \
   --mount "type=volume,source=$job_volume,target=/target" "$runner_image" \
-  sh -c 'cat > /target/descriptor.json && touch /target/config-targets /target/job-environment && chmod 0444 /target/descriptor.json /target/config-targets /target/job-environment'
+  sh -c 'cat > /target/descriptor.json && touch /target/config-targets /target/job-environment && printf /workspace > /target/working-directory && chmod 0444 /target/descriptor.json /target/config-targets /target/job-environment /target/working-directory'
 docker run --rm --interactive --mount "type=volume,source=$job_volume,target=/target" "$runner_image" \
   sh -c 'cat > /target/script && chmod 0444 /target/script' <"$work_dir/job-script"
 printf 'dim-qemu-candidate-marker\n' | docker run --rm --interactive \

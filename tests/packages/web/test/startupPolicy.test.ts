@@ -47,7 +47,7 @@ describe("DIM reviewer web startup policy", () => {
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), generationId: "b".repeat(64) } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), password: "incorrect-password" } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), username: "admin-a", password: "admin-a-secret-1" } },
-      { ...base, nativeGit: { ...objectField(base, "nativeGit"), repositoryIds: ["source", "foreign"] } },
+      { ...base, nativeGit: { ...objectField(base, "nativeGit"), repositoryIds: ["../foreign"] } },
       { ...base, nativeGit: { ...objectField(base, "nativeGit"), reviewerId: "reviewer-b" } }
     ];
 

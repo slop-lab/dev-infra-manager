@@ -8,6 +8,7 @@ export type RootReadLeaseScope = {
   readonly generationId: string;
   readonly ownerHostId: string;
   readonly projectId: string;
+  readonly repositoryId: string;
 };
 export type IssuedRootReadLease = RootReadCredential & RootReadLeaseScope & { readonly expiresAt: number };
 
@@ -40,7 +41,8 @@ export function createRootReadLeaseRegistry(now: () => number): RootReadLeaseReg
       return {
         generationId: lease.generationId,
         ownerHostId: lease.ownerHostId,
-        projectId: lease.projectId
+        projectId: lease.projectId,
+        repositoryId: lease.repositoryId
       };
     },
     clear() {

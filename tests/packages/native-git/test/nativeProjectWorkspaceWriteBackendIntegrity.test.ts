@@ -84,7 +84,7 @@ async function finalizedFixtureAtRoot(
 }
 
 async function issueLease(origin: string): Promise<WorkspaceWriteLease> {
-  const response = await fetch(`${origin}/v1/projects/project-a/workspace-write-leases`, {
+  const response = await fetch(`${origin}/v1/projects/project-a/repositories/root/workspace-write-leases`, {
     method: "POST",
     headers: { authorization: workspaceWriteIssuerAuthorization, "content-type": "application/json" },
     body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId })

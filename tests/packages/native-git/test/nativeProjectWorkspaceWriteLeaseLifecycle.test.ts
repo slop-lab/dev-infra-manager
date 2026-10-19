@@ -82,7 +82,7 @@ async function finalizedFixture(
 }
 
 function requestWriteLease(origin: string): Promise<Response> {
-  return fetch(`${origin}/v1/projects/project-a/workspace-write-leases`, {
+  return fetch(`${origin}/v1/projects/project-a/repositories/root/workspace-write-leases`, {
     method: "POST",
     headers: { authorization: workspaceWriteIssuerAuthorization, "content-type": "application/json" },
     body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId })
@@ -90,7 +90,7 @@ function requestWriteLease(origin: string): Promise<Response> {
 }
 
 function requestRootReadLease(origin: string): Promise<Response> {
-  return fetch(`${origin}/v1/projects/project-a/root-read-leases`, {
+  return fetch(`${origin}/v1/projects/project-a/repositories/root/read-leases`, {
     method: "POST",
     headers: { authorization: rootReadIssuerAuthorization, "content-type": "application/json" },
     body: JSON.stringify({ schemaVersion: 1, generationId })

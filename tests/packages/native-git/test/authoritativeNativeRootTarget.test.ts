@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { CandidateExecutionError } from "../../../../core/packages/native-git/src/candidate-execution-schema.js";
-import { resolveAuthoritativeNativeRootTarget } from "../../../../core/packages/native-git/src/authoritative-native-root-target.js";
+import { resolveAuthoritativeNativeRepositoryTarget } from "../../../../core/packages/native-git/src/authoritative-native-root-target.js";
 import {
   authoritativePolicy,
   candidateContext,
@@ -22,14 +22,14 @@ describe("authoritative imported-root target", () => {
     const before = await proofBytes(fixture.root);
 
     // When
-    const target = await resolveAuthoritativeNativeRootTarget(fixture.context, { projectId: "project-a" });
+    const target = await resolveAuthoritativeNativeRepositoryTarget(fixture.context, { projectId: "project-a", repositoryId: "root" });
 
     // Then
     expect(target.repository).toBe(rootRepository(fixture.root));
     expect(target.currentHead).toMatchObject({ sequence: 0, commit: fixture.bundle.commit,
       tree: fixture.bundle.tree, protectedRef: "refs/heads/main" });
     expect(target.imported).toMatchObject({ serviceId: "native-main", projectId: "project-a",
-      rootRepositoryId: "root", protectedRef: "refs/heads/main",
+      repositoryId: "root", protectedRef: "refs/heads/main",
       expectedCommit: fixture.bundle.commit, resolvedTree: fixture.bundle.tree,
       policy: authoritativePolicy() });
     expect(target.imported.policy.requiredJobs.map(({ name, kind }) => ({ name, kind }))).toEqual([
@@ -50,7 +50,7 @@ describe("authoritative imported-root target", () => {
     const before = await proofBytes(fixture.root);
 
     // When
-    const read = resolveAuthoritativeNativeRootTarget(fixture.context, selector);
+    const read = resolveAuthoritativeNativeRepositoryTarget(fixture.context, selector);
 
     // Then
     await expect(read).rejects.toBeInstanceOf(CandidateExecutionError);
@@ -64,7 +64,7 @@ describe("authoritative imported-root target", () => {
     await fixture.close();
 
     // When
-    const read = resolveAuthoritativeNativeRootTarget(fixture.context, { projectId: "project-a" });
+    const read = resolveAuthoritativeNativeRepositoryTarget(fixture.context, { projectId: "project-a", repositoryId: "root" });
 
     // Then
     await expect(read).rejects.toBeInstanceOf(CandidateExecutionError);

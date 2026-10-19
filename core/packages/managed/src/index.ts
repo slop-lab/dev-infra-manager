@@ -21,12 +21,6 @@ export * from "./nativeProjectDraftStore.js";
 export * from "./nativeProjectPendingCodec.js";
 export * from "./nativeProjectPendingStore.js";
 export * from "./nativeProjectReadinessClient.js";
-export {
-  issueNativeProjectDraftRootReadLease,
-  NativeProjectDraftRootReadError,
-  type NativeProjectDraftRootReadInput
-} from "./nativeProjectDraftRootRead.js";
-export * from "./nativeProjectDraftRootSnapshot.js";
 export * from "./nativeQemuRunnerImage.js";
 export * from "./nativeControlPlaneConnection.js";
 export * from "./plugin.js";

@@ -8,7 +8,7 @@ export type WorkspaceWriteLeaseScope = {
   readonly generationId: string;
   readonly ownerHostId: string;
   readonly projectId: string;
-  readonly repositoryId: "root";
+  readonly repositoryId: string;
   readonly workspaceId: string;
 };
 export type IssuedWorkspaceWriteLease = NativeBasicCredential & WorkspaceWriteLeaseScope & {

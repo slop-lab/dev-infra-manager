@@ -128,17 +128,17 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
   if (url.pathname.startsWith("/v1/operations/")) {
     return handleOperations(context, session, request, response, url.pathname);
   }
-  const reviews = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/root/reviews$`).exec(url.pathname);
-  if (request.method === "GET" && reviews?.[1] !== undefined) {
-    requireScope(context.config, reviews[1], "root");
-    return sendJson(response, { status: 200, body: await requireNative(context).listReviews(reviews[1]) });
+  const reviews = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews$`).exec(url.pathname);
+  if (request.method === "GET" && reviews?.[1] !== undefined && reviews[2] !== undefined) {
+    requireScope(context.config, reviews[1], reviews[2]);
+    return sendJson(response, { status: 200, body: await requireNative(context).listReviews(reviews[1], reviews[2]) });
   }
-  const promotion = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/root/reviews/([0-9a-f]{64})/promotions$`).exec(url.pathname);
-  if (request.method === "POST" && promotion?.[1] !== undefined && promotion[2] !== undefined) {
-    requireScope(context.config, promotion[1], "root"); requireMutation(context.config, request, session);
+  const promotion = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})/promotions$`).exec(url.pathname);
+  if (request.method === "POST" && promotion?.[1] !== undefined && promotion[2] !== undefined && promotion[3] !== undefined) {
+    requireScope(context.config, promotion[1], promotion[2]); requireMutation(context.config, request, session);
     if (!accountRoles(context.config, session).includes("operator")) throw new HttpResponseError(403, "operator authority required");
     emptySchema.parse(await readJson(request));
-    return sendJson(response, { status: 200, body: await requireNative(context).promote(promotion[1], promotion[2]) });
+    return sendJson(response, { status: 200, body: await requireNative(context).promote(promotion[1], promotion[2], promotion[3]) });
   }
   const action = actionPattern.exec(url.pathname);
   if (request.method === "POST" && action !== null) {
@@ -185,7 +185,7 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
     requireScope(context.config, projectId, repositoryId);
     requireMutation(context.config, request, session);
     const body = resolveSchema.parse(await readJson(request));
-    return sendJson(response, { status: 200, body: reviewBody(context.config, session, await requireNative(context).resolveReview(projectId, body)) });
+    return sendJson(response, { status: 200, body: reviewBody(context.config, session, await requireNative(context).resolveReview(projectId, repositoryId, body)) });
   }
   throw new HttpResponseError(404, "not found");
 }
@@ -243,12 +243,12 @@ function requireOrigin(config: ReviewerWebConfig, request: IncomingMessage): voi
 }
 
 function requireScope(config: ReviewerWebConfig, projectId: string, repositoryId: string): void {
-  if (projectId !== config.nativeGit?.projectId || repositoryId !== "root") throw new HttpResponseError(404, "not found");
+  if (projectId !== config.nativeGit?.projectId || !config.nativeGit.repositoryIds.includes(repositoryId)) throw new HttpResponseError(404, "not found");
 }
 
 function sessionBody(config: ReviewerWebConfig, session: ReviewerSession) {
   return {
-    authenticated: true, projectId: config.nativeGit?.projectId ?? "",
+    authenticated: true, repositoryIds: config.nativeGit?.repositoryIds ?? [], projectId: config.nativeGit?.projectId ?? "",
     reviewerId: config.nativeGit?.reviewerId ?? "", csrfToken: session.csrfToken,
     roles: accountRoles(config, session), capabilities: { review: config.nativeGit !== undefined, operations: config.operations !== undefined, promotion: config.nativeGit?.promoter !== undefined }
   };

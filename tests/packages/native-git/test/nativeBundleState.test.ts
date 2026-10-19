@@ -26,7 +26,7 @@ describe("native Git idle bundle state", () => {
     const result = await inspectNativeGitBundleState(root);
 
     // Then
-    expect(result).toEqual({ stateFormat: 8 });
+    expect(result).toEqual({ stateFormat: 9 });
     expect(await stateTree(root)).toEqual(before);
     expect(before.map((entry) => entry.entry)).toEqual([
       ".dim-native-git-owner.sqlite3",
@@ -35,12 +35,12 @@ describe("native Git idle bundle state", () => {
     ]);
     expect(JSON.parse(await readFile(join(root, "state-format.json"), "utf8"))).toEqual({
       schemaVersion: 1,
-      stateFormat: 8,
+      stateFormat: 9,
       database: "native-idle.sqlite3",
       schemaManifestSha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
     });
     const database = new DatabaseSync(join(root, "native-idle.sqlite3"), { readOnly: true });
-    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 8 });
+    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 9 });
     expect(database.prepare(
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     ).all()).toEqual([
@@ -48,7 +48,8 @@ describe("native Git idle bundle state", () => {
       { name: "native_project_registration" },
       { name: "native_project_root_import" },
       { name: "native_project_root_promotion_finalized" },
-      { name: "native_project_root_promotion_intent" }
+      { name: "native_project_root_promotion_intent" },
+      { name: "native_repository_registration" }
     ]);
     database.close();
     expect((await stat(join(root, "state-format.json"))).mode & 0o777).toBe(0o444);
@@ -71,19 +72,19 @@ describe("native Git idle bundle state", () => {
     expect(await stateTree(root)).toEqual(before);
   });
 
-  it("rejects obsolete format-7 state without changing it", async () => {
+  it("rejects obsolete format-8 state without changing it", async () => {
     // Given
     const root = await temporaryRoot();
     const state = await initializeNativeGitBundleState(root);
     await state.owner.release();
     const database = new DatabaseSync(join(root, "native-idle.sqlite3"));
-    database.exec("PRAGMA user_version = 7;");
+    database.exec("PRAGMA user_version = 8;");
     database.close();
     const markerPath = join(root, "state-format.json");
     const marker = JSON.parse(await readFile(markerPath, "utf8"));
     await replaceMarker(root, `${JSON.stringify({
       ...marker,
-      stateFormat: 7,
+      stateFormat: 8,
       schemaManifestSha256: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     })}\n`);
     const before = await stateTree(root);

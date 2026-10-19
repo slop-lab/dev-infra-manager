@@ -1,9 +1,8 @@
 import { currentExecutionEvidence } from "./execution-evidence.js";
-import { createHash } from "node:crypto";
 import { readAuthoritativeNativeDecisions } from "./authoritative-native-decision-store.js";
 import { readAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
-import { resolveAuthoritativeNativeRootTarget } from "./authoritative-native-root-target.js";
+import { resolveAuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
 import {
@@ -18,11 +17,6 @@ import {
   saveNativeProjectRootPromotionIntent
 } from "./native-project-root-promotion-state.js";
 import { atomicPromote, candidateDescendsFrom } from "./promotion-git.js";
-
-type OrdinaryEvidence = {
-  readonly result: string;
-  readonly completion: { readonly kind: string; readonly exitCode?: number };
-};
 
 export type NativeInstalledPromotionContext = {
   readonly config: NativeGitBundleConfig;
@@ -50,15 +44,16 @@ export type NativeInstalledPromotionResult = {
 export async function promoteInstalledNativeReview(
   context: NativeInstalledPromotionContext,
   projectId: string,
+  repositoryId: string,
   reviewId: string
 ): Promise<NativeInstalledPromotionResult> {
-  const target = await resolveAuthoritativeNativeRootTarget(context.runtime, { projectId });
+  const target = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId, repositoryId });
   const envelope = await readAuthoritativeNativeReviewEnvelope(target.repository, reviewId);
-  if (envelope === undefined || envelope.review.projectId !== projectId) {
+  if (envelope === undefined || envelope.review.projectId !== projectId || envelope.review.repositoryId !== repositoryId) {
     throw new NativeInstalledPromotionError("review was not found");
   }
   const review = envelope.review;
-  const finalized = readNativeProjectRootPromotionFinalized(context.runtime.state.database, projectId)
+  const finalized = readNativeProjectRootPromotionFinalized(context.runtime.state.database, projectId, repositoryId)
     .find((transition) => transition.reviewId === reviewId);
   if (finalized !== undefined && target.currentHead.commit === finalized.candidateCommit
     && review.candidateCommit === finalized.candidateCommit && review.candidateTree === finalized.candidateTree) {
@@ -81,7 +76,7 @@ export async function promoteInstalledNativeReview(
     throw new NativeInstalledPromotionError("human approval evidence is incomplete");
   }
   if (!await candidateDescendsFrom({ gitExecutable: context.runtime.gitExecutable,
-    storageRoot: context.stateDirectory }, { projectId, repositoryId: "root" },
+    storageRoot: context.stateDirectory }, { projectId, repositoryId },
   review.expectedProtectedHead, review.candidateCommit)) {
     throw new NativeInstalledPromotionError("candidate does not descend from the protected head");
   }
@@ -111,7 +106,7 @@ export async function promoteInstalledNativeReview(
   };
   const evidenceDigest = nativeProjectRootPromotionEvidenceDigest(evidence);
   const identity = {
-    projectId,
+    projectId, repositoryId,
     importNonce: target.imported.importNonce,
     sequence: target.currentHead.sequence + 1,
     reviewId,
@@ -136,7 +131,7 @@ export async function promoteInstalledNativeReview(
   saveNativeProjectRootPromotionIntent(context.runtime.state.database, transition);
   await context.hooks?.afterIntent?.();
   const updated = await atomicPromote({ gitExecutable: context.runtime.gitExecutable, storageRoot: context.stateDirectory },
-    { projectId, repositoryId: "root", protectedRef: review.protectedRef, proposalRef: review.proposalRef },
+    { projectId, repositoryId, protectedRef: review.protectedRef, proposalRef: review.proposalRef },
     review.expectedProtectedHead, review.candidateCommit);
   if (!updated) throw new NativeInstalledPromotionError("protected ref compare-and-swap failed");
   await context.hooks?.afterCompareAndSwap?.();
@@ -150,10 +145,6 @@ function result(outcome: NativeInstalledPromotionResult["outcome"],
     protectedRef: transition.protectedRef, expectedProtectedHead: transition.expectedCommit,
     candidateCommit: transition.candidateCommit, candidateTree: transition.candidateTree,
     sequence: transition.sequence };
-}
-
-function digest(domain: string, value: unknown): string {
-  return createHash("sha256").update(domain).update(JSON.stringify(value)).digest("hex");
 }
 
 export class NativeInstalledPromotionError extends Error {

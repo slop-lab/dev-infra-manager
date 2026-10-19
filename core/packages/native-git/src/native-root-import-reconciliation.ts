@@ -35,17 +35,17 @@ export async function inspectNativeRootImportStaging(
   registrations: readonly NativeProjectRegistration[],
   imports: readonly NativeProjectRootImport[]
 ): Promise<NativeRootImportReconciliation> {
-  const importsByProject = new Map(imports.map((entry) => [entry.projectId, entry]));
+  const importsByProject = new Map(imports.map((entry) => [`${entry.projectId}/${entry.repositoryId}`, entry]));
   const cleanup: Cleanup[] = [];
   for (const registration of registrations) {
-    if (registration.phase !== "root-prepared") continue;
+    if (registration.phase !== "repository-prepared") continue;
     const projectRoot = join(stateDirectory, registration.projectId);
-    const directory = rootBundleDirectory(stateDirectory, registration.projectId);
+    const directory = rootBundleDirectory(stateDirectory, registration.projectId, registration.repositoryId);
     if (!await exists(directory)) continue;
     await assertOwnedNativeProjectStorage(stateDirectory, registration);
     await assertPrivateDirectory(directory);
     const parents = [await validatePrivateDirectory(projectRoot), await validatePrivateDirectory(directory)];
-    const rootImport = importsByProject.get(registration.projectId);
+    const rootImport = importsByProject.get(`${registration.projectId}/${registration.repositoryId}`);
     if (rootImport === undefined) {
       throw new NativeRootImportReconciliationError("root import staging directory has no bound intent");
     }

@@ -26,14 +26,14 @@ async function writeConfig(output: string, config: ReviewerWebConfig) {
   return configPath;
 }
 /** Credentials stay in private files; only the new browser login is printed. */
-export async function initializeReviewerWeb(input: { connection: string; project: string; output: string; port?: number; operations?: string; promoter?: string }) {
+export async function initializeReviewerWeb(input: { connection: string; project: string; repositories: readonly string[]; output: string; port?: number; operations?: string; promoter?: string }) {
   const connection = connectionSchema.parse(await loadPrivateJson(resolve(input.connection)));
   const promoter = input.promoter === undefined ? undefined : promoterConnectionSchema.parse(await loadPrivateJson(resolve(input.promoter)));
   if (promoter !== undefined && (promoter.endpoint !== connection.baseUrl || promoter.generationId !== connection.generationId)) throw new Error("promoter endpoint and generation must match the reviewer connection");
   const operations = input.operations === undefined ? undefined : operationsConfigSchema.parse(await loadPrivateJson(resolve(input.operations)));
   const browser = browserAccount("reviewer", ["read", "reviewer", ...(operations !== undefined || promoter !== undefined ? ["operator" as const] : [])]);
   const nativeGit = { baseUrl: connection.baseUrl, username: connection.username, password: connection.password,
-    projectId: input.project, reviewerId: connection.reviewerId, generationId: connection.generationId,
+    projectId: input.project, repositoryIds: input.repositories, reviewerId: connection.reviewerId, generationId: connection.generationId,
     ...(promoter === undefined ? {} : { promoter: { ...promoter.credential, hostId: promoter.hostId } }) };
   const config = parseReviewerWebConfig({ ...listener(input.port), nativeGit, ...(operations === undefined ? {} : { operations }), accounts: [browser.account] });
   await new NativeGitClient(nativeGit).attest();

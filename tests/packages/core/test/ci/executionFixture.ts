@@ -13,11 +13,12 @@ export function event(name = "source", kind: ExecutionEvent["executionKind"] = "
     projectId: "project-a", repositoryId: "root", protectedRef: "refs/heads/main", reviewId: "2".repeat(64),
     expectedProtectedHead: "1".repeat(40), candidateCommit: "2".repeat(40), candidateTree: "3".repeat(40),
     policyRevision: "4".repeat(64), requiredReviewRevision: "5".repeat(64), qualityRevision: "6".repeat(64),
-    executionKind: kind, jobName: name, evidenceClass: "candidate-controlled" };
+    executionKind: kind, jobName: name, evidenceClass: "candidate-controlled",
+    inputs: { root: { commit: "2".repeat(40), tree: "3".repeat(40) } } };
 }
 export function grant(assignment: ExecutionAssignment): ExecutionGrant {
   const source = assignment.event;
-  const descriptor = { projectId: source.projectId, repositoryId: "root" as const, protectedRef: source.protectedRef,
+  const descriptor = { projectId: source.projectId, repositoryId: source.repositoryId, inputs: source.inputs, protectedRef: source.protectedRef,
     expectedProtectedHead: source.expectedProtectedHead, candidateCommit: source.candidateCommit, candidateTree: source.candidateTree,
     policyRevision: source.policyRevision, requiredReviewRevision: source.requiredReviewRevision,
     requiredJobSetRevision: source.qualityRevision, generationId: assignment.generationId, jobName: source.jobName,

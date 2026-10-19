@@ -10,7 +10,7 @@ export function createReviewActions(elements, lifecycle) {
     const session = lifecycle.session();
     if (session === null || lifecycle.isPending(button)) return;
     const reviewId = elements.reviewId.value;
-    const repositoryId = "root";
+    const repositoryId = elements.repositoryId.value;
     const operation = lifecycle.startOperation(button);
     lifecycle.lockNavigation();
     const label = button.textContent;

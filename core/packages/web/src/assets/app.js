@@ -59,10 +59,11 @@ function showSignedOut(message = "") {
 /** @param {import("./types.js").Session} activeSession */
 function showWorkspace(activeSession) {
   session = activeSession;
+  elements.repositoryId.replaceChildren(...activeSession.repositoryIds.map((id) => new Option(id, id)));
   elements.restore.hidden = true;
   elements.loginView.hidden = true;
   elements.workspace.hidden = !activeSession.capabilities.review;
-  showOperations(activeSession, (id) => { elements.reviewId.value = id; elements.openForm.requestSubmit(); });
+  showOperations(activeSession, (id, repositoryId) => { elements.repositoryId.value = repositoryId; elements.reviewId.value = id; elements.openForm.requestSubmit(); });
   elements.sessionActions.hidden = false;
   elements.scopeProject.textContent = activeSession.projectId;
   elements.scopeReviewer.textContent = activeSession.reviewerId;
@@ -101,13 +102,13 @@ function startOperation(button = null) {
 
 function lockDecisionNavigation() {
   decisionPending = true;
-  for (const control of [elements.proposalRef, elements.reviewId,
+  for (const control of [elements.repositoryId, elements.proposalRef, elements.reviewId,
     elements.createButton, elements.openButton, elements.logoutButton]) control.disabled = true;
 }
 
 function unlockDecisionNavigation() {
   decisionPending = false;
-  for (const control of [elements.proposalRef, elements.reviewId,
+  for (const control of [elements.repositoryId, elements.proposalRef, elements.reviewId,
     elements.createButton, elements.openButton, elements.logoutButton]) control.disabled = false;
 }
 
@@ -135,7 +136,7 @@ async function openReview(reviewId, operation) {
   if (session === null) return;
   showEvidenceState("loading");
   showRequestError("", null);
-  const repositoryId = "root";
+  const repositoryId = elements.repositoryId.value;
   const result = await request(`/v1/projects/${encodeURIComponent(session.projectId)}/repositories/${encodeURIComponent(repositoryId)}/reviews/${encodeURIComponent(reviewId)}`, operation);
   if (!operations.isCurrent(operation)) return;
   if (result.status === 401) return showSignedOut("Your session ended. Sign in again.");
@@ -190,7 +191,7 @@ elements.createForm.addEventListener("submit", async (event) => {
   showEvidenceState("loading");
   showRequestError("", null);
   try {
-    const result = await request(`/v1/projects/${encodeURIComponent(session.projectId)}/repositories/${encodeURIComponent("root")}/reviews/resolve`, operation, { method: "POST", headers: { "Content-Type": "application/json", "X-DIM-CSRF": session.csrfToken }, body: JSON.stringify({ proposalRef: elements.proposalRef.value }) });
+    const result = await request(`/v1/projects/${encodeURIComponent(session.projectId)}/repositories/${encodeURIComponent(elements.repositoryId.value)}/reviews/resolve`, operation, { method: "POST", headers: { "Content-Type": "application/json", "X-DIM-CSRF": session.csrfToken }, body: JSON.stringify({ proposalRef: elements.proposalRef.value }) });
     if (!operations.isCurrent(operation)) return;
     if (result.status === 401) return showSignedOut("Your session ended. Sign in again.");
     const created = record(result.body);
@@ -261,3 +262,5 @@ request("/v1/session", restoreOperation).then((result) => {
 }).catch(() => {
   if (operations.isCurrent(restoreOperation)) showSignedOut("The reviewer service could not be reached. Retry when it is available.");
 });
+
+elements.repositoryId.addEventListener("change", () => { startOperation(); clearReview(elements); elements.reviewId.value = ""; });

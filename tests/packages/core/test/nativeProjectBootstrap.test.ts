@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { bootstrapNativeProjectRoot, NativeProjectBootstrapError,
-  NativeProjectDraftStore } from "../../../../core/packages/managed/src/index.js";
+import { bootstrapNativeProjectRepository, NativeProjectBootstrapError,
+  NativeProjectDraftStore, NativeProjectPendingStore } from "../../../../core/packages/managed/src/index.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
 import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot,
   activateFinalizeServiceForGeneration, activationTokenB, closeFinalizeService, generationB,
@@ -32,6 +32,7 @@ async function fixture(change: Readonly<Record<string, unknown>> = {}) {
 repositories:
   root: {url: https://example.test/root.git, root: true, ref: main, protect: [main]}
 nativeReview:
+  ciRepositoryIds: [root]
   requiredReviewerIds: [owner]
   pathReviewerRules: []
   requiredJobs:
@@ -53,7 +54,8 @@ nativeReview:
   await writeFile(importerConnectionFile, JSON.stringify({ schemaVersion: 1, endpoint: service.origin,
     serviceId: "native-main", role: "operator-root-importer", hostId: importer.hostId, generationId,
     credential: { username: importer.username, password: importer.password }, ...change }), { mode: 0o600 });
-  const input = { name: "acme", projectId: "project-a", stateRoot: root, scratchRoot, sourceRepository,
+  await new NativeProjectPendingStore(root).create({ name: "acme", projectId: "project-a", ownerHostId: importer.hostId });
+  const input = { repositoryId: "root", name: "acme", projectId: "project-a", stateRoot: root, scratchRoot, sourceRepository,
     gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main",
     policySource: { kind: "reviewed-manifest" as const }, registrarConnectionFile, importerConnectionFile,
     signal: AbortSignal.timeout(20_000) };
@@ -64,32 +66,32 @@ describe("trusted native Project bootstrap", () => {
   it("imports a pinned protected head and persists only an exact non-ready native draft", async () => {
     const { root, state, service, input } = await fixture();
 
-    const imported = await bootstrapNativeProjectRoot(input);
+    const imported = await bootstrapNativeProjectRepository(input);
 
     expect(imported).toMatchObject({ name: "acme", projectId: "project-a", ownerHostId: "host-a",
-      generationId, phase: "root-imported", importReceipt: { phase: "root-imported" } });
-    expect(imported.schemaVersion).toBe(2);
-    if (imported.schemaVersion !== 2) throw new Error("fresh native draft did not use schema 2");
+      generationId, phase: "repository-imported", importReceipt: { phase: "repository-imported" } });
+    expect(imported.schemaVersion).toBe(3);
+    if (imported.schemaVersion !== 3) throw new Error("fresh native draft did not use schema 2");
     expect(imported.reviewPolicy.requiredJobs.map(({ kind }) => kind)).toEqual(["qemu", "ordinary-sysbox"]);
-    expect(await new NativeProjectDraftStore(root).read("acme")).toEqual(imported);
+    expect(await new NativeProjectDraftStore(root).read("acme", "root")).toEqual(imported);
     expect((await run("/usr/bin/git", ["--git-dir", rootRepository(state), "rev-parse",
       "refs/heads/main"])).stdout.trim()).toBe(imported.expectedCommit);
     const transport = await fetch(`${service.origin}/v1/projects/project-a/repositories/root.git/info/refs?service=git-upload-pack`);
     expect(transport.status).toBe(401);
-    expect(await bootstrapNativeProjectRoot(input)).toEqual(imported);
+    expect(await bootstrapNativeProjectRepository(input)).toEqual(imported);
   });
 
   it("recovers an import completed by native Git before its receipt reached the host draft", async () => {
     const { root, state, input } = await fixture();
-    const imported = await bootstrapNativeProjectRoot(input);
-    if (imported.phase !== "root-imported") throw new Error("bootstrap fixture did not import the root");
+    const imported = await bootstrapNativeProjectRepository(input);
+    if (imported.phase !== "repository-imported") throw new Error("bootstrap fixture did not import the root");
     const { importReceipt, ...boundFields } = imported;
-    expect(importReceipt.phase).toBe("root-imported");
-    const recordPath = join(root, "native-project-drafts", "acme.json");
+    expect(importReceipt.phase).toBe("repository-imported");
+    const recordPath = join(root, "native-project-drafts", "acme", "root.json");
     await writeFile(recordPath, `${JSON.stringify({ ...boundFields, phase: "import-pending" })}\n`, { mode: 0o600 });
-    expect(await new NativeProjectDraftStore(root).read("acme")).toMatchObject({ phase: "import-pending" });
+    expect(await new NativeProjectDraftStore(root).read("acme", "root")).toMatchObject({ phase: "import-pending" });
 
-    const recovered = await bootstrapNativeProjectRoot(input);
+    const recovered = await bootstrapNativeProjectRepository(input);
 
     expect(recovered).toEqual(imported);
     expect((await run("/usr/bin/git", ["--git-dir", rootRepository(state), "rev-parse",
@@ -99,10 +101,10 @@ describe("trusted native Project bootstrap", () => {
   it("replays an unchanged generation-A imported draft through active generation B without rewriting it", async () => {
     // Given
     const { root, state, service, input } = await fixture();
-    const imported = await bootstrapNativeProjectRoot(input);
-    if (imported.phase !== "root-imported") throw new Error("bootstrap fixture did not import the root");
-    const recordPath = join(root, "native-project-drafts", "acme.json");
-    const artifactPath = join(root, "native-project-drafts", "artifacts", imported.projectId,
+    const imported = await bootstrapNativeProjectRepository(input);
+    if (imported.phase !== "repository-imported") throw new Error("bootstrap fixture did not import the root");
+    const recordPath = join(root, "native-project-drafts", "acme", "root.json");
+    const artifactPath = join(root, "native-project-drafts", "artifacts", imported.projectId, imported.repositoryId,
       `${imported.bundleDigest}.bundle`);
     await closeFinalizeService(service);
     const servingB = await startFinalizeServiceForGeneration(state, generationB, activationTokenB);
@@ -118,7 +120,7 @@ describe("trusted native Project bootstrap", () => {
       database: await readFile(join(state, "native-idle.sqlite3")) };
 
     // When
-    const replayed = await bootstrapNativeProjectRoot(input);
+    const replayed = await bootstrapNativeProjectRepository(input);
 
     // Then
     expect(replayed).toEqual(imported);
@@ -132,8 +134,8 @@ describe("trusted native Project bootstrap", () => {
 
   it("refuses an imported draft after its live protected head moves without changing host state", async () => {
     const { root, state, input } = await fixture();
-    const imported = await bootstrapNativeProjectRoot(input);
-    const recordPath = join(root, "native-project-drafts", "acme.json");
+    const imported = await bootstrapNativeProjectRepository(input);
+    const recordPath = join(root, "native-project-drafts", "acme", "root.json");
     const before = await readFile(recordPath);
     const movedCommit = (await run("/usr/bin/git", ["--git-dir", rootRepository(state),
       "-c", "user.name=DIM Test", "-c", "user.email=dim@example.invalid",
@@ -141,7 +143,7 @@ describe("trusted native Project bootstrap", () => {
     await run("/usr/bin/git", ["--git-dir", rootRepository(state), "update-ref",
       "refs/heads/main", movedCommit, imported.expectedCommit]);
 
-    await expect(bootstrapNativeProjectRoot(input)).rejects.toThrow(NativeProjectBootstrapError);
+    await expect(bootstrapNativeProjectRepository(input)).rejects.toThrow(NativeProjectBootstrapError);
 
     expect(await readFile(recordPath)).toEqual(before);
     expect((await run("/usr/bin/git", ["--git-dir", rootRepository(state), "rev-parse",
@@ -155,10 +157,10 @@ describe("trusted native Project bootstrap", () => {
     const database = join(state, "native-idle.sqlite3");
     const before = await readFile(database);
 
-    await expect(bootstrapNativeProjectRoot(input)).rejects.toThrow(NativeProjectBootstrapError);
+    await expect(bootstrapNativeProjectRepository(input)).rejects.toThrow(NativeProjectBootstrapError);
 
     expect(await readFile(database)).toEqual(before);
     await expect(stat(join(root, "native-project-drafts"))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(stat(join(root, "projects"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await new NativeProjectPendingStore(root).read("acme", importer.hostId))?.phase).toBe("configuring");
   });
 });

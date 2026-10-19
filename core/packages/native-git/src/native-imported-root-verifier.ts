@@ -27,6 +27,7 @@ type ImportedRootInput = {
   readonly gitIdentity: GitExecutableIdentity;
   readonly ownerHostId: string;
   readonly projectId: string;
+  readonly repositoryId: string;
   readonly state: NativeGitBundleState;
   readonly stateDirectory: string;
 };
@@ -37,26 +38,26 @@ type LiveImportedRootInput = ImportedRootInput & {
   readonly expectedGenerationId: string;
 };
 
-export async function verifyLiveImportedRoot(input: LiveImportedRootInput): Promise<LiveImportedRoot> {
+export async function verifyLiveImportedRepository(input: LiveImportedRootInput): Promise<LiveImportedRoot> {
   assertActive(input);
-  const result = await verifyImportedRootReadOnly(input);
+  const result = await verifyImportedRepositoryReadOnly(input);
   assertActive(input);
   return result;
 }
 
-export async function verifyImportedRootReadOnly(input: ImportedRootInput): Promise<LiveImportedRoot> {
+export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput): Promise<LiveImportedRoot> {
   const registration = readNativeProjectRegistrationsFromDatabase(input.state.database)
-    .find((entry) => entry.projectId === input.projectId);
+    .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
   if (registration === undefined || registration.ownerHostId !== input.ownerHostId) {
     throw new NativeImportedRootNotFoundError();
   }
   const imported = requireImportedRoot(input);
-  if (registration.phase !== "root-prepared" || registration.serviceId !== imported.serviceId
-    || registration.rootRepositoryId !== imported.rootRepositoryId) {
+  if (registration.phase !== "repository-prepared" || registration.serviceId !== imported.serviceId
+    || registration.repositoryId !== imported.repositoryId) {
     throw new NativeProjectRootImportStateError("native Project imported root registration binding is invalid");
   }
-  const currentHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, imported.projectId);
-  const repository = join(input.stateDirectory, input.projectId, "root.git");
+  const currentHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, imported.projectId, imported.repositoryId);
+  const repository = join(input.stateDirectory, input.projectId, `${input.repositoryId}.git`);
   await assertStableStorage(input, registration, imported, repository);
   await inspectImportedNativeRootReadOnly({
     gitExecutable: input.gitExecutable,
@@ -72,8 +73,8 @@ export async function verifyImportedRootReadOnly(input: ImportedRootInput): Prom
   await assertStableStorage(input, registration, imported, repository);
   const current = requireImportedRoot(input);
   const currentRegistration = readNativeProjectRegistrationsFromDatabase(input.state.database)
-    .find((entry) => entry.projectId === input.projectId);
-  const rereadHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, current.projectId);
+    .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
+  const rereadHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, current.projectId, current.repositoryId);
   if (JSON.stringify(current) !== JSON.stringify(imported)
     || JSON.stringify(currentRegistration) !== JSON.stringify(registration)
     || JSON.stringify(rereadHead) !== JSON.stringify(currentHead)) {
@@ -98,15 +99,15 @@ async function assertStableStorage(
 ): Promise<void> {
   await assertOwnedNativeProjectStorage(input.stateDirectory, registration);
   await assertPrivateDirectory(repository);
-  await assertDurableNativeRootBundle(input.stateDirectory, input.projectId, imported.importNonce,
+  await assertDurableNativeRootBundle(input.stateDirectory, input.projectId, input.repositoryId, imported.importNonce,
     imported.bundleDigest, imported.bundleSize);
 }
 
 function requireImportedRoot(input: ImportedRootInput): NativeProjectRootImportInstalled {
   const imported = readNativeProjectRootImportsFromDatabase(input.state.database)
-    .find((entry) => entry.projectId === input.projectId);
+    .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
   if (imported === undefined || imported.ownerHostId !== input.ownerHostId
-    || imported.phase !== "root-imported") {
+    || imported.phase !== "repository-imported") {
     throw new NativeProjectRootImportStateError("native Project imported root is unavailable");
   }
   return imported;

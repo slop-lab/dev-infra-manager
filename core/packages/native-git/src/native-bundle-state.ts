@@ -38,7 +38,7 @@ const activeStates = new WeakSet<NativeGitBundleState>();
 
 export type NativeGitBundleState = {
   readonly database: string;
-  readonly stateFormat: 8;
+  readonly stateFormat: 9;
   readonly owner: StorageOwner;
 };
 
@@ -62,14 +62,14 @@ export async function initializeNativeGitBundleState(
     } else {
       const persisted = await validateNativeGitBundleStateFiles(stateDirectory, entries);
       if (expectedGenerationId !== undefined && persisted.imports.some((rootImport) =>
-        rootImport.generationId !== expectedGenerationId && rootImport.phase !== "root-imported")) {
+        rootImport.generationId !== expectedGenerationId && rootImport.phase !== "repository-imported")) {
         throw new NativeGitBundleStateError("native Project root import belongs to another generation");
       }
       await persisted.reconcileRootImports();
     }
     const state: NativeGitBundleState = {
       database,
-      stateFormat: 8,
+      stateFormat: 9,
       owner: {
         async release() {
           if (!activeStates.delete(state)) return;
@@ -87,12 +87,12 @@ export async function initializeNativeGitBundleState(
 
 export async function inspectNativeGitBundleState(
   stateDirectory: string
-): Promise<{ readonly stateFormat: 8 }> {
+): Promise<{ readonly stateFormat: 9 }> {
   await assertDirectory(stateDirectory);
   const entries = await readdir(stateDirectory);
   await inspectStorageOwner(stateDirectory);
   await validateNativeGitBundleStateFiles(stateDirectory, entries);
-  return { stateFormat: 8 };
+  return { stateFormat: 9 };
 }
 
 export function registerNativeProject(state: NativeGitBundleState, generationId: string, input: unknown): void {
@@ -120,44 +120,48 @@ export function claimNativeProjectRootImport(
 export function markNativeProjectRootBundleDurable(
   state: NativeGitBundleState,
   projectId: string,
+  repositoryId: string,
   importNonce: string,
   bundleDigest: string,
   bundleSize: number
 ): NativeProjectRootImportDurable | NativeProjectRootImportInstalled {
   assertNativeGitBundleStateActive(state);
-  return markNativeProjectRootBundleDurableInDatabase(state.database, projectId, importNonce, bundleDigest, bundleSize);
+  return markNativeProjectRootBundleDurableInDatabase(state.database, projectId, repositoryId, importNonce, bundleDigest, bundleSize);
 }
 
 export function beginNativeProjectRootImportInstallation(
   state: NativeGitBundleState,
   projectId: string,
+  repositoryId: string,
   ownerHostId: string,
   selector: NativeProjectRootImportFinalizeSelector
 ): NativeProjectRootImport {
   assertNativeGitBundleStateActive(state);
   return beginNativeProjectRootImportInstallationInDatabase(
-    state.database, projectId, ownerHostId, selector
+    state.database, projectId, repositoryId, ownerHostId, selector
   );
 }
 
 export function markNativeProjectRootObjectsInstalled(
   state: NativeGitBundleState,
   projectId: string,
+  repositoryId: string,
   selector: NativeProjectRootImportFinalizeSelector,
   resolvedTree: string
 ): NativeProjectRootImportInstalled {
   assertNativeGitBundleStateActive(state);
-  return markNativeProjectRootObjectsInstalledInDatabase(state.database, projectId, selector, resolvedTree);
+  return markNativeProjectRootObjectsInstalledInDatabase(state.database, projectId, repositoryId, selector, resolvedTree);
 }
 
 export function markNativeProjectRootImported(
   state: NativeGitBundleState,
   projectId: string,
+  repositoryId: string,
   selector: NativeProjectRootImportFinalizeSelector,
   resolvedTree: string
 ): NativeProjectRootImportInstalled {
   assertNativeGitBundleStateActive(state);
-  return markNativeProjectRootImportedInDatabase(state.database, projectId, selector, resolvedTree);
+  return markNativeProjectRootImportedInDatabase(state.database, projectId, repositoryId, selector, resolvedTree);
 }
 
 export { NativeProjectRegistrationConflictError };

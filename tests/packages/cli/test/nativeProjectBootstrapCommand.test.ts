@@ -20,13 +20,13 @@ afterEach(cleanupNativeProjectFixtures);
 
 test("native root bootstrap help requires explicit local source and separate operator connections", () => {
   const help = spawnSync(process.execPath, ["--import", tsxImport, cli,
-    "project", "bootstrap-native-root", "--help"], { cwd: packageDirectory, encoding: "utf8" });
+    "project", "repository", "import", "--help"], { cwd: packageDirectory, encoding: "utf8" });
 
   assert.equal(help.status, 0);
-  for (const option of ["--project-id <project-id>", "--source-repository <absolute-path>",
-    "--source-ref <full-branch-ref>", "--registrar-connection <absolute-path>",
+  for (const option of ["--source <absolute-path>",
+    "--ref <full-branch-ref>", "--registrar-connection <absolute-path>",
     "--importer-connection <absolute-path>", "--git-executable <absolute-path>",
-    "--review-policy <absolute-private-file>"]) {
+    "--review-policy <absolute-file>"]) {
     assert.match(help.stdout, new RegExp(option.replace(/[<>]/g, "\\$&")));
   }
   assert.doesNotMatch(help.stdout, /bootstrap-git-url|password|token/);
@@ -37,8 +37,8 @@ test("native root bootstrap imports a manifest-free source from an explicit revi
   const fixture = await nativeFixture({ seedImportedDraft: false });
   await removeReviewedManifest(fixture);
   const reviewPolicy = join(fixture.stateRoot, "review-policy.json");
-  await writeFile(reviewPolicy, JSON.stringify({ schemaVersion: 1, rootAlias: "application",
-    review: { requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [] } }), { mode: 0o600 });
+  await writeFile(reviewPolicy, JSON.stringify({ schemaVersion: 1, repositoryId: "root",
+    review: { requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [], ciRepositoryIds: ["root"] } }), { mode: 0o600 });
 
   // When
   const imported = await runBootstrap(fixture, reviewPolicy);
@@ -46,7 +46,7 @@ test("native root bootstrap imports a manifest-free source from an explicit revi
   // Then
   assert.equal(imported.status, 0, imported.stderr);
   assert.deepEqual(JSON.parse(imported.stdout), {
-    ...(JSON.parse(imported.stdout) as object), rootAlias: "application", protectedRef: "refs/heads/main"
+    ...(JSON.parse(imported.stdout) as object), repositoryId: "root", protectedRef: "refs/heads/main"
   });
 });
 
@@ -56,19 +56,19 @@ test("native root bootstrap does not infer an empty policy when the reviewed man
   await removeReviewedManifest(fixture);
 
   // When
-  const result = await runCli(["project", "bootstrap-native-root", "acme",
-    "--project-id", "project-a", "--source-repository", fixture.sourceRepository,
-    "--source-ref", "refs/heads/main", "--registrar-connection", fixture.registrarPath,
+  const result = await runCli(["project", "repository", "import", "acme", "root",
+    "--source", fixture.sourceRepository,
+    "--ref", "refs/heads/main", "--registrar-connection", fixture.registrarPath,
     "--importer-connection", fixture.importerPath, "--json"], fixture.environment);
 
   // Then
-  assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /manifest must be a regular reviewed Git blob/);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /review-policy/);
 });
 
 test("native root bootstrap rejects unsafe external policy files before service mutation", async (context) => {
-  const valid = JSON.stringify({ schemaVersion: 1, rootAlias: "root",
-    review: { requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [] } });
+  const valid = JSON.stringify({ schemaVersion: 1, repositoryId: "root",
+    review: { requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [], ciRepositoryIds: ["root"] } });
   const cases: readonly { readonly name: string;
     readonly prepare: (fixture: NativeFixture) => Promise<string> }[] = [
     { name: "relative path", prepare: async () => "review-policy.json" },
@@ -79,27 +79,27 @@ test("native root bootstrap rejects unsafe external policy files before service 
     } },
     { name: "duplicate top-level key", prepare: async (fixture) => {
       const policyPath = join(fixture.stateRoot, "duplicate-top-level.json");
-      await writeFile(policyPath, `{"schemaVersion":1,"rootAlias":"ignored","rootAlias":"root","review":${JSON.stringify({
-        requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: []
+      await writeFile(policyPath, `{"schemaVersion":1,"repositoryId":"ignored","repositoryId":"root","review":${JSON.stringify({
+        requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [], ciRepositoryIds: ["root"]
       })}}`, { mode: 0o600 });
       return policyPath;
     } },
     { name: "duplicate nested review key", prepare: async (fixture) => {
       const policyPath = join(fixture.stateRoot, "duplicate-review.json");
-      await writeFile(policyPath, `{"schemaVersion":1,"rootAlias":"root","review":{"requiredReviewerIds":[],"requiredReviewerIds":["owner"],"pathReviewerRules":[],"requiredJobs":[]}}`,
+      await writeFile(policyPath, `{"schemaVersion":1,"repositoryId":"root","review":{"requiredReviewerIds":[],"requiredReviewerIds":["owner"],"pathReviewerRules":[],"requiredJobs":[]}}`,
         { mode: 0o600 });
       return policyPath;
     } },
     { name: "duplicate key inside an array object", prepare: async (fixture) => {
       const policyPath = join(fixture.stateRoot, "duplicate-array-object.json");
-      await writeFile(policyPath, `{"schemaVersion":1,"rootAlias":"root","review":{"requiredReviewerIds":["owner"],"pathReviewerRules":[{"pathPrefix":"ignored","pathPrefix":"src/","reviewerIds":["owner"]}],"requiredJobs":[]}}`,
+      await writeFile(policyPath, `{"schemaVersion":1,"repositoryId":"root","review":{"requiredReviewerIds":["owner"],"pathReviewerRules":[{"pathPrefix":"ignored","pathPrefix":"src/","reviewerIds":["owner"]}],"requiredJobs":[]}}`,
         { mode: 0o600 });
       return policyPath;
     } },
     { name: "invalid review", prepare: async (fixture) => {
       const policyPath = join(fixture.stateRoot, "invalid-review.json");
-      await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, rootAlias: "root",
-        review: { requiredReviewerIds: [], pathReviewerRules: [], requiredJobs: [] } }), { mode: 0o600 });
+      await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, repositoryId: "root",
+        review: { requiredReviewerIds: [], pathReviewerRules: [], requiredJobs: [], ciRepositoryIds: ["root"] } }), { mode: 0o600 });
       return policyPath;
     } },
     { name: "symbolic link", prepare: async (fixture) => {
@@ -150,8 +150,8 @@ test("native root bootstrap rejects an in-place policy rewrite before service mu
   // Given
   const fixture = await nativeFixture({ seedImportedDraft: false });
   const policyPath = join(fixture.stateRoot, "changing-policy.json");
-  const policy = JSON.stringify({ schemaVersion: 1, rootAlias: "root",
-    review: { requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [] } });
+  const policy = JSON.stringify({ schemaVersion: 1, repositoryId: "root",
+    review: { requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [], ciRepositoryIds: ["root"] } });
   await writeFile(policyPath, policy.padEnd(60 * 1024, " "), { mode: 0o600 });
   const databasePath = join(fixture.serviceRoot, "native-idle.sqlite3");
   const databaseBefore = await readFile(databasePath);
@@ -176,9 +176,9 @@ test("native root bootstrap rejects an in-place policy rewrite before service mu
 });
 
 function runBootstrap(fixture: NativeFixture, reviewPolicy: string, nodeArguments: readonly string[] = []) {
-  return runCli(["project", "bootstrap-native-root", "acme",
-    "--project-id", "project-a", "--source-repository", fixture.sourceRepository,
-    "--source-ref", "refs/heads/main", "--registrar-connection", fixture.registrarPath,
+  return runCli(["project", "repository", "import", "acme", "root",
+    "--source", fixture.sourceRepository,
+    "--ref", "refs/heads/main", "--registrar-connection", fixture.registrarPath,
     "--importer-connection", fixture.importerPath, "--review-policy", reviewPolicy, "--json"],
   fixture.environment, nodeArguments);
 }

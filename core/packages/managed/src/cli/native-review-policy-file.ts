@@ -6,7 +6,7 @@ import { UserError } from "@slop-lab/dim-managed";
 const maximumPolicyBytes = 64 * 1024;
 
 export type NativeReviewPolicyFile = {
-  readonly rootAlias: string;
+  readonly repositoryId: string;
   readonly review: unknown;
 };
 
@@ -58,12 +58,12 @@ function parseNativeReviewPolicyFile(serialized: string): NativeReviewPolicyFile
   } catch (error) {
     throw new UserError("native review policy is invalid JSON", { cause: error });
   }
-  if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.rootAlias !== "string"
+  if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.repositoryId !== "string"
     || !Object.hasOwn(value, "review")
-    || Object.keys(value).some((key) => !["schemaVersion", "rootAlias", "review"].includes(key))) {
-    throw new UserError("native review policy must contain exactly schemaVersion 1, rootAlias, and review");
+    || Object.keys(value).some((key) => !["schemaVersion", "repositoryId", "review"].includes(key))) {
+    throw new UserError("native review policy must contain exactly schemaVersion 1, repositoryId, and review");
   }
-  return { rootAlias: value.rootAlias, review: value.review };
+  return { repositoryId: value.repositoryId, review: value.review };
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

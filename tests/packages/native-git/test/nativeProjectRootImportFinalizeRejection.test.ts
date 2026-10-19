@@ -50,7 +50,7 @@ describe("native Project root import finalize rejection", () => {
   it("does not adopt a preexisting protected ref even when it equals the bound commit", async () => {
     const fixture = await durableFixture("preexisting-ref");
     const repository = rootRepository(fixture.root);
-    const bundlePath = join(fixture.root, "project-a", ".dim-root-import", `${fixture.receipt.importNonce}.bundle`);
+    const bundlePath = join(fixture.root, "project-a", ".dim-import-root", `${fixture.receipt.importNonce}.bundle`);
     await runGit("/usr/bin/git", ["--git-dir", repository, "bundle", "unbundle", bundlePath]);
     await runGit("/usr/bin/git", ["--git-dir", repository, "update-ref", "refs/heads/main",
       fixture.bundle.commit, "0".repeat(40)]);
@@ -82,7 +82,7 @@ describe("native Project root import finalize rejection", () => {
   it("rejects a hard-linked installed pack before publishing the protected ref", async () => {
     const fixture = await durableFixture("hardlinked-pack");
     const repository = rootRepository(fixture.root);
-    const bundlePath = join(fixture.root, "project-a", ".dim-root-import", `${fixture.receipt.importNonce}.bundle`);
+    const bundlePath = join(fixture.root, "project-a", ".dim-import-root", `${fixture.receipt.importNonce}.bundle`);
     await runGit("/usr/bin/git", ["--git-dir", repository, "bundle", "unbundle", bundlePath]);
     const packDirectory = join(repository, "objects", "pack");
     const pack = (await readdir(packDirectory)).find((name) => name.endsWith(".pack"));
@@ -100,7 +100,7 @@ describe("native Project root import finalize rejection", () => {
 
   it("leaves the ref unborn and blocks startup when the durable bundle proof changes", async () => {
     const fixture = await durableFixture("changed-bundle");
-    const path = join(fixture.root, "project-a", ".dim-root-import", `${fixture.receipt.importNonce}.bundle`);
+    const path = join(fixture.root, "project-a", ".dim-import-root", `${fixture.receipt.importNonce}.bundle`);
     const bytes = await readFile(path);
     bytes[bytes.length - 1] = (bytes[bytes.length - 1] ?? 0) ^ 1;
     await writeFile(path, bytes, { mode: 0o600 });
@@ -132,7 +132,7 @@ describe("native Project root import finalize rejection", () => {
           || typeof row.policy_json !== "string") throw new Error("missing import policy fixture");
         database.prepare("UPDATE native_project_root_import SET policy_json = ?")
           .run(row.policy_json.replace(
-            "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+            "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
             "f".repeat(64)
           ));
       }

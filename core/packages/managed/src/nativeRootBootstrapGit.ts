@@ -3,8 +3,8 @@ import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import { UserError } from "@slop-lab/dim-core";
-import { compileNativeRootBootstrapPolicy, parseNativeRootBootstrapManifestYaml,
-  type NativeRootBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
+import { compileNativeRepositoryBootstrapPolicy, parseNativeRootBootstrapManifestYaml,
+  type NativeRepositoryBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
 
 const execute = promisify(execFile);
@@ -14,13 +14,14 @@ export type NativeRootBootstrapGitInput = {
   readonly gitExecutable: string;
   readonly sourceRepository: string;
   readonly selectedRef: string;
+  readonly repositoryId: string;
   readonly scratchRoot: string;
   readonly policySource: { readonly kind: "reviewed-manifest" }
-    | { readonly kind: "manifest-free"; readonly rootAlias: string; readonly review: unknown };
+    | { readonly kind: "manifest-free"; readonly review: unknown };
   readonly signal: AbortSignal;
 };
 
-export type NativeRootBootstrapGitPlan = NativeRootBootstrapPolicy & {
+export type NativeRootBootstrapGitPlan = NativeRepositoryBootstrapPolicy & {
   readonly expectedCommit: string;
   readonly resolvedTree: string;
   readonly bundlePath: string;
@@ -70,7 +71,7 @@ export async function prepareNativeRootBootstrapGit(
   if (resolvedTree.length !== expectedCommit.length || !/^[0-9a-f]+$/.test(resolvedTree)) {
     throw new UserError("native root tree is invalid");
   }
-  let policy: NativeRootBootstrapPolicy;
+  let policy: NativeRepositoryBootstrapPolicy;
   switch (input.policySource.kind) {
     case "reviewed-manifest": {
       const entry = await git([...sourceArgs, "ls-tree", expectedCommit, "--", ".dim/repos.yml"],
@@ -79,11 +80,11 @@ export async function prepareNativeRootBootstrapGit(
         throw new UserError("native root manifest must be a regular reviewed Git blob");
       }
       const yaml = await git([...sourceArgs, "show", `${expectedCommit}:.dim/repos.yml`], "manifest read");
-      policy = parseNativeRootBootstrapManifestYaml(yaml, input.selectedRef);
+      policy = parseNativeRootBootstrapManifestYaml(yaml, input.selectedRef, input.repositoryId);
       break;
     }
     case "manifest-free":
-      policy = compileNativeRootBootstrapPolicy({ rootAlias: input.policySource.rootAlias,
+      policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: input.repositoryId,
         protectedRef: input.selectedRef, review: input.policySource.review });
       break;
     default: {

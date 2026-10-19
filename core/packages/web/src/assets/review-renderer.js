@@ -53,6 +53,7 @@ export function renderReview(elements, review, reviewerId) {
     ["Required reviewers", requiredReviewerIds.join(", ")], ["Created", input.createdAt]
   ];
   for (const value of values) appendMetadata(elements.metadata, value[0], value[1], value[2] === true);
+  for (const snapshot of review.inputs) appendMetadata(elements.metadata, `Input ${snapshot.repositoryId}`, `commit ${snapshot.commit}; tree ${snapshot.tree}`, true);
   renderDecision(elements, input.status, reviewerId, approvals, revocations, canDecide);
   elements.pathCount.textContent = `${changes.length} ${changes.length === 1 ? "path" : "paths"}`;
   elements.changedPaths.replaceChildren(...changes.map((change) => {

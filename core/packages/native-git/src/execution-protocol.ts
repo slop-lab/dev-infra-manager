@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { candidateExecutionDescriptorSchema, executionProfileFields } from "./candidate-execution-schema.js";
 import { descriptorDigest } from "./candidate-execution.js";
@@ -24,7 +25,8 @@ export const executionGrantSchema = executionGrantRequestSchema.unwrap().extend(
 }).strict().readonly().superRefine((grant, context) => {
   const descriptor = grant.descriptor;
   if (grant.descriptorDigest !== descriptorDigest(descriptor)
-    || descriptor.projectId !== grant.event.projectId || descriptor.jobName !== grant.event.jobName
+    || descriptor.projectId !== grant.event.projectId || descriptor.repositoryId !== grant.event.repositoryId
+    || !isDeepStrictEqual(descriptor.inputs, grant.event.inputs) || descriptor.jobName !== grant.event.jobName
     || descriptor.generationId !== grant.generationId
     || descriptor.runnerBaseImage !== grant.profile.runnerBaseImage || descriptor.jobImage !== grant.profile.jobBaseImage
     || JSON.stringify(descriptor.bounds) !== JSON.stringify(grant.profile.bounds)) {

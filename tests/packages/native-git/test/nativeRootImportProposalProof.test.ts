@@ -41,8 +41,10 @@ describe("native imported root proof with proposals", () => {
       `refs/heads/proposals/${workspaceId}/change`, candidate]);
 
     // When
-    const proof = await fetch(`${service.origin}/v1/projects/project-a/root-import/proof`, {
-      headers: { authorization }
+    const proof = await fetch(`${service.origin}/v1/projects/project-a/repositories/root/import/proof`, {
+      method: "POST",
+      headers: { authorization, "content-type": "application/json" },
+      body: JSON.stringify({ schemaVersion: 1, generationId })
     });
 
     // Then
@@ -51,8 +53,10 @@ describe("native imported root proof with proposals", () => {
     await closeFinalizeService(service);
     const restarted = await startFinalizeService(root);
     await activateFinalizeService(restarted.origin);
-    const afterRestart = await fetch(`${restarted.origin}/v1/projects/project-a/root-import/proof`, {
-      headers: { authorization }
+    const afterRestart = await fetch(`${restarted.origin}/v1/projects/project-a/repositories/root/import/proof`, {
+      method: "POST",
+      headers: { authorization, "content-type": "application/json" },
+      body: JSON.stringify({ schemaVersion: 1, generationId })
     });
     expect(afterRestart.status).toBe(200);
   });

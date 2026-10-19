@@ -64,7 +64,7 @@ export async function initializeNativeBundleRuntime(
     assertConfiguredHumanReviewers(config, imported.policy);
   }
   await Promise.all(readNativeProjectRegistrationsFromDatabase(state.database).map(async (registration) => {
-    const repository = join(options.stateDirectory, registration.projectId, `${registration.rootRepositoryId}.git`);
+    const repository = join(options.stateDirectory, registration.projectId, `${registration.repositoryId}.git`);
     await assertAuthoritativeNativeReviewStore(repository);
     await assertAuthoritativeNativeApprovalStore(repository);
     await assertAuthoritativeNativeRevocationStore(repository);

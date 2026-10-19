@@ -50,10 +50,11 @@ describe("native Git root importer host client", () => {
     await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));
     const client = await createNodeNativeGitRootImporterClient(await connection(service.origin));
     const input = {
-      serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root",
+      serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
       policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-      policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+      ciRepositoryIds: ["root"],
+      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
         requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
         requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
         requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
@@ -61,10 +62,10 @@ describe("native Git root importer host client", () => {
       bundlePath
     } as const;
 
-    const result = await client.importRoot(input, AbortSignal.timeout(20_000));
+    const result = await client.importRepository(input, AbortSignal.timeout(20_000));
 
     expect(result).toMatchObject({ serviceId: "native-main", projectId: "project-a", generationId,
-      expectedCommit: bundle.commit, resolvedTree: bundle.tree, phase: "root-imported" });
+      expectedCommit: bundle.commit, resolvedTree: bundle.tree, phase: "repository-imported" });
     expect((await runGit("/usr/bin/git", ["--git-dir", rootRepository(root), "rev-parse", "refs/heads/main"])).stdout.trim())
       .toBe(bundle.commit);
     expect(result.bundleSize).toBe(bundle.bytes.length);
@@ -80,10 +81,11 @@ describe("native Git root importer host client", () => {
     await activateFinalizeService(service.origin);
     await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));
     const client = await createNodeNativeGitRootImporterClient(await connection(service.origin));
-    const receipt = await client.importRoot({ serviceId: "native-main", projectId: "project-a",
-      rootRepositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
+    const receipt = await client.importRepository({ serviceId: "native-main", projectId: "project-a",
+      repositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
       policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-      policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+      ciRepositoryIds: ["root"],
+      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
         requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
         requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
         requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
@@ -92,11 +94,11 @@ describe("native Git root importer host client", () => {
     const databasePath = join(root, "native-idle.sqlite3");
     const before = await readFile(databasePath);
 
-    const proof = await client.proveRoot("project-a", AbortSignal.timeout(20_000));
+    const proof = await client.proveRepository("project-a", "root", AbortSignal.timeout(20_000));
 
     expect(proof).toEqual({ schemaVersion: 3, servingGenerationId: generationId,
       ownerHostId: importer.hostId, importReceipt: receipt,
-      currentHead: { projectId: "project-a", sequence: 0, protectedRef: "refs/heads/main",
+      currentHead: { projectId: "project-a", repositoryId: "root", sequence: 0, protectedRef: "refs/heads/main",
         commit: receipt.expectedCommit, tree: receipt.resolvedTree, policyDigest: receipt.policyDigest } });
     expect(await readFile(databasePath)).toEqual(before);
   });
@@ -110,20 +112,21 @@ describe("native Git root importer host client", () => {
     await activateFinalizeService(service.origin);
     await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));
     const connectionPath = await connection(service.origin);
-    const input = { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root",
+    const input = { serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
       policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-      policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+      ciRepositoryIds: ["root"],
+      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
         requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
         requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
         requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
         requiredReviewerIds: ["owner"], pathReviewerRules: [] },
       bundlePath } as const;
     const first = await (await createNodeNativeGitRootImporterClient(connectionPath))
-      .importRoot(input, AbortSignal.timeout(20_000));
+      .importRepository(input, AbortSignal.timeout(20_000));
 
     const replay = await (await createNodeNativeGitRootImporterClient(connectionPath))
-      .importRoot(input, AbortSignal.timeout(20_000));
+      .importRepository(input, AbortSignal.timeout(20_000));
 
     expect(replay).toEqual(first);
     expect((await runGit("/usr/bin/git", ["--git-dir", rootRepository(root), "rev-parse", "refs/heads/main"])).stdout.trim())
@@ -139,7 +142,7 @@ describe("native Git root importer host client", () => {
     const before = await readFile(database);
     const bundlePath = join(await createFinalizeRoot("client-denied-bundle"), "root.bundle");
     await writeFile(bundlePath, "not a bundle");
-    const input = { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root",
+    const input = { serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: "b".repeat(40), policy: {}, bundlePath } as const;
     const registrarCredential = { username: "registrar-a", password: bundleSecrets.projectRegistrar };
     const denials = [
@@ -149,7 +152,7 @@ describe("native Git root importer host client", () => {
     ];
     for (const change of denials) {
       const client = await createNodeNativeGitRootImporterClient(await connection(service.origin, change));
-      await expect(client.importRoot(input, AbortSignal.timeout(5_000)))
+      await expect(client.importRepository(input, AbortSignal.timeout(5_000)))
         .rejects.toThrow(NativeGitRootImporterClientError);
     }
     expect(await readFile(database)).toEqual(before);
@@ -167,10 +170,10 @@ describe("native Git root importer host client", () => {
       if (request.url === "/v1/operator-root-importer-identity") {
         response.end(JSON.stringify({ schemaVersion: 1, serviceId: "native-main",
           role: "operator-root-importer", hostId: importer.hostId, generationId }));
-      } else if (request.url === "/v1/projects/project-a/root-import") {
+      } else if (request.url === "/v1/projects/project-a/repositories/root/import") {
         for await (const chunk of request) uploadBytes += Buffer.byteLength(chunk);
         response.end(JSON.stringify({ schemaVersion: 1, serviceId: "native-main",
-          projectId: "project-a", rootRepositoryId: "root", generationId,
+          projectId: "project-a", repositoryId: "root", generationId,
           importNonce: "00000000-0000-4000-8000-000000000000", protectedRef: "refs/heads/main",
           expectedCommit: "a".repeat(40), policyDigest: "f".repeat(64),
           bundleDigest: createHash("sha256").update(bundle).digest("hex"),
@@ -186,10 +189,11 @@ describe("native Git root importer host client", () => {
     if (address === null || typeof address === "string") throw new Error("fake importer did not bind TCP");
     const client = await createNodeNativeGitRootImporterClient(await connection(`http://127.0.0.1:${address.port}`));
 
-    await expect(client.importRoot({ serviceId: "native-main", projectId: "project-a",
-      rootRepositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: "a".repeat(40),
+    await expect(client.importRepository({ serviceId: "native-main", projectId: "project-a",
+      repositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: "a".repeat(40),
       policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-    policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+    ciRepositoryIds: ["root"],
+      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
         requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
         requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
         requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
@@ -225,13 +229,13 @@ describe("native Git root importer host client", () => {
             hostId: importer.hostId, generationId }
           : { schemaVersion: 3, servingGenerationId: generationId, ownerHostId: importer.hostId,
             importReceipt: { schemaVersion: 1, serviceId: "native-main", projectId: "project-a",
-              rootRepositoryId: "root", generationId,
+              repositoryId: "root", generationId,
               importNonce: "00000000-0000-4000-8000-000000000000",
               protectedRef: "refs/heads/main", expectedCommit: "a".repeat(40),
               resolvedTree: "b".repeat(40), policyDigest: "c".repeat(64),
-              bundleDigest: "d".repeat(64), bundleSize: 123, phase: "root-imported",
+              bundleDigest: "d".repeat(64), bundleSize: 123, phase: "repository-imported",
               ...change.receipt },
-            currentHead: { projectId: "project-a", sequence: 0, protectedRef: "refs/heads/main",
+            currentHead: { projectId: "project-a", repositoryId: "root", sequence: 0, protectedRef: "refs/heads/main",
               commit: "a".repeat(40), tree: "b".repeat(40), policyDigest: "c".repeat(64),
               ...("currentHead" in change ? change.currentHead : {}) },
             ...change.outer };
@@ -244,10 +248,10 @@ describe("native Git root importer host client", () => {
       hostId: importer.hostId, generationId,
       credential: { username: importer.username, password: importer.password } }, httpClient);
 
-    await expect(client.proveRoot("project-a", AbortSignal.timeout(5_000)))
+    await expect(client.proveRepository("project-a", "root", AbortSignal.timeout(5_000)))
       .rejects.toThrow(NativeGitRootImporterClientError);
 
     expect(requests).toEqual(["GET /v1/operator-root-importer-identity",
-      "GET /v1/projects/project-a/root-import/proof"]);
+      "POST /v1/projects/project-a/repositories/root/import/proof"]);
   });
 });

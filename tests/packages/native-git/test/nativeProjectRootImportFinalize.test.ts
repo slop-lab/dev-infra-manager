@@ -39,14 +39,14 @@ describe("native Project root import finalization", () => {
     const finalized = await response.json();
 
     expect(response.status).toBe(200);
-    expect(finalized).toEqual({ ...receipt, resolvedTree: bundle.tree, phase: "root-imported" });
+    expect(finalized).toEqual({ ...receipt, resolvedTree: bundle.tree, phase: "repository-imported" });
     expect(await refValue(rootRepository(root), "refs/heads/main")).toBe(bundle.commit);
     const refs = await runGit("/usr/bin/git", ["--git-dir", rootRepository(root),
       "for-each-ref", "--format=%(refname)"]);
     expect(refs.stdout).toBe("refs/heads/main\n");
     const database = new DatabaseSync(join(root, "native-idle.sqlite3"), { readOnly: true });
     expect(database.prepare("SELECT phase, resolved_tree FROM native_project_root_import").get())
-      .toEqual({ phase: "root-imported", resolved_tree: bundle.tree });
+      .toEqual({ phase: "repository-imported", resolved_tree: bundle.tree });
     expect(database.prepare(
       "SELECT name FROM sqlite_schema WHERE name IN ('native_project_reader', 'native_project_writer')"
     ).all()).toEqual([]);
@@ -67,7 +67,7 @@ describe("native Project root import finalization", () => {
       const receipt = parseImportReceipt(await (await uploadRootBundle(service.origin, bundle)).json());
       await closeFinalizeService(service);
       const repository = rootRepository(root);
-      const bundlePath = join(root, "project-a", ".dim-root-import", `${receipt.importNonce}.bundle`);
+      const bundlePath = join(root, "project-a", ".dim-import-root", `${receipt.importNonce}.bundle`);
       const database = new DatabaseSync(join(root, "native-idle.sqlite3"));
       if (window === "object-install") {
         database.prepare("UPDATE native_project_root_import SET phase = 'installing'").run();
@@ -86,7 +86,7 @@ describe("native Project root import finalization", () => {
 
       const recovered = new DatabaseSync(join(root, "native-idle.sqlite3"), { readOnly: true });
       expect(recovered.prepare("SELECT phase, resolved_tree FROM native_project_root_import").get())
-        .toEqual({ phase: "root-imported", resolved_tree: bundle.tree });
+        .toEqual({ phase: "repository-imported", resolved_tree: bundle.tree });
       recovered.close();
       expect(await refValue(repository, "refs/heads/main")).toBe(bundle.commit);
     }

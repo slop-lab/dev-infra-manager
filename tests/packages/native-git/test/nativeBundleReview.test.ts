@@ -108,7 +108,7 @@ const service = await startFinalizeService(root, undefined, undefined, undefined
     await new Promise(() => {});
   }
 });
-const response = await fetch(service.origin + "/v1/projects/project-a/workspace-write-leases", {
+const response = await fetch(service.origin + "/v1/projects/project-a/repositories/root/workspace-write-leases", {
   method: "POST",
   headers: { authorization: workspaceWriteIssuerAuthorization, "content-type": "application/json" },
   body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId })

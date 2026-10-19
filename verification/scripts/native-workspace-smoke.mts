@@ -1,3 +1,4 @@
+import type { WorkspaceRecord } from "../../core/packages/core/src/workspace/models.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -7,19 +8,19 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const repo = path.resolve(import.meta.dirname, "../..");
-const load = (file: string) => import(pathToFileURL(path.join(repo, file)).href);
-const { ProcessRunner, WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, workspaceRuntimeResources } = await load("core/packages/core/dist/workspace.js");
-const { prepareControlPlane, connectControlPlane } = await load("core/packages/managed/dist/controlPlaneSetup.js");
-const { configuredNativeGitBundleServer } = await load("core/packages/native-git/dist/service.js");
-const { parseNativeGitBundleConfig } = await load("core/packages/native-git/dist/bundle-config.js");
-const { dimWorkflowCompiler } = await load("plugin-ci-workflows/dist/index.js");
-const { bootstrapNativeProjectRoot } = await load("core/packages/managed/dist/nativeProjectBootstrap.js");
-const { NativeProjectPendingStore } = await load("core/packages/managed/dist/nativeProjectPendingStore.js");
-const { createNodeNativeGitRootImporterClient } = await load("core/packages/managed/dist/nativeGitRootImporterClient.js");
-const { loadNativeControlPlaneConnection } = await load("core/packages/managed/dist/nativeControlPlaneConnection.js");
-const { saveControlPlaneSelection } = await load("core/packages/managed/dist/controlPlaneSelection.js");
-const { createManagedWorkspace, ensureManagedWorkspace } = await load("core/packages/managed/dist/nativeWorkspaceHost.js");
-const { readNativeWorkspaceAttachment, nativeWorkspaceAttachmentFile } = await load("core/packages/managed/dist/nativeWorkspaceAttachment.js");
+const load = (file: string): Promise<unknown> => import(pathToFileURL(path.join(repo, file)).href);
+const { ProcessRunner, WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, workspaceRuntimeResources } = await load("core/packages/core/dist/workspace.js") as typeof import("../../core/packages/core/src/workspace.js");
+const { prepareControlPlane, connectControlPlane } = await load("core/packages/managed/dist/controlPlaneSetup.js") as typeof import("../../core/packages/managed/src/controlPlaneSetup.js");
+const { configuredNativeGitBundleServer } = await load("core/packages/native-git/dist/service.js") as typeof import("../../core/packages/native-git/src/service.js");
+const { parseNativeGitBundleConfig } = await load("core/packages/native-git/dist/bundle-config.js") as typeof import("../../core/packages/native-git/src/bundle-config.js");
+const { dimWorkflowCompiler } = await load("plugin-ci-workflows/dist/index.js") as typeof import("../../plugin-ci-workflows/src/index.js");
+const { bootstrapNativeProjectRepository } = await load("core/packages/managed/dist/nativeProjectBootstrap.js") as typeof import("../../core/packages/managed/src/nativeProjectBootstrap.js");
+const { NativeProjectPendingStore } = await load("core/packages/managed/dist/nativeProjectPendingStore.js") as typeof import("../../core/packages/managed/src/nativeProjectPendingStore.js");
+const { createNodeNativeGitRootImporterClient } = await load("core/packages/managed/dist/nativeGitRootImporterClient.js") as typeof import("../../core/packages/managed/src/nativeGitRootImporterClient.js");
+const { loadNativeControlPlaneConnection } = await load("core/packages/managed/dist/nativeControlPlaneConnection.js") as typeof import("../../core/packages/managed/src/nativeControlPlaneConnection.js");
+const { saveControlPlaneSelection } = await load("core/packages/managed/dist/controlPlaneSelection.js") as typeof import("../../core/packages/managed/src/controlPlaneSelection.js");
+const { createManagedWorkspace, ensureManagedWorkspace } = await load("core/packages/managed/dist/nativeWorkspaceHost.js") as typeof import("../../core/packages/managed/src/nativeWorkspaceHost.js");
+const { readNativeWorkspaceAttachment, nativeWorkspaceAttachmentFile } = await load("core/packages/managed/dist/nativeWorkspaceAttachment.js") as typeof import("../../core/packages/managed/src/nativeWorkspaceAttachment.js");
 
 const root = await mkdtemp(path.join(os.tmpdir(), "dim-native-workspace-smoke-"));
 const name = `native-smoke-${Date.now()}`;
@@ -28,16 +29,15 @@ const runner = new ProcessRunner();
 const store = new WorkspaceStore(path.join(root, "workspaces"));
 const runtime = new ContainerWorkspaceRuntime(runner);
 const base = new WorkspaceService(store, runtime, async () => { throw new Error("existing workspace lifecycle must not reacquire source"); });
-let service: any;
-let record: any;
+let service: Awaited<ReturnType<typeof configuredNativeGitBundleServer>> | undefined;
 const oldEnvironment = { DIM_MANAGED_STATE_ROOT: process.env.DIM_MANAGED_STATE_ROOT,
   DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE };
 try {
   const operator = path.join(root, "operator");
   await prepareControlPlane({ directory: operator, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
     ordinaryCiImage: `registry.example/ordinary@sha256:${"b".repeat(64)}` });
-  const native = JSON.parse(await readFile(path.join(operator, "native-git.json"), "utf8"));
-  native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
+  const native = { ...parseNativeGitBundleConfig(JSON.parse(await readFile(path.join(operator, "native-git.json"), "utf8"))),
+    gitVersion: execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().replace(/^git version /, "") };
   await writeFile(path.join(operator, "native-git.json"), JSON.stringify(native), { mode: 0o600 });
   const generationId = "c".repeat(64);
   const activationToken = Buffer.alloc(32, 71).toString("base64url");
@@ -56,33 +56,37 @@ try {
   execFileSync("/usr/bin/git", ["-C", source, "add", "."]);
   execFileSync("/usr/bin/git", ["-C", source, "-c", "user.name=DIM Smoke", "-c", "user.email=smoke@example.invalid", "commit", "-m", "initial"]);
   const managedRoot = path.join(root, "managed"); await mkdir(managedRoot, { mode: 0o700 });
-  await bootstrapNativeProjectRoot({ name: "example", projectId: "example", stateRoot: managedRoot, scratchRoot: managedRoot,
-    sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main",
-    registrarConnectionFile: path.join(connected.directory, "registrar.json"), importerConnectionFile: path.join(connected.directory, "importer.json"),
-    policySource: { kind: "manifest-free", rootAlias: "root", review: { requiredReviewerIds: ["owner"], requiredJobs: [] } },
-    signal: AbortSignal.timeout(30_000) });
   const projects = new NativeProjectPendingStore(managedRoot);
   const connection = await loadNativeControlPlaneConnection(path.join(connected.directory, "host.json"));
-  await projects.admit("example", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), AbortSignal.timeout(10_000));
-  await projects.ready("example", connection, AbortSignal.timeout(10_000));
+  await projects.create({ name: "example", projectId: "example", ownerHostId: connection.hostId });
+  await bootstrapNativeProjectRepository({ name: "example", projectId: "example", stateRoot: managedRoot, scratchRoot: managedRoot,
+    repositoryId: "app", sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main",
+    registrarConnectionFile: path.join(connected.directory, "registrar.json"), importerConnectionFile: path.join(connected.directory, "importer.json"),
+    policySource: { kind: "manifest-free", review: { requiredReviewerIds: ["owner"], requiredJobs: [], ciRepositoryIds: ["app"] } },
+    signal: AbortSignal.timeout(30_000) });
+  await projects.admitRepository("example", "app", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), connection, AbortSignal.timeout(10_000));
+  await projects.configure("example", { configurationRepositoryId: "app", defaultWorkingRepositoryId: "app" }, connection, AbortSignal.timeout(10_000));
   process.env.DIM_MANAGED_STATE_ROOT = managedRoot;
   process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE = path.join(connected.directory, "host.json");
-  record = await createManagedWorkspace({ name, source: { url: "dim://example" }, image,
+  const record: WorkspaceRecord = await createManagedWorkspace({ name, source: { url: "dim://example" }, image,
     resources: { cpuCount: "2", memory: "2g", pidsLimit: "512" } }, { runner, store });
   assert.equal(record.schemaVersion, 10);
   assert.equal(record.source.url, "dim://example");
   assert.equal((await base.list()).length, 1);
   const resources = workspaceRuntimeResources(record);
   const inspection = await runner.run("docker", ["inspect", resources.container]);
-  const actual = JSON.parse(inspection.stdout)[0];
-  assert.equal(actual.HostConfig.Privileged, false);
-  assert.equal(actual.HostConfig.Runtime, "sysbox-runc");
-  assert.deepEqual(actual.Mounts.map((mount: any) => mount.Type), ["volume", "volume", "volume"]);
+  const inspected: unknown = JSON.parse(inspection.stdout); assert(Array.isArray(inspected));
+  const actual = object(inspected[0]), hostConfig = object(actual.HostConfig);
+  assert.equal(hostConfig.Privileged, false);
+  assert.equal(hostConfig.Runtime, "sysbox-runc");
+  assert(Array.isArray(actual.Mounts));
+  assert.deepEqual(actual.Mounts.map((mount: unknown) => object(mount).Type), ["volume", "volume", "volume"]);
   const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managedRoot, record.id));
-  const auth = { authorization: `Basic ${Buffer.from(`dim:${attachment.grant}`).toString("base64")}` };
+  const repository = attachment.repositories.app; assert(repository);
+  const auth = { authorization: `Basic ${Buffer.from(`dim:${repository.grant}`).toString("base64")}` };
   const broker = `http://${attachment.gateway}:${attachment.port}`;
   assert.equal((await fetch(`${broker}/api/host-inputs/private`, { headers: auth })).status, 404);
-  assert.equal((await fetch(`${broker}/v1/projects/foreign/repositories/root.git/info/refs?service=git-upload-pack`, { headers: auth })).status, 404);
+  assert.equal((await fetch(`${broker}/v1/projects/foreign/repositories/app.git/info/refs?service=git-upload-pack`, { headers: auth })).status, 404);
   const git = async (args: string[], success = true) => {
     const result = await runtime.run(record, ["git", ...args]);
     assert.equal(result.exitCode === 0, success, `${args.join(" ")}: ${result.stderr}`);
@@ -94,22 +98,25 @@ try {
   await git(["push", "origin"]);
   await git(["push", "origin", "HEAD:refs/heads/main"], false);
   await git(["push", "origin", `HEAD:refs/heads/proposals/${Buffer.alloc(32, 99).toString("base64url")}/main`], false);
-  const protectedHead = execFileSync("/usr/bin/git", ["--git-dir", path.join(root, "native-service/example/root.git"), "rev-parse", "refs/heads/main"], { encoding: "utf8" }).trim();
+  const protectedHead = execFileSync("/usr/bin/git", ["--git-dir", path.join(root, "native-service/example/app.git"), "rev-parse", "refs/heads/main"], { encoding: "utf8" }).trim();
   assert.equal(protectedHead, record.source.commit);
   const roleHeaders = (credential: { username: string; password: string }) => ({
     authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`,
     "content-type": "application/json", "x-dim-generation-id": generationId
   });
-  const resolved = await fetch(`${endpoint}/v1/projects/example/repositories/root/reviews/resolve`, {
-    method: "POST", headers: roleHeaders(native.humanReviewers[0]),
-    body: JSON.stringify({ schemaVersion: 1, proposalRef: `refs/heads/proposals/${attachment.nativeWorkspaceId}/main` }) });
+  const reviewer = native.humanReviewers[0], promoter = native.hostPromoters[0]; assert(reviewer && promoter);
+  const resolved = await fetch(`${endpoint}/v1/projects/example/repositories/app/reviews/resolve`, {
+    method: "POST", headers: roleHeaders(reviewer),
+    body: JSON.stringify({ schemaVersion: 1, proposalRef: `refs/heads/proposals/${repository.nativeWorkspaceId}/main` }) });
   assert.equal(resolved.status, 200, await resolved.clone().text());
-  const envelope: any = await resolved.json();
-  const reviewPath = `${endpoint}/v1/projects/example/repositories/root/reviews/${envelope.review.reviewId}`;
-  const approved = await fetch(`${reviewPath}/approvals`, { method: "POST", headers: roleHeaders(native.humanReviewers[0]),
+  const envelope: unknown = await resolved.json(), review = object(object(envelope).review);
+  assert.equal(typeof review.reviewId, "string");
+  assert.deepEqual(object(review.inputs).app, { commit: review.candidateCommit, tree: review.candidateTree });
+  const reviewPath = `${endpoint}/v1/projects/example/repositories/app/reviews/${String(review.reviewId)}`;
+  const approved = await fetch(`${reviewPath}/approvals`, { method: "POST", headers: roleHeaders(reviewer),
     body: JSON.stringify({ requestId: randomUUID() }) });
   assert.equal(approved.status, 201, await approved.clone().text());
-  const promoted = await fetch(`${reviewPath}/promotions`, { method: "POST", headers: roleHeaders(native.hostPromoters[0]),
+  const promoted = await fetch(`${reviewPath}/promotions`, { method: "POST", headers: roleHeaders(promoter),
     body: JSON.stringify({ schemaVersion: 1 }) });
   assert.equal(promoted.status, 201, await promoted.clone().text());
   // Promotion changes the protected head without resetting an existing workspace checkout or its Git capability.
@@ -147,12 +154,12 @@ try {
   console.log("single Sysbox workspace, core record, scoped broker, real proposal push and protected/foreign denials: passed");
   const networkBefore = (await runner.run("docker", ["network", "inspect", resources.network, "--format", "{{.Id}}"])).stdout.trim();
   await base.stop(name);
-  assert.equal((await fetch(`${broker}/v1/projects/example/repositories/root.git/info/refs?service=git-upload-pack`, { headers: auth })).status, 409);
+  assert.equal((await fetch(`${broker}/v1/projects/example/repositories/app.git/info/refs?service=git-upload-pack`, { headers: auth })).status, 409);
   await base.start(name); await ensureManagedWorkspace(await store.read(name), { runner, store });
   await base.recreate(name); await ensureManagedWorkspace(await store.read(name), { runner, store });
   assert.equal((await runner.run("docker", ["network", "inspect", resources.network, "--format", "{{.Id}}"])).stdout.trim(), networkBefore);
   await git(["fetch", "origin"]);
-  await base.discard(name); record = undefined;
+  await base.discard(name);
   const remainsAuthorized = await fetch(`${broker}/health`, { headers: auth, signal: AbortSignal.timeout(500) })
     .then((response) => response.status === 200, () => false);
   assert.equal(remainsAuthorized, false);
@@ -169,4 +176,9 @@ try {
   // Project readiness roots intentionally become readonly; restore only this disposable fixture for cleanup.
   execFileSync("/usr/bin/chmod", ["-R", "u+rwX", root]);
   await rm(root, { recursive: true, force: true });
+}
+
+function object(value: unknown): Record<string, unknown> {
+  assert(value !== null && typeof value === "object" && !Array.isArray(value));
+  return value as Record<string, unknown>;
 }

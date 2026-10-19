@@ -14,6 +14,7 @@ type UploadInput = {
   readonly connection: NativeGitRootImporterConnection;
   readonly authorization: string;
   readonly projectId: string;
+  readonly repositoryId: string;
   readonly prelude: object;
   readonly bundlePath: string;
   readonly signal: AbortSignal;
@@ -45,7 +46,7 @@ export async function uploadNativeGitRootBundle(input: UploadInput): Promise<{
       const finish = () => {
         if (uploaded && reply !== undefined) resolve(reply);
       };
-      const request = httpRequest(new URL(`/v1/projects/${input.projectId}/root-import`, input.connection.endpoint), {
+      const request = httpRequest(new URL(`/v1/projects/${input.projectId}/repositories/${input.repositoryId}/import`, input.connection.endpoint), {
         method: "POST", signal,
         headers: { authorization: input.authorization, accept: "application/json",
           "content-type": "application/octet-stream", "content-length": String(size + prelude.length) }

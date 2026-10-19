@@ -4,7 +4,7 @@ import { open, rename } from "node:fs/promises";
 
 export type NativeGitBundleMarker = {
   readonly schemaVersion: 1;
-  readonly stateFormat: 8;
+  readonly stateFormat: 9;
   readonly database: string;
   readonly schemaManifestSha256: string;
 };

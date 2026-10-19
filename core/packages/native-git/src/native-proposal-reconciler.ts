@@ -20,12 +20,13 @@ export type NativeProposalRefSnapshot = ReadonlyMap<string, string>;
 export async function readNativeProposalRefs(
   runtime: Omit<AuthoritativeNativeCandidateRuntime, "workflowCompiler">,
   projectId: string,
+  repositoryId: string,
   workspaceId?: string
 ): Promise<NativeProposalRefSnapshot> {
   const registration = readNativeProjectRegistrations(runtime.state)
-    .find((candidate) => candidate.projectId === projectId);
+    .find((candidate) => candidate.projectId === projectId && candidate.repositoryId === repositoryId);
   if (registration === undefined) throw new NativeProposalReconcilerError("native proposal Project is not registered");
-  const repository = join(runtime.state.database, "..", projectId, `${registration.rootRepositoryId}.git`);
+  const repository = join(runtime.state.database, "..", projectId, `${registration.repositoryId}.git`);
   const prefix = workspaceId === undefined
     ? "refs/heads/proposals/"
     : `refs/heads/proposals/${workspaceId}/`;
@@ -66,13 +67,14 @@ export function changedNativeProposalRefs(
 export async function reconcileNativeProposalRefs(
   runtime: AuthoritativeNativeCandidateRuntime,
   projectId: string,
+  repositoryId: string,
   proposalRefs: readonly string[],
   hooks: AuthoritativeNativeReviewHooks = {}
 ): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
   const envelopes: AuthoritativeNativeReviewEnvelope[] = [];
   for (const proposalRef of proposalRefs) {
     envelopes.push(await createAuthoritativeNativeReview(runtime, {
-      projectId, repositoryId: "root", proposalRef
+      projectId, repositoryId, proposalRef
     }, hooks));
   }
   return envelopes;
@@ -84,9 +86,10 @@ export async function reconcileRegisteredNativeProposals(
 ): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
   const envelopes: AuthoritativeNativeReviewEnvelope[] = [];
   for (const registration of readNativeProjectRegistrations(runtime.state)) {
-    const refs = await readNativeProposalRefs(runtime, registration.projectId);
+    if (registration.phase !== "repository-prepared") continue;
+    const refs = await readNativeProposalRefs(runtime, registration.projectId, registration.repositoryId);
     envelopes.push(...await reconcileNativeProposalRefs(
-      runtime, registration.projectId, [...refs.keys()].sort(), hooks
+      runtime, registration.projectId, registration.repositoryId, [...refs.keys()].sort(), hooks
     ));
   }
   return envelopes;

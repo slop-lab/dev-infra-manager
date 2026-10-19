@@ -16,7 +16,7 @@ it("initializes a private reviewer configuration from a live generated connectio
   const config = { schemaVersion: 1, serviceId: "native-main", baseUrl: native.baseUrl(), generationId, ...humanReviewer };
   const cli = fileURLToPath(new URL("../../../../core/packages/web/src/cli.ts", import.meta.url));
   const run = (path = output) => promisify(execFile)(process.execPath, ["--import", "tsx", cli, "init", connection,
-    "--project", "project-a", "--output", path, "--port", String(port)]);
+    "--project", "project-a", "--repository", "root", "--output", path, "--port", String(port)]);
   const port = await availablePort();
   try {
     await writeFile(connection, JSON.stringify(config), { mode: 0o600 });

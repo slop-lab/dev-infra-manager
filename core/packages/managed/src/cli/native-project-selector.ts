@@ -26,22 +26,7 @@ export type NativeProjectSelection = {
   readonly environment: NodeJS.ProcessEnv;
 };
 
-export type NativeProjectView = {
-  readonly name: string;
-  readonly projectId: string;
-  readonly serviceId: "native-main";
-  readonly ownerHostId: string;
-  readonly phase: "admission-pending" | "ready";
-  readonly rootAlias: string;
-  readonly protectedRef: string;
-  readonly rootCommit: string;
-  readonly rootTree: string;
-  readonly policyRevision: string;
-  readonly requiredReviewRevision: string;
-  readonly requiredJobSetRevision: string;
-  readonly runnable: boolean;
-  readonly readyAt?: string;
-};
+export type NativeProjectView = NativeProjectRecord & { readonly runnable: boolean };
 
 export async function selectNativeProject(
   environment: NodeJS.ProcessEnv = process.env
@@ -82,20 +67,5 @@ export async function nativeProjectImporter(
 }
 
 export function nativePendingProjectView(record: NativeProjectRecord): NativeProjectView {
-  return {
-    name: record.name,
-    projectId: record.projectId,
-    serviceId: record.serviceId,
-    ownerHostId: record.ownerHostId,
-    phase: record.phase,
-    rootAlias: record.rootAlias,
-    protectedRef: record.protectedRef,
-    rootCommit: record.rootCommit,
-    rootTree: record.rootTree,
-    policyRevision: record.reviewPolicy.policyRevision,
-    requiredReviewRevision: record.reviewPolicy.requiredReviewRevision,
-    requiredJobSetRevision: record.reviewPolicy.requiredJobSetRevision,
-    runnable: record.phase === "ready",
-    ...(record.phase === "ready" ? { readyAt: record.readyAt } : {})
-  };
+  return { ...record, runnable: record.phase === "ready" };
 }

@@ -11,7 +11,7 @@ describe("native bundle shutdown", () => {
     await once(server, "listening");
     const events: string[] = [];
     const close = createNativeBundleShutdown({ server,
-      state: { stateFormat: 8, database: "unused", owner: { async release() { events.push("released"); } } },
+      state: { stateFormat: 9, database: "unused", owner: { async release() { events.push("released"); } } },
       eventDispatcher: { start() {}, wake() {}, healthy() { return true; },
         async close() { events.push("dispatcher-closed"); } },
       stopAdmission() { events.push("admission-stopped"); },

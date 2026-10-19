@@ -1,5 +1,7 @@
+import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { executionInputsSchema } from "./candidate-execution-schema.js";
 import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
@@ -29,7 +31,8 @@ const blobIdentityObject = z.object({ objectId, sha256 }).strict();
 const blobIdentity = blobIdentityObject.readonly();
 const plannedJob = authoritativeNativeRequiredJobObject.extend({
   script: blobIdentityObject.extend({ path: z.string().refine(isCandidatePath) }).strict().readonly(),
-  argv: z.array(z.string()).refine(isCandidateArgv).readonly()
+  argv: z.array(z.string()).refine(isCandidateArgv).readonly(),
+  inputs: executionInputsSchema
 }).strict().readonly();
 const planning = z.discriminatedUnion("status", [
   z.object({ status: z.literal("valid"), configBlob: blobIdentityObject.extend({ path: z.string().refine(isCandidatePath) }).strict().readonly().nullable(), jobs: z.array(plannedJob).max(64).readonly() }).strict().readonly(),
@@ -38,7 +41,7 @@ const planning = z.discriminatedUnion("status", [
 
 const identityObjectSchema = z.object({
   schemaVersion: z.literal(2), serviceId: z.literal("native-main"), projectId: identifier,
-  repositoryId: z.literal("root"), protectedRef: z.string(), proposalRef: z.string(),
+  repositoryId: identifier, inputs: executionInputsSchema, protectedRef: z.string(), proposalRef: z.string(),
   expectedProtectedHead: objectId, candidateCommit: objectId, candidateTree: objectId,
   policyRevision: digest, requiredReviewRevision: digest, workspaceId: stableWorkspaceId,
   requiredReviewerIds: z.array(identifier).min(1).readonly(),
@@ -51,10 +54,10 @@ export const authoritativeNativeReviewSchema = identityObjectSchema.extend({
 
 export const authoritativeNativeReviewEventSchema = z.object({
   schemaVersion: z.literal(3), type: z.literal("dim.native.review-job.available"), eventId: digest,
-  envelopeId: digest, projectId: identifier, repositoryId: z.literal("root"), protectedRef: z.string(),
+  envelopeId: digest, projectId: identifier, repositoryId: identifier, protectedRef: z.string(),
   reviewId: digest, expectedProtectedHead: objectId, candidateCommit: objectId, candidateTree: objectId,
   policyRevision: digest, requiredReviewRevision: digest, qualityRevision: digest,
-  executionKind: z.enum(["ordinary-sysbox", "qemu"]), jobName, evidenceClass: z.literal("candidate-controlled")
+  executionKind: z.enum(["ordinary-sysbox", "qemu"]), jobName, evidenceClass: z.literal("candidate-controlled"), inputs: executionInputsSchema
 }).strict().readonly();
 
 export const authoritativeNativeReviewEnvelopeSchema = z.object({
@@ -102,6 +105,17 @@ export function parseAuthoritativeNativeReviewEnvelope(input: unknown): Authorit
   const envelope = authoritativeNativeReviewEnvelopeSchema.parse(input);
   const { reviewId, createdAt: _createdAt, ...identity } = envelope.review;
   assertSortedUnique(identity.requiredReviewerIds);
+  const primary = { commit: identity.candidateCommit, tree: identity.candidateTree };
+  if (!Object.hasOwn(identity.inputs, identity.repositoryId) || !isDeepStrictEqual(identity.inputs[identity.repositoryId], primary)) invalid("primary repository snapshot");
+  const plannedInputs: Record<string, { commit: string; tree: string }> = { [identity.repositoryId]: primary };
+  if (envelope.planning.status === "valid") for (const job of envelope.planning.jobs) {
+    if (!Object.hasOwn(job.inputs, identity.repositoryId) || !isDeepStrictEqual(job.inputs[identity.repositoryId], primary)) invalid("job primary snapshot");
+    for (const [id, snapshot] of Object.entries(job.inputs)) {
+      if (Object.hasOwn(plannedInputs, id) && !isDeepStrictEqual(plannedInputs[id], snapshot)) invalid("conflicting repository snapshots");
+      plannedInputs[id] = snapshot;
+    }
+  }
+  if (!isDeepStrictEqual(plannedInputs, identity.inputs)) invalid("review repository snapshot");
   assertSortedUnique(envelope.requiredJobs.map(jobKey));
   if (!identity.proposalRef.startsWith(`refs/heads/proposals/${identity.workspaceId}/`)
     || authoritativeNativeReviewDigest(identity) !== reviewId) invalid("review identity");
@@ -129,7 +143,7 @@ function eventFor(input: { readonly review: AuthoritativeNativeReview; readonly 
     expectedProtectedHead: input.review.expectedProtectedHead, candidateCommit: input.review.candidateCommit,
     candidateTree: input.review.candidateTree, policyRevision: input.review.policyRevision,
     requiredReviewRevision: input.review.requiredReviewRevision, qualityRevision: input.qualityRevision,
-    executionKind: input.job.executionKind, jobName: input.job.jobName, evidenceClass: input.job.evidenceClass });
+    executionKind: input.job.executionKind, jobName: input.job.jobName, evidenceClass: input.job.evidenceClass, inputs: input.job.inputs });
 }
 
 function jobKey(job: { readonly executionKind: string; readonly jobName: string }): string {

@@ -34,7 +34,7 @@ const registrarB = {
   username: "project-registrar-b",
   password: Buffer.alloc(32, 44).toString("base64url")
 } as const;
-const projectA = { serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root" } as const;
+const projectA = { serviceId: "native-main", projectId: "project-a", repositoryId: "root" } as const;
 const roots: string[] = [];
 const services: NativeGitBundleServer[] = [];
 
@@ -99,8 +99,8 @@ describe("operator Project registrar transport", () => {
     expect(await refValue(repository(first.root), "refs/heads/main")).toBeUndefined();
     expect(await refValue(repository(first.root), "refs/heads/proposals/workspace-a/change-1")).toBeUndefined();
     const database = new DatabaseSync(databasePath, { readOnly: true });
-    expect(database.prepare("SELECT phase, owner_host_id FROM native_project_registration").get())
-      .toEqual({ phase: "root-prepared", owner_host_id: "host-a" });
+    expect(database.prepare("SELECT r.phase, p.owner_host_id FROM native_repository_registration r JOIN native_project_registration p ON p.project_id = r.project_id").get())
+      .toEqual({ phase: "repository-prepared", owner_host_id: "host-a" });
     expect(database.prepare("SELECT name FROM sqlite_schema WHERE name = 'native_project_writer'").get()).toBeUndefined();
     database.close();
     const beforeDenials = await readFile(databasePath);
@@ -208,7 +208,7 @@ function preparationResponse(preparation: typeof projectA) {
     schemaVersion: 1,
     generationId,
     hostId: registrar.hostId,
-    preparation: { ...preparation, state: "root-prepared" }
+    preparation: { ...preparation, state: "repository-prepared" }
   };
 }
 

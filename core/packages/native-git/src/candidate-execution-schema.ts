@@ -2,7 +2,8 @@ import { z } from "zod";
 import { isCandidatePath, isCandidateArgv } from "./workflowCompiler.js";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
-const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
+const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
+const jobName = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
 const revision = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/);
 const generation = z.string().regex(/^[0-9a-f]{64}$/);
 const positiveInteger = z.string().regex(/^[1-9][0-9]*$/);
@@ -24,7 +25,7 @@ export const executionProfileFields = {
 
 const candidateExecutionDescriptorFields = {
   generationId: generation,
-  jobName: identifier,
+  jobName,
   runnerBaseImage: image,
   bounds: executionProfileFields.bounds,
   projectId: identifier,
@@ -43,8 +44,13 @@ const blobIdentityFields = {
   sha256: z.string().regex(/^sha256:[0-9a-f]{64}$/)
 } as const;
 
+export const executionInputsSchema = z.record(identifier, z.object({ commit: objectId, tree: objectId }).strict().readonly())
+  .refine((inputs) => Object.keys(inputs).length > 0 && Object.keys(inputs).length <= 64).readonly();
+export type ExecutionInputs = z.infer<typeof executionInputsSchema>;
+
 export const candidateExecutionDescriptorSchema = z.object({
   ...candidateExecutionDescriptorFields,
+  inputs: executionInputsSchema,
   evidenceClass: z.literal("candidate-controlled"),
   configBlob: z.object({ ...blobIdentityFields, path: scriptPath }).strict().readonly(),
   script: z.object({ ...blobIdentityFields, path: scriptPath }).strict().readonly(),

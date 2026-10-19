@@ -16,11 +16,11 @@ type Input = {
   readonly knownCredentials: readonly Credential[];
   readonly runtime: AuthoritativeNativeCandidateRuntime;
   readonly webhooks?: ExternalWebhookDispatcher;
-  readonly promote: (projectId: string, reviewId: string) => Promise<NativeInstalledPromotionResult>;
+  readonly promote: (projectId: string, repositoryId: string, reviewId: string) => Promise<NativeInstalledPromotionResult>;
 };
 
 const promoteSchema = z.object({ schemaVersion: z.literal(1) }).strict().readonly();
-const promotionRoute = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/root\/reviews\/([0-9a-f]{64})\/promotions$/;
+const promotionRoute = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/reviews\/([0-9a-f]{64})\/promotions$/;
 
 export type NativeHostPromoterService = {
   readonly handle: (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<boolean>;
@@ -78,9 +78,10 @@ export function createNativeHostPromoterService(input: Input): NativeHostPromote
         return true;
       }
       promoteSchema.parse(await readBoundedJson(request));
-      const reviewId = promoteMatch?.[2];
-      if (reviewId === undefined) return true;
-      const promoted = await input.promote(projectId, reviewId);
+      const repositoryId = promoteMatch?.[2];
+      const reviewId = promoteMatch?.[3];
+      if (reviewId === undefined || repositoryId === undefined) return true;
+      const promoted = await input.promote(projectId, repositoryId, reviewId);
       sendJson(response, promoted.outcome === "promoted" ? 201 : 200, promoted);
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof NativeGitBundleHttpError) {

@@ -16,7 +16,7 @@ const requestTimeoutMilliseconds = 5_000;
 export type NativeGitProjectPreparation = {
   readonly serviceId: "native-main";
   readonly projectId: string;
-  readonly rootRepositoryId: "root";
+  readonly repositoryId: string;
 };
 
 export type NativeGitProjectPreparationResult = {
@@ -26,8 +26,8 @@ export type NativeGitProjectPreparationResult = {
   readonly preparation: {
     readonly serviceId: "native-main";
     readonly projectId: string;
-    readonly rootRepositoryId: "root";
-    readonly state: "root-prepared";
+    readonly repositoryId: string;
+    readonly state: "repository-prepared";
   };
 };
 
@@ -156,12 +156,12 @@ async function requestJson(
 }
 
 function parsePreparation(input: NativeGitProjectPreparation): NativeGitProjectPreparation {
-  const root = exactRecord(input, ["serviceId", "projectId", "rootRepositoryId"]);
-  if (root.serviceId !== "native-main" || root.rootRepositoryId !== "root") invalidResponse();
+  const root = exactRecord(input, ["serviceId", "projectId", "repositoryId"]);
+  if (root.serviceId !== "native-main") invalidResponse();
   return {
     serviceId: "native-main",
     projectId: projectIdentifier(root.projectId),
-    rootRepositoryId: "root"
+    repositoryId: projectIdentifier(root.repositoryId)
   };
 }
 
@@ -172,12 +172,12 @@ function parsePreparationResponse(
 ): NativeGitProjectPreparationResult {
   const root = exactRecord(value, ["schemaVersion", "generationId", "hostId", "preparation"]);
   const preparation = exactRecord(root.preparation, [
-    "serviceId", "projectId", "rootRepositoryId", "state"
+    "serviceId", "projectId", "repositoryId", "state"
   ]);
   if (root.schemaVersion !== 1 || root.generationId !== connection.generationId || root.hostId !== connection.hostId
     || preparation.serviceId !== requested.serviceId || preparation.projectId !== requested.projectId
-    || preparation.rootRepositoryId !== requested.rootRepositoryId
-    || preparation.state !== "root-prepared") invalidResponse();
+    || preparation.repositoryId !== requested.repositoryId
+    || preparation.state !== "repository-prepared") invalidResponse();
   return {
     schemaVersion: 1,
     generationId: connection.generationId,
@@ -185,8 +185,8 @@ function parsePreparationResponse(
     preparation: {
       serviceId: "native-main",
       projectId: requested.projectId,
-      rootRepositoryId: "root",
-      state: "root-prepared"
+      repositoryId: requested.repositoryId,
+      state: "repository-prepared"
     }
   };
 }

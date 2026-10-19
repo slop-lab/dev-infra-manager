@@ -5,36 +5,59 @@ on the selected host; see [usage](usage.md).
 
 Install the optional integration with `dim installer install core --with-managed`.
 Use `dim managed control-plane prepare` and `connect` to configure services and
-host connections. Bootstrap a reviewed repository with the generated registrar
-and importer roles, then create its Project:
+host connections. A Project groups independent repositories. Import each with
+its own trusted review policy, then select the configuration and default working
+repositories:
 
 ```bash
-dim managed project bootstrap-native-root PROJECT \
-  --project-id PROJECT_ID \
-  --source-repository /absolute/reviewed/root \
-  --source-ref refs/heads/main \
-  --registrar-connection /absolute/operator/registrar.json \
-  --importer-connection /absolute/operator/importer.json --json
-dim managed project create PROJECT --json
-dim managed project list --json
-dim create dim://PROJECT dev
+dim managed project create codyssey --project-id codyssey
+# Each policy file names its repositoryId, required reviewers/jobs and ciRepositoryIds.
+dim managed project repository import codyssey public \
+  --source /absolute/reviewed/codyssey-public --ref refs/heads/main \
+  --review-policy /absolute/operator/public-policy.json
+dim managed project repository import codyssey private \
+  --source /absolute/reviewed/codyssey-private --ref refs/heads/main \
+  --review-policy /absolute/operator/private-policy.json
+dim managed project configure codyssey \
+  --configuration-repository private --default-repository public
+dim managed project repository list codyssey --json
+dim create dim://codyssey dev --repository public --repository private --workdir public
 dim exec dev -- git status
 ```
+
+Source paths and branch names in this example must identify your reviewed local
+clones. Import never publishes code to an upstream Git host. Saved control-plane
+connections provide registrar/importer roles; explicit connection options can
+select other private connection files.
 
 The host holding the Project registration and private connection creates the
 workspace. With SSH, select that host with `--host`; client-side paths and
 credentials are not implicitly transferred.
 
-Project readiness proves registered repository ownership and protected-source
-access. It requires neither CI capacity nor a proposal approval. Managed source
-acquisition seeds the selected protected commit once, then configures a scoped
-Git broker for reads and workspace proposal pushes. The workspace receives a
-scoped grant, never the host's importer, reviewer or promoter credentials.
+Each selected repository lives at `/workspace/<repositoryId>` with its own Git
+origin and proposal grant. Without `--repository`, only the default working
+repository is selected. `--workdir` names a selected repository. The configuration
+repository is independently attested and checked for required plugins. If it is
+not selected, it stays in temporary host staging and is never seeded or granted
+to the guest. For example, `dim create dim://codyssey public-dev` selects only
+`public` even though the configuration comes from `private`.
 
-Core owns the same single Sysbox container and persistent volumes used by
-ordinary Git workspaces. `dim stop`, `start`, `restart`, `recreate`, `resources`
-and `discard` apply to both. Protected-ref promotion does not reset an existing
-checkout; developers fetch and reconcile their own local changes.
+Repository readiness proves registered ownership and protected-source access.
+It requires neither CI capacity nor a proposal approval. Acquisition seeds each
+selected protected commit once. Workspaces receive scoped grants, never the
+host's importer, reviewer or promoter credentials.
+
+Core owns the same workspace lifecycle and persistent volumes used by ordinary
+Git workspaces. `dim stop`, `start`, `restart`, `recreate`, `resources` and
+`discard` apply to both. Protected-ref promotion does not reset existing
+checkouts; developers fetch and reconcile their own local changes.
+
+Reviews and promotion always select one repository. Imported policy explicitly
+allows CI input repository IDs; jobs request a subset and default to their own
+repository. Review and execution evidence binds exact commit/tree tuples.
+Changing an input head makes the old review stale; explicitly resolving the
+proposal captures a new review requiring fresh approval. Promotion changes one
+protected ref with compare-and-swap. There is no cross-repository atomic update.
 
 Managed Project registration and Git review are separate from disposable
 workspace runtime identity. Old internal storage formats are not adopted or

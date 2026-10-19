@@ -14,6 +14,7 @@ function element(selector, constructor) {
 
 export function reviewerElements() {
   return {
+    repositoryId: element("#repository-id", HTMLSelectElement),
     restore: element("#restore-state", HTMLElement), loginView: element("#login-view", HTMLElement), loginForm: element("#login-form", HTMLFormElement),
     loginButton: element("#login-button", HTMLButtonElement), loginError: element("#login-error", HTMLElement), statusAnnouncer: element("#status-announcer", HTMLElement),
     alertAnnouncer: element("#alert-announcer", HTMLElement), username: element("#username", HTMLInputElement), password: element("#password", HTMLInputElement),

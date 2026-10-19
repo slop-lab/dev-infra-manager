@@ -32,8 +32,6 @@ export interface WorkspaceExecOptions extends RunOptions { workspaceId?: string 
 export interface CreateWorkspaceInput {
   name: string;
   source: WorkspaceSource;
-  repositories?: readonly string[];
-  workingDirectory?: string;
   image?: string;
   runtime?: string;
   resources?: Partial<WorkspaceResources>;

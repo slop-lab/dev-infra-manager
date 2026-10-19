@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import type { CandidateExecutionDescriptor } from "./candidate-execution-schema.js";
 
-const descriptorDomain = "dim-job-execution-v1";
+const descriptorDomain = "dim-job-execution-v2";
 
 export function descriptorDigest(descriptor: CandidateExecutionDescriptor): string {
   const fields = [
     descriptor.projectId,
     descriptor.repositoryId,
+    JSON.stringify(Object.entries(descriptor.inputs).sort(([left], [right]) => left.localeCompare(right)).map(([id, snapshot]) => [id, snapshot.commit, snapshot.tree])),
     descriptor.protectedRef,
     descriptor.expectedProtectedHead,
     descriptor.candidateCommit,

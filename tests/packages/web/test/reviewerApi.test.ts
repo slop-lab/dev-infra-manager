@@ -65,6 +65,7 @@ describe("DIM reviewer web API", () => {
     expect(response.headers.get("set-cookie")).toMatch(/^dim_session=[A-Za-z0-9_-]+; Path=\/; HttpOnly; SameSite=Strict$/);
     expect(await readJsonObject(response)).toEqual({
       authenticated: true,
+      repositoryIds: ["root"],
       roles: ["read", "reviewer"],
       capabilities: { review: true, operations: false, promotion: false },
       projectId: "project-a",

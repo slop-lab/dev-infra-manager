@@ -75,10 +75,10 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     if (await handleNativeProjectReadinessHttp(input.readiness, request, response, url)) return;
     if (await input.humanReviewerService.handle(request, response, url)) return;
     if (await input.hostPromoterService.handle(request, response, url)) return;
-    if (/^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/root-import\/proof$/.test(url.pathname)
-      && (request.method !== "GET" || url.search !== "")) return sendNotFound(response);
+    if (/^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/repositories\/[^/]+\/import\/proof$/.test(url.pathname)
+      && (request.method !== "POST" || url.search !== "")) return sendNotFound(response);
     if (url.search === "" && (url.pathname === "/v1/operator-root-importer-identity"
-      || /^\/v1\/projects\/.+\/root-import(?:\/(?:finalize|proof))?$/.test(url.pathname))) {
+      || /^\/v1\/projects\/.+\/repositories\/[^/]+\/import(?:\/(?:finalize|proof))?$/.test(url.pathname))) {
       if (await input.rootImportService.handle(request, response, url.pathname)) return;
     }
     if (url.search === "" && await handleNativeGitProjectRegistrarHttp({

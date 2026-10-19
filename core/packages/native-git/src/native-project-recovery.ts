@@ -25,14 +25,14 @@ export async function recoverNativeProjectProvisioning(
   input: NativeProjectRecovery
 ): Promise<readonly NativeProjectRegistration[]> {
   for (const registration of input.registrations) {
-    const repository = { projectId: registration.projectId, repositoryId: registration.rootRepositoryId };
-    if (registration.phase === "root-prepared") {
+    const repository = { projectId: registration.projectId, repositoryId: registration.repositoryId };
+    if (registration.phase === "repository-prepared") {
       await assertOwnedNativeProjectStorage(input.config.storageRoot, registration);
       await assertRegisteredRepository(input.config, repository);
     } else if (input.activated) {
       await prepareOwnedNativeProjectStorage(input.config.storageRoot, registration);
       await initializeNativeRepository(input.config, repository);
-      completeNativeProjectPreparation(input.state.database, input.generationId, registration.projectId);
+      completeNativeProjectPreparation(input.state.database, input.generationId, registration.projectId, registration.repositoryId);
     }
   }
   return readNativeProjectRegistrationsFromDatabase(input.state.database);

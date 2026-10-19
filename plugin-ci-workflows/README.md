@@ -9,6 +9,7 @@ jobs:
   integration:
     script: scripts/integration.sh
     runtime: vm
+    repositories: [public, private]
 ```
 
 A job needs a script from the candidate repository. Jobs use Sysbox by default;
@@ -20,3 +21,20 @@ The managed native Git service supplies `dimWorkflowCompiler`. Library callers
 can inject another `WorkflowCompiler`, including a different configuration path
 or language. Git validates immutable candidate objects and job inputs; workers
 verify the resulting blob identities without interpreting workflow syntax.
+
+`repositories` optionally requests a finite subset of the Project's repositories.
+The job's own repository is always included. The imported repository policy's
+`ciRepositoryIds` allowlist authorizes access; candidate YAML cannot widen it.
+An unknown or unauthorized repository makes the candidate plan invalid.
+
+Review creation freezes each selected repository's exact commit and tree. The
+primary repository uses the proposal commit; dependencies use their protected
+heads. These inputs bind the review, job event and execution descriptor. A
+changed dependency produces a new review identity and invalidates old integration
+evidence; retries never silently choose newer dependency commits.
+
+Every checkout, including a single-repository job, lives at
+`/workspace/<repositoryId>`. The job starts in its own repository directory.
+Workers materialize only selected trees, without `.git` or Git credentials.
+Joint-job logs and results remain private to the Project; selecting a public
+repository does not publish execution artifacts.

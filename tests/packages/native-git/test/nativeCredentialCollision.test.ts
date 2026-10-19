@@ -19,7 +19,7 @@ const registrar = {
   hostId: "host-a", username: "project-registrar-a", password: Buffer.alloc(32, 43).toString("base64url")
 } as const;
 const preparation = {
-  serviceId: "native-main", projectId: "project-a", rootRepositoryId: "root"
+  serviceId: "native-main", projectId: "project-a", repositoryId: "root"
 } as const;
 
 describe("native Git prepared credential boundaries", () => {

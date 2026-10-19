@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { timingSafeEqual } from "node:crypto";
 import { createServer, request as httpRequest, type Server } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -13,18 +14,24 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
   const store = new WorkspaceStore(attachment.workspaceStateRoot);
   const server = createServer(async (request, response) => {
     try {
-      const expected = Buffer.from(`Basic ${Buffer.from(`dim:${attachment.grant}`).toString("base64")}`);
-      const actual = Buffer.from(request.headers.authorization ?? "");
+      const url = new URL(request.url ?? "/", "http://dim.invalid");
+      const match = /^\/v1\/projects\/([a-z0-9-]+)\/repositories\/([a-z0-9][a-z0-9-]*)\.git(?:\/|$)/.exec(url.pathname);
+      const health = request.method === "GET" && url.pathname === "/health" && url.search === "";
+      const repositoryId = match?.[2], repository = repositoryId === undefined ? undefined : attachment.repositories[repositoryId];
+      if (!health && (match?.[1] !== attachment.projectId || !repository)) { response.writeHead(404).end(); return; }
+      const grant = health ? Object.values(attachment.repositories)[0]?.grant : repository?.grant;
+      if (!grant) { response.writeHead(404).end(); return; }
+      const expected = Buffer.from(`Basic ${Buffer.from(`dim:${grant}`).toString("base64")}`), actual = Buffer.from(request.headers.authorization ?? "");
       if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) { response.writeHead(401, { "www-authenticate": 'Basic realm="DIM workspace Git"' }).end(); return; }
       let workspace: WorkspaceRecord;
       try { workspace = await store.read(attachment.workspaceName); } catch { response.writeHead(410).end(); return; }
       if (workspace.id !== attachment.workspaceId || workspace.phase === "discarding") { response.writeHead(410).end(); return; }
-      const url = new URL(request.url ?? "/", "http://dim.invalid");
-      if (request.method === "GET" && url.pathname === "/health" && url.search === "") {
+      if (health) {
         response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" }).end(nativeWorkspaceBrokerHealth(attachment)); return;
       }
       if (!workspace.initialized || workspace.phase !== "running") { response.writeHead(409).end(); return; }
-      const base = `/v1/projects/${attachment.projectId}/repositories/root.git`;
+      if (!repository || !repositoryId) { response.writeHead(404).end(); return; }
+      const base = `/v1/projects/${attachment.projectId}/repositories/${repositoryId}.git`;
       const endpoint = url.pathname.slice(base.length);
       const discovery = request.method === "GET" && url.pathname === `${base}/info/refs`
         && new URLSearchParams(url.search).size === 1
@@ -36,24 +43,24 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       // A verified reconnect updates only this private host-side reference. The running
       // broker retains its original UUID, scope and workspace credential.
       const current = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(attachment.managedStateRoot, attachment.workspaceId));
-      if (Object.entries(attachment).some(([key, value]) => key !== "connectionFile" && current[key as keyof NativeWorkspaceAttachment] !== value)) {
+      if (!isDeepStrictEqual({ ...attachment, connectionFile: "" }, { ...current, connectionFile: "" })) {
         response.writeHead(409).end(); return;
       }
       const connection = await loadNativeControlPlaneConnection(current.connectionFile);
       const project = await new NativeProjectPendingStore(attachment.managedStateRoot).read(attachment.projectName, connection.hostId);
       if (project?.phase !== "ready" || project.projectId !== attachment.projectId
-        || project.protectedRef !== attachment.protectedRef) { response.writeHead(409).end(); return; }
-      const proof = await proveNativeProjectReadiness(connection, project, AbortSignal.timeout(5000), {
-        commit: attachment.commit, tree: attachment.tree, allowFastForward: true
+        || project.repositories[repositoryId]?.protectedRef !== repository.protectedRef) { response.writeHead(409).end(); return; }
+      const proof = await proveNativeProjectReadiness(connection, project, repositoryId, AbortSignal.timeout(5000), {
+        commit: repository.commit, tree: repository.tree, allowFastForward: true
       });
-      if (proof.policyRevision !== attachment.policyRevision
-        || proof.requiredReviewRevision !== attachment.requiredReviewRevision || proof.requiredJobSetRevision !== attachment.requiredJobSetRevision) {
+      if (proof.policyRevision !== repository.policyRevision
+        || proof.requiredReviewRevision !== repository.requiredReviewRevision || proof.requiredJobSetRevision !== repository.requiredJobSetRevision) {
         response.writeHead(409).end(); return;
       }
       const lease = await createNativeGitWorkspaceWriteIssuerClient({ schemaVersion: 1, endpoint: connection.nativeGit.endpoint,
         serviceId: "native-main", role: "operator-workspace-write-issuer", hostId: connection.hostId,
         generationId: proof.generationId, credential: connection.nativeGit.workspaceWriteIssuer
-      }).issueWorkspaceWriteLease({ projectId: attachment.projectId, repositoryId: "root", workspaceId: attachment.nativeWorkspaceId }, AbortSignal.timeout(5000));
+      }).issueWorkspaceWriteLease({ projectId: attachment.projectId, repositoryId, workspaceId: repository.nativeWorkspaceId }, AbortSignal.timeout(5000));
       const target = new URL(`${url.pathname}${url.search}`, connection.nativeGit.endpoint);
       const upstream = (target.protocol === "https:" ? httpsRequest : httpRequest)(target, {
         method: request.method, signal: AbortSignal.timeout(30_000), headers: {

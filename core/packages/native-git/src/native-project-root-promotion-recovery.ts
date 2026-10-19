@@ -16,12 +16,12 @@ export async function recoverNativeProjectRootPromotions(input: {
   readonly stateDirectory: string;
 }): Promise<void> {
   for (const intent of readNativeProjectRootPromotionIntents(input.state.database)) {
-    const repository = join(input.stateDirectory, intent.projectId, "root.git");
+    const repository = join(input.stateDirectory, intent.projectId, `${intent.repositoryId}.git`);
     const current = (await execute(input.gitExecutable,
       ["--git-dir", repository, "rev-parse", intent.protectedRef], { env: gitEnvironment() })).stdout.trim();
     if (current === intent.expectedCommit) {
       const updated = await atomicPromote({ gitExecutable: input.gitExecutable, storageRoot: input.stateDirectory },
-        { projectId: intent.projectId, repositoryId: "root", protectedRef: intent.protectedRef,
+        { projectId: intent.projectId, repositoryId: intent.repositoryId, protectedRef: intent.protectedRef,
           proposalRef: intent.proposalRef }, intent.expectedCommit, intent.candidateCommit);
       if (!updated) throw new NativeProjectRootPromotionRecoveryError("promotion recovery compare-and-swap failed");
     } else if (current !== intent.candidateCommit) {

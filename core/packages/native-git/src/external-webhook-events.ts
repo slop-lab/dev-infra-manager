@@ -11,11 +11,11 @@ export async function readExternalWebhookEvents(state: NativeGitBundleState, sou
 }[]> {
   const events: { projectId: string; event: ExternalWebhookEvent }[] = [];
   for (const registration of readNativeProjectRegistrations(state)) {
-    const { projectId } = registration;
-    const repository = join(dirname(state.database), projectId, `${registration.rootRepositoryId}.git`);
+    const { projectId, repositoryId } = registration;
+    const repository = join(dirname(state.database), projectId, `${registration.repositoryId}.git`);
     for (const { review } of await readAuthoritativeNativeReviewEnvelopes(repository)) {
-      events.push({ projectId, event: event(source, "dev.dim.git.review.created", projectId, review.reviewId, {
-        projectId, reviewId: review.reviewId, repositoryId: "root", proposalRef: review.proposalRef,
+      events.push({ projectId, event: event(source, "dev.dim.git.review.created", projectId, repositoryId, review.reviewId, {
+        projectId, reviewId: review.reviewId, repositoryId, proposalRef: review.proposalRef,
         protectedRef: review.protectedRef, expectedCommit: review.expectedProtectedHead,
         candidateCommit: review.candidateCommit, candidateTree: review.candidateTree,
         policyRevision: review.policyRevision, createdAt: review.createdAt
@@ -23,9 +23,9 @@ export async function readExternalWebhookEvents(state: NativeGitBundleState, sou
     }
   }
   for (const promotion of readNativeProjectRootPromotionFinalized(state.database)) {
-    const { projectId } = promotion;
-    events.push({ projectId, event: event(source, "dev.dim.git.ref.promoted", projectId, promotion.transitionId, {
-      projectId, repositoryId: "root", reviewId: promotion.reviewId, transitionId: promotion.transitionId,
+    const { projectId, repositoryId } = promotion;
+    events.push({ projectId, event: event(source, "dev.dim.git.ref.promoted", projectId, repositoryId, promotion.transitionId, {
+      projectId, repositoryId, reviewId: promotion.reviewId, transitionId: promotion.transitionId,
       sequence: promotion.sequence, proposalRef: promotion.proposalRef, protectedRef: promotion.protectedRef,
       expectedCommit: promotion.expectedCommit, candidateCommit: promotion.candidateCommit,
       candidateTree: promotion.candidateTree, generationId: promotion.decisionGeneration
@@ -33,9 +33,9 @@ export async function readExternalWebhookEvents(state: NativeGitBundleState, sou
   }
   return events;
 }
-function event(source: string, type: ExternalWebhookEvent["type"], projectId: string, identity: string,
+function event(source: string, type: ExternalWebhookEvent["type"], projectId: string, repositoryId: string, identity: string,
   data: ExternalWebhookEvent["data"]): ExternalWebhookEvent {
   return { specversion: "1.0", source, type,
-    id: createHash("sha256").update(JSON.stringify([source, type, projectId, identity])).digest("hex"),
-    subject: `projects/${projectId}/repositories/root`, datacontenttype: "application/json", data };
+    id: createHash("sha256").update(JSON.stringify([source, type, projectId, repositoryId, identity])).digest("hex"),
+    subject: `projects/${projectId}/repositories/${repositoryId}`, datacontenttype: "application/json", data };
 }

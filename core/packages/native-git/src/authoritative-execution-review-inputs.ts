@@ -2,11 +2,11 @@ import { loadAuthoritativeNativeCandidateJobInputs } from "./authoritative-nativ
 import type { NativeCandidateJobInputs } from "./native-candidate-job-inputs.js";
 import { readAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
-import { resolveAuthoritativeNativeRootTarget } from "./authoritative-native-root-target.js";
+import { resolveAuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
 import { CandidateExecutionError } from "./candidate-execution-schema.js";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
 
-type Target = Awaited<ReturnType<typeof resolveAuthoritativeNativeRootTarget>>;
+type Target = Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;
 type Envelope = NonNullable<Awaited<ReturnType<typeof readAuthoritativeNativeReviewEnvelope>>>;
 
 export type AuthoritativeExecutionReviewSnapshot = {
@@ -21,12 +21,12 @@ export type CurrentAuthoritativeExecutionInputs = {
 
 export async function loadAuthoritativeExecutionReview(
   runtime: AuthoritativeNativeCandidateRuntime,
-  selector: { readonly projectId: string; readonly reviewId: string }
+  selector: { readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
 ): Promise<AuthoritativeExecutionReviewSnapshot> {
-  const target = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.projectId });
+  const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.projectId, repositoryId: selector.repositoryId });
   const envelope = await readAuthoritativeNativeReviewEnvelope(target.repository, selector.reviewId);
   if (envelope === undefined || envelope.review.projectId !== selector.projectId
-    || envelope.review.repositoryId !== "root") {
+    || envelope.review.repositoryId !== selector.repositoryId) {
     throw new CandidateExecutionError("authoritative execution review was not found");
   }
   await assertCurrentReview(runtime, target, envelope.review);
@@ -38,12 +38,12 @@ export async function loadCurrentAuthoritativeExecutionInputs(
   snapshot: AuthoritativeExecutionReviewSnapshot
 ): Promise<CurrentAuthoritativeExecutionInputs> {
   const inputs = await loadAuthoritativeNativeCandidateJobInputs(runtime, {
-    projectId: snapshot.envelope.review.projectId,
+    projectId: snapshot.envelope.review.projectId, repositoryId: snapshot.envelope.review.repositoryId,
     candidateCommit: snapshot.envelope.review.candidateCommit,
     candidateTree: snapshot.envelope.review.candidateTree
   });
-  const currentTarget = await resolveAuthoritativeNativeRootTarget(runtime, {
-    projectId: snapshot.envelope.review.projectId
+  const currentTarget = await resolveAuthoritativeNativeRepositoryTarget(runtime, {
+    projectId: snapshot.envelope.review.projectId, repositoryId: snapshot.envelope.review.repositoryId
   });
   const currentEnvelope = await readAuthoritativeNativeReviewEnvelope(
     currentTarget.repository,

@@ -13,7 +13,7 @@ export type NativeProjectReadinessProof = {
   readonly serviceId: "native-main";
   readonly ownerHostId: string;
   readonly projectId: string;
-  readonly repositoryId: "root";
+  readonly repositoryId: string;
   readonly generationId: string;
   readonly protectedRef: string;
   readonly commit: string;
@@ -58,49 +58,50 @@ export async function attestNativeWorkspaceWriteIssuer(
 export async function proveNativeProjectReadiness(
   connection: NativeControlPlaneConnection,
   record: NativeProjectRecord,
+  repositoryId: string,
   signal: AbortSignal,
-  selectedRoot: { readonly commit: string; readonly tree: string; readonly allowFastForward?: true } = {
-    commit: record.rootCommit,
-    tree: record.rootTree
-  },
+  selectedRoot?: { readonly commit: string; readonly tree: string; readonly allowFastForward?: true },
   httpClient: NativeGitAdmissionHttpClient = createNodeNativeGitAdmissionHttpClient()
 ): Promise<NativeProjectReadinessProof> {
+  const repository = record.repositories[repositoryId];
+  if (!repository) invalid();
+  const selected = selectedRoot ?? { commit: repository.commit, tree: repository.tree };
   const generationId = (await attestNativeWorkspaceWriteIssuer(connection, signal, httpClient)).generationId;
   const response = await httpClient.request({
     endpoint: connection.nativeGit.endpoint,
     method: "POST",
-    path: `/v1/projects/${record.projectId}/workspace-readiness`,
+    path: `/v1/projects/${record.projectId}/repositories/${repositoryId}/workspace-readiness`,
     authorization: issuerAuthorization(connection),
     body: JSON.stringify({
       schemaVersion: 1,
       generationId,
-      repositoryId: "root",
-      protectedRef: record.protectedRef,
-      rootCommit: selectedRoot.commit,
-      rootTree: selectedRoot.tree,
-      policyRevision: record.reviewPolicy.policyRevision,
-      requiredReviewRevision: record.reviewPolicy.requiredReviewRevision,
-      requiredJobSetRevision: record.reviewPolicy.requiredJobSetRevision
+      repositoryId,
+      protectedRef: repository.protectedRef,
+      commit: selected.commit,
+      tree: selected.tree,
+      policyRevision: repository.reviewPolicy.policyRevision,
+      requiredReviewRevision: repository.reviewPolicy.requiredReviewRevision,
+      requiredJobSetRevision: repository.reviewPolicy.requiredJobSetRevision
     }),
     signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)])
   });
   const proof = exactRecord(parseResponse(response), responseFields);
   if (proof.schemaVersion !== 1 || proof.serviceId !== connection.nativeGit.serviceId
     || proof.ownerHostId !== connection.hostId || proof.projectId !== record.projectId
-    || proof.repositoryId !== record.rootRepositoryId || proof.generationId !== generationId
-    || proof.protectedRef !== record.protectedRef || !objectId(proof.commit)
-    || !objectId(proof.tree) || proof.policyRevision !== record.reviewPolicy.policyRevision
-    || proof.requiredReviewRevision !== record.reviewPolicy.requiredReviewRevision
-    || proof.requiredJobSetRevision !== record.reviewPolicy.requiredJobSetRevision
-    || (selectedRoot.allowFastForward !== true
-      && (proof.commit !== selectedRoot.commit || proof.tree !== selectedRoot.tree))) invalid();
+    || proof.repositoryId !== repositoryId || proof.generationId !== generationId
+    || proof.protectedRef !== repository.protectedRef || !objectId(proof.commit)
+    || !objectId(proof.tree) || proof.policyRevision !== repository.reviewPolicy.policyRevision
+    || proof.requiredReviewRevision !== repository.reviewPolicy.requiredReviewRevision
+    || proof.requiredJobSetRevision !== repository.reviewPolicy.requiredJobSetRevision
+    || (selected.allowFastForward !== true
+      && (proof.commit !== selected.commit || proof.tree !== selected.tree))) invalid();
   return {
     schemaVersion: 1, serviceId: "native-main", ownerHostId: connection.hostId,
-    projectId: record.projectId, repositoryId: "root", generationId,
-    protectedRef: record.protectedRef, commit: proof.commit, tree: proof.tree,
-    policyRevision: record.reviewPolicy.policyRevision,
-    requiredReviewRevision: record.reviewPolicy.requiredReviewRevision,
-    requiredJobSetRevision: record.reviewPolicy.requiredJobSetRevision
+    projectId: record.projectId, repositoryId, generationId,
+    protectedRef: repository.protectedRef, commit: proof.commit, tree: proof.tree,
+    policyRevision: repository.reviewPolicy.policyRevision,
+    requiredReviewRevision: repository.reviewPolicy.requiredReviewRevision,
+    requiredJobSetRevision: repository.reviewPolicy.requiredJobSetRevision
   };
 }
 

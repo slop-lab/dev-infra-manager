@@ -24,7 +24,8 @@ const services: NativeGitBundleServer[] = [];
 const policy = {
   schemaVersion: 1,
   protectedRef: "refs/heads/main",
-  policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
+  ciRepositoryIds: ["root"],
+  policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
   requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
   requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
   requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
@@ -58,7 +59,7 @@ describe("native Project root bundle receipt", () => {
       schemaVersion: 1,
       serviceId: "native-main",
       projectId: "project-a",
-      rootRepositoryId: "root",
+      repositoryId: "root",
       generationId,
       importNonce: expect.any(String),
       protectedRef: "refs/heads/main",
@@ -76,7 +77,7 @@ describe("native Project root bundle receipt", () => {
         bundle_size: bundle.bytes.length
       });
     database.close();
-    expect(await readFile(join(root, "project-a", ".dim-root-import", `${receipt.importNonce}.bundle`)))
+    expect(await readFile(join(root, "project-a", ".dim-import-root", `${receipt.importNonce}.bundle`)))
       .toEqual(bundle.bytes);
     expect(await refValue(join(root, "project-a", "root.git"), "refs/heads/main")).toBeUndefined();
     expect((await readdir(join(root, "project-a", "root.git", "refs", "heads"))).length).toBe(0);
@@ -135,7 +136,7 @@ describe("native Project root bundle receipt", () => {
     expect(database.prepare("SELECT phase, bundle_sha256, bundle_size FROM native_project_root_import").get())
       .toEqual({ phase: "intent", bundle_sha256: null, bundle_size: null });
     database.close();
-    expect(await readdir(join(root, "project-a", ".dim-root-import"))).toEqual([]);
+    expect(await readdir(join(root, "project-a", ".dim-import-root"))).toEqual([]);
     expect(await refValue(join(root, "project-a", "root.git"), "refs/heads/main")).toBeUndefined();
   });
 
@@ -225,7 +226,7 @@ async function upload(
   credential = { username: "project-root-importer-a", password: bundleSecrets.projectRootImporter }
 ): Promise<Response> {
   const body = Buffer.concat([Buffer.from(`${JSON.stringify(prelude)}\n`), bundle]);
-  return fetch(`${origin}/v1/projects/${projectId}/root-import`, {
+  return fetch(`${origin}/v1/projects/${projectId}/repositories/root/import`, {
     method: "POST",
     headers: {
       authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`,
@@ -253,7 +254,7 @@ async function createBundle(multipleRefs = false): Promise<{ readonly bytes: Buf
 }
 
 function project(projectId: string) {
-  return { serviceId: "native-main", projectId, rootRepositoryId: "root" } as const;
+  return { serviceId: "native-main", projectId, repositoryId: "root" } as const;
 }
 
 function importPrelude(projectId: string, expectedCommit: string) {
@@ -262,7 +263,7 @@ function importPrelude(projectId: string, expectedCommit: string) {
     generationId,
     serviceId: "native-main",
     projectId,
-    rootRepositoryId: "root",
+    repositoryId: "root",
     protectedRef: "refs/heads/main",
     expectedCommit,
     policy

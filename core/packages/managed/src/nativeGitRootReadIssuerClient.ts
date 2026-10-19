@@ -13,7 +13,7 @@ const maximumResponseBytes = 64 * 1024;
 const requestTimeoutMilliseconds = 5_000;
 const maximumLeaseLifetimeMilliseconds = 30_000;
 const leaseFields = [
-  "schemaVersion", "serviceId", "projectId", "rootRepositoryId", "generationId",
+  "schemaVersion", "serviceId", "projectId", "repositoryId", "generationId",
   "username", "password", "expiresAt"
 ] as const;
 
@@ -21,7 +21,7 @@ export type NativeGitRootReadLease = {
   readonly schemaVersion: 1;
   readonly serviceId: "native-main";
   readonly projectId: string;
-  readonly rootRepositoryId: "root";
+  readonly repositoryId: string;
   readonly generationId: string;
   readonly username: string;
   readonly password: string;
@@ -32,7 +32,7 @@ export interface NativeGitRootReadIssuerClient {
   readonly endpoint: string;
   readonly hostId: string;
   readonly generationId: string;
-  issueRootReadLease(projectId: string, signal: AbortSignal): Promise<NativeGitRootReadLease>;
+  issueRepositoryReadLease(projectId: string, repositoryId: string, signal: AbortSignal): Promise<NativeGitRootReadLease>;
 }
 
 export class NativeGitRootReadIssuerClientError extends Error {
@@ -69,14 +69,14 @@ export function createNativeGitRootReadIssuerClient(
     endpoint: connection.endpoint,
     hostId: connection.hostId,
     generationId: connection.generationId,
-    async issueRootReadLease(projectId, signal) {
-      if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(projectId)) invalid();
+    async issueRepositoryReadLease(projectId, repositoryId, signal) {
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(projectId) || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)) invalid();
       let response: NativeGitAdmissionHttpResponse;
       try {
         response = await httpClient.request({
           endpoint: connection.endpoint,
           method: "POST",
-          path: `/v1/projects/${projectId}/root-read-leases`,
+          path: `/v1/projects/${projectId}/repositories/${repositoryId}/read-leases`,
           authorization,
           body: JSON.stringify({ schemaVersion: 1, generationId: connection.generationId }),
           signal: AbortSignal.any([signal, AbortSignal.timeout(requestTimeoutMilliseconds)])
@@ -86,7 +86,7 @@ export function createNativeGitRootReadIssuerClient(
       }
       const receivedAt = Date.now();
       const value = parseResponse(response);
-      return parseLease(value, connection, projectId, receivedAt);
+      return parseLease(value, connection, projectId, repositoryId, receivedAt);
     }
   };
 }
@@ -107,11 +107,12 @@ function parseLease(
   value: unknown,
   connection: NativeGitRootReadIssuerConnection,
   projectId: string,
+  repositoryId: string,
   receivedAt: number
 ): NativeGitRootReadLease {
   const lease = exactRecord(value, leaseFields);
   if (lease.schemaVersion !== 1 || lease.serviceId !== connection.serviceId
-    || lease.projectId !== projectId || lease.rootRepositoryId !== "root"
+    || lease.projectId !== projectId || lease.repositoryId !== repositoryId
     || lease.generationId !== connection.generationId
     || typeof lease.expiresAt !== "number" || !Number.isSafeInteger(lease.expiresAt)
     || lease.expiresAt <= receivedAt
@@ -120,7 +121,7 @@ function parseLease(
     schemaVersion: 1,
     serviceId: "native-main",
     projectId,
-    rootRepositoryId: "root",
+    repositoryId,
     generationId: connection.generationId,
     username: leaseUsername(lease.username),
     password: leasePassword(lease.password),

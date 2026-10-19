@@ -1,3 +1,4 @@
+import { attachmentRecord } from "./nativeProjectFixture.js";
 import type { CommandResult } from "@slop-lab/dim-core";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -44,12 +45,7 @@ describe("optional plugin controller core workspace adapter", () => {
 
   it("reads Project metadata only from a matching native attachment", async () => {
     const f = await fixture();
-    const attachment = { schemaVersion: 1 as const, workspaceId: f.record.id, workspaceName: f.record.name,
-      nativeWorkspaceId: Buffer.alloc(32, 1).toString("base64url"), projectName: "project", projectId: "project-id",
-      protectedRef: "refs/heads/main", commit: "a".repeat(40), tree: "b".repeat(40), policyRevision: "c".repeat(64),
-      requiredReviewRevision: "d".repeat(64), requiredJobSetRevision: "e".repeat(64), connectionFile: join(f.root, "connection.json"),
-      workspaceStateRoot: f.core, managedStateRoot: f.managed, gateway: "172.18.0.1", port: 1234,
-      grant: Buffer.alloc(32, 2).toString("base64url") };
+    const attachment = { ...attachmentRecord(f.managed, f.record.id, f.record.name), workspaceStateRoot: f.core, projectName: "project", projectId: "project-id" };
     await writeNativeWorkspaceAttachment(attachment);
     expect(await f.controller.list()).toEqual([{ id: f.record.id, name: f.record.name, projectName: "project", projectId: "project-id" }]);
     await writeNativeWorkspaceAttachment({ ...attachment, workspaceName: "other" });
