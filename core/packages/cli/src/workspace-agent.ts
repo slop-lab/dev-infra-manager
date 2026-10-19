@@ -1,18 +1,19 @@
 import { spawn } from "node:child_process";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { constants } from "node:fs";
-import { mkdir, open } from "node:fs/promises";
+import { mkdir, open, readFile, stat } from "node:fs/promises";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import {
-  ProcessRunner, UserError, WorkspaceService, WorkspaceStore,
+  ProcessRunner, UserError, WorkspaceService, WorkspaceStore, deployGuestIntegration, workspaceGuestAssets,
   type WorkspaceHostPluginContext, type WorkspaceRecord, type WorkspaceRuntime
 } from "@slop-lab/dim-core/workspace";
 import { atomicWrite } from "@slop-lab/dim-core";
-import { composeWorkspaceRuntime, loadHostPlugins } from "./host-plugins.js";
+import { composeWorkspaceRuntime, loadHostPlugins, hostPluginHome } from "./host-plugins.js";
 import { ensureWorkspaceIntegration } from "./workspace-composition.js";
 
 interface AgentConfiguration {
@@ -21,7 +22,9 @@ interface AgentConfiguration {
   stateRoot: string;
   host: string;
   token: string;
+  generation: string;
 }
+type StoredAgentConfiguration = Omit<AgentConfiguration, "generation"> & { generation?: string };
 interface AgentReady { endpoint: string; workspaceId: string }
 export interface AgentHostContext extends WorkspaceHostPluginContext { readonly runtime: WorkspaceRuntime }
 
@@ -34,18 +37,25 @@ export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: Age
     if (current.id !== record.id || current.phase !== "running") throw new UserError("workspace changed before its scoped service bridge was ready");
     const root = directory(context.store, record.id), file = path.join(root, "config.json");
     await mkdir(root, { recursive: true, mode: 0o700 });
-    let config: AgentConfiguration | undefined;
-    try { config = parseConfiguration(await privateJson(file)); }
+    let stored: StoredAgentConfiguration | undefined;
+    try { stored = parseStoredConfiguration(await privateJson(file)); }
     catch (error) { if (!hasCode(error, "ENOENT")) throw error; }
+    if (stored && (stored.workspaceId !== record.id || stored.workspaceName !== record.name || stored.stateRoot !== context.stateRoot)) throw new UserError("workspace service bridge identity conflicts with its state");
     const host = await context.runtime.hostGateway?.(record);
     if (!host || !privateAddress(host)) throw new UserError("workspace runtime has no private host service gateway");
-    if (!config || config.host !== host) {
-      config = { workspaceId: record.id, workspaceName: record.name, stateRoot: context.stateRoot, host, token: randomBytes(32).toString("base64url") };
-      await atomicWrite(file, config);
-    }
-    if (config.workspaceId !== record.id || config.workspaceName !== record.name || config.stateRoot !== context.stateRoot) throw new UserError("workspace service bridge identity conflicts with its state");
+    const generation = await workspaceAgentGeneration();
+    const changed = !stored || stored.host !== host || stored.generation !== generation;
+    let config: AgentConfiguration = { workspaceId: record.id, workspaceName: record.name,
+      stateRoot: context.stateRoot, host, generation, token: changed || !stored ? randomBytes(32).toString("base64url") : stored.token };
+    if (changed) await atomicWrite(file, config);
     let ready = await agentReady(root, config);
     if (!ready) {
+      // An unreachable process may still be alive. Revoke its token before
+      // publishing another ephemeral listener, even within the same generation.
+      if (!changed) {
+        config = { ...config, token: randomBytes(32).toString("base64url") };
+        await atomicWrite(file, config);
+      }
       const script = process.argv[1];
       if (!script) throw new UserError("cannot locate the host service bridge entrypoint");
       const log = await open(path.join(root, "service.log"), "a", 0o600);
@@ -66,10 +76,13 @@ export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: Age
       if (!ready) throw new UserError(`workspace service bridge did not become ready; see ${root}/service.log`);
     }
     const payload = JSON.stringify({ endpoint: ready.endpoint, token: config.token, workspaceId: record.id });
-    const written = await context.runtime.exec(record, ["node", "--input-type=commonjs", "-e",
-      'const fs=require("node:fs"),p=require("node:path"),{randomUUID}=require("node:crypto");const d=p.join(process.env.HOME,".config/dim");fs.mkdirSync(d,{recursive:true,mode:0o700});let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const f=p.join(d,"workspace.json"),t=f+".tmp-"+randomUUID();let owned=false;try{const fd=fs.openSync(t,"wx",0o600);owned=true;try{fs.writeFileSync(fd,s)}finally{fs.closeSync(fd)}fs.renameSync(t,f)}finally{if(owned)fs.rmSync(t,{force:true})}});'
-    ], { stdin: Readable.from([payload]), signal: context.signal });
-    if (written !== 0) throw new UserError("cannot install the workspace-scoped service connection; workspace data was preserved");
+    await deployGuestIntegration({ service: context.service, workspace: record, signal: context.signal }, {
+      name: "workspace-connection", files: [
+        ...await Promise.all(workspaceGuestAssets().filter(({ name }) => name === "dim-workspace" || name === "dim-nproc")
+          .map(async ({ name, sourcePath }) => ({ path: `.local/bin/${name}`, contents: await readFile(sourcePath), mode: 0o700 as const }))),
+        { path: ".config/dim/workspace.json", contents: payload }
+      ]
+    });
   });
   for (const plugin of await loadHostPlugins()) await plugin.workspaceReady?.(record, context);
 }
@@ -81,8 +94,8 @@ async function agentReady(root: string, config: AgentConfiguration): Promise<Age
     const endpoint = new URL(raw.endpoint);
     if (endpoint.origin !== raw.endpoint || endpoint.protocol !== "http:" || endpoint.hostname !== config.host || !endpoint.port) return;
     const response = await fetch(`${endpoint.origin}/v1/resources`, { redirect: "error", headers: { authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(500) });
-    if (response.status !== 200) return;
     await response.body?.cancel();
+    if (response.status !== 200 || response.headers.get("x-dim-bridge-generation") !== config.generation) return;
     return { endpoint: endpoint.origin, workspaceId: config.workspaceId };
   } catch (error) {
     if (hasCode(error, "ENOENT") || error instanceof TypeError || error instanceof DOMException) return;
@@ -93,6 +106,7 @@ async function agentReady(root: string, config: AgentConfiguration): Promise<Age
 /** Separate entrypoint: only a private, host-owned configuration can start a bridge. */
 export async function runWorkspaceAgent(file: string): Promise<void> {
   const config = parseConfiguration(await privateJson(file));
+  if (config.generation !== await workspaceAgentGeneration()) throw new UserError("workspace bridge generation changed before startup; run the workspace command again");
   const runner = new ProcessRunner();
   const store = new WorkspaceStore(config.stateRoot);
   const composition = composeWorkspaceRuntime({ runner, cleanupRunner: runner, stateRoot: store.root });
@@ -112,7 +126,7 @@ export async function runWorkspaceAgent(file: string): Promise<void> {
   }, close); }, 2_000);
   const configurationWatch = setInterval(() => { void privateJson(file).then((value) => {
     const latest = parseConfiguration(value);
-    if (latest.token !== config.token || latest.host !== config.host) close();
+    if (latest.token !== config.token || latest.host !== config.host || latest.generation !== config.generation) close();
   }, close); }, 2_000);
   try {
     server.listen(0, config.host); await once(server, "listening");
@@ -141,6 +155,7 @@ export function createWorkspaceAgentServer(
   server.requestTimeout = 15_000; server.headersTimeout = 5_000; server.keepAliveTimeout = 1_000;
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (request.headers.origin !== undefined || !authorized(request.headers.authorization, config.token)) { json(response, 403, { error: "workspace connection denied" }); return; }
+    response.setHeader("x-dim-bridge-generation", config.generation);
     const record = await context.store.read(config.workspaceName);
     if (record.id !== config.workspaceId) { json(response, 410, { error: "workspace identity expired" }); return; }
     if (request.method === "GET" && request.url === "/v1/resources") { json(response, 200, record.resources); return; }
@@ -156,20 +171,36 @@ export function createWorkspaceAgentServer(
       }).finally(() => { changing = false; }); });
       return;
     }
-    if (request.method === "POST" && request.url === "/v1/expose") {
-      const input = await readJson(request);
-      if (!isObject(input) || Object.keys(input).sort().join() !== "ingress,name,port"
-        || typeof input.name !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.name)
-        || typeof input.ingress !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.ingress)
-        || !Number.isSafeInteger(input.port) || typeof input.port !== "number" || input.port < 1 || input.port > 65535) throw new UserError("expose requires a service name, ingress and loopback port");
-      const plugin = (await loadHostPlugins()).find((plugin) => plugin.agent?.expose);
-      if (!plugin?.agent?.expose) throw new UserError("install and configure an external URL host plugin before exposing a service");
-      json(response, 200, await plugin.agent.expose({ name: input.name, port: input.port, ingress: input.ingress }, record, context)); return;
+    if (request.method === "GET" && request.url === "/v1/plugins") {
+      if (!record.initialized || record.phase !== "running" || !(await context.runtime.inspect(record))?.running) { json(response, 409, { error: "workspace is not running" }); return; }
+      const plugins = [];
+      for (const plugin of await loadHostPlugins()) {
+        const guest = plugin.guest;
+        if (!guest) continue;
+        const status = await guest.inspect?.(record, context) ?? { state: "ready" as const };
+        if (!isObject(status) || !["ready", "unconfigured"].includes(status.state)
+          || (status.message !== undefined && (typeof status.message !== "string" || status.message.length > 2000))) {
+          throw new UserError(`invalid guest integration status from '${plugin.name}'`);
+        }
+        plugins.push({ name: plugin.name, description: guest.description,
+          commands: (guest.commands ?? []).map(({ name, description }) => ({ name, description })),
+          operations: (guest.operations ?? []).map(({ name, description }) => ({ name, description })),
+          state: status.state, ...(status.message === undefined ? {} : { message: status.message }) });
+      }
+      const latest = await context.store.read(config.workspaceName);
+      if (latest.id !== record.id || !latest.initialized || latest.phase !== "running" || !(await context.runtime.inspect(latest))?.running) { json(response, 410, { error: "workspace identity expired" }); return; }
+      json(response, 200, { plugins }); return;
     }
-    if (request.method === "GET" && request.url === "/v1/urls") {
-      const plugin = (await loadHostPlugins()).find((plugin) => plugin.agent?.urls);
-      if (!plugin?.agent?.urls) throw new UserError("external URL integration is not installed");
-      json(response, 200, await plugin.agent.urls(record, context)); return;
+    const operationPath = /^\/v1\/plugins\/([a-z][a-z0-9-]{0,63})\/([a-z][a-z0-9-]{0,63})$/.exec(request.url ?? "");
+    if (request.method === "POST" && operationPath) {
+      if (!record.initialized || record.phase !== "running" || !(await context.runtime.inspect(record))?.running) { json(response, 409, { error: "workspace is not running" }); return; }
+      const plugin = (await loadHostPlugins()).find(({ name }) => name === operationPath[1]);
+      const operation = plugin?.guest?.operations?.find(({ name }) => name === operationPath[2]);
+      if (!operation) { json(response, 404, { error: "unknown workspace plugin operation" }); return; }
+      const input = await readJson(request);
+      const latest = await context.store.read(config.workspaceName);
+      if (latest.id !== record.id || !latest.initialized || latest.phase !== "running" || !(await context.runtime.inspect(latest))?.running) { json(response, 410, { error: "workspace identity expired" }); return; }
+      json(response, 200, await operation.handle(input, latest, context)); return;
     }
     json(response, 404, { error: "unknown workspace operation" });
   }
@@ -191,14 +222,49 @@ async function privateJson(file: string): Promise<unknown> {
     return JSON.parse(await handle.readFile("utf8"));
   } finally { await handle.close(); }
 }
-function parseConfiguration(value: unknown): AgentConfiguration {
+function parseStoredConfiguration(value: unknown): StoredAgentConfiguration {
   if (!isObject(value) || typeof value.workspaceId !== "string" || !/^[0-9a-f-]{36}$/.test(value.workspaceId)
     || typeof value.workspaceName !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(value.workspaceName)
     || typeof value.stateRoot !== "string" || !path.isAbsolute(value.stateRoot)
     || typeof value.host !== "string" || !privateAddress(value.host)
+    || (value.generation !== undefined && (typeof value.generation !== "string" || !/^[0-9a-f]{64}$/.test(value.generation)))
     || typeof value.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(value.token)) throw new UserError("invalid workspace bridge configuration");
-  return { workspaceId: value.workspaceId, workspaceName: value.workspaceName, stateRoot: value.stateRoot, host: value.host, token: value.token };
+  return { workspaceId: value.workspaceId, workspaceName: value.workspaceName, stateRoot: value.stateRoot, host: value.host, token: value.token, ...(value.generation === undefined ? {} : { generation: value.generation }) };
 }
 function privateAddress(value: string): boolean { return isIP(value) === 4 && (/^10\./.test(value) || /^192\.168\./.test(value) || /^172\.(?:1[6-9]|2[0-9]|3[01])\./.test(value)); }
 function isObject(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
 function hasCode(value: unknown, code: string): boolean { return isObject(value) && value.code === code; }
+
+
+function parseConfiguration(value: unknown): AgentConfiguration {
+  const config = parseStoredConfiguration(value);
+  if (!config.generation) throw new UserError("workspace bridge configuration requires a current generation");
+  return { ...config, generation: config.generation };
+}
+
+/** One shared bridge owns module freshness; plugins need no update callbacks. */
+export async function workspaceAgentGeneration(): Promise<string> {
+  const hash = createHash("sha256").update("dim-workspace-bridge-v2\0");
+  const source = fileURLToPath(import.meta.url);
+  for (const file of [source, path.join(path.dirname(source), `host-plugins${path.extname(source)}`)]) {
+    hash.update(file).update("\0").update(await readFile(file)).update("\0");
+  }
+  const home = hostPluginHome(); hash.update(home).update("\0");
+  try {
+    const metadata = await stat(home, { bigint: true });
+    hash.update(`${metadata.dev}:${metadata.ino}\0`);
+  } catch (error) { if (!hasCode(error, "ENOENT")) throw error; hash.update("absent\0"); }
+  let manifest: string;
+  try { manifest = await readFile(path.join(home, "plugins.json"), "utf8"); }
+  catch (error) { if (!hasCode(error, "ENOENT")) throw error; return hash.update("no-plugins").digest("hex"); }
+  hash.update(manifest).update("\0");
+  const value: unknown = JSON.parse(manifest);
+  if (!isObject(value) || value.schemaVersion !== 1 || !Array.isArray(value.plugins)
+    || !value.plugins.every((name: unknown) => typeof name === "string" && name.length > 0)) throw new UserError("invalid installed DIM plugin manifest");
+  const installed = createRequire(path.join(home, "package.json"));
+  for (const name of value.plugins as string[]) {
+    const file = installed.resolve(name);
+    hash.update(name).update("\0").update(file).update("\0").update(await readFile(file)).update("\0");
+  }
+  return hash.digest("hex");
+}

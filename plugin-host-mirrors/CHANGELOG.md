@@ -13,3 +13,6 @@ matched unpublished source package set.
   HTTP routing. Private workspace UUID-fenced relays survive pause/resume,
   recreation and endpoint changes while rejecting discarded routes and upstream
   package-artifact escapes.
+  Advertise connection setup through in-workspace plugin discovery. An installed
+  but unconfigured client leaves ordinary workspace preparation unchanged;
+  malformed explicit configuration remains an error.

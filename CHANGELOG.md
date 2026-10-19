@@ -22,6 +22,10 @@ is implied by these source changes.
   limits, tool-neutral SSH and scoped in-guest lifecycle/session helpers.
   Concurrent service resume keeps one supervisor and workload across atomic
   owner-record replacement.
+  Installed host plugins prepare their guest clients without repository
+  configuration; agents discover commands and readiness inside the workspace.
+  Share bounded, identity-checked file delivery across integrations, including
+  explicitly selected containers in the workspace's private Docker engine.
 - Install managed Git, human review, shared CI and service plugins only when
   selected. Keep the `@slop-lab/dim-installer` facade, exact component graphs
   and transactional install/activation recovery. Prepare initial CI capacity

@@ -15,14 +15,19 @@ export function parseCacheCatalog(input: unknown): CacheEndpoints {
   return Object.fromEntries(cacheKinds.map((kind) => [kind, cacheEndpoint(endpoints[kind], kind)])) as CacheEndpoints;
 }
 /** Connecting never provisions a server. A server plugin may publish the same URL catalog. */
-export async function readCacheEndpoints(): Promise<CacheEndpoints> {
+export async function findCacheEndpoints(): Promise<CacheEndpoints | undefined> {
   try { return parseCacheCatalog(await privateJson(path.join(mirrorStateRoot(), "config.json"))); }
   catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
   try { return parseCacheCatalog(await privateJson(path.join(hostStateRoot(), "services/package-caches.json"))); }
   catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") throw new Error("cache URLs are not configured; run dim mirrors configure FILE, or install a cache server plugin and publish its endpoints");
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
     throw error;
   }
+}
+export async function readCacheEndpoints(): Promise<CacheEndpoints> {
+  const endpoints = await findCacheEndpoints();
+  if (!endpoints) throw new Error("cache URLs are not configured; run dim mirrors configure FILE, or install a cache server plugin and publish its endpoints");
+  return endpoints;
 }
 export const hostMirrorProvider = {
   async ensure(_runner: StreamingCommandRunner): Promise<MirrorRouting> {

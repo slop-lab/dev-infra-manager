@@ -30,9 +30,18 @@ export interface WorkspaceHostPlugin {
   readonly commands?: readonly { readonly name: string; readonly description: string }[];
   run?(args: string[], context: WorkspaceHostPluginContext): Promise<void>;
   workspaceReady?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void>;
-  /** These requests already carry the caller's immutable workspace identity. */
-  agent?: {
-    expose?(input: { name: string; port: number; ingress: string }, workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<unknown>;
-    urls?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<unknown>;
+  /** Guest clients belong to this plugin; transport supplies the immutable caller. */
+  guest?: {
+    readonly description: string;
+    readonly commands?: readonly { readonly name: string; readonly description: string }[];
+    readonly operations?: readonly {
+      readonly name: string;
+      readonly description: string;
+      handle(input: unknown, workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<unknown>;
+    }[];
+    inspect?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<{
+      readonly state: "ready" | "unconfigured";
+      readonly message?: string;
+    }>;
   };
 }

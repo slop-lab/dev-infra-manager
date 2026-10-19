@@ -47,3 +47,21 @@ it.each([["host-mirrors", "mirrors"], ["cache-server", "cache-server"]])("discov
     name: pluginName, commands: [commandName]
   }]);
 });
+
+it("loads the actual tools, router and external URL guest descriptors together", async () => {
+  const root = await fixture();
+  const selections = [
+    ["agent-tools", "@slop-lab/dim-plugin-agent-tools", "agent-tools"],
+    ["host-llm-router", "@slop-lab/dim-plugin-host-llm-router", "host-llm-router"],
+    ["external-urls", "@slop-lab/dim-plugin-external-urls", "external-urls"]
+  ] as const;
+  for (const [directory, name] of selections) {
+    const installed = path.join(root, "node_modules", name);
+    await mkdir(path.dirname(installed), { recursive: true });
+    await symlink(new URL(`../../../../plugin-${directory}`, import.meta.url).pathname, installed);
+  }
+  await writeFile(path.join(root, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: selections.map(([, name]) => name) }));
+  const loaded = await loadHostPlugins();
+  expect(loaded.map(({ name }) => name)).toEqual(selections.map(([, , name]) => name));
+  expect(loaded.every(({ guest }) => guest && guest.commands?.length && guest.description)).toBe(true);
+});

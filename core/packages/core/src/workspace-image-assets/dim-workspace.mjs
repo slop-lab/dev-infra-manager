@@ -39,32 +39,19 @@ async function main(args) {
     console.log(JSON.stringify(await request("POST", `/v1/${command}`, {})));
     return;
   }
-  if (command === "urls") {
-    if (rest.length && (rest.length !== 1 || rest[0] !== "--json")) throw new Error("usage: dim-workspace urls [--json]");
-    console.log(JSON.stringify(await request("GET", "/v1/urls"))); return;
+  if (command === "plugins") {
+    if (rest.length) throw new Error("usage: dim-workspace plugins");
+    console.log(JSON.stringify(await request("GET", "/v1/plugins"))); return;
   }
-  if (command === "expose") {
-    const flags = options(rest, ["--name", "--port", "--ingress"]);
-    const port = Number(flags["--port"]);
-    if (!Number.isInteger(port) || port < 1 || port > 65535 || !flags["--name"] || !flags["--ingress"]) {
-      throw new Error("usage: dim-workspace expose --name NAME --port PORT --ingress NAME");
-    }
-    console.log(JSON.stringify(await request("POST", "/v1/expose", { name: flags["--name"], port, ingress: flags["--ingress"] })));
-    return;
+  if (command === "plugin") {
+    const [plugin, operation, input = "{}"] = rest;
+    if (rest.length < 2 || rest.length > 3 || !/^[a-z][a-z0-9-]{0,63}$/.test(plugin ?? "")
+      || !/^[a-z][a-z0-9-]{0,63}$/.test(operation ?? "")) throw new Error("usage: dim-workspace plugin NAME OPERATION [JSON]");
+    /** @type {unknown} */
+    const body = JSON.parse(input);
+    console.log(JSON.stringify(await request("POST", `/v1/plugins/${plugin}/${operation}`, body))); return;
   }
-  throw new Error("usage: dim-workspace resources|nproc|restart|recreate|expose|urls|session|service");
-}
-
-/** @param {string[]} args @param {readonly string[]} allowed */
-function options(args, allowed) {
-  /** @type {Record<string, string>} */
-  const result = {};
-  for (let index = 0; index < args.length; index += 2) {
-    const key = args[index], value = args[index + 1];
-    if (key === undefined || !allowed.includes(key) || value === undefined || result[key] !== undefined) throw new Error("invalid or repeated option");
-    result[key] = value;
-  }
-  return result;
+  throw new Error("usage: dim-workspace resources|nproc|restart|recreate|plugins|plugin|session|service");
 }
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
@@ -87,7 +74,7 @@ async function privateJson(file) {
   } finally { await handle.close(); }
 }
 
-/** @param {"GET" | "POST"} method @param {string} pathname @param {Record<string, unknown>} [body] */
+/** @param {"GET" | "POST"} method @param {string} pathname @param {unknown} [body] */
 async function request(method, pathname, body) {
   const config = await privateJson(configuration);
   if (!record(config) || typeof config.endpoint !== "string" || typeof config.token !== "string" || !config.token

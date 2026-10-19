@@ -46,6 +46,15 @@ new configuration at their next launch; an already active session is not killed.
 `DIM_LLM_ROUTER_CONNECTION_FILE` can select another private guest connection.
 The adapter is also exported at `@slop-lab/dim-plugin-host-llm-router/opencode`.
 
+No repository `.dim` declaration is required. After attachment, the installed
+host plugin repairs its small OpenCode helpers whenever the workspace becomes
+ready, retaining the guest connection and its scoped credential. It does not
+issue a new credential or select another route during recovery. Inside the
+workspace, `dim-workspace plugins` advertises the integration and reports
+whether its local connection can reach the gateway. An unattached workspace
+shows setup instructions rather than an active router. Deleting the private
+connection requires an explicit host-side attachment again.
+
 Codex may use an explicitly configured custom Responses provider with this same
 scoped bearer token. No TLS interception or copying of ChatGPT authentication is
 needed. DIM does not rewrite an existing Codex provider configuration.

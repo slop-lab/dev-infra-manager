@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,6 +16,7 @@ import { issuePrincipal, revokePrincipal } from "../../../../plugin-host-llm-rou
 import { loadHostConfig } from "../../../../plugin-host-llm-router/src/config.js";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
 const { runLlmCommand } = await import(new URL("cli.js", process.env.DIM_TEST_ROUTER_DIST ?? new URL("../../../../plugin-host-llm-router/dist/", import.meta.url)).href) as typeof import("../../../../plugin-host-llm-router/src/cli.js");
+const { hostPlugin } = await import(new URL("index.js", process.env.DIM_TEST_ROUTER_DIST ?? new URL("../../../../plugin-host-llm-router/dist/", import.meta.url)).href) as typeof import("../../../../plugin-host-llm-router/src/index.js");
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const close of cleanup.splice(0).reverse()) await close(); });
 async function listen(server: Server) {
@@ -53,12 +54,17 @@ async function fixture(stream = false) {
   await runLlmCommand(["llm", "prepare", directory, "--control-plane", cpOrigin, "--issuer", "host-a", "--issuer-key-file", join(root, "issuer.key"), "--endpoint", "http://127.0.0.1:8319"], context);
   const configPath = join(directory, "gateway.json"), config = await loadHostConfig(configPath);
   const gateway = await createHostGateway(config, store), gatewayOrigin = await listen(gateway.server); cleanup.push(() => gateway.close());
-  const home = join(root, "guest-home"); await mkdir(home);
+  config.publicEndpoint = gatewayOrigin; await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
+  const home = join(root, "guest-home"); await mkdir(home, { mode: 0o700 });
+  const guestEnvironment = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config") };
   vi.spyOn(service, "exec").mockImplementation(async (name, args, options) => {
     expect(name).toBe(workspace.name); expect(options?.workspaceId).toBe(workspace.id);
-    const chunks: Buffer[] = []; if (!options?.stdin) throw new Error("missing attachment input");
-    for await (const chunk of options.stdin) chunks.push(Buffer.from(chunk));
-    execFileSync(process.execPath, args.slice(1), { input: Buffer.concat(chunks), env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config") }, stdio: ["pipe", "pipe", "pipe"] }); return 0;
+    const chunks: Buffer[] = []; if (options?.stdin) for await (const chunk of options.stdin) chunks.push(Buffer.from(chunk));
+    return new Promise<number>((resolve, reject) => {
+      const child = spawn(process.execPath, args.slice(1), { env: guestEnvironment, stdio: ["pipe", "pipe", "pipe"] });
+      if (options?.stdout) child.stdout.pipe(options.stdout, { end: false }); else child.stdout.resume();
+      child.stderr.resume(); child.once("error", reject); child.once("close", (code) => resolve(code ?? 1)); child.stdin.end(Buffer.concat(chunks));
+    });
   });
   await runLlmCommand(["llm", "attach", workspace.name, "--config", configPath, "--project", "application"], context);
   const connectionPath = join(home, ".config/dim/llm-router.json");
@@ -66,7 +72,7 @@ async function fixture(stream = false) {
   if (typeof connection !== "object" || connection === null || !("token" in connection) || typeof connection.token !== "string") throw new Error("missing guest token");
   const token = connection.token;
   const request = () => fetch(gatewayOrigin + "/v1/responses", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ model: "reviewed-model", input: "hello", stream }) });
-  return { root, home, store, workspace, context, config, cpConfig, cp, cpOrigin, gatewayOrigin, connectionPath, connection, token, request,
+  return { root, home, guestEnvironment, store, workspace, context, config, cpConfig, cp, cpOrigin, gatewayOrigin, connectionPath, connection, token, request,
     backendKey, issuerKey, upstreamClosed: () => upstreamClosed, seenAuthorization: () => seenAuthorization };
 }
 it("attaches a local-only guest credential and forwards through independently configured control-plane authority", async () => {
@@ -138,7 +144,13 @@ it("serializes principal rotation with workspace credential delivery", async () 
   let deliver: ((status: number) => void) | undefined, entered: (() => void) | undefined;
   const delivery = new Promise<number>((resolve) => { deliver = resolve; });
   const waiting = new Promise<void>((resolve) => { entered = resolve; });
-  vi.mocked(f.context.service.exec).mockImplementation(async () => { entered?.(); return delivery; });
+  const execute = vi.mocked(f.context.service.exec).getMockImplementation();
+  if (!execute) throw new Error("missing guest executor");
+  let held = false;
+  vi.mocked(f.context.service.exec).mockImplementation(async (...args) => {
+    if (!held) { held = true; entered?.(); await delivery; }
+    return execute(...args);
+  });
   const args = ["llm", "attach", f.workspace.name, "--config", join(f.root, "host/gateway.json"), "--project", "application"];
   const first = runLlmCommand(args, f.context);
   await waiting;
@@ -166,4 +178,45 @@ it("keeps the old binding usable when writing replacement helper assets fails be
   expect(connection).toMatchObject({ token: f.token });
   const response = await f.request(); expect(response.status).toBe(200); await response.text();
   expect(Number(f.cp.ledger.database.prepare("SELECT COUNT(*) AS n FROM principals WHERE route_id='default' AND enabled=1").get()?.n)).toBe(1);
+});
+
+it("repairs attached helper assets automatically without changing credentials and reports actual gateway readiness", async () => {
+  const f = await fixture(), before = await readFile(f.connectionPath, "utf8");
+  const adapter = join(f.home, ".config/opencode/plugins/dim-llm-router.js"), launcher = join(f.home, ".config/dim/opencode-launch.js");
+  await writeFile(adapter, "damaged asset", { mode: 0o600 }); await unlink(launcher);
+  await hostPlugin.workspaceReady!(f.workspace, f.context);
+  expect(await readFile(adapter, "utf8")).not.toBe("damaged asset");
+  expect(await readFile(launcher, "utf8")).toContain("prepareOpenCode");
+  expect(await readFile(f.connectionPath, "utf8")).toBe(before);
+  expect(Number(f.cp.ledger.database.prepare("SELECT COUNT(*) AS n FROM principals").get()?.n)).toBe(1);
+  expect(await hostPlugin.guest!.inspect!(f.workspace, f.context)).toMatchObject({ state: "ready" });
+  await unlink(f.connectionPath); await unlink(adapter);
+  await hostPlugin.workspaceReady!(f.workspace, f.context);
+  await expect(readFile(adapter)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await hostPlugin.guest!.inspect!(f.workspace, f.context)).toMatchObject({ state: "unconfigured" });
+});
+
+it("honors an in-HOME XDG config root and rejects an outside-HOME replacement before committing credentials", async () => {
+  const f = await fixture(), customConfig = join(f.home, "custom/config");
+  f.guestEnvironment.XDG_CONFIG_HOME = customConfig;
+  const attach = ["llm", "attach", f.workspace.name, "--config", join(f.root, "host/gateway.json"), "--project", "application"];
+  await runLlmCommand(attach, f.context);
+  const adapter = join(customConfig, "opencode/plugins/dim-llm-router.js");
+  expect(await readFile(adapter, "utf8")).toContain("DimLlmRouter");
+  const result = execFileSync(process.execPath, ["--input-type=module", "-e", `
+    const {default: factory}=await import(process.env.DIM_TEST_ADAPTER);
+    const hook=await factory(),config={};await hook.config(config);
+    if(config.model!=="dim-responses/reviewed-model")throw Error("custom XDG router not selected");
+    console.log("custom-xdg-router-ready");
+  `], { encoding: "utf8", env: { ...f.guestEnvironment, DIM_TEST_ADAPTER: pathToFileURL(adapter).href } });
+  expect(result.trim()).toBe("custom-xdg-router-ready");
+  expect(await hostPlugin.guest!.inspect!(f.workspace, f.context)).toMatchObject({ state: "ready" });
+  const before = await readFile(f.connectionPath, "utf8"), connection: unknown = JSON.parse(before);
+  if (!connection || typeof connection !== "object" || !("token" in connection) || typeof connection.token !== "string") throw new Error("missing attached token");
+  f.guestEnvironment.XDG_CONFIG_HOME = join(f.root, "outside-home");
+  await expect(runLlmCommand(attach, f.context)).rejects.toThrow(/inside workspace HOME/);
+  expect(await readFile(f.connectionPath, "utf8")).toBe(before);
+  expect((await fetch(f.gatewayOrigin + "/v1/models", { headers: { authorization: `Bearer ${connection.token}` } })).status).toBe(200);
+  expect(await hostPlugin.guest!.inspect!(f.workspace, f.context)).toMatchObject({ state: "unconfigured" });
+  expect(Number(f.cp.ledger.database.prepare("SELECT COUNT(*) AS n FROM principals WHERE enabled=1").get()?.n)).toBe(1);
 });

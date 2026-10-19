@@ -4,6 +4,12 @@ This optional host plugin owns tool installation and launch behavior. Ordinary
 repositories need no `.dim`, OpenCode bootstrap files or DIM-specific scripts.
 The base image contains no coding-agent package or provider credentials.
 
+Installing this plugin on the host automatically prepares its small helpers
+inside ready workspaces, including ordinary repositories without `.dim` files.
+Run `dim-workspace plugins` inside the workspace to discover commands and setup
+status. `dim-tools-setup opencode` or `dim-tools-setup codex` performs the explicit
+pinned tool installation there; helper preparation itself downloads no tools.
+
 ```sh
 dim installer install plugin '@slop-lab/dim-plugin-agent-tools@0.10.0'
 dim tools setup development opencode
@@ -70,8 +76,8 @@ volume; outside a DIM runtime it uses `$HOME/.local/tmp/opencode`.
 Inside the workspace, request its stable, workspace-scoped service name:
 
 ```sh
-dim-workspace expose --name opencode --port 4096 --ingress YOUR_HTTPS_INGRESS
-dim-workspace urls --json
+dim-expose --name opencode --port 4096 --ingress YOUR_HTTPS_INGRESS
+dim-expose list
 ```
 
 A host operator must approve a pending route. Enter that approved HTTPS URL

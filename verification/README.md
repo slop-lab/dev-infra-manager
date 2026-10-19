@@ -120,3 +120,20 @@ Actual VM execution remains a separate hardware gate:
 facade into temporary prefixes. These are distinct checks: an image probe does
 not prove a deployment transaction. Installer package tests separately cover
 rollback, ownership and fail-before-mutation behavior.
+
+Guest integration delivery has an additional disposable Sysbox check:
+
+```bash
+DIM_GUEST_INTEGRATION_IMAGE=sha256:REVIEWED_LOCAL_IMAGE_ID \
+  pnpm --filter @slop-lab/dim-tests exec vitest run --config vitest.config.ts \
+  packages/core/test/guestIntegrationRuntime.test.ts --maxWorkers=1
+```
+
+It creates an ordinary repository without `.dim`, checks unchanged-file reuse
+and repair after recreation, then delivers to one explicitly selected nested
+container while leaving another untouched. Its tiny nested Node image is made
+from the reviewed workspace's existing binaries without a registry download.
+The owned workspace, volumes, nested containers and image are discarded. This
+tests the shared delivery path; plugin discovery and scoped requests have
+separate real HTTP/client tests, and each integration retains its own behavior
+checks. It does not install plugins into existing operator workspaces.

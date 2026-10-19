@@ -21,7 +21,7 @@ it("guest commands use only scoped routes, preserve resource allocation and reje
     requests.push({ method: request.method ?? "", url: request.url ?? "", body });
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify(request.url === "/v1/resources" ? { cpuCount, memory: "4g", pidsLimit: "512" }
-      : request.url === "/v1/urls" ? { urls: [] } : { accepted: true }));
+      : request.url === "/v1/plugins" ? { plugins: [] } : { accepted: true }));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
@@ -35,16 +35,18 @@ it("guest commands use only scoped routes, preserve resource allocation and reje
     cpuCount = "unlimited";
     expect(Number((await run("nproc")).stdout)).toBeGreaterThanOrEqual(1);
     await run("restart"); await run("recreate");
-    await run("expose", "--name", "opencode", "--port", "4096", "--ingress", "https");
-    await run("urls", "--json");
+    await run("plugin", "example", "submit", JSON.stringify({ arbitrary: ["plugin-owned", 123] }));
+    await run("plugins");
     expect(requests.slice(-4)).toEqual([
       { method: "POST", url: "/v1/restart", body: {} }, { method: "POST", url: "/v1/recreate", body: {} },
-      { method: "POST", url: "/v1/expose", body: { name: "opencode", port: 4096, ingress: "https" } },
-      { method: "GET", url: "/v1/urls", body: null }
+      { method: "POST", url: "/v1/plugins/example/submit", body: { arbitrary: ["plugin-owned", 123] } },
+      { method: "GET", url: "/v1/plugins", body: null }
     ]);
     const count = requests.length;
     await expect(run("restart", "--workspace", "other")).rejects.toThrow();
-    await expect(run("expose", "--name", "x", "--port", "4096", "--ingress", "https", "--host", "foreign")).rejects.toThrow();
+    await expect(run("expose", "--name", "x", "--port", "4096", "--ingress", "https")).rejects.toThrow();
+    await expect(run("plugin", "../foreign", "run")).rejects.toThrow();
+    await expect(run("plugin", "example", "submit", "not-json")).rejects.toThrow();
     await chmod(configuration, 0o644);
     await expect(run("resources")).rejects.toThrow(/private user-owned/);
     expect(requests).toHaveLength(count);

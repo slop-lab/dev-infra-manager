@@ -59,6 +59,24 @@ function parseHostPlugin(value: unknown): WorkspaceHostPlugin {
   if (value.run !== undefined && typeof value.run !== "function") throw new UserError(`invalid command handler in '${value.name}'`);
   if (value.workspaceReady !== undefined && typeof value.workspaceReady !== "function") throw new UserError(`invalid workspace integration in '${value.name}'`);
   if (Array.isArray(value.commands) && value.commands.length && value.run === undefined) throw new UserError(`missing command handler in '${value.name}'`);
+  if (value.guest !== undefined) {
+    const guest = value.guest;
+    if (!isObject(guest) || !description(guest.description)
+      || (guest.inspect !== undefined && typeof guest.inspect !== "function")) throw new UserError(`invalid guest integration in '${value.name}'`);
+    for (const key of ["commands", "operations"] as const) {
+      const entries = guest[key];
+      if (entries === undefined) continue;
+      const names = new Set<string>();
+      if (!Array.isArray(entries) || entries.length > 64) throw new UserError(`invalid guest ${key} in '${value.name}'`);
+      for (const entry of entries as unknown[]) {
+        if (!isObject(entry) || !identifier(entry.name) || !description(entry.description)
+          || names.has(entry.name) || (key === "operations" && typeof entry.handle !== "function")) {
+          throw new UserError(`invalid or duplicate guest ${key} in '${value.name}'`);
+        }
+        names.add(entry.name);
+      }
+    }
+  }
   return value as unknown as WorkspaceHostPlugin;
 }
 
@@ -110,3 +128,5 @@ export function composeWorkspaceRuntime(context: WorkspaceRuntimeFactoryContext)
 function identifier(value: unknown): value is string { return typeof value === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(value); }
 function isObject(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
 function hasCode(error: unknown, code: string): boolean { return isObject(error) && error.code === code; }
+
+function description(value: unknown): value is string { return typeof value === "string" && value.length > 0 && value.length <= 2000; }

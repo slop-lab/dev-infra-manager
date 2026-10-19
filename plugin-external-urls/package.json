@@ -35,9 +35,11 @@
     "@slop-lab/dim-contracts-external-url": "0.10.0"
   },
   "peerDependencies": {
+    "@slop-lab/dim-core": "0.10.0",
     "@slop-lab/dim-managed": "0.10.0"
   },
   "devDependencies": {
+    "@slop-lab/dim-core": "workspace:0.10.0",
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
     "typescript": "5.8.3",

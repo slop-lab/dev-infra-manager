@@ -1,8 +1,68 @@
 # Host and control-plane plugins
 
-Plugins declare their execution location through their package name and export.
+Plugin exports identify their execution location. Packages that provide both
+sides of a shared service also name the host or control-plane role explicitly.
 Workspace commands use host plugins; shared services use control-plane plugins.
 Installing one does not enable the other location's implementation.
+
+## Host plugins prepare their clients
+
+Install a feature on its owning host once. The host plugin owns any helpers,
+configuration and scoped connections needed inside its workspaces. A repository
+does not need a `.dim` directory or plugin declaration for this preparation.
+Repository plugin requirements are additional dependency checks, not the source
+of the host's enabled integrations.
+
+Preparation runs when a workspace becomes ready, including start, recreation
+and the host's execution path. Plugins repair their guest assets without
+reinstalling unchanged files. Large tool downloads, provider authentication and
+service/route selection remain explicit plugin operations. Installing an agent
+tools plugin does not implicitly install every supported coding agent; installing
+a router adapter does not choose an upstream account or grant a Project scope.
+
+Inside a workspace, discover the host's enabled integrations with:
+
+```bash
+dim-workspace plugins
+```
+
+The response describes plugin commands, scoped operations and readiness. It
+contains no host configuration or credentials. Plugins own their user-facing
+clients, such as `dim-expose`; the generic client also supports namespaced
+operations through `dim-workspace plugin NAME OPERATION [JSON]`. An operation
+receives the authenticated immutable workspace identity from the host, rather
+than accepting another workspace selector from its caller.
+
+This connection is a shared proxy for all enabled guest integrations. Host
+composition owns its process, current protocol and installed-plugin generation;
+plugins do not each implement update detection or install another proxy. The
+next host readiness operation refreshes the shared guest client and replaces a
+stale connection when installed code or plugin selection changes. Old workspace
+images therefore do not need to supply the current plugin protocol themselves.
+
+The shared guest delivery primitive accepts reviewed plugin files relative to
+the guest user's home and sends their contents over stdin. It checks file and
+directory ownership, rejects unsafe links, preserves unchanged files and uses
+atomic replacement. Plugin code retains responsibility for installation
+semantics, resource health and the ordering of credential activation. The
+primitive does not interpret repository installation scripts or deployment
+policies.
+
+The default Sysbox workspace is also the coding agent's container. A plugin may
+explicitly target a container inside that workspace's private Docker engine;
+the delivery path resolves its container ID before execution. It never scans
+and modifies every container, connects to the host Docker socket from a guest,
+or assumes a separate coding-agent container exists. Arbitrary application
+images need the prerequisites of the selected client; unsupported targets fail
+with an installation error. Separate guest packages are useful only when their
+dependencies or release lifecycle justify them.
+
+Targeted file delivery does not grant a nested container the workspace's
+lifecycle connection. A plugin that connects a nested client owns that client's
+restricted credentials and connection semantics; it must not copy host operator
+credentials or the workspace lifecycle token as a shortcut.
+
+## Shared service packages
 
 | Package | Location and responsibility |
 | --- | --- |

@@ -11,3 +11,6 @@ Target: `0.10.0` internal development candidate.
   grants and provider credentials stay on the trusted host. TCP flows preserve
   independent half-close directions, including delayed binary responses. Saved
   routes recover when a stopped workspace returns after controller startup.
+  Prepare the plugin-owned `dim-expose` client automatically from the host,
+  without repository configuration; advertise commands and ingress readiness
+  through generic scoped plugin discovery.

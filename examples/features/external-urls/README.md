@@ -46,8 +46,9 @@ Inside the workspace, an agent can make the same limited request without a
 host CLI or operator token:
 
 ```sh
-dim-workspace expose --name app --port 3000 --ingress local-http
-dim-workspace urls --json
+dim-workspace plugins
+dim-expose --name app --port 3000 --ingress local-http
+dim-expose list
 ```
 
 The request script uses the host CLI's scoped workspace grant to request

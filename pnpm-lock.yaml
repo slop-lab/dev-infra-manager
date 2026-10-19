@@ -228,6 +228,9 @@ importers:
         specifier: 0.10.0
         version: link:../core/packages/contracts/external-url
     devDependencies:
+      '@slop-lab/dim-core':
+        specifier: workspace:0.10.0
+        version: link:../core/packages/core
       '@slop-lab/dim-managed':
         specifier: workspace:0.10.0
         version: link:../core/packages/managed

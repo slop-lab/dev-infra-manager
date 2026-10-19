@@ -147,6 +147,12 @@ without `dim-core`, the workspace CLI or managed host integration. See
 
 ## Optional workspace plugins
 
+Host plugins prepare their small workspace clients without repository `.dim`
+configuration. Inside the workspace, `dim-workspace plugins` lists available
+commands and setup status. Authentication, shared-service configuration and
+large tool installations remain explicit operations. See
+[guest preparation and plugin locations](specification/docs/plugin-scopes.md).
+
 Install only the integrations needed on the selected host. `dim plugins` lists
 the host's installed commands and runtime providers; remote clients need only
 the base CLI.

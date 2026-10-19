@@ -16,7 +16,7 @@ output.version = publishPackageVersion(source.version);
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
 output.dependencies = { ...source.dependencies, "@slop-lab/dim-contracts-external-url": output.version };
-output.peerDependencies = { ...source.peerDependencies, "@slop-lab/dim-managed": output.version };
+output.peerDependencies = { ...source.peerDependencies, "@slop-lab/dim-managed": output.version, "@slop-lab/dim-core": output.version };
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
@@ -24,3 +24,5 @@ await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README
 await copyFile(new URL("../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
 
 await cp(new URL("../skills/", import.meta.url), new URL("../dist/skills/", import.meta.url), { recursive: true });
+
+await cp(new URL("../src/guest/", import.meta.url), new URL("../dist/guest/", import.meta.url), { recursive: true });

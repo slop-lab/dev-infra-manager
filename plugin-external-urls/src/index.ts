@@ -16,7 +16,6 @@ import {
   type ResolvedWorkspaceTarget,
   type WorkspaceTarget
 } from "@slop-lab/dim-managed";
-import type { WorkspaceHostPlugin } from "@slop-lab/dim-managed";
 import {
   readExternalUrlConfig,
   writeExternalUrlConfig,
@@ -1148,23 +1147,4 @@ const plugin: DimPlugin = {
 
 export default plugin;
 
-/** The agent can request a named loopback service, but cannot choose an admin
- * socket, another workspace, nested container, arbitrary hostname or approval. */
-export const hostPlugin: WorkspaceHostPlugin = {
-  name: "external-urls",
-  agent: {
-    async expose(input, workspace, context) {
-      if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(input.name)) throw new UserError("service name must be a lowercase DNS label of at most 32 characters");
-      const normalized = workspace.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "") || "workspace";
-      const identity = createHash("sha256").update(workspace.name).digest("hex").slice(0, 16);
-      const prefix = normalized.slice(0, Math.max(1, 63 - input.name.length - 19));
-      const subdomain = `${prefix}-${identity}--${input.name}`;
-      return workspacePluginRequest(workspace, "/api/urls", {
-        method: "POST", body: { ingress: input.ingress, subdomain, target: { containers: [], port: input.port, protocol: "http" } }
-      }, context.signal);
-    },
-    urls(workspace, context) {
-      return workspacePluginRequest(workspace, "/api/urls", { method: "GET" }, context.signal);
-    }
-  }
-};
+export { hostPlugin } from "./guest.js";

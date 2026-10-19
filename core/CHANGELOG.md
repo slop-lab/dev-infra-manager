@@ -21,6 +21,10 @@ Target: `0.10.0` internal development candidate; this is not a published release
   Registered guest services keep a kernel lock for their supervisor lifetime,
   preventing duplicate workloads during concurrent resume and atomic owner-record
   replacement.
+  Host plugins prepare guest clients independently of repository configuration;
+  scoped discovery lists their commands and readiness. Share safe, unchanged-aware
+  guest file delivery and explicit nested-container targeting, while individual
+  plugins own installation, authentication and service semantics.
 - Extract managed Git, review, CI and controller integrations into optional
   packages. Base installation and startup do not import or activate them.
   Managed Git supplies proposal-scoped source access to the same workspace

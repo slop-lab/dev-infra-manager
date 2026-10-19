@@ -18,12 +18,35 @@ For unlimited CPU, `dim-nproc` uses the guest's process affinity and any local
 cgroup v2 quota. A VM may have fewer visible vCPUs than its host; nothing in
 this interface exposes host administration.
 
-Optional plugins can receive an explicitly scoped request, such as a URL:
+Discover the host's enabled integrations and their client commands without
+adding configuration to your repository:
 
 ```sh
-dim-workspace expose --name app --port 3000 --ingress YOUR_INGRESS
-dim-workspace urls --json
+dim-workspace plugins
 ```
+
+The inventory includes readiness and setup instructions. It does not include
+host settings or credentials. Host plugins prepare their small guest clients
+when the workspace becomes ready; large tool installs and service enrollment
+remain explicit operations. The default runtime runs your coding agent in this
+same workspace container.
+
+Optional plugins own their specific clients. For example, the External URLs
+plugin prepares `dim-expose`:
+
+```sh
+dim-expose --name app --port 3000 --ingress YOUR_INGRESS
+dim-expose list
+```
+
+The generic interface is `dim-workspace plugin NAME OPERATION [JSON]`.
+Only operations listed by an installed plugin are callable. Core does not
+interpret exposure, model routing or tool-installation options.
+
+The host refreshes the shared client and connection when preparing the workspace.
+Plugin updates use that same proxy; individual integrations do not install
+their own update detector. The current client in `~/.local/bin` takes precedence
+over an older copy baked into the image.
 
 That request cannot choose another workspace, Docker socket or host upstream.
 An ingress that requires approval remains unavailable until a host operator

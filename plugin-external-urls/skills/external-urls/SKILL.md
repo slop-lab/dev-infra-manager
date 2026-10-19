@@ -6,14 +6,18 @@ description: Expose a workspace HTTP service through an approved DIM ingress and
 Use this skill when an agent running inside a DIM workspace needs a browser
 URL for its own development service.
 
+Run `dim-workspace plugins` to discover the installed integration and its
+readiness. The host prepares `dim-expose`; the source repository needs no DIM
+configuration. Ingress names and approval remain host choices.
+
 1. Start the service bound to `127.0.0.1` inside the workspace. Keep its process
    alive. Choose the actual service port and a stable service name, such as
    `app` or `opencode`. Do not put credentials into the service name or URL.
 2. Request a route using the configured ingress name:
 
    ```sh
-   dim-workspace expose --name app --port 3000 --ingress YOUR_INGRESS
-   dim-workspace urls --json
+   dim-expose --name app --port 3000 --ingress YOUR_INGRESS
+   dim-expose list
    ```
 
 3. Read the returned route ID, URL and approval status. A pending route is

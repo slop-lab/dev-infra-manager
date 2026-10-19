@@ -2,7 +2,7 @@ import { atomicWrite } from "@slop-lab/dim-core";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceHostPlugin } from "@slop-lab/dim-core/workspace";
-import { hostMirrorProvider, readCacheEndpoints, mirrorStateRoot, parseCacheCatalog } from "./provider.js";
+import { hostMirrorProvider, findCacheEndpoints, mirrorStateRoot, parseCacheCatalog } from "./provider.js";
 import { attachWorkspaceMirrors } from "./attachment.js";
 export { hostMirrorProvider } from "./provider.js";
 
@@ -29,9 +29,24 @@ export const hostPlugin: WorkspaceHostPlugin = {
     await hostMirrorProvider.ensure(context.runner);
     console.log("Docker, npm, PyPI and APT cache connections are configured.");
   },
+  guest: {
+    description: "Connect workspace and nested-container package managers to operator-configured Docker, npm, PyPI and APT caches; never deploy a server",
+    commands: [
+      { name: "docker", description: "Use the configured Docker registry cache" },
+      { name: "npm", description: "Use the configured npm cache" },
+      { name: "pip", description: "Use the configured PyPI cache" },
+      { name: "apt", description: "Use the configured APT cache" }
+    ],
+    async inspect() {
+      return await findCacheEndpoints()
+        ? { state: "ready", message: "Package-cache connection configuration is available; this status does not probe cache health" }
+        : { state: "unconfigured", message: "Run dim mirrors configure FILE, or publish endpoints from an explicitly installed cache server" };
+    }
+  },
   async workspaceReady(workspace, context) {
     if (!workspace.initialized || workspace.phase !== "running") return;
-    const endpoints = await readCacheEndpoints();
+    const endpoints = await findCacheEndpoints();
+    if (!endpoints) return;
     await attachWorkspaceMirrors(workspace, context, { endpoints });
   }
 };

@@ -171,7 +171,10 @@ and [source repository](https://github.com/slop-lab/dev-infra-manager).
 ## Coding agents
 
 The package includes [the workspace URL skill](skills/external-urls/SKILL.md).
-Inside a workspace, `dim-workspace expose --name app --port 3000 --ingress NAME`
-requests a route through the scoped guest API; `dim-workspace urls --json`
+The installed host plugin automatically prepares `dim-expose` in each ready
+workspace. No repository declaration is required. Run `dim-workspace plugins`
+to discover its commands and whether the host has a configured ingress.
+Inside a workspace, `dim-expose --name app --port 3000 --ingress NAME`
+requests a route through the scoped guest API; `dim-expose list`
 inspects its own routes. A pending route still needs host approval. This API
 never provides host-admin credentials or allows another workspace selector.

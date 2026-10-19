@@ -13,6 +13,12 @@ socket, host runtime socket or raw host credential into a workspace.
 
 ## Installation and registration
 
+Host plugins may prepare their own in-workspace clients automatically without
+repository metadata. [Plugin locations and guest preparation](plugin-scopes.md)
+describe the shared delivery and discovery interfaces. `dim-workspace plugins`
+lists their commands and readiness inside a workspace. The host plugin remains
+the installation unit; a separate npm package for each container is unnecessary.
+
 Install the optional managed component and exact reviewed plugin versions:
 
 ```sh
@@ -123,7 +129,9 @@ precedence, supporting a separate host or NAS without a deployment DSL.
 `dim mirrors ensure` validates connection configuration and never starts servers.
 
 An enabled client refreshes scoped workspace relays and guest configuration on
-workspace readiness. Provider failure stops that selected path rather than
+workspace readiness once cache URLs are configured. Without a catalog it leaves
+direct package access unchanged and advertises the required setup through
+`dim-workspace plugins`. Invalid configured input and provider failure stop that selected path rather than
 silently changing routing. Docker Hub fallback is blocked for the selected
 mirror path. Neither package is required by ordinary workspaces, controller
 startup or native Git. Cache storage outlives individual workspaces; workspace
