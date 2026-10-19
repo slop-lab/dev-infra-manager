@@ -1,5 +1,5 @@
 import {
-  UserError, type CreateWorkspaceInput, type StreamingCommandRunner,
+  UserError, type CommandRunner, type CreateWorkspaceInput, type StreamingCommandRunner,
   type WorkspaceRecord, type WorkspaceService, type WorkspaceStore, type WorkspaceRuntime
 } from "@slop-lab/dim-core/workspace";
 
@@ -7,7 +7,7 @@ import {
 export interface WorkspaceHostContext {
   readonly store: WorkspaceStore;
   readonly runner: StreamingCommandRunner;
-  readonly cleanupRunner: StreamingCommandRunner;
+  readonly cleanupRunner: CommandRunner;
   readonly signal: AbortSignal;
   readonly runtime?: WorkspaceRuntime;
 }

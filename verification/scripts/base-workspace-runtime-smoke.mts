@@ -20,7 +20,7 @@ const repository = join(root, "source");
 await mkdir(repository);
 async function git(args: string[]) {
   const result = await runner.run("git", ["-C", repository, ...args]);
-  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.exitCode, 0, `${JSON.stringify(args)}: ${result.stderr}`);
   return result.stdout.trim();
 }
 await git(["init", "--initial-branch=main"]);
@@ -51,6 +51,16 @@ try {
   assert.match(await command(["git", "var", "GIT_AUTHOR_IDENT"]), /^Smoke <smoke@example\.invalid> \d+ [+-]\d{4}$/);
   assert.equal(await command(["git", "config", "user.email"]), record.git.email);
   await command(["sh", "-c", "printf 'retained checkout' > local.txt; printf 'retained home' > /home/dim/smoke.txt"]);
+  assert.equal(await command(["sh", "-c", "test \"$TMPDIR\" = /mnt/dim-tmp && test \"$(stat -c %a \"$TMPDIR\")\" = 700 && printf retained-temp > \"$TMPDIR/smoke.txt\" && printf temp-ok"]), "temp-ok");
+  assert.match(await command(["docker", "buildx", "version"]), /buildx/);
+  assert.match(await command(["docker", "compose", "version"]), /Compose/);
+  await command(["dim-workspace", "session", "register", "--", "sh", "-c", "printf 'resumed\\n' >> /home/dim/session-smoke.txt"]);
+  await command(["dim-workspace", "service", "register", "--name", "smoke", "--", "sh", "-c", "printf 'started\\n' >> /home/dim/service-smoke.txt; exec sleep infinity"]);
+  await command(["dim-workspace", "service", "resume"]);
+  await command(["sh", "-c", "ssh-keygen -q -t ed25519 -N '' -f /home/dim/ssh-smoke && dim-workspace-ssh setup /home/dim/ssh-smoke.pub"]);
+  const hostKey = await command(["dim-workspace-ssh", "host-key"]);
+  const ssh = ["ssh", "-p", "2222", "-i", "/home/dim/ssh-smoke", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "dim@127.0.0.1", "printf ssh-ok"];
+  assert.equal(await command(ssh), "ssh-ok");
   await assert.rejects(runtime.seed(record, join(root, "checkout")), /already populated/);
   console.log("source seed and user data preservation: passed");
 
@@ -58,6 +68,8 @@ try {
   // and musl loader form a tiny image for its own nested Docker engine.
   assert.equal(await command(["sh", "-c", "tar -c /bin/busybox /lib/ld-musl-* | docker import - dim-runtime-smoke >/dev/null && docker run --rm dim-runtime-smoke /bin/busybox echo nested-ok"]), "nested-ok");
   console.log("nested container execution: passed");
+  await command(["sh", "-c", "for i in $(seq 1 12); do docker run --rm dim-runtime-smoke /bin/busybox true || exit; done; sleep 1; ps -eo stat,comm | awk '$1 ~ /^Z/ && $2 ~ /rootlesskit|containerd-shim/ { bad=1; print } END { exit bad }'"]);
+  console.log("repeated nested container exits leave no rootlesskit/containerd-shim zombies: passed");
   const original = record.resources;
   const limited = { cpuCount: "0.5", memory: "1g", pidsLimit: "256" };
   assert.deepEqual(await runtime.updateResources(record, limited), { recreated: false });
@@ -72,12 +84,21 @@ try {
   await assert.rejects(runtime.run(record, ["true"]), /stopped/);
   await runtime.start(record);
   assert.equal(await command(["cat", "local.txt"]), "retained checkout");
+  await command(["sh", "-c", "for i in $(seq 1 100); do test -s /home/dim/session-smoke.txt && test \"$(wc -l < /home/dim/service-smoke.txt)\" -ge 2 && exit 0; sleep .1; done; exit 1"]);
+  const resumedBeforeRecreate = Number(await command(["sh", "-c", "wc -l < /home/dim/session-smoke.txt"]));
+  const servicesBeforeRecreate = Number(await command(["sh", "-c", "wc -l < /home/dim/service-smoke.txt"]));
   await runtime.remove(record, { keepData: true });
   assert.equal(await runtime.inspect(record), undefined);
   await runtime.create(record);
   await runtime.start(record);
   assert.equal(await command(["cat", "local.txt"]), "retained checkout");
   assert.equal(await command(["cat", "/home/dim/smoke.txt"]), "retained home");
+  assert.equal(await command(["cat", "/mnt/dim-tmp/smoke.txt"]), "retained-temp");
+  assert.equal(await command(["dim-workspace-ssh", "host-key"]), hostKey);
+  await command(["sh", "-c", `for i in $(seq 1 100); do test "$(wc -l < /home/dim/session-smoke.txt)" -gt ${resumedBeforeRecreate} && test "$(wc -l < /home/dim/service-smoke.txt)" -gt ${servicesBeforeRecreate} && exit 0; sleep .1; done; exit 1`]);
+  assert.equal(await command(ssh), "ssh-ok");
+  assert.match(await command(["dim-workspace", "service", "list"]), /"running":true/);
+  console.log("private TMPDIR, SSH identity, registered services and sessions survive restart/recreation: passed");
   assert.equal(await command(["docker", "run", "--rm", "dim-runtime-smoke", "/bin/busybox", "echo", "nested-retained"]), "nested-retained");
   console.log("stop/start and runtime recreation retain checkout, home and nested Docker: passed");
   await runtime.remove(record, { keepData: true });
@@ -87,6 +108,12 @@ try {
   await assert.rejects(runtime.create(record), /retained checkout storage is missing/);
   assert.notEqual((await runner.run("docker", ["volume", "inspect", missing])).exitCode, 0);
   console.log("missing retained checkout is rejected without fabricating empty storage: passed");
+} catch (error) {
+  const diagnostics = await runtime.run(record, ["sh", "-c", "cat /home/dim/session-smoke.txt /home/dim/service-smoke.txt /home/dim/.local/state/dim/session.log /home/dim/.local/state/dim/services/smoke.log 2>&1; dim-workspace service list"]);
+  process.stderr.write(diagnostics.stdout + diagnostics.stderr);
+  const logs = await runner.run("docker", ["logs", workspaceRuntimeResources(record).container]);
+  process.stderr.write(logs.stdout + logs.stderr);
+  throw error;
 } finally {
   await runtime.remove(record, { keepData: false });
   const resources = workspaceRuntimeResources(record);

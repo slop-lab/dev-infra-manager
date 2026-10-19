@@ -45,12 +45,7 @@ case "$command" in
     if [[ ! -f "$state/ssh_host_ed25519_key" ]]; then
       ssh-keygen -q -t ed25519 -N '' -f "$state/ssh_host_ed25519_key"
     fi
-    # useradd's initially locked password rejects public-key login on Alpine.
-    # An unrecorded random password unlocks the account; sshd still disables all password authentication.
     user="$(id -un)"
-    password="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))')"
-    printf '%s:%s\n' "$user" "$password" | sudo chpasswd
-    unset password
     cat >"$configuration" <<CONFIG
 Port 2222
 ListenAddress 127.0.0.1
@@ -80,6 +75,14 @@ CONFIG
     [[ $# -eq 0 ]] || fail 'start accepts no arguments'
     [[ -f "$configuration" ]] || exit 0
     if owns_process; then exit 0; fi
+    # Recreated root filesystems restore Alpine's locked account. Unlock its
+    # actual persistent-state owner on every start, including the root entrypoint.
+    # Password authentication remains disabled in the private sshd configuration.
+    user="$(stat -c %U -- "$state")"
+    [[ "$user" != root && "$user" != UNKNOWN ]] || fail 'SSH state must belong to the workspace user'
+    password="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))')"
+    printf '%s:%s\n' "$user" "$password" | sudo chpasswd
+    unset password
     sudo mkdir -p /run/sshd
     sudo /usr/sbin/sshd -t -f "$configuration"
     sudo /usr/sbin/sshd -f "$configuration" -E "$state/sshd.log"

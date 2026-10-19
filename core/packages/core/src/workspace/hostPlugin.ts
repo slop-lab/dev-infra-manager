@@ -16,6 +16,7 @@ export interface WorkspaceHostPluginContext extends WorkspaceRuntimeFactoryConte
   readonly store: WorkspaceStore;
   /** Disposable verification cleanup has a fresh bounded lifetime after caller cancellation. */
   cleanupWorkspace?(name: string, workspaceId?: string): Promise<void>;
+  hostGateway?(workspace: WorkspaceRecord): Promise<string>;
 }
 
 /** An installed module exports `hostPlugin`. Loading and command routing belong to the host CLI. */
@@ -28,6 +29,7 @@ export interface WorkspaceHostPlugin {
   };
   readonly commands?: readonly { readonly name: string; readonly description: string }[];
   run?(args: string[], context: WorkspaceHostPluginContext): Promise<void>;
+  workspaceReady?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void>;
   /** These requests already carry the caller's immutable workspace identity. */
   agent?: {
     expose?(input: { name: string; port: number; ingress: string }, workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<unknown>;

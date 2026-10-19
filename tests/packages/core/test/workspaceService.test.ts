@@ -64,12 +64,12 @@ describe("workspace application lifecycle", () => {
   it("leaves failed initialization discoverable and cannot pretend an empty workspace is ready", async () => {
     const f = await fixture();
     f.runtime.seed = async () => { throw new Error("copy failed"); };
-    await expect(f.service.create(create)).rejects.toThrow("workspace create 'dev': copy failed");
+    await expect(f.service.create(create)).rejects.toThrow("workspace create 'dev': at seed checkout: copy failed");
     const failed = await f.service.show("dev");
     expect(failed.initialized).toBe(false); expect(failed.phase).toBe("error");
     await expect(f.service.start("dev")).rejects.toThrow("initialization did not complete");
     expect(f.calls.filter((c) => c === "start")).toHaveLength(1);
-    expect((await f.service.show("dev")).error).toBe("copy failed");
+    expect((await f.service.show("dev")).error).toBe("at seed checkout: copy failed");
     await f.service.discard("dev"); expect(await f.service.list()).toEqual([]);
   });
 

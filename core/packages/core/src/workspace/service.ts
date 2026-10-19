@@ -27,6 +27,8 @@ export interface WorkspaceConnectOptions extends Pick<RunOptions, "stdin" | "std
   workspaceId?: string;
 }
 
+export interface WorkspaceExecOptions extends RunOptions { workspaceId?: string }
+
 export interface CreateWorkspaceInput {
   name: string;
   source: WorkspaceSource;
@@ -67,7 +69,9 @@ export class WorkspaceService {
       await mkdir(path.join(this.store.root, "staging"), { recursive: true, mode: 0o700 });
       const staging = await mkdtemp(path.join(this.store.root, "staging", "source-"));
       try {
-        const source = await this.acquireSource({ source: input.source, destination: path.join(staging, "checkout") });
+        let source: AcquiredWorkspaceSource;
+        try { source = await this.stage("acquire source", () => this.acquireSource({ source: input.source, destination: path.join(staging, "checkout") })); }
+        catch (error) { throw this.failure("create", name, error); }
         const now = new Date().toISOString();
         let record: WorkspaceRecord = {
           schemaVersion: 10, id: randomUUID(), name, source, runtime,
@@ -77,9 +81,9 @@ export class WorkspaceService {
         };
         await this.store.write(record);
         try {
-          await this.runtime.create(record);
-          await this.runtime.start(record);
-          await this.runtime.seed(record, path.join(staging, "checkout"));
+          await this.stage("create runtime", () => this.runtime.create(record));
+          await this.stage("start runtime", () => this.runtime.start(record));
+          await this.stage("seed checkout", () => this.runtime.seed(record, path.join(staging, "checkout")));
           record = await this.publish(record, { phase: "running", initialized: true });
           return record;
         } catch (error) { await this.fail(record, error); throw this.failure("create", name, error); }
@@ -89,22 +93,22 @@ export class WorkspaceService {
 
   start(name: string, expectedWorkspaceId?: string): Promise<WorkspaceRecord> {
     return this.change(name, "start", async (record) => {
-      await this.runtime.start(record);
+      await this.stage("start runtime", () => this.runtime.start(record));
       return this.publish(record, { phase: "running" });
     }, (record) => { this.requireInitialized(record); this.requireIdentity(record, expectedWorkspaceId); });
   }
 
   stop(name: string, expectedWorkspaceId?: string): Promise<WorkspaceRecord> {
     return this.change(name, "stop", async (record) => {
-      await this.runtime.stop(record);
+      await this.stage("stop runtime", () => this.runtime.stop(record));
       return this.publish(record, { phase: "stopped" });
     }, (record) => this.requireIdentity(record, expectedWorkspaceId));
   }
 
   restart(name: string, expectedWorkspaceId?: string): Promise<WorkspaceRecord> {
     return this.change(name, "restart", async (record) => {
-      await this.runtime.stop(record);
-      await this.runtime.start(record);
+      await this.stage("stop runtime", () => this.runtime.stop(record));
+      await this.stage("start runtime", () => this.runtime.start(record));
       return this.publish(record, { phase: "running" });
     }, (record) => { this.requireInitialized(record); this.requireIdentity(record, expectedWorkspaceId); });
   }
@@ -112,9 +116,9 @@ export class WorkspaceService {
   recreate(name: string, expectedWorkspaceId?: string): Promise<WorkspaceRecord> {
     return this.change(name, "recreate", async (record) => {
       // Workspace identity/storage remain; the container is replaced. No source reset.
-      await this.runtime.remove(record, { keepData: true });
-      await this.runtime.create(record);
-      await this.runtime.start(record);
+      await this.stage("retain workspace data", () => this.runtime.remove(record, { keepData: true }));
+      await this.stage("create replacement runtime", () => this.runtime.create(record));
+      await this.stage("start replacement runtime", () => this.runtime.start(record));
       return this.publish(record, { phase: "running" });
     }, (record) => { this.requireInitialized(record); this.requireIdentity(record, expectedWorkspaceId); });
   }
@@ -122,7 +126,7 @@ export class WorkspaceService {
   resources(name: string, changes: Partial<WorkspaceResources>, expectedWorkspaceId?: string): Promise<{ workspace: WorkspaceRecord; recreated: boolean }> {
     let resources: WorkspaceResources;
     return this.change(name, "resources", async (record) => {
-      const result = await this.runtime.updateResources(record, resources);
+      const result = await this.stage("apply resource limits", () => this.runtime.updateResources(record, resources));
       return { workspace: await this.publish(record, { resources }), recreated: result.recreated };
     }, (record) => { this.requireIdentity(record, expectedWorkspaceId); resources = validateResources({ ...record.resources, ...changes }); });
   }
@@ -130,16 +134,17 @@ export class WorkspaceService {
   async discard(name: string, expectedWorkspaceId?: string): Promise<void> {
     await this.change(name, "discard", async (record) => {
       await this.publish(record, { phase: "discarding" });
-      await this.runtime.remove(record, { keepData: false });
+      await this.stage("remove runtime and workspace data", () => this.runtime.remove(record, { keepData: false }));
       await this.store.remove(name);
     }, (record) => this.requireIdentity(record, expectedWorkspaceId));
   }
 
-  async exec(name: string, command: string[], options: RunOptions = {}): Promise<number> {
+  async exec(name: string, command: string[], options: WorkspaceExecOptions = {}): Promise<number> {
     if (!command.length || command.some((argument) => typeof argument !== "string" || argument.includes("\0"))) {
       throw new UserError("provide a command to execute in the workspace");
     }
     const record = await this.store.read(workspaceName(name));
+    this.requireIdentity(record, options.workspaceId);
     this.requireInitialized(record);
     if (record.phase !== "running") throw new UserError(`workspace '${name}' is ${record.phase}; run dim start ${name}`);
     return this.runtime.exec(record, command, options);
@@ -187,5 +192,10 @@ export class WorkspaceService {
 
   private failure(operation: string, name: string, error: unknown): UserError {
     return new UserError(`workspace ${operation} '${name}': ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  private async stage<T>(name: string, action: () => Promise<T>): Promise<T> {
+    try { return await action(); }
+    catch (error) { throw new UserError(`at ${name}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
   }
 }

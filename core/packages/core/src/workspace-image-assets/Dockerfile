@@ -18,6 +18,8 @@ ENV HOME=/home/dim \
     PATH=/home/dim/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN npm install --global pnpm@10.13.1
+RUN mkdir -p /mnt/dim-tmp && chown dim:dim /mnt/dim-tmp && chmod 0700 /mnt/dim-tmp
+ENV TMPDIR=/mnt/dim-tmp DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp
 RUN docker buildx version && docker compose version
 COPY agent-entrypoint.bash /usr/local/bin/dim-agent-entrypoint
 COPY dim-workspace.mjs /usr/local/bin/dim-workspace

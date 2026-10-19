@@ -53,6 +53,7 @@ function parseHostPlugin(value: unknown): WorkspaceHostPlugin {
     throw new UserError(`invalid commands in host plugin '${value.name}'`);
   }
   if (value.run !== undefined && typeof value.run !== "function") throw new UserError(`invalid command handler in '${value.name}'`);
+  if (value.workspaceReady !== undefined && typeof value.workspaceReady !== "function") throw new UserError(`invalid workspace integration in '${value.name}'`);
   if (Array.isArray(value.commands) && value.commands.length && value.run === undefined) throw new UserError(`missing command handler in '${value.name}'`);
   return value as unknown as WorkspaceHostPlugin;
 }

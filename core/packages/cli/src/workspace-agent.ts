@@ -13,6 +13,7 @@ import {
 } from "@slop-lab/dim-core/workspace";
 import { atomicWrite } from "@slop-lab/dim-core";
 import { composeWorkspaceRuntime, loadHostPlugins } from "./host-plugins.js";
+import { ensureWorkspaceIntegration } from "./workspace-composition.js";
 
 interface AgentConfiguration {
   workspaceId: string;
@@ -36,9 +37,9 @@ export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: Age
     let config: AgentConfiguration | undefined;
     try { config = parseConfiguration(await privateJson(file)); }
     catch (error) { if (!hasCode(error, "ENOENT")) throw error; }
-    if (!config) {
-      const host = await context.runtime.hostGateway?.(record);
-      if (!host || !privateAddress(host)) throw new UserError("workspace runtime has no private host service gateway");
+    const host = await context.runtime.hostGateway?.(record);
+    if (!host || !privateAddress(host)) throw new UserError("workspace runtime has no private host service gateway");
+    if (!config || config.host !== host) {
       config = { workspaceId: record.id, workspaceName: record.name, stateRoot: context.stateRoot, host, token: randomBytes(32).toString("base64url") };
       await atomicWrite(file, config);
     }
@@ -70,6 +71,7 @@ export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: Age
     ], { stdin: Readable.from([payload]), signal: context.signal });
     if (written !== 0) throw new UserError("cannot install the workspace-scoped service connection; workspace data was preserved");
   });
+  for (const plugin of await loadHostPlugins()) await plugin.workspaceReady?.(record, context);
 }
 
 async function agentReady(root: string, config: AgentConfiguration): Promise<AgentReady | undefined> {
@@ -99,11 +101,18 @@ export async function runWorkspaceAgent(file: string): Promise<void> {
   const context: AgentHostContext = { runner, cleanupRunner: runner, stateRoot: store.root, store, service, signal: abort.signal, runtime: composition.runtime };
   const current = await store.read(config.workspaceName);
   if (current.id !== config.workspaceId || await composition.runtime.hostGateway?.(current) !== config.host) throw new UserError("workspace bridge no longer matches its runtime");
-  const server = createWorkspaceAgentServer(config, context);
+  const server = createWorkspaceAgentServer(config, context, async (updated) => {
+    await ensureWorkspaceIntegration(updated, context);
+    await ensureWorkspaceAgent(updated, context);
+  });
   const close = () => { abort.abort(); server.close(); server.closeAllConnections(); };
   process.once("SIGTERM", close); process.once("SIGINT", close); process.once("SIGHUP", close);
   const watch = setInterval(() => { void store.read(config.workspaceName).then((record) => {
     if (record.id !== config.workspaceId) close();
+  }, close); }, 2_000);
+  const configurationWatch = setInterval(() => { void privateJson(file).then((value) => {
+    const latest = parseConfiguration(value);
+    if (latest.token !== config.token || latest.host !== config.host) close();
   }, close); }, 2_000);
   try {
     server.listen(0, config.host); await once(server, "listening");
@@ -112,13 +121,16 @@ export async function runWorkspaceAgent(file: string): Promise<void> {
     await atomicWrite(path.join(path.dirname(file), "ready.json"), { endpoint: `http://${config.host}:${address.port}`, workspaceId: config.workspaceId });
     await once(server, "close");
   } finally {
-    clearInterval(watch); close();
+    clearInterval(watch); clearInterval(configurationWatch); close();
     process.off("SIGTERM", close); process.off("SIGINT", close); process.off("SIGHUP", close);
   }
 }
 
 /** Exported for real HTTP tests with disposable state and a runtime adapter. */
-export function createWorkspaceAgentServer(config: AgentConfiguration, context: AgentHostContext): Server {
+export function createWorkspaceAgentServer(
+  config: AgentConfiguration, context: AgentHostContext,
+  afterChange?: (record: WorkspaceRecord) => Promise<void>
+): Server {
   let changing = false;
   const server = createServer((request, response) => {
     void handle(request, response).catch((error: unknown) => {
@@ -139,7 +151,7 @@ export function createWorkspaceAgentServer(config: AgentConfiguration, context: 
       changing = true;
       const operation = request.url === "/v1/restart" ? "restart" : "recreate";
       json(response, 202, { accepted: true, operation, workspaceId: record.id });
-      setImmediate(() => { void context.service[operation](record.name, record.id).catch((error: unknown) => {
+      setImmediate(() => { void context.service[operation](record.name, record.id).then(afterChange).catch((error: unknown) => {
         process.stderr.write(`workspace ${operation}: ${error instanceof Error ? error.message : String(error)}\n`);
       }).finally(() => { changing = false; }); });
       return;

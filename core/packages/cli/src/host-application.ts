@@ -56,7 +56,11 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
       async () => { throw new UserError("cleanup cannot acquire source"); });
     await cleanup.discard(name, workspaceId);
   };
-  const context = { store, runner, cleanupRunner: processRunner, signal, runtime: composition.runtime, cleanupWorkspace };
+  const context = { store, runner, cleanupRunner: processRunner, signal, runtime: composition.runtime, cleanupWorkspace,
+    hostGateway: (workspace: import("@slop-lab/dim-core/workspace").WorkspaceRecord) => {
+      if (!composition.runtime.hostGateway) throw new UserError(`runtime '${workspace.runtime}' does not provide a private host gateway`);
+      return composition.runtime.hostGateway(workspace);
+    } };
   const service = new WorkspaceService(
     store, composition.runtime,
     (input) => acquireWorkspaceSource({ ...input, runner, signal })
@@ -113,11 +117,16 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
     }
     case "resources": {
       const resources = object(input.resources, "resources");
-      result = await service.resources(string(input.name, "name"), {
+      const updated = await service.resources(string(input.name, "name"), {
         ...(resources.cpuCount === undefined ? {} : { cpuCount: string(resources.cpuCount, "cpuCount") }),
         ...(resources.memory === undefined ? {} : { memory: string(resources.memory, "memory") }),
         ...(resources.pidsLimit === undefined ? {} : { pidsLimit: string(resources.pidsLimit, "pidsLimit") })
       }, expectedId);
+      if (updated.recreated && updated.workspace.phase === "running") {
+        await ensureWorkspaceIntegration(updated.workspace, context);
+        await ensureWorkspaceAgent(updated.workspace, agentContext);
+      }
+      result = updated;
       break;
     }
     case "discard":
