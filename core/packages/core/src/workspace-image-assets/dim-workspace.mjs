@@ -190,18 +190,22 @@ async function services(args) {
     for (const name of entries) result.push({ name, running: await serviceAlive(name) });
     console.log(JSON.stringify(result)); return;
   }
+  /** @type {string[]} */ const failures = [];
   for (const name of entries) {
-    if (await serviceAlive(name)) continue;
-    const log = await open(path.join(servicesRoot, `${name}.log`), "a", 0o600);
     try {
-      const child = spawn(process.execPath, [process.argv[1] ?? "", "service", "__run", name], { detached: true, stdio: ["ignore", log.fd, log.fd, "ipc"] });
-      await new Promise((resolve, reject) => {
-        child.once("error", reject);
-        child.once("message", () => { child.disconnect(); child.unref(); resolve(undefined); });
-        child.once("exit", (code) => { if (code) reject(new Error(`service '${name}' failed; inspect ${name}.log`)); else resolve(undefined); });
-      });
-    } finally { await log.close(); }
+      if (await serviceAlive(name)) continue;
+      const log = await open(path.join(servicesRoot, `${name}.log`), "a", 0o600);
+      try {
+        const child = spawn(process.execPath, [process.argv[1] ?? "", "service", "__run", name], { detached: true, stdio: ["ignore", log.fd, log.fd, "ipc"] });
+        await new Promise((resolve, reject) => {
+          child.once("error", reject);
+          child.once("message", () => { child.disconnect(); child.unref(); resolve(undefined); });
+          child.once("exit", (code) => { if (code) reject(new Error(`service '${name}' failed; inspect ${name}.log`)); else resolve(undefined); });
+        });
+      } finally { await log.close(); }
+    } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
   }
+  if (failures.length) throw new Error(`some registered services failed: ${failures.join("; ")}`);
 }
 
 /** @param {unknown} value @returns {value is string} */
@@ -280,7 +284,7 @@ async function superviseService(name) {
     const stop = () => child.kill("SIGTERM");
     process.once("SIGTERM", stop); process.once("SIGINT", stop);
     try {
-      await new Promise((resolve, reject) => { child.once("spawn", () => resolve(undefined)); child.once("error", reject); });
+      await Promise.race([closed, new Promise((resolve, reject) => { child.once("spawn", () => resolve(undefined)); child.once("error", reject); })]);
       identity.child = child.pid ?? 0;
       identity.childTicks = identity.child ? await processIdentity(identity.child) ?? "" : "";
       const temporary = `${ownerFile}.${nonce}.tmp`;
@@ -290,6 +294,11 @@ async function superviseService(name) {
       const code = await closed;
       if (typeof code !== "number") throw new Error("invalid service exit code");
       process.exitCode = code;
+    } catch (error) {
+      child.kill("SIGTERM");
+      const timer = setTimeout(() => child.kill("SIGKILL"), 1000);
+      try { await closed.catch(() => {}); } finally { clearTimeout(timer); }
+      throw error;
     } finally { process.off("SIGTERM", stop); process.off("SIGINT", stop); }
   } finally {
     const owner = await serviceOwner(name);

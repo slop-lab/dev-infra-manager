@@ -92,3 +92,16 @@ it("registered services resume independently of sessions without duplicate proce
     await expect(run("service", "register", "--name", "../escape", "--", "true")).rejects.toThrow();
   } finally { await run("service", "remove", "tunnel").catch(() => {}); await rm(home, { recursive: true, force: true }); }
 });
+
+it("one failed registered service does not prevent other independent services from starting", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "dim-guest-services-failure-"));
+  const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env: { ...process.env, HOME: home } });
+  try {
+    const marker = path.join(home, "healthy");
+    await run("service", "register", "--name", "broken", "--", "/missing/service-command");
+    await run("service", "register", "--name", "healthy", "--", process.execPath, "-e", `require('node:fs').writeFileSync(process.argv[1],'started');setInterval(()=>{},1000)`, marker);
+    await expect(run("service", "resume")).rejects.toThrow(/some registered services failed: broken/);
+    await expect.poll(() => readFile(marker, "utf8")).toBe("started");
+    expect(JSON.parse((await run("service", "list")).stdout)).toEqual([{ name: "broken", running: false }, { name: "healthy", running: true }]);
+  } finally { await run("service", "remove", "healthy").catch(() => {}); await rm(home, { recursive: true, force: true }); }
+});
