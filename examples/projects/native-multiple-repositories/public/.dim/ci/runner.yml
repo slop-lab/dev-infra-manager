@@ -1,0 +1,3 @@
+jobs:
+  public-check:
+    script: .dim/ci/jobs/source.bash

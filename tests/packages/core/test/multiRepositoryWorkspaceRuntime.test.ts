@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -19,6 +19,7 @@ import { activateFinalizeService, cleanupFinalizeFixtures, generationId, importe
   rootReadIssuer, runGit, startFinalizeService, workspaceWriteIssuer } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
 
 const image = process.env.DIM_NATIVE_MULTI_REPOSITORY_IMAGE;
+const example = resolve(import.meta.dirname, "../../../../examples/projects/native-multiple-repositories");
 
 describe("disposable multi-repository workspace runtime", () => {
   it.skipIf(!image)("seeds independent Git checkouts and retains selected layout across Sysbox recreation", async () => {
@@ -57,19 +58,16 @@ describe("disposable multi-repository workspace runtime", () => {
       const importerClient = await createNodeNativeGitRootImporterClient(importerFile);
       for (const repositoryId of ["public", "private"]) {
         const source = join(root, `source-${repositoryId}`); checkoutSources.set(repositoryId, source);
+        await cp(join(example, repositoryId), source, { recursive: true });
         await runGit("/usr/bin/git", ["init", "--initial-branch=main", source]);
-        await writeFile(join(source, "README.md"), `${repositoryId} checkout\n`);
-        if (repositoryId === "private") {
-          await mkdir(join(source, ".dim"));
-          await writeFile(join(source, ".dim/workspace.json"), '{"schemaVersion":1,"plugins":[]}\n');
-          await writeFile(join(source, "private-sentinel"), "must not enter public-only workspace\n");
-        }
+        const policy: unknown = JSON.parse(await readFile(join(example, "policies", `${repositoryId}.json`), "utf8"));
+        if (typeof policy !== "object" || policy === null || !("review" in policy) || !("repositoryId" in policy)
+          || policy.repositoryId !== repositoryId) throw new Error("invalid example policy");
         await runGit("/usr/bin/git", ["-C", source, "add", "."]);
         await runGit("/usr/bin/git", ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "source"]);
         await bootstrapNativeProjectRepository({ name: "example", projectId: "example", repositoryId, stateRoot: managed, scratchRoot: managed,
           sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main", registrarConnectionFile: registrarFile,
-          importerConnectionFile: importerFile, policySource: { kind: "manifest-free", review: {
-            requiredReviewerIds: ["owner"], requiredJobs: [], ciRepositoryIds: ["private", "public"] } }, signal: AbortSignal.timeout(30_000) });
+          importerConnectionFile: importerFile, policySource: { kind: "manifest-free", review: policy.review }, signal: AbortSignal.timeout(30_000) });
         await projects.admitRepository("example", repositoryId, importerClient, connection, AbortSignal.timeout(10_000));
       }
       await projects.configure("example", { configurationRepositoryId: "private", defaultWorkingRepositoryId: "public" }, connection, AbortSignal.timeout(10_000));
@@ -77,7 +75,9 @@ describe("disposable multi-repository workspace runtime", () => {
       process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE = hostFile;
       let validatedConfigurations = 0;
       const context = { runner, store, runtime, async validateCheckout(directory: string) {
-        expect(await readFile(join(directory, "private-sentinel"), "utf8")).toContain("must not enter");
+        expect(await readFile(join(directory, "expected-public-version.txt"), "utf8")).toBe("1\n");
+        expect(await readFile(join(directory, ".dim/ci/runner.yml"), "utf8"))
+          .toBe(await readFile(join(example, "private/.dim/ci/runner.yml"), "utf8"));
         validatedConfigurations++;
       } };
       const all = await createManagedWorkspace({ name: names[0]!, source: { url: "dim://example" }, repositories: ["public", "private"],
@@ -88,6 +88,7 @@ describe("disposable multi-repository workspace runtime", () => {
         expect(result.exitCode, result.stderr).toBe(0); return result.stdout.trim();
       };
       expect(await guest(all, ["pwd"])).toBe("/workspace/private");
+      expect(await guest(all, ["bash", ".dim/ci/jobs/integration.bash"])).toBe("native-multiple-integration-ok");
       const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managed, all.id));
       expect(attachment.repositories.public?.grant).not.toBe(attachment.repositories.private?.grant);
       expect(attachment.repositories.public?.nativeWorkspaceId).not.toBe(attachment.repositories.private?.nativeWorkspaceId);
@@ -111,7 +112,8 @@ describe("disposable multi-repository workspace runtime", () => {
       const publicOnly = await createManagedWorkspace({ name: names[1]!, source: { url: "dim://example" }, repositories: ["public"], image,
         resources: { cpuCount: "2", memory: "2g", pidsLimit: "1024" } }, context);
       expect(await guest(publicOnly, ["pwd"])).toBe("/workspace/public");
-      expect(await guest(publicOnly, ["sh", "-ceu", "test ! -e /workspace/private; test ! -e /workspace/private-sentinel; test ! -e /workspace/public/.dim; ls -A /workspace"])).toBe("public");
+      expect(await guest(publicOnly, ["sh", "-ceu", "test ! -e /workspace/private; test ! -e /workspace/public/expected-public-version.txt; ls -A /workspace"])).toBe("public");
+      expect(await guest(publicOnly, ["bash", ".dim/ci/jobs/source.bash"])).toBe("native-multiple-public-ok");
       expect(validatedConfigurations).toBe(2);
     } finally {
       for (const record of await store.list()) {

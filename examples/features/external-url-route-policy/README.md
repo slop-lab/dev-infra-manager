@@ -1,7 +1,16 @@
 # External URL Route Policy
 
 > **Archived predecessor example.** Retained for historical source comparison;
-> it is not a current native-only adoption path.
+> it is not a complete current deployment recipe. Use the maintained
+> [External URLs recipe](../external-urls/README.md) for setup and prerequisites.
+
+The standalone server below exercises the still-supported trusted route-policy
+webhook protocol. It requires Node.js 24/26 and a private host Unix socket.
+Integrating it requires managed administration plus
+`@slop-lab/dim-plugin-external-urls@0.10.0` on the workspace host and an
+operator-configured ingress referencing that socket. Native Git, CI and a DNS
+plugin are not required for a local HTTP ingress. This directory is not a source
+repository template and declares no workspace plugins of its own.
 
 This advanced example replaces the default `WORKSPACE--` subdomain policy
 with a trusted Unix-socket webhook. The basic External URL example remains

@@ -1,5 +1,14 @@
 # Shared Sysbox and QEMU workers
 
+Required components: matching managed administration installed with
+`dim installer install core --with-managed`, connected native Git/CI services,
+and a private generation-bound worker connection. The managed service composes
+`@slop-lab/dim-plugin-ci-workflows`; this compiler and the
+`@slop-lab/dim-native-git` service are not host-plugin registry entries. No
+optional host plugin is required. Host mirrors are optional. Container slots
+require Docker/Sysbox; VM slots require Docker and functional KVM. Both require
+operator-reviewed runner/job image digests, not the placeholders below.
+
 Prepare/install/connect the optional control plane as described in
 [managed administration](../../../core/packages/managed/docs/cli.md). Edit the
 private execution service configuration before deployment to add a worker and

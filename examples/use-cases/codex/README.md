@@ -1,7 +1,17 @@
 # Codex in a development workspace
 
 Use an ordinary Git source and the optional tool integration. The repository
-needs no Codex bootstrap code or DIM manifest:
+needs no Codex bootstrap code or DIM manifest.
+
+Required components: base DIM with Docker/Sysbox and a built workspace image
+(`dim image build`), plus `@slop-lab/dim-plugin-agent-tools@0.10.0` on the selected
+host. Tool installation needs guest network access; inference needs deliberate
+guest-side Codex authentication. Managed administration, native Git, CI, an LLM
+router and external-URL plugins are not required. For a repository that always
+needs these helpers, commit `.dim/workspace.json` containing
+`{"plugins":["@slop-lab/dim-plugin-agent-tools@0.10.0"]}`. This generic recipe
+installs the plugin explicitly instead:
+
 
 ```sh
 dim installer install plugin '@slop-lab/dim-plugin-agent-tools@0.10.0'

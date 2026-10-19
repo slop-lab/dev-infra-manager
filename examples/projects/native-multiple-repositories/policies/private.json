@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "repositoryId": "private",
+  "review": {
+    "ciRepositoryIds": ["private", "public"],
+    "requiredReviewerIds": ["owner"],
+    "requiredJobs": [
+      { "name": "private-check", "kind": "ordinary-sysbox" },
+      { "name": "integration", "kind": "ordinary-sysbox" }
+    ]
+  }
+}

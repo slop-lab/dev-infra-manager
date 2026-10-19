@@ -1,5 +1,25 @@
 # Native basic repository
 
+## Required components
+
+Install matching managed administration on the selected host with
+`dim installer install core --with-managed`. Prepare/install/connect its native
+Git and CI services as described in [managed administration](../../../core/packages/managed/docs/cli.md).
+`@slop-lab/dim-native-git` supplies the Git service;
+`@slop-lab/dim-plugin-ci-workflows` supplies the `.dim/ci/runner.yml` compiler
+composed by the managed service. These are service/library components, not
+host plugins to put in a workspace declaration.
+
+This example needs no optional host plugin, so it has no host-plugin requirement
+file. It still requires a Docker/Sysbox host and a built workspace image
+(`dim image build`) to start a development workspace.
+To obtain both required CI results, configure a `container` slot with reviewed
+Sysbox runner/job images and a `vm` slot with reviewed QEMU runner/job images on
+a host with functional KVM. Offline workers do not block Project import or
+workspace creation, but leave required job results pending.
+
+## Import and develop
+
 Copy this example into a new Git repository and commit it on `main`. Prepare and
 connect an optional control plane on the selected host first. Its private role
 files stay outside the repository and workspace; connect saves their selection.

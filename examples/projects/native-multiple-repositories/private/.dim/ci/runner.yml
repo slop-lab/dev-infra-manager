@@ -1,0 +1,6 @@
+jobs:
+  private-check:
+    script: .dim/ci/jobs/source.bash
+  integration:
+    script: .dim/ci/jobs/integration.bash
+    repositories: [public, private]

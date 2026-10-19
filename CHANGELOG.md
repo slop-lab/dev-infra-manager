@@ -11,6 +11,9 @@ is implied by these source changes.
   proposal credentials, reviews and protected-ref promotion. Select workspace
   checkouts and their default directory; CI binds allowed repository inputs to
   exact commit/tree snapshots without granting unselected repository access.
+  A runnable public/private example links its reviewed files to Git/CI and
+  workspace runtime verification; example recipes identify required optional
+  plugins and services.
 
 - Develop ordinary Git repositories on local or SSH hosts without installing a
   control plane. Use `dim ls`, `create`, `exec`, `connect` and `forward` directly.

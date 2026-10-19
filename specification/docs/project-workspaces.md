@@ -3,6 +3,10 @@
 Managed Git is optional. Ordinary development needs only a Git URL or a path
 on the selected host; see [usage](usage.md).
 
+The [public/private example](../../examples/projects/native-multiple-repositories/README.md)
+provides two independent runnable repository templates, reviewed import policies,
+and linked Git/CI and workspace runtime verification for this layout.
+
 Install the optional integration with `dim installer install core --with-managed`.
 Use `dim managed control-plane prepare` and `connect` to configure services and
 host connections. A Project groups independent repositories. Import each with

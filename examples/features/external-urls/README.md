@@ -9,6 +9,16 @@ For a temporary tunnel, use `dim forward WORKSPACE 3000:3000` instead. The URL
 plugin is useful when the host should retain a named route with explicit
 approval.
 
+Required components: base Docker/Sysbox workspace support, matching managed
+administration (`dim installer install core --with-managed`), and
+`@slop-lab/dim-plugin-external-urls@0.10.0` installed on the workspace host.
+The host controller and ingress provide this integration; no native Git service,
+CI worker, DNS plugin or separate control-plane deployment is required for the
+loopback HTTP example. An arbitrary source repository needs no declaration;
+if the integration is intrinsic to that repository, its `.dim/workspace.json`
+can declare `{"plugins":["@slop-lab/dim-plugin-external-urls@0.10.0"]}`.
+That declaration does not install managed administration or configure ingress.
+
 ## Start a service
 
 Create a workspace from your own Git source, or use an existing workspace:

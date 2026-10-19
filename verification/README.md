@@ -40,6 +40,24 @@ pnpm --dir tests exec tsx ../verification/scripts/base-workspace-runtime-smoke.m
 just verify workspace-agent IMAGE
 ```
 
+The [public/private Project example](../examples/projects/native-multiple-repositories/README.md)
+is also exercised directly from its checked-in files:
+
+```bash
+pnpm --dir tests exec vitest run packages/core/test/ci/multipleRepositoryExample.test.ts
+DIM_NATIVE_MULTI_REPOSITORY_IMAGE=REVIEWED_WORKSPACE_IMAGE pnpm --dir tests exec vitest run packages/core/test/multiRepositoryWorkspaceRuntime.test.ts
+```
+
+The first command composes a disposable native Git service with the actual CI
+workflow compiler plugin, imports the example's two independent Git trees and
+reviewed policies, and runs its scripts against exact selected inputs. It needs
+Git, Bash and `cmp`, with no provider login or installed control plane. The
+second also needs host Docker, Sysbox and an existing reviewed workspace image;
+it checks real proposal Git, selected directories, persistence through recreation
+and public-only isolation, then removes its own workspaces. Its default skip in
+source CI is not physical-runtime acceptance. Required plugins and services for
+the other examples are listed in the [example verification matrix](../examples/README.md#what-the-checks-establish).
+
 The first checks owned storage, nested Docker, resource updates/unlimited,
 private temporary data, SSH keys and registered service/session recovery through
 stop/start/recreation. It also checks repeated nested exits for leaked zombie

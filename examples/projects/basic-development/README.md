@@ -3,6 +3,11 @@
 The same commands work on the local host and a selected SSH development host.
 The source repository needs no DIM manifest or lifecycle hook.
 
+Required components: base DIM on the selected host, Docker with the Sysbox
+runtime, and a workspace image built below. No optional host plugin, managed
+administration, native Git service or CI worker is required. Remote use also
+requires operator SSH access to that host.
+
 ```bash
 dim host add development --ssh user@development-host
 dim host use development
