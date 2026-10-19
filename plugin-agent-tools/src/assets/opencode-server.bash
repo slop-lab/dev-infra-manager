@@ -67,6 +67,41 @@ installed_version="$(opencode --version)"
 [[ "$installed_version" = "$EXPECTED_OPENCODE_VERSION" ]] || \
   fail "expected opencode $EXPECTED_OPENCODE_VERSION; run workspace-user-setup.bash first (found $installed_version)"
 
+# Optional user-side integration hook; no host plugin or host credential is loaded.
+hook_file="$HOME/.config/dim/opencode-launch.js"
+if [[ -e "$hook_file" || -L "$hook_file" ]]; then
+  [[ -f "$hook_file" && ! -L "$hook_file" && -O "$hook_file" ]] || fail 'OpenCode launch hook must be an owned regular file'
+  launch_environment="$(node "$hook_file")" || fail 'OpenCode launch integration failed'
+  jq -e 'type == "object" and all(to_entries[]; (.key == "OPENCODE_CONFIG_CONTENT" or .key == "OMO_PROFILE") and (.value | type == "string"))' >/dev/null <<<"$launch_environment" || fail 'invalid OpenCode launch environment'
+  if jq -e 'has("OPENCODE_CONFIG_CONTENT")' >/dev/null <<<"$launch_environment"; then
+    export OPENCODE_CONFIG_CONTENT="$(jq -r '.OPENCODE_CONFIG_CONTENT' <<<"$launch_environment")"
+  fi
+  if jq -e 'has("OMO_PROFILE")' >/dev/null <<<"$launch_environment"; then
+    export OMO_PROFILE="$(jq -r '.OMO_PROFILE' <<<"$launch_environment")"
+  fi
+fi
+configuration_fingerprint="$(node --input-type=commonjs <<'NODE'
+const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto")
+const home = process.env.HOME
+const hash = crypto.createHash("sha256")
+for (const key of ["DIM_LLM_ROUTER_OPENCODE_MODE", "DIM_LLM_ROUTER_CONNECTION_FILE", "OPENCODE_CONFIG_CONTENT", "OMO_PROFILE", "OCX_PROFILE", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR"]) {
+  hash.update(JSON.stringify([key, process.env[key] ?? null]))
+}
+const config = process.env.XDG_CONFIG_HOME || path.join(home, ".config")
+for (const file of [process.env.DIM_LLM_ROUTER_CONNECTION_FILE || path.join(home, ".config/dim/llm-router.json"),
+  path.join(home, ".config/dim/opencode-launch.js"), path.join(config, "opencode/plugins/dim-llm-router.js"),
+  path.join(config, "opencode/opencode.json"), path.join(config, "opencode/opencode.jsonc"),
+  path.join(home, ".omo/omo.jsonc"), process.env.OPENCODE_CONFIG].filter(Boolean)) {
+  try {
+    const stat = fs.lstatSync(file)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== process.getuid() || stat.size > 1024 * 1024) throw Error("unsafe OpenCode integration configuration")
+    hash.update(file).update(fs.readFileSync(file))
+  } catch (error) { if (error.code !== "ENOENT") throw error }
+}
+process.stdout.write(hash.digest("hex"))
+NODE
+)" || fail 'could not fingerprint OpenCode configuration'
+
 state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
 state_dir="$(node - "$HOME" "$state_home" <<'NODE'
 const fs = require("node:fs")
@@ -158,6 +193,18 @@ process.exit(environment.includes(expected) ? 0 : 1)
 NODE
 }
 
+process_configuration_matches() {
+  local process_id="$1"
+  local key="$2"
+  local value="$3"
+  node - "$process_id" "$key" "$value" <<'NODE'
+const fs = require("node:fs")
+const expected = `${process.argv[3]}=${process.argv[4]}`
+const environment = fs.readFileSync(`/proc/${process.argv[2]}/environ`, "utf8").split("\0")
+process.exit(environment.includes(expected) ? 0 : 1)
+NODE
+}
+
 process_cors_matches() {
   node - "$1" "$2" <<'NODE'
 const fs = require("node:fs")
@@ -225,6 +272,7 @@ if [[ -f "$pid_file" && ! -L "$pid_file" ]]; then
     process_instance_matches "$recorded_pid" "$recorded_instance"; then
     owned_pid="$recorded_pid"
     if [[ "${recorded_port:-}" = "$port" ]] && process_cors_matches "$owned_pid" "$cors_origins_json" && \
+      process_configuration_matches "$owned_pid" DIM_OPENCODE_WEB_CONFIGURATION_FINGERPRINT "$configuration_fingerprint" && \
       authenticated_health && \
       process_owns_listener "$owned_pid" "$port"; then
       server_pid="$owned_pid"
@@ -259,6 +307,7 @@ if [[ -z "${server_pid:-}" ]]; then
   OPENCODE_SERVER_PASSWORD="$password" \
   DIM_OPENCODE_WEB_INSTANCE_ID="$instance_id" \
   DIM_OPENCODE_WEB_CORS_ORIGINS_CANONICAL="$cors_origins_json" \
+  DIM_OPENCODE_WEB_CONFIGURATION_FINGERPRINT="$configuration_fingerprint" \
     nohup opencode serve --hostname 127.0.0.1 --port "$port" \
       "${cors_arguments[@]}" \
       {lock_fd}>&- </dev/null >>"$log_file" 2>&1 &

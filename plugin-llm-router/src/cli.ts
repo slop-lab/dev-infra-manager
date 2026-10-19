@@ -100,20 +100,23 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     if (action !== "attach") throw new Error(usage);
     const workspace = await context.store.read(positional), projectId = required("--project");
     const route = config.routes.find((route) => route.id === (flags.get("--route") ?? "default")); if (!route) throw new Error("router route was not found");
+    const selectedModel = route.models.find(({ id }) => id === (flags.get("--model") ?? route.models[0]?.id));
+    if (!selectedModel) throw new Error("attachment default model must belong to the selected route");
     const principalId = flags.get("--principal") ?? workspace.id;
-    const connection = { schemaVersion: 1, workspaceId: workspace.id, projectId, principalId, endpoint: origin(required("--endpoint")), token: ledger.issue(workspace, route.id, projectId, principalId), models: route.models };
+    const connection = { schemaVersion: 1, workspaceId: workspace.id, projectId, principalId, endpoint: origin(required("--endpoint")), token: ledger.issue(workspace, route.id, projectId, principalId), models: route.models, defaultModel: selectedModel.id };
     const adapter = await readFile(new URL("./opencode.js", import.meta.url), "utf8");
-    const status = await context.service.exec(workspace.name, ["node", "--input-type=commonjs", "-e", attachScript], { signal: context.signal, workspaceId: workspace.id, stdin: Readable.from(JSON.stringify({ connection, adapter })) });
+    const launch = await readFile(new URL("./opencode-launch.js", import.meta.url), "utf8");
+    const status = await context.service.exec(workspace.name, ["node", "--input-type=commonjs", "-e", attachScript], { signal: context.signal, workspaceId: workspace.id, stdin: Readable.from(JSON.stringify({ connection, adapter, launch })) });
     if (status !== 0) { ledger.revoke(principalId); throw new Error("workspace LLM attachment failed; principal revoked"); }
-    console.log(`Attached project '${projectId}' route '${route.id}' to ${workspace.name}`);
+    console.log(`Attached project '${projectId}' route '${route.id}' to ${workspace.name}; OpenCode defaults to dim-${selectedModel.api}/${selectedModel.id}. Rerun dim tools server to refresh an existing server.`);
   } finally { ledger.close(); await guard.release(); }
 }
 const attachScript = String.raw`
 const fs=require("node:fs"),os=require("node:os"),path=require("node:path");let input="";
 process.stdin.setEncoding("utf8");process.stdin.on("data",chunk=>input+=chunk);process.stdin.on("end",()=>{
- const data=JSON.parse(input),home=os.homedir(),config=path.join(home,".config/dim"),plugins=path.join(home,".config/opencode/plugins");
+ const data=JSON.parse(input),home=os.homedir(),config=path.join(home,".config/dim"),plugins=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),"opencode/plugins");
  fs.mkdirSync(config,{recursive:true,mode:0o700});fs.mkdirSync(plugins,{recursive:true,mode:0o700});
- for(const [file,value] of [[path.join(config,"llm-router.json"),JSON.stringify(data.connection)], [path.join(plugins,"dim-llm-router.js"),data.adapter]]){
+ for(const [file,value] of [[path.join(config,"llm-router.json"),JSON.stringify(data.connection)], [path.join(plugins,"dim-llm-router.js"),data.adapter], [path.join(config,"opencode-launch.js"),data.launch]]){
   try{const st=fs.lstatSync(file);if(!st.isFile()||st.isSymbolicLink()||st.uid!==process.getuid()||st.nlink!==1)throw Error("unsafe workspace config path");}catch(error){if(error.code!=="ENOENT")throw error;}
   const temporary=file+".tmp-"+require("node:crypto").randomUUID();fs.writeFileSync(temporary,value,{mode:0o600,flag:"wx"});fs.renameSync(temporary,file);
  }

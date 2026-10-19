@@ -217,6 +217,23 @@ grep -Fqx "127.0.0.1 $port --cors=https://slop-lab.github.io" "$opencode_argumen
 kill -0 "$unrelated_pid"
 
 
+# Attaching or rotating the optional router after launch must refresh only the
+# recorded owned process; unchanged configuration must retain its PID.
+mkdir -p "$work_dir/home/.config/dim" "$work_dir/home/.omo"
+for changed_file in "$work_dir/home/.config/dim/llm-router.json" "$work_dir/home/.omo/omo.jsonc"; do
+  printf '%s\n' '{"revision":"new-configuration"}' >"$changed_file"
+  chmod 0600 "$changed_file"
+  env "${base_env[@]}" bash "$launcher" >/dev/null
+  changed_pid="$(cut -d ' ' -f 1 "$state_dir/server.pid")"
+  [[ "$changed_pid" != "$server_pid" ]]
+  ! kill -0 "$server_pid" 2>/dev/null
+  server_pid="$changed_pid"
+  [[ "$(cat "$credential_file")" = "$credential_before_change" ]]
+  env "${base_env[@]}" bash "$launcher" >/dev/null
+  [[ "$(cut -d ' ' -f 1 "$state_dir/server.pid")" = "$server_pid" ]]
+  kill -0 "$unrelated_pid"
+done
+
 kill "$server_pid"
 wait "$server_pid" 2>/dev/null || true
 rm -f "$work_dir/home/.local/state/opencode-web/server.pid"

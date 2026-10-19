@@ -22,7 +22,27 @@ async function DimLlmRouter() {
       || typeof model.output !== "number" || !Number.isSafeInteger(model.output) || model.output < 1) throw new Error("invalid DIM model metadata");
     return { id: model.id, name: model.name, api: model.api, context: model.context, output: model.output };
   });
-  return { async config(config: Record<string, unknown>): Promise<void> {
+  const mode = process.env.DIM_LLM_ROUTER_OPENCODE_MODE ?? "router";
+  if (mode !== "router" && mode !== "providers") throw new Error("DIM_LLM_ROUTER_OPENCODE_MODE must be router or providers");
+  const selected = models.find((model) => model.id === connection.defaultModel) ?? models[0];
+  if (!selected || connection.defaultModel !== undefined && selected.id !== connection.defaultModel) throw new Error("DIM default model is not in the attached route");
+  const selection = `dim-${selected.api}/${selected.id}`;
+  return { async "chat.params"(input: unknown, output?: unknown): Promise<void> {
+    if (mode === "providers") return;
+    const model = record(record(input).model);
+    const allowed = models.find((candidate) => model.providerID === `dim-${candidate.api}` && model.id === candidate.id);
+    if (!allowed) {
+      throw new Error("DIM router mode rejects an unattached model/provider; use DIM_LLM_ROUTER_OPENCODE_MODE=providers to opt out");
+    }
+    if (allowed.api === "responses" && output !== undefined) {
+      const parameters = record(output);
+      const options = parameters.options === undefined ? {} : record(parameters.options);
+      if (options.previousResponseId !== undefined || options.previous_response_id !== undefined) {
+        throw new Error("DIM router requires stateless full-history Responses requests");
+      }
+      parameters.options = { ...options, store: false };
+    }
+  }, async config(config: Record<string, unknown>): Promise<void> {
     const providers = config.provider === undefined ? {} : record(config.provider);
     for (const api of ["responses", "chat"] as const) {
       const selected = models.filter((model) => model.api === api); if (selected.length === 0) continue;
@@ -30,9 +50,20 @@ async function DimLlmRouter() {
       if (providers[name] !== undefined) throw new Error(`OpenCode provider '${name}' already exists; refusing to replace it`);
       providers[name] = { npm: api === "responses" ? "@ai-sdk/openai" : "@ai-sdk/openai-compatible", name: "DIM workspace router",
         options: { baseURL: `${connection.endpoint}/v1`, apiKey: connection.token },
-        models: Object.fromEntries(selected.map((model) => [model.id, { name: model.name, limit: { context: model.context, output: model.output } }])) };
+        models: Object.fromEntries(selected.map((model) => [model.id, { name: model.name, ...(api === "responses" ? { options: { store: false } } : {}), limit: { context: model.context, output: model.output } }])) };
     }
     config.provider = providers;
+    if (mode === "router") {
+      config.model = selection;
+      config.small_model = selection;
+      if (config.agent !== undefined) {
+        for (const value of Object.values(record(config.agent))) {
+          const agent = record(value);
+          agent.model = selection;
+          delete agent.variant;
+        }
+      }
+    }
   } };
 }
 export default DimLlmRouter;

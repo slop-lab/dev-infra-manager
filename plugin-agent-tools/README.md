@@ -89,3 +89,12 @@ The maintained setup derives from the user's
 It keeps the useful user-home/OMO setup while replacing broad process killing,
 automatic unauthenticated exposure and repository bootstrap with explicit
 workspace operations.
+
+When the optional LLM-router plugin attaches a workspace, these helpers run its
+user-side OpenCode launch hook before TUI/run/server/saved continuation. That
+hook returns only OpenCode configuration and an OMO profile selection; tools do
+not load host plugins or upstream credentials. Existing owned Web servers are
+restarted when router, OMO, or OpenCode configuration changes and reused when
+unchanged. Run `dim tools server WORKSPACE` again after attachment/token rotation
+to refresh an existing server. `DIM_LLM_ROUTER_OPENCODE_MODE=providers` explicitly
+retains independent model/provider choices.

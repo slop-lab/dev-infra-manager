@@ -2,10 +2,10 @@
 // @ts-check
 import { execFileSync, spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { mkdir, open, realpath, stat } from "node:fs/promises";
+import { mkdir, open, realpath, stat, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 try { await main(); }
 catch (error) { console.error(`dim-agent: ${error instanceof Error ? error.message : String(error)}`); process.exitCode = 2; }
@@ -43,6 +43,23 @@ async function main() {
     const temporary = path.join(root, "opencode");
     await mkdir(temporary, { recursive: true, mode: 0o700 });
     process.env.TMPDIR = temporary;
+    const hookFile = path.join(home, ".config/dim/opencode-launch.js");
+    let hookInfo;
+    try { hookInfo = await lstat(hookFile); }
+    catch (error) { if (!(record(error) && error.code === "ENOENT")) throw error; }
+    if (hookInfo !== undefined) {
+      if (!hookInfo.isFile() || hookInfo.isSymbolicLink() || hookInfo.uid !== process.getuid?.()) throw new Error("OpenCode launch hook must be an owned regular file");
+      /** @type {unknown} */
+      const module = await import(pathToFileURL(hookFile).href);
+      if (!record(module) || typeof module.prepareOpenCode !== "function") throw new Error("invalid OpenCode launch hook");
+      /** @type {unknown} */
+      const overrides = await module.prepareOpenCode();
+      if (!record(overrides)) throw new Error("invalid OpenCode launch environment");
+      for (const [key, value] of Object.entries(overrides)) {
+        if (!["OPENCODE_CONFIG_CONTENT", "OMO_PROFILE"].includes(key) || typeof value !== "string") throw new Error("unsupported OpenCode launch environment");
+        process.env[key] = value;
+      }
+    }
   }
   const resume = args[0] === "--resume";
   if (resume) args.shift();

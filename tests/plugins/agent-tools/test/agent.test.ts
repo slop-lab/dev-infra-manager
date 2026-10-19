@@ -25,11 +25,18 @@ it("tool launch forwards exact arguments and registers tool-owned noninteractive
     const run = (...args: string[]) => execute(process.execPath, [agent, ...args], { cwd: home, env });
     const literal = "value;$(not-a-shell)";
     expect(JSON.parse((await run("codex", literal, "--host", "unchanged")).stdout).argv).toEqual([literal, "--host", "unchanged"]);
+    await mkdir(path.join(home, ".config/dim"), { recursive: true });
+    await writeFile(path.join(home, ".config/dim/opencode-launch.js"),
+      'export async function prepareOpenCode(){return {OPENCODE_CONFIG_CONTENT:JSON.stringify({model:"dim-responses/reviewed"}),OMO_PROFILE:"dim-router"}}', { mode: 0o600 });
     const first = JSON.parse((await run("opencode", "--resume-on-restart", literal)).stdout);
-    expect(first.argv).toEqual([literal]); expect(first.temporary).toBe(path.join(root, "temporary-volume/opencode"));
+    expect(first.argv).toEqual([literal]);
+    expect(JSON.parse(first.opencodeConfig)).toEqual({ model: "dim-responses/reviewed" });
+    expect(first.omoProfile).toBe("dim-router"); expect(first.temporary).toBe(path.join(root, "temporary-volume/opencode"));
     const resumed = JSON.parse((await execute(process.execPath, [guest, "session", "resume"], { env, cwd: home })).stdout);
     expect(resumed.argv.slice(0, 2)).toEqual(["run", "--continue"]);
     expect(resumed.temporary).toBe(first.temporary);
+    expect(resumed.opencodeConfig).toBe(first.opencodeConfig);
+    expect(resumed.omoProfile).toBe(first.omoProfile);
     await run("codex", "--resume-on-restart");
     const codex = JSON.parse((await execute(process.execPath, [guest, "session", "resume"], { env, cwd: home })).stdout);
     expect(codex.argv.slice(0, 4)).toEqual(["exec", "resume", "--last", expect.stringContaining("Continue the interrupted task")]);
