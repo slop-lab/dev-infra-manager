@@ -183,3 +183,34 @@ host/image combination; repeat the checks for a different image or host.
 Backend facts: [Incus VM creation](https://linuxcontainers.org/incus/docs/main/howto/instances_create/),
 [resource options](https://linuxcontainers.org/incus/docs/main/reference/instance_options/),
 [console transport](https://linuxcontainers.org/incus/docs/main/api-extensions/#console-vga-type).
+
+Reviewed VM image downloads can share a persistent host artifact cache:
+
+```bash
+dim vm image import https://images.example/dim-vm.tar.xz --sha256 REVIEWED_SHA256
+# Split Incus images:
+dim vm image import https://images.example/incus.tar.xz --sha256 METADATA_SHA256 \
+  --rootfs-url https://images.example/rootfs.qcow2 --rootfs-sha256 ROOTFS_SHA256
+```
+
+The command imports into the configured local Incus project and returns its
+verified VM fingerprint for `dim create --runtime vm --image FINGERPRINT`.
+The image must already contain the reviewed DIM guest prerequisites described
+above. A plain Ubuntu cloud disk is not an Incus image or a prepared DIM guest;
+this command does not provision it or select an unreviewed default image.
+
+Downloads are keyed by their full SHA-256 under
+`${XDG_CACHE_HOME:-$HOME/.cache}/dim/artifacts` on the selected host. Set
+`DIM_ARTIFACT_CACHE=/absolute/path` on that host to use another disk or a NAS
+mount. The operator owns this directory; do not grant workspace code write
+access. Every hit is checked, concurrent requests lock the same digest,
+interrupted downloads resume, and verified files are synced and atomically
+renamed. Workspace discard never removes the cache. Cache eviction is an
+explicit operator action performed while downloads are idle.
+
+A NAS must provide working cross-client `flock`, atomic same-directory rename,
+and file/filesystem sync with durable writes. Mounts without those semantics
+are unsupported; use a local host cache instead. Separate hosts can share this
+cache only when their mount provides those locking and durability guarantees.
+The repository's Ubuntu bootstrap and CI image-seeding tools reuse this helper
+for plain test disks without treating those disks as DIM-ready VM images.

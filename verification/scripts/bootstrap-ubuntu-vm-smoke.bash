@@ -28,7 +28,7 @@ readonly BOOTSTRAP_IMAGE_SHA256=6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c57
 BOOTSTRAP_WORK_ROOT="$(mktemp -d /tmp/dim-bootstrap-ubuntu-vm.XXXXXXXX)"
 BOOTSTRAP_WORK_IDENTITY="$(stat -Lc '%d:%i' "$BOOTSTRAP_WORK_ROOT")"
 BOOTSTRAP_EVIDENCE_ROOT="${DIM_BOOTSTRAP_VM_LOG_ROOT:-$PWD/.local/verification/bootstrap-ubuntu-vm-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
-BOOTSTRAP_BASE_IMAGE="$BOOTSTRAP_WORK_ROOT/ubuntu-24.04-server-cloudimg-amd64.img"
+BOOTSTRAP_BASE_IMAGE=""
 BOOTSTRAP_CLEANUP_COMPLETE=0
 BOOTSTRAP_CLEANUP_UNCERTAIN=0
 export BOOTSTRAP_WORK_ROOT BOOTSTRAP_EVIDENCE_ROOT BOOTSTRAP_BASE_IMAGE
@@ -73,8 +73,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 bootstrap_source_verify_bundle "$BOOTSTRAP_WORK_ROOT/source.git"
-timeout --signal=TERM --kill-after=15s 1800s \
-  curl --fail --location --proto '=https' --tlsv1.2 --output "$BOOTSTRAP_BASE_IMAGE" "$BOOTSTRAP_IMAGE_URL"
+BOOTSTRAP_BASE_IMAGE="$(timeout --signal=TERM --kill-after=15s 1800s bash \
+  "$script_dir/../../plugin-vm/scripts/artifact-cache.bash" "$BOOTSTRAP_IMAGE_URL" "$BOOTSTRAP_IMAGE_SHA256")"
 printf '%s  %s\n' "$BOOTSTRAP_IMAGE_SHA256" "$BOOTSTRAP_BASE_IMAGE" | sha256sum --check --strict
 printf 'image-url=%s\nimage-sha256=%s\nsource-sha=%s\nsource-tree=%s\n' \
   "$BOOTSTRAP_IMAGE_URL" "$BOOTSTRAP_IMAGE_SHA256" "$SOURCE_SHA" "$SOURCE_TREE" \

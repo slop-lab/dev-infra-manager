@@ -12,3 +12,5 @@ await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README
 await copyFile(new URL("../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
 
 await copyFile(new URL("./install-budget-helper.bash", import.meta.url), new URL("../dist/install-budget-helper.bash", import.meta.url));
+
+await copyFile(new URL("./artifact-cache.bash", import.meta.url), new URL("../dist/artifact-cache.bash", import.meta.url));

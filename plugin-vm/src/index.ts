@@ -9,6 +9,7 @@ import { parseVmHostConfig, readVmHostConfig } from "./config.js";
 import { IncusMachines } from "./incus.js";
 import { IncusWorkspaceRuntime } from "./runtime.js";
 import { PersistentVmService } from "./store.js";
+import { importReviewedImage, type ReviewedImageDownload } from "./images.js";
 import { serveVmConsole } from "./console.js";
 
 export { CommandVmBudget } from "./budget-helper.js";
@@ -43,6 +44,20 @@ async function runVmCommand(args: string[], context: WorkspaceHostPluginContext)
     process.stdout.write("VM host configuration saved. Create a workspace with: dim create SOURCE NAME --runtime vm --image INCUS_FINGERPRINT\n"); return;
   }
   const config = readVmHostConfig(context.stateRoot);
+  if (command === "image") {
+    if (name !== "import" || !argument || args.length < 5 || (args.length - 3) % 2 !== 0) throw new UserError("usage: dim vm image import URL --sha256 DIGEST [--rootfs-url URL --rootfs-sha256 DIGEST]");
+    const options = new Map<string, string>();
+    for (let index = 3; index < args.length; index += 2) {
+      const flag = args[index], value = args[index + 1];
+      if (!flag || !value || !["--sha256", "--rootfs-url", "--rootfs-sha256"].includes(flag) || options.has(flag)) throw new UserError("unknown, duplicate or missing image import option");
+      options.set(flag, value);
+    }
+    const sha256 = options.get("--sha256"), rootfsUrl = options.get("--rootfs-url"), rootfsSha = options.get("--rootfs-sha256");
+    if (!sha256 || (rootfsUrl === undefined) !== (rootfsSha === undefined)) throw new UserError("image import requires SHA-256 for every downloaded file");
+    const input: ReviewedImageDownload = { url: argument, sha256, ...(rootfsUrl !== undefined && rootfsSha !== undefined ? { rootfs: { url: rootfsUrl, sha256: rootfsSha } } : {}) };
+    process.stdout.write(`${JSON.stringify({ fingerprint: await importReviewedImage(config, input, context.runner, context.signal) })}\n`);
+    return;
+  }
   const machines = new IncusMachines(config, context.runner, configuredBudget(config, context.runner), context.cleanupRunner);
   const service = new PersistentVmService(context.stateRoot, machines, context.store);
   switch (command) {
