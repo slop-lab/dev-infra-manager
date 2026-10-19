@@ -9,6 +9,7 @@ const packageDirectories = [
   "core/packages/core/dist",
   "core/packages/managed/dist",
   "core/packages/native-git/dist",
+  "core/packages/web/dist",
   "plugin-ci-workflows/dist",
   "core/packages/contracts/external-url/dist",
   "plugin-dns-cloudflare/dist",
