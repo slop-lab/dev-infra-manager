@@ -133,7 +133,7 @@ export async function createRouter(config: RouterConfig) {
       if (!upstreamRejected && !observer.completed) throw new Error("upstream response ended without a completion marker");
       if (observer.model !== undefined && observer.model !== model.id) throw new RequestError(502, "observed upstream model differs from the reviewed model", "upstream_policy_violation");
       const recorded = archive.result();
-      ledger.finish(id, { outcome: upstreamRejected || observer.failed ? "failed" : "completed", captureComplete: recorded.complete, requestHash: hash(bytes), ...recorded,
+      ledger.finish(id, { outcome: upstreamRejected || observer.failed ? "failed" : "completed", executionFinished: observer.completed, captureComplete: recorded.complete, requestHash: hash(bytes), ...recorded,
         ...(observer.model === undefined ? {} : { observedModel: observer.model }), ...(observer.usage === undefined ? {} : { usage: observer.usage }), ...(observer.rawUsage === undefined ? {} : { rawUsage: observer.rawUsage }),
         ...(upstreamRejected ? { errorCode: "upstream-rejected" } : {}), delivery: "complete" });
       response.end();

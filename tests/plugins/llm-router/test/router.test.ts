@@ -384,3 +384,47 @@ it("fails an unexpected observed model visibly while preserving completed execut
     observed_model: "unreviewed-substitution", error_code: "upstream_policy_violation", occupied: 0
   });
 });
+
+it.each([false, true])("recognizes standard Responses error:null as successful completion (stream=%s)", async (stream) => {
+  let calls = 0;
+  const responseBody = { id: "resp_completed", object: "response", status: "completed", error: null,
+    incomplete_details: null, model: "reviewed-model", output: [{ type: "function_call", name: "read", arguments: "{}", call_id: "call_read" }],
+    usage: { input_tokens: 11, output_tokens: 5, total_tokens: 16 } };
+  const bytes = Buffer.from(stream ? `data: ${JSON.stringify({ type: "response.completed", response: responseBody })}\n\n` : JSON.stringify(responseBody));
+  const fx = await fixture((_request, response) => {
+    calls++; response.writeHead(200, { "content-type": stream ? "text/event-stream" : "application/json" }); response.end(bytes);
+  }, { concurrent: 1 });
+  for (let request = 1; request <= 2; request++) {
+    const response = await fx.request({ stream }); expect(response.status).toBe(200);
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+    expect(fx.router.ledger.request(response.headers.get("x-dim-request-id")!)).toMatchObject({
+      outcome: "completed", execution: "completed", occupied: 0, accounting: "settled", capture_complete: 1,
+      input_tokens: 11, output_tokens: 5, observed_model: "reviewed-model"
+    });
+    expect(calls).toBe(request);
+  }
+});
+
+it.each([
+  { status: "failed", stream: false }, { status: "incomplete", stream: false },
+  { status: "failed", stream: true }, { status: "incomplete", stream: true }
+])("releases confirmed terminal $status execution without replaying it (stream=$stream)", async ({ status, stream }) => {
+  let calls = 0;
+  const responseBody = { id: "resp_terminal", object: "response", status, model: "reviewed-model",
+    error: status === "failed" ? { code: "server_error", message: "backend failed" } : null,
+    incomplete_details: status === "incomplete" ? { reason: "max_output_tokens" } : null, usage: null };
+  const bytes = Buffer.from(stream ? `data: ${JSON.stringify({ type: `response.${status}`, response: responseBody })}\n\n` : JSON.stringify(responseBody));
+  const fx = await fixture((_request, response) => {
+    calls++; response.writeHead(200, { "content-type": stream ? "text/event-stream" : "application/json" }); response.end(bytes);
+  }, { concurrent: 1 });
+  for (let request = 1; request <= 2; request++) {
+    const response = await fx.request({ stream }); expect(response.status).toBe(200);
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+    expect(fx.router.ledger.request(response.headers.get("x-dim-request-id")!)).toMatchObject({
+      outcome: "failed", execution: "failed", occupied: 0, capture_complete: 1,
+      accounting: "reconciliation_required", input_tokens: null, output_tokens: null
+    });
+    // Each operator/client invocation dispatches once. A terminal failure is not retried.
+    expect(calls).toBe(request);
+  }
+});

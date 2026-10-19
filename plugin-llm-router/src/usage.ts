@@ -52,7 +52,7 @@ export class UsageObserver {
     try {
       const value: unknown = JSON.parse(source), outer = object(value);
       const row = ["response.completed", "response.failed", "response.incomplete"].includes(String(outer.type)) ? object(outer.response) : outer;
-      if (outer.type === "response.failed" || outer.type === "response.incomplete" || row.status === "failed" || row.status === "incomplete" || row.error !== undefined) { this.failed = true; this.completed = true; }
+      if (outer.type === "response.failed" || outer.type === "response.incomplete" || row.status === "failed" || row.status === "incomplete" || row.error !== undefined && row.error !== null) { this.failed = true; this.completed = true; }
       if (outer.type === "response.completed" || !this.streaming && (row.status === "completed" || Array.isArray(row.choices))) this.completed = true;
       if (typeof row.model === "string") this.model = row.model;
       if (row.usage === undefined || row.usage === null) return;
