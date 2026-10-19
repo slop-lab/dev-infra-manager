@@ -1,0 +1,108 @@
+name: OpenCode Web Pages
+
+on:
+  push:
+    branches: [main, development]
+    paths:
+      - .github/workflows/opencode-pages.yml
+      - tools/opencode-web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One public site: either branch may publish. Finish an active deployment;
+# the newest queued main/development run supplies the next site revision.
+concurrency:
+  group: opencode-github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26.5.0
+      - name: Read reviewed Bun version
+        id: pin
+        run: node -e 'const fs=require("node:fs");fs.appendFileSync(process.env.GITHUB_OUTPUT,"bun="+JSON.parse(fs.readFileSync("tools/opencode-web/upstream.json","utf8")).bun+"\n")'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+      - name: Build reviewed upstream static UI
+        run: node tools/opencode-web/build.mjs "$RUNNER_TEMP/opencode-source" "$RUNNER_TEMP/opencode-build"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-web-build
+          path: ${{ runner.temp }}/opencode-build
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26.5.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: opencode-web-build
+          path: ${{ runner.temp }}/opencode-build
+      - name: Preserve versioned Pages archive and stage current UI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_TERMINAL_PROMPT: 0
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: '!f() { printf "%s\n" "username=x-access-token" "password=$GH_TOKEN"; }; f'
+        shell: bash
+        run: |
+          set -euo pipefail
+          site="$RUNNER_TEMP/opencode-site"
+          if git ls-remote --exit-code --heads origin refs/heads/gh-pages > "$RUNNER_TEMP/opencode-pages-ref"; then
+            git fetch --depth=1 origin refs/heads/gh-pages:refs/remotes/origin/gh-pages
+            git worktree add --detach "$site" refs/remotes/origin/gh-pages
+            git -C "$site" switch -c gh-pages
+          else
+            status=$?
+            if [[ "$status" != 2 ]]; then exit "$status"; fi
+            git init --initial-branch=gh-pages "$site"
+            git -C "$site" remote add origin "$(git remote get-url origin)"
+          fi
+          node tools/opencode-web/stage.mjs "$site" "$RUNNER_TEMP/opencode-build"
+          git -C "$site" config user.name github-actions[bot]
+          git -C "$site" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$site" add --all -- opencode-web .nojekyll
+          if ! git -C "$site" diff --cached --quiet; then
+            git -C "$site" commit -m "Publish pinned OpenCode Web from $GITHUB_SHA"
+            git -C "$site" push origin HEAD:refs/heads/gh-pages
+          fi
+          mkdir "$RUNNER_TEMP/opencode-pages-artifact"
+          git -C "$site" archive HEAD | tar -x -C "$RUNNER_TEMP/opencode-pages-artifact"
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: ${{ runner.temp }}/opencode-pages-artifact
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

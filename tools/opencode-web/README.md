@@ -17,7 +17,35 @@ to configure it. HTTPS Pages requires an HTTPS/WSS backend; an HTTP-only
 remote server will be blocked by browser mixed-content rules. CORS must allow
 `https://slop-lab.github.io`, the origin without repository/version paths.
 
-## Build and stage
+## Publish with GitHub Actions
+
+[OpenCode Web Pages](../../.github/workflows/opencode-pages.yml) builds and deploys
+changes to this tool on both `main` and `development` pushes, and supports a
+manual run from either branch. Both branches publish the same public URL: the
+last successful deployment wins. A single concurrency group serializes the
+archive and deployment; an active deployment is allowed to finish.
+
+Configure repository **Settings → Pages → Source → GitHub Actions**, and allow
+`main` and `development` in the `github-pages` environment's deployment rules.
+The workflow uses only the repository's short-lived `GITHUB_TOKEN` and Pages OIDC.
+No OpenCode login, router token, host configuration or user credential is needed.
+It never deploys pull requests or arbitrary manual-run branches.
+
+The build job has read-only repository access. It checks the reviewed upstream
+commit, uses the exact Bun version from `upstream.json`, and installs the frozen
+upstream dependencies without install scripts. All actions are pinned to commit
+SHAs. Only the archive/deployment job receives `contents: write`, `pages: write`
+and `id-token: write` permissions.
+
+The `gh-pages` branch is a generated static archive. Each deployment restores
+it, replaces the current `opencode-web/v/VERSION`, updates the default redirect
+and versions manifest, then deploys the archived tree with Pages Actions.
+Older versions and unrelated Pages content remain available. The branch is
+created on the first deployment and is not itself the Pages publishing source.
+Updating `tools/opencode-web/upstream.json` deliberately selects a new reviewed
+OpenCode/Bun pin; the versioned URL remains tied to that upstream version.
+
+## Local build and staging
 
 Install Bun 1.3.14 and Node 24/26, then explicitly build the pinned source:
 
@@ -31,8 +59,8 @@ install scripts. The temporary source edits are restored even when build fails.
 Only generated static assets are copied to `build/opencode-web/v/1.18.31/`.
 No credentials or host configuration are part of the artifact.
 
-Generated artifacts belong to the separate `gh-pages` branch. If the branch
-already exists:
+Generated artifacts belong to the separate `gh-pages` archive branch. To inspect
+the exact output locally when that branch already exists:
 
 ```sh
 git worktree add .pages-worktree gh-pages
@@ -40,10 +68,9 @@ node tools/opencode-web/stage.mjs .pages-worktree
 git -C .pages-worktree status
 ```
 
-For the first deployment, create a separate orphan `gh-pages` worktree. Review
-and commit the staged output there, then push that branch and configure Pages
-to deploy from its root. Publishing is an explicit maintainer action, not a
-side effect of building DIM. The staging command updates only the current
+For a first local inspection, create a separate orphan `gh-pages` worktree.
+Building or staging locally does not publish anything; the Actions workflow
+owns public deployment. The staging command updates only the current
 `opencode-web/v/VERSION`, its default redirect and versions manifest. Other
 versions and unrelated Pages content are preserved. Fixes can replace the
 current pinned version without deleting older versions.
