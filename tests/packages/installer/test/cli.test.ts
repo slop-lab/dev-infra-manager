@@ -683,6 +683,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(echoed.cwd).toBe(await realpath(cwd));
     expect(echoed.env.DIM_INVOKED_VIA_INSTALLER).toBe("1");
     expect(echoed.env.DIM_INSTALLER_VERSION).toBe("0.10.0");
+    expect(echoed.env.DIM_INSTALLER_ENTRYPOINT).toBe(cliEntry);
   });
 
   it("forwards --help to the configured CLI instead of intercepting it", async () => {

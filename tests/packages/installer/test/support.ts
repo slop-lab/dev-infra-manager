@@ -188,7 +188,8 @@ ${options.echoFile
   cwd: process.cwd(),
   env: {
     DIM_INVOKED_VIA_INSTALLER: process.env.DIM_INVOKED_VIA_INSTALLER ?? null,
-    DIM_INSTALLER_VERSION: process.env.DIM_INSTALLER_VERSION ?? null
+    DIM_INSTALLER_VERSION: process.env.DIM_INSTALLER_VERSION ?? null,
+    DIM_INSTALLER_ENTRYPOINT: process.env.DIM_INSTALLER_ENTRYPOINT ?? null
   }
 }));`
     : ""}

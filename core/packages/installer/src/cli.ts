@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { configuredCli, queryCliVersion, validateConfiguredCli } from "./install.js";
 import { interactiveInstall, installerCommand } from "./installerCommands.js";
 import { printFacadeHelp } from "./installerHelp.js";
@@ -73,7 +74,8 @@ async function proxyCli(executable: string, commandArgs: string[], version: stri
       env: {
         ...process.env,
         DIM_INVOKED_VIA_INSTALLER: "1",
-        DIM_INSTALLER_VERSION: version
+        DIM_INSTALLER_VERSION: version,
+        DIM_INSTALLER_ENTRYPOINT: fileURLToPath(import.meta.url)
       },
       stdio: "inherit"
     });
