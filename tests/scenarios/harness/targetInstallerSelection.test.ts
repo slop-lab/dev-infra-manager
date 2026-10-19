@@ -60,7 +60,7 @@ exec "$@"
 `);
   await Promise.all([resolve(scripts, "local-preparation-state.bash"), resolve(tools, "mise")]
     .map((path) => chmod(path, 0o755)));
-  const environment = {
+  const environment: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: `${tools}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     TMPDIR: temporaryRoot,
@@ -141,12 +141,13 @@ describe("target installer selection", () => {
 { printf 'mise'; printf ' %s' "$@"; printf '\\n'; } >>"$DIM_INVOCATIONS"
 exec "$DIM_TEST_REAL_MISE" "$@"
 `);
-    const environment = { ...fixture.environment,
+    const miseConfigurationFile = resolve(fixture.root, "mise-config/config.toml");
+    const environment: NodeJS.ProcessEnv = { ...fixture.environment,
       PATH: `${dirname(process.execPath)}:${tools}:${process.env.PATH ?? ""}`,
       MISE_DATA_DIR: resolve(fixture.root, "mise-data"),
       MISE_CACHE_DIR: resolve(fixture.root, "mise-cache"),
       MISE_CONFIG_DIR: resolve(fixture.root, "mise-config"),
-      MISE_GLOBAL_CONFIG_FILE: resolve(fixture.root, "mise-config/config.toml"),
+      MISE_GLOBAL_CONFIG_FILE: miseConfigurationFile,
       MISE_TRUSTED_CONFIG_PATHS: fixture.root,
       DIM_TEST_REAL_MISE: located.stdout.trim()
     };
@@ -169,7 +170,7 @@ exec "$DIM_TEST_REAL_MISE" "$@"
     });
     expect(version.status, version.stderr).toBe(0);
     expect(version.stdout).toMatch(/DIM CLI (\S+) \(via DIM installer \1\)/);
-    expect(await readFile(environment.MISE_GLOBAL_CONFIG_FILE, "utf8")).toContain("npm:@slop-lab/dim-installer");
+    expect(await readFile(miseConfigurationFile, "utf8")).toContain("npm:@slop-lab/dim-installer");
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   }, 120_000);
 });

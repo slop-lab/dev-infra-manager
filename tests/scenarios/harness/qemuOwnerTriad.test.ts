@@ -65,6 +65,7 @@ describe("QEMU owner artifact triad", () => {
       expect(await inspectOwner(paths.ownerPath, paths.socketPath, process.cwd())).toEqual({ state: "absent" });
     } else if (hasOwner && hasSocket && hasLease) {
       const inspected = await inspectOwner(paths.ownerPath, paths.socketPath, process.cwd());
+      if (inspected.record === undefined) throw new Error("expected the live owner record");
       expect(ownerFingerprint(inspected)).toEqual({
         state: "live",
         pid: String(process.pid),

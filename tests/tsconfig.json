@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
+    "target": "ES2024",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
@@ -20,7 +20,8 @@
     "contracts/**/*.ts",
     "installer/**/*.ts",
     "web/**/*.ts",
-    "cli/host/**/*.ts"
+    "cli/host/**/*.ts",
+    "scenarios/**/*.ts"
   ],
   "exclude": [
     "cli/*.ts"

@@ -57,7 +57,7 @@ Use actual authenticated HTTPS origins or loopback HTTP via an operator-owned
 forward. Start it on that runtime host:
 
 ```bash
-dim --host devbox managed ci worker /srv/dim/worker-a.json
+dim --host devbox ci worker /srv/dim/worker-a.json
 ```
 
 A QEMU slot uses the same shape with `runtime: "vm"`. Its runner image is the

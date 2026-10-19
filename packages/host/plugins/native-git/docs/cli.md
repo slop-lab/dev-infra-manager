@@ -119,10 +119,10 @@ Read recent execution summaries and one execution's diagnostics on the selected
 host:
 
 ```bash
-dim --host devbox managed ci jobs
-dim --host devbox managed ci jobs --json
-dim --host devbox managed ci logs EXECUTION_ID
-dim --host devbox managed ci logs EXECUTION_ID --json
+dim --host devbox control-plane ci jobs
+dim --host devbox control-plane ci jobs --json
+dim --host devbox control-plane ci logs EXECUTION_ID
+dim --host devbox control-plane ci logs EXECUTION_ID --json
 ```
 
 `control-plane connect` writes an owner-only `ci-query.json` beside the saved

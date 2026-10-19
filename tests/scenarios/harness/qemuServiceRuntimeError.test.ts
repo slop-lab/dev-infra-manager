@@ -1,3 +1,4 @@
+import type { BigIntStats } from "node:fs";
 import { lstat, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -18,7 +19,7 @@ async function triggerRuntimeServerErrors(
   await rename(temporary, fixture.runtimeServerErrorTriggerFile);
 }
 
-function identity(stats: Awaited<ReturnType<typeof lstat>>): { readonly device: bigint; readonly inode: bigint } {
+function identity(stats: BigIntStats): { readonly device: bigint; readonly inode: bigint } {
   return { device: stats.dev, inode: stats.ino };
 }
 

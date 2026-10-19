@@ -1,3 +1,4 @@
+import type { BigIntStats } from "node:fs";
 import { link, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer, type Server } from "node:net";
 import { resolve } from "node:path";
@@ -7,7 +8,7 @@ import { http, launchRecords, readEvents, startService, waitForExit, waitForObse
 
 const foreignServers: Server[] = [];
 
-function identity(stats: Awaited<ReturnType<typeof lstat>>): { readonly device: bigint; readonly inode: bigint } {
+function identity(stats: BigIntStats): { readonly device: bigint; readonly inode: bigint } {
   return { device: stats.dev, inode: stats.ino };
 }
 

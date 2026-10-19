@@ -73,13 +73,17 @@ function parseEvidence(value: unknown): EvidenceRecord {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function stringField(value: unknown, key: string): string {
-  if (typeof value === "object" && value !== null && key in value && typeof value[key] === "string") return value[key];
+  if (isRecord(value) && typeof value[key] === "string") return value[key];
   throw new FixtureStartupError(`field ${key} is missing`);
 }
 
 function numberField(value: unknown, key: string): number {
-  if (typeof value === "object" && value !== null && key in value && typeof value[key] === "number") return value[key];
+  if (isRecord(value) && typeof value[key] === "number") return value[key];
   throw new FixtureStartupError(`field ${key} is missing`);
 }
 

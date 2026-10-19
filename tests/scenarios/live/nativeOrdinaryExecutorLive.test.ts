@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sysboxBackend } from "../../../packages/host/plugins/ci-worker/src/backends/sysbox.js";
-import type { NativeCandidateReadAuthority } from "../../../packages/host/plugins/ci-worker/src/candidate.js";
+import { verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from "../../../packages/host/plugins/ci-worker/src/candidate.js";
 import { executionDescriptorDigest } from "../../../packages/contracts/ci/src/execution-protocol.js";
 import { ProcessRunner } from "../../../packages/host/core/src/runner.js";
 import { assignment, grant } from "../../contracts/ci/executionFixture.js";
@@ -36,7 +36,9 @@ describe("Sysbox execution backend with the real Docker daemon", () => {
         return { commitObjectId: descriptor.candidateCommit, treeObjectId: descriptor.candidateTree }; }
     };
     try {
-      const completed = await sysboxBackend.run({ runner, root, authority, signal: AbortSignal.timeout(110_000),
+      const completed = await sysboxBackend.run({ runner, root, signal: AbortSignal.timeout(110_000),
+        acquireCandidate: (paths) => verifyAndMaterializeCandidate({ ...paths, authority, descriptor,
+          descriptorDigest: executionDescriptorDigest(descriptor) }),
         grant: { ...selected, descriptor, descriptorDigest: executionDescriptorDigest(descriptor) } });
       expect(completed.result, JSON.stringify({ completion: completed.completion, stdout: Buffer.from(completed.logs.stdout.base64, "base64").toString(), stderr: Buffer.from(completed.logs.stderr.base64, "base64").toString() })).toBe("success"); expect(completed.cleanupComplete).toBe(true);
       expect(completed.stdout.sha256).toBe(digest(Buffer.from("native-live-output\n")));

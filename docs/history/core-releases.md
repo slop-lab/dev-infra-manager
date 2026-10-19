@@ -1,5 +1,8 @@
 # Core development changelog
 
+Archived package-group notes from before the host/control-plane reorganization.
+Current release outcomes are recorded in the [root changelog](../../CHANGELOG.md).
+
 ## Unreleased
 
 Target: `0.10.0` internal development candidate; this is not a published release.

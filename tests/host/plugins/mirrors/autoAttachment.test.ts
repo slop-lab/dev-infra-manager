@@ -46,7 +46,7 @@ it("passes Docker upgrade streams in both directions including final bytes after
   const directory = await root(), engine = join(directory, "engine.sock"), socket = join(directory, "docker.sock");
   const upstream = createServer(); upstream.on("upgrade", (_request, stream, head) => {
     stream.allowHalfOpen = true; stream.write("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n");
-    const chunks = [head]; stream.on("data", (chunk: Buffer) => chunks.push(chunk)); stream.on("end", () => stream.end(Buffer.concat(chunks)));
+    const chunks: Buffer[] = [head]; stream.on("data", (chunk: Buffer) => chunks.push(chunk)); stream.on("end", () => stream.end(Buffer.concat(chunks)));
   }); await listen(upstream, engine);
   const proxy = createGuestDockerProxy({ socket, engineSocket: engine, files: [], environmentDefaults: [], blockedHostnames: [] });
   await new Promise<void>((resolve) => proxy.server.listen(socket, resolve)); cleanup.push(() => proxy.close());

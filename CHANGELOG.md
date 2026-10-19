@@ -32,8 +32,13 @@ is implied by these source changes.
   and connect generation-bound worker configuration without hand-writing
   credentials. Source installs retain the
   matching installer and select it through mise for subsequent operations.
-  Install named control-plane plugins in an independent runtime without
-  workspace core through `installer install control-plane plugin`.
+  Install `dim-host-plugin-*` capabilities on workspace/CI hosts and
+  `dim-control-plane-plugin-*` services in an independent runtime without
+  host core through `installer install control-plane plugin`. Native Project
+  commands use `dim project`, CI workers use `dim ci worker`, and operator
+  deployment/query commands use `dim control-plane`. The base host core owns
+  the generic controller; neutral CI contracts keep workers independent of
+  Git server implementation packages.
   Validate deployment installation against its selected configuration and
   current owned resources.
 - Use the same workspace lifecycle for ordinary and managed Git sources.
