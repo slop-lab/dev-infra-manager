@@ -1,7 +1,7 @@
 # Preserved issue implementation
 
 This work implements the 32 open `dim-dim/root` issues and their comments exported
-on 2026-10-18. The stopped `dim-gitea` database was copied read-only and compared:
+on 2026-10-18. The source database was copied read-only and compared:
 all 32 issues and 80 comments match the preserved backup, whose checksums pass.
 The original backup and attachment remain unchanged outside the repository.
 
@@ -17,7 +17,7 @@ not establish actual KVM, account authentication, or deployed service behavior.
 | #4 | codex helper 및 example, 연계 검증 추가 | `dim-workspace-ssh` and core guest-client documentation provide public-key SSH and a tool-neutral `dim connect` ProxyCommand. Actual public-key SSH through the selected remote host and `dim connect` ProxyCommand passed before/after restart and recreation, with pinned guest host keys. |
 | #6 | 개발환경 설정 편의성 개선 및 관련 방향성 변경 | `plugin-agent-tools` owns pinned Codex/OpenCode/OMO setup and launch for ordinary repositories. Actual pinned setup and OpenCode serve/reuse passed; repository `.dim` contains no tool bootstrap. |
 | #8 | 오류 메시지 내용로 오류가 어떤 단계에서 발생했는지 알 수 있도록 수정 | Workspace failures include operation, workspace, lifecycle phase and original cause; CLI prints one doctor hint. Lifecycle failure/retained-state tests passed. |
-| #11 | controller, gitea 재시작 시 workspace에서 dim-gitea 호스트를 못 찾음 | Managed Git broker setup is recovered at start/exec/restart/recreate; scoped agent bridges and plugin hooks are refreshed after self operations and resource-triggered recreation. Managed Git replaces the retired Gitea dependency. |
+| #11 | 서비스 재시작 후 workspace의 Git 접속 복구 | Managed Git broker setup is recovered at start/exec/restart/recreate; scoped agent bridges and plugin hooks are refreshed after self operations and resource-triggered recreation. |
 | #15 | example workspace restart 등 검증 추가 | Actual Sysbox and selected-SSH-host checks cover stop/start/recreate, binary forwarding, cancellation and data retention. Extended runtime check also covers SSH keys, TMPDIR, services and sessions. |
 | #22 | 자체 워크스페이스 재생성 기능 추가 | Workspace-only HTTP capability accepts self restart/recreate without host credentials or a workspace selector. UUID is checked inside lifecycle lock. Actual persisted services/sessions survive recreation; scoped HTTP tests passed. |
 | #24 | VM 기반 workspace backend 추가 | `plugin-vm` implements the Incus workspace runtime and guest client delivery. Actual KVM guest boot, Docker and browser SPICE passed. Normal-user lifecycle, nested Docker, persistent data and guest reboot passed. A root-owned admission wrapper applies limits before QEMU exec, including replacement processes. |
@@ -29,10 +29,10 @@ not establish actual KVM, account authentication, or deployed service behavior.
 | #35 | docker/apt registry mirror 플러그인 추가/분리 및 대체, 추가 확장 기반 및 방향성 확립 | Cache lifecycle/state/ownership belongs to independent `plugin-cache-server`; `plugin-host-mirrors` owns client routing/configuration consumed by workspaces and managed CI. Actual nested cold/warm/offline/cache-IP replacement checks passed. Optional `.dim/workspace.json` declares exact packages; missing plugins fail before runtime creation, or receive explicit TTY operator approval on the selected host followed by source-commit revalidation. |
 | #37 | 시스템 리소스 제한 변경 | Container limits support live updates and data-preserving unlimited reset; actual lifecycle passed. VM guest allocation and host cgroup ceilings are separate; actual CPU throttling, unlimited reset and fresh-process reboot limits passed. Releasing touched guest memory returned 282,669,056 bytes to the host with zero swap. Guest allocation changes require a stopped VM; host ceilings remain live. |
 | #38 | dim 없는 프로젝트 사용 가능하게 수정 | Ordinary Git URL/local committed source works without Project registration, `.dim`, controller or plugins. Root aliases include `dim ls`, shell/exec and custom run. |
-| #39 | 간단한 웹 서버를 external-urls 플러그인을 통해 expose하는 기능 적절한 example에 추가 | In-guest `dim-expose`/`urls` use the external-urls plugin and scoped host approval path. External URL example and agent-facing skill document the loopback HTTP flow. |
-| #40 | core에서 gitea 제거, control plane 자체 git host 구현 | Optional native Git service implements repository intake, scoped workspace Git, review, CI result bindings and checked promotion; Gitea and its credentials are absent from the base graph. Real Git/CI/promotion tests and 13 HTTP/Git webhook/config checks passed. Signed external subscriptions use an independent durable outbox with bounded delivery, restart recovery and scoped operator retry. |
+| #39 | 간단한 웹 서버를 external-urls 플러그인을 통해 expose하는 기능 적절한 example에 추가 | In-guest `dim-expose` and `dim-expose list` use the external-urls plugin and scoped host approval path. External URL example and agent-facing skill document the loopback HTTP flow. |
+| #40 | 선택형 control-plane Git host 구현 | Optional native Git service implements repository intake, scoped workspace Git, review, CI result bindings and checked promotion. Real Git/CI/promotion tests and 13 HTTP/Git webhook/config checks passed. Signed external subscriptions use an independent durable outbox with bounded delivery, restart recovery and scoped operator retry. |
 | #41 | web ui 추가(별도 패키지, #40 이후) | Separate web package provides reader/operator/reviewer roles, workspace creation/lifecycle/resources through configured hosts, CI logs/capacity/cancel/retry and Git review/promotion. Actual Chromium operator creation and reader denial passed, alongside real Git/CI integration. No deployed site is claimed. |
-| #44 | 에이전트 컨테이너 내부에 workspace backend 중립 dim 공통 인터페이스 제공 | Core guest client uses runtime-independent resources/restart/recreate/expose/urls/service/session operations. Host composition owns runtime selection and narrow plugin ports; no container socket or host-admin credential enters the guest. |
+| #44 | 에이전트 컨테이너 내부에 workspace backend 중립 dim 공통 인터페이스 제공 | Core guest client provides runtime-independent resource/lifecycle/service/session operations and scoped plugin discovery/calls. Plugins prepare their clients through shared delivery; External URLs owns `dim-expose`. Host composition owns runtime selection; no host-admin credential enters the guest. |
 | #45 | dim installer facade 동작 변경 | Stable installer facade retains `installer install core|plugin|control-plane`; base-only dependency graph and matching source bundles keep managed services optional. Actual matched-facade reinstall, mise selection, six-plugin installation/discovery and absence of managed/native Git dependencies passed. The 16-artifact source bundle includes the separately installable `dim-web`; its standalone install also passed without managed/native Git. |
 | #47 | .dim 수정 시 workspace 재시작 등의 동작을 간단히 테스트할 방법 추가 | `plugin-workspace-check` creates only a new disposable workspace, checks checkout/home/nested Docker through restart/recreate and discards even after failure/cancellation with fresh UUID-fenced cleanup. Four behavioral tests passed. |
 | #48 | self workspace restart 등의 api를 통해 workspace만 재시작하는 게 아니라 에이전트 세션도 이어서 진행할 수 있어야 함 | Generic saved session and independent service registry live in persistent home. Agent-tools owns Codex `exec resume --last` and OpenCode `run --continue`; actual generic restart/recreate resume passed. Provider login is explicit. |
@@ -49,7 +49,7 @@ not establish actual KVM, account authentication, or deployed service behavior.
 
 The structural-refactor production source checkpoint is `f4d40475`; the record
 below describes that checkpoint. Its verification used disposable resources
-without replacing the installed DIM services or changing the stopped Gitea data.
+without replacing installed services or modifying the source issue database.
 The subsequent installed-router and Pages acceptance is recorded separately below.
 
 - Pinned Node 24.19.0 and 26.5.0 source checks both pass strict JS/TS checks,
@@ -79,8 +79,7 @@ The subsequent installed-router and Pages acceptance is recorded separately belo
 
 The follow-up production checkpoint `a644825d` was installed locally using the
 matching source installer selected by mise. Agent-tools and LLM-router are
-optional plugins; the old managed controller is disabled, while existing
-control-plane services and stopped Gitea data remain intact.
+optional plugins. The verification used the installed control-plane services.
 
 Development's Pages deployment succeeded in Actions run `39190026587` and serves
 [pinned OpenCode 1.18.31](https://slop-lab.github.io/dev-infra-manager/opencode-web/).

@@ -72,7 +72,7 @@ describe("native Project draft store", () => {
       expect(metadata.nlink).toBe(1);
     }
     const record = await readFile(recordPath, "utf8");
-    expect(record).not.toMatch(/credential|password|gitea|ready/i);
+    expect(record).not.toMatch(/credential|password|ready/i);
   });
 
   it("replays only an identical pending intent", async () => {

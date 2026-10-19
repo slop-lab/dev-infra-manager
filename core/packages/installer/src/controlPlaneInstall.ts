@@ -24,7 +24,6 @@ import {
 import { discardControlPlanePreflight } from "./controlPlanePreflightFailure.js";
 import { acquireControlPlaneStateLock } from "./controlPlaneLock.js";
 import { probeControlPlanePublishedAddresses } from "./controlPlanePortProbe.js";
-import { preflightControlPlanePredecessor } from "./controlPlanePredecessor.js";
 import { createControlPlaneComposeFile, validateControlPlaneCompose } from "./controlPlaneServiceRuntime.js";
 import { completeControlPlaneSourcePreflight, readControlPlaneSources } from "./controlPlaneSources.js";
 import {
@@ -45,7 +44,6 @@ export type ControlPlaneInstallOptions = {
   readonly runner?: ControlPlaneDockerRunner;
   readonly readinessPolicy?: ControlPlaneReadinessPolicy;
   readonly randomBytes?: (size: number) => Buffer;
-  readonly environment?: NodeJS.ProcessEnv;
 };
 
 export type FirstControlPlaneInstallOptions = ControlPlaneInstallOptions;
@@ -59,7 +57,6 @@ export async function installFirstControlPlane(options: FirstControlPlaneInstall
 }
 
 async function install(options: ControlPlaneInstallOptions, firstOnly: boolean): Promise<ControlPlaneInstalledState> {
-  await preflightControlPlanePredecessor(options.environment ?? process.env);
   const config = await readControlPlaneConfig(options.configPath);
   const sources = await readControlPlaneSources(config);
   const runner = options.runner ?? new ProcessControlPlaneDockerRunner();

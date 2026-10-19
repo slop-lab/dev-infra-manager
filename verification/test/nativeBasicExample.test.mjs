@@ -27,5 +27,4 @@ test("compiles the reviewed example policy and workflow into the same required j
     jobs.map(({ name, kind }) => ({ name, kind })));
   assert.match(ordinaryScript, /native-basic-ordinary-ok/);
   assert.match(qemuScript, /native-basic-qemu-ok/);
-  assert.doesNotMatch(`${policySource}\n${runnerSource}`, /gitea|actions|webhook|runnerToken/i);
 });

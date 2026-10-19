@@ -1,16 +1,10 @@
 import { createHash } from "node:crypto";
 import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { afterEach } from "vitest";
 import { readControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
-import {
-  installControlPlane as installControlPlaneSubject,
-  installFirstControlPlane as installFirstControlPlaneSubject,
-  type ControlPlaneInstallOptions,
-  type FirstControlPlaneInstallOptions
-} from "../../../../core/packages/installer/src/controlPlaneInstall.js";
-import type { ControlPlaneInstalledState } from "../../../../core/packages/installer/src/controlPlaneState.js";
+export { installControlPlane, installFirstControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import { writeControlPlaneFixture, writePrivate } from "./controlPlaneFixture.js";
 import type { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 
@@ -44,22 +38,6 @@ export async function installFixture(): Promise<{ readonly configPath: string; r
   temporaryDirectories.push(directory);
   const source = await writeControlPlaneFixture(join(directory, "operator"));
   return { configPath: source.configPath, stateRoot: join(directory, "state") };
-}
-
-export async function installControlPlane(options: ControlPlaneInstallOptions): Promise<ControlPlaneInstalledState> {
-  return await installControlPlaneSubject({
-    ...options,
-    environment: options.environment ?? { DIM_STATE_ROOT: join(dirname(options.stateRoot), "lifecycle") }
-  });
-}
-
-export async function installFirstControlPlane(
-  options: FirstControlPlaneInstallOptions
-): Promise<ControlPlaneInstalledState> {
-  return await installFirstControlPlaneSubject({
-    ...options,
-    environment: options.environment ?? { DIM_STATE_ROOT: join(dirname(options.stateRoot), "lifecycle") }
-  });
 }
 
 export function deterministicRandom(): (size: number) => Buffer {

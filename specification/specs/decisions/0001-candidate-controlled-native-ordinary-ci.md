@@ -88,23 +88,13 @@ maintainers assess before protected promotion.
   product correctness. The evidence claim is limited to the checks actually
   selected and executed; maintainers own requirements, coverage, and regression
   judgment.
-- The earlier target contract that admitted a protected-head runner definition
-  is intentionally superseded. DIM is pre-stable, so no compatibility parser,
-  dual format, or state migration is defined.
-- Native Git implements the strict schema-2 descriptor-bound attempt, terminal
-  evidence, verifier gate, and promotion checks. The native Project adapter,
-  authenticated ordinary-service verifier client, scheduler path, and host
-  executor remain unimplemented; without that client the production gate fails
-  closed.
+- Native Git validates descriptor-bound attempts, terminal evidence, current
+  repository inputs and promotion conditions. The shared CI service coordinates
+  authenticated workers, while host executors own isolated runtime creation and
+  cleanup. Unavailable authority or unverifiable evidence fails closed.
 - Service restart, generation rollover, lease expiry, and dependency outage
   must reconcile eligibility and retry durable queued work internally. They
   must not require another proposal push or operator readmission.
-
-## Supersedes
-
-This record supersedes the protected-snapshot ordinary admission semantics
-previously stated by `CI-ORDINARY-POOL-001` and `CI-JOB-IMAGE-001`. It does not
-change protected QEMU cache-hook or predecessor Gitea runner admission.
 
 ## Clarification: optional quality policy
 

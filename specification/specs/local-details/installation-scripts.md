@@ -64,9 +64,9 @@ candidate validation. Execution MUST require a normal sudo-capable operator,
 explicit fresh-VM acknowledgement, one full reviewed root commit matching a
 clean checkout, and the expected pre-stable package version.
 
-Before privileged or network operations it MUST refuse predecessor DIM state,
-prepared artifacts, Docker workloads or non-default resources, and existing
-daemon overrides. It MUST NOT delete, adopt, migrate, or overwrite them.
+Before privileged or network operations it MUST verify that DIM state and
+prepared artifacts are absent, Docker has no workloads or non-default resources,
+and daemon overrides are absent. Existing resources remain untouched.
 Executable tools MUST use reviewed exact versions and embedded checksums;
 Docker packages MUST use an exact signed package tuple. The host image-store
 requirement MUST NOT change the distinct trusted inner-daemon storage contract.
@@ -344,22 +344,31 @@ routing, approval, ingress removal, route rebinding, and denial after workspace
 name or cached IP reuse. The retired Project-root plus nested-agent example is
 not a supported verification path.
 
-## Multi-Repository Project Example Smoke
+## Native Project Workspace Verification
 
-`verification/scripts/multi-repository-example-smoke.bash`, invoked by
-`just verify example current-installed auto multi-repository`, builds and installs local packages,
-copies `examples/projects/multi-repository/repos/` to a temporary directory, initializes and
-pushes real Git repositories, and
-verifies the documented workspace and secret boundary against managed Gitea.
-The trusted workspace deploys the reviewed secret service on its own nested
-Docker daemon; the smoke verifies the agent service's independent daemon
-cannot see that service and its environment does not contain the raw secret.
+`verification/scripts/native-workspace-smoke.mts` verifies actual Native Git
+bootstrap, scoped proposal transport and the common workspace runtime through
+private disposable state and generated service credentials. Its runtime image
+must be explicitly selected from reviewed local artifacts.
 
-## Single-Repository Project Example Smoke
+`tests/packages/core/test/multiRepositoryWorkspaceRuntime.test.ts` exercises
+multiple independently imported repositories in one actual Sysbox workspace
+when `DIM_NATIVE_MULTI_REPOSITORY_IMAGE` selects a reviewed local image. It checks
+independent origins and grants, configured working directory, Git identity,
+proposal pushes, recreation with retained data, and exclusion of a private
+configuration checkout when only the public repository is selected. It owns and
+cleans its generated services, workspace resources and temporary state.
 
-`verification/scripts/single-repository-example-smoke.bash`, invoked by `just verify example
-current-installed auto single-repository`, verifies the default
-one-repository/no-secret shape, including an unprotected direct `main` push,
-explicit workspace resource limits, an unprivileged Project-owned agent, its
-private rootless DinD sidecar, nested container execution, and the agent HTTP
-application.
+## Native CI Runtime Verification
+
+`verification/scripts/native-ci-runtime-smoke.mts` exercises an actual isolated
+container or VM runner with a disposable candidate script, checkout and
+read-only host configuration. Invoke it with an explicit `container|vm` runtime,
+supervisor image and digest-pinned Ubuntu job image. It checks the selected
+runtime's filesystem, configuration and nested-container boundaries. The VM path
+requires readable/writable KVM and the reviewed runner artifacts.
+
+Centralized Native Git and CI integration tests separately exercise service
+identity, exact repository-input acquisition, authenticated claims, result
+publication, review and checked promotion. Packaged installation, service
+protocols and physical runtime mechanics have separate verification owners.

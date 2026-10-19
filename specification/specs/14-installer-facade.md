@@ -366,9 +366,9 @@ The command installs or updates one Docker Compose v2 project named
 `dim-control-plane`. It contains exactly two long-running services:
 `native-git`, which owns native Git transport, review evidence, and the durable
 review-event outbox, and `ordinary-ci`, which owns ordinary CI admission,
-webhook inbox, demand, queueing, claim receipts, leases, and report retry. It
-MUST NOT install Gitea, a browser UI, a reverse proxy, a runner
-daemon, or a Project-specific service or image. `@slop-lab/dim-cli` MUST NOT
+webhook inbox, demand, queueing, claim receipts, leases, and report retry.
+Worker daemons, browser UIs, ingress services, and Project-specific services
+are installed and operated separately. `@slop-lab/dim-cli` MUST NOT
 implement, proxy, or alias this operation.
 
 The installer config is a regular, non-symbolic-link, DIM-user-owned mode-`0600`
@@ -807,50 +807,17 @@ bundle.
 
 Changing `deploymentId`, either numeric identity, fixed container port, fixed
 mount path, fixed volume name, or Compose project name in place is unsupported.
-Before reading the installer config, opening the control-plane state lock,
-staging input, constructing a Docker runner, invoking Docker, or mutating
-installer state, the command MUST perform a bounded predecessor-state preflight
-over these explicit DIM-owned selectors:
+First installation requires all fixed `dim-control-plane` Docker resources to
+be absent. An update requires a valid schema-1 installed record and complete
+exact-owned resources. The image-local read-only state probe accepts only the
+current marked service state format and exact schema. Missing or malformed
+markers, unsupported formats, and schema mismatches fail without changing the
+database, WAL, SHM, marker, or volume bytes.
 
-1. Presence of `DIM_GITEA_CONNECTION_FILE`, `DIM_GIT_SYNC_CONNECTION_FILE`,
-   `DIM_QEMU_SCHEDULER_CONNECTION_FILE`, or
-   `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, including an empty value, is
-   rejected because it explicitly selects removed predecessor infrastructure.
-   Referenced paths MUST NOT be opened or modified.
-2. Presence of canonical managed Gitea state at
-   `${DIM_STATE_ROOT:-$HOME/.local/state/dim}/services/gitea.json` is rejected
-   unchanged. Its contents MUST NOT be opened, parsed, classified, migrated, or
-   cleaned.
-3. The command scans only canonical Project-scoped CI-runner records at
-   `${DIM_STATE_ROOT:-$HOME/.local/state/dim}/ci-runners/<project>/<name>.json`.
-   Existing runner directories MUST be caller-owned mode `0700`. Every
-   canonical JSON runner entry is rejected unchanged solely because the path is
-   present, regardless of executor kind or lifecycle phase. Record contents
-   MUST NOT be opened, parsed, or classified. A symbolic link, non-regular
-   entry, invalid canonical name, unsafe runner directory, or inspection error
-   also fails closed without changing predecessor bytes.
-4. First installation requires all fixed `dim-control-plane` Docker resources
-   to be absent and MUST NOT adopt a pre-existing
-   `dim-control-plane-ordinary-ci-data` volume. An update requires a valid
-   schema-1 installed record and complete exact-owned resources. The image-local
-   read-only state probe accepts only the current marked state format and exact
-   schema. Schema-less, schema-1, predecessor schema-2, missing-marker,
-   malformed-marker, or schema-mismatched ordinary state is rejected without
-   changing database, WAL, SHM, marker, or volume bytes.
-
-There is no compatibility alias, implicit migration, dual-service period,
-volume adoption, automatic cleanup, data conversion, or conversion of Sysbox
-capacity into QEMU or native ordinary capacity. The predecessor `dim ci
-ordinary-pool service run <config>` command accepted an arbitrary
-operator-supplied config path whose `database` path was also arbitrary. Those
-external configs, databases, and service processes are not registered
-installer state and are not discoverable from the new exact schema-1 installer
-input. The installer MUST NOT traverse the host filesystem or enumerate
-processes to find them. Their unrelated existence does not block installation,
-but they are never adopted. Operators remain responsible for stopping them
-with the old pinned release; a configured publication collision is separately
-rejected by the normal daemon publication probe. This contract defines no
-backup, export, or data-conversion authority.
+Installation examines its explicit configuration, recorded deployment state and
+owned Docker resources. Publication probes detect conflicts on configured
+addresses. Installation does not discover unrelated services by traversing host
+filesystems or enumerating processes.
 
 Required acceptance evidence is specified by
 [Verification](12-verification.md).

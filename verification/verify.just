@@ -100,7 +100,7 @@ native-idle-service-images:
 installer-artifacts:
     cd .. && pnpm --dir verification exec vitest run test/localSourceInstaller.test.ts test/targetInstallerSelection.test.ts --no-file-parallelism
 
-# Verify forge detection without relying on a live GitHub or Gitea instance.
+# Verify GitHub forge detection offline.
 pull-request-skill:
     cd .. && bash verification/scripts/pull-request-skill-smoke.bash
 

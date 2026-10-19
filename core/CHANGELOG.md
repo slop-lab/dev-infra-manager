@@ -35,6 +35,8 @@ Target: `0.10.0` internal development candidate; this is not a published release
   connection checks bind clients to the installed generation. Installation and
   activation failures retain transactional recovery. Source installation keeps
   the matching facade selected through mise.
+  Control-plane preflight validates the selected deployment and current resource
+  ownership before activation.
 - Put workflow syntax in the selected workflow plugin. Git authority consumes
   normalized plans and owns proposals, review and atomic protected-ref updates;
   external subscribers receive signed CloudEvents through independent durable

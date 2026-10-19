@@ -184,7 +184,7 @@ New product decisions above supersede mandatory-control-plane assumptions.
 | Workstream | Exported issues | Treatment |
 | --- | --- | --- |
 | Daily remote development | #4, #6, #29, #31, #38, #44, #48 | Design the no-configuration workspace, tool-neutral SSH/session/service APIs and generic tool setup together. Keep stable service labels separate from runtime identity. |
-| Workspace lifecycle and diagnostics | #8, #11, #15, #22, #49, #55, #56 | Verify existing progress first; own restart/recreate/storage/process cleanup in runtime/application layers. Reassess obsolete Gitea symptoms as generic endpoint/recovery checks. |
+| Workspace lifecycle and diagnostics | #8, #11, #15, #22, #49, #55, #56 | Verify existing progress first; own restart/recreate/storage/process cleanup in runtime/application layers. Check service endpoint resolution and recovery across restarts. |
 | Runtime and resource model | #24, #34, #37 | Model resources and agent operations independently of container/VM. Preserve working resource discovery, add unlimited semantics intentionally, validate VM behavior empirically. |
 | Mirrors, execution capacity and images | #1, #3, #27, #35 | One execution model, shared base images, plugin-owned mirrors and ordinary-user cache routing. Do not turn bypass resistance into a new strong egress-security requirement. |
 | Optional managed Git, UI and install | #40, #41, #45 | Reuse working Git/review behavior behind optional composition, keep facade behavior, make install/connect usable, build UI on application services. |

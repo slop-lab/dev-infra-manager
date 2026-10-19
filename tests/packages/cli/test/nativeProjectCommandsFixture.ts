@@ -243,9 +243,7 @@ function controlConnection(endpoint: string, hostId: string, servingGenerationId
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
   const environment = { ...process.env };
-  for (const name of ["DIM_GITEA_CONNECTION_FILE", "DIM_GIT_SYNC_CONNECTION_FILE",
-    "DIM_QEMU_SCHEDULER_CONNECTION_FILE", "DIM_ORDINARY_CI_POOL_CONNECTION_FILE",
-    "DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE"]) {
+  for (const name of ["DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE"]) {
     delete environment[name];
   }
   return environment;

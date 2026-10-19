@@ -284,28 +284,6 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stderr).toContain("control-plane installer config must be a non-symbolic-link mode-0600 regular file");
   });
 
-  it("rejects an empty obsolete ordinary-pool selector before reading control-plane config", async () => {
-    // Given: the obsolete environment key is present but empty and the config path does not exist.
-    const root = await tempDir("dim-control-plane-predecessor-selector-");
-    const { env } = await baseEnv(root);
-    const stateHome = join(root, "state-home");
-    if (tsxPath === undefined) throw new TypeError("tsx executable is required for this suite");
-
-    // When: the real facade starts control-plane installation.
-    const result = await runCli(
-      ["installer", "install", "control-plane", "--config", join(root, "missing.json")],
-      tsxPath,
-      { ...env, DIM_ORDINARY_CI_POOL_CONNECTION_FILE: "", XDG_STATE_HOME: stateHome },
-      root
-    );
-
-    // Then: key presence is rejected before config reading or installer-state creation.
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("DIM_ORDINARY_CI_POOL_CONNECTION_FILE");
-    expect(result.stderr).not.toContain("config must be");
-    await expect(access(join(stateHome, "dim", "control-plane"))).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
   it("rejects the obsolete install-cp token before configured CLI proxy dispatch", async () => {
     // Given
     const root = await tempDir("dim-cli-install-cp-configured-");

@@ -29,8 +29,8 @@ an existing canonical GitHub remote when public publication was requested. Do
 not probe a native Git endpoint as a forge or invent a GitHub repository from
 its Project ID. Native proposal/review/promotion requests use the installed
 managed Git operations and their separate authority roles; do not translate
-them into a PR or use retired Gitea APIs. Historical backup issue numbers are
-not automatically current GitHub issue numbers.
+them into a PR. Imported issue numbers identify backup records; use current
+GitHub issue identifiers when selecting a live issue.
 
 ## Publish or update
 

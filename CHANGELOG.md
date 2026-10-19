@@ -34,6 +34,8 @@ is implied by these source changes.
   matching installer and select it through mise for subsequent operations.
   Install named control-plane plugins in an independent runtime without
   workspace core through `installer install control-plane plugin`.
+  Validate deployment installation against its selected configuration and
+  current owned resources.
 - Use the same workspace lifecycle for ordinary and managed Git sources.
   Remove the separate trusted outer container, duplicate host/workspace state,
   unused controller RPC/session paths and predecessor compatibility machinery.

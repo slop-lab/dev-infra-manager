@@ -35,10 +35,9 @@ describe("native Project draft codec", () => {
     expect(parseNativeProjectDraft(imported)).toEqual(imported);
   });
 
-  it("rejects ready, Gitea state, unknown fields, changed required job kinds, and an unbound receipt", () => {
+  it("rejects ready, unknown fields, changed required job kinds, and an unbound receipt", () => {
     for (const invalid of [
       { ...pending, phase: "ready" },
-      { ...pending, giteaOrganizationId: 7 },
       { ...pending, credential: "secret" },
       { ...pending, reviewPolicy: { ...pending.reviewPolicy, requiredJobs: changedKindJobs } },
       { ...pending, phase: "repository-imported" },

@@ -13,13 +13,6 @@ import {
   type NativeProjectRecord
 } from "@slop-lab/dim-managed";
 
-const predecessorSelectors = [
-  "DIM_GITEA_CONNECTION_FILE",
-  "DIM_GIT_SYNC_CONNECTION_FILE",
-  "DIM_QEMU_SCHEDULER_CONNECTION_FILE",
-  "DIM_ORDINARY_CI_POOL_CONNECTION_FILE"
-] as const;
-
 export type NativeProjectSelection = {
   readonly connection: NativeControlPlaneConnection;
   readonly store: NativeProjectPendingStore;
@@ -31,10 +24,6 @@ export type NativeProjectView = NativeProjectRecord & { readonly runnable: boole
 export async function selectNativeProject(
   environment: NodeJS.ProcessEnv = process.env
 ): Promise<NativeProjectSelection> {
-  const unsupported = predecessorSelectors.find((name) => environment[name] !== undefined);
-  if (unsupported !== undefined) {
-    throw new UserError(`${unsupported} is unsupported by the native-only DIM CLI`);
-  }
   const selected = await selectedControlPlaneHostFile(environment);
   const connection = await loadNativeControlPlaneConnection(path.resolve(selected));
   const stateRoot = managedStateRoot(environment);

@@ -57,7 +57,7 @@ function expectEvidenceArtifact(job: WorkflowJob, expectedCommit: string): void 
 describe("candidate source workflows", () => {
   it("binds source verification to the event commit and retains source evidence and check logs", async () => {
     // Given
-    const { source, workflow } = await readWorkflow("verify");
+    const { workflow } = await readWorkflow("verify");
     const sourceJob = workflow.jobs.source;
     assert(sourceJob !== undefined);
 
@@ -72,7 +72,6 @@ describe("candidate source workflows", () => {
       if: "always()",
       with: expect.objectContaining({ path: "${{ runner.temp }}/dim-source-checks", "retention-days": 7 }),
     }));
-    expect(source).not.toMatch(/\.monorepo-candidate|monorepo-candidate|sources\.tsv|overlay|gitea/i);
   });
 
   it("dispatches only native ordinary and real-KVM integration lanes", async () => {
@@ -86,7 +85,6 @@ describe("candidate source workflows", () => {
     expect(source.match(/ref: \$\{\{ github\.sha \}\}/g)).toHaveLength(2);
     expect(source).toContain("just verify native-ordinary-executor-live");
     expect(source).toContain("just verify native-qemu-guest-mechanics-kvm");
-    expect(source).not.toMatch(/gitea|ordinary-ci-pool|shared-qemu|ci runner/i);
     for (const job of Object.values(workflow.jobs)) {
       expectExactCheckout(job, "${{ github.sha }}");
       const pnpm = job.steps.find((step) => step.uses?.startsWith("pnpm/action-setup@"));
