@@ -134,7 +134,7 @@ if [[ ! -f "$aggregate_lock" || -L "$aggregate_lock" ]]; then
   echo "aggregate source-build lock is missing from reviewed commit $commit" >&2
   exit 1
 fi
-source_version="$(node -p "require('$source_root/core/package.json').version")"
+source_version="$(node -p 'JSON.parse(require("node:fs").readFileSync(require("node:path").join(process.argv[1], "core/package.json"), "utf8")).version' "$source_root")"
 aggregate_lock_sha="$(sha256sum "$aggregate_lock" | cut -d ' ' -f 1)"
 [[ "$aggregate_lock_sha" =~ ^[0-9a-f]{64}$ ]]
 aggregate_sha="$({

@@ -63,7 +63,7 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
     docker: "#!/usr/bin/env bash\nprintf 'sha256:%064d\\n' 1\n",
     node: [
       "#!/usr/bin/env bash",
-      "if [[ \"$1\" == '-p' ]]; then printf '0.8.0\\n'; exit 0; fi",
+      `if [[ "$1" == '-p' ]]; then exec '${process.execPath.replaceAll("'", "'\\''")}' "$@"; fi`,
       "printf 'node version=%s\\n' \"$DIM_LOCAL_BUILD_VERSION\" >>\"$DIM_INVOCATIONS\"",
       "cp \"$2/core/packages/core/source-marker\" \"$3/source-marker\""
     ].join("\n"),
@@ -85,13 +85,14 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
   return { root, tools, log, selectedCommit: git(root, "rev-parse", "HEAD").stdout.trim() };
 }
 
-function runPack(fixture: RealGitFixture, commit: string, output: string): SpawnSyncReturns<string> {
+function runPack(fixture: RealGitFixture, commit: string, output: string, sourceRoot?: string): SpawnSyncReturns<string> {
   return spawnSync("/usr/bin/bash", [resolve(fixture.root, "scripts/pack-source-build.bash"), output], {
     encoding: "utf8",
     env: {
       PATH: `${fixture.tools}:/usr/bin:/bin`,
       DIM_INVOCATIONS: fixture.log,
-      DIM_SOURCE_ROOT_COMMIT: commit
+      DIM_SOURCE_ROOT_COMMIT: commit,
+      ...(sourceRoot === undefined ? {} : { DIM_SOURCE_BUILD_ROOT: sourceRoot })
     }
   });
 }
@@ -101,7 +102,7 @@ afterEach(async () => {
 });
 
 describe("real Git local source build safety", () => {
-  it("archives the selected commit bytes when a replacement ref exists", async () => {
+  it("archives selected commit bytes through a quoted staging path when a replacement ref exists", async () => {
     // Given
     const fixture = await createRealGitFixture();
     await writeFile(resolve(fixture.root, "core/packages/core/source-marker"), "replacement-commit\n");
@@ -112,7 +113,7 @@ describe("real Git local source build safety", () => {
     const output = resolve(fixture.root, "candidate");
 
     // When
-    const result = runPack(fixture, fixture.selectedCommit, output);
+    const result = runPack(fixture, fixture.selectedCommit, output, resolve(fixture.root, "quoted ' source staging"));
 
     // Then
     expect(result.status).toBe(0);
