@@ -91,6 +91,7 @@ trap cleanup EXIT
 
 GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$source_archive" "$commit" -- \
   LICENSE \
+  tsconfig.base.json \
   pnpm-lock.yaml \
   core \
   plugin-dns-cloudflare \
