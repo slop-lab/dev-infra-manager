@@ -1,8 +1,11 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
+import { FailureOnlyReporter } from "./support/failure-only-reporter.js";
 
 export default defineConfig({
   test: {
+    reporters: process.env.DIM_CHECK_VERBOSE === "1" ? ["default"] : [new FailureOnlyReporter()],
+    silent: process.env.DIM_CHECK_VERBOSE === "1" ? false : "passed-only",
     // Package fixtures include real Git imports, HTTP services, fsync and
     // restart recovery on shared CI CPUs. This is a harness budget, not a
     // production deadline; explicitly bounded operations retain their limits.
