@@ -23,12 +23,12 @@ describe("native current root lease denial", () => {
     const origin = `${fixture.service.origin}/v1/projects/project-a`;
 
     // When
-    const read = await fetch(`${origin}/root-read-leases`, {
+    const read = await fetch(`${origin}/repositories/root/read-leases`, {
       method: "POST",
       headers: { authorization: rootReadIssuerAuthorization, "content-type": "application/json" },
       body: JSON.stringify({ schemaVersion: 1, generationId })
     });
-    const write = await fetch(`${origin}/workspace-write-leases`, {
+    const write = await fetch(`${origin}/repositories/root/workspace-write-leases`, {
       method: "POST",
       headers: { authorization: workspaceWriteIssuerAuthorization, "content-type": "application/json" },
       body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root",

@@ -124,5 +124,8 @@ async function protectedIdentity(root: string): Promise<{ readonly commit: strin
 }
 
 function rootProof(origin: string): Promise<Response> {
-  return fetch(`${origin}/v1/projects/project-a/root-import/proof`, { headers: { authorization } });
+  return fetch(`${origin}/v1/projects/project-a/repositories/root/import/proof`, {
+    method: "POST", headers: { authorization, "content-type": "application/json" },
+    body: JSON.stringify({ schemaVersion: 1, generationId })
+  });
 }
