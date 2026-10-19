@@ -44,3 +44,37 @@ not establish actual KVM, account authentication, or deployed service behavior.
 | #54 | 터널 플러그인 추가 | `plugin-tunnels` owns durable TCP/UDP routes, scoped grants, guest service attachment and separate authenticated operator UI. Seven real socket/process/HTTP tests and actual Chromium add/remove/revoke flow passed. |
 | #55 | controller 및 web ui server를 oom killer로부터 보호 | Base containers, CI container/VM supervisors and VM admission use positive workload OOM preference, keeping controller/web at the host default. Actual base/CI and VM before-exec/reboot checks passed; the replacement QEMU process retained OOM preference 500. |
 | #56 | 기본 에이전트 이미지에 docker buildx 등 의존성 보강 설치 | Base image installs and verifies Docker buildx and Compose alongside Git/SSH/Node tooling. Actual image build and running-workspace version checks passed. |
+
+## Verification record
+
+The production source checkpoint is `f4d40475`. Later documentation-only commits
+retain that production source. Verification uses disposable resources rather
+than replacing the installed DIM services or changing the stopped Gitea data.
+
+- Pinned Node 24.19.0 and 26.5.0 source checks both pass strict JS/TS checks,
+  production builds, 1,268 central behavioral tests, 96 CLI tests and 150
+  installation/verification tests (two separately reported skips), followed by
+  all 132 privileged QEMU/service fixture tests. Both complete gates exit zero. The command
+  is `DIM_SOURCE_NODE_MAJOR=24 bash verification/scripts/source-gate-container.bash`;
+  run it again with `DIM_SOURCE_NODE_MAJOR=26` for the other supported lane.
+- All 82 ordinary JS/MJS/CJS source files contain `// @ts-check` and belong to
+  the strict JavaScript project; none is omitted from that check.
+- The complete production graph builds. An isolated exact-commit source build
+  produces 16 artifacts with one matching source-derived version, including the
+  optional Web application. Actual facade reinstall, mise selection, six-plugin
+  discovery and standalone `dim-web` execution verify the package boundaries.
+- Actual final Sysbox lifecycle checks cover checkout/home/Docker/TMPDIR
+  retention, resource changes, current-boot readiness, immediate SSH after
+  restart/recreation, independent services and session continuation, zombie
+  checks and owned discard. The compiled CLI also passes scoped self operations.
+- Actual selected-host SSH checks cover public-key `dim connect` ProxyCommand,
+  pinned guest host identity, restart/recreation, binary/concurrent forwarding,
+  half-close responses and cancellation cleanup. Disposable hosts, networks,
+  workspaces and all four data volumes are removed afterward.
+- Separate actual KVM/Incus and container/KVM CI checks cover the evidence in
+  the table above; source tests alone are not used to claim those results.
+
+The LLM attachment's live OAuth/refresh/provider-inference/account-selection
+checks need an authenticated backend. The separate OpenCode static site has
+been built and exercised locally in Chromium, but has not been published to
+GitHub Pages. These external checks are not represented as completed deployment.

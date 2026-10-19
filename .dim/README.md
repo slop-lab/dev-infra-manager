@@ -1,4 +1,4 @@
-# DIM-recognized Project configuration
+# DIM-recognized repository configuration
 
 | File | Reader |
 | --- | --- |
