@@ -57,5 +57,8 @@ workspace commands and the generic controller use host core only. See the
 Managed workspace creation accepts repeated `--repository ID` and `--workdir ID`
 with a `dim://PROJECT` source. Selection defaults to the Project's default working
 repository; an explicit selection must include the working repository. Ordinary
-Git sources reject these managed selection options. Native operator review
-commands require both Project and repository before the proposal or review ID.
+Git sources reject these managed selection options. The code-review package owns
+`dim-code-review resolve|inspect|approve|revoke`; merge-policy owns
+`dim-merge-policy promote`. Their generated private reviewer/promoter connections
+and commands select both Project and repository. Repository hosting alone
+installs neither operator CLI.

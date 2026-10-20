@@ -1,9 +1,25 @@
 {
   "schemaVersion": 1,
   "repositoryId": "public",
-  "review": {
-    "ciRepositoryIds": ["public"],
-    "requiredReviewerIds": ["owner"],
-    "requiredJobs": [{ "name": "public-check", "kind": "ordinary-sysbox" }]
+  "extensions": {
+    "code-review": {
+      "requiredReviewerIds": [
+        "owner"
+      ],
+      "pathReviewerRules": []
+    },
+    "git-ci": {
+      "ciRepositoryIds": [
+        "public"
+      ],
+      "requiredJobs": [
+        {
+          "name": "public-check",
+          "kind": "ordinary-sysbox",
+          "evidenceClass": "candidate-controlled"
+        }
+      ]
+    },
+    "merge-policy": {}
   }
 }

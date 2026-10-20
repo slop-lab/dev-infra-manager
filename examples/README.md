@@ -27,11 +27,11 @@ source installations should use the matching prepared package set.
 | Example | Host plugins | Other required components |
 | --- | --- | --- |
 | [Basic development](projects/basic-development/README.md) | None | Base DIM, Docker with Sysbox, built workspace image; SSH access for a remote host |
-| [Native basic repository](projects/native-basic-root/README.md) | None | Native Git and CI worker host plugins plus operator tools via `dim installer install core --with-managed`; connected native Git/control-plane services; managed service's `@slop-lab/dim-control-plane-plugin-ci-workflows` compiler; configured Sysbox and QEMU/KVM CI slots for both required jobs |
-| [Multiple repositories](projects/native-multiple-repositories/README.md) | None | Managed integration, connected native Git service and its CI workflow compiler; Sysbox workspace image; shared execution service and Sysbox worker to run CI |
+| [Native basic repository](projects/native-basic-root/README.md) | Native-Git; CI-worker on the execution host | Operator administration; Git-repositories, code-review, Git-CI, merge-policy, CI-workflows and CI control-plane plugins; configured container and VM/KVM slots |
+| [Multiple repositories](projects/native-multiple-repositories/README.md) | Native-Git; CI-worker on the execution host | The same control-plane plugin composition; Sysbox workspace image and configured container worker; independent repository policies |
 | [Codex](use-cases/codex/README.md) | `@slop-lab/dim-host-plugin-agent-tools@0.10.0` | Base workspace prerequisites; guest tool installation network access and deliberate Codex authentication; guest SSH setup for remote editors |
 | [External URLs](features/external-urls/README.md) | `@slop-lab/dim-host-plugin-external-urls@0.10.0` | Managed administration and its host controller, an owned workspace, configured ingress; no native Git/control-plane service required |
-| [Shared execution](features/shared-execution/README.md) | None | Managed CI service/compiler composition, private worker connection, reviewed runner/job images; Docker/Sysbox for container slots or Docker and functional KVM for VM slots |
+| [Shared execution](features/shared-execution/README.md) | CI-worker | CI coordinator; Git-CI and workflow compiler for repository jobs; private worker connection and reviewed images; Docker/Sysbox or functional KVM |
 | [Route policy](features/external-url-route-policy/README.md) | External-URLs plugin for a separately configured integration | Standalone policy webhook; Node.js 24/26 and a private Unix socket; use with the External URLs recipe |
 
 The recognized repository declaration is `.dim/workspace.json`, for example:
@@ -45,7 +45,7 @@ configuration repository before creating a workspace and asks before installing
 missing plugins. An empty list explicitly means no host plugins are required;
 it does not provision managed services, CI workers, images or tool credentials.
 In particular,
-`@slop-lab/dim-control-plane-plugin-native-git` and
+`@slop-lab/dim-control-plane-plugin-git-repositories` and
 `@slop-lab/dim-control-plane-plugin-ci-workflows` are control-plane plugins installed
 with `dim installer install control-plane plugin PACKAGE@EXACT_VERSION`, using
 the standalone control-plane runtime without workspace core. See

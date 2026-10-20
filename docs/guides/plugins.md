@@ -3,12 +3,14 @@
 Ordinary Git workspaces, local/SSH host selection, shell execution and loopback
 forwarding run without plugins or a control plane. Host plugins add workspace and CI-worker capabilities; control-plane plugins
 provide shared authority and service capabilities. Workflow syntax belongs to
-`@slop-lab/dim-control-plane-plugin-ci-workflows`; Git authority and CI runtimes consume its
-compiled job plans through an explicit compiler interface.
+`@slop-lab/dim-control-plane-plugin-ci-workflows`; the separately selected Git-CI
+plugin consumes its compiled plans. Repository hosting and human review require
+neither a compiler nor an execution service.
 
 The generic controller plugin host belongs to `@slop-lab/dim-host-core/controller`. It owns
-external URL drivers, scoped workspace routes, host administration routes and
-host-input providers. It does not own workspace lifecycle or inject a controller
+the lifecycle of enabled controller plugins, scoped request dispatch, host
+administration transport and neutral host-input provider registration. Feature
+plugins own their concrete drivers and provider semantics. It does not own workspace lifecycle or inject a controller
 socket, host runtime socket or raw host credential into a workspace.
 
 ## Installation and registration

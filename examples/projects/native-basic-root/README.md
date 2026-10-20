@@ -2,20 +2,36 @@
 
 ## Required components
 
-Install matching managed administration on the selected host with
-`dim installer install core --with-managed`. Prepare/install/connect its native
-Git and CI services as described in [managed administration](../../../packages/host/plugins/native-git/docs/cli.md).
-`@slop-lab/dim-control-plane-plugin-native-git` supplies the Git service;
-`@slop-lab/dim-control-plane-plugin-ci-workflows` supplies the `.dim/ci/runner.yml`
-compiler. Install these on the control-plane machine with
-`dim installer install control-plane plugin PACKAGE@EXACT_VERSION`.
-They use the standalone control-plane runtime without workspace core. They are
-control-plane plugins, separate from `.dim/workspace.json` host requirements;
+Install the native Git host integration and operator tools on the selected
+workspace host with `dim installer install core --with-managed`. This profile
+installs `@slop-lab/dim-host-plugin-native-git`,
+`@slop-lab/dim-host-plugin-ci-worker` and `@slop-lab/dim-control-plane-admin`;
+it does not deploy control-plane services. Prepare/install/connect those services
+as described in [administration](../../../packages/host/plugins/native-git/docs/cli.md).
+
+The reviewed policy selects these control-plane plugins:
+
+```bash
+dim installer install control-plane plugin \
+  '@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-code-review@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-git-ci@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-merge-policy@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-ci-workflows@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-ci@0.10.0'
+```
+
+`git-repositories` owns Git storage and scoped transport; `code-review` owns human
+approval; `git-ci` plans jobs and binds execution evidence; `merge-policy` gates
+protected-ref updates. `ci-workflows` only interprets `.dim/ci/runner.yml`; the
+separate `ci` coordinator and host `ci-worker` execute its jobs. These services
+use the standalone control-plane runtime without workspace core. Installing
+packages alone does not configure their private connections or start listeners;
 see [plugin locations](../../../docs/guides/plugin-scopes.md).
 
-This example needs no optional host plugin, so it has no host-plugin requirement
-file. It still requires a Docker/Sysbox host and a built workspace image
-(`dim image build`) to start a development workspace.
+The example needs no additional guest tool plugin or `.dim/workspace.json`
+requirement file. Workspaces require Docker/Sysbox and a built workspace image
+(`dim image build`).
 To obtain both required CI results, configure a `container` slot with reviewed
 Sysbox runner/job images and a `vm` slot with reviewed QEMU runner/job images on
 a host with functional KVM. Offline workers do not block Project import or
@@ -26,13 +42,13 @@ workspace creation, but leave required job results pending.
 Copy this example into a new Git repository and commit it on `main`. Prepare and
 connect an optional control plane on the selected host first. Its private role
 files stay outside the repository and workspace; connect saves their selection.
-Review `review-policy.json` as trusted operator input before importing:
+Review `repository-policy.json` as trusted operator input before importing:
 
 ```bash
 dim project create native-basic --project-id native-basic
 dim project repository import native-basic root \
   --source "$PWD" --ref refs/heads/main \
-  --review-policy "$PWD/review-policy.json" --json
+  --policy "$PWD/repository-policy.json" --json
 dim project configure native-basic \
   --configuration-repository root --default-repository root --json
 dim project repository list native-basic --json
@@ -48,7 +64,7 @@ choose the default directory with `--workdir`. Their checkouts live separately a
 selected configuration repository. Unselected repositories receive no guest Git
 grant or checkout. Repository names do not change native Git authentication.
 
-The policy permits CI input only from `root`. Extend `ciRepositoryIds` explicitly
+The policy permits CI input only from `root`. Extend `extensions["git-ci"].ciRepositoryIds` explicitly
 if reviewed jobs should access another repository in this Project. A candidate
 workflow cannot widen that operator allowlist itself.
 

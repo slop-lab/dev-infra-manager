@@ -6,13 +6,14 @@
 
 ## Decision
 
-Native ordinary CI reads `.dim/ci/runner.yml` and its named script from the
+When explicitly selected, the Git-CI control-plane plugin uses its selected
+workflow compiler to read `.dim/ci/runner.yml` and its named script from the
 exact candidate Git tree, not from the protected head. The candidate may choose
 job names and script bytes within the strict schema and sandbox fixed by
 `CI-NATIVE-CANDIDATE-JOB-001`. The operator chooses the digest-pinned job and
 runner base images and all resource limits.
 
-Every create or fast-forward update of a workspace-scoped proposal ref
+With Git-CI enabled, every create or fast-forward update of a workspace-scoped proposal ref
 automatically queues every valid job in that exact candidate tree. Trusted
 native Project registration supplies eligibility centrally. There is no
 per-Project runner registration, admission command, repeated policy refresh,
@@ -88,8 +89,9 @@ maintainers assess before protected promotion.
   product correctness. The evidence claim is limited to the checks actually
   selected and executed; maintainers own requirements, coverage, and regression
   judgment.
-- Native Git validates descriptor-bound attempts, terminal evidence, current
-  repository inputs and promotion conditions. The shared CI service coordinates
+- Git-CI validates descriptor-bound attempts, terminal evidence and current
+  repository inputs. Merge-policy checks selected quality evidence and human
+  decisions, then requests the repository engine's checked CAS. The shared CI service coordinates
   authenticated workers, while host executors own isolated runtime creation and
   cleanup. Unavailable authority or unverifiable evidence fails closed.
 - Service restart, generation rollover, lease expiry, and dependency outage
@@ -98,6 +100,7 @@ maintainers assess before protected promotion.
 
 ## Clarification: optional quality policy
 
+Repository hosting and human review can run without Git-CI or a compiler.
 This decision classifies native ordinary evidence whether or not a Project
 quality policy selects the job for promotion. It does not require a Project to configure CI,
 does not make ordinary capacity or results a Project or workspace readiness

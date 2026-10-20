@@ -105,12 +105,13 @@ A prepared source bundle can also install managed services and integrations:
 just install-local --with-managed
 ```
 
-This profile installs managed support as an optional library. It does not
-select plugins, start a controller, build another workspace image or deploy a
-control plane. Explicit plugins remain separate installer operations. For a
+This explicit profile installs the native-Git host and CI worker plugins plus
+control-plane administration tools. It does not start a controller or worker,
+build another workspace image or deploy a control plane. Other plugins remain
+separate installer operations. For a
 registry package set, use `dim installer install core --with-managed`.
 
-Prepare and connect an optional control plane through the managed CLI:
+Prepare and connect the explicit Git/review/CI service profile through the control-plane operator CLI:
 
 ```bash
 dim control-plane prepare /absolute/operator/deployment \

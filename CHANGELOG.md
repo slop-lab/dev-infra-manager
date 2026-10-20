@@ -7,6 +7,16 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
+- Split managed Git into independent repository, code-review, merge-policy,
+  Git CI and webhook control-plane plugins. Repository hosting no longer
+  requires review, CI or a workflow compiler. The managed deployment preset
+  composes the full workflow, while repository policies explicitly select
+  their features. Host policy transport and control-plane lifecycle remain
+  independent of feature implementations. Approvals bind the complete policy;
+  changing it requires renewed approval. Use `--policy` with the namespaced
+  repository policy file and the separate `dim-code-review` and
+  `dim-merge-policy` operator clients.
+
 - Manage independent Git repositories in one Project with separate imports,
   proposal credentials, reviews and protected-ref promotion. Select workspace
   checkouts and their default directory; CI binds allowed repository inputs to

@@ -138,8 +138,12 @@ an issue tracker.
 
 Control-plane plugins run in the standalone
 [`@slop-lab/dim-control-plane-core`](packages/control-plane/core/README.md) runtime.
-Native Git, the CI workflow compiler and the LLM router have explicit
-`dim-control-plane-plugin-*` package names. They install in a separate tree
+Git repositories, code review, merge policy, Git CI, webhooks, the CI workflow
+compiler and the LLM router have explicit `dim-control-plane-plugin-*` package
+names. Repository hosting works without review or CI; each repository selects
+its installed features through namespaced policy. The managed deployment
+preset composes these plugins for the full review and CI workflow.
+They install in a separate tree
 without `dim-host-core`, the workspace CLI or managed host integration. See
 [plugin locations and installation](docs/guides/plugin-scopes.md).
 

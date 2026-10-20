@@ -7,21 +7,22 @@ The [public/private example](../../examples/projects/native-multiple-repositorie
 provides two independent runnable repository templates, reviewed import policies,
 and linked Git/CI and workspace runtime verification for this layout.
 
-Install the optional integration with `dim installer install core --with-managed`.
-Use `dim control-plane prepare` and `connect` to configure services and
+The optional `dim installer install core --with-managed` profile installs the
+native-Git host plugin, CI worker plugin and control-plane administration tools.
+Control-plane service plugins are installed and selected separately. Use `dim control-plane prepare` and `connect` to configure services and
 host connections. A Project groups independent repositories. Import each with
-its own trusted review policy, then select the configuration and default working
+its own trusted repository policy, then select the configuration and default working
 repositories:
 
 ```bash
 dim project create codyssey --project-id codyssey
-# Each policy file names its repositoryId, required reviewers/jobs and ciRepositoryIds.
+# Policy files name repositoryId and feature-owned extensions; omitting --policy uses repository-only policy.
 dim project repository import codyssey public \
   --source /absolute/reviewed/codyssey-public --ref refs/heads/main \
-  --review-policy /absolute/operator/public-policy.json
+  --policy /absolute/operator/public-policy.json
 dim project repository import codyssey private \
   --source /absolute/reviewed/codyssey-private --ref refs/heads/main \
-  --review-policy /absolute/operator/private-policy.json
+  --policy /absolute/operator/private-policy.json
 dim project configure codyssey \
   --configuration-repository private --default-repository public
 dim project repository list codyssey --json

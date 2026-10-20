@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "repositoryId": "root",
+  "extensions": {
+    "code-review": {
+      "requiredReviewerIds": [
+        "owner"
+      ],
+      "pathReviewerRules": []
+    },
+    "git-ci": {
+      "ciRepositoryIds": [
+        "root"
+      ],
+      "requiredJobs": [
+        {
+          "name": "source",
+          "kind": "ordinary-sysbox",
+          "evidenceClass": "candidate-controlled"
+        },
+        {
+          "name": "integration",
+          "kind": "qemu",
+          "evidenceClass": "candidate-controlled"
+        }
+      ]
+    },
+    "merge-policy": {}
+  }
+}

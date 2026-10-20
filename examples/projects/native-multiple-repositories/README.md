@@ -8,28 +8,37 @@ credentials or access to private product code.
 
 ## Required components
 
-Install the optional managed integration with
-`dim installer install core --with-managed`, then prepare/install/connect native
-Git on the selected host using [managed administration](../../../packages/host/plugins/native-git/docs/cli.md).
-The control-plane machine requires the native Git and CI workflow plugins:
+On the selected workspace host, `dim installer install core --with-managed`
+installs `@slop-lab/dim-host-plugin-native-git`,
+`@slop-lab/dim-host-plugin-ci-worker` and `@slop-lab/dim-control-plane-admin`.
+Prepare/install/connect the services using
+[administration](../../../packages/host/plugins/native-git/docs/cli.md).
+The policies in this example select the following control-plane plugins:
 
 ```bash
 dim installer install control-plane plugin \
-  '@slop-lab/dim-control-plane-plugin-native-git@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-ci-workflows@0.10.0'
+  '@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-code-review@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-git-ci@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-merge-policy@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-ci-workflows@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-ci@0.10.0'
 ```
 
-These install without workspace core on the control-plane machine. The workspace
-host uses the managed client integration and a saved service connection.
-Native Git serves `dim://` sources and proposal Git; the workflow plugin interprets
-`.dim/ci/runner.yml`. See [plugin locations](../../../docs/guides/plugin-scopes.md)
-for standalone runtime configuration and the separate Docker deployment path.
+These install without workspace core on the control-plane machine. Repository
+transport, human review, CI integration and protected-ref policy are independent
+plugins. `ci-workflows` interprets `.dim/ci/runner.yml`; `git-ci` captures the
+selected inputs and connects them to the separate `ci` execution coordinator.
+Installing packages alone does not start services. See
+[plugin locations](../../../docs/guides/plugin-scopes.md) for standalone runtime
+configuration and the separate Docker deployment path.
 
-Running the jobs also requires the shared execution service, a Sysbox worker,
-and reviewed runner/job images containing Bash and `cmp`. See
+Running the jobs requires a configured host CI worker and reviewed Sysbox
+runner/job images containing Bash and `cmp`. See
 [worker setup](../../features/shared-execution/README.md). Worker capacity is
-independent of Project import and workspace creation. This example uses no VM
-backend or dynamically loaded host plugins.
+independent of Project import and workspace creation. This example needs no VM
+backend or additional guest tool plugin. Development workspaces require a built
+Sysbox workspace image and the saved native Git service connection.
 
 ## Try the disposable repositories
 
@@ -53,10 +62,10 @@ done
 dim project create codyssey --project-id codyssey
 dim project repository import codyssey public \
   --source "$work/public" --ref refs/heads/main \
-  --review-policy "$example/policies/public.json"
+  --policy "$example/policies/public.json"
 dim project repository import codyssey private \
   --source "$work/private" --ref refs/heads/main \
-  --review-policy "$example/policies/private.json"
+  --policy "$example/policies/private.json"
 dim project configure codyssey \
   --configuration-repository private --default-repository public
 dim create dim://codyssey full-dev --repository public --repository private --workdir private

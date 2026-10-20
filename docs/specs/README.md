@@ -1,7 +1,9 @@
 # Specification index
 
 The base product is an ordinary Git workspace on a local or SSH-selected host.
-Native Git, review and CI are optional integrations. Host core owns lifecycle and generic controller capabilities; host plugins
+Repository hosting, code review, merge policy, Git-CI and webhook delivery are
+independently selected control-plane plugins. Human review does not require CI
+or a compiler. Host core owns lifecycle and generic controller capabilities; host plugins
 add features, while control-plane plugins own shared authority and coordination.
 
 | Document | Scope |
@@ -19,4 +21,4 @@ add features, while control-plane plugins own shared authority and coordination.
 and [verification](12-verification.md) cover the shared architecture and optional
 integrations. Owner-specific details live with `packages/host/plugins/` and
 `packages/control-plane/plugins/`. See [plugin scopes](../guides/plugin-scopes.md)
-for runtime SDK boundaries and installation roles.
+for runtime SDK boundaries and installation roles. [Git transport and feature authority](local-details/native-git-transport.md) defines policy ownership and durable CAS recovery.

@@ -9,7 +9,11 @@ and retired runtime layouts are not compatibility requirements.
 | Core workspace application | Create, observe, execute, stop/recreate/discard owned workspace resources | Immutable UUID, parsed record, per-workspace lock, exact ownership labels |
 | Workspace | Modify checkout/home/private Docker and run development services | No host Docker socket, host checkout bind or reusable host role credentials |
 | Managed Git broker | Read registered source and push one workspace proposal namespace | Scoped attachment and grant, live core UUID/state validation, private host listener |
-| Git authority | Own repositories, proposal evidence and protected refs | Protected writes use current policy, selected evidence, human decisions and atomic ref update |
+| Git repositories | Own registered repositories, imports, scoped transport and protected-ref CAS | Guest credentials cannot mutate protected refs; trusted extensions request exact authorized CAS |
+| Code review | Publish immutable candidate evidence and human decisions | Exact candidate, repository inputs and complete trusted policy bind approvals |
+| Merge policy | Authorize protected promotion and retain decision evidence | Current approvals and required quality guards checked under repository serialization |
+| Git-CI | Plan candidates, issue scoped execution grants, accept current evidence | Compiler and CI state absent from repository-only and review-only operation |
+| Webhooks | Deliver durable authority events to configured subscribers | Delivery credentials and retry state confer no source or promotion authority |
 | Execution | Lease jobs, fence capacity, report candidate-bound results | No review, promotion, importer or general host authority |
 | Human reviewer | Inspect exact candidate evidence, approve or revoke | Approval binds the reviewed tuple and policy; CI is not approval |
 | Controller plugin | Serve explicitly enabled scoped routes and constrained inputs | Current core workspace UUID/state and target ownership checked at use |

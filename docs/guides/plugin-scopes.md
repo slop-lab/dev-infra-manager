@@ -67,11 +67,22 @@ credentials or the workspace lifecycle token as a shortcut.
 | Package | Location and responsibility |
 | --- | --- |
 | `@slop-lab/dim-control-plane-core` | Standalone service plugin runtime; loading, capability validation and shutdown |
-| `@slop-lab/dim-control-plane-plugin-native-git` | Repository storage, scoped Git transport, review and protected-ref promotion |
+| `@slop-lab/dim-control-plane-plugin-git-repositories` | Repository storage, scoped Git transport and durable protected-ref CAS |
+| `@slop-lab/dim-control-plane-plugin-code-review` | Immutable review evidence and human approvals/revocations |
+| `@slop-lab/dim-control-plane-plugin-merge-policy` | Promotion authorization from current review and selected quality evidence |
+| `@slop-lab/dim-control-plane-plugin-git-ci` | Candidate planning, execution grants/evidence and CI event delivery |
+| `@slop-lab/dim-control-plane-plugin-webhooks` | Independent external subscriptions and durable signed delivery |
 | `@slop-lab/dim-control-plane-plugin-ci` | Durable execution coordination and worker admission |
-| `@slop-lab/dim-control-plane-plugin-ci-workflows` | Repository workflow language compiler consumed by native Git |
+| `@slop-lab/dim-control-plane-plugin-ci-workflows` | Repository workflow language compiler consumed by Git-CI |
 | `@slop-lab/dim-control-plane-plugin-llm-router` | Upstream accounts and secrets, routing, admission, usage and exchange capture |
 | `@slop-lab/dim-host-plugin-llm-router` | Workspace identity checks, scoped router enrollment, local gateway and guest/OpenCode configuration |
+
+Repository hosting does not require review, merge policy, a compiler or CI.
+Human review works without Git-CI; protected-ref promotion requires a selected
+merge-policy implementation. Trusted repository policy sections must have enabled
+owners. The repository-owned `./extensions` SDK supplies attachment and serialized
+repository ports; the control-plane core only composes generic named extensions.
+Feature code and its state remain in the owning plugin.
 
 The workflow compiler does not execute jobs. The CI control-plane plugin owns
 execution coordination; `@slop-lab/dim-host-plugin-ci-worker` runs configured
@@ -86,8 +97,7 @@ no host core, host plugins or DIM CLI installed:
 
 ```bash
 dim installer install control-plane plugin \
-  '@slop-lab/dim-control-plane-plugin-native-git@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-ci-workflows@0.10.0'
+  '@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0'
 ```
 
 This installs the matching standalone runtime and selected plugins in a separate
@@ -100,9 +110,9 @@ supplies `DIM_DATA_HOME` when omitted).
 Manage that plugin selection with:
 
 ```bash
-dim installer control-plane disable-plugin '@slop-lab/dim-control-plane-plugin-native-git'
-dim installer control-plane enable-plugin '@slop-lab/dim-control-plane-plugin-native-git'
-dim installer control-plane remove-plugin '@slop-lab/dim-control-plane-plugin-native-git'
+dim installer control-plane disable-plugin '@slop-lab/dim-control-plane-plugin-git-repositories'
+dim installer control-plane enable-plugin '@slop-lab/dim-control-plane-plugin-git-repositories'
+dim installer control-plane remove-plugin '@slop-lab/dim-control-plane-plugin-git-repositories'
 ```
 
 Restart the control-plane process after changing its enabled plugin selection.
@@ -140,7 +150,7 @@ native Git startup without workspace packages, independent packaged installation
 and router-to-host gateway authorization. The artifact profile smoke installs
 real control-plane packages into an empty user tree before installing any host
 components. The public/private [example](../../examples/projects/native-multiple-repositories/README.md)
-uses the actual native Git and workflow plugins in linked Git/CI verification.
+uses explicitly selected repository, review, merge, Git-CI and workflow plugins in linked Git/CI verification.
 
 ## Shared package caches
 

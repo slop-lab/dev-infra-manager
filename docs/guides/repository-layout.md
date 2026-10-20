@@ -8,6 +8,7 @@ Production packages are grouped by where they run and what they own:
 | `packages/host/plugins/<name>` | `@slop-lab/dim-host-plugin-<name>` | Optional host capabilities and their workspace or agent integration |
 | `packages/control-plane/core` | `@slop-lab/dim-control-plane-core` | Standalone control-plane plugin runtime |
 | `packages/control-plane/plugins/<name>` | `@slop-lab/dim-control-plane-plugin-<name>` | Independent authoritative services and workflow interpretation |
+| `packages/control-plane/deployment` | `@this-project/control-plane-deployment` (private) | Composition artifact for the installer’s fixed service-image profile |
 | `packages/control-plane/admin` | `@slop-lab/dim-control-plane-admin` | Explicit service deployment and operator connection tools |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
 | `packages/cli` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
@@ -25,6 +26,13 @@ The mirrors consumer and cache-server deployment are separate host plugins.
 Mirrors owns its included and installed protocol adapters, scoped relay and guest
 client configuration; cache-server owns local cache service resources. Their
 shared placement input is a URL catalog, with only selected protocols required.
+
+Repository hosting, code review, merge policy, Git-CI and external webhook
+transport are separate control-plane plugins. Repository storage owns protected
+ref CAS and its recovery journal; review owns human evidence, merge policy owns
+authorization, and Git-CI owns workflow planning and execution evidence. Their
+shared attachment SDK belongs to the repository plugin. Neutral Git contracts
+contain schemas and identities, without importing feature implementations.
 
 The control-plane runtime and its plugins can be installed without the host
 core or CLI. CI workers consume neutral CI contracts; they do not install the

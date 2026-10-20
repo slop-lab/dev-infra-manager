@@ -1,9 +1,10 @@
 # Shared candidate execution
 
 CI is optional. A Git repository can be developed without any queue or worker.
-For managed proposals, native Git compiles the exact candidate configuration
-through the selected workflow plugin and durably sends normalized jobs to one
-execution service. Registration makes Projects eligible; protected policy
+For managed proposals, the optional Git-CI plugin compiles the exact candidate
+configuration through its selected workflow plugin and durably sends normalized
+jobs to one execution service. Git-repositories and code-review can operate
+without Git-CI or a compiler. Registration makes Projects eligible; protected policy
 selects which successful results promotion requires, not which valid jobs run.
 
 The execution service owns one durable aggregate per job/attempt. Its phases
@@ -13,7 +14,7 @@ or interrupted work holds capacity until owned cleanup is confirmed. The worker
 journals requests and cleaned results so transport retries preserve identity.
 
 Result acceptance and Git publication are separate: cleaned capacity can be
-returned after durable result acceptance while a Git outage is retried. Git
+returned after durable result acceptance while a Git outage is retried. Git-CI
 accepts only exact candidate evidence for the current execution attempt. Results
 remain candidate-controlled and do not approve or promote their own source.
 
@@ -21,7 +22,7 @@ remain candidate-controlled and do not approve or promote their own source.
 
 A workflow job may request `repositories: [public, private]`. Its own repository
 is always selected, even when the field is omitted. The source repository's
-trusted imported `ciRepositoryIds` allowlist bounds these requests. A candidate
+trusted imported `extensions["git-ci"].ciRepositoryIds` allowlist bounds these requests. A candidate
 cannot grant itself another repository by changing workflow YAML.
 
 Review creation freezes a canonical map of repository IDs to exact commit/tree
@@ -29,7 +30,9 @@ pairs. The primary repository contributes its proposal candidate; dependencies
 contribute their protected heads. Each job binds its selected subset into its
 event and descriptor. The review identity binds the complete input combination,
 so reconciliation with unchanged inputs returns the same immutable review.
-A dependency advancing creates a new review identity; old integration evidence
+The complete trusted policy digest also binds review, so changing quality policy
+requires a fresh approval. A dependency advancing creates a new review identity;
+old integration evidence
 and approvals cannot silently apply to the new combination. Promotion still
 performs a compare-and-swap on only the reviewed repository's protected ref.
 There is no atomic cross-repository promotion transaction.

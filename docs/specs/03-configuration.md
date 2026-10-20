@@ -23,7 +23,12 @@ remain overrides. Private role files have owner-only permissions, cannot be
 symlink aliases, and bind credentials to their service and role. Importer,
 reviewer, promoter, workspace issuer and execution roles remain distinct.
 
-Native Git owns repository storage and protected-ref policy. Service-owned bare
+Git-repositories owns repository storage and the neutral policy envelope
+`{schemaVersion, protectedRef, policyRevision, extensions}`. Each selected
+feature owns its policy section and strict configuration. Unknown or disabled
+policy owners are rejected during import and startup. Code-review, merge-policy,
+Git-CI and webhooks are optional service plugins; repository-only configuration
+contains none of their credentials or compiler settings. Service-owned bare
 repositories use numeric Git sharing mode `0600`; startup rejects unsafe state
 rather than widening permissions. Candidate-controlled configuration cannot
 select host paths, devices, credentials or privileged runtime arguments.

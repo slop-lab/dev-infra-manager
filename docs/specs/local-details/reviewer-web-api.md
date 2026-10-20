@@ -21,7 +21,7 @@ verification; production origins use HTTPS.
 
 The file contains scrypt hashes and explicit `read`, `operator`, and `reviewer`
 roles for local accounts. There is no singleton reviewer-account alias. Optional
-native Git configuration selects a single reviewer identity shared deliberately
+code-review configuration selects a single reviewer identity shared deliberately
 by accounts granted the reviewer role. When native Git is selected, before
 opening its listener the service calls `GET /v1/human-reviewer-identity`
 without redirects. Startup requires role `human-reviewer`, service `native-main`,
@@ -85,7 +85,7 @@ The service accepts these native-backed routes:
 - `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID/revocations`
 - `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID/promotions`
 
-The path Project must equal the configured Project and the repository must be root.
+The path Project must equal the configured Project and the repository must belong to its configured repository allowlist.
 Foreign and malformed paths return `404` without native dispatch. Query strings,
 encoded suffixes, unlisted review action suffixes, arbitrary URLs, and arbitrary
 methods are absent.
@@ -117,8 +117,9 @@ must never be widened or reused as administrator authority.
 Native review responses are parsed and projected into an explicit browser DTO.
 The DTO includes immutable IDs/refs/revisions, printable changed paths and
 symlink targets, object IDs and modes, printable patch text, required reviewer
-IDs, safe approval/revocation timestamps, and the envelope’s quality revision.
-No terminal CI summaries are fabricated. It
+IDs and safe approval/revocation timestamps from the version-3 code-review
+envelope. Workflow plans and quality revisions belong to Git-CI and are not
+fields of that base review response. No terminal CI summaries are fabricated. It
 also includes the account-specific boolean `canDecide`; read-only authenticated
 accounts receive `false` and the browser exposes no decision control. It
 omits `patchBytes`, raw path bytes, policy digest, writer username, reviewer

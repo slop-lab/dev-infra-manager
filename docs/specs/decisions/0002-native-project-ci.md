@@ -12,10 +12,14 @@ proposal namespace and promotion sequence. Repository access is selected by the
 complete `(projectId, repositoryId)` identity; registration and storage ownership
 are verified before issuing scoped read or proposal-write authority.
 
-The control-plane Native Git plugin owns repository transport, registration,
-review and checked promotion. Its configured workflow compiler plugin interprets
-candidate `.dim/ci/runner.yml` files. The shared CI service owns durable job demand,
-claims, leases and result publication. Workspace hosts and CI workers are separate
+The Git-repositories control-plane plugin owns repository transport,
+registration, imports and durable protected-ref CAS. Code-review owns human
+review evidence, and merge-policy authorizes promotion from current decisions.
+Git-CI separately owns candidate planning, execution grants and evidence; its
+selected workflow compiler interprets candidate `.dim/ci/runner.yml` files.
+The shared CI service owns durable job demand, claims, leases and result
+publication. Repository hosting works without any of these feature plugins;
+human review works without Git-CI or a workflow compiler. Workspace hosts and CI workers are separate
 consumers of these services. Native Project and workspace readiness depend on
 repository ownership, source identity and runtime prerequisites; they do not
 require a CI worker, a successful job or a completed promotion.
@@ -29,14 +33,20 @@ required evidence, then compares the current protected head with the reviewed
 expected head before updating that repository's ref. Repositories promote
 independently; this design provides no cross-repository atomic transaction.
 
-Each accepted workspace proposal update queues its valid candidate-defined jobs.
+When Git-CI is selected, each accepted workspace proposal update queues its valid candidate-defined jobs.
 The operator selects digest-pinned runner and job images, worker membership,
 resource limits and available execution kinds. A candidate selects job names,
 script bytes and permitted repository inputs inside those boundaries. Protected
 `requiredJobs` policy selects the successful evidence necessary for promotion;
 it does not authorize host commands or determine which valid proposal jobs run.
 
-The trusted repository policy bounds selectable CI repository inputs. A job
+A canonical trusted policy envelope binds the protected ref and selected feature
+sections. Import and startup reject a section without its enabled owner. The
+full policy is bound to review, including quality policy; changing it requires
+fresh human approval. Repository state format 10 stores neutral CAS transitions,
+while review, merge authorization and CI evidence remain owned by their plugins.
+
+The trusted Git-CI policy bounds selectable repository inputs. A job
 records the complete selected repository commit/tree map, including the primary
 candidate and dependency protected snapshots. Acquisition, execution grants and
 reported evidence bind that same map. Dependency drift or a changed primary

@@ -1,12 +1,31 @@
 {
   "schemaVersion": 1,
   "repositoryId": "private",
-  "review": {
-    "ciRepositoryIds": ["private", "public"],
-    "requiredReviewerIds": ["owner"],
-    "requiredJobs": [
-      { "name": "private-check", "kind": "ordinary-sysbox" },
-      { "name": "integration", "kind": "ordinary-sysbox" }
-    ]
+  "extensions": {
+    "code-review": {
+      "requiredReviewerIds": [
+        "owner"
+      ],
+      "pathReviewerRules": []
+    },
+    "git-ci": {
+      "ciRepositoryIds": [
+        "private",
+        "public"
+      ],
+      "requiredJobs": [
+        {
+          "name": "private-check",
+          "kind": "ordinary-sysbox",
+          "evidenceClass": "candidate-controlled"
+        },
+        {
+          "name": "integration",
+          "kind": "ordinary-sysbox",
+          "evidenceClass": "candidate-controlled"
+        }
+      ]
+    },
+    "merge-policy": {}
   }
 }
