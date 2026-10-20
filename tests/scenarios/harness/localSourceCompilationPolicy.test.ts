@@ -66,6 +66,7 @@ it("publishes and packs every actual owner with one matched local dependency gra
     await mkdir(resolve(root, "scripts/packages"), { recursive: true });
     await copyFile(resolve(repository, "LICENSE"), resolve(root, "LICENSE"));
     await copyFile(resolve(repository, "scripts/packages/publish-package-version.ts"), resolve(root, "scripts/packages/publish-package-version.ts"));
+    await copyFile(resolve(repository, "scripts/packages/publish-library.ts"), resolve(root, "scripts/packages/publish-library.ts"));
     for (const directory of packageDirectories) {
       const relative = directory.replace(/\/dist$/, "");
       const source = resolve(repository, relative), target = resolve(root, relative);
