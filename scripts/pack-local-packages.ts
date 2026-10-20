@@ -28,6 +28,7 @@ export const packageDirectories = [
   "packages/host/plugins/llm-router/dist",
   "packages/control-plane/plugins/llm-router/dist",
   "packages/host/plugins/vm/dist",
+  "packages/host/plugins/kvm/dist",
   "packages/host/plugins/workspace-check/dist",
   "packages/host/plugins/agent-tools/dist",
   "packages/host/plugins/tunnels/dist",

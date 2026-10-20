@@ -424,6 +424,18 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/host/plugins/kvm:
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/host/plugins/llm-router:
     devDependencies:
       '@slop-lab/dim-host-core':

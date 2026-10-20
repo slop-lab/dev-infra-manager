@@ -27,9 +27,38 @@ export function workspaceRuntimeResources(record: Pick<WorkspaceRecord, "id">) {
   };
 }
 
+/** Device grants are constructed by trusted host runtime providers, never repository input. */
+export interface WorkspaceRuntimeDevice {
+  readonly hostPath: string;
+  readonly containerPath: string;
+  readonly major: number;
+  readonly minor: number;
+  readonly permissions: "r" | "w" | "rw" | "rwm";
+}
+export interface ContainerWorkspaceRuntimeOptions { readonly devices?: readonly WorkspaceRuntimeDevice[] }
+
 /** Owns runtime resources only. The application owns records, Git acquisition and locks. */
 export class ContainerWorkspaceRuntime {
-  constructor(private readonly runner: StreamingCommandRunner, private readonly cleanupRunner: CommandRunner = runner) {}
+  private readonly devices: readonly WorkspaceRuntimeDevice[];
+  constructor(private readonly runner: StreamingCommandRunner, private readonly cleanupRunner: CommandRunner = runner,
+    options: ContainerWorkspaceRuntimeOptions = {}) {
+    this.devices = (options.devices ?? []).map((device) => {
+      if (![device.hostPath, device.containerPath].every((value) => path.isAbsolute(value) && path.normalize(value) === value && !/[\0\r\n:,]/.test(value))
+        || !device.containerPath.startsWith("/dev/") || ![device.major, device.minor].every((value) => Number.isSafeInteger(value) && value >= 0)
+        || !["r", "w", "rw", "rwm"].includes(device.permissions)) throw new UserError("invalid trusted workspace device grant");
+      return { ...device };
+    });
+    if (new Set(this.devices.map(({ containerPath }) => containerPath)).size !== this.devices.length) throw new UserError("duplicate workspace device target");
+  }
+
+  private deviceRules(): string[] {
+    return [...new Set(this.devices.map((device) => `c ${device.major}:${device.minor} ${device.permissions}`))];
+  }
+
+  private matchesDeviceRules(value: unknown): boolean {
+    const actual = array(value), expected = this.deviceRules();
+    return actual.length === expected.length && expected.every((rule) => actual.includes(rule));
+  }
 
   async hostGateway(record: WorkspaceRecord): Promise<string> {
     await this.require(record);
@@ -52,7 +81,7 @@ export class ContainerWorkspaceRuntime {
     const host = object(container.HostConfig);
     assertOwned(config.Labels, record, "container");
     if (config.Image !== record.image || host.Runtime !== "sysbox-runc" || host.Privileged !== false || host.OomScoreAdj !== 500
-      || array(host.Devices).length !== 0 || array(host.CapAdd).length !== 0
+      || array(host.Devices).length !== 0 || !this.matchesDeviceRules(host.DeviceCgroupRules) || array(host.CapAdd).length !== 0
       || array(host.SecurityOpt).length !== 0 || array(host.Binds).length !== 0
       || Object.keys(object(host.PortBindings)).length !== 0) {
       throw new UserError(`workspace '${record.name}' container configuration conflicts with its isolated runtime`);
@@ -61,15 +90,21 @@ export class ContainerWorkspaceRuntime {
       ["/home/dim", resources.home], ["/workspace", resources.checkout], ["/var/lib/docker", resources.docker],
       ["/mnt/dim-tmp", resources.tmp]
     ]);
+    const deviceMounts = new Map(this.devices.map((device) => [device.containerPath, device]));
     for (const raw of array(container.Mounts)) {
       const mount = object(raw);
+      const device = typeof mount.Destination === "string" ? deviceMounts.get(mount.Destination) : undefined;
+      if (device !== undefined && mount.Type === "bind" && mount.Source === device.hostPath && mount.RW === device.permissions.includes("w")) {
+        deviceMounts.delete(device.containerPath);
+        continue;
+      }
       if (mount.Type !== "volume" || mount.RW !== true || typeof mount.Destination !== "string"
         || mount.Name !== mounts.get(mount.Destination)) {
         throw new UserError(`workspace '${record.name}' has an unexpected runtime mount`);
       }
       mounts.delete(mount.Destination);
     }
-    if (mounts.size !== 0 || host.NetworkMode !== resources.network
+    if (mounts.size !== 0 || deviceMounts.size !== 0 || host.NetworkMode !== resources.network
       || Object.keys(object(object(container.NetworkSettings).Networks)).some((name) => name !== resources.network)) {
       throw new UserError(`workspace '${record.name}' runtime storage or network changed`);
     }
@@ -103,6 +138,8 @@ export class ContainerWorkspaceRuntime {
       "--runtime", "sysbox-runc",
       "--oom-score-adj", "500",
       ...resourceArguments(record.resources),
+      ...this.deviceRules().flatMap((rule) => ["--device-cgroup-rule", rule]),
+      ...this.devices.flatMap((device) => ["--mount", `type=bind,source=${device.hostPath},target=${device.containerPath}${device.permissions.includes("w") ? "" : ",readonly"}`]),
       ...(["home", "checkout", "docker", "tmp"] as const).flatMap((role) => [
         "--mount", `type=volume,source=${resources[role]},target=${{ home: "/home/dim", checkout: "/workspace", docker: "/var/lib/docker", tmp: "/mnt/dim-tmp" }[role]}`
       ]),

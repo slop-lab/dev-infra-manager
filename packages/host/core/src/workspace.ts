@@ -19,3 +19,5 @@ export { deployGuestIntegration, execGuestIntegrationTarget } from "./workspace/
 export type { GuestIntegrationContext, GuestIntegrationTarget, GuestIntegration } from "./workspace/guestIntegration.js";
 
 export { resolveHostPluginModule } from "./pluginModule.js";
+
+export type { WorkspaceRuntimeDevice, ContainerWorkspaceRuntimeOptions } from "./workspace/runtime.js";

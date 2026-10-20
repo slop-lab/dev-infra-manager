@@ -61,6 +61,7 @@ writeFileSync(join(output,"packer-marker"),"selected-packer\\n");
     "packages/host/plugins/llm-router",
     "packages/control-plane/plugins/llm-router",
     "packages/host/plugins/vm",
+    "packages/host/plugins/kvm",
     "packages/host/plugins/workspace-check",
     "packages/host/plugins/agent-tools",
     "packages/host/plugins/tunnels"
