@@ -109,3 +109,23 @@ and activation transaction retains its own facade contract.
 feature ports and repository primitives. Package tests exercise real Git/HTTP
 repository-only and review-only operation, scoped transport, CAS recovery,
 malformed state and failure cleanup.
+
+## Protected-ref update policies
+
+`./extensions` exports `RefUpdatePolicy` and `refUpdatePolicyExtension` for
+additional constraints. Each provider owns one named section of the imported
+repository policy, validates its own options, and throws to deny an update.
+Every selected provider must accept; there are no override/allow modes that
+subtract another provider's checks. The repository records the provider revision
+with each accepted transition. A missing or changed required provider fails closed.
+
+Code-review contributes required human approvals and merge-policy contributes
+its current authorization and quality evidence. Both are enforced by the actual
+repository CAS, so another integration cannot skip them by avoiding the merge
+HTTP API. Ordinary fast-forward history, non-deletion, exact commit/tree and
+expected-head CAS checks remain mandatory even after approval.
+
+The [security review example](../../../../examples/features/security-review/README.md)
+combines conditional path/JSON/project-matcher reviews with a separate file-retention
+ref policy. Recovery cancels unapplied pending intents; it never replays old
+permission after restart. Already-applied transitions are finalized for recovery.

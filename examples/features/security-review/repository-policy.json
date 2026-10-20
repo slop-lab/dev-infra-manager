@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "repositoryId": "root",
+  "extensions": {
+    "code-review": {
+      "requiredReviewerIds": [],
+      "pathReviewerRules": [
+        {
+          "pathPrefix": ".dim/review/",
+          "reviewerIds": [
+            "security"
+          ]
+        }
+      ],
+      "changeReviewerRules": [
+        {
+          "matcher": "json-field",
+          "options": {
+            "path": "app/config.json",
+            "pointer": "/runtime/isolation"
+          },
+          "reviewerIds": [
+            "security"
+          ]
+        },
+        {
+          "matcher": "project-guard",
+          "options": {},
+          "reviewerIds": [
+            "security"
+          ]
+        }
+      ]
+    },
+    "merge-policy": {},
+    "retain-files": {
+      "paths": [
+        ".dim/review/matcher.mjs"
+      ]
+    }
+  }
+}

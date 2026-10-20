@@ -20,6 +20,61 @@ trusted policy and exact repository input snapshots are bound to human approval.
 Changed policy, protected head, proposal, or dependency snapshot invalidates an
 old decision. Review records never execute repository code.
 
+## Conditional security review
+
+The operator-imported policy can add reviewers by path or by content. Conditions
+only add requirements; no matcher can remove a reviewer selected by another rule.
+For example:
+
+```json
+{
+  "requiredReviewerIds": [],
+  "pathReviewerRules": [
+    { "pathPrefix": ".dim/review/", "reviewerIds": ["security"] },
+    { "pathPrefix": "deploy/", "reviewerIds": ["security"] }
+  ],
+  "changeReviewerRules": [
+    {
+      "matcher": "json-field",
+      "options": { "path": "runtime.json", "pointer": "/runtime/isolation" },
+      "reviewerIds": ["security"]
+    }
+  ]
+}
+```
+
+`json-field` compares an RFC6901 JSON pointer in the exact old/new Git blobs.
+Object key order and unrelated fields do not count as a protected-field change;
+missing and null differ. File creation/deletion/rename, executable or symlink
+modes, invalid UTF8/JSON, duplicate keys, excessive nesting, unsafe or fractional
+numbers, and files above 1 MiB conservatively require the selected reviewer.
+JSON comments and trailing commas are not accepted. Empty pointer selects the
+whole JSON value.
+
+`./extensions` exports `reviewChangeMatcherExtension` and `ReviewChangeMatcher`
+for custom rules. A provider validates its options and returns a boolean over
+immutable changed paths and bounded Git blobs. `readCandidateFile` reads regular
+files from the exact candidate commit, independent of any mutable checkout.
+Provider identity includes a SHA256 revision covering its implementation and
+configuration. Missing/duplicate providers, invalid options, evaluation errors
+and non-boolean results cannot silently bypass review. Provider revisions and
+the complete policy are bound to the review ID; creation, approval and promotion
+recompute requirements. Installing a new matcher implementation invalidates an
+old review even if it happens to return the same reviewers.
+
+A matcher can live in the Project repository. Protect its entrypoint, settings
+and dependency closure with an independent mandatory path rule. Changing the
+matcher requires that review even if the candidate matcher returns false; it
+does not have to execute an older protected version. The operator-imported rule
+is the trust anchor: a candidate cannot edit it to disable its own protection.
+Execute project code in an isolated evaluator rather than the credential-bearing
+control-plane process. The [security review example](../../../../examples/features/security-review/README.md)
+shows a single-file project matcher, bounded Docker execution, and unconditional
+protection of its own review directory.
+
+These checks govern DIM's native protected refs. GitHub branch protection and
+rulesets are a separate authority; a DIM policy does not configure them.
+
 The Git-CI plugin can supply an optional preparation capability. Its immutable
 plan digest is attached to the review; its workflow interpretation, execution
 grants, evidence and delivery state remain owned by Git-CI. Without that plugin,

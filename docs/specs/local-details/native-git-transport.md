@@ -48,7 +48,8 @@ The neutral policy envelope contains `schemaVersion`, `protectedRef`,
 complete canonical extensions object. An empty extensions object is valid.
 Selected feature owners strictly validate their sections:
 
-- `code-review`: required reviewer IDs and path-specific reviewer rules.
+- `code-review`: baseline reviewers, mandatory path rules and content-change
+  rules supplied by named review matchers.
 - `git-ci`: allowed repository inputs and promotion-required jobs.
 - `merge-policy`: the merge implementation's supported policy options.
 
@@ -72,6 +73,23 @@ approvals/revocations. Review identity binds the full trusted policy, primary
 candidate commit/tree and exact dependency snapshots. The version-3 review
 envelope contains the review, policy digest and generic immutable attachment
 references. It contains no workflow plan or execution events.
+
+Required reviewers are the union of baseline, matching path rules and matching
+content rules in the operator-imported policy. A rule may never remove another
+rule's requirement. An empty baseline permits conditional review; matched rules
+still require all selected human approvals. Content matchers read bounded blobs
+and candidate files by immutable Git identity, never from a mutable checkout.
+The matcher implementation/configuration revision participates in the review ID.
+Missing providers, invalid options and failed evaluations fail closed. Creation,
+approval and protected-ref promotion all recompute the same requirements.
+
+Project repositories may contain their own matchers. Changes to their code,
+settings and dependency closure must independently require review through the
+trusted imported policy; their return value cannot waive that requirement.
+Candidate matchers need not be replaced with an older protected version, but
+must execute without control-plane credentials or authority. Changing a candidate
+commit after approval invalidates that approval. The imported policy is an
+operator trust anchor and cannot be replaced by candidate configuration.
 
 Review preparation extensions may contribute pinned inputs and attachment
 references. Code-review rejects conflicting snapshots and revalidates source
@@ -107,6 +125,25 @@ merge-policy consults its quality guard. Common execution wire types belong to
 `@slop-lab/dim-contracts-ci`, not the repository engine.
 
 ## Protected refs and durable state
+
+Protected-ref update policies are named repository extensions with a reviewed
+implementation/configuration revision and provider-owned option validation.
+A matching key in the imported policy selects that constraint; all selected
+constraints must succeed under the repository serialization gate before an intent
+is recorded or Git changes. Providers cannot disable another constraint. Unknown,
+missing, duplicate, failing or changed providers fail closed. The accepted ref
+transition records the complete policy digest and selected ref-policy revision.
+
+Code-review owns the mandatory approval constraint for its policy; merge-policy
+owns its authorization and quality-evidence constraint. These checks run at the
+repository CAS boundary, including requests from other trusted integrations.
+They are not solely checks in the merge HTTP handler. Exact expected-head CAS,
+non-deletion and fast-forward history remain repository integrity requirements;
+a human approval cannot authorize rewriting protected history.
+
+Recovery finalizes an already-applied Git transition. An unapplied old-head intent
+is canceled rather than replayed: a later attempt must check current policies,
+reviews, revocations and evidence again.
 
 Only trusted service extensions can request repository CAS. The repository
 checks import ownership, generation, expected head, candidate commit/tree,

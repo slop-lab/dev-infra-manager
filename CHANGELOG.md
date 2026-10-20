@@ -13,7 +13,14 @@ is implied by these source changes.
   composes the full workflow, while repository policies explicitly select
   their features. Host policy transport and control-plane lifecycle remain
   independent of feature implementations. Approvals bind the complete policy;
-  changing it requires renewed approval. Use `--policy` with the namespaced
+  changing it requires renewed approval. Add mandatory reviews for paths or
+  specific JSON fields and extend matching through named providers. Project-owned
+  matchers can change, but an independent rule requires review of their own code
+  and settings; their output cannot waive that review. Compose named protected-ref
+  update constraints at the repository boundary,
+  alongside non-rewritable history, current approvals and quality evidence.
+  Restart recovery never replays an unapplied authorization. Use `--policy` with
+  the namespaced
   repository policy file and the separate `dim-code-review` and
   `dim-merge-policy` operator clients.
 
