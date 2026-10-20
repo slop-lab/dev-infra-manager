@@ -29,6 +29,7 @@ export type RepositoryAttachment = {
 export type RepositoryExtensionFactory = {
   readonly name: string;
   readonly policyName?: string;
+  readonly requiresRefUpdatePolicies?: readonly string[];
   readonly credentials?: readonly { readonly username: string; readonly password: string }[];
   attach(context: RepositoryExtensionContext): Promise<RepositoryAttachment>;
 };
@@ -61,3 +62,5 @@ export * from "./native-root-import-storage.js";
 export * from "./native-bundle-server-types.js";
 export * from "./native-project-root-import-transitions.js";
 export * from "./native-bundle-activation.js";
+
+export * from "./ref-update-policies.js";

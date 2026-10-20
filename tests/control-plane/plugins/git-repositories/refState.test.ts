@@ -28,7 +28,7 @@ it("binds protected-ref CAS to exact repository/head/authorization and returns o
   } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 }, 20_000);
 
-it.each([false, true])("recovers an accepted durable ref intent when Git CAS has completed: %s", async (gitAlreadyChanged) => {
+it.each([false, true])("finalizes accepted ref changes and cancels unaccepted intents without replay (Git changed: %s)", async (gitAlreadyChanged) => {
   const f = await fixture(false);
   let restarted: Awaited<ReturnType<typeof configuredNativeGitBundleServer>> | undefined;
   try {
@@ -36,12 +36,18 @@ it.each([false, true])("recovers an accepted durable ref intent when Git CAS has
     const current = readNativeProjectRootCurrentHeadFromDatabase(f.service.context.runtime.state.database, "project", "main");
     const imported = (await import("@slop-lab/dim-control-plane-plugin-git-repositories/extensions")).readNativeProjectRootImportsFromDatabase(f.service.context.runtime.state.database)[0];
     if (imported === undefined) throw new Error("import is missing");
-    const transition: RepositoryRefTransition = { ...input, sequence: 1, importNonce: imported.importNonce, expectedTree: current.tree, protectedRef: current.protectedRef, policyDigest: current.policyDigest, generationId: f.service.context.runtime.expectedGenerationId };
+    const transition: RepositoryRefTransition = { ...input, sequence: 1, importNonce: imported.importNonce, expectedTree: current.tree, protectedRef: current.protectedRef, policyDigest: current.policyDigest, refPolicyRevision: "e".repeat(64), generationId: f.service.context.runtime.expectedGenerationId };
     saveRepositoryRefIntent(f.service.context.runtime.state.database, transition);
     expect(() => readNativeProjectRootCurrentHeadFromDatabase(f.service.context.runtime.state.database, "project", "main")).toThrow(/recovery is pending/);
     if (gitAlreadyChanged) expect(await atomicPromote({ gitExecutable: "/usr/bin/git", storageRoot: f.options.stateDirectory }, transition, input.expectedCommit, input.candidateCommit)).toBe(true);
     await f.service.close();
     restarted = await configuredNativeGitBundleServer(f.options);
+    if (!gitAlreadyChanged) {
+      expect(readProtectedRefTransition(restarted.context.runtime, input.authorizationId)).toBeUndefined();
+      expect(readNativeProjectRootCurrentHeadFromDatabase(restarted.context.runtime.state.database, "project", "main").commit).toBe(input.expectedCommit);
+      expect((await git("/usr/bin/git", ["--git-dir", join(f.root, "state/project/main.git"), "rev-parse", "refs/heads/main"])).stdout.trim()).toBe(input.expectedCommit);
+      return;
+    }
     expect(readProtectedRefTransition(restarted.context.runtime, input.authorizationId)).toMatchObject({ sequence: 1, candidateCommit: input.candidateCommit });
     expect((await git("/usr/bin/git", ["--git-dir", join(f.root, "state/project/main.git"), "rev-parse", "refs/heads/main"])).stdout.trim()).toBe(input.candidateCommit);
     // Rehashing the persisted record cannot authorize a transition from a false base.

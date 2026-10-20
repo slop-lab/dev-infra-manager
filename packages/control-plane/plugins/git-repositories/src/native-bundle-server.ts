@@ -1,3 +1,4 @@
+import { refUpdatePolicies, refUpdatePolicyRevision } from "./ref-update-policies.js";
 import { lstat, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { once } from "node:events";
@@ -26,9 +27,13 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
   const config = parseNativeGitBundleConfig(options.config);
   assertBundleToken(options.readinessToken, "readiness"); assertBundleToken(options.activationToken, "activation"); assertGenerationId(options.expectedGenerationId);
   const extensions = options.extensions ?? [];
+  const refPolicies = refUpdatePolicies(extensions);
   const factories = repositoryExtensionFactories(extensions);
   if (factories.some((factory) => !/^[a-z][a-z0-9-]{0,63}$/.test(factory.name))) throw new Error("invalid repository extension name");
   if (new Set(factories.map((entry) => entry.name)).size !== factories.length) throw new Error("repository extension names must be unique");
+  for (const factory of factories) for (const name of factory.requiresRefUpdatePolicies ?? []) {
+    if (!refPolicies.some((provider) => provider.name === name)) throw new Error(`repository extension '${factory.name}' requires ref update policy '${name}'`);
+  }
   const policyOwners = factories.filter((entry) => entry.policyName !== undefined);
   if (new Set(policyOwners.map((entry) => entry.policyName)).size !== policyOwners.length) throw new Error("repository policy owners must be unique");
   const registrars = parseNativeGitProjectRegistrars(config.projectRegistrars);
@@ -68,8 +73,8 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
       attachments.push(await factory.attach({ ...context, extensionStateDirectory }));
     }
     const validatePolicy = async (policy: NativeImportedRootPolicy, selector: { readonly projectId: string; readonly repositoryId: string }) => {
-      for (const name of Object.keys(policy.extensions)) if (!policyOwners.some((entry) => entry.policyName === name)) throw new NativeProjectRootImportStateError(`repository policy requires an enabled ${name} plugin`);
-      try { for (const attachment of attachments) await attachment.validatePolicy?.(policy, selector); }
+      for (const name of Object.keys(policy.extensions)) if (!policyOwners.some((entry) => entry.policyName === name) && !refPolicies.some((entry) => entry.name === name)) throw new NativeProjectRootImportStateError(`repository policy requires an enabled ${name} plugin`);
+      try { refUpdatePolicyRevision(policy, refPolicies); for (const attachment of attachments) await attachment.validatePolicy?.(policy, selector); }
       catch (error) { throw new NativeProjectRootImportStateError("repository feature policy is invalid", { cause: error }); }
     };
     for (const imported of readNativeProjectRootImportsFromDatabase(state.database)) await validatePolicy(imported.policy, imported);

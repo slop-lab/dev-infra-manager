@@ -6,7 +6,7 @@ import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-
 const id = z.string().regex(/^[0-9a-f]{64}$/);
 const oid = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 export const repositoryRefTransitionSchema = `CREATE TABLE repository_ref_transition (project_id TEXT NOT NULL, repository_id TEXT NOT NULL, sequence INTEGER NOT NULL CHECK(sequence > 0), transition_id TEXT NOT NULL UNIQUE, record_json TEXT NOT NULL, finalized INTEGER NOT NULL CHECK(finalized IN (0,1)), PRIMARY KEY(project_id,repository_id,sequence), FOREIGN KEY(project_id,repository_id) REFERENCES native_project_root_import(project_id,repository_id)) STRICT`;
-const transitionSchema = z.object({ projectId: z.string(), repositoryId: z.string(), sequence: z.number().int().positive(), importNonce: z.string().uuid(), protectedRef: z.string().startsWith("refs/heads/"), proposalRef: z.string().regex(/^refs\/heads\/proposals\/[A-Za-z0-9_-]{43}\/[A-Za-z0-9._/-]+$/).refine((value) => !value.includes("..") && !value.includes("//") && !value.includes("/.") && !value.endsWith("/") && !value.endsWith(".") && !value.endsWith(".lock")), expectedCommit: oid, expectedTree: oid, candidateCommit: oid, candidateTree: oid, generationId: id, policyDigest: id, authorizationId: id, evidenceDigest: id }).strict().readonly();
+const transitionSchema = z.object({ projectId: z.string(), repositoryId: z.string(), sequence: z.number().int().positive(), importNonce: z.string().uuid(), protectedRef: z.string().startsWith("refs/heads/"), proposalRef: z.string().regex(/^refs\/heads\/proposals\/[A-Za-z0-9_-]{43}\/[A-Za-z0-9._/-]+$/).refine((value) => !value.includes("..") && !value.includes("//") && !value.includes("/.") && !value.endsWith("/") && !value.endsWith(".") && !value.endsWith(".lock")), expectedCommit: oid, expectedTree: oid, candidateCommit: oid, candidateTree: oid, generationId: id, policyDigest: id, refPolicyRevision: id, authorizationId: id, evidenceDigest: id }).strict().readonly();
 export type RepositoryRefTransition = z.infer<typeof transitionSchema>;
 export type NativeProjectRootCurrentHead = { readonly projectId: string; readonly repositoryId: string; readonly sequence: number; readonly protectedRef: string; readonly commit: string; readonly tree: string; readonly policyDigest: string };
 export function repositoryTransitionId(value: RepositoryRefTransition): string { return createHash("sha256").update("dim-repository-ref-v1\0").update(JSON.stringify(transitionSchema.parse(value))).digest("hex"); }
@@ -59,3 +59,12 @@ export function finalizeRepositoryRef(path: string, transition: RepositoryRefTra
 }
 
 export class RepositoryRefStateError extends Error { readonly name = "RepositoryRefStateError"; }
+
+/** Discard only an exact unaccepted transition after Git still proves the old head. */
+export function cancelRepositoryRefIntent(path: string, transition: RepositoryRefTransition): void {
+  const database = new DatabaseSync(path);
+  try {
+    const result = database.prepare("DELETE FROM repository_ref_transition WHERE transition_id=? AND finalized=0").run(repositoryTransitionId(transition));
+    if (result.changes !== 1) throw new RepositoryRefStateError("pending repository ref intent is missing");
+  } finally { database.close(); }
+}

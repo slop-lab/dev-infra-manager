@@ -186,6 +186,33 @@ function displayBytes(value: Buffer): string {
   }
 }
 
+/** Reads exact regular-file bytes from the immutable candidate tree, without checkout or filters. */
+export async function readAuthoritativeNativeCandidateFile(
+  input: PinnedReviewGit & { readonly candidateCommit: string }, path: string
+): Promise<Buffer | undefined> {
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(input.candidateCommit)) throw new AuthoritativeNativeReviewGitError("invalid candidate commit identity");
+  if (Buffer.byteLength(path, "utf8") > 1024 || path.length === 0 || path.startsWith("/") || path.includes("\0")
+    || path.includes("\\") || path.split("/").some((part) => part === "" || part === "." || part === "..")
+    || Buffer.from(path, "utf8").toString("utf8") !== path) throw new AuthoritativeNativeReviewGitError("candidate file path must be a normalized relative path");
+  const result = await runPinnedBuffer(input, ["ls-tree", "-z", "--full-tree", input.candidateCommit, "--", `:(literal)${path}`]);
+  if (result.length === 0) return undefined;
+  const entries = splitNul(result);
+  const entry = entries[0];
+  if (entries.length !== 1 || entry === undefined) throw new AuthoritativeNativeReviewGitError("candidate tree file identity is ambiguous");
+  const separator = entry.indexOf(9);
+  if (separator < 0 || !entry.subarray(separator + 1).equals(Buffer.from(path, "utf8"))) throw new AuthoritativeNativeReviewGitError("candidate tree file identity conflicts");
+  const metadata = /^(100644|100755) blob ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(entry.subarray(0, separator).toString("ascii"));
+  if (metadata?.[2] === undefined) throw new AuthoritativeNativeReviewGitError("candidate matcher input must be a regular file");
+  return readAuthoritativeNativeReviewBlob(input, metadata[2]);
+}
+
+export async function readAuthoritativeNativeReviewBlob(input: PinnedReviewGit, objectId: string): Promise<Buffer> {
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(objectId)) throw new AuthoritativeNativeReviewGitError("invalid review blob identity");
+  const size = Number((await runPinned(input, ["cat-file", "-s", objectId])).stdout.trim());
+  if (!Number.isSafeInteger(size) || size < 0 || size > 1024 * 1024) throw new AuthoritativeNativeReviewGitError("review matcher blob exceeds 1 MiB");
+  return runPinnedBuffer(input, ["cat-file", "blob", objectId], 1024 * 1024);
+}
+
 async function readBlob(input: PinnedReviewGit, objectId: string): Promise<Buffer> {
   return objectId === "0" ? Buffer.alloc(0) : runPinnedBuffer(input, ["cat-file", "blob", objectId]);
 }
@@ -208,11 +235,11 @@ async function runPinned(input: PinnedReviewGit, arguments_: readonly string[]) 
   return result;
 }
 
-async function runPinnedBuffer(input: PinnedReviewGit, arguments_: readonly string[]): Promise<Buffer> {
+async function runPinnedBuffer(input: PinnedReviewGit, arguments_: readonly string[], maximumBytes = maximumOutputBytes): Promise<Buffer> {
   await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
   const result = await execute(input.gitExecutable,
     ["--no-replace-objects", "--git-dir", input.repository, ...arguments_], {
-      encoding: "buffer", env: gitEnvironment, maxBuffer: maximumOutputBytes, timeout: 30_000, signal: input.signal
+      encoding: "buffer", env: gitEnvironment, maxBuffer: maximumBytes, timeout: 30_000, signal: input.signal
     });
   await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
   if (!Buffer.isBuffer(result.stdout)) throw new AuthoritativeNativeReviewGitError("Git returned non-buffer output");

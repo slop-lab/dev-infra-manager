@@ -5,6 +5,7 @@ import { mergePolicyConfigurationSchema } from "./config.js";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
 import { repositoryExtension, readProtectedRefTransition } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
 import { mergeQualityGuards } from "./extensions.js";
+import { mergeRefUpdatePolicyExtension } from "./ref-update-policy.js";
 import { createNativeHostPromoterService } from "./native-host-promoter-http.js";
 import { promoteInstalledNativeReview } from "./native-installed-promotion.js";
 import { MergeAuthorizationStore } from "./state.js";
@@ -17,6 +18,8 @@ export const controlPlanePlugin: ControlPlanePlugin = {
   configure(raw) {
     const config = mergePolicyConfigurationSchema.parse(raw);
     const stores = new Set<MergeAuthorizationStore>();
+    const repositoryStores = new Map<string, MergeAuthorizationStore>();
+    const refPolicy = mergeRefUpdatePolicyExtension((directory) => repositoryStores.get(directory));
     const wake = new Set<() => void>();
     const events = { name: "merge-policy", async read() {
       return [...stores].flatMap((store) => store.read().flatMap(({ authorization: value, authorizationId, sequence }) => sequence === undefined ? [] : [{
@@ -28,7 +31,7 @@ export const controlPlanePlugin: ControlPlanePlugin = {
       }]));
     }, subscribeWake(listener: () => void) { wake.add(listener); return () => { wake.delete(listener); }; } };
     return { requiresExtensions: [{ kind: "dim.git-repositories.service", name: "default" }, { kind: "dim.code-review.service", name: "default" }],
-      extensions: [repositoryExtension({ name: "merge-policy", policyName: "merge-policy", credentials: config.hostPromoters, async attach(context) {
+      extensions: [refPolicy, repositoryExtension({ name: "merge-policy", policyName: "merge-policy", requiresRefUpdatePolicies: ["merge-policy"], credentials: config.hostPromoters, async attach(context) {
       const stateDirectory = context.extensionStateDirectory;
       await mkdir(stateDirectory, { recursive: true, mode: 0o700 });
       const store = new MergeAuthorizationStore(join(stateDirectory, "authorizations.sqlite3"));
@@ -43,14 +46,14 @@ export const controlPlanePlugin: ControlPlanePlugin = {
           }
         }
       } catch (error) { store.close(); throw error; }
-      stores.add(store);
+      stores.add(store); repositoryStores.set(context.stateDirectory, store);
       const http = createNativeHostPromoterService({ promoters: config.hostPromoters, context,
         promote: (projectId, repositoryId, reviewId) => context.serialize(async () => {
           const result = await promoteInstalledNativeReview({ repository: context, store, guards: mergeQualityGuards(context.extensions) }, projectId, repositoryId, reviewId);
           for (const listener of wake) listener(); return result;
         }) });
       return { handle: http.handle, validatePolicy(policy) { z.object({}).strict().parse(policy.extensions["merge-policy"] ?? {}); },
-        async close() { stores.delete(store); store.close(); } };
+        async close() { repositoryStores.delete(context.stateDirectory); stores.delete(store); store.close(); } };
     } }), { kind: "dim.webhooks.event-source", name: events.name, value: events }], async start() { return { async close() {} }; } };
   }
 };

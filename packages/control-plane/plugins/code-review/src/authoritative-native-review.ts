@@ -1,3 +1,4 @@
+import { defaultReviewChangeMatchers } from "./change-matchers.js";
 import { codeReviewPolicy } from "./policy.js";
 import type { CodeReviewRuntime, ReviewAttachment } from "./extensions.js";
 import { assertReviewInputsCurrent } from "./review-inputs.js";
@@ -7,6 +8,8 @@ import {
 } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
 import {
   assertAuthoritativeNativeReviewRefs,
+  readAuthoritativeNativeCandidateFile,
+  readAuthoritativeNativeReviewBlob,
   inspectAuthoritativeNativeReviewGit
 } from "./authoritative-native-review-git.js";
 import {
@@ -77,9 +80,9 @@ export async function createAuthoritativeNativeReview(
       proposalRef: selector.data.proposalRef,
       ...evidence,
       policyRevision: policy.policyRevision,
-      requiredReviewRevision: codeReviewPolicy(policy).requiredReviewRevision,
+      requiredReviewRevision: codeReviewPolicy(policy, runtime.reviewChangeMatchers).requiredReviewRevision,
       workspaceId: selector.data.workspaceId,
-      requiredReviewerIds: requiredReviewers(policy, evidence.changes)
+      requiredReviewerIds: await requiredReviewersForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit)
     };
     const attachments: ReviewAttachment[] = [];
     for (const preparation of runtime.reviewPreparations ?? []) {
@@ -101,6 +104,10 @@ export async function createAuthoritativeNativeReview(
       || JSON.stringify(current.imported) !== JSON.stringify(target.imported)
       || JSON.stringify(current.currentHead) !== JSON.stringify(target.currentHead)) {
       throw new AuthoritativeNativeReviewError("authoritative imported repository changed during review creation");
+    }
+    if (codeReviewPolicy(current.imported.policy, runtime.reviewChangeMatchers).requiredReviewRevision !== identity.requiredReviewRevision
+      || JSON.stringify(await requiredReviewersForChanges(runtime, current.imported.policy, evidence.changes, target.repository, evidence.candidateCommit)) !== JSON.stringify(identity.requiredReviewerIds)) {
+      throw new AuthoritativeNativeReviewError("required review matcher changed during review creation");
     }
     await assertReviewInputsCurrent(runtime, identity);
     for (const preparation of runtime.reviewPreparations ?? []) {
@@ -128,16 +135,44 @@ export async function createAuthoritativeNativeReview(
   }
 }
 
-export function requiredReviewers(
-  policy: NativeImportedRootPolicy,
+function pathRequiredReviewers(
+  reviewed: ReturnType<typeof codeReviewPolicy>,
   changes: readonly AuthoritativeNativeChangedPath[]
 ): readonly string[] {
-  const reviewed = codeReviewPolicy(policy);
   const reviewers = new Set(reviewed.requiredReviewerIds);
   for (const rule of reviewed.pathReviewerRules) {
     const prefix = Buffer.from(rule.pathPrefix, "utf8");
     const matches = changes.some((change) => [change.oldPathBytes, change.newPathBytes]
       .some((encoded) => Buffer.from(encoded, "base64").subarray(0, prefix.length).equals(prefix)));
+    if (matches) for (const reviewer of rule.reviewerIds) reviewers.add(reviewer);
+  }
+  return [...reviewers].sort();
+}
+
+export async function requiredReviewersForChanges(
+  runtime: CodeReviewRuntime,
+  policy: NativeImportedRootPolicy,
+  changes: readonly AuthoritativeNativeChangedPath[],
+  repository: string,
+  candidateCommit: string
+): Promise<readonly string[]> {
+  const reviewed = codeReviewPolicy(policy, runtime.reviewChangeMatchers);
+  const reviewers = new Set(pathRequiredReviewers(reviewed, changes));
+  const objectIds = new Set(changes.flatMap(({ oldObjectId, newObjectId }) => [oldObjectId, newObjectId]).filter((id) => id !== "0"));
+  const blobs = new Map<string, Promise<Buffer>>();
+  const git = { gitExecutable: runtime.gitExecutable, gitIdentity: runtime.gitIdentity, repository, signal: AbortSignal.timeout(30_000) };
+  const readBlob = (objectId: string): Promise<Buffer> => {
+    if (!objectIds.has(objectId)) throw new Error("review matcher requested an object outside the authoritative change set");
+    let pending = blobs.get(objectId);
+    if (pending === undefined) { pending = readAuthoritativeNativeReviewBlob(git, objectId); blobs.set(objectId, pending); }
+    return pending.then((value) => Buffer.from(value));
+  };
+  for (const rule of reviewed.changeReviewerRules) {
+    const matcher = (runtime.reviewChangeMatchers ?? defaultReviewChangeMatchers()).find(({ name }) => name === rule.matcher);
+    if (matcher === undefined) throw new Error(`required review change matcher '${rule.matcher}' is unavailable`);
+    const matches = await matcher.matches({ options: rule.options, changes, readBlob,
+      readCandidateFile: (path) => readAuthoritativeNativeCandidateFile({ ...git, candidateCommit }, path) });
+    if (typeof matches !== "boolean") throw new Error(`review change matcher '${matcher.name}' returned a non-boolean result`);
     if (matches) for (const reviewer of rule.reviewerIds) reviewers.add(reviewer);
   }
   return [...reviewers].sort();

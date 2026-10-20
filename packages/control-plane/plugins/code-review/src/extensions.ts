@@ -1,3 +1,4 @@
+import type { ReviewChangeMatcher } from "./change-matchers.js";
 import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin";
 import type { RepositoryRuntime, RepositoryExtensionContext, AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
 import type { AuthoritativeNativeReviewIdentity, AuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-schema.js";
@@ -18,7 +19,7 @@ export type ReviewPreparation = {
   prepare(input: ReviewPreparationInput): Promise<{ readonly inputs: RepositorySnapshots; readonly attachment?: ReviewAttachment }>;
   assertCurrent?(input: { readonly runtime: RepositoryRuntime; readonly review: AuthoritativeNativeReviewIdentity; readonly attachment?: ReviewAttachment }): Promise<void>;
 };
-export type CodeReviewRuntime = RepositoryRuntime & { readonly reviewPreparations?: readonly ReviewPreparation[] };
+export type CodeReviewRuntime = RepositoryRuntime & { readonly reviewPreparations?: readonly ReviewPreparation[]; readonly reviewChangeMatchers?: readonly ReviewChangeMatcher[] };
 export function reviewPreparationExtension(preparation: ReviewPreparation): ControlPlaneExtension {
   return { kind: reviewPreparationKind, name: preparation.name, value: preparation };
 }
@@ -39,3 +40,5 @@ export * from "./native-human-reviewer-freshness.js";
 export * from "./authoritative-native-review.js";
 export * from "./review-record-storage.js";
 export { AuthoritativeNativeReviewAdmissionBusyError } from "./authoritative-native-review-controller.js";
+
+export * from "./change-matchers.js";

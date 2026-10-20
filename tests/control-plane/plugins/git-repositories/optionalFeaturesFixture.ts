@@ -18,12 +18,12 @@ export const basic = (credential: { username: string; password: string }) => `Ba
 export function record(value: unknown): Record<string, unknown> { if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("expected object"); return Object.fromEntries(Object.entries(value)); }
 export function text(value: Record<string, unknown>, key: string): string { const result = value[key]; if (typeof result !== "string") throw new Error(`missing ${key}`); return result; }
 
-export async function fixture(withReview: boolean, extraExtensions: readonly ControlPlaneExtension[] = []) {
+export async function fixture(withReview: boolean, extraExtensions: readonly ControlPlaneExtension[] = [], reviewPolicy: unknown = { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, humanReviewers = [reviewer], additionalPolicies: Readonly<Record<string, unknown>> = {}) {
   const root = await mkdtemp(join(tmpdir(), "dim-optional-git-"));
   const source = join(root, "source");
   const version = /git version (\d+\.\d+\.\d+)/.exec((await git("/usr/bin/git", ["--version"])).stdout)?.[1];
   if (version === undefined) throw new Error("Git version is missing");
-  const prepared = withReview ? await codeReviewPlugin.configure({ humanReviewers: [reviewer] }) : undefined;
+  const prepared = withReview ? await codeReviewPlugin.configure({ humanReviewers }) : undefined;
   const options: Parameters<typeof configuredNativeGitBundleServer>[0] = { config: { schemaVersion: 7, serviceId: "native-main", host: "0.0.0.0", port: 8080, storageRoot: "/var/lib/dim-native-git", gitExecutable: "/usr/bin/git", gitVersion: version, projectRegistrars: [], projectRootImporters: [importer], projectRootReadIssuers: [], workspaceWriteIssuers: [writer] }, stateDirectory: join(root, "state"), expectedGenerationId: generationId, readinessToken: token(4), activationToken: token(5), extensions: [...(prepared?.extensions ?? []), ...extraExtensions] };
   const service = await configuredNativeGitBundleServer(options);
   try {
@@ -38,7 +38,7 @@ export async function fixture(withReview: boolean, extraExtensions: readonly Con
     const initial = await commit();
     const bundle = join(root, "initial.bundle");
     await git("/usr/bin/git", ["-C", source, "bundle", "create", bundle, "refs/heads/main"]);
-    const extensions = withReview ? { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } } : {};
+    const extensions = { ...(withReview ? { "code-review": reviewPolicy } : {}), ...additionalPolicies };
     const policy = { schemaVersion: 1, protectedRef: "refs/heads/main", policyRevision: nativeRepositoryPolicyRevision({ protectedRef: "refs/heads/main", extensions }), extensions };
     const prelude = { schemaVersion: 1, serviceId: "native-main", generationId, projectId: "project", repositoryId: "main", protectedRef: "refs/heads/main", expectedCommit: initial, policy };
     const uploaded = await fetch(`${origin}/v1/projects/project/repositories/main/import`, { method: "POST", headers: { authorization: basic(importer), "content-type": "application/octet-stream" }, body: Buffer.concat([Buffer.from(`${JSON.stringify(prelude)}\n`), await readFile(bundle)]) });

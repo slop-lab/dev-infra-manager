@@ -24,7 +24,7 @@ export async function seedRootPromotion(input: SeedPromotionInput): Promise<void
       sequence: 1, protectedRef: "refs/heads/main", proposalRef: reviewProposalRef,
       expectedCommit: stringField(imported, "expected_commit"), expectedTree: stringField(imported, "resolved_tree"),
       candidateCommit: input.candidateCommit, candidateTree: input.recordedCandidateTree ?? input.candidateTree,
-      generationId, policyDigest: stringField(imported, "policy_sha256"),
+      generationId, refPolicyRevision: "e".repeat(64), policyDigest: stringField(imported, "policy_sha256"),
       authorizationId: evidenceIdentity("authorization", "fixture"), evidenceDigest: evidenceIdentity("decision", "fixture")
     };
     saveRepositoryRefIntent(databasePath, transition);

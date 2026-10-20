@@ -1,3 +1,4 @@
+import { checkRefUpdatePolicies } from "./ref-update-policies.js";
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -6,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { atomicPromote, candidateDescendsFrom } from "./promotion-git.js";
 import { resolveAuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
 import { assertGitExecutableIdentity } from "./repository.js";
-import { saveRepositoryRefIntent, finalizeRepositoryRef, readRepositoryRefTransitions, assertRepositoryRefTransitions, type RepositoryRefTransition } from "./repository-ref-state.js";
+import { saveRepositoryRefIntent, finalizeRepositoryRef, readRepositoryRefTransitions, assertRepositoryRefTransitions, cancelRepositoryRefIntent, type RepositoryRefTransition } from "./repository-ref-state.js";
 import type { RepositoryExtensionContext, RepositoryRuntime } from "./extensions.js";
 const execute = promisify(execFile);
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
@@ -33,9 +34,13 @@ export async function compareAndSwapProtectedRef(context: RepositoryExtensionCon
   await assertGitExecutableIdentity(context.runtime.gitExecutable, context.runtime.gitIdentity);
   const tree = await execute(context.runtime.gitExecutable, ["--no-replace-objects", "--git-dir", target.repository, "rev-parse", "--verify", `${input.candidateCommit}^{tree}`], { env: gitEnvironment(), maxBuffer: 1024, timeout: 30_000 });
   if (tree.stdout.trim() !== input.candidateTree) throw new Error("protected ref candidate tree conflicts");
+  const refPolicyRevision = await checkRefUpdatePolicies(context, target, input);
+  const current = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: input.projectId, repositoryId: input.repositoryId });
+  if (JSON.stringify(current) !== JSON.stringify(target)) throw new Error("repository changed during ref update authorization");
+  await assertGitExecutableIdentity(context.runtime.gitExecutable, context.runtime.gitIdentity);
   const transition: RepositoryRefTransition = { ...input, expectedTree: target.currentHead.tree, protectedRef: target.currentHead.protectedRef,
     sequence: target.currentHead.sequence + 1, importNonce: target.imported.importNonce,
-    generationId: context.runtime.expectedGenerationId, policyDigest: target.imported.policyDigest };
+    generationId: context.runtime.expectedGenerationId, refPolicyRevision, policyDigest: target.imported.policyDigest };
   saveRepositoryRefIntent(context.runtime.state.database, transition);
   if (!await atomicPromote(config, transition, input.expectedCommit, input.candidateCommit)) throw new Error("protected ref compare-and-swap failed; recovery is required");
   finalizeRepositoryRef(context.runtime.state.database, transition);
@@ -51,7 +56,9 @@ export async function recoverRepositoryRefChanges(runtime: Pick<RepositoryRuntim
     if (tree.stdout.trim() !== transition.candidateTree || !await candidateDescendsFrom({ gitExecutable: runtime.gitExecutable, storageRoot: stateDirectory }, transition, transition.expectedCommit, transition.candidateCommit)) throw new Error("pending repository ref candidate is invalid");
     const result = await execute(runtime.gitExecutable, ["--no-replace-objects", "--git-dir", repository, "rev-parse", "--verify", transition.protectedRef], { env: gitEnvironment(), maxBuffer: 1024, timeout: 30_000 });
     if (result.stdout.trim() === transition.expectedCommit) {
-      if (!await atomicPromote({ gitExecutable: runtime.gitExecutable, storageRoot: stateDirectory }, transition, transition.expectedCommit, transition.candidateCommit)) throw new Error("pending repository ref change could not be recovered");
+      // An intent is not permission to replay after policy or approval changes.
+      cancelRepositoryRefIntent(runtime.state.database, transition);
+      continue;
     } else if (result.stdout.trim() !== transition.candidateCommit) throw new Error("pending repository ref change conflicts with Git state");
     finalizeRepositoryRef(runtime.state.database, transition);
   }

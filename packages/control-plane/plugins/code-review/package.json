@@ -63,7 +63,8 @@
   },
   "dependencies": {
     "zod": "4.1.11",
-    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-git": "workspace:0.10.0",
+    "jsonc-parser": "3.3.1"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

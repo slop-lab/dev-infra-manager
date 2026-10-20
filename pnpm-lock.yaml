@@ -203,6 +203,9 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
       zod:
         specifier: 4.1.11
         version: 4.1.11
