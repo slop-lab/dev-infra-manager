@@ -19,6 +19,7 @@
     "**/*.cjs",
     "**/*.d.ts",
     "scripts/**/*.ts",
+    "scripts/**/*.mts",
     "tools/**/*.ts",
     "packages/**/scripts/**/*.ts",
     "examples/**/*.ts"
