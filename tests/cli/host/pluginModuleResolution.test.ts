@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -49,4 +49,27 @@ it("accepts direct installed packages and explicit operator module paths without
   await writeFile(path.join(outside, "package.json"), JSON.stringify({ name: "outside-plugin", type: "module", main: "../outside.js" }));
   await writeFile(path.join(root, "node_modules/outside.js"), "throw Error('must not import outside selected package');");
   await expect(resolveHostPluginModule(root, "outside-plugin")).rejects.toThrow(/outside its installed package/);
+});
+
+
+it("loads the selected immutable release after runtime/current changes in the same process", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "dim-plugin-release-")); roots.push(root);
+  const releases = [path.join(root, "release-one"), path.join(root, "release-two")];
+  for (const [index, release] of releases.entries()) {
+    const selected = path.join(release, "node_modules/@example/update"); await mkdir(selected, { recursive: true });
+    await writeFile(path.join(selected, "package.json"), JSON.stringify({ name: "@example/update", type: "module", exports: "./index.js" }));
+    await writeFile(path.join(selected, "index.js"), `export const hostPlugin={name:'release-${index}'};export default {name:'release-${index}',apiVersion:4,register(){}};`);
+    await writeFile(path.join(release, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: ["@example/update"] }));
+  }
+  const current = path.join(root, "current"); await symlink(releases[0]!, current, "dir");
+  vi.stubEnv("DIM_PLUGIN_HOME", current);
+  for (let index = 0; index < releases.length; index++) {
+    if (index !== 0) {
+      const next = path.join(root, "next"); await symlink(releases[index]!, next, "dir"); await rename(next, current);
+    }
+    expect(await resolveHostPluginModule(current, "@example/update")).toBe(path.join(releases[index]!, "node_modules/@example/update/index.js"));
+    expect((await loadHostPlugins()).map(({ name }) => name)).toEqual([`release-${index}`]);
+    const controller = await loadInstalledPlugins(current);
+    expect(controller.registered.plugins).toContain(`release-${index}`); await controller.registered.dispose();
+  }
 });

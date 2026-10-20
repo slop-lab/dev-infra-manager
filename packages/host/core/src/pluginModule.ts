@@ -6,7 +6,8 @@ import { UserError } from "./errors.js";
 
 /** Resolve an operator-selected host module. Named packages must be installed in this runtime tree. */
 export async function resolveHostPluginModule(home: string, specifier: string): Promise<string> {
-  const selectedHome = path.resolve(home);
+  // Immutable release paths also separate Node resolution caches across current-symlink updates.
+  const selectedHome = await realpath(path.resolve(home));
   const resolver = createRequire(path.join(selectedHome, "package.json"));
   // Explicit development paths select their module directly rather than a package lookup.
   if (specifier.startsWith("file:")) return realpath(fileURLToPath(specifier));
