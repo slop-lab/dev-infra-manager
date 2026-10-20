@@ -3,23 +3,23 @@ set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 launcher="${DIM_QEMU_TRUSTED_LAUNCHER:-$repository_root/tests/scenarios/qemu/qemu-verify.bash}"
-service="$repository_root/tests/scenarios/qemu/qemu-service.mjs"
-owner="$repository_root/tests/scenarios/qemu/qemu-service-owner.mjs"
-client="$repository_root/tests/scenarios/qemu/qemu-client.mjs"
+service="$repository_root/tests/scenarios/qemu/qemu-service.mts"
+owner="$repository_root/tests/scenarios/qemu/qemu-service-owner.mts"
+client="$repository_root/tests/scenarios/qemu/qemu-client.mts"
 root_modules=(
-  qemu-event-followers.mjs
-  qemu-input-handoff.mjs
-  qemu-values.mjs
-  qemu-owner-record.mjs
-  qemu-process-group.mjs
-  qemu-run-finalization.mjs
-  qemu-service-artifacts.mjs
-  qemu-service-filesystem.mjs
-  qemu-service-http.mjs
-  qemu-service-owner.mjs
-  qemu-service-startup.mjs
-  qemu-service.mjs
-  qemu-snapshot.mjs
+  qemu-event-followers.mts
+  qemu-input-handoff.mts
+  qemu-values.mts
+  qemu-owner-record.mts
+  qemu-process-group.mts
+  qemu-run-finalization.mts
+  qemu-service-artifacts.mts
+  qemu-service-filesystem.mts
+  qemu-service-http.mts
+  qemu-service-owner.mts
+  qemu-service-startup.mts
+  qemu-service.mts
+  qemu-snapshot.mts
 )
 node="${DIM_QEMU_NODE_EXECUTABLE:-/usr/bin/node}"
 sudo_command=/usr/bin/sudo
@@ -291,8 +291,8 @@ for module in "${root_modules[@]}"; do
   run_sudo_once /usr/bin/install -o root -g root -m 0444 \
     "$repository_root/tests/scenarios/qemu/$module" "$service_dir/modules/$module"
 done
-service="$service_dir/modules/qemu-service.mjs"
-owner="$service_dir/modules/qemu-service-owner.mjs"
+service="$service_dir/modules/qemu-service.mts"
+owner="$service_dir/modules/qemu-service-owner.mts"
 run_sudo_once /usr/bin/install -o root -g root -m 0555 "$launcher" "$service_dir/gate.bash"
 launcher_wrapper_source="$(/usr/bin/mktemp)"
 printf '#!/usr/bin/env bash\nexec %q --reuid %q --regid %q --init-groups -- /usr/bin/env HOME=%q USER=%q LOGNAME=%q /bin/bash %q "$@"\n' \

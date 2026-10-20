@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createTemporaryRootTracker } from "./registryCacheRouting.fixture.js";
 
 const verificationRoot = resolve(import.meta.dirname, "../../../scripts/checks");
-const fixtureScript = resolve(verificationRoot, "registry-cache-evidence.mjs");
+const fixtureScript = resolve(verificationRoot, "registry-cache-evidence.ts");
 const temporaryRoots = createTemporaryRootTracker();
 type FixtureProcess = ChildProcessByStdio<null, Readable, Readable>;
 const fixtureProcesses: FixtureProcess[] = [];

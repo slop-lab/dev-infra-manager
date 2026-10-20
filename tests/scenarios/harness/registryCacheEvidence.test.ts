@@ -8,7 +8,7 @@ import { createInterface } from "node:readline";
 import type { Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 
-const fixtureScript = resolve(import.meta.dirname, "../../../scripts/checks/registry-cache-evidence.mjs");
+const fixtureScript = resolve(import.meta.dirname, "../../../scripts/checks/registry-cache-evidence.ts");
 const fixtureRoots: string[] = [];
 type FixtureProcess = ChildProcessByStdio<null, Readable, Readable>;
 const fixtureProcesses: FixtureProcess[] = [];

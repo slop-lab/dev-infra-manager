@@ -36,7 +36,7 @@ test("actual Git checkout requirements fail before records/runtime; source movem
       let runtimeCalls = 0;
       const unexpected = async (): Promise<never> => { runtimeCalls++; throw new Error("runtime must not run"); };
       const runtime: WorkspaceRuntime = { create: unexpected, start: unexpected, stop: unexpected, remove: unexpected, inspect: unexpected,
-        seed: unexpected, exec: unexpected, run: unexpected, connect: unexpected, updateResources: unexpected };
+        seed: unexpected, exec: unexpected, connect: unexpected, updateResources: unexpected };
       const store = new WorkspaceStore(path.join(root, "state"));
       const check = workspaceRequirements();
       const service = new WorkspaceService(store, runtime, async (input) => {

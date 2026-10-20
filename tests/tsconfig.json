@@ -12,19 +12,12 @@
     "noEmit": true,
     "allowJs": true,
     "checkJs": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
-    "host/**/*.ts",
-    "control-plane/**/*.ts",
-    "contracts/**/*.ts",
-    "installer/**/*.ts",
-    "web/**/*.ts",
-    "cli/host/**/*.ts",
-    "scenarios/**/*.ts"
-  ],
-  "exclude": [
-    "cli/*.ts"
+    "**/*.ts",
+    "**/*.mts"
   ],
   "extends": "../tsconfig.source.json"
 }

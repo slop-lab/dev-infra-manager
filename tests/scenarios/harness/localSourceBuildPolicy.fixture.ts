@@ -66,7 +66,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       copyFile(resolve(projectRoot, "scripts", script), resolve(scripts, script))
     )
   );
-  await writeFile(resolve(scripts, "pack-local-packages.mjs"), "");
+  await writeFile(resolve(scripts, "pack-local-packages.ts"), "");
 
   const toolsSource: Readonly<Record<string, string>> = {
     docker:

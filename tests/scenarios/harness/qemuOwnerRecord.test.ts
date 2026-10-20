@@ -6,13 +6,13 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createOwnerRecord, inspectOwner, parseOwnerRecord, retireOwner,
-} from "../qemu/qemu-service-owner.mjs";
+} from "../qemu/qemu-service-owner.mts";
 import {
   captureSocketIdentity, createSocketLease, publishOwner, removeOwnedArtifacts,
   restoreReplacedSocket, safeguardReplacedSocket, socketLeasePath,
-} from "../qemu/qemu-service-artifacts.mjs";
+} from "../qemu/qemu-service-artifacts.mts";
 
-const ownerScript = resolve(import.meta.dirname, "../qemu/qemu-service-owner.mjs");
+const ownerScript = resolve(import.meta.dirname, "../qemu/qemu-service-owner.mts");
 
 const roots: string[] = [];
 const servers: Server[] = [];

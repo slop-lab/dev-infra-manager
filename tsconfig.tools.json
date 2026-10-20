@@ -1,0 +1,32 @@
+{
+  "extends": "./tsconfig.source.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "./tests/node_modules/@types"
+    ],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "**/*.js",
+    "**/*.mjs",
+    "**/*.cjs",
+    "**/*.d.ts",
+    "scripts/**/*.ts",
+    "tools/**/*.ts",
+    "packages/**/scripts/**/*.ts",
+    "examples/**/*.ts"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    ".git/**",
+    ".local/**"
+  ]
+}

@@ -12,9 +12,9 @@ export default defineConfig({
     // production deadline; explicitly bounded operations retain their limits.
     testTimeout: 15_000,
     include: [
-      "{host,control-plane,contracts,installer,web}/**/*.test.{ts,mjs}",
+      "{host,control-plane,contracts,installer,web}/**/*.test.ts",
       "cli/host/**/*.test.ts",
-      "scenarios/{harness,ci,llm-router}/**/*.test.{ts,mjs}"
+      "scenarios/{harness,ci,llm-router}/**/*.test.ts"
     ],
     exclude: ["scenarios/harness/{qemu*,kvm*,bootstrapInstallerSafety}.test.ts"]
   },

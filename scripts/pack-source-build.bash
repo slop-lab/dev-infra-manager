@@ -135,7 +135,7 @@ echo "[source] build production packages"
 pnpm --dir "$source_root" --recursive --workspace-concurrency=1 run build
 
 echo "[source] create install bundle"
-node "$repo_root/scripts/pack-local-packages.mjs" "$source_root" "$output_stage"
+node "$repo_root/scripts/pack-local-packages.ts" "$source_root" "$output_stage"
 cp -- "$source_root/.dim-source-state" "$output_stage/.dim-source-state"
 
 if [[ -d "$output_directory" ]]; then

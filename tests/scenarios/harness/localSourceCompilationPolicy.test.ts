@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { packageDirectories, packLocalPackages } from "../../../scripts/pack-local-packages.mjs";
+import { packageDirectories, packLocalPackages } from "../../../scripts/pack-local-packages.ts";
 import { cp, copyFile, mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -33,7 +33,7 @@ describe("exact source plugin compilation", () => {
     expect(pnpmInvocations[0]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+ install --frozen-lockfile version=/);
     expect(pnpmInvocations).toHaveLength(2);
     expect(pnpmInvocations[1]).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+ --recursive --workspace-concurrency=1 run build version=/);
-    expect(invocations.at(-1)).toMatch(/^node .*pack-local-packages\.mjs /);
+    expect(invocations.at(-1)).toMatch(/^node .*pack-local-packages\.ts /);
     for (const repository of ["packages/host/plugins/dns-cloudflare", "packages/host/plugins/external-urls", "packages/host/plugins/mirrors"]) {
       expect(await readFile(resolve(fixture.root, `output/${repository}.package.json`), "utf8")).toBe(fixturePackageManifest);
     }
@@ -52,7 +52,7 @@ describe("exact source plugin compilation", () => {
     expect(invocations.match(/^pnpm /gm)).toHaveLength(1);
     expect(invocations).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+ install --frozen-lockfile/m);
     expect(invocations).not.toMatch(/^pnpm .* run build /m);
-    expect(invocations).not.toMatch(/^node .*pack-local-packages\.mjs /m);
+    expect(invocations).not.toMatch(/^node .*pack-local-packages\.ts /m);
   });
 });
 
@@ -65,13 +65,13 @@ it("publishes and packs every actual owner with one matched local dependency gra
   try {
     await mkdir(resolve(root, "scripts/packages"), { recursive: true });
     await copyFile(resolve(repository, "LICENSE"), resolve(root, "LICENSE"));
-    await copyFile(resolve(repository, "scripts/packages/publish-package-version.mjs"), resolve(root, "scripts/packages/publish-package-version.mjs"));
+    await copyFile(resolve(repository, "scripts/packages/publish-package-version.ts"), resolve(root, "scripts/packages/publish-package-version.ts"));
     for (const directory of packageDirectories) {
       const relative = directory.replace(/\/dist$/, "");
       const source = resolve(repository, relative), target = resolve(root, relative);
       await cp(source, target, { recursive: true, filter: (entry) => !entry.split("/").includes("node_modules") });
       await symlink(resolve(source, "node_modules"), resolve(target, "node_modules"));
-      const result = spawnSync(process.execPath, [resolve(target, "scripts/build-publish-package.mjs")], {
+      const result = spawnSync(process.execPath, [resolve(target, "scripts/build-publish-package.ts")], {
         cwd: target, encoding: "utf8", env: { ...process.env, DIM_LOCAL_BUILD_VERSION: version }
       });
       expect(result.error, `${relative} publisher could not run`).toBeUndefined();

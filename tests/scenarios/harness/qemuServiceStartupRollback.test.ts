@@ -10,7 +10,7 @@ import { spawnPreloadScript } from "./qemuServiceFixtureScripts.js";
 import { waitForObservation } from "./qemuServiceTestSupport.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../..");
-const serviceScript = resolve(workspaceRoot, "tests/scenarios/qemu/qemu-service.mjs");
+const serviceScript = resolve(workspaceRoot, "tests/scenarios/qemu/qemu-service.mts");
 const roots: string[] = [];
 const processes: ChildProcess[] = [];
 const servers: Server[] = [];
@@ -164,14 +164,14 @@ describe("QEMU service startup rollback", () => {
     await writeFile(runSentinel, "existing run\n");
     await writeFile(loader, `import { pathToFileURL } from "node:url";
 export async function resolve(specifier, context, nextResolve) {
-  if (specifier.endsWith("qemu-service-artifacts.mjs") && !specifier.includes("?real")) {
+  if (specifier.endsWith("qemu-service-artifacts.mts") && !specifier.includes("?real")) {
     return { shortCircuit: true, url: pathToFileURL(process.env.DIM_TEST_OWNER_WRAPPER).href };
   }
   return nextResolve(specifier, context);
 }
 `);
     await writeFile(ownerWrapper, `import fs from "node:fs";
-import * as artifacts from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, "tests/scenarios/qemu/qemu-service-artifacts.mjs")).href}?real`)};
+import * as artifacts from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, "tests/scenarios/qemu/qemu-service-artifacts.mts")).href}?real`)};
 export const captureSocketIdentity = artifacts.captureSocketIdentity;
 export const createSocketLease = artifacts.createSocketLease;
 export const identity = artifacts.identity;

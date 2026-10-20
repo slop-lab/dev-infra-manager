@@ -111,7 +111,7 @@ same-name/cached-IP reuse. They use actual core workspace records.
 After building matched packages and a base Sysbox workspace image:
 
 ```sh
-node scripts/checks/controller-workspace-relay-smoke.mjs IMAGE
+node scripts/checks/controller-workspace-relay-smoke.ts IMAGE
 ```
 
 The disposable-container smoke verifies the owned loopback relay, concurrent

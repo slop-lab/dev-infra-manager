@@ -114,11 +114,11 @@ describe("external URL route policies", () => {
     })).rejects.toThrow("exceeds 64 KiB");
   });
 
-  it("runs a webhook route policy fixture", async () => {
+  it("runs the shipped webhook route policy example", async () => {
     const directory = await mkdtemp("/tmp/dim-route-policy-example-");
     cleanup.push(() => rm(directory, { recursive: true, force: true }));
     const socketPath = path.join(directory, "policy.sock");
-    const script = path.resolve(import.meta.dirname, "./fixtures/policy-server.mjs");
+    const script = path.resolve(import.meta.dirname, "../../../../examples/features/external-url-route-policy/policy-server.ts");
     const child = spawn(process.execPath, [script, socketPath], {
       stdio: ["ignore", "pipe", "inherit"]
     });

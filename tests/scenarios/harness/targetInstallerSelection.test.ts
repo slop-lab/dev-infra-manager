@@ -71,7 +71,7 @@ exec "$@"
     DIM_INVOCATIONS: log,
     DIM_OLD_FACADE_MUTATION: oldFacadeMutation
   };
-  const packed = run(process.execPath, [resolve(workspaceRoot, "scripts/pack-local-packages.mjs"), workspaceRoot, bundle], environment);
+  const packed = run(process.execPath, [resolve(workspaceRoot, "scripts/pack-local-packages.ts"), workspaceRoot, bundle], environment);
   expect(packed.status, packed.stderr).toBe(0);
   return { root, bundle, readiness, log, oldFacadeMutation, environment };
 }

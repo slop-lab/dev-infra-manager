@@ -158,7 +158,7 @@ test("native root bootstrap rejects an in-place policy rewrite before service mu
   const marker = join(fixture.stateRoot, "policy-rewrite-observed");
   fixture.environment.DIM_TEST_REVIEW_POLICY_PATH = policyPath;
   fixture.environment.DIM_TEST_REVIEW_POLICY_MARKER = marker;
-  const mutationImport = new URL("./fixtures/mutate-review-policy-during-read.mjs", import.meta.url).href;
+  const mutationImport = new URL("./fixtures/mutate-review-policy-during-read.ts", import.meta.url).href;
 
   // When
   const result = await runBootstrap(fixture, policyPath, ["--import", mutationImport]);

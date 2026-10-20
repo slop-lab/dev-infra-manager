@@ -12,7 +12,7 @@ import {
   callHost, decodeHostRequest, encodeHostRequest, hostInvocation, HostTransportError, streamHost
 } from "../../packages/cli/src/host-transport.js";
 
-const peer = fileURLToPath(new URL("./fixtures/host-peer.mjs", import.meta.url));
+const peer = fileURLToPath(new URL("./fixtures/host-peer.ts", import.meta.url));
 const localCommand = { file: process.execPath, args: [peer] };
 const local = { name: "local" };
 const execFileAsync = promisify(execFile);

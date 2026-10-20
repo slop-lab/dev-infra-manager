@@ -298,6 +298,7 @@ async function run(args: string[], fixture: Fixture, input?: string): Promise<{ 
   });
   if (input !== undefined) child.stdin?.end(input);
   let stdout = "", stderr = "";
+  assert.ok(child.stdout && child.stderr);
   child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
   child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
   const status = await new Promise<number | null>((resolve, reject) => {

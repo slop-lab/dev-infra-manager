@@ -101,7 +101,7 @@ type HostFixture = {
 };
 
 async function createHostFixture(
-  handler: Parameters<typeof createServer>[0]
+  handler: import("node:http").RequestListener
 ): Promise<HostFixture> {
   const root = await mkdtemp(path.join(tmpdir(), "dim-external-url-list-"));
   const stateRoot = path.join(root, "state");

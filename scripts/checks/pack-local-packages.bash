@@ -20,4 +20,4 @@ export DIM_LOCAL_BUILD_VERSION
 pnpm run workspace:build >/dev/null
 
 echo "[packages] create pnpm tarballs"
-node "$script_dir/pack-local-packages.mjs" "$output_directory"
+node "$script_dir/pack-local-packages.ts" "$output_directory"

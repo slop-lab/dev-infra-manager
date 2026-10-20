@@ -53,6 +53,11 @@ provider-specific tools; do not assume that `origin` is GitHub.
   cross-component and privileged fixtures live in `tests/scenarios/`.
   Shared runners belong in `scripts/checks/`, package helpers in
   `scripts/packages/`, and normative contracts in `docs/specs/`.
+- Write repository tools and tests in TypeScript. Standalone Node tools use
+  erasable types and run directly on the supported Node 24/26 toolchain. Keep
+  JavaScript for browser/guest assets delivered without compilation and for
+  bootstrap code that runs before that toolchain is selected. Remaining JS
+  sources require `// @ts-check` and the shared strict compiler check.
 - Keep package design notes with their owner. Record current release outcomes
   in the root `CHANGELOG.md`; old package-group notes are archived in
   `docs/history/`. Nonpublishable workspaces use the `@this-project/` namespace.

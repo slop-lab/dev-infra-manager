@@ -83,7 +83,7 @@ docker image tag "$dind_image" "$agent_image"
 start_fixture() {
   local route="$1"
   local ready="$root/$route-ready.json" evidence="$root/$route-upstream.jsonl"
-  node "$script_dir/registry-cache-evidence.mjs" --run-id "$run_id" --route "$route" \
+  node "$script_dir/registry-cache-evidence.ts" --run-id "$run_id" --route "$route" \
     --bind-address "$fixture_address" --evidence-file "$evidence" --ready-file "$ready" \
     >"$root/$route-fixture.stdout" 2>"$root/$route-fixture.stderr" &
   if [[ "$route" == cold ]]; then cold_fixture_pid=$!; else outage_fixture_pid=$!; fi

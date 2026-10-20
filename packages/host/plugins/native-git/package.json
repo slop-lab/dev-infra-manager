@@ -25,7 +25,7 @@
     }
   },
   "scripts": {
-    "build": "node ../../../../scripts/packages/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {

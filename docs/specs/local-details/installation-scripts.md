@@ -330,7 +330,7 @@ run directly against the packed CLI) reports it enabled.
 ## Core workspace controller relay smoke
 
 ```sh
-node scripts/checks/controller-workspace-relay-smoke.mjs WORKSPACE_IMAGE
+node scripts/checks/controller-workspace-relay-smoke.ts WORKSPACE_IMAGE
 ```
 
 Requires matched built packages, Docker and Sysbox. Creates a disposable core

@@ -237,7 +237,7 @@ In a workspace with this reviewed Project's broker already provisioned, use
 the client instead of the trusted-host setup command:
 
 ```bash
-node tests/scenarios/qemu/qemu-client.mjs run \
+node tests/scenarios/qemu/qemu-client.mts run \
   --input "bootstrap-source=$BROKER_SOURCE_ROOT/.local/verification/bootstrap-source"
 ```
 

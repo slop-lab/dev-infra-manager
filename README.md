@@ -188,7 +188,8 @@ just build-packages
 
 `just typecheck` checks both TypeScript and all source JavaScript (`.js`,
 `.mjs`, `.cjs`) with the shared strict compiler settings. JavaScript sources
-use `// @ts-check`; run `pnpm check:js` for that check alone.
+use `// @ts-check`. Repository tools use TypeScript executed directly by Node 24/26;
+run `pnpm check:tools` to check tools and the remaining JavaScript.
 
 Tests are under `tests/`; deployment and cross-component checks are under
 `scripts/checks/` and `tests/scenarios/`. The source gate and fresh VM bootstrap describe their own

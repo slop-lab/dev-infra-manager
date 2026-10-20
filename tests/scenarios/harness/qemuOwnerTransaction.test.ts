@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-const artifactUrl = pathToFileURL(resolve(import.meta.dirname, "../qemu/qemu-service-artifacts.mjs")).href;
+const artifactUrl = pathToFileURL(resolve(import.meta.dirname, "../qemu/qemu-service-artifacts.mts")).href;
 const roots: string[] = [];
 
 async function runCase(stage: string, collision = false) {

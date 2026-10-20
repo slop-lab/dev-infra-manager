@@ -60,7 +60,7 @@ describe("local source installation", () => {
     };
     await mkdir(resolve(environment.DIM_CONFIG_PATH, ".."), { recursive: true });
     const packed = run(process.execPath, [
-      resolve(workspaceRoot, "scripts/pack-local-packages.mjs"), workspaceRoot, bundle
+      resolve(workspaceRoot, "scripts/pack-local-packages.ts"), workspaceRoot, bundle
     ], environment);
     expect(packed.status, packed.stderr).toBe(0);
 
@@ -147,7 +147,7 @@ describe("local source installation", () => {
       DIM_STATE_ROOT: stateRoot
     };
     const packed = run(process.execPath, [
-      resolve(workspaceRoot, "scripts/pack-local-packages.mjs"), workspaceRoot, bundle
+      resolve(workspaceRoot, "scripts/pack-local-packages.ts"), workspaceRoot, bundle
     ], environment);
     expect(packed.status, packed.stderr).toBe(0);
     const manifest = JSON.parse(await readFile(resolve(bundle, "packages.json"), "utf8")) as PackageManifest;

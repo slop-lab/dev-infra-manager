@@ -67,7 +67,7 @@ docker image pull "$dind_image" >/dev/null
 
 cold_ready="$root/cold-ready.json"
 cold_evidence="$root/cold-upstream.jsonl"
-node "$script_dir/registry-cache-evidence.mjs" \
+node "$script_dir/registry-cache-evidence.ts" \
   --run-id "$run_id" --route cold --bind-address "$fixture_address" \
   --evidence-file "$cold_evidence" --ready-file "$cold_ready" \
   >"$root/cold-fixture.stdout" 2>"$root/cold-fixture.stderr" &
@@ -85,7 +85,7 @@ cold_ref="docker.io/$cold_repository@$cold_digest"
 
 outage_ready="$root/outage-ready.json"
 outage_evidence="$root/outage-upstream.jsonl"
-node "$script_dir/registry-cache-evidence.mjs" \
+node "$script_dir/registry-cache-evidence.ts" \
   --run-id "$run_id" --route outage --bind-address "$fixture_address" \
   --evidence-file "$outage_evidence" --ready-file "$outage_ready" \
   >"$root/outage-fixture.stdout" 2>"$root/outage-fixture.stderr" &

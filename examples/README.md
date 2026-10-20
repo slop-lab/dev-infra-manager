@@ -13,7 +13,7 @@
   integration. They do not change the base workspace lifecycle.
 
 The native Project fixture has source checks in
-`tests/scenarios/harness/nativeBasicExample.test.mjs`. Real Git, runtime, service and
+`tests/scenarios/harness/nativeBasicExample.test.ts`. Real Git, runtime, service and
 CI verification require their declared disposable host prerequisites; source
 structure checks alone do not establish runtime or multi-host acceptance.
 
@@ -32,7 +32,7 @@ source installations should use the matching prepared package set.
 | [Codex](use-cases/codex/README.md) | `@slop-lab/dim-host-plugin-agent-tools@0.10.0` | Base workspace prerequisites; guest tool installation network access and deliberate Codex authentication; guest SSH setup for remote editors |
 | [External URLs](features/external-urls/README.md) | `@slop-lab/dim-host-plugin-external-urls@0.10.0` | Managed administration and its host controller, an owned workspace, configured ingress; no native Git/control-plane service required |
 | [Shared execution](features/shared-execution/README.md) | None | Managed CI service/compiler composition, private worker connection, reviewed runner/job images; Docker/Sysbox for container slots or Docker and functional KVM for VM slots |
-| [Archived route policy](features/external-url-route-policy/README.md) | External-URLs plugin for a separately configured integration | Historical standalone policy-server fixture; Node.js 24/26 and a private Unix socket; not a complete deployment recipe |
+| [Route policy](features/external-url-route-policy/README.md) | External-URLs plugin for a separately configured integration | Standalone policy webhook; Node.js 24/26 and a private Unix socket; use with the External URLs recipe |
 
 The recognized repository declaration is `.dim/workspace.json`, for example:
 
@@ -64,15 +64,15 @@ in to a provider. The complete source gate is documented in
 
 | Example / check | Required test components and scope |
 | --- | --- |
-| Native basic: [policy/workflow check](../tests/scenarios/harness/nativeBasicExample.test.mjs) | Managed policy compiler plus CI-workflows compiler; checks the committed example and required job agreement, without Docker, KVM or live services |
+| Native basic: [policy/workflow check](../tests/scenarios/harness/nativeBasicExample.test.ts) | Managed policy compiler plus CI-workflows compiler; checks the committed example and required job agreement, without Docker, KVM or live services |
 | [Multiple repositories](projects/native-multiple-repositories/README.md): [linked integration](../tests/scenarios/ci/multipleRepositoryExample.test.ts) | Native Git service, managed CI and CI-workflows compiler from source; real disposable local Git/HTTP plus the committed integration script; no host plugin, installed control plane or Docker required |
 | Multiple repositories: [physical workspace test](../tests/host/core/multiRepositoryWorkspaceRuntime.test.ts) | The same managed/native components plus Docker/Sysbox, a built workspace image and matched package outputs; opt in with `DIM_NATIVE_MULTI_REPOSITORY_IMAGE`; proves checkout isolation, repository grants, pushes and persistent recreation |
-| External URLs: [plugin tests](../tests/host/plugins/external-urls) and [relay smoke](../scripts/checks/controller-workspace-relay-smoke.mjs) | Tests import the external-URLs plugin and managed controller from source. The relay smoke additionally needs matched built packages and a Sysbox workspace image; it does not need native Git, DNS or CI |
+| External URLs: [plugin tests](../tests/host/plugins/external-urls) and [relay smoke](../scripts/checks/controller-workspace-relay-smoke.ts) | Tests import the external-URLs plugin and managed controller from source. The relay smoke additionally needs matched built packages and a Sysbox workspace image; it does not need native Git, DNS or CI |
 | Codex: [agent-tools tests](../tests/host/plugins/agent-tools) | Agent-tools source and disposable local helper processes; tests exercise configuration and launch behavior, without authenticating Codex or claiming live provider inference |
-| Archived route policy: [protocol tests](../tests/host/plugins/external-urls/routePolicy.test.ts) | External-URLs plugin source and a local Unix socket; protocol coverage does not establish a deployed public ingress |
+| Route policy: [protocol tests](../tests/host/plugins/external-urls/routePolicy.test.ts) | External-URLs plugin source and a local Unix socket; protocol coverage does not establish a deployed public ingress |
 
 ```sh
-pnpm --dir tests exec vitest run scenarios/harness/nativeBasicExample.test.mjs
+pnpm --dir tests exec vitest run scenarios/harness/nativeBasicExample.test.ts
 pnpm --dir tests exec vitest run scenarios/ci/multipleRepositoryExample.test.ts
 DIM_NATIVE_MULTI_REPOSITORY_IMAGE=YOUR_BUILT_IMAGE \
   pnpm --dir tests exec vitest run host/core/multiRepositoryWorkspaceRuntime.test.ts

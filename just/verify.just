@@ -58,7 +58,7 @@ workspace-user-setup:
 
 # Verify every publishable package through the same dry-run used before release.
 package-packs:
-    cd .. && node scripts/packages/check-package-packs.mjs
+    cd .. && node scripts/packages/check-package-packs.ts
 
 # Run the strongest gate supported inside this repository's DIM development agent.
 agent:
@@ -112,7 +112,7 @@ ci-runtime runtime supervisor image:
 
 # Exercise optional workspace capabilities through the bounded base transport.
 controller-workspace-relay-smoke image:
-    cd .. && node scripts/checks/controller-workspace-relay-smoke.mjs "{{image}}"
+    cd .. && node scripts/checks/controller-workspace-relay-smoke.ts "{{image}}"
 
 # Requires Docker and network access; exercises `mise use --raw --global npm:@slop-lab/dim-installer` in a disposable container.
 mise-install-smoke:
@@ -128,4 +128,4 @@ isolation-json:
 
 # Install exact source artifacts into temporary prefixes and verify optional profiles.
 local-bundle-profiles bundle:
-    cd .. && node scripts/checks/local-bundle-profiles-smoke.mjs "{{bundle}}"
+    cd .. && node scripts/checks/local-bundle-profiles-smoke.ts "{{bundle}}"

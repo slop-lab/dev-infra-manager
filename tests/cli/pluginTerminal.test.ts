@@ -8,7 +8,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 const execute = promisify(execFile);
 const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.url));
-const plugin = fileURLToPath(new URL("./fixtures/terminal-plugin.mjs", import.meta.url));
+const plugin = fileURLToPath(new URL("./fixtures/terminal-plugin.ts", import.meta.url));
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
 test("local and SSH optional plugin commands inherit the real operator PTY", async () => {

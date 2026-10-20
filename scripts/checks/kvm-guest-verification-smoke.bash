@@ -43,7 +43,7 @@ native_contracts() {
   pnpm --filter @slop-lab/dim-control-plane-plugin-native-git run build
   pnpm --filter @slop-lab/dim-cli run build
   pnpm --dir tests exec vitest run host/core/workspaceService.test.ts host/core/nativeWorkspaceBroker.test.ts
-  pnpm --dir tests exec vitest run scenarios/harness/nativeBasicExample.test.mjs scenarios/harness/candidateSourceWorkflow.test.ts
+  pnpm --dir tests exec vitest run scenarios/harness/nativeBasicExample.test.ts scenarios/harness/candidateSourceWorkflow.test.ts
 }
 
 installed_services() {

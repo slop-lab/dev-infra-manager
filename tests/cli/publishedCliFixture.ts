@@ -18,8 +18,8 @@ function isolatedPackage(): { root: string; directory: string } {
     mkdirSync(path.join(directory, "scripts"), { recursive: true });
     mkdirSync(path.join(root, "scripts/packages"), { recursive: true });
     cpSync(path.join(packageDirectory, "dist"), path.join(directory, "dist"), { recursive: true });
-    for (const file of ["package.json", "README.md", "scripts/build-publish-package.mjs"]) copyFileSync(path.join(packageDirectory, file), path.join(directory, file));
-    copyFileSync(path.resolve(packageDirectory, "../../scripts/packages/publish-package-version.mjs"), path.join(root, "scripts/packages/publish-package-version.mjs"));
+    for (const file of ["package.json", "README.md", "scripts/build-publish-package.ts"]) copyFileSync(path.join(packageDirectory, file), path.join(directory, file));
+    copyFileSync(path.resolve(packageDirectory, "../../scripts/packages/publish-package-version.ts"), path.join(root, "scripts/packages/publish-package-version.ts"));
     copyFileSync(path.resolve(packageDirectory, "../../package.json"), path.join(root, "package.json"));
     copyFileSync(path.resolve(packageDirectory, "../../LICENSE"), path.join(root, "LICENSE"));
     symlinkSync(path.join(packageDirectory, "node_modules"), path.join(directory, "node_modules"), "dir");
@@ -30,7 +30,7 @@ function isolatedPackage(): { root: string; directory: string } {
 export function buildPublishedCli(environment: NodeJS.ProcessEnv): PublishedCliFixture {
   const fixture = isolatedPackage();
   try {
-    const packaged = spawnSync(process.execPath, ["scripts/build-publish-package.mjs"], { cwd: fixture.directory, env: environment, encoding: "utf8" });
+    const packaged = spawnSync(process.execPath, ["scripts/build-publish-package.ts"], { cwd: fixture.directory, env: environment, encoding: "utf8" });
     assert.equal(packaged.status, 0, packaged.stderr);
     const published = spawnSync(process.execPath, ["dist/cli.js", "--version"], { cwd: fixture.directory, env: environment, encoding: "utf8" });
     assert.equal(published.status, 0, published.stderr);

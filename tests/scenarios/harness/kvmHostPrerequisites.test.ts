@@ -9,9 +9,9 @@ const smokeSource = resolve(workspaceRoot, "scripts/checks/kvm-host-install-smok
 const prerequisites = resolve(workspaceRoot, "scripts/checks/lib/kvm-host-prerequisites.bash");
 const roots: string[] = [];
 const modules = [
-  "qemu-event-followers.mjs", "qemu-input-handoff.mjs", "qemu-values.mjs", "qemu-owner-record.mjs", "qemu-process-group.mjs", "qemu-run-finalization.mjs",
-  "qemu-service-artifacts.mjs", "qemu-service-filesystem.mjs", "qemu-service-http.mjs", "qemu-service-owner.mjs",
-  "qemu-service-startup.mjs", "qemu-service.mjs", "qemu-snapshot.mjs",
+  "qemu-event-followers.mts", "qemu-input-handoff.mts", "qemu-values.mts", "qemu-owner-record.mts", "qemu-process-group.mts", "qemu-run-finalization.mts",
+  "qemu-service-artifacts.mts", "qemu-service-filesystem.mts", "qemu-service-http.mts", "qemu-service-owner.mts",
+  "qemu-service-startup.mts", "qemu-service.mts", "qemu-snapshot.mts",
 ] as const;
 
 type PreflightFixture = {
@@ -37,7 +37,7 @@ async function preflightFixture(): Promise<PreflightFixture> {
   for (const command of ["qemu-system-x86_64", "qemu-img", "cloud-localds"] as const) {
     await writeFile(resolve(tools, command), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
   }
-  await Promise.all([...modules, "qemu-client.mjs"].map((module) =>
+  await Promise.all([...modules, "qemu-client.mts"].map((module) =>
     copyFile(resolve(workspaceRoot, "tests/scenarios/qemu", module), resolve(projectQemu, module))));
   await writeFile(resolve(root, "launcher.bash"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
   await writeFile(sudo, "#!/usr/bin/env bash\nexit 1\n", { mode: 0o700 });

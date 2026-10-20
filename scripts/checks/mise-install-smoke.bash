@@ -39,7 +39,7 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
-node scripts/pack-local-packages.mjs "$repo_root" "$source_dir" >/dev/null
+node scripts/pack-local-packages.ts "$repo_root" "$source_dir" >/dev/null
 core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-host-core*.tgz' -print -quit)"
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-installer*.tgz' -print -quit)"

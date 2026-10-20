@@ -97,7 +97,7 @@ The actual container relay smoke checks concurrent binary streams, half-close,
 relay reuse, ownership fencing and discard cleanup:
 
 ```bash
-node scripts/checks/controller-workspace-relay-smoke.mjs WORKSPACE_IMAGE
+node scripts/checks/controller-workspace-relay-smoke.ts WORKSPACE_IMAGE
 ```
 
 Run that command from the repository root after building matched packages and a

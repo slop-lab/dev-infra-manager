@@ -1,12 +1,11 @@
 # External URL Route Policy
 
-> **Archived predecessor example.** Retained for historical source comparison;
-> it is not a complete current deployment recipe. Use the maintained
-> [External URLs recipe](../external-urls/README.md) for setup and prerequisites.
+Use the [External URLs recipe](../external-urls/README.md) for the host plugin
+and ingress setup, then add the policy below.
 
 The standalone server below exercises the still-supported trusted route-policy
 webhook protocol. It requires Node.js 24/26 and a private host Unix socket.
-Integrating it requires managed administration plus
+Integrating it requires
 `@slop-lab/dim-host-plugin-external-urls@0.10.0` on the workspace host and an
 operator-configured ingress referencing that socket. Native Git, CI and a DNS
 plugin are not required for a local HTTP ingress. This directory is not a source
@@ -19,7 +18,7 @@ focused on ordinary workspace-qualified URLs.
 Start the policy beside the DIM controller:
 
 ```bash
-node examples/features/external-url-route-policy/policy-server.mjs \
+node examples/features/external-url-route-policy/policy-server.ts \
   /run/user/"$(id -u)"/dim/external-url-policy.sock
 ```
 

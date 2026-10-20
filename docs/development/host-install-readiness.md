@@ -38,7 +38,7 @@ resource readback and discard cleanup using only owned fixture resources.
 `just verify workspace-runtime` runs the production source/runtime adapter
 against a locally built image, including nested Docker, retained storage,
 resource updates and missing-volume rejection. The real SSH fixture is
-`scripts/checks/base-workspace-ssh-smoke.mjs`; its setup/run/cleanup
+`scripts/checks/base-workspace-ssh-smoke.ts`; its setup/run/cleanup
 phases use a disposable trusted SSH host with a loopback-only published port,
 a temporary key and client configuration. Only that trusted admin host
 receives the Docker socket. The development workspace does not.

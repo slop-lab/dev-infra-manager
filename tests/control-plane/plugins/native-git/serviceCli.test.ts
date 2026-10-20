@@ -10,7 +10,7 @@ const run = promisify(execFile);
 const workspaceRoot = resolve(import.meta.dirname, "../../../..");
 const packageRoot = join(workspaceRoot, "packages/control-plane/plugins/native-git");
 const serviceCli = join(workspaceRoot, "packages/control-plane/plugins/native-git/dist/deployment-cli.js");
-const stateProbe = join(import.meta.dirname, "fixtures/nativeStateProbeProcess.mjs");
+const stateProbe = join(import.meta.dirname, "fixtures/nativeStateProbeProcess.ts");
 const roots: string[] = [];
 
 afterAll(async () => {

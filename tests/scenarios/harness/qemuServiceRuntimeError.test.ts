@@ -2,7 +2,7 @@ import type { BigIntStats } from "node:fs";
 import { lstat, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { socketLeasePath } from "../qemu/qemu-service-artifacts.mjs";
+import { socketLeasePath } from "../qemu/qemu-service-artifacts.mts";
 import {
   http,
   readEvents,

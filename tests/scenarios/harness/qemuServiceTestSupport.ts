@@ -9,7 +9,7 @@ import { afterEach } from "vitest";
 import { launcherScript, spawnPreloadScript } from "./qemuServiceFixtureScripts.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../../..");
-const serviceScript = resolve(workspaceRoot, "tests/scenarios/qemu/qemu-service.mjs");
+const serviceScript = resolve(workspaceRoot, "tests/scenarios/qemu/qemu-service.mts");
 const fixtures: ServiceFixture[] = [];
 const fixtureRoots: string[] = [];
 

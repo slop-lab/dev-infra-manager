@@ -19,7 +19,7 @@ const fixtureRoots: string[] = [];
 
 const sourceCommit = { DIM_SOURCE_ROOT_COMMIT: fixtureRootCommit } as const;
 
-const publishPackageVersionHelper = resolve(workspaceRoot, "scripts/packages/publish-package-version.mjs");
+const publishPackageVersionHelper = resolve(workspaceRoot, "scripts/packages/publish-package-version.ts");
 
 async function sourceBuildFixture(): Promise<SourceBuildFixture> {
   const fixture = await createSourceBuildFixture();
@@ -289,7 +289,7 @@ describe("local source build policy", () => {
     // Then
     expect(result.status).not.toBe(0);
     expect(invocations).not.toMatch(/^pnpm .* run build/m);
-    expect(invocations).not.toMatch(/^node .*pack-local-packages\.mjs/m);
+    expect(invocations).not.toMatch(/^node .*pack-local-packages\.ts/m);
     expect(invocations).not.toMatch(/^docker buildx build/m);
     expect(invocations).not.toMatch(/^docker image tag/m);
     expect(await readFile(resolve(fixture.root, "package.json"), "utf8")).toBe(sourceManifest);

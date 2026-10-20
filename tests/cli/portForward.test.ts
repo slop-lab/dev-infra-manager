@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { forwardWorkspace } from "../../packages/cli/src/port-forward.js";
 
-const peer = fileURLToPath(new URL("./fixtures/host-peer.mjs", import.meta.url));
+const peer = fileURLToPath(new URL("./fixtures/host-peer.ts", import.meta.url));
 
 test("forwarding preserves concurrent binary exchanges and refuses a reused workspace name", async () => {
   await withForward(async (fixture) => {

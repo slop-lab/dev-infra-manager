@@ -5,11 +5,11 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createOwnerRecord, inspectOwner,
-} from "../qemu/qemu-service-owner.mjs";
+} from "../qemu/qemu-service-owner.mts";
 import {
   captureSocketIdentity, createSocketLease, publishOwner, removeOwnedArtifacts,
   safeguardReplacedSocket, socketLeasePath,
-} from "../qemu/qemu-service-artifacts.mjs";
+} from "../qemu/qemu-service-artifacts.mts";
 
 const roots: string[] = [];
 const servers: Server[] = [];

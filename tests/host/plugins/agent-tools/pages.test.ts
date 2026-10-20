@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
-import { stagePages } from "../../../../tools/opencode-web/stage.mjs";
+import { stagePages } from "../../../../tools/opencode-web/stage.ts";
 
 it("stages only the pinned UI version while retaining other versions and unrelated Pages content", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-pages-stage-"));

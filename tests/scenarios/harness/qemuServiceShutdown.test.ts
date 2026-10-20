@@ -13,7 +13,7 @@ import {
   waitForObservation,
   type ServiceFixture
 } from "./qemuServiceTestSupport.js";
-import { socketLeasePath } from "../qemu/qemu-service-artifacts.mjs";
+import { socketLeasePath } from "../qemu/qemu-service-artifacts.mts";
 
 function isMissing(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";

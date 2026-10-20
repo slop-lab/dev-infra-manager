@@ -55,7 +55,7 @@ OpenCode/Bun pin; the versioned URL remains tied to that upstream version.
 Install Bun 1.3.14 and Node 24/26, then explicitly build the pinned source:
 
 ```sh
-node tools/opencode-web/build.mjs
+node tools/opencode-web/build.ts
 ```
 
 The source cache lives outside this checkout and must match the exact reviewed
@@ -69,7 +69,7 @@ the exact output locally when that branch already exists:
 
 ```sh
 git worktree add .pages-worktree gh-pages
-node tools/opencode-web/stage.mjs .pages-worktree
+node tools/opencode-web/stage.ts .pages-worktree
 git -C .pages-worktree status
 ```
 

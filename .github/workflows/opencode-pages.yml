@@ -36,7 +36,7 @@ jobs:
         with:
           bun-version: ${{ steps.pin.outputs.bun }}
       - name: Build reviewed upstream static UI
-        run: node tools/opencode-web/build.mjs "$RUNNER_TEMP/opencode-source" "$RUNNER_TEMP/opencode-build"
+        run: node tools/opencode-web/build.ts "$RUNNER_TEMP/opencode-source" "$RUNNER_TEMP/opencode-build"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: opencode-web-build
@@ -89,7 +89,7 @@ jobs:
             git init --initial-branch=gh-pages "$site"
             git -C "$site" remote add origin "$(git remote get-url origin)"
           fi
-          node tools/opencode-web/stage.mjs "$site" "$RUNNER_TEMP/opencode-build"
+          node tools/opencode-web/stage.ts "$site" "$RUNNER_TEMP/opencode-build"
           git -C "$site" config user.name github-actions[bot]
           git -C "$site" config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git -C "$site" add --all -- opencode-web .nojekyll
