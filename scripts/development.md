@@ -39,6 +39,21 @@ dim create /path/on/selected/host/to/dev-infra-manager dim-verify \
 dim shell dim-verify
 ```
 
+For an unpublished source checkout, build the local bundle and install its
+matching core before adding the plugin from that same bundle:
+
+```sh
+just prepare-local
+just install-local
+bundle="$PWD/.local/dim-packages"
+version="$(bash scripts/local-package-version.bash "$bundle")"
+dim installer install plugin --local-packages "$bundle" \
+  "@slop-lab/dim-host-plugin-kvm@$version"
+```
+
+Then run `dim kvm configure`, `dim kvm doctor` and the workspace creation command
+above on that host.
+
 Inside the new workspace, install the VM tooling and check readiness:
 
 ```sh
