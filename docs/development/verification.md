@@ -29,14 +29,14 @@ GitHub uploads per-lane source-check logs even on failure, separately from the
 exact-source evidence. No installed DIM service or provider credential is needed
 for this source gate.
 
-`pnpm --dir verification test` runs cross-package checks on an ordinary developer
+`pnpm --dir tests test:scenarios` runs cross-package checks on an ordinary developer
 host. It packages existing matched `dist` outputs when testing installation; it
 does not rebuild shared packages. Run `just build-packages` first.
 
 With an already built workspace image, run the explicit live container checks:
 
 ```bash
-pnpm --dir tests exec tsx ../../scripts/checks/base-workspace-runtime-smoke.mts IMAGE
+pnpm --dir tests exec tsx ../scripts/checks/base-workspace-runtime-smoke.mts IMAGE
 just verify workspace-agent IMAGE
 ```
 
@@ -44,8 +44,8 @@ The [public/private Project example](../../examples/projects/native-multiple-rep
 is also exercised directly from its checked-in files:
 
 ```bash
-pnpm --dir tests exec vitest run packages/core/test/ci/multipleRepositoryExample.test.ts
-DIM_NATIVE_MULTI_REPOSITORY_IMAGE=REVIEWED_WORKSPACE_IMAGE pnpm --dir tests exec vitest run packages/core/test/multiRepositoryWorkspaceRuntime.test.ts
+pnpm --dir tests exec vitest run scenarios/ci/multipleRepositoryExample.test.ts
+DIM_NATIVE_MULTI_REPOSITORY_IMAGE=REVIEWED_WORKSPACE_IMAGE pnpm --dir tests exec vitest run host/core/multiRepositoryWorkspaceRuntime.test.ts
 ```
 
 The first command composes a disposable native Git service with the actual CI
@@ -69,8 +69,8 @@ and discard their own workspace/storage. They do not modify installed DIM servic
 CI execution has a separate live gate for both public runtime names:
 
 ```bash
-pnpm --dir tests exec tsx ../../scripts/checks/native-ci-runtime-smoke.mts container DIND_SUPERVISOR_IMAGE UBUNTU_IMAGE@sha256:DIGEST
-pnpm --dir tests exec tsx ../../scripts/checks/native-ci-runtime-smoke.mts vm QEMU_SUPERVISOR_IMAGE UBUNTU_IMAGE@sha256:DIGEST
+pnpm --dir tests exec tsx ../scripts/checks/native-ci-runtime-smoke.mts container DIND_SUPERVISOR_IMAGE UBUNTU_IMAGE@sha256:DIGEST
+pnpm --dir tests exec tsx ../scripts/checks/native-ci-runtime-smoke.mts vm QEMU_SUPERVISOR_IMAGE UBUNTU_IMAGE@sha256:DIGEST
 ```
 
 Use the reviewed Docker-in-Docker base for the container supervisor. Build the
@@ -83,7 +83,7 @@ Image archives are extracted only inside the VM; the host never unpacks them.
 
 The QEMU service ownership and process-safety fixtures require a root-owned,
 canonical Node interpreter and root filesystem operations. Run
-`pnpm --dir verification test:qemu-service` only in a disposable root environment.
+`pnpm --dir tests test:qemu-service` only in a disposable root environment.
 This profile tests filesystem ownership, bounded subprocesses, startup, signal
 handling and cleanup. It does not execute a VM or prove KVM availability.
 
@@ -106,8 +106,7 @@ docker run --rm --init --network none --user 0:0 \
   --tmpfs "$repo/tests/node_modules/.vite:mode=1777" \
   --workdir "$repo/tests" --entrypoint /usr/local/bin/node \
   dim-qemu-fixture-tools node_modules/vitest/vitest.mjs run \
-  scenarios/harness/qemu*.test.ts scenarios/harness/kvm*.test.ts scenarios/harness/bootstrapInstallerSafety.test.ts \
-  --no-file-parallelism
+  --config vitest.privileged.config.ts --no-file-parallelism
 ```
 
 The container receives no network, Docker socket, or KVM device. `--init` reaps
@@ -126,7 +125,7 @@ Guest integration delivery has an additional disposable Sysbox check:
 ```bash
 DIM_GUEST_INTEGRATION_IMAGE=sha256:REVIEWED_LOCAL_IMAGE_ID \
   pnpm --filter @this-project/tests exec vitest run --config vitest.config.ts \
-  packages/core/test/guestIntegrationRuntime.test.ts --maxWorkers=1
+  host/core/guestIntegrationRuntime.test.ts --maxWorkers=1
 ```
 
 It creates an ordinary repository without `.dim`, checks unchanged-file reuse

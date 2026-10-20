@@ -72,10 +72,10 @@ in to a provider. The complete source gate is documented in
 | Archived route policy: [protocol tests](../tests/host/plugins/external-urls/routePolicy.test.ts) | External-URLs plugin source and a local Unix socket; protocol coverage does not establish a deployed public ingress |
 
 ```sh
-pnpm --dir verification exec vitest run test/nativeBasicExample.test.mjs
-pnpm --dir tests exec vitest run packages/core/test/ci/multipleRepositoryExample.test.ts
+pnpm --dir tests exec vitest run scenarios/harness/nativeBasicExample.test.mjs
+pnpm --dir tests exec vitest run scenarios/ci/multipleRepositoryExample.test.ts
 DIM_NATIVE_MULTI_REPOSITORY_IMAGE=YOUR_BUILT_IMAGE \
-  pnpm --dir tests exec vitest run packages/core/test/multiRepositoryWorkspaceRuntime.test.ts
+  pnpm --dir tests exec vitest run host/core/multiRepositoryWorkspaceRuntime.test.ts
 ```
 
 The ordinary-development and shared-worker instructions are deployment recipes,
