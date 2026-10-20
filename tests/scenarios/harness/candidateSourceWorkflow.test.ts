@@ -43,7 +43,7 @@ function expectEvidenceArtifact(job: WorkflowJob, expectedCommit: string): void 
     expect.objectContaining({
       env: expect.objectContaining({ DIM_EXPECTED_CANDIDATE_SHA: expectedCommit }),
       run: expect.stringContaining(
-        `node scripts/checks/candidate-source-evidence.ts "$DIM_EXPECTED_CANDIDATE_SHA" ${artifactPath}`,
+        `node scripts/checks/candidate-source-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" ${artifactPath}`,
       ),
     }),
     expect.objectContaining({
