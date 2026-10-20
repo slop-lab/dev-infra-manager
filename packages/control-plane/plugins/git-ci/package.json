@@ -6,20 +6,32 @@
   "license": "MIT",
   "description": "Git candidate planning, scoped execution inputs and CI evidence",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./sdk": {
-      "types": "./src/sdk.ts",
+      "dim-source": {
+        "types": "./src/sdk.ts",
+        "default": "./src/sdk.ts"
+      },
+      "types": "./dist/sdk.d.ts",
       "import": "./dist/sdk.js",
       "default": "./dist/sdk.js"
     },
     "./config": {
-      "types": "./src/config.ts",
+      "dim-source": {
+        "types": "./src/config.ts",
+        "default": "./src/config.ts"
+      },
+      "types": "./dist/config.d.ts",
       "import": "./dist/config.js",
       "default": "./dist/config.js"
     }

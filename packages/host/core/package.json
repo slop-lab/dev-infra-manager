@@ -19,23 +19,39 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./workspace": {
-      "types": "./src/workspace.ts",
+      "dim-source": {
+        "types": "./src/workspace.ts",
+        "default": "./src/workspace.ts"
+      },
+      "types": "./dist/workspace.d.ts",
       "import": "./dist/workspace.js"
     },
     "./controller": {
-      "types": "./src/controller/index.ts",
+      "dim-source": {
+        "types": "./src/controller/index.ts",
+        "default": "./src/controller/index.ts"
+      },
+      "types": "./dist/controller/index.d.ts",
       "import": "./dist/controller/index.js",
       "default": "./dist/controller/index.js"
     },
     "./controller/cli": {
-      "types": "./src/controller/cli/index.ts",
+      "dim-source": {
+        "types": "./src/controller/cli/index.ts",
+        "default": "./src/controller/cli/index.ts"
+      },
+      "types": "./dist/controller/cli/index.d.ts",
       "import": "./dist/controller/cli/index.js",
       "default": "./dist/controller/cli/index.js"
     }

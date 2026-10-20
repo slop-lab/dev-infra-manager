@@ -67,7 +67,7 @@ test("exec transport streams stdin, stdout and stderr without JSON conversion an
   const script = `import { streamHost } from ${JSON.stringify(transport)};
     process.exitCode = await streamHost({name:'local'}, {operation:'exec', input:{exitCode:17}},
       {localCommand: ${JSON.stringify(localCommand)}});`;
-  const child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), "--input-type=module", "-e", script], {
+  const child = spawn(process.execPath, ["--conditions=dim-source", "--import", import.meta.resolve("tsx"), "--input-type=module", "-e", script], {
     stdio: ["pipe", "pipe", "pipe"]
   });
   let stdout = "";

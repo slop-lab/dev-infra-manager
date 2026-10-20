@@ -11,25 +11,41 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./extensions": {
-      "types": "./src/extensions.ts",
+      "dim-source": {
+        "types": "./src/extensions.ts",
+        "default": "./src/extensions.ts"
+      },
+      "types": "./dist/extensions.d.ts",
       "import": "./dist/extensions.js",
       "default": "./dist/extensions.js"
     },
     "./config": {
-      "types": "./src/config.ts",
+      "dim-source": {
+        "types": "./src/config.ts",
+        "default": "./src/config.ts"
+      },
+      "types": "./dist/config.d.ts",
       "import": "./dist/config.js",
       "default": "./dist/config.js"
     },
     "./client": {
-      "types": "./src/review-client.ts",
+      "dim-source": {
+        "types": "./src/review-client.ts",
+        "default": "./src/review-client.ts"
+      },
+      "types": "./dist/review-client.d.ts",
       "import": "./dist/review-client.js",
       "default": "./dist/review-client.js"
     }

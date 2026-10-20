@@ -48,7 +48,7 @@ test("actual Git checkout requirements fail before records/runtime; source movem
       assert.deepEqual(await readdir(path.join(store.root, "staging")), []);
       const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.url));
       const tsx = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
-      const response = await runner.run(process.execPath, [tsx, cli, "__host", encodeHostRequest({ operation: "create", input: { name: "dev", source: { url: source } } })], {
+      const response = await runner.run(process.execPath, ["--conditions=dim-source", tsx, cli, "__host", encodeHostRequest({ operation: "create", input: { name: "dev", source: { url: source } } })], {
         env: { ...process.env, DIM_PLUGIN_HOME: home, DIM_STATE_ROOT: store.root }
       });
       assert.equal(response.exitCode, 0, response.stderr);
@@ -139,7 +139,7 @@ if(request.operation==='plugins.installRequired'){fs.writeFileSync(root+'/instal
 else console.log(JSON.stringify(fs.existsSync(root+'/installed')?${JSON.stringify(record)}:${JSON.stringify(required)}));`, { mode: 0o700 });
     const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.url));
     const tsx = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
-    const command = [process.execPath, tsx, cli, "--host", "remote", "create", "/srv/repo", "dev", "--json"].map(shellQuote).join(" ");
+    const command = [process.execPath, "--conditions=dim-source", tsx, cli, "--host", "remote", "create", "/srv/repo", "dev", "--json"].map(shellQuote).join(" ");
     const output = await new Promise<string>((resolve, reject) => {
       const child = spawn("script", ["--quiet", "--return", "--command", command, "/dev/null"], {
         env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, XDG_CONFIG_HOME: config, DIM_TEST_REQUIRED_ROOT: root },

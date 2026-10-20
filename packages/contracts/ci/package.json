@@ -6,60 +6,104 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./execution": {
-      "types": "./src/execution-protocol.ts",
+      "dim-source": {
+        "types": "./src/execution-protocol.ts",
+        "default": "./src/execution-protocol.ts"
+      },
+      "types": "./dist/execution-protocol.d.ts",
       "import": "./dist/execution-protocol.js",
       "default": "./dist/execution-protocol.js"
     },
     "./aggregate": {
-      "types": "./src/aggregate.ts",
+      "dim-source": {
+        "types": "./src/aggregate.ts",
+        "default": "./src/aggregate.ts"
+      },
+      "types": "./dist/aggregate.d.ts",
       "import": "./dist/aggregate.js",
       "default": "./dist/aggregate.js"
     },
     "./config": {
-      "types": "./src/config.ts",
+      "dim-source": {
+        "types": "./src/config.ts",
+        "default": "./src/config.ts"
+      },
+      "types": "./dist/config.d.ts",
       "import": "./dist/config.js",
       "default": "./dist/config.js"
     },
     "./worker": {
-      "types": "./src/worker.ts",
+      "dim-source": {
+        "types": "./src/worker.ts",
+        "default": "./src/worker.ts"
+      },
+      "types": "./dist/worker.d.ts",
       "import": "./dist/worker.js",
       "default": "./dist/worker.js"
     },
     "./query": {
-      "types": "./src/query.ts",
+      "dim-source": {
+        "types": "./src/query.ts",
+        "default": "./src/query.ts"
+      },
+      "types": "./dist/query.d.ts",
       "import": "./dist/query.js",
       "default": "./dist/query.js"
     },
     "./connections": {
-      "types": "./src/connections.ts",
+      "dim-source": {
+        "types": "./src/connections.ts",
+        "default": "./src/connections.ts"
+      },
+      "types": "./dist/connections.d.ts",
       "import": "./dist/connections.js",
       "default": "./dist/connections.js"
     },
     "./workflow": {
-      "types": "./src/workflow.ts",
+      "dim-source": {
+        "types": "./src/workflow.ts",
+        "default": "./src/workflow.ts"
+      },
+      "types": "./dist/workflow.d.ts",
       "import": "./dist/workflow.js",
       "default": "./dist/workflow.js"
     },
     "./descriptor": {
-      "types": "./src/candidate-execution-schema.ts",
+      "dim-source": {
+        "types": "./src/candidate-execution-schema.ts",
+        "default": "./src/candidate-execution-schema.ts"
+      },
+      "types": "./dist/candidate-execution-schema.d.ts",
       "import": "./dist/candidate-execution-schema.js",
       "default": "./dist/candidate-execution-schema.js"
     },
     "./digest": {
-      "types": "./src/candidate-execution.ts",
+      "dim-source": {
+        "types": "./src/candidate-execution.ts",
+        "default": "./src/candidate-execution.ts"
+      },
+      "types": "./dist/candidate-execution.d.ts",
       "import": "./dist/candidate-execution.js",
       "default": "./dist/candidate-execution.js"
     },
     "./events": {
-      "types": "./src/events.ts",
+      "dim-source": {
+        "types": "./src/events.ts",
+        "default": "./src/events.ts"
+      },
+      "types": "./dist/events.d.ts",
       "import": "./dist/events.js",
       "default": "./dist/events.js"
     }

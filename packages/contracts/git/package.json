@@ -11,15 +11,23 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./http": {
-      "types": "./src/http.ts",
+      "dim-source": {
+        "types": "./src/http.ts",
+        "default": "./src/http.ts"
+      },
+      "types": "./dist/http.d.ts",
       "import": "./dist/http.js",
       "default": "./dist/http.js"
     }

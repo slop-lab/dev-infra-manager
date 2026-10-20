@@ -7,7 +7,7 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run test:unit && pnpm run test:cli && pnpm run test:scenarios",
     "test:unit": "vitest run host control-plane contracts installer web cli/host --exclude 'scenarios/**' --maxWorkers=2",
-    "test:cli": "tsx --test --test-reporter=./support/node-failure-reporter.ts cli/*.test.ts",
+    "test:cli": "tsx --conditions=dim-source --test --test-reporter=./support/node-failure-reporter.ts cli/*.test.ts",
     "test:scenarios": "vitest run scenarios/harness scenarios/llm-router scenarios/ci --no-file-parallelism --exclude 'scenarios/harness/qemu*.test.ts' --exclude 'scenarios/harness/kvm*.test.ts' --exclude 'scenarios/harness/bootstrapInstallerSafety.test.ts'",
     "test:qemu-service": "node -e 'if (process.getuid?.() !== 0) { console.error(\"QEMU service fixtures require a disposable root environment; see docs/development/verification.md\"); process.exit(2); }' && vitest run --config vitest.privileged.config.ts"
   },
@@ -26,6 +26,20 @@
     "ws": "8.22.0",
     "@types/ws": "8.18.2",
     "verdaccio": "6.8.0",
-    "yaml": "2.8.3"
+    "yaml": "2.8.3",
+    "@slop-lab/dim-contracts-ci": "workspace:*",
+    "@slop-lab/dim-contracts-external-url": "workspace:*",
+    "@slop-lab/dim-contracts-git": "workspace:*",
+    "@slop-lab/dim-control-plane-admin": "workspace:*",
+    "@slop-lab/dim-control-plane-core": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-ci-workflows": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-code-review": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-llm-router": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-merge-policy": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-webhooks": "workspace:*",
+    "@slop-lab/dim-host-core": "workspace:*",
+    "@slop-lab/dim-host-plugin-mirrors": "workspace:*",
+    "@slop-lab/dim-host-plugin-native-git": "workspace:*"
   }
 }

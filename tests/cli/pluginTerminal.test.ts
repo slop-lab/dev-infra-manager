@@ -18,7 +18,7 @@ test("local and SSH optional plugin commands inherit the real operator PTY", asy
     await writeFile(path.join(root, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: [plugin] }));
     await writeFile(path.join(root, "package.json"), '{"private":true}');
     const env = { ...process.env, DIM_PLUGIN_HOME: root, DIM_STATE_ROOT: path.join(root, "state"), XDG_CONFIG_HOME: path.join(root, "config"), PATH: `${bin}:${process.env.PATH}` };
-    const invocation = [process.execPath, "--import", import.meta.resolve("tsx"), cli];
+    const invocation = [process.execPath, "--conditions=dim-source", "--import", import.meta.resolve("tsx"), cli];
     await writeFile(path.join(bin, "dim"), `#!/bin/sh\nexec ${invocation.map(quote).join(" ")} "$@"\n`); await chmod(path.join(bin, "dim"), 0o700);
     await writeFile(path.join(bin, "ssh"), `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');if(process.argv[2]!=='-tt')throw Error('interactive SSH lost PTY allocation');if(!process.stdin.isTTY)throw Error('SSH input must inherit the real terminal');const r=spawnSync('/bin/sh',['-c',process.argv.at(-1)],{stdio:'inherit',env:process.env});process.exit(r.status??1);\n`); await chmod(path.join(bin, "ssh"), 0o700);
     await execute(process.execPath, [...invocation.slice(1), "host", "add", "devbox", "--ssh", "operator@host"], { env });

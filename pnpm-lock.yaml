@@ -546,6 +546,48 @@ importers:
 
   tests:
     devDependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:*
+        version: link:../packages/contracts/ci
+      '@slop-lab/dim-contracts-external-url':
+        specifier: workspace:*
+        version: link:../packages/contracts/external-url
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:*
+        version: link:../packages/contracts/git
+      '@slop-lab/dim-control-plane-admin':
+        specifier: workspace:*
+        version: link:../packages/control-plane/admin
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:*
+        version: link:../packages/control-plane/core
+      '@slop-lab/dim-control-plane-plugin-ci-workflows':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/ci-workflows
+      '@slop-lab/dim-control-plane-plugin-code-review':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/code-review
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/git-repositories
+      '@slop-lab/dim-control-plane-plugin-llm-router':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/llm-router
+      '@slop-lab/dim-control-plane-plugin-merge-policy':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/merge-policy
+      '@slop-lab/dim-control-plane-plugin-webhooks':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/webhooks
+      '@slop-lab/dim-host-core':
+        specifier: workspace:*
+        version: link:../packages/host/core
+      '@slop-lab/dim-host-plugin-mirrors':
+        specifier: workspace:*
+        version: link:../packages/host/plugins/mirrors
+      '@slop-lab/dim-host-plugin-native-git':
+        specifier: workspace:*
+        version: link:../packages/host/plugins/native-git
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3

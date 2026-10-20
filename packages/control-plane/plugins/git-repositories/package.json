@@ -11,23 +11,39 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./service": {
-      "types": "./src/service.ts",
+      "dim-source": {
+        "types": "./src/service.ts",
+        "default": "./src/service.ts"
+      },
+      "types": "./dist/service.d.ts",
       "import": "./dist/service.js"
     },
     "./config": {
-      "types": "./src/bundle-config.ts",
+      "dim-source": {
+        "types": "./src/bundle-config.ts",
+        "default": "./src/bundle-config.ts"
+      },
+      "types": "./dist/bundle-config.d.ts",
       "import": "./dist/bundle-config.js"
     },
     "./extensions": {
-      "types": "./src/extensions.ts",
+      "dim-source": {
+        "types": "./src/extensions.ts",
+        "default": "./src/extensions.ts"
+      },
+      "types": "./dist/extensions.d.ts",
       "import": "./dist/extensions.js",
       "default": "./dist/extensions.js"
     }

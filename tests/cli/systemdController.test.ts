@@ -213,7 +213,7 @@ fi
 function runControllerRestart(fixture: SystemdFixture) {
   return spawnSync(
     process.execPath,
-    ["--import", tsxImport, cli, "controller", "restart"],
+    ["--conditions=dim-source", "--import", tsxImport, cli, "controller", "restart"],
     { cwd: packageDirectory, encoding: "utf8", env: fixture.env }
   );
 }

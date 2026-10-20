@@ -9,7 +9,7 @@ it("configuration parsing and host preparation do not load the SQLite authority 
   const cli = new URL("../../../../packages/control-plane/admin/src/cli/index.ts", import.meta.url).href;
   const pair = new URL("../../../../packages/control-plane/admin/src/service-pair.ts", import.meta.url).href;
   const { humanReviewers: _reviewers, hostPromoters: _promoters, ci: _ci, ...repositoryConfig } = idleNativeConfig();
-  const output = execFileSync(process.execPath, ["--import", createRequire(import.meta.url).resolve("tsx"), "--input-type=module", "-e", `
+  const output = execFileSync(process.execPath, ["--conditions=dim-source", "--import", createRequire(import.meta.url).resolve("tsx"), "--input-type=module", "-e", `
     import { registerHooks } from "node:module";
     registerHooks({ resolve(specifier, context, next) {
       if (specifier === "node:sqlite") throw new Error("configuration loaded the SQLite authority runtime");

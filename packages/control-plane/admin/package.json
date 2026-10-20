@@ -6,25 +6,41 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./cli": {
-      "types": "./src/cli/index.ts",
+      "dim-source": {
+        "types": "./src/cli/index.ts",
+        "default": "./src/cli/index.ts"
+      },
+      "types": "./dist/cli/index.d.ts",
       "import": "./dist/cli/index.js",
       "default": "./dist/cli/index.js"
     },
     "./ci": {
-      "types": "./src/ci/operations.ts",
+      "dim-source": {
+        "types": "./src/ci/operations.ts",
+        "default": "./src/ci/operations.ts"
+      },
+      "types": "./dist/ci/operations.d.ts",
       "import": "./dist/ci/operations.js",
       "default": "./dist/ci/operations.js"
     },
     "./service-pair": {
-      "types": "./src/service-pair.ts",
+      "dim-source": {
+        "types": "./src/service-pair.ts",
+        "default": "./src/service-pair.ts"
+      },
+      "types": "./dist/service-pair.d.ts",
       "import": "./dist/service-pair.js",
       "default": "./dist/service-pair.js"
     }

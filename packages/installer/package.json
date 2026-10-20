@@ -10,7 +10,11 @@
   },
   "homepage": "https://github.com/slop-lab/dev-infra-manager#readme",
   "bugs": "https://github.com/slop-lab/dev-infra-manager/issues",
-  "keywords": ["cli", "installer", "plugins"],
+  "keywords": [
+    "cli",
+    "installer",
+    "plugins"
+  ],
   "private": true,
   "type": "module",
   "bin": {

@@ -81,6 +81,8 @@ it("publishes and packs every actual owner with one matched local dependency gra
         version: string; dependencies?: Record<string, string>; peerDependencies?: Record<string, string>;
       };
       expect(metadata.version).toBe(version);
+      const published = await readFile(resolve(root, directory, "package.json"), "utf8");
+      expect(published, `${relative} must expose only built entrypoints`).not.toMatch(/"dim-source"|"\.\/src\//);
       for (const [name, selected] of Object.entries({ ...metadata.dependencies, ...metadata.peerDependencies })) {
         expect(selected, `${relative} must publish registry dependencies`).not.toMatch(/^workspace:/);
         if (name.startsWith("@slop-lab/dim-")) expect(selected, `${relative} pins ${name}`).toBe(version);

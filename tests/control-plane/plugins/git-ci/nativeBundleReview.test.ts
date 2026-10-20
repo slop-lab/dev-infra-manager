@@ -118,7 +118,7 @@ const remote = new URL("/v1/projects/project-a/repositories/root.git", service.o
 remote.username = lease.username;
 remote.password = lease.password;
 process.send?.({ kind: "ready", remote: remote.toString() });`;
-    const child = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", childScript], {
+    const child = spawn(process.execPath, ["--conditions=dim-source", "--import", "tsx", "--input-type=module", "--eval", childScript], {
       cwd: process.cwd(), env: { ...process.env, DIM_TEST_ROOT: fixture.root,
         DIM_TEST_WORKSPACE_ID: reviewWorkspaceId },
       stdio: ["ignore", "ignore", "pipe", "ipc"]

@@ -18,7 +18,7 @@ const runFile = promisify(execFile);
 afterEach(cleanupNativeProjectFixtures);
 
 test("native root bootstrap help requires explicit local source and separate operator connections", () => {
-  const help = spawnSync(process.execPath, ["--import", tsxImport, "--input-type=module", "-e", "import { runNativeGitCli } from '@slop-lab/dim-host-plugin-native-git/cli'; await runNativeGitCli(['project','repository','import','--help']);"], { cwd: packageDirectory, encoding: "utf8" });
+  const help = spawnSync(process.execPath, ["--conditions=dim-source", "--import", tsxImport, "--input-type=module", "-e", "import { runNativeGitCli } from '@slop-lab/dim-host-plugin-native-git/cli'; await runNativeGitCli(['project','repository','import','--help']);"], { cwd: packageDirectory, encoding: "utf8" });
 
   assert.equal(help.status, 0, help.stderr);
   for (const option of ["--source <absolute-path>",
@@ -158,7 +158,7 @@ test("native root bootstrap rejects an in-place policy rewrite before service mu
   const mutationImport = new URL("./fixtures/mutate-review-policy-during-read.ts", import.meta.url).href;
 
   // When
-  const result = await runBootstrap(fixture, policyPath, ["--import", mutationImport]);
+  const result = await runBootstrap(fixture, policyPath, ["--conditions=dim-source", "--import", mutationImport]);
 
   // Then
   assert.equal(await readFile(marker, "utf8"), "rewritten-during-read\n");

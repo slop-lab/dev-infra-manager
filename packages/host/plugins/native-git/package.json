@@ -6,20 +6,32 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./host": {
-      "types": "./src/nativeWorkspaceHost.ts",
+      "dim-source": {
+        "types": "./src/nativeWorkspaceHost.ts",
+        "default": "./src/nativeWorkspaceHost.ts"
+      },
+      "types": "./dist/nativeWorkspaceHost.d.ts",
       "import": "./dist/nativeWorkspaceHost.js",
       "default": "./dist/nativeWorkspaceHost.js"
     },
     "./cli": {
-      "types": "./src/cli/index.ts",
+      "dim-source": {
+        "types": "./src/cli/index.ts",
+        "default": "./src/cli/index.ts"
+      },
+      "types": "./dist/cli/index.d.ts",
       "import": "./dist/cli/index.js",
       "default": "./dist/cli/index.js"
     }

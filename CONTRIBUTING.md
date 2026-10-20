@@ -37,6 +37,14 @@ The top-level justfile is an everyday contributor index, not a mirror of every
 CI job. Reusable verification commands remain under `just verify`; hosted lane
 composition lives in workflows and scripts.
 
+Workspace packages declare their public entry points in `package.json` exports.
+Type checks and Vitest select the `dim-source` condition, so a fresh checkout
+needs no generated declarations or manually maintained path aliases. Package
+builds select the default compiled exports in dependency order. Published
+manifests contain only compiled entry points. For a standalone source command
+that imports workspace packages, use `node --conditions=dim-source`; ordinary
+installed commands use the default exports.
+
 The recommended complete source check requires only Bash and Docker on the
 host:
 

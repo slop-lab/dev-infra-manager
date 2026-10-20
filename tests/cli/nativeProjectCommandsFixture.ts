@@ -148,7 +148,7 @@ export async function rewriteJson(
 
 export async function runCli(args: readonly string[], environment: NodeJS.ProcessEnv,
   nodeArguments: readonly string[] = []) {
-  const child = spawn(process.execPath, ["--import", tsxImport, ...nodeArguments, cli, ...args], {
+  const child = spawn(process.execPath, ["--conditions=dim-source", "--import", tsxImport, ...nodeArguments, cli, ...args], {
     cwd: packageDirectory, env: environment, stdio: ["ignore", "pipe", "pipe"]
   });
   let stdout = "";

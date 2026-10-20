@@ -1,6 +1,4 @@
-import path from "node:path";
 import { defineConfig } from "vitest/config";
-import sourceConfig from "../tsconfig.source.json" with { type: "json" };
 import { FailureOnlyReporter } from "./support/failure-only-reporter.js";
 
 export default defineConfig({
@@ -18,9 +16,12 @@ export default defineConfig({
     ],
     exclude: ["scenarios/harness/{qemu*,kvm*,bootstrapInstallerSafety}.test.ts"]
   },
+  // Keep linked package SDKs in the same source graph as direct owner imports.
+  ssr: {
+    resolve: { conditions: ["dim-source", "node"] },
+    noExternal: [/^@slop-lab\/dim-/, /^@this-project\/control-plane-deployment/]
+  },
   resolve: {
-    alias: Object.entries(sourceConfig.compilerOptions.paths)
-      .sort(([a], [b]) => b.length - a.length)
-      .map(([find, [source]]) => ({ find, replacement: path.resolve(import.meta.dirname, "..", source!) }))
+    conditions: ["dim-source"]
   }
 });

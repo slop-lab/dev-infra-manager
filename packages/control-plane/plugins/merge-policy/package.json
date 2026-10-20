@@ -6,25 +6,41 @@
   "license": "MIT",
   "description": "Protected Git ref promotion using selected review and quality checks",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./extensions": {
-      "types": "./src/extensions.ts",
+      "dim-source": {
+        "types": "./src/extensions.ts",
+        "default": "./src/extensions.ts"
+      },
+      "types": "./dist/extensions.d.ts",
       "import": "./dist/extensions.js",
       "default": "./dist/extensions.js"
     },
     "./config": {
-      "types": "./src/config.ts",
+      "dim-source": {
+        "types": "./src/config.ts",
+        "default": "./src/config.ts"
+      },
+      "types": "./dist/config.d.ts",
       "import": "./dist/config.js",
       "default": "./dist/config.js"
     },
     "./cli": {
-      "types": "./src/cli.ts",
+      "dim-source": {
+        "types": "./src/cli.ts",
+        "default": "./src/cli.ts"
+      },
+      "types": "./dist/cli.d.ts",
       "import": "./dist/cli.js",
       "default": "./dist/cli.js"
     }

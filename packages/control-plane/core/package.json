@@ -6,20 +6,32 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./plugin": {
-      "types": "./src/plugin.ts",
+      "dim-source": {
+        "types": "./src/plugin.ts",
+        "default": "./src/plugin.ts"
+      },
+      "types": "./dist/plugin.d.ts",
       "import": "./dist/plugin.js",
       "default": "./dist/plugin.js"
     },
     "./lock": {
-      "types": "./src/lock.ts",
+      "dim-source": {
+        "types": "./src/lock.ts",
+        "default": "./src/lock.ts"
+      },
+      "types": "./dist/lock.d.ts",
       "import": "./dist/lock.js",
       "default": "./dist/lock.js"
     }

@@ -28,7 +28,7 @@ async function bounded<T>(operation: Promise<T>, description: string): Promise<T
 }
 
 export function startLockChild(root: string, name: string): LockChild {
-  const child = spawn(process.execPath, ["--import", "tsx", childSource, root, name], {
+  const child = spawn(process.execPath, ["--conditions=dim-source", "--import", "tsx", childSource, root, name], {
     stdio: ["pipe", "pipe", "pipe"]
   });
   child.stdout.setEncoding("utf8");

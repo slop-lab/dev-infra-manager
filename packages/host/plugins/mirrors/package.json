@@ -11,15 +11,23 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./adapter": {
-      "types": "./src/adapter.ts",
+      "dim-source": {
+        "types": "./src/adapter.ts",
+        "default": "./src/adapter.ts"
+      },
+      "types": "./dist/adapter.d.ts",
       "import": "./dist/adapter.js",
       "default": "./dist/adapter.js"
     }

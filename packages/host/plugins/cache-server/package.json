@@ -11,10 +11,14 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
@@ -25,9 +29,15 @@
     "pack:dry-run": "pnpm run build && bash ../../../../scripts/packages/pnpm-pack-dry-run.bash ./dist"
   },
   "packageManager": "pnpm@10.13.1",
-  "engines": { "node": "^24.0.0 || ^26.0.0" },
-  "publishConfig": { "access": "public" },
-  "peerDependencies": { "@slop-lab/dim-host-core": "0.10.0" },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@slop-lab/dim-host-core": "0.10.0"
+  },
   "devDependencies": {
     "@slop-lab/dim-host-core": "workspace:0.10.0",
     "@types/node": "24.13.3",

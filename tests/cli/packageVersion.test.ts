@@ -43,7 +43,7 @@ test("source CLI reports the normal package version deterministically", () => {
   const expected = "0.10.0";
 
   // When
-  const result = spawnSync(process.execPath, ["--import", tsxImport, sourceCli, "--version"], {
+  const result = spawnSync(process.execPath, ["--conditions=dim-source", "--import", tsxImport, sourceCli, "--version"], {
     cwd: packageDirectory,
     encoding: "utf8"
   });

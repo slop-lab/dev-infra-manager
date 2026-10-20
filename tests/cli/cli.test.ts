@@ -293,7 +293,7 @@ else {
 }
 
 async function run(args: string[], fixture: Fixture, input?: string): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  const child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), cli, ...args], {
+  const child = spawn(process.execPath, ["--conditions=dim-source", "--import", import.meta.resolve("tsx"), cli, ...args], {
     env: fixture.env, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"]
   });
   if (input !== undefined) child.stdin?.end(input);
