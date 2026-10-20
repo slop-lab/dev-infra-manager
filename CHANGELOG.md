@@ -31,6 +31,9 @@ is implied by these source changes.
   the control plane and host in separate simultaneous VMs and can launch from
   a DIM workspace with the optional KVM runtime; its preflight reports actual
   KVM VM creation, tooling and resource requirements.
+  Fresh VM installation inherits selected workspace package mirrors and reuses
+  pinned bootstrap binaries from a shared SHA256 cache, with explicit direct
+  routing when no cache was selected.
 
 - Develop ordinary Git repositories on local or SSH hosts without installing a
   control plane. Use `dim ls`, `create`, `exec`, `connect` and `forward` directly.

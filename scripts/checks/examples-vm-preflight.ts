@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, statfsSync } from "node:fs";
 import { tmpdir, totalmem } from "node:os";
+import { discoverVmCaches } from "../examples/vm-cache.ts";
 
 const help = `Usage: node scripts/checks/examples-vm-preflight.ts [--json]
 
@@ -31,6 +32,12 @@ if (args.length === 1 && args[0] === "--help") {
   const add = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
   add("architecture", process.arch === "x64" && process.platform === "linux", `${process.platform}/${process.arch}; requires Linux x86-64`);
   add("Node.js", /^(24|26)\./.test(process.versions.node), process.versions.node);
+  try {
+    const caches = await discoverVmCaches();
+    const kinds = Object.keys(caches.endpoints).sort();
+    add("cache routing", true, kinds.length ? `${caches.source}: ${kinds.join(", ")}`
+      : "direct: no APT/npm/Docker cache selected for VM installation; downloads will use upstreams");
+  } catch (error) { add("cache routing", false, error instanceof Error ? error.message : String(error)); }
   for (const command of ["qemu-system-x86_64", "qemu-img", "cloud-localds", "python3", "ssh", "scp", "ssh-keygen", "curl", "git", "timeout", "sha256sum", "just"]) {
     const result = spawnSync("sh", ["-c", 'command -v "$1"', "examples-vm-tool", command], { encoding: "utf8", timeout: 5_000 });
     add(command, result.status === 0, result.status === 0 ? result.stdout.trim() : "missing; see --help for workspace tool setup");

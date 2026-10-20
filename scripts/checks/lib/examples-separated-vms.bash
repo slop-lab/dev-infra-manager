@@ -43,16 +43,22 @@ bootstrap_examples_run() {
   local cp_machine host_machine cp_key_type cp_key
   source "$script_dir/lib/check-output.bash"
   check_output_init "$BOOTSTRAP_EVIDENCE_ROOT/stages"
+  node "$script_dir/../examples/vm-cache.ts" prepare "$BOOTSTRAP_WORK_ROOT/cache.json" "$BOOTSTRAP_WORK_ROOT/cache-cloud-init.yml" "$BOOTSTRAP_EVIDENCE_ROOT/cache-routing.json"
+  BOOTSTRAP_EXAMPLES_CACHE_CLOUD_INIT="$BOOTSTRAP_WORK_ROOT/cache-cloud-init.yml"
+  source "$script_dir/lib/bootstrap-artifact-seed.bash"
+  examples_artifacts_prepare
   printf '[examples] phase=boot-control-plane log=%s/examples-control-plane-console.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
   bootstrap_guest_start examples-control-plane 3072; examples_vm_save control-plane
   bootstrap_guest_copy_source; bootstrap_guest_prepare_source
+  examples_artifacts_seed_guest
   printf '[examples] phase=control-plane-tools log=%s/01-control-plane-tools.log\n' "$CHECK_OUTPUT_ROOT"
   check_output_run control-plane-tools timeout --signal=TERM --kill-after=30s 1800s "${BOOTSTRAP_SSH[@]}" \
-    'cd /home/dim/dim/workbench && sudo bash scripts/checks/lib/install-source-tools-ubuntu.bash && ! command -v docker'
+    'cd /home/dim/dim/workbench && sudo env DIM_BOOTSTRAP_DOWNLOAD_CACHE=/home/dim/dim/bootstrap-artifacts bash scripts/checks/lib/install-source-tools-ubuntu.bash && ! command -v docker'
   cp_machine="$("${BOOTSTRAP_SSH[@]}" cat /etc/machine-id)"
   printf '[examples] phase=boot-workspace-host log=%s/examples-workspace-host-console.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
   bootstrap_guest_start examples-workspace-host 4096; examples_vm_save host
   bootstrap_guest_copy_source; bootstrap_guest_prepare_source
+  examples_artifacts_seed_guest
   # Keep this shell function outside check_output_run's conditional subshell:
   # Bash otherwise disables errexit inside its multi-step bootstrap body.
   bootstrap_guest_run_acceptance ordinary

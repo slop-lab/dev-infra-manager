@@ -6,8 +6,6 @@ node_installer="$script_dir/install-trusted-qemu-node.bash"
 pins_helper="${pins_helper:-$script_dir/../../../scripts/lib/bootstrap-ubuntu-pins.bash}"
 source "$pins_helper"
 target="$dim_source_tools_root"
-pnpm_sha256=e1cab530ea8252eb90e4add71d95838fd6f2656e6977f120df5ecb6f5b2822e0
-just_sha256=6a3003f68fa4d86ada8afe33830a88ffdb6c2fcaff4e5a840b1cb90eaf6f46fc
 
 [[ "$(/usr/bin/id -u)" == 0 ]] || {
   echo "source tool installer must run as root" >&2
@@ -46,13 +44,11 @@ fi
 work="$(mktemp -d /usr/local/lib/.dim-source-tools.XXXXXX)"
 trap '/usr/bin/rm -rf -- "$work"' EXIT
 mkdir -m 0755 "$work/stage" "$work/stage/bin"
-curl --fail --silent --show-error --location \
-  --output "$work/pnpm" "https://github.com/pnpm/pnpm/releases/download/v${dim_pnpm_version}/pnpm-linux-x64"
-printf '%s  %s\n' "$pnpm_sha256" "$work/pnpm" | sha256sum --check --status
-curl --fail --silent --show-error --location \
-  --output "$work/just.tar.gz" \
-  "https://github.com/casey/just/releases/download/${dim_just_version}/just-${dim_just_version}-x86_64-unknown-linux-musl.tar.gz"
-printf '%s  %s\n' "$just_sha256" "$work/just.tar.gz" | sha256sum --check --status
+source "${download_helper:-$script_dir/bootstrap-download.bash}"
+dim_bootstrap_artifact pnpm amd64
+dim_bootstrap_download "$dim_artifact_url" "$dim_artifact_sha256" "$work/pnpm"
+dim_bootstrap_artifact just amd64
+dim_bootstrap_download "$dim_artifact_url" "$dim_artifact_sha256" "$work/just.tar.gz"
 tar -xzf "$work/just.tar.gz" -C "$work/stage/bin" just
 install -m 0755 "$work/pnpm" "$work/stage/bin/pnpm"
 chown -R root:root "$work/stage"

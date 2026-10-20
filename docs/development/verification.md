@@ -41,6 +41,15 @@ the VM boundary through a host-key-pinned SSH tunnel; service listeners stay
 on each VM's loopback interface. It is not an in-process
 or same-VM substitute. The separate bootstrap profile still tests the
 `ordinary` and `control-qemu` installation roles independently.
+
+Cache routing is recorded in `cache-routing.json`. The gate discovers this
+workspace's selected mirror URLs, or accepts `DIM_EXAMPLES_CACHE_CATALOG` with
+the existing URL-only catalog schema. Missing selection is reported as `direct`;
+it does not imply that a cache on the physical host is inherited. APT/npm/Docker
+client configuration is applied before guest installation, and Docker selection
+is bound to the bootstrap resume identity. Fixed Node/pnpm/Just/Sysbox downloads
+are seeded from the outer content-addressed cache and verified again by each
+installer. See the [cache setup and limits](../../scripts/development.md#kvm-example-verification-inside-a-workspace).
 The outer invocation must succeed as well as its guest stages; teardown or
 evidence-export failure is not acceptance. Logs remain under the selected
 evidence directory, and the workflow uploads them even on failure. It uploads

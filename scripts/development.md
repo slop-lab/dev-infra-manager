@@ -57,6 +57,28 @@ and workspace examples. They communicate across the VM boundary. Each VM has a
 separate disk and DIM state; the outer workspace needs no host Docker socket or
 host operator credentials. Evidence is written to `.local/checks/examples-vm-*`.
 
+The preflight reports selected caches or explicitly says `direct`. If the host's
+mirrors plugin configured this workspace, the gate automatically passes its
+public APT/npm/Docker cache URLs into both fresh VMs. The gate does not start
+cache servers. On the selected host, configure the
+[mirrors client](../packages/host/plugins/mirrors/README.md) and, when needed,
+the separate [cache server](../packages/host/plugins/cache-server/README.md).
+An operator can instead select an existing URL catalog explicitly:
+
+```sh
+DIM_EXAMPLES_CACHE_CATALOG=/absolute/package-caches.json bash scripts/dev.bash verify-vm
+```
+
+Node, pnpm, Just and Sysbox are pinned binary downloads rather than npm packages.
+The gate downloads each once into its outer SHA256 artifact cache, checks the
+digest, and seeds both VMs; each installer copies and checks the bytes again.
+Ubuntu images use the same persistent artifact cache. It lives in
+`$XDG_CACHE_HOME/dim/artifacts` or `~/.cache/dim/artifacts`; `DIM_ARTIFACT_CACHE`
+selects another absolute directory. Keep this workspace to reuse its cache on
+later runs. The default workspace does not mount the physical host's cache.
+Source compilation and image building still take time. APT's HTTPS downloads
+remain direct; an npm cache does not cache GitHub or Node.js binary downloads.
+
 KVM access is an explicit operator grant and exposes the host kernel's KVM
 interface. Repository configuration cannot grant it. Configure only on a host
 where this is appropriate; ordinary development does not require the plugin.

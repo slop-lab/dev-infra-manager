@@ -21,8 +21,8 @@ dim_docker_config_identity() {
 
 dim_marker_content() {
   local phase="$1" docker_config_sha256="$2"
-  printf 'schema=2\nphase=%s\nrole=%s\nsource-sha=%s\nversion=%s\noperator-uid=%s\ndocker-config-sha256=%s\n' \
-    "$phase" "$role" "$source_sha" "$expected_version" "$operator_uid" "$docker_config_sha256"
+  printf 'schema=3\nphase=%s\nrole=%s\nsource-sha=%s\nversion=%s\noperator-uid=%s\ndocker-config-sha256=%s\ncache-catalog-sha256=%s\n' \
+    "$phase" "$role" "$source_sha" "$expected_version" "$operator_uid" "$docker_config_sha256" "${cache_catalog_sha256:-absent}"
 }
 
 dim_write_marker() {

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version=24.19.0
-target=/usr/local/lib/dim-qemu-node-24.19.0
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+pins_helper="${pins_helper:-$script_dir/../../lib/bootstrap-ubuntu-pins.bash}"
+source "$pins_helper"
+version="$dim_node_version"
+target="$dim_node_root"
 archive_arch="${1:-}"
-case "$archive_arch" in
-  x64) checksum=14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647 ;;
-  arm64) checksum=01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc ;;
-  *) printf 'unsupported Node.js archive architecture: %s\n' "$archive_arch" >&2; exit 2 ;;
-esac
-url="https://nodejs.org/dist/v${version}/node-v${version}-linux-${archive_arch}.tar.xz"
+dim_bootstrap_artifact node "$archive_arch"
+checksum="$dim_artifact_sha256"
+url="$dim_artifact_url"
 
 if [[ "${2:-}" == --describe ]]; then
   printf '  - download: %s\n  - SHA-256: %s\n  - install Node executable: %s/bin/node\n' \
@@ -68,7 +68,9 @@ work="$(/usr/bin/mktemp -d /usr/local/lib/.dim-qemu-node-install.XXXXXX)"
 trap '/usr/bin/rm -rf -- "$work"' EXIT
 archive="$work/node.tar.xz"
 stage="$work/extracted"
-/usr/bin/curl --fail --silent --show-error --location --output "$archive" "$url"
+download_helper="${download_helper:-$script_dir/bootstrap-download.bash}"
+source "$download_helper"
+dim_bootstrap_download "$url" "$checksum" "$archive"
 [[ ! -L "$archive" && -f "$archive" ]] &&
   [[ "$(/usr/bin/stat -c '%u:%g' -- "$archive")" == 0:0 ]] || {
     echo "downloaded Node.js archive is not a root-owned regular file" >&2

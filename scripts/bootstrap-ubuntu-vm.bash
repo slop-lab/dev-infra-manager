@@ -22,6 +22,8 @@ role=""
 source_sha=""
 fresh_acknowledged=0
 print_plan=0
+cache_catalog=""
+cache_catalog_sha256=absent
 
 usage() {
   cat <<'EOF'
@@ -37,6 +39,7 @@ Options:
   --expected-version VERSION  Required package version (default: 0.10.0).
   --acknowledge-fresh-vm      Confirm this disposable VM has no workloads/state to adopt.
   --print-plan                Print a read-only preview; does not validate the candidate.
+  --cache-catalog FILE        Root-owned public cache URL catalog for a disposable VM.
   --help                      Show this help without changing the host.
 
 Execution supports Ubuntu 24.04 amd64 only and must run as a normal sudo operator.
@@ -51,6 +54,7 @@ while (($#)); do
     --source-sha) [[ $# -ge 2 ]] || { echo "--source-sha requires a value" >&2; exit 2; }; source_sha="$2"; shift 2 ;;
     --expected-version) [[ $# -ge 2 ]] || { echo "--expected-version requires a value" >&2; exit 2; }; expected_version="$2"; shift 2 ;;
     --acknowledge-fresh-vm) fresh_acknowledged=1; shift ;;
+    --cache-catalog) [[ $# -ge 2 ]] || { echo "--cache-catalog requires a file" >&2; exit 2; }; cache_catalog="$2"; shift 2 ;;
     --print-plan) print_plan=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) printf 'unknown bootstrap argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
@@ -123,10 +127,18 @@ if [[ "$role" == control-qemu && ! -c "$kvm_device" ]]; then
   exit 2
 fi
 
+if [[ -n "$cache_catalog" ]]; then
+  [[ "$cache_catalog" == /* && ! -L "$cache_catalog" && -f "$cache_catalog" && -r "$cache_catalog" ]] || { echo "cache catalog must be an absolute regular file" >&2; exit 2; }
+  cache_metadata="$(stat -c '%u:%a:%h' -- "$cache_catalog")"
+  [[ "${cache_metadata%%:*}" == 0 && "${cache_metadata##*:}" == 1 ]] || { echo "cache catalog must be root owned with one link" >&2; exit 2; }
+  cache_mode="${cache_metadata#*:}"; cache_mode="${cache_mode%:*}"
+  (( (8#$cache_mode & 8#022) == 0 )) || { echo "cache catalog must not be writable by other users" >&2; exit 2; }
+  cache_catalog_sha256="$(sha256sum -- "$cache_catalog" | cut -d' ' -f1)"
+fi
 dim_open_bootstrap_state
 
 if [[ "$resume" -eq 0 ]]; then
-  sudo /usr/bin/bash "$tool_installer"
+  sudo env DIM_BOOTSTRAP_DOWNLOAD_CACHE="${DIM_BOOTSTRAP_DOWNLOAD_CACHE:-}" /usr/bin/bash "$tool_installer"
   env -u SUDO_USER DIM_HOST_INSTALL_ASSUME_YES=1 bash "$host_installer" sysbox docker-ce
   if [[ "$role" == control-qemu ]]; then
     bash "$kvm_installer" "$operator"
@@ -135,6 +147,10 @@ if [[ "$resume" -eq 0 ]]; then
     echo "host installer introduced unsupported Docker systemd overrides" >&2
     exit 2
   }
+  if [[ -n "$cache_catalog" ]]; then
+    cache_docker_result="$(sudo "$dim_node_root/bin/node" "$repo_root/scripts/examples/vm-cache.ts" docker-config "$cache_catalog" "$docker_daemon_config")"
+    if [[ "$cache_docker_result" == configured ]]; then sudo systemctl restart docker; fi
+  fi
   provisioned_docker_config_sha256="$(dim_docker_config_identity)" || { echo "host installer produced unsafe Docker daemon configuration" >&2; exit 2; }
   dim_write_marker awaiting-login "$provisioned_docker_config_sha256"
 fi

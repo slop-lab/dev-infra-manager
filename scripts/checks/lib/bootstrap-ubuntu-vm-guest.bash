@@ -50,6 +50,9 @@ EOF
     owner: root:root
     permissions: '0644'
     content: $host_public
+EOF
+  if [[ -n "${BOOTSTRAP_EXAMPLES_CACHE_CLOUD_INIT:-}" ]]; then cat -- "$BOOTSTRAP_EXAMPLES_CACHE_CLOUD_INIT" >>"$root/user-data"; fi
+  cat >>"$root/user-data" <<EOF
 package_update: true
 packages: [git]
 runcmd:
@@ -171,8 +174,11 @@ bootstrap_guest_run_acceptance() {
     bash -s -- "$SOURCE_SHA" "$role" >"$BOOTSTRAP_EVIDENCE_ROOT/$role-bootstrap-pass1.log" 2>&1 <<'REMOTE'
 set -euo pipefail
 cd /home/dim/dim/workbench
+cache_args=()
+if [[ -r /etc/dim-examples-cache.json ]]; then cache_args=(--cache-catalog /etc/dim-examples-cache.json); fi
+if [[ -d /home/dim/dim/bootstrap-artifacts ]]; then export DIM_BOOTSTRAP_DOWNLOAD_CACHE=/home/dim/dim/bootstrap-artifacts; fi
 bash scripts/bootstrap-ubuntu-vm.bash --role "$2" --source-sha "$1" \
-  --expected-version 0.10.0 --acknowledge-fresh-vm
+  --expected-version 0.10.0 --acknowledge-fresh-vm "${cache_args[@]}"
 REMOTE
   status=$?
   set -e
@@ -185,8 +191,11 @@ REMOTE
     bash -s -- "$SOURCE_SHA" "$role" >"$BOOTSTRAP_EVIDENCE_ROOT/$role-bootstrap-pass2.log" 2>&1 <<'REMOTE'
 set -euo pipefail
 cd /home/dim/dim/workbench
+cache_args=()
+if [[ -r /etc/dim-examples-cache.json ]]; then cache_args=(--cache-catalog /etc/dim-examples-cache.json); fi
+if [[ -d /home/dim/dim/bootstrap-artifacts ]]; then export DIM_BOOTSTRAP_DOWNLOAD_CACHE=/home/dim/dim/bootstrap-artifacts; fi
 bash scripts/bootstrap-ubuntu-vm.bash --role "$2" --source-sha "$1" \
-  --expected-version 0.10.0 --acknowledge-fresh-vm
+  --expected-version 0.10.0 --acknowledge-fresh-vm "${cache_args[@]}"
 version="$($HOME/.local/bin/dim --version)"
 [[ "$version" =~ ^DIM\ CLI\ 0\.10\.0-local-[0-9a-f]{64}\ \(via\ DIM\ installer\ 0\.10\.0-local-[0-9a-f]{64}\)$ ]]
 docker info --format '{{json .Runtimes}}' | grep -q '"sysbox-runc"'

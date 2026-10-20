@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -70,11 +70,13 @@ printf '\n' >>${JSON.stringify(log)}
   for (const command of ["qemu-system-x86_64", "qemu-img", "cloud-localds", "ssh"] as const) {
     await writeFile(resolve(tools, command), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o755 });
   }
+  await copyFile(resolve(workspaceRoot, "scripts/checks/lib/bootstrap-download.bash"), resolve(root, "lib/bootstrap-download.bash"));
   const helperSource = await readFile(nodeInstallerSource, "utf8");
   await writeFile(nodeInstaller, helperSource
+    .replace(/^pins_helper=.*$/m, `pins_helper=${JSON.stringify(resolve(workspaceRoot, "scripts/lib/bootstrap-ubuntu-pins.bash"))}`)
     .replace(/^target=.*$/m, `target=${JSON.stringify(target)}`)
     .replace(/^url=.*$/m, `url=${JSON.stringify(`file://${archive}`)}`)
-    .replace("14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647", checksum));
+    .replace(/^checksum=.*$/m, `checksum=${checksum}`));
   await chmod(nodeInstaller, 0o755);
   const source = await readFile(installerSource, "utf8");
   await writeFile(installer, source
@@ -100,14 +102,15 @@ afterEach(async () => {
 
 describe("Ubuntu KVM dependency installer", () => {
   it("pins the vetted Node archives without trusting a remote manifest", async () => {
-    // Given
-    const source = await readFile(nodeInstallerSource, "utf8");
-
-    // When / Then
-    expect(source).toContain("node-v${version}-linux-${archive_arch}.tar.xz");
-    expect(source).toContain("14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647");
-    expect(source).toContain("01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc");
-    expect(source).not.toContain("SHASUMS256");
+    for (const [architecture, digest] of [
+      ["x64", "14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647"],
+      ["arm64", "01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc"]
+    ]) {
+      const described = spawnSync("bash", [nodeInstallerSource, architecture!, "--describe"], { encoding: "utf8" });
+      expect(described.status, described.stderr).toBe(0);
+      expect(described.stdout).toContain(`node-v24.19.0-linux-${architecture}.tar.xz`);
+      expect(described.stdout).toContain(digest);
+    }
   });
 
   it("makes no privileged changes when confirmation is not exact", async () => {

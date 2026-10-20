@@ -14,6 +14,7 @@ dim_artifact_cache() (
   flock -x -w 1800 "$artifact_lock"
   [[ ! -L "$target" && ! -L "$partial" ]] || { printf 'artifact cache refuses symlink entries\n' >&2; exit 1; }
   if [[ -f "$target" ]] && printf '%s  %s\n' "$digest" "$target" | sha256sum --check --status; then
+    printf '[artifact] cache hit %s\n' "$digest" >&2
     printf '%s\n' "$target"; exit 0
   fi
   if [[ -e "$target" ]]; then rm -- "$target"; fi
@@ -25,12 +26,13 @@ dim_artifact_cache() (
     printf '%s\n' "$target"; exit 0
   fi
   # A server that does not support ranges must be retried from zero.
+  printf '[artifact] downloading %s\n' "$digest" >&2
   local status=0
-  curl --fail --location --proto '=http,https' --proto-redir '=https' --tlsv1.2 --connect-timeout 30 --max-time 1800 \
+  curl --silent --show-error --fail --location --proto '=http,https' --proto-redir '=https' --tlsv1.2 --connect-timeout 30 --max-time 1800 \
     --continue-at - --output "$partial" "$url" >&2 || status=$?
   if ((status == 33)); then
     rm -f -- "$partial"
-    curl --fail --location --proto '=http,https' --proto-redir '=https' --tlsv1.2 --connect-timeout 30 --max-time 1800 \
+    curl --silent --show-error --fail --location --proto '=http,https' --proto-redir '=https' --tlsv1.2 --connect-timeout 30 --max-time 1800 \
       --output "$partial" "$url" >&2
   elif ((status != 0)); then exit "$status"; fi
   if ! printf '%s  %s\n' "$digest" "$partial" | sha256sum --check --status; then

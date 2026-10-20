@@ -4,6 +4,8 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/runtime-backends.bash
 source "$script_dir/lib/runtime-backends.bash"
+source "$script_dir/../lib/bootstrap-ubuntu-pins.bash"
+source "$script_dir/lib/bootstrap-download.bash"
 
 backend="${1:-}"
 if ! dim_is_runtime_backend "$backend"; then
@@ -15,14 +17,15 @@ case "$docker_source" in ubuntu|docker-ce) ;; *) echo "Docker source must be ubu
 install_user="${SUDO_USER:-$(id -un)}"
 [[ "$install_user" != root ]] || install_user=""
 
-sysbox_version="${SYSBOX_VERSION:-0.7.0}"
+sysbox_version="${SYSBOX_VERSION:-$dim_sysbox_version}"
 sysbox_arch="${SYSBOX_ARCH:-$(dpkg --print-architecture)}"
 sysbox_deb=""
+sysbox_work=""
 apparmor_local_profile="/etc/apparmor.d/local/fusermount3"
 apparmor_rule_marker="# dev-infra-manager: allow Sysbox FUSE mounts"
 
 cleanup() {
-  [[ -z "$sysbox_deb" ]] || rm -f -- "$sysbox_deb"
+  [[ -z "$sysbox_work" ]] || rm -rf -- "$sysbox_work"
 }
 trap cleanup EXIT
 
@@ -79,16 +82,12 @@ install_common_packages() {
 
 install_sysbox() {
   local checksum url
-  case "$sysbox_arch" in
-    arm64) checksum="eae9c0e91ddd39bd1826d6a7a313a73d42a8449ef5113e9d6d118b559cb809ba" ;;
-    amd64) checksum="eeff273671467b8fa351ab3d40709759462dc03d9f7b50a1b207b37982ce40a9" ;;
-    *) echo "Unsupported architecture for pinned Sysbox package: $sysbox_arch" >&2; exit 2 ;;
-  esac
-
-  sysbox_deb="$(mktemp --suffix=.deb "/tmp/sysbox-ce_${sysbox_version}-0.linux_${sysbox_arch}.XXXXXX")"
-  url="https://downloads.nestybox.com/sysbox/releases/v${sysbox_version}/sysbox-ce_${sysbox_version}-0.linux_${sysbox_arch}.deb"
-  curl -L -o "$sysbox_deb" "$url"
-  echo "${checksum}  ${sysbox_deb}" | sha256sum -c -
+  [[ "$sysbox_version" == "$dim_sysbox_version" ]] || { echo 'unsupported Sysbox version; use the reviewed pin' >&2; exit 2; }
+  dim_bootstrap_artifact sysbox "$sysbox_arch"
+  checksum="$dim_artifact_sha256"; url="$dim_artifact_url"
+  sysbox_work="$(mktemp -d /tmp/dim-sysbox-install.XXXXXX)"
+  sysbox_deb="$sysbox_work/sysbox.deb"
+  dim_bootstrap_download "$url" "$checksum" "$sysbox_deb"
   sudo apt-get install -y "$sysbox_deb"
 
   if [[ -f /etc/apparmor.d/fusermount3 ]]; then
