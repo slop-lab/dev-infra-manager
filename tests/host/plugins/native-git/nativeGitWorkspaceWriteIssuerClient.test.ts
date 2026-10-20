@@ -68,6 +68,39 @@ describe("native Git workspace write issuer host client", () => {
     expect(response.status).toBe(403);
   });
 
+  it.each([-86_400_000, 86_400_000])("uses issuer duration and conservative local RTT deadline with clock offset %s", async (offset) => {
+    vi.spyOn(Date, "now").mockReturnValue(leaseNow);
+    vi.spyOn(performance, "now").mockReturnValueOnce(100).mockReturnValueOnce(350);
+    const issuedAt = leaseNow + offset;
+    const httpClient: NativeGitAdmissionHttpClient = {
+      async request() {
+        const response = {
+          schemaVersion: 1,
+          serviceId: "native-main",
+          projectId: "project-a",
+          repositoryId: "root",
+          generationId,
+          workspaceId,
+          username: `workspace-write-${Buffer.alloc(18, 1).toString("base64url")}`,
+          password: Buffer.alloc(32, 2).toString("base64url"),
+          issuedAt,
+          expiresAt: issuedAt + 30_000
+        };
+        return {
+          statusCode: 201,
+          contentType: "application/json",
+          cacheControl: "no-store",
+          body: Buffer.from(JSON.stringify(response))
+        };
+      }
+    };
+    const client = createNativeGitWorkspaceWriteIssuerClient(issuerConnection("http://127.0.0.1:1"), httpClient);
+    const lease = await client.issueWorkspaceWriteLease({
+      projectId: "project-a", repositoryId: "root", workspaceId
+    }, AbortSignal.timeout(5_000));
+    expect(lease.expiresAt).toBe(leaseNow + 29_750);
+  });
+
   it.each([
     ["wrong status", { statusCode: 200 }],
     ["malformed JSON", { rawBody: "{" }],
@@ -91,7 +124,7 @@ describe("native Git workspace write issuer host client", () => {
     const responseBody = {
       schemaVersion: 1, serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       generationId, workspaceId, username: `workspace-write-${Buffer.alloc(18, 1).toString("base64url")}`,
-      password: Buffer.alloc(32, 2).toString("base64url"), expiresAt: Date.now() + 25_000,
+      password: Buffer.alloc(32, 2).toString("base64url"), issuedAt: leaseNow, expiresAt: Date.now() + 25_000,
       ...("bodyChange" in change ? change.bodyChange : {})
     };
     const httpClient: NativeGitAdmissionHttpClient = {

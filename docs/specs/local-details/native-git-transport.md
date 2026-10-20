@@ -28,6 +28,13 @@ immutable workspace's proposal namespace. Protected writes, tags, deletion,
 force and foreign access are denied by Git transport. Without a review plugin,
 a successful proposal push performs no review publication or workflow read.
 
+Repository read and workspace-write leases carry issuer timestamps for a
+positive lifetime of at most 30 seconds. The host validates that interval and
+subtracts the complete request round-trip time before caching credentials against
+its own local deadline. It does not compare absolute clocks across hosts. The
+repository server independently enforces expiry and generation on every use;
+expired or delayed responses cannot extend authority.
+
 Host source acquisition is a host-plugin capability over the core workspace
 lifecycle. Its private broker retains host role credentials and checks the live
 workspace UUID/state for every request. Guests receive scoped grants.

@@ -24,6 +24,8 @@ is implied by these source changes.
   A runnable public/private example links its reviewed files to Git/CI and
   workspace runtime verification; example recipes identify required optional
   plugins and services.
+  Scoped Git credentials account for request latency without requiring exactly
+  synchronized clocks between the control plane and workspace host.
   Examples own executable recipes, repository templates and development/check
   scripts. Both lightweight integration and fresh-VM workspace acceptance use
   those declarations. Run heavy VM acceptance before merging to main or

@@ -235,12 +235,14 @@ async function issueLease(origin: string): Promise<WorkspaceWriteLease> {
   const username = Reflect.get(value, "username");
   const password = Reflect.get(value, "password");
   const expiresAt = Reflect.get(value, "expiresAt");
-  if (typeof username !== "string" || typeof password !== "string" || typeof expiresAt !== "number") {
+  const issuedAt = Reflect.get(value, "issuedAt");
+  if (typeof username !== "string" || typeof password !== "string" || typeof expiresAt !== "number" || typeof issuedAt !== "number") {
     throw new TestSetupError();
   }
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(value).toEqual({ schemaVersion: 1, serviceId: "native-main", projectId: "project-a",
-    repositoryId: "root", generationId, workspaceId, username, password, expiresAt });
+    repositoryId: "root", generationId, workspaceId, username, password, issuedAt, expiresAt });
+  expect(expiresAt - issuedAt).toBe(30_000);
   return { username, password, expiresAt };
 }
 

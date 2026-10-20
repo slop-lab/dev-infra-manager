@@ -1,3 +1,4 @@
+import { localLeaseExpiry } from "./leaseLifetime.js";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type {
   NativeGitAdmissionHttpClient,
@@ -11,10 +12,9 @@ import {
 
 const maximumResponseBytes = 64 * 1024;
 const requestTimeoutMilliseconds = 5_000;
-const maximumLeaseLifetimeMilliseconds = 30_000;
 const leaseFields = [
   "schemaVersion", "serviceId", "projectId", "repositoryId", "generationId",
-  "username", "password", "expiresAt"
+  "username", "password", "issuedAt", "expiresAt"
 ] as const;
 
 export type NativeGitRootReadLease = {
@@ -25,6 +25,7 @@ export type NativeGitRootReadLease = {
   readonly generationId: string;
   readonly username: string;
   readonly password: string;
+  /** Host-local conservative reuse deadline; the issuer enforces actual expiry. */
   readonly expiresAt: number;
 };
 
@@ -71,6 +72,7 @@ export function createNativeGitRootReadIssuerClient(
     generationId: connection.generationId,
     async issueRepositoryReadLease(projectId, repositoryId, signal) {
       if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(projectId) || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId)) invalid();
+      const started = performance.now();
       let response: NativeGitAdmissionHttpResponse;
       try {
         response = await httpClient.request({
@@ -86,7 +88,7 @@ export function createNativeGitRootReadIssuerClient(
       }
       const receivedAt = Date.now();
       const value = parseResponse(response);
-      return parseLease(value, connection, projectId, repositoryId, receivedAt);
+      return parseLease(value, connection, projectId, repositoryId, receivedAt, performance.now() - started);
     }
   };
 }
@@ -108,15 +110,15 @@ function parseLease(
   connection: NativeGitRootReadIssuerConnection,
   projectId: string,
   repositoryId: string,
-  receivedAt: number
+  receivedAt: number,
+  elapsed: number
 ): NativeGitRootReadLease {
   const lease = exactRecord(value, leaseFields);
   if (lease.schemaVersion !== 1 || lease.serviceId !== connection.serviceId
     || lease.projectId !== projectId || lease.repositoryId !== repositoryId
-    || lease.generationId !== connection.generationId
-    || typeof lease.expiresAt !== "number" || !Number.isSafeInteger(lease.expiresAt)
-    || lease.expiresAt <= receivedAt
-    || lease.expiresAt > receivedAt + maximumLeaseLifetimeMilliseconds) invalid();
+    || lease.generationId !== connection.generationId) invalid();
+  const expiresAt = localLeaseExpiry(lease.issuedAt, lease.expiresAt, elapsed, receivedAt);
+  if (expiresAt === undefined) throw new NativeGitRootReadIssuerClientError("native Git lease lifetime is invalid or exhausted in transit");
   return {
     schemaVersion: 1,
     serviceId: "native-main",
@@ -125,7 +127,7 @@ function parseLease(
     generationId: connection.generationId,
     username: leaseUsername(lease.username),
     password: leasePassword(lease.password),
-    expiresAt: lease.expiresAt
+    expiresAt
   };
 }
 

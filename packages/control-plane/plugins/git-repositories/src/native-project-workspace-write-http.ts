@@ -168,6 +168,7 @@ export function createNativeProjectWorkspaceWriteService(
           workspaceId: lease.workspaceId,
           username: lease.username,
           password: lease.password,
+          issuedAt: lease.issuedAt,
           expiresAt: lease.expiresAt
         });
         return true;

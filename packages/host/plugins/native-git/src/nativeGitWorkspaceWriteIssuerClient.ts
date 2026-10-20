@@ -1,3 +1,4 @@
+import { localLeaseExpiry } from "./leaseLifetime.js";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type {
   NativeGitAdmissionHttpClient,
@@ -11,10 +12,9 @@ import {
 
 const maximumResponseBytes = 64 * 1024;
 const requestTimeoutMilliseconds = 5_000;
-const maximumLeaseLifetimeMilliseconds = 30_000;
 const leaseFields = [
   "schemaVersion", "serviceId", "projectId", "repositoryId", "generationId", "workspaceId",
-  "username", "password", "expiresAt"
+  "username", "password", "issuedAt", "expiresAt"
 ] as const;
 
 export type NativeGitWorkspaceWriteLeaseRequest = {
@@ -32,6 +32,7 @@ export type NativeGitWorkspaceWriteLease = {
   readonly workspaceId: string;
   readonly username: string;
   readonly password: string;
+  /** Host-local conservative reuse deadline; the issuer enforces actual expiry. */
   readonly expiresAt: number;
 };
 
@@ -82,6 +83,7 @@ export function createNativeGitWorkspaceWriteIssuerClient(
     generationId: connection.generationId,
     async issueWorkspaceWriteLease(input, signal) {
       const request = parseRequest(input);
+      const started = performance.now();
       let response: NativeGitAdmissionHttpResponse;
       try {
         response = await httpClient.request({
@@ -101,7 +103,7 @@ export function createNativeGitWorkspaceWriteIssuerClient(
         throw new NativeGitWorkspaceWriteIssuerClientError("native Git workspace write lease request failed");
       }
       const receivedAt = now();
-      return parseLease(parseResponse(response), connection, request, receivedAt);
+      return parseLease(parseResponse(response), connection, request, receivedAt, performance.now() - started);
     }
   };
 }
@@ -132,15 +134,15 @@ function parseLease(
   value: unknown,
   connection: NativeGitWorkspaceWriteIssuerConnection,
   request: NativeGitWorkspaceWriteLeaseRequest,
-  receivedAt: number
+  receivedAt: number,
+  elapsed: number
 ): NativeGitWorkspaceWriteLease {
   const lease = exactRecord(value, leaseFields);
   if (lease.schemaVersion !== 1 || lease.serviceId !== connection.serviceId
     || lease.projectId !== request.projectId || lease.repositoryId !== request.repositoryId
-    || lease.generationId !== connection.generationId || lease.workspaceId !== request.workspaceId
-    || typeof lease.expiresAt !== "number" || !Number.isSafeInteger(lease.expiresAt)
-    || lease.expiresAt <= receivedAt
-    || lease.expiresAt > receivedAt + maximumLeaseLifetimeMilliseconds) invalid();
+    || lease.generationId !== connection.generationId || lease.workspaceId !== request.workspaceId) invalid();
+  const expiresAt = localLeaseExpiry(lease.issuedAt, lease.expiresAt, elapsed, receivedAt);
+  if (expiresAt === undefined) throw new NativeGitWorkspaceWriteIssuerClientError("native Git lease lifetime is invalid or exhausted in transit");
   return {
     schemaVersion: 1,
     serviceId: "native-main",
@@ -150,7 +152,7 @@ function parseLease(
     workspaceId: request.workspaceId,
     username: leaseUsername(lease.username),
     password: leasePassword(lease.password),
-    expiresAt: lease.expiresAt
+    expiresAt
   };
 }
 

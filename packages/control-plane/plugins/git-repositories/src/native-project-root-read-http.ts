@@ -137,6 +137,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
           generationId: input.expectedGenerationId,
           username: lease.username,
           password: lease.password,
+          issuedAt: lease.issuedAt,
           expiresAt: lease.expiresAt
         });
         return true;

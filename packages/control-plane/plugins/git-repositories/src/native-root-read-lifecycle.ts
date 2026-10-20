@@ -10,7 +10,7 @@ export type RootReadLeaseScope = {
   readonly projectId: string;
   readonly repositoryId: string;
 };
-export type IssuedRootReadLease = RootReadCredential & RootReadLeaseScope & { readonly expiresAt: number };
+export type IssuedRootReadLease = RootReadCredential & RootReadLeaseScope & { readonly issuedAt: number; readonly expiresAt: number };
 
 type StoredRootReadLease = RootReadLeaseScope & {
   readonly expiresAt: number;
@@ -53,9 +53,10 @@ export function createRootReadLeaseRegistry(now: () => number): RootReadLeaseReg
       if (leases.size >= maximumLiveLeases) return undefined;
       const username = `root-read-${randomBytes(18).toString("base64url")}`;
       const password = randomBytes(32).toString("base64url");
-      const expiresAt = now() + leaseLifetimeMilliseconds;
+      const issuedAt = now();
+      const expiresAt = issuedAt + leaseLifetimeMilliseconds;
       leases.set(digest(username), { ...scope, expiresAt, passwordDigest: digestBuffer(password) });
-      return { ...scope, username, password, expiresAt };
+      return { ...scope, username, password, issuedAt, expiresAt };
     }
   };
 }

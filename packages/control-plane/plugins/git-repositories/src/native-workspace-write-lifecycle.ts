@@ -12,6 +12,7 @@ export type WorkspaceWriteLeaseScope = {
   readonly workspaceId: string;
 };
 export type IssuedWorkspaceWriteLease = NativeBasicCredential & WorkspaceWriteLeaseScope & {
+  readonly issuedAt: number;
   readonly expiresAt: number;
 };
 type StoredWorkspaceWriteLease = WorkspaceWriteLeaseScope & {
@@ -56,9 +57,10 @@ export function createWorkspaceWriteLeaseRegistry(now: () => number): WorkspaceW
       if (leases.size >= maximumLiveLeases) return undefined;
       const username = `workspace-write-${randomBytes(18).toString("base64url")}`;
       const password = randomBytes(32).toString("base64url");
-      const expiresAt = now() + leaseLifetimeMilliseconds;
+      const issuedAt = now();
+      const expiresAt = issuedAt + leaseLifetimeMilliseconds;
       leases.set(digest(username), { ...scope, expiresAt, passwordDigest: digestBuffer(password) });
-      return { ...scope, username, password, expiresAt };
+      return { ...scope, username, password, issuedAt, expiresAt };
     }
   };
 }
