@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import type { ControlPlanePlugin } from "../../packages/control-plane/core/src/plugin.js";
 import type { startControlPlanePlugins } from "../../packages/control-plane/core/src/index.js";
 import { loadExampleRecipe, resolveExamplePath } from "./recipe.ts";
+import { loopbackServiceConfiguration } from "./separated-service-config.ts";
 const data = process.env.DIM_DATA_HOME, setup = process.argv[2];
 if (!data || !setup?.startsWith("/")) throw new Error("private DIM_DATA_HOME and absolute operator directory required");
 const resolver = createRequire(join(data, "control-plane/runtime/current/package.json"));
@@ -16,12 +17,13 @@ function object(value: unknown): Record<string, unknown> { if (!value || typeof 
 const read = async (file: string) => object(JSON.parse(await readFile(join(setup, file), "utf8")));
 const native = await read("native-git.json"), ordinary = await read("ordinary-ci.json"), runtime = await read("acceptance-runtime.json");
 const { humanReviewers, hostPromoters, ci, ...repository } = native;
+const placed = loopbackServiceConfiguration(ci, ordinary);
 repository.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().replace(/^git version /, "");
 const state = join(data, "acceptance-services"); await mkdir(state, { mode: 0o700 });
 const configurations: Readonly<Record<string, unknown>> = {
   "git-repositories": { service: repository, stateDirectory: join(state, "git"), ...object(runtime.native), expectedGenerationId: runtime.generationId, listen: { host: "127.0.0.1", port: 8080 } },
-  "code-review": { humanReviewers }, "merge-policy": { hostPromoters }, "git-ci": ci, "ci-workflows": {},
-  ci: { service: ordinary, stateDirectory: join(state, "ci"), ...object(runtime.ci), expectedGenerationId: runtime.generationId, listen: { host: "127.0.0.1", port: 8081 } }
+  "code-review": { humanReviewers }, "merge-policy": { hostPromoters }, "git-ci": placed.gitCi, "ci-workflows": {},
+  ci: { service: placed.coordinator, stateDirectory: join(state, "ci"), ...object(runtime.ci), expectedGenerationId: runtime.generationId, listen: { host: "127.0.0.1", port: 8081 } }
 };
 const examples = resolve(import.meta.dirname, "../../examples"), catalog: unknown = JSON.parse(await readFile(join(examples, "catalog.json"), "utf8"));
 if (!Array.isArray(catalog) || !catalog.every((entry): entry is string => typeof entry === "string")) throw new Error("invalid example catalog");
