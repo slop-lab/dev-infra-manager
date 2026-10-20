@@ -92,6 +92,8 @@ ordinary, native basic, and multiple repositories. Provider/service recipes
 expose executable `dev` and `verify` commands and document their prerequisites;
 they do not pretend an unconfigured provider is an accepted VM scenario.
 
+The ordinary source gate runs `all verify` on every source check, including
+development pushes, so recipe commands are exercised rather than only parsed.
 Run `just verify examples-vm` for the fresh Ubuntu/KVM gate. The fresh-VM wrapper
 prepares exact installed packages, a matching workspace
 image and temporary native services before invoking these stages. This heavy

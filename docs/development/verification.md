@@ -43,12 +43,13 @@ The workflow event filters follow GitHub's
 ## Source checks and logs
 
 `just check-source` runs the same complete gate as GitHub CI in a disposable,
-pinned Node 24 container: type checks, builds, tests, privileged service
-fixtures, package shapes and the production dependency audit. Select the other
+pinned Node 24 container: type checks, builds, tests, executable example recipes,
+privileged service fixtures, package shapes and the production dependency audit. Select the other
 supported lane with `DIM_SOURCE_NODE_MAJOR=26 just check-source`. Both lanes use
 a fixed two-CPU container limit on local hosts and GitHub runners.
-`just check-source-native` runs type checks, builds and ordinary tests directly
-with the installed supported toolchain; it does not run privileged fixtures.
+`just check-source-native` runs type checks, builds, ordinary tests and the
+examples' lightweight `verify` stages with the installed supported
+toolchain; it does not run privileged fixtures or VM example stages.
 
 The terminal shows the current stage and a heartbeat every 30 seconds. Passing
 command output stays in private per-stage logs under `.local/checks/run.*`.

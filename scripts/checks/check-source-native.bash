@@ -13,6 +13,7 @@ check_output_run prerequisites bash scripts/checks/source-gate-preflight.bash
 check_output_run typecheck pnpm run workspace:check
 check_output_run build pnpm run workspace:build
 check_output_run tests pnpm run workspace:test
+check_output_run examples node scripts/examples/run.ts all verify
 if [[ "${1:-}" == --ci ]]; then
   check_output_run service-fixtures pnpm --dir tests test:qemu-service
   check_output_run package-packs just --quiet verify package-packs
