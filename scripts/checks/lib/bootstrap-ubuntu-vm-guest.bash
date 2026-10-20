@@ -198,10 +198,14 @@ REMOTE
       'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench && pnpm install --frozen-lockfile && just build-packages && just verify native-idle-service-images && just verify installer-artifacts' \
       >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-service-images-and-installer-artifacts.log" 2>&1
     printf 'PASS fresh-ubuntu service-images-and-installer-artifacts source=%s\n' "$SOURCE_SHA"
-    printf 'fresh-ubuntu phase=native-basic-lifecycle role=%s source=%s\n' "$role" "$SOURCE_SHA"
+    printf 'fresh-ubuntu phase=example-recipes role=%s source=%s\n' "$role" "$SOURCE_SHA"
     timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" \
-      'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench && just verify native-basic-lifecycle' \
-      >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-native-basic-lifecycle.log" 2>&1
-    printf 'PASS fresh-ubuntu native-basic-lifecycle source=%s\n' "$SOURCE_SHA"
+      bash -s -- "$SOURCE_SHA" >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-example-recipes.log" 2>&1 <<'REMOTE'
+set -euo pipefail
+export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin
+cd /home/dim/dim/workbench
+bash scripts/examples/verify-installed.bash
+REMOTE
+    printf 'PASS fresh-ubuntu example-recipes source=%s\n' "$SOURCE_SHA"
   fi
 }

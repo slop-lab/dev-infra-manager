@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "name": "basic-development",
+  "plugins": {
+    "host": [],
+    "controlPlane": []
+  },
+  "repositories": [
+    {
+      "id": "app",
+      "path": "repository"
+    }
+  ],
+  "commands": {
+    "dev": {
+      "argv": [
+        "bash",
+        "scripts/dev.bash"
+      ]
+    },
+    "verify": {
+      "argv": [
+        "bash",
+        "scripts/verify.bash"
+      ]
+    },
+    "verify-vm": {
+      "argv": [
+        "bash",
+        "scripts/verify-vm.bash"
+      ]
+    }
+  }
+}

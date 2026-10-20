@@ -99,9 +99,12 @@ try {
   }
   console.log("host profile: explicit native Git and CI worker plugins with operator tools");
 
-  run(facade, ["installer", "install", "plugin", artifact("@slop-lab/dim-host-plugin-mirrors"), artifact("@slop-lab/dim-host-plugin-cache-server")]);
+  const selectedHostPlugins = ["@slop-lab/dim-host-plugin-mirrors", "@slop-lab/dim-host-plugin-cache-server", "@slop-lab/dim-host-plugin-external-urls"];
+  run(facade, ["installer", "install", "plugin", "--local-packages", bundle,
+    ...selectedHostPlugins.map((name) => `${name}@${packages.find((entry) => entry.name === name)?.version}`)]);
+  assert.ok(existsSync(path.join(runtime, "node_modules/@slop-lab/dim-contracts-external-url")), "host plugin bundle must install its contracts dependency");
   run(facade, install);
-  assert.deepEqual(plugins().sort(), [...profilePlugins, "@slop-lab/dim-host-plugin-cache-server", "@slop-lab/dim-host-plugin-mirrors"].sort());
+  assert.deepEqual(plugins().sort(), [...profilePlugins, ...selectedHostPlugins].sort());
   assert.equal(path.resolve(runtime, string(dependencies()["@slop-lab/dim-host-plugin-mirrors"]).slice(5)),
     artifact("@slop-lab/dim-host-plugin-mirrors"));
   assert.equal(path.resolve(runtime, string(dependencies()["@slop-lab/dim-host-plugin-cache-server"]).slice(5)),

@@ -4,6 +4,14 @@ set shell := ["bash", "-uc"]
 environments-kvm verbose="":
     cd .. && bash scripts/checks/kvm-host-install-smoke.bash "{{verbose}}"
 
+# Fresh-VM example acceptance for the exact committed candidate before main/release.
+examples-vm:
+    cd .. && bash scripts/checks/examples-vm-smoke.bash
+
+# Execute the checked-in examples' lightweight verification commands.
+examples:
+    cd .. && node scripts/examples/run.ts all verify
+
 # Real KVM guest mechanics on the current host. This is not independent-host or human release acceptance.
 native-qemu-guest-mechanics-kvm:
     @[[ "$(uname -m)" == x86_64 ]] || { echo "native-qemu-guest-mechanics-kvm requires x86-64" >&2; exit 2; }

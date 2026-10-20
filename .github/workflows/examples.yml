@@ -1,0 +1,55 @@
+name: Examples in fresh VM
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    branches: [main]
+    types: [checks_requested]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  examples-vm:
+    runs-on: dim-native-qemu
+    timeout-minutes: 180
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Record exact candidate source
+        env:
+          DIM_EXPECTED_CANDIDATE_SHA: ${{ github.sha }}
+          DIM_EXAMPLES_EVIDENCE: ${{ runner.temp }}/dim-examples-vm-source.json
+        run: node scripts/checks/candidate-source-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" "$DIM_EXAMPLES_EVIDENCE"
+      - name: Require real KVM
+        run: |
+          if [[ ! -c /dev/kvm || ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            printf '%s\n' 'Examples VM gate unavailable: readable/writable /dev/kvm is required; TCG is forbidden.' >&2
+            exit 2
+          fi
+      - name: Verify examples in fresh Ubuntu VMs
+        env:
+          DIM_EXAMPLES_VM_LOG_ROOT: ${{ runner.temp }}/dim-examples-vm-logs
+        run: bash scripts/checks/examples-vm-smoke.bash
+      - name: Upload examples VM logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: examples-vm-logs-${{ github.sha }}
+          path: ${{ runner.temp }}/dim-examples-vm-logs
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload exact-tree evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: examples-vm-source-${{ github.sha }}
+          path: ${{ runner.temp }}/dim-examples-vm-source.json
+          if-no-files-found: error
+          retention-days: 30

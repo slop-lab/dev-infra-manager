@@ -4,11 +4,12 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { withNativeGitExecutionReadAuthority } from "../../../packages/host/plugins/ci-worker/src/nativeGitCandidateReadAuthority.js";
 import { verifyAndMaterializeCandidate } from "../../../packages/host/plugins/ci-worker/src/candidate.js";
 import { cleanupFinalizeFixtures, createFinalizeRoot, runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
+import { closeExampleServices } from "./exampleServiceFixture.js";
 import { multipleRepositoryExampleFixture } from "./multipleRepositoryExampleFixture.js";
 
 let fixture: Awaited<ReturnType<typeof multipleRepositoryExampleFixture>>;
 beforeEach(async () => { fixture = await multipleRepositoryExampleFixture(); }, 30_000);
-afterEach(cleanupFinalizeFixtures);
+afterEach(async () => { await closeExampleServices(); await cleanupFinalizeFixtures(); });
 
 it("runs the checked-in private integration workflow against its exact public/private Git snapshots", async () => {
   const f = fixture, grant = await f.authorize("private", "integration");

@@ -24,6 +24,10 @@ is implied by these source changes.
   A runnable public/private example links its reviewed files to Git/CI and
   workspace runtime verification; example recipes identify required optional
   plugins and services.
+  Examples own executable recipes, repository templates and development/check
+  scripts. Both lightweight integration and fresh-VM workspace acceptance use
+  those declarations. Run heavy VM acceptance before merging to main or
+  releasing, independently of development push checks.
 
 - Develop ordinary Git repositories on local or SSH hosts without installing a
   control plane. Use `dim ls`, `create`, `exec`, `connect` and `forward` directly.
@@ -54,6 +58,9 @@ is implied by these source changes.
   Git server implementation packages.
   Validate deployment installation against its selected configuration and
   current owned resources.
+  Install selected host plugins from a matching local package bundle with
+  their complete dependency closure. Build service images from temporary
+  contexts containing only selected compiled packages and image inputs.
 - Use the same workspace lifecycle for ordinary and managed Git sources.
   Remove the separate trusted outer container, duplicate host/workspace state,
   unused controller RPC/session paths and predecessor compatibility machinery.
@@ -381,7 +388,7 @@ is implied by these source changes.
   (including `dim plugin`, a `dim-cli` command) unchanged to a separately
   installed `@slop-lab/dim-cli`, adding `DIM_INVOKED_VIA_INSTALLER`/
   `DIM_INSTALLER_VERSION` for display purposes only. See
-  [Installer Facade](specification/specs/14-installer-facade.md).
+  [Installer Facade](docs/specs/14-installer-facade.md).
 - Added `--no-local-bin`/`--local-bin` install modes with a mise-aware
   default, a managed `~/.local/bin/dim` symlink that refuses to touch an
   unmanaged or pre-0.2 `dim`, and a combined `dim --version` line once a
@@ -390,7 +397,7 @@ is implied by these source changes.
   to `dim` (`/home/agent` → `/home/dim`, `AGENT_UID`/`AGENT_GID` build args
   → `DIM_UID`/`DIM_GID`). The account belongs to DIM's controller/root
   environment; an actual coding agent runs in a separate child container.
-  See [Trust Boundaries](specification/specs/02-boundaries-and-trust.md#agent-container-boundary).
+  See [Trust Boundaries](docs/specs/02-boundaries-and-trust.md#host-and-workspace).
 - `rootless-podman` no longer defaults its outer container to
   `--privileged`; it now receives the specific capabilities nested
   unprivileged user namespaces need instead (the same set already used for
@@ -407,7 +414,7 @@ is implied by these source changes.
 - Split the root `README.md` into user-facing content (installing and using
   `dim`) and [CONTRIBUTING.md](CONTRIBUTING.md) (building/verifying DIM
   itself), added a project glossary
-  ([docs/README.md](specification/docs/README.md#glossary)) covering Project/Workspace
+  ([documentation index](docs/guides/README.md)) covering Project/Workspace
   scope and what "controller" actually refers to, and added `just cli` to
   build core and run `dim` from source without the
   `ERR_MODULE_NOT_FOUND`-if-core-isn't-built footgun of invoking `tsx`

@@ -171,9 +171,14 @@ preseeded ephemeral SSH host keys, and a UID-1001 `dim` operator with
 guest-local passwordless sudo. The first SSH login must finish the bootstrap
 with status 3; a new SSH login performs the resume. Each guest proves the
 installed `0.10.0-local-<64 lowercase hex>` facade and a real Sysbox container.
-The control/QEMU guest additionally checks the current service images,
-installs matched tarballs into isolated prefixes with `just verify installer-artifacts`, and runs
-`just verify native-basic-lifecycle` gates. It does not create persistent
+The control/QEMU guest additionally checks the current service images and
+installs matched tarballs into isolated prefixes with `just verify installer-artifacts`.
+It then packs the exact recipe versions, installs the examples' declared host
+and control-plane plugins through an isolated facade, builds a workspace image,
+and runs `scripts/examples/verify-vm.ts`. The ordinary and native single/multiple
+repository examples execute their checked-in workspace scripts and discard
+their disposable workspaces. This establishes workspace behavior, rather than
+execution of the optional CI worker's QEMU jobs. It does not create persistent
 operator TLS material, native global-role credentials, worker deployments, or
 a generic multi-host bridge; the gates own and clean their disposable fixtures.
 The acceptance profile installs the checkout's frozen development dependencies

@@ -15,6 +15,7 @@ import {
   queryCliVersion,
   readLocalPackageBundle,
   readControlPlanePackageBundle,
+  readHostPluginPackageBundle,
   packageNameFromSpecifier,
   removePlugins,
   setPluginsEnabled,
@@ -225,7 +226,6 @@ async function installPluginPackages(specifiers: readonly string[], target: Plug
     console.log(`Executable: ${path.join(home, "node_modules", ".bin", "dim-control-plane")}`);
     return;
   }
-  if (localDirectory !== undefined) throw new Error("--local-packages for plugins requires install control-plane plugin");
   if (specifiers.some((specifier) => packageNameFromSpecifier(specifier)?.startsWith("@slop-lab/dim-control-plane-plugin-"))) {
     throw new Error("control-plane packages use 'dim installer install control-plane plugin'; no host CLI installation is required");
   }
@@ -239,8 +239,15 @@ async function installPluginPackages(specifiers: readonly string[], target: Plug
     throw new Error(`configured version ${cli.version} does not match installed ${installedVersion}; run 'dim installer install core' to repair`);
   }
   const home = defaultPluginHome();
+  const bundle = localDirectory === undefined ? undefined : await readHostPluginPackageBundle(localDirectory, specifiers,
+    (await readManifest(path.join(home, "plugins.json"))).plugins);
+  if (bundle !== undefined && bundle.version !== installedVersion) {
+    throw new Error("local plugin bundle must match the installed DIM CLI version; install the matching core first");
+  }
+  const selected = specifiers.map(packageNameFromSpecifier).filter((name): name is string => name !== undefined);
   const installed = await withInstallerProgress("plugin", (operation) =>
-    installPlugins(specifiers, { pluginHome: home, operation }));
+    installPlugins(specifiers, { pluginHome: home, operation,
+      ...(bundle === undefined ? {} : { packageSpecifiers: bundle.packageSpecifiers, pluginNames: selected }) }));
   for (const name of installed) console.log(`Installed and enabled ${name}`);
   console.log(`Plugin home: ${home}`);
 }

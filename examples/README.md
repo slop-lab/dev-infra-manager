@@ -1,84 +1,106 @@
-# Examples
+# Executable DIM recipes
 
-- [Ordinary remote development](projects/basic-development/README.md) uses the
-  base Git workspace, explicit development commands and local forwarding.
-- [Native Project](projects/native-basic-root/README.md) adds proposal Git,
-  human review and candidate-controlled ordinary or QEMU jobs.
-- [Multiple repositories](projects/native-multiple-repositories/README.md)
-  groups independent public/private repositories in one Project, with separate
-  workspace grants and an exact joint CI snapshot.
-- [Codex](use-cases/codex/README.md) installs the reviewed coding tool explicitly
-  into a workspace's persistent home.
-- Optional feature examples live under `features/` with their owning
-  integration. They do not change the base workspace lifecycle.
+Every entry in [`catalog.json`](catalog.json) owns a `recipe.json`, runnable
+`scripts/`, and any repository templates or trusted operator policy files it
+uses. The declaration is consumed by both installation and linked verification;
+the documentation is not a second plugin inventory.
 
-The native Project fixture has source checks in
-`tests/scenarios/harness/nativeBasicExample.test.ts`. Real Git, runtime, service and
-CI verification require their declared disposable host prerequisites; source
-structure checks alone do not establish runtime or multi-host acceptance.
-
-## Required components
-
-Install optional packages on the selected development host, where DIM executes
-workspace commands. Installing a package on the SSH client alone does not make
-it available remotely. Versions below match this checkout's `0.10.0` release;
-source installations should use the matching prepared package set.
-
-| Example | Host plugins | Other required components |
+| Recipe | What its fast stage establishes | VM journey |
 | --- | --- | --- |
-| [Basic development](projects/basic-development/README.md) | None | Base DIM, Docker with Sysbox, built workspace image; SSH access for a remote host |
-| [Native basic repository](projects/native-basic-root/README.md) | Native-Git; CI-worker on the execution host | Operator administration; Git-repositories, code-review, Git-CI, merge-policy, CI-workflows and CI control-plane plugins; configured container and VM/KVM slots |
-| [Multiple repositories](projects/native-multiple-repositories/README.md) | Native-Git; CI-worker on the execution host | The same control-plane plugin composition; Sysbox workspace image and configured container worker; independent repository policies |
-| [Codex](use-cases/codex/README.md) | `@slop-lab/dim-host-plugin-agent-tools@0.10.0` | Base workspace prerequisites; guest tool installation network access and deliberate Codex authentication; guest SSH setup for remote editors |
-| [External URLs](features/external-urls/README.md) | `@slop-lab/dim-host-plugin-external-urls@0.10.0` | Managed administration and its host controller, an owned workspace, configured ingress; no native Git/control-plane service required |
-| [Shared execution](features/shared-execution/README.md) | CI-worker | CI coordinator; Git-CI and workflow compiler for repository jobs; private worker connection and reviewed images; Docker/Sysbox or functional KVM |
-| [Route policy](features/external-url-route-policy/README.md) | External-URLs plugin for a separately configured integration | Standalone policy webhook; Node.js 24/26 and a private Unix socket; use with the External URLs recipe |
+| [Ordinary development](projects/basic-development/README.md) | Checked-in ordinary repository script | Installed CLI, workspace and script |
+| [Native basic](projects/native-basic-root/README.md) | Declared plugins, real Git import/grant, pinned workflow script | Installed CLI, native source and workspace script |
+| [Multiple repositories](projects/native-multiple-repositories/README.md) | Actual public/private trees and policies, exact CI inputs, isolation and incompatible combination | Both selected repositories and integration script |
+| [Codex](use-cases/codex/README.md) | Real helper installation and workspace identity fencing | Explicit tool/network/account prerequisites |
+| [External URLs](features/external-urls/README.md) | HTTP route approval boundary | Explicit ingress and approval prerequisites |
+| [Route policy](features/external-url-route-policy/README.md) | Actual Unix HTTP allow/rewrite/deny | Operator service; no implicit deployment |
+| [Shared execution](features/shared-execution/README.md) | Actual Git/CI admission, results and recovery | Explicit worker/image/runtime prerequisites |
 
-The recognized repository declaration is `.dim/workspace.json`, for example:
+## Run a recipe
 
-```json
-{"plugins":["@slop-lab/dim-host-plugin-agent-tools@0.10.0"]}
+Install the locked monorepo dependencies first. Node.js 24/26 runs the small
+TypeScript runner directly. No recipe is executed merely by loading its JSON.
+
+```bash
+node scripts/examples/run.ts examples/projects/native-multiple-repositories verify
+node scripts/examples/run.ts all verify
 ```
 
-Only exact registry package versions belong in `plugins`. DIM checks the
-configuration repository before creating a workspace and asks before installing
-missing plugins. An empty list explicitly means no host plugins are required;
-it does not provision managed services, CI workers, images or tool credentials.
-In particular,
-`@slop-lab/dim-control-plane-plugin-git-repositories` and
-`@slop-lab/dim-control-plane-plugin-ci-workflows` are control-plane plugins installed
-with `dim installer install control-plane plugin PACKAGE@EXACT_VERSION`, using
-the standalone control-plane runtime without workspace core. See
-[plugin locations](../docs/guides/plugin-scopes.md).
-Feature recipes applied to an arbitrary
-repository document their plugin installation steps instead of adding a
-manifest to that unrelated source.
+`verify` is the daily, local source gate: it exercises real Git/HTTP or local
+scripts without Docker/KVM, account credentials or installing packages. The
+native integration tests read the recipe's plugin selections, source trees and
+policy files. Their source registry composes the declared repository-side
+plugins; it does not assert that host plugins or the standalone CI coordinator
+were installed. Actual installed-package integration belongs to the VM journey.
 
-## What the checks establish
+Install the recipe's plugins on their owning machines explicitly:
 
-Run focused commands below from the repository root after installing the locked
-workspace dependencies. These source tests import the named components from
-this checkout; they do not require globally installing those plugins or logging
-in to a provider. The complete source gate is documented in
-[verification profiles](../docs/development/verification.md).
-
-| Example / check | Required test components and scope |
-| --- | --- |
-| Native basic: [policy/workflow check](../tests/scenarios/harness/nativeBasicExample.test.ts) | Managed policy compiler plus CI-workflows compiler; checks the committed example and required job agreement, without Docker, KVM or live services |
-| [Multiple repositories](projects/native-multiple-repositories/README.md): [linked integration](../tests/scenarios/ci/multipleRepositoryExample.test.ts) | Native Git service, managed CI and CI-workflows compiler from source; real disposable local Git/HTTP plus the committed integration script; no host plugin, installed control plane or Docker required |
-| Multiple repositories: [physical workspace test](../tests/host/core/multiRepositoryWorkspaceRuntime.test.ts) | The same managed/native components plus Docker/Sysbox, a built workspace image and matched package outputs; opt in with `DIM_NATIVE_MULTI_REPOSITORY_IMAGE`; proves checkout isolation, repository grants, pushes and persistent recreation |
-| External URLs: [plugin tests](../tests/host/plugins/external-urls) and [relay smoke](../scripts/checks/controller-workspace-relay-smoke.ts) | Tests import the external-URLs plugin and managed controller from source. The relay smoke additionally needs matched built packages and a Sysbox workspace image; it does not need native Git, DNS or CI |
-| Codex: [agent-tools tests](../tests/host/plugins/agent-tools) | Agent-tools source and disposable local helper processes; tests exercise configuration and launch behavior, without authenticating Codex or claiming live provider inference |
-| Route policy: [protocol tests](../tests/host/plugins/external-urls/routePolicy.test.ts) | External-URLs plugin source and a local Unix socket; protocol coverage does not establish a deployed public ingress |
-
-```sh
-pnpm --dir tests exec vitest run scenarios/harness/nativeBasicExample.test.ts
-pnpm --dir tests exec vitest run scenarios/ci/multipleRepositoryExample.test.ts
-DIM_NATIVE_MULTI_REPOSITORY_IMAGE=YOUR_BUILT_IMAGE \
-  pnpm --dir tests exec vitest run host/core/multiRepositoryWorkspaceRuntime.test.ts
+```bash
+node scripts/examples/run.ts examples/projects/native-multiple-repositories install-host
+node scripts/examples/run.ts examples/projects/native-multiple-repositories install-control-plane
 ```
 
-The ordinary-development and shared-worker instructions are deployment recipes,
-not independent end-to-end test fixtures. A source/compiler test alone does not
-prove a worker ran a job; use the physical runtime and worker verification
-profiles for that claim.
+The host already needs base DIM and the native examples need control-plane
+administration (`dim installer install core --with-managed` is the convenience
+profile). Control-plane plugins install into their independent runtime. These
+commands install packages; they do not invent credentials, log in, configure
+external services or start listeners. With reviewed source artifacts, set
+`DIM_EXAMPLE_PACKAGE_BUNDLE` to the directory containing `packages.json` and its
+tarballs. The facade validates the exact declared package versions and dependency
+closure. A local-version bundle is not silently substituted for `0.10.0` recipes.
+`DIM_EXAMPLE_DIM_BIN` selects the actual installer facade/CLI executable.
+
+For a workspace recipe's deliberate development setup:
+
+```bash
+export DIM_EXAMPLE_WORK="$(mktemp -d)"
+node scripts/examples/run.ts examples/projects/native-multiple-repositories dev
+```
+
+Native recipes require a saved, live control-plane connection before `dev`.
+Templates are copied into the fresh operator directory, committed as independent
+Git repositories, imported with the declared policies, and selected through the
+installed CLI. Operator policies are copied into fresh mode-0600 files under the private
+operator work directory; checked-in policy files keep their original permissions
+and stay outside candidate repositories. The
+workspace remains available after `dev`; discard it deliberately when finished.
+`DIM_EXAMPLE_PROJECT` and `DIM_EXAMPLE_WORKSPACE` override its names;
+`DIM_EXAMPLE_WORKSPACE_IMAGE` selects an already built image.
+
+## Installed-package acceptance
+
+After a matching `pnpm run workspace:build`, a Linux host with Docker/Sysbox can
+exercise the actual installed-package path without replacing its DIM installation:
+
+```bash
+bash scripts/examples/verify-installed.bash
+```
+
+This creates a private source-package bundle and installer prefix, installs the
+declared host/control-plane plugins, builds a matching disposable workspace image,
+starts temporary services from the installed control-plane tree, and runs the
+workspace recipes through the installed CLI. It removes its temporary image,
+workspaces, controller and private state afterward. It requires network access for
+locked package/image dependencies and does not authenticate external providers.
+This Sysbox acceptance is distinct from running the same journey in a fresh VM.
+
+## VM acceptance
+
+`run.ts all verify-vm` selects only recipes with that stage. Each creates its
+workspace and discards it in an exit trap, including failures. `DIM_EXAMPLE_WORK`
+is scoped by recipe name when using `all`. The default complete journeys are
+ordinary, native basic, and multiple repositories. Provider/service recipes
+expose executable `dev` and `verify` commands and document their prerequisites;
+they do not pretend an unconfigured provider is an accepted VM scenario.
+
+Run `just verify examples-vm` for the fresh Ubuntu/KVM gate. The fresh-VM wrapper
+prepares exact installed packages, a matching workspace
+image and temporary native services before invoking these stages. This heavy
+acceptance gate is required before merging to main and before release, rather
+than on every daily development check. It verifies workspace integration using
+the installed artifacts. It does not substitute for functional-KVM CI runner
+verification or provider/account acceptance.
+
+Generic runtime support is documented in [verification](../docs/development/verification.md).
+Only exact host-plugin requirements belong in a repository's optional
+`.dim/workspace.json`; recipe declarations also name control-plane plugins and
+operator stages and are not automatically recognized candidate configuration.

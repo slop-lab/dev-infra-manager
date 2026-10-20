@@ -1,5 +1,45 @@
 # Verification profiles
 
+## Examples in fresh VMs
+
+`.github/workflows/examples.yml` runs the `examples-vm` check on pull requests
+targeting `main`, on merge groups targeting `main`, and on explicit manual
+dispatches such as release candidates. It does not run on `development` pushes.
+The ordinary Node 24/26 source checks in `verify.yml` still run on their existing
+events; passing source checks alone does not establish VM example acceptance.
+
+The examples workflow needs a disposable x86-64 self-hosted runner labeled
+`dim-native-qemu`, with the host prerequisites documented in the
+[fresh Ubuntu VM profile](bootstrap-ubuntu-vm.md#disposable-fresh-vm-acceptance-profile).
+It requires readable/writable real `/dev/kvm`; missing KVM fails as unavailable,
+and neither a successful skip nor TCG counts as a pass. An offline runner leaves
+the required check pending. Use test hosts without production DIM state or
+credentials. The workflow does not retain checkout credentials.
+
+From a clean exact candidate on that host, run the same gate manually:
+
+```bash
+DIM_EXAMPLES_VM_LOG_ROOT=/absolute/private/examples-evidence \
+  bash scripts/checks/examples-vm-smoke.bash
+```
+
+The wrapper creates a Git bundle and manifest for the current commit and tree,
+verifies `GITHUB_SHA` when supplied, and delegates to the existing fresh Ubuntu
+bootstrap profile. Example `verify-vm` stages run inside those fresh guests.
+The outer invocation must succeed as well as its guest stages; teardown or
+evidence-export failure is not acceptance. Logs remain under the selected
+evidence directory, and the workflow uploads them even on failure. It uploads
+`examples-vm-source-<SHA>` separately with the exact commit/tree evidence.
+
+A maintainer must configure `examples-vm` as a required `main` branch check;
+adding this workflow does not change repository rules. PR runs may test a
+synthetic merge commit, and merge-queue runs test the queue's candidate rather
+than the original PR head. Review the recorded commit/tree, not merely the
+branch name or an older green run. Release candidates must repeat this gate
+against their exact frozen commit/tree; see [releasing](../guides/releasing.md#required-verification).
+The workflow event filters follow GitHub's
+[merge-group branch syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onmerge_groupbranchesbranches-ignore).
+
 ## Source checks and logs
 
 `just check-source` runs the same complete gate as GitHub CI in a disposable,

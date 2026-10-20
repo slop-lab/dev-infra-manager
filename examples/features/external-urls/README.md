@@ -1,5 +1,26 @@
 # Example: External URLs
 
+## Runnable recipe
+
+[`recipe.json`](recipe.json) owns the exact host/control-plane plugin selection,
+repository paths and executable stages. From the DIM repository root:
+
+```bash
+node scripts/examples/run.ts examples/features/external-urls install-host
+node scripts/examples/run.ts examples/features/external-urls install-control-plane
+node scripts/examples/run.ts examples/features/external-urls verify
+```
+
+`verify` is a fast local check using the locked source toolchain; it does not
+install plugins or authenticate provider accounts. `dev` runs this directory's
+actual setup/service script after the prerequisites below are configured.
+For workspace recipes, set `DIM_EXAMPLE_WORK` to a fresh absolute operator
+directory; source templates are copied and committed there, never overwritten.
+
+This provider/service recipe has no automatic `verify-vm` stage: its explicit
+runtime prerequisites are not silently provisioned by the generic VM journey.
+See the [recipe runner](../../README.md) for shared options and the heavy VM gate.
+
 Expose a service from an ordinary Git workspace through an optional host-owned
 HTTP ingress. This example needs no native Project or control plane. Run the
 DIM commands on the host that owns the workspace; neither a controller socket

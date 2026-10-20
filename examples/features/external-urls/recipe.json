@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "name": "external-urls",
+  "plugins": {
+    "host": [
+      "@slop-lab/dim-host-plugin-external-urls@0.10.0"
+    ],
+    "controlPlane": []
+  },
+  "repositories": [
+    {
+      "id": "app",
+      "path": "repository"
+    }
+  ],
+  "commands": {
+    "dev": {
+      "argv": [
+        "bash",
+        "scripts/dev.bash"
+      ]
+    },
+    "verify": {
+      "argv": [
+        "bash",
+        "scripts/verify.bash"
+      ]
+    }
+  }
+}

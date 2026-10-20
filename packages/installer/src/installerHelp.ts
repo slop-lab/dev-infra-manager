@@ -64,13 +64,14 @@ and make mise version selection differ from the CLI that actually runs.`);
 
 export function printInstallPluginHelp(target: "host" | "control-plane" = "host"): void {
   if (target === "host") {
-    console.log(`Usage: dim installer install plugin PACKAGE@EXACT_VERSION...
+    console.log(`Usage: dim installer install plugin [options] PACKAGE@EXACT_VERSION...
 
 Installs host plugins beside an installed DIM CLI. For standalone service plugins
 use 'dim installer install control-plane plugin'.
 
 Options:
-  -h, --help  Show this help`);
+  --local-packages DIRECTORY  Use a matching reviewed packages.json artifact closure
+  -h, --help                 Show this help`);
     return;
   }
   console.log(`Usage: dim installer install control-plane plugin [options] PACKAGE@EXACT_VERSION...

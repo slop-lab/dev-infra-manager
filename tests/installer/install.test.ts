@@ -14,6 +14,7 @@ import {
   packageNameFromSpecifier,
   queryCliVersion,
   readLocalPackageBundle,
+  readHostPluginPackageBundle,
   readUserConfig,
   validateConfiguredCli
 } from "../../packages/installer/src/install.js";
@@ -702,6 +703,15 @@ describe("@slop-lab/dim-installer", () => {
       expect((await readLocalPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors"])).packageNames).toEqual([
         "@slop-lab/dim-host-core", "@slop-lab/dim-cli", "@slop-lab/dim-host-plugin-mirrors"
       ]);
+    });
+
+    it("selects exact host plugins from a bundle and rejects a different requested version", async () => {
+      const { root } = await bundleFixture();
+      expect((await readHostPluginPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors@0.10.0-local-test"])).packageNames).toEqual([
+        "@slop-lab/dim-host-core", "@slop-lab/dim-cli", "@slop-lab/dim-host-plugin-mirrors"
+      ]);
+      await expect(readHostPluginPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors@0.9.0"])).rejects.toThrow(/does not match selected plugin/);
+      await expect(readHostPluginPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors@latest"])).rejects.toThrow(/exact PACKAGE@VERSION/);
     });
 
     it("rejects selected missing or version-mismatched dependencies instead of falling back to a registry", async () => {

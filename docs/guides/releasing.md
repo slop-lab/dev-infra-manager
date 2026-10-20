@@ -81,6 +81,28 @@ just verify native-idle-service-images
 just verify installer-artifacts
 ```
 
+The heavy examples gate is also required before merging into `main` and before
+release. `.github/workflows/examples.yml` runs `examples-vm` for `main` pull
+requests and merge groups; dispatch it explicitly for the frozen release
+candidate. It does not run on every `development` push. Configure the
+`examples-vm` required check in the repository's `main` rules separately;
+workflow source does not configure branch protection.
+
+Use a disposable `dim-native-qemu` runner with real readable/writable `/dev/kvm`
+and the [fresh VM prerequisites](../development/bootstrap-ubuntu-vm.md#disposable-fresh-vm-acceptance-profile).
+The exact candidate gate can also be invoked directly:
+
+```bash
+DIM_EXAMPLES_VM_LOG_ROOT=/absolute/private/examples-evidence \
+  bash scripts/checks/examples-vm-smoke.bash
+```
+
+Retain its successful outer result, guest example results, source manifest and
+commit/tree evidence. A missing runner is pending; missing KVM is unavailable
+and fails the gate. Neither is a successful skip. PR/merge-queue candidates can
+be synthetic commits, so compare the uploaded commit/tree with the candidate
+being accepted. A different release commit/tree requires new evidence.
+
 Review every package dry-run listing and confirm it contains its README,
 license, runtime files, declarations, and publishable manifest. Installer
 evidence must use the exact packed target, prove missing/current state succeeds,
@@ -106,8 +128,8 @@ or a host pnpm installation. Its root-owned fixtures exist only inside its
 disposable container. `just check-source-native` is for an already pinned,
 disposable environment, not an ordinary hosted-runner user or a live sudo shell.
 
-The GitHub workflows `.github/workflows/verify.yml` and
-`.github/workflows/integration.yml` must run against the canonical candidate
+The GitHub workflows `.github/workflows/verify.yml`,
+`.github/workflows/integration.yml`, and `.github/workflows/examples.yml` must run against the canonical candidate
 SHA. Dispatch ordinary and `qemu-kvm` integration lanes on fresh matching
 self-hosted runners and require their recorded `headSha` to equal
 `candidate_root_sha`.
@@ -125,7 +147,7 @@ Manual dispatch does not install or register a runner. Before dispatching:
   `gh repo view --json defaultBranchRef` and `gh workflow list --all`.
 - The selected branch or tag must point at the reviewed clean candidate.
   Dispatch uses a branch/tag ref, not a promise that a moving branch will
-  remain at the SHA inspected earlier. Freeze the ref for the three dispatches
+  remain at the SHA inspected earlier. Freeze the ref for all four dispatches
   and reject any run whose `headSha` differs from the candidate.
 - The source workflow uses fresh `ubuntu-24.04` hosted runners. Integration
   requires fresh, disposable Linux self-hosted runners with labels
@@ -161,12 +183,13 @@ candidate_root_sha="$(git rev-parse HEAD)"
   test -z "$(git status --porcelain)"
   test "$(gh api "repos/$repository/commits/$candidate_ref" --jq .sha)" = "$candidate_root_sha"
   default_branch="$(gh repo view "$repository" --json defaultBranchRef --jq .defaultBranchRef.name)"
-  for workflow in verify.yml integration.yml; do
+  for workflow in verify.yml integration.yml examples.yml; do
     gh api --method GET "repos/$repository/contents/.github/workflows/$workflow" \
       -f ref="$default_branch" --jq .sha >/dev/null
   done
 
   gh workflow run verify.yml --repo "$repository" --ref "$candidate_ref"
+  gh workflow run examples.yml --repo "$repository" --ref "$candidate_ref"
   gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=ordinary
   gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=qemu-kvm
 
@@ -189,11 +212,12 @@ run_id=REPLACE_WITH_NEW_RUN_ID
 )
 ```
 
-Require both source matrix jobs and the selected job of each integration run
-to succeed. The unselected integration job is skipped by design; a skipped
+Require both source matrix jobs, `examples-vm`, and the selected job of each
+integration run to succeed. The unselected integration job is skipped by design; a skipped
 selected job, queued job, cancellation, failure, or timeout is not success.
 Retain the exact run URLs and source artifacts
-`native-candidate-source-node-{24,26}-<SHA>` outside tracked source. Old failed
+`native-candidate-source-node-{24,26}-<SHA>` and `examples-vm-source-<SHA>`
+outside tracked source; retain the corresponding examples VM logs as well. Old failed
 runs retain their old workflow/action revisions: re-running their failed jobs
 does not test a newly fixed workflow. Dispatch a new run on the corrected ref.
 

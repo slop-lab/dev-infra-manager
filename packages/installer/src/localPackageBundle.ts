@@ -24,6 +24,16 @@ export async function readLocalPackageBundle(
 }
 
 export async function readControlPlanePackageBundle(directory: string, selectedSpecifiers: readonly string[]): Promise<LocalPackageBundle> {
+  const versions = selectedPluginVersions(selectedSpecifiers);
+  return readArtifactClosure(directory, ["@slop-lab/dim-control-plane-core", ...versions.keys()], "@slop-lab/dim-control-plane-core", versions);
+}
+
+export async function readHostPluginPackageBundle(directory: string, selectedSpecifiers: readonly string[], retainedPlugins: readonly string[] = []): Promise<LocalPackageBundle> {
+  const versions = selectedPluginVersions(selectedSpecifiers);
+  return readArtifactClosure(directory, ["@slop-lab/dim-cli", "@slop-lab/dim-host-core", ...retainedPlugins, ...versions.keys()], "@slop-lab/dim-cli", versions);
+}
+
+function selectedPluginVersions(selectedSpecifiers: readonly string[]): ReadonlyMap<string, string> {
   const versions = new Map<string, string>();
   for (const specifier of selectedSpecifiers) {
     const separator = specifier.lastIndexOf("@"), name = specifier.slice(0, separator), version = specifier.slice(separator + 1);
@@ -31,7 +41,7 @@ export async function readControlPlanePackageBundle(directory: string, selectedS
     if (versions.has(name)) throw new Error(`duplicate selected plugin '${name}'`);
     versions.set(name, version);
   }
-  return readArtifactClosure(directory, ["@slop-lab/dim-control-plane-core", ...versions.keys()], "@slop-lab/dim-control-plane-core", versions);
+  return versions;
 }
 
 async function readArtifactClosure(directory: string, roots: readonly string[], runtime: string, expectedVersions: ReadonlyMap<string, string> = new Map()): Promise<LocalPackageBundle> {

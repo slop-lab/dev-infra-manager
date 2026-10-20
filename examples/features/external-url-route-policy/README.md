@@ -1,5 +1,24 @@
 # External URL Route Policy
 
+## Runnable recipe
+
+[`recipe.json`](recipe.json) owns the exact host/control-plane plugin selection,
+repository paths and executable stages. From the DIM repository root:
+
+```bash
+node scripts/examples/run.ts examples/features/external-url-route-policy install-host
+node scripts/examples/run.ts examples/features/external-url-route-policy install-control-plane
+node scripts/examples/run.ts examples/features/external-url-route-policy verify
+```
+
+`verify` is a fast local check using the locked source toolchain; it does not
+install plugins or authenticate provider accounts. `dev` runs this directory's
+actual setup/service script after the prerequisites below are configured.
+
+This provider/service recipe has no automatic `verify-vm` stage: its explicit
+runtime prerequisites are not silently provisioned by the generic VM journey.
+See the [recipe runner](../../README.md) for shared options and the heavy VM gate.
+
 Use the [External URLs recipe](../external-urls/README.md) for the host plugin
 and ingress setup, then add the policy below.
 

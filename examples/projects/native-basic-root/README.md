@@ -1,5 +1,29 @@
 # Native basic repository
 
+## Runnable recipe
+
+[`recipe.json`](recipe.json) owns the exact host/control-plane plugin selection,
+repository paths and executable stages. From the DIM repository root:
+
+```bash
+node scripts/examples/run.ts examples/projects/native-basic-root install-host
+node scripts/examples/run.ts examples/projects/native-basic-root install-control-plane
+node scripts/examples/run.ts examples/projects/native-basic-root verify
+```
+
+`verify` is a fast local check using the locked source toolchain; it does not
+install plugins or authenticate provider accounts. `dev` runs this directory's
+actual setup/service script after the prerequisites below are configured.
+For workspace recipes, set `DIM_EXAMPLE_WORK` to a fresh absolute operator
+directory; source templates are copied and committed there, never overwritten.
+
+`verify-vm` uses the installed DIM command to create a workspace, run its checked-in
+verification script, and discard the workspace on success or failure. It requires
+a prepared base image; native recipes also require a live, saved control-plane
+connection. It exercises workspace integration, not execution of CI jobs in a
+QEMU worker. The separate CI runner gates cover that backend.
+See the [recipe runner](../../README.md) for shared options and the heavy VM gate.
+
 ## Required components
 
 Install the native Git host integration and operator tools on the selected
@@ -39,16 +63,20 @@ workspace creation, but leave required job results pending.
 
 ## Import and develop
 
-Copy this example into a new Git repository and commit it on `main`. Prepare and
+Copy only `repository/` into a new Git repository and commit it on `main`.
+Keep `repository-policy.json` outside that repository as reviewed operator input. Prepare and
 connect an optional control plane on the selected host first. Its private role
 files stay outside the repository and workspace; connect saves their selection.
-Review `repository-policy.json` as trusted operator input before importing:
+Set `example` to this recipe directory. Review its policy before importing
+your source checkout:
 
 ```bash
+policy="$(mktemp)"
+install -m 0600 "$example/repository-policy.json" "$policy"
 dim project create native-basic --project-id native-basic
 dim project repository import native-basic root \
   --source "$PWD" --ref refs/heads/main \
-  --policy "$PWD/repository-policy.json" --json
+  --policy "$policy" --json
 dim project configure native-basic \
   --configuration-repository root --default-repository root --json
 dim project repository list native-basic --json

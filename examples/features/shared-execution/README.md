@@ -1,5 +1,24 @@
 # Shared Sysbox and QEMU workers
 
+## Runnable recipe
+
+[`recipe.json`](recipe.json) owns the exact host/control-plane plugin selection,
+repository paths and executable stages. From the DIM repository root:
+
+```bash
+node scripts/examples/run.ts examples/features/shared-execution install-host
+node scripts/examples/run.ts examples/features/shared-execution install-control-plane
+node scripts/examples/run.ts examples/features/shared-execution verify
+```
+
+`verify` is a fast local check using the locked source toolchain; it does not
+install plugins or authenticate provider accounts. `dev` runs this directory's
+actual setup/service script after the prerequisites below are configured.
+
+This provider/service recipe has no automatic `verify-vm` stage: its explicit
+runtime prerequisites are not silently provisioned by the generic VM journey.
+See the [recipe runner](../../README.md) for shared options and the heavy VM gate.
+
 Required components: `@slop-lab/dim-host-plugin-ci-worker` on the runtime host,
 a private generation-bound worker connection, and the separate
 `@slop-lab/dim-control-plane-plugin-ci` coordinator. The native Git integration

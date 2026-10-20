@@ -1,5 +1,29 @@
 # One Project, independent public and private repositories
 
+## Runnable recipe
+
+[`recipe.json`](recipe.json) owns the exact host/control-plane plugin selection,
+repository paths and executable stages. From the DIM repository root:
+
+```bash
+node scripts/examples/run.ts examples/projects/native-multiple-repositories install-host
+node scripts/examples/run.ts examples/projects/native-multiple-repositories install-control-plane
+node scripts/examples/run.ts examples/projects/native-multiple-repositories verify
+```
+
+`verify` is a fast local check using the locked source toolchain; it does not
+install plugins or authenticate provider accounts. `dev` runs this directory's
+actual setup/service script after the prerequisites below are configured.
+For workspace recipes, set `DIM_EXAMPLE_WORK` to a fresh absolute operator
+directory; source templates are copied and committed there, never overwritten.
+
+`verify-vm` uses the installed DIM command to create a workspace, run its checked-in
+verification script, and discard the workspace on success or failure. It requires
+a prepared base image; native recipes also require a live, saved control-plane
+connection. It exercises workspace integration, not execution of CI jobs in a
+QEMU worker. The separate CI runner gates cover that backend.
+See the [recipe runner](../../README.md) for shared options and the heavy VM gate.
+
 Use this layout for a pair such as `mjy9088/codyssey-public` and
 `mjy9088/codyssey-private`: one Project, two independent Git histories, separate
 proposal grants and reviews, and an explicit integration job. The included
@@ -59,13 +83,17 @@ for repository in public private; do
     -c user.email=example@invalid commit -m 'initial example'
 done
 
+mkdir -m 0700 "$work/policies"
+for repository in public private; do
+  install -m 0600 "$example/policies/$repository.json" "$work/policies/$repository.json"
+done
 dim project create codyssey --project-id codyssey
 dim project repository import codyssey public \
   --source "$work/public" --ref refs/heads/main \
-  --policy "$example/policies/public.json"
+  --policy "$work/policies/public.json"
 dim project repository import codyssey private \
   --source "$work/private" --ref refs/heads/main \
-  --policy "$example/policies/private.json"
+  --policy "$work/policies/private.json"
 dim project configure codyssey \
   --configuration-repository private --default-repository public
 dim create dim://codyssey full-dev --repository public --repository private --workdir private

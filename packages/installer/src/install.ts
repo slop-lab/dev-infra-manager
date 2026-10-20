@@ -108,4 +108,4 @@ export {
   type ControlPlaneStaging
 } from "./controlPlaneState.js";
 
-export { readLocalPackageBundle, readControlPlanePackageBundle } from "./localPackageBundle.js";
+export { readLocalPackageBundle, readControlPlanePackageBundle, readHostPluginPackageBundle } from "./localPackageBundle.js";

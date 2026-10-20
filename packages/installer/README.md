@@ -26,7 +26,7 @@ dim installer install core [--local-bin|--no-local-bin] [--prefix PATH]
   [--with-managed] [--host-mirror-plugin PACKAGE@EXACT_VERSION]
 dim installer install control-plane --config ABSOLUTE_FILE
 dim installer recover control-plane --roll-forward --generation GENERATION
-dim installer install plugin PACKAGE@EXACT_VERSION...
+dim installer install plugin [--local-packages DIRECTORY] PACKAGE@EXACT_VERSION...
 dim installer enable-plugin PACKAGE...
 dim installer disable-plugin PACKAGE...
 dim installer remove-plugin PACKAGE...
@@ -156,6 +156,12 @@ and restore only declared user data. Disposal of old resources is a separate
 explicit operator action.
 
 ## Plugins
+
+For a matched source bundle, use `--local-packages DIRECTORY` with exact plugin
+versions on either host or control-plane installs. The installer selects the
+complete declared dependency closure from `packages.json`; it enables only the
+requested plugins. A host bundle must match the installed CLI version. The
+artifact directory can contain other optional packages without selecting them.
 
 Plugin coordinates must be exact versions. Local tarballs are copied into
 installer-owned storage so replacement does not depend on the original path.

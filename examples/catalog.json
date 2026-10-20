@@ -1,0 +1,9 @@
+[
+  "projects/basic-development",
+  "projects/native-basic-root",
+  "projects/native-multiple-repositories",
+  "use-cases/codex",
+  "features/external-urls",
+  "features/external-url-route-policy",
+  "features/shared-execution"
+]

@@ -2,6 +2,9 @@ name: Verify native candidate
 
 on:
   pull_request:
+  merge_group:
+    branches: [main]
+    types: [checks_requested]
   push:
     branches: [main, development, candidate/**]
   workflow_dispatch:

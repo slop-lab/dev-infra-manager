@@ -46,7 +46,7 @@ test("defines a pinned, bounded two-role fresh Ubuntu acceptance profile", async
   assert.match(guestHelper, /docker run --rm --runtime=sysbox-runc/);
   assert.match(guestHelper, /just verify native-idle-service-images && just verify installer-artifacts/);
   assert.match(guestHelper, /pnpm install --frozen-lockfile && just build-packages/);
-  assert.match(guestHelper, /just verify native-basic-lifecycle/);
+  assert.match(guestHelper, /bash scripts\/examples\/verify-installed\.bash/);
   assert.match(sourceHelper, /schemaVersion/);
   assert.match(sourceHelper, /sourceSha/);
   assert.match(sourceHelper, /sourceTree/);

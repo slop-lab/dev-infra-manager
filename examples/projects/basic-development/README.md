@@ -1,5 +1,29 @@
 # Ordinary remote development
 
+## Runnable recipe
+
+[`recipe.json`](recipe.json) owns the exact host/control-plane plugin selection,
+repository paths and executable stages. From the DIM repository root:
+
+```bash
+node scripts/examples/run.ts examples/projects/basic-development install-host
+node scripts/examples/run.ts examples/projects/basic-development install-control-plane
+node scripts/examples/run.ts examples/projects/basic-development verify
+```
+
+`verify` is a fast local check using the locked source toolchain; it does not
+install plugins or authenticate provider accounts. `dev` runs this directory's
+actual setup/service script after the prerequisites below are configured.
+For workspace recipes, set `DIM_EXAMPLE_WORK` to a fresh absolute operator
+directory; source templates are copied and committed there, never overwritten.
+
+`verify-vm` uses the installed DIM command to create a workspace, run its checked-in
+verification script, and discard the workspace on success or failure. It requires
+a prepared base image; native recipes also require a live, saved control-plane
+connection. It exercises workspace integration, not execution of CI jobs in a
+QEMU worker. The separate CI runner gates cover that backend.
+See the [recipe runner](../../README.md) for shared options and the heavy VM gate.
+
 The same commands work on the local host and a selected SSH development host.
 The source repository needs no DIM manifest or lifecycle hook.
 
