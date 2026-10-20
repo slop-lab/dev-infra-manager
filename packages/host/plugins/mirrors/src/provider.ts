@@ -1,38 +1,32 @@
-import type { StreamingCommandRunner } from "@slop-lab/dim-host-core";
 import os from "node:os";
 import path from "node:path";
-import { cacheEndpoint, cacheKinds, clientFiles, DOCKER_HUB_DIRECT_HOSTNAMES, type CacheEndpoints, type MirrorRouting } from "./cache-routing.js";
+import { parseEndpoints, mirrorRouting, type CacheEndpoints } from "./cache-routing.js";
+import { builtinMirrorAdapters, type MirrorAdapters } from "./registry.js";
 import { object, privateJson } from "./relay-state.js";
 export function hostStateRoot(): string {
   return path.resolve(process.env.DIM_STATE_ROOT ?? path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local/state"), "dim"));
 }
 export function mirrorStateRoot(): string { return path.join(hostStateRoot(), "plugins/host-mirrors"); }
-export function parseCacheCatalog(input: unknown): CacheEndpoints {
+export function parseCacheCatalog(input: unknown, adapters: MirrorAdapters = builtinMirrorAdapters): CacheEndpoints {
   const value = object(input);
   if (value.schemaVersion !== 1 || Object.keys(value).some((key) => key !== "schemaVersion" && key !== "endpoints")) throw new Error("expected cache URL catalog schemaVersion 1 and endpoints");
-  const endpoints = object(value.endpoints);
-  if (Object.keys(endpoints).some((key) => !cacheKinds.includes(key as typeof cacheKinds[number]))) throw new Error("unknown cache kind");
-  return Object.fromEntries(cacheKinds.map((kind) => [kind, cacheEndpoint(endpoints[kind], kind)])) as CacheEndpoints;
+  return parseEndpoints(value.endpoints, adapters);
 }
 /** Connecting never provisions a server. A server plugin may publish the same URL catalog. */
-export async function findCacheEndpoints(): Promise<CacheEndpoints | undefined> {
-  try { return parseCacheCatalog(await privateJson(path.join(mirrorStateRoot(), "config.json"))); }
+export async function findCacheEndpoints(adapters: MirrorAdapters = builtinMirrorAdapters): Promise<CacheEndpoints | undefined> {
+  try { return parseCacheCatalog(await privateJson(path.join(mirrorStateRoot(), "config.json")), adapters); }
   catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
-  try { return parseCacheCatalog(await privateJson(path.join(hostStateRoot(), "services/package-caches.json"))); }
+  try { return parseCacheCatalog(await privateJson(path.join(hostStateRoot(), "services/package-caches.json")), adapters); }
   catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
     throw error;
   }
 }
-export async function readCacheEndpoints(): Promise<CacheEndpoints> {
-  const endpoints = await findCacheEndpoints();
+export async function readCacheEndpoints(adapters: MirrorAdapters = builtinMirrorAdapters): Promise<CacheEndpoints> {
+  const endpoints = await findCacheEndpoints(adapters);
   if (!endpoints) throw new Error("cache URLs are not configured; run dim mirrors configure FILE, or install a cache server plugin and publish its endpoints");
   return endpoints;
 }
-export const hostMirrorProvider = {
-  async ensure(_runner: StreamingCommandRunner): Promise<MirrorRouting> {
-    const endpoints = await readCacheEndpoints();
-    return { network: "bridge", blockedHostnames: DOCKER_HUB_DIRECT_HOSTNAMES, jobFiles: clientFiles(endpoints), jobEnvironmentDefaults: { NPM_CONFIG_GLOBALCONFIG: "/etc/npmrc" },
-      dockerDaemonConfig: JSON.stringify({ "registry-mirrors": [endpoints.docker], "insecure-registries": new URL(endpoints.docker).protocol === "http:" ? [new URL(endpoints.docker).host] : [] }) };
-  }
-};
+export async function resolveMirrorRouting(adapters: MirrorAdapters = builtinMirrorAdapters) {
+  return mirrorRouting(await readCacheEndpoints(adapters), adapters);
+}

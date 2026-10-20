@@ -141,3 +141,18 @@ and router-to-host gateway authorization. The artifact profile smoke installs
 real control-plane packages into an empty user tree before installing any host
 components. The public/private [example](../../examples/projects/native-multiple-repositories/README.md)
 uses the actual native Git and workflow plugins in linked Git/CI verification.
+
+## Shared package caches
+
+The mirrors host plugin is a consumer integration. Its included Docker Hub,
+npm, PyPI and APT adapters can be selected independently by endpoint. Enabled
+installed host plugins may contribute additional reviewed adapters through
+`mirrorAdapterExtension`; catalogs remain URL-only data. Each protocol owns
+request restrictions, metadata handling and its self-contained guest client.
+The common relay and guest runner own transport and application, rather than
+interpreting a configurable policy language. See the
+[mirrors adapter SDK](../../packages/host/plugins/mirrors/README.md#installed-protocol-adapters).
+
+The separate cache-server plugin provisions its reviewed local services and
+publishes endpoint URLs. External services or NAS placement use the same URL
+selection; the consumer does not reconcile or take ownership of those servers.

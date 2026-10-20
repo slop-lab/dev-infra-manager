@@ -140,6 +140,9 @@
       ],
       "@slop-lab/dim-web": [
         "packages/web/src/index.ts"
+      ],
+      "@slop-lab/dim-host-plugin-mirrors/adapter": [
+        "packages/host/plugins/mirrors/src/adapter.ts"
       ]
     }
   }

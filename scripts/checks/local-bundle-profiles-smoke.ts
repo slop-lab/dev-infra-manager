@@ -2,9 +2,10 @@
 import { object, array, string, parseJson } from "./lib/json-values.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 if (process.argv.length !== 3 || !process.argv[2]) throw new Error("usage: node local-bundle-profiles-smoke.ts BUNDLE_DIRECTORY");
 const bundle = path.resolve(process.argv[2]);
@@ -106,4 +107,39 @@ try {
   assert.equal(existsSync(path.join(scratch, "config", "systemd/user/dim-controller.service")), false);
   assert.equal(existsSync(path.join(scratch, "run", "dim/controller.pid")), false);
   console.log("explicit plugin survives matched-bundle upgrade without controller activation");
+
+  // Compile an independent plugin against the actual installed public SDK, not repository aliases.
+  const fixture = path.join(scratch, "future-adapter"), output = path.join(fixture, "dist");
+  mkdirSync(fixture);
+  const repository = fileURLToPath(new URL("../..", import.meta.url));
+  const source = path.join(repository, "tests/scenarios/fixtures/mirror-adapter");
+  for (const file of ["futureMirrorAdapter.ts", "futureMirrorGuestClient.ts"]) copyFileSync(path.join(source, file), path.join(fixture, file));
+  const version = packages.find(({ name }) => name === "@slop-lab/dim-host-plugin-mirrors")?.version;
+  assert.ok(version, "mirror package version must exist");
+  const fixtureMetadata = { name: "@this-project/mirror-future-fixture", private: true, version, type: "module", exports: "./futureMirrorAdapter.js",
+    peerDependencies: { "@slop-lab/dim-host-core": version, "@slop-lab/dim-host-plugin-mirrors": version } };
+  writeFileSync(path.join(fixture, "package.json"), JSON.stringify(fixtureMetadata));
+  symlinkSync(path.join(runtime, "node_modules"), path.join(fixture, "node_modules"), "dir");
+  const compiler = path.join(repository, "tests/node_modules/typescript/bin/tsc");
+  writeFileSync(path.join(fixture, "tsconfig.json"), JSON.stringify({ compilerOptions: {
+    target: "ES2023", module: "NodeNext", moduleResolution: "NodeNext", strict: true,
+    noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: true, skipLibCheck: true,
+    typeRoots: [path.join(repository, "tests/node_modules/@types")], types: ["node"], outDir: "dist"
+  }, include: ["*.ts"] }));
+  run(process.execPath, [compiler, "-p", path.join(fixture, "tsconfig.json")]);
+  writeFileSync(path.join(output, "package.json"), JSON.stringify(fixtureMetadata));
+  const packed = array(parseJson(run("npm", ["pack", output, "--pack-destination", fixture, "--json"]).stdout));
+  assert.equal(packed.length, 1);
+  const tarball = path.join(fixture, string(object(packed[0]).filename));
+  run(facade, ["installer", "install", "plugin", tarball]);
+  const catalog = path.join(scratch, "future-cache.json");
+  writeFileSync(catalog, JSON.stringify({ schemaVersion: 1, endpoints: { future: "https://future.example/cache/" } }));
+  run(facade, ["mirrors", "configure", catalog]);
+  assert.match(run(facade, ["mirrors", "ensure"]).stdout, /Cache connections configured: future/);
+  const discovered = array(parseJson(run(facade, ["plugins"]).stdout));
+  assert.ok(discovered.some((entry) => object(entry).name === "future-mirror-adapter"));
+  assert.ok(plugins().includes("@this-project/mirror-future-fixture"));
+  assert.equal(existsSync(path.join(scratch, "state/dim", "services/package-caches.json")), false);
+  console.log("public mirror SDK: independently compiled and packed adapter installs, configures and resolves through enabled host plugins");
+
 } finally { rmSync(scratch, { recursive: true, force: true }); }

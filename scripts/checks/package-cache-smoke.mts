@@ -2,19 +2,26 @@
 /** Disposable public-package cache verification. No installed cache or workspace is changed. */
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, request, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProcessRunner } from "../../packages/host/core/src/runner.js";
 import { ensureCacheServices, cacheServiceNames } from "../../packages/host/plugins/cache-server/src/cache-services.js";
 import { MirrorState } from "../../packages/host/plugins/cache-server/src/cacheState.js";
-import { npmCacheDefinition, pypiCacheDefinition } from "../../packages/host/plugins/cache-server/src/packageCaches.js";
+import { cacheServices } from "../../packages/host/plugins/cache-server/src/services/index.js";
 
 const [npmImage, pypiImage] = process.argv.slice(2);
 if (!npmImage || !pypiImage || [npmImage, pypiImage].some((image) => !/^\S+@sha256:[a-f0-9]{64}$/.test(image))) {
   throw new Error("usage: tsx package-cache-smoke.mts NPM_IMAGE@sha256:DIGEST PYPI_IMAGE@sha256:DIGEST");
 }
+const pins: unknown = JSON.parse(await readFile(new URL("../../packages/host/plugins/cache-server/src/cache-images.json", import.meta.url), "utf8"));
+const kinds = ["docker", "npm", "pypi", "apt"] as const;
+const definitions = cacheServices.map((service) => {
+  const image: unknown = service.kind === "npm" ? npmImage : service.kind === "pypi" ? pypiImage : object(pins)[service.kind];
+  assert(typeof image === "string" && /^\S+@sha256:[a-f0-9]{64}$/.test(image), `reviewed ${service.kind} image pin is required`);
+  return service.definition(image);
+});
 const token = randomUUID().slice(0, 8), namespace = `dim-packages-${token}`;
 const directory = await mkdtemp(join(tmpdir(), namespace)), front = `${namespace}-front`;
 const runner = new ProcessRunner(), relays: Server[] = [];
@@ -66,8 +73,10 @@ function wheel(index: Record<string, unknown>, base: string, version: string) {
   return { url: url.href, sha256: object(item.hashes).sha256 };
 }
 try {
-  const published = await ensureCacheServices(runner, { stateRoot: directory, namespace }, [npmCacheDefinition(npmImage), pypiCacheDefinition(pypiImage)]);
+  const published = await ensureCacheServices(runner, { stateRoot: directory, namespace }, definitions);
+  assert.deepEqual(Object.keys(published).sort(), [...kinds].sort());
   assert(published.npm && published.pypi);
+  console.log("all four reviewed cache services provisioned through the nonce Docker lifecycle: PASS");
   await ready(`http://${published.npm.host}:${published.npm.port}/is-number/7.0.0`, "application/json");
   await ready(`http://${published.pypi.host}:${published.pypi.port}/root/pypi/+simple/six/`, "application/vnd.pypi.simple.v1+json");
   console.log("host-published npm/PyPI endpoints accept real package metadata requests: PASS");
@@ -89,7 +98,7 @@ try {
   assert.equal(createHash("sha1").update(tarball).digest("hex"), object(manifest.dist).shasum);
   assert.equal(sha256(packageWheel), cachedWheel.sha256);
   console.log("actual public npm metadata/tarball and PyPI simple-index/wheel, local relay asset URLs and upstream digests: PASS");
-  for (const name of ["npm", "pypi"]) await docker(["network", "disconnect", cacheServiceNames(name, namespace).network, cacheServiceNames(name, namespace).container]);
+  for (const name of kinds) await docker(["network", "disconnect", cacheServiceNames(name, namespace).network, cacheServiceNames(name, namespace).container]);
   const warmManifest = await json(npmMetadata), warmIndex = await json(pypiIndex, simpleJson);
   assert.equal(sha256(await bytes(npmAsset(warmManifest, npm))), sha256(tarball));
   assert.equal(sha256(await bytes(wheel(warmIndex, pypiIndex, "1.17.0").url)), sha256(packageWheel));
@@ -98,7 +107,7 @@ try {
   assert(!missingNpm.ok); assert(!missingWheel.ok); await missingNpm.body?.cancel(); await missingWheel.body?.cancel();
   console.log("uncached npm metadata and PyPI wheel fail offline without asset URL bypass: PASS");
 } catch (error) {
-  for (const name of ["npm", "pypi"]) {
+  for (const name of kinds) {
     const logs = await docker(["logs", "--tail", "30", cacheServiceNames(name, namespace).container], true);
     process.stderr.write(`${name} diagnostics:\n${(logs.stdout + logs.stderr).slice(-8192)}\n`);
   }
@@ -106,7 +115,7 @@ try {
 } finally {
   for (const server of relays) { server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve())); }
   const ownership = await new MirrorState(directory, namespace).readHostMirrorOwnership();
-  for (const name of ["npm", "pypi"]) {
+  for (const name of kinds) {
     const names = cacheServiceNames(name, namespace);
     for (const [kind, resource, role] of [["container", names.container, `cache:${name}`], ["volume", names.volume, `data:${name}`]] as const) {
       const inspected = await docker([kind, "inspect", resource, "--format", kind === "container" ? "{{json .Config.Labels}}" : "{{json .Labels}}"], true);

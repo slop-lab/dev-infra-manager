@@ -9,10 +9,21 @@ not require the client plugin.
 ```sh
 dim installer install plugin '@slop-lab/dim-host-plugin-cache-server@0.10.0'
 dim cache-server ensure
+# Or deploy only the local services needed on this host:
+dim cache-server ensure npm pypi
 dim cache-server endpoints
 ```
 
-`ensure` independently reconciles four compiled adapters using reviewed image
+`ensure` defaults to all four services; an explicit list selects just those
+services and republishes the local catalog with that selection. Unselected
+containers and persistent data are not stopped or deleted. Existing clients must
+be configured with the new selection; publishing a catalog does not rewrite
+running workspaces. Unknown and duplicate service names fail before deployment.
+
+Each service has its own compiled adapter under `src/services/`, owning its
+process settings and endpoint path. Shared Docker ownership, publication and
+volume reconciliation live in `cache-services.ts`; the provider only selects
+adapters, checks listener readiness and writes the catalog. All use reviewed image
 digests: a Docker registry pull-through cache, Verdaccio npm cache, devpi PyPI
 mirror and apt-cacher-ng. The PyPI service disables unused search indexing. It waits for listeners before publishing a private
 schema-version-1 URL catalog at
@@ -47,7 +58,7 @@ package-manager credentials are not copied into them.
 ## Separate cache hosts and NAS placement
 
 A workspace host may instead use independently operated cache services on a NAS
-or another server. Give the client a catalog with the same four URL fields and
+or another server. Give the client a catalog with the desired Docker, npm, PyPI or APT URL fields and
 run `dim mirrors configure FILE`; see the client README for its exact schema.
 The operator owns TLS, network reachability, storage and service authentication
 outside this local deployment. URL credentials are not supported by the client

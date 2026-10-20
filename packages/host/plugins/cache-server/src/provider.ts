@@ -4,26 +4,24 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { connect } from "node:net";
 import { ensureCacheServices, type CacheEndpoint } from "./cache-services.js";
-import { dockerCacheDefinition } from "./registryCache.js";
-import { aptCacheDefinition } from "./aptCache.js";
-import { npmCacheDefinition, pypiCacheDefinition } from "./packageCaches.js";
+import { selectCacheServices } from "./services/index.js";
 
 /** Deployment stays here. Consumers receive URLs and have no deployment dependency. */
-export async function ensureLocalCaches(runner: StreamingCommandRunner, stateRoot: string) {
+export async function ensureLocalCaches(runner: StreamingCommandRunner, stateRoot: string, kinds?: readonly string[]) {
+  const services = selectCacheServices(kinds);
   const pins: unknown = JSON.parse(await readFile(new URL("./cache-images.json", import.meta.url), "utf8"));
   if (!pins || typeof pins !== "object" || Array.isArray(pins)) throw new Error("invalid reviewed cache image pins");
-  const factories = { docker: dockerCacheDefinition, npm: npmCacheDefinition, pypi: pypiCacheDefinition, apt: aptCacheDefinition };
-  const definitions = Object.entries(factories).map(([kind, factory]) => {
+  const definitions = services.map(({ kind, definition }) => {
     const image: unknown = Reflect.get(pins, kind);
     if (typeof image !== "string" || !image.includes("@sha256:")) throw new Error(`missing reviewed ${kind} cache image pin`);
-    return factory(image);
+    return definition(image);
   });
   const managed = await ensureCacheServices(runner, { stateRoot: join(stateRoot, "plugins/cache-server") }, definitions);
   const endpoints: Record<string, string> = {};
-  for (const kind of Object.keys(factories)) {
+  for (const { kind, endpointUrl } of services) {
     const endpoint = managed[kind]; if (!endpoint) throw new Error(`cache '${kind}' is unavailable`);
     await listening(endpoint);
-    endpoints[kind] = `http://${endpoint.host}:${endpoint.port}/${kind === "pypi" ? "root/pypi/+simple/" : ""}`;
+    endpoints[kind] = endpointUrl(endpoint);
   }
   await atomicWrite(join(stateRoot, "services/package-caches.json"), { schemaVersion: 1, endpoints });
   return endpoints;

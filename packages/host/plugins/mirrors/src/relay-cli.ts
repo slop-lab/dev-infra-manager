@@ -13,7 +13,7 @@ async function main() {
   if (!guard) throw new Error("mirror relay is already running");
   try {
     const relay = await createMirrorRelay(config);
-    await atomicWrite(join(root, "ready.json"), { configurationId: config.configurationId, ports: relay.ports });
+    await atomicWrite(join(root, "ready.json"), { configurationId: config.configurationId, ports: relay.ports, controlPort: relay.controlPort });
     let reloading = false;
     const timer = setInterval(() => {
       if (reloading) return; reloading = true;
@@ -24,7 +24,7 @@ async function main() {
         if (!isDeepStrictEqual(scope, nextScope)) throw new Error("mirror relay scope changed");
         if (next.configurationId !== config.configurationId) {
           relay.updateTargets(next);
-          await atomicWrite(join(root, "ready.json"), { configurationId: next.configurationId, ports: relay.ports });
+          await atomicWrite(join(root, "ready.json"), { configurationId: next.configurationId, ports: relay.ports, controlPort: relay.controlPort });
         }
       })().catch(() => relay.close()).finally(() => { reloading = false; });
     }, 250);

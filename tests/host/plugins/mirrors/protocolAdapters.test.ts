@@ -2,9 +2,16 @@ import { expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { atomicWrite, type StreamingCommandRunner } from "@slop-lab/dim-host-core";
-import { dockerTarget, packageTarget, rewritePackageMetadata } from "../../../../packages/host/plugins/mirrors/src/package-routing.js";
-import { hostMirrorProvider, parseCacheCatalog } from "../../../../packages/host/plugins/mirrors/src/provider.js";
+import { atomicWrite } from "@slop-lab/dim-host-core";
+import { mirrorAdapter as docker } from "../../../../packages/host/plugins/mirrors/src/adapters/docker/index.js";
+import { mirrorAdapter as npm } from "../../../../packages/host/plugins/mirrors/src/adapters/npm/index.js";
+import { mirrorAdapter as pypi } from "../../../../packages/host/plugins/mirrors/src/adapters/pypi/index.js";
+const dockerTarget = docker.target;
+function packageTarget(kind: "npm" | "pypi", path: string, endpoint: string) { return ({ npm, pypi })[kind].target(path, endpoint); }
+function rewritePackageMetadata(kind: "npm" | "pypi", contents: string, upstream: URL, endpoint: string, clientOrigin: string) {
+  return ({ npm, pypi })[kind].metadata!.rewrite(contents, { upstream, endpoint, clientOrigin });
+}
+import { resolveMirrorRouting, parseCacheCatalog } from "../../../../packages/host/plugins/mirrors/src/provider.js";
 
 it("uses the same fixed URL catalog for local, NAS and externally operated caches", () => {
   const endpoints = { docker: "https://nas.example/docker/", npm: "https://npm.example/cache/", pypi: "https://nas.example/root/pypi/+simple/", apt: "http://mirror.example:3142/" };
@@ -46,15 +53,13 @@ it("consumes server-published or explicit external URLs without invoking a deplo
   const root = await mkdtemp(join(tmpdir(), "dim-cache-catalog-"));
   vi.stubEnv("DIM_STATE_ROOT", root);
   const endpoints = { docker: "https://nas.example/docker/", npm: "https://npm.example/cache/", pypi: "https://nas.example/root/pypi/+simple/", apt: "http://mirror.example:3142/" };
-  const forbidden = async (): Promise<never> => { throw new Error("client must not invoke Docker or install servers"); };
-  const runner: StreamingCommandRunner = { run: forbidden, runStreaming: forbidden };
   try {
     await atomicWrite(join(root, "services/package-caches.json"), { schemaVersion: 1, endpoints });
-    const published = await hostMirrorProvider.ensure(runner);
+    const published = await resolveMirrorRouting();
     expect(published.dockerDaemonConfig).toContain(endpoints.docker);
     expect(published.jobFiles?.find((file) => file.target === "/etc/npmrc")?.contents).toContain(endpoints.npm);
     await atomicWrite(join(root, "plugins/host-mirrors/config.json"), { schemaVersion: 1, endpoints: { ...endpoints, npm: "https://override.example/" } });
-    const explicit = await hostMirrorProvider.ensure(runner);
+    const explicit = await resolveMirrorRouting();
     expect(explicit.jobFiles?.find((file) => file.target === "/etc/npmrc")?.contents).toContain("https://override.example/");
     expect(explicit.jobEnvironmentDefaults).toEqual({ NPM_CONFIG_GLOBALCONFIG: "/etc/npmrc" });
   } finally { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }

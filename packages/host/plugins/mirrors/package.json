@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/dim-host-plugin-mirrors",
   "version": "0.10.0",
-  "description": "Connect DIM workspaces and CI to Docker, npm, PyPI and APT caches",
+  "description": "Connect workspaces and CI to package caches through installed protocol adapters",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -17,6 +17,11 @@
       "types": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "import": "./dist/adapter.js",
+      "default": "./dist/adapter.js"
     }
   },
   "scripts": {

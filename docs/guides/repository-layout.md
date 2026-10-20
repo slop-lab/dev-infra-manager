@@ -21,6 +21,11 @@ Host plugins own delivery of their workspace and agent helpers through the
 shared host integration mechanism. Repositories need no plugin configuration
 for capabilities selected by the operator.
 
+The mirrors consumer and cache-server deployment are separate host plugins.
+Mirrors owns its included and installed protocol adapters, scoped relay and guest
+client configuration; cache-server owns local cache service resources. Their
+shared placement input is a URL catalog, with only selected protocols required.
+
 The control-plane runtime and its plugins can be installed without the host
 core or CLI. CI workers consume neutral CI contracts; they do not install the
 Native Git server to understand execution requests. Contracts do not depend on

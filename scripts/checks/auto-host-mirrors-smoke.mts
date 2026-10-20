@@ -14,7 +14,8 @@ import { acquireWorkspaceSource } from "../../packages/host/core/src/workspace/s
 import type { WorkspaceHostPluginContext } from "../../packages/host/core/src/workspace/hostPlugin.js";
 const image = process.argv[2]; if (!image) throw new Error("usage: tsx auto-host-mirrors-smoke.mts WORKSPACE_IMAGE");
 const artifact: typeof import("../../packages/host/plugins/mirrors/src/attachment.js") = await import(new URL("../../packages/host/plugins/mirrors/dist/attachment.js", import.meta.url).href);
-const packageCaches: typeof import("../../packages/host/plugins/cache-server/src/packageCaches.js") = await import(new URL("../../packages/host/plugins/cache-server/dist/packageCaches.js", import.meta.url).href);
+const npmAdapter: typeof import("../../packages/host/plugins/cache-server/src/services/npm.js") = await import(new URL("../../packages/host/plugins/cache-server/dist/services/npm.js", import.meta.url).href);
+const pypiAdapter: typeof import("../../packages/host/plugins/cache-server/src/services/pypi.js") = await import(new URL("../../packages/host/plugins/cache-server/dist/services/pypi.js", import.meta.url).href);
 const pins: unknown = JSON.parse(await readFile(new URL("../../packages/host/plugins/cache-server/dist/cache-images.json", import.meta.url), "utf8"));
 function pin(kind: string): string {
   assert(pins !== null && typeof pins === "object" && !Array.isArray(pins));
@@ -49,10 +50,10 @@ async function startPackageCache(name: string, definition: import("../../package
   args.push(definition.image, ...(definition.entrypoint?.slice(1) ?? []), ...(definition.command ?? []));
   await run(args); await run(["network", "connect", egress, name]); await run(["start", name]);
 }
-async function attach() {
+async function attach(endpoints?: Record<string, string>) {
   assert(workspace);
   const context: WorkspaceHostPluginContext = { runner, cleanupRunner: runner, stateRoot: root, store, service, signal: AbortSignal.timeout(60_000), hostGateway: (record) => runtime.hostGateway(record) };
-  await artifact.attachWorkspaceMirrors(workspace, context, { endpoints: {
+  await artifact.attachWorkspaceMirrors(workspace, context, { endpoints: endpoints ?? {
     docker: `http://${await address(registry)}:5000/`, apt: `http://${await address(apt)}:3142/`,
     npm: `http://${await address(npm)}:4873/`, pypi: `http://${await address(pypi)}:3141/root/pypi/+simple/`
   } });
@@ -76,8 +77,8 @@ try {
   await run(["network", "connect", egress, registry]);
   await run(["start", registry]);
   await startApt();
-  await startPackageCache(npm, packageCaches.npmCacheDefinition(pin("npm")), volumes[2]!);
-  await startPackageCache(pypi, packageCaches.pypiCacheDefinition(pin("pypi")), volumes[3]!);
+  await startPackageCache(npm, npmAdapter.npmService.definition(pin("npm")), volumes[2]!);
+  await startPackageCache(pypi, pypiAdapter.pypiService.definition(pin("pypi")), volumes[3]!);
   workspace = await service.create({ name: prefix, source: { url: source }, image, resources: { cpuCount: "2", memory: "3g", pidsLimit: "2048" } });
   await attach();
   const daemon = JSON.parse((await guest(["docker", "info", "--format", "{{json .RegistryConfig}}"])).stdout) as { Mirrors: string[] };
@@ -123,6 +124,34 @@ try {
   assert.notEqual(failedPull.exitCode, 0, "Docker must not bypass its unavailable mirror");
   assert.match(failedPull.stderr, /127\.0\.0\.1|connection refused|mirror|timeout|EOF/i);
   console.log("actual nested APT outage fails closed; default Docker Hub fallback blocked: PASS");
+  // Existing read-only bind mounts retain their inode while owned configuration
+  // contents follow endpoint changes and retire safely when an adapter is removed.
+  const cachedDebian = digests[0]; assert(cachedDebian);
+  await guest(["docker", "run", "--detach", "--pull=never", "--network", "none", "--name", "partial-existing", cachedDebian, "sleep", "infinity"]);
+  const clientFiles = ["/etc/npmrc", "/etc/apt/apt.conf.d/99dim-mirrors", "/etc/pip.conf"];
+  async function existingClientState() {
+    return (await guest(["docker", "exec", "partial-existing", "stat", "-c", "%d:%i", ...clientFiles])).stdout;
+  }
+  const previousInodes = await existingClientState();
+  const previousPid = (await guest(["docker", "inspect", "partial-existing", "--format", "{{.State.Pid}}"])).stdout;
+  await attach({ npm: `http://${await address(npm)}:4873/` });
+  await guest(["sh", "-ceu", "test ! -e /etc/apt/apt.conf.d/99dim-mirrors; ! grep -q 'BEGIN DIM CACHE' /etc/pip.conf; ! grep -q 'BEGIN DIM HOST MIRRORS' /etc/hosts"]);
+  const restored = JSON.parse((await guest(["docker", "info", "--format", "{{json .RegistryConfig}}"])).stdout) as { Mirrors: string[] | null };
+  assert.equal(restored.Mirrors?.length ?? 0, 0, "removing Docker adapter must restore the nested daemon configuration");
+  assert.equal(await existingClientState(), previousInodes, "existing client bind mounts must retain their original inodes");
+  assert.equal((await guest(["docker", "inspect", "partial-existing", "--format", "{{.State.Pid}}"])).stdout, previousPid,
+    "updating cache defaults must preserve the existing container process");
+  const effectiveRegistry = (await guest(["sh", "-ceu", "sed -n 's/^registry=//p' /etc/npmrc"])).stdout.trim();
+  assert.match(effectiveRegistry, /^http:\/\//);
+  assert.equal((await guest(["docker", "exec", "partial-existing", "cat", "/etc/npmrc"])).stdout, `registry=${effectiveRegistry}\n`,
+    "existing npm bind must use the refreshed relay endpoint");
+  assert.equal((await guest(["docker", "exec", "partial-existing", "cat", "/etc/apt/apt.conf.d/99dim-mirrors"])).stdout,
+    'Acquire::http::Proxy "DIRECT";\nAcquire::https::Proxy "DIRECT";\n');
+  assert.equal((await guest(["docker", "exec", "partial-existing", "cat", "/etc/pip.conf"])).stdout, "");
+  await guest(["docker", "run", "--rm", "--pull=never", "--network", "none", cachedDebian, "sh", "-ceu",
+    "test ! -e /etc/apt/apt.conf.d/99dim-mirrors; test ! -e /etc/pip.conf; test -r /etc/npmrc; test \"$NPM_CONFIG_GLOBALCONFIG\" = /etc/npmrc"]);
+  await guest(["docker", "rm", "--force", "partial-existing"]);
+  console.log("four-to-npm-only attachment restores host clients, updates existing bind contents without inode/process replacement and configures only npm in new nested containers: PASS");
 } catch (error) {
   if (workspace) {
     const diagnostic = await runtime.run(workspace, ["sh", "-c", "cat /home/dim/.local/state/dim/services/host-mirrors.log; docker info --format '{{json .RegistryConfig}}'; sudo cat /var/log/dockerd.log | tail -30; ls -l /var/run/*sock"], { signal: AbortSignal.timeout(10_000) }).catch(() => undefined);

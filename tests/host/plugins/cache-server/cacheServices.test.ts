@@ -6,8 +6,8 @@ import { afterEach, expect, it } from "vitest";
 import type { CommandResult, StreamingCommandRunner } from "@slop-lab/dim-host-core";
 import { cacheServiceNames, ensureCacheServices, type CacheServiceDefinition } from "../../../../packages/host/plugins/cache-server/src/cache-services.js";
 import { MirrorState } from "../../../../packages/host/plugins/cache-server/src/cacheState.js";
-import { dockerCacheDefinition } from "../../../../packages/host/plugins/cache-server/src/registryCache.js";
-import { aptCacheDefinition } from "../../../../packages/host/plugins/cache-server/src/aptCache.js";
+import { dockerService } from "../../../../packages/host/plugins/cache-server/src/services/docker.js";
+import { aptService } from "../../../../packages/host/plugins/cache-server/src/services/apt.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -99,9 +99,9 @@ it("reconciles selected services and preserves independent volumes across config
 
 it("adds selected protocols without changing previously persisted ownership or provisioning unselected caches", async () => {
   const options = await fixture(), runner = new Docker(), state = new MirrorState(options.stateRoot, options.namespace);
-  await ensureCacheServices(runner, options, [dockerCacheDefinition(image)]);
+  await ensureCacheServices(runner, options, [dockerService.definition(image)]);
   const first = await state.readHostMirrorOwnership();
-  await ensureCacheServices(runner, options, [dockerCacheDefinition(image), aptCacheDefinition(image)]);
+  await ensureCacheServices(runner, options, [dockerService.definition(image), aptService.definition(image)]);
   const second = await state.readHostMirrorOwnership();
   expect(second?.serviceId).toBe(first?.serviceId);
   expect(second?.resourceIds["cache:docker"]).toBe(first?.resourceIds["cache:docker"]);
@@ -170,8 +170,8 @@ it("starts stopped owned services by immutable ID and rejects stale network iden
 });
 
 it("keeps registry and APT protocol settings in their compiled definitions", () => {
-  expect(dockerCacheDefinition(image)).toMatchObject({ name: "docker", port: 5000, dataTarget: "/var/lib/registry", environment: { REGISTRY_PROXY_REMOTEURL: "https://registry-1.docker.io" } });
-  expect(aptCacheDefinition(image)).toMatchObject({ name: "apt", port: 3142, dataTarget: "/var/cache/apt-cacher-ng" });
+  expect(dockerService.definition(image)).toMatchObject({ name: "docker", port: 5000, dataTarget: "/var/lib/registry", environment: { REGISTRY_PROXY_REMOTEURL: "https://registry-1.docker.io" } });
+  expect(aptService.definition(image)).toMatchObject({ name: "apt", port: 3142, dataTarget: "/var/cache/apt-cacher-ng" });
   expect(cacheServiceNames("docker").container).not.toBe("dim-registry-cache");
 });
 function record(value: unknown): Record<string, unknown> { if (!isRecord(value)) throw new Error("invalid fixture object"); return value; }
