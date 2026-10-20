@@ -149,7 +149,16 @@ if [[ "$resume" -eq 0 ]]; then
   }
   if [[ -n "$cache_catalog" ]]; then
     cache_docker_result="$(sudo "$dim_node_root/bin/node" "$repo_root/scripts/examples/vm-cache.ts" docker-config "$cache_catalog" "$docker_daemon_config")"
-    if [[ "$cache_docker_result" == configured ]]; then sudo systemctl restart docker; fi
+    if [[ "$cache_docker_result" == configured ]]; then
+      sudo /usr/bin/dockerd --validate --config-file "$docker_daemon_config"
+      # Mirror settings support SIGHUP. Another full restart immediately after
+      # Docker/Sysbox installation can exhaust the unit's start-rate budget.
+      if ! sudo systemctl kill --kill-who=main --signal=HUP docker \
+        || ! sudo "$dim_node_root/bin/node" "$repo_root/scripts/examples/vm-cache.ts" verify-docker "$cache_catalog"; then
+        sudo journalctl -u docker --no-pager -n 80 >&2 || true
+        exit 2
+      fi
+    fi
   fi
   provisioned_docker_config_sha256="$(dim_docker_config_identity)" || { echo "host installer produced unsafe Docker daemon configuration" >&2; exit 2; }
   dim_write_marker awaiting-login "$provisioned_docker_config_sha256"

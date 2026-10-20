@@ -4,8 +4,13 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { cacheCloudInit, discoverVmCaches, dockerCacheConfig, selectedCacheEndpoints } from "../../../scripts/examples/vm-cache.ts";
+import { cacheCloudInit, discoverVmCaches, dockerCacheConfig, dockerCacheActive, selectedCacheEndpoints } from "../../../scripts/examples/vm-cache.ts";
 const directories: string[] = [];
+it("does not accept an on-disk cache change until the running daemon reports that exact mirror", () => {
+  expect(dockerCacheActive({ Mirrors: [] }, "http://cache.example:5000/")).toBe(false);
+  expect(dockerCacheActive({ Mirrors: ["http://other.example:5000/"] }, "http://cache.example:5000/")).toBe(false);
+  expect(dockerCacheActive({ Mirrors: ["http://cache.example:5000/"] }, "http://cache.example:5000")).toBe(true);
+});
 afterEach(async () => { await Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 async function temporary() { const path = await mkdtemp(join(tmpdir(), "dim-vm-cache-")); directories.push(path); return path; }
 it("selects public guest endpoints without loading client modules and rewrites only loopback HTTP", () => {

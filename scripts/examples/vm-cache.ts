@@ -3,6 +3,7 @@ import { lstat, open, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
+import { spawnSync } from "node:child_process";
 export const cacheKinds = ["apt", "docker", "npm"] as const;
 export type VmCacheEndpoints = Partial<Record<typeof cacheKinds[number], string>>;
 const dockerBlockedHosts = "127.0.0.1 registry-1.docker.io auth.docker.io";
@@ -71,8 +72,26 @@ export function dockerCacheConfig(current: unknown, endpoints: VmCacheEndpoints)
   if (Object.hasOwn(config, "registry-mirrors") || Object.hasOwn(config, "insecure-registries")) throw new Error("bootstrap refuses pre-existing Docker cache policy");
   return { ...config, "registry-mirrors": [endpoints.docker], ...(new URL(endpoints.docker).protocol === "http:" ? { "insecure-registries": [new URL(endpoints.docker).host] } : {}) };
 }
+export function dockerCacheActive(registry: unknown, endpoint: string): boolean {
+  const mirrors = object(registry).Mirrors;
+  return Array.isArray(mirrors) && mirrors.length === 1 && typeof mirrors[0] === "string"
+    && new URL(mirrors[0]).href === new URL(endpoint).href;
+}
 async function main() {
   const [command, file, output, evidence] = process.argv.slice(2);
+  if (command === "verify-docker" && file) {
+    const { docker } = selectedCacheEndpoints(await publicJson(file));
+    if (!docker) return;
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      const result = spawnSync("/usr/bin/docker", ["info", "--format", "{{json .RegistryConfig}}"], { encoding: "utf8", timeout: 5000 });
+      if (result.status === 0 && dockerCacheActive(JSON.parse(result.stdout), docker)) {
+        console.log("Docker cache reload verified"); return;
+      }
+      await new Promise((done) => setTimeout(done, 200));
+    }
+    throw new Error("Docker did not activate the selected cache after reload");
+  }
   if (command === "prepare" && file && output && evidence) {
     const selected = await discoverVmCaches();
     await writeFile(file, JSON.stringify({ schemaVersion: 1, endpoints: selected.endpoints }), { mode: 0o600, flag: "wx" });
@@ -94,6 +113,6 @@ async function main() {
     if (!hosts.split("\n").includes(dockerBlockedHosts)) await writeFile("/etc/hosts", `${hosts.trimEnd()}\n${dockerBlockedHosts}\n`);
     console.log("configured"); return;
   }
-  throw new Error("usage: vm-cache.ts prepare CATALOG CLOUD_INIT EVIDENCE | docker-config CATALOG DAEMON_CONFIG");
+  throw new Error("usage: vm-cache.ts prepare CATALOG CLOUD_INIT EVIDENCE | docker-config CATALOG DAEMON_CONFIG | verify-docker CATALOG");
 }
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) await main();
