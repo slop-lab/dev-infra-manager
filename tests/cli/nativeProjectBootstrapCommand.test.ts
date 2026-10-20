@@ -12,8 +12,7 @@ import {
   type NativeFixture
 } from "./nativeProjectCommandsFixture.js";
 
-const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../packages/cli", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../packages/host/plugins/native-git", import.meta.url));
 const tsxImport = import.meta.resolve("tsx");
 const runFile = promisify(execFile);
 afterEach(cleanupNativeProjectFixtures);
@@ -21,7 +20,7 @@ afterEach(cleanupNativeProjectFixtures);
 test("native root bootstrap help requires explicit local source and separate operator connections", () => {
   const help = spawnSync(process.execPath, ["--import", tsxImport, "--input-type=module", "-e", "import { runNativeGitCli } from '@slop-lab/dim-host-plugin-native-git/cli'; await runNativeGitCli(['project','repository','import','--help']);"], { cwd: packageDirectory, encoding: "utf8" });
 
-  assert.equal(help.status, 0);
+  assert.equal(help.status, 0, help.stderr);
   for (const option of ["--source <absolute-path>",
     "--ref <full-branch-ref>", "--registrar-connection <absolute-path>",
     "--importer-connection <absolute-path>", "--git-executable <absolute-path>",
