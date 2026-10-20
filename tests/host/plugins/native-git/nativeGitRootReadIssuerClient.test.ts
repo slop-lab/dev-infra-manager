@@ -1,12 +1,13 @@
+import { compileNativeRepositoryBootstrapPolicy } from "@slop-lab/dim-host-plugin-native-git";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/ci/src/http.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/git/src/http.js";
 import { createNativeGitRootReadIssuerClient, createNodeNativeGitRootImporterClient, createNodeNativeGitRootReadIssuerClient, NativeGitRootReadIssuerClientError } from "@slop-lab/dim-host-plugin-native-git";
-import { bundleSecrets } from "../../../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { bundleSecrets } from "../../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import {
   activateFinalizeService,
   cleanupFinalizeFixtures,
@@ -19,7 +20,7 @@ import {
   rootRepository,
   runGit,
   startFinalizeService
-} from "../../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+} from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 
 const run = promisify(execFile);
 const roots: string[] = [];
@@ -56,13 +57,7 @@ describe("native Git root read issuer host client", () => {
     await importerClient.importRepository({
       serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
-      policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-      ciRepositoryIds: ["root"],
-      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
-        requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
-        requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
-        requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
-        requiredReviewerIds: ["owner"], pathReviewerRules: [] },
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
       bundlePath
     }, AbortSignal.timeout(20_000));
     const client = await createNodeNativeGitRootReadIssuerClient(await connection(service.origin));

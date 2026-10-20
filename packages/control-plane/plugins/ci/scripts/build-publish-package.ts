@@ -7,7 +7,7 @@ const version = publishPackageVersion(metadata.version);
 await writeFile(new URL("../dist/package.json", import.meta.url), JSON.stringify({
   name: metadata.name, version, type: "module", license: "MIT", main: "./index.js", types: "./index.d.ts",
   exports: { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } },
-  dependencies: { "@slop-lab/dim-contracts-ci": version, zod: "4.1.11" },
+  dependencies: { "@slop-lab/dim-contracts-ci": version, "@slop-lab/dim-contracts-git": version, zod: "4.1.11" },
   peerDependencies: { "@slop-lab/dim-control-plane-core": version }, engines: { node: "^24.0.0 || ^26.0.0" }, bin: { "dim-ci-service": "./cli.js" }
 }, null, 2) + "\n");
 await copyFile(new URL("../../../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));

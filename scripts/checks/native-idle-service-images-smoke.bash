@@ -23,7 +23,7 @@ docker info >/dev/null
 "$repo_root/scripts/checks/lib/check-installation-docker-version.bash" "$(docker version --format '{{.Server.Version}}')"
 # Callers with a protected, matched build can verify those exact artifacts without cleaning dist.
 if [[ "${DIM_VERIFY_SKIP_BUILD:-0}" != 1 ]]; then
-  pnpm --filter '@slop-lab/dim-control-plane-admin...' --filter '@slop-lab/dim-control-plane-plugin-ci...' --workspace-concurrency=1 run build >/dev/null
+  pnpm --filter '@this-project/control-plane-deployment...' --filter '@slop-lab/dim-control-plane-plugin-ci...' --workspace-concurrency=1 run build >/dev/null
 fi
 node --input-type=module - "$work_dir" <<'JS'
 import { randomBytes } from 'node:crypto';
@@ -43,7 +43,7 @@ for (const [name, source] of [['native', 'native-git'], ['ci', 'ordinary-ci']]) 
 await writeFile(join(root, 'generation'), randomBytes(32).toString('hex'));
 JS
 generation="$(cat "$work_dir/generation")"
-docker build --tag "$native_image" --file packages/control-plane/plugins/native-git/image/Dockerfile . >/dev/null
+docker build --tag "$native_image" --file packages/control-plane/deployment/image/Dockerfile . >/dev/null
 docker build --tag "$ci_image" --file packages/control-plane/plugins/ci/image/Dockerfile . >/dev/null
 docker image inspect --format 'Verified image {{.Id}}' "$native_image" "$ci_image"
 docker network create "$network" >/dev/null
@@ -69,9 +69,11 @@ for container in "$native_container" "$ci_container"; do
   docker exec "$container" node --input-type=module -e '
     import assert from "node:assert/strict";
     import { readdirSync } from "node:fs";
-    const expected = ["dim-contracts-ci", "dim-control-plane-plugin-ci"];
-    if (process.argv[1] === "native") expected.splice(1, 1,
-      "dim-control-plane-core", "dim-control-plane-plugin-ci-workflows", "dim-control-plane-plugin-native-git");
+    const expected = ["dim-contracts-ci", "dim-contracts-git", "dim-control-plane-plugin-ci"];
+    if (process.argv[1] === "native") expected.splice(2, 1,
+      "dim-control-plane-core", "dim-control-plane-admin", "dim-control-plane-plugin-ci-workflows",
+      "dim-control-plane-plugin-git-repositories", "dim-control-plane-plugin-code-review",
+      "dim-control-plane-plugin-merge-policy", "dim-control-plane-plugin-git-ci", "dim-control-plane-plugin-webhooks");
     assert.deepEqual(readdirSync("/usr/local/lib/dim/node_modules/@slop-lab").sort(), expected.sort(),
       "service image must contain only its reviewed control-plane dependency closure");
   ' "$([[ "$container" == "$native_container" ]] && printf native || printf ci)"
@@ -102,7 +104,7 @@ assert.equal(response.status, 200); assert.deepEqual(await response.json(), []);
 JS
 for container in "$native_container" "$ci_container"; do docker stop --time 15 "$container" >/dev/null; done
 for kind in native ci; do
-  if [[ "$kind" == native ]]; then image="$native_image"; state="$native_state"; target=/var/lib/dim-native-git; format=9;
+  if [[ "$kind" == native ]]; then image="$native_image"; state="$native_state"; target=/var/lib/dim-native-git; format=10;
   else image="$ci_image"; state="$ci_state"; target=/var/lib/dim-ordinary-ci; format=102; fi
   compatibility="$(docker run --rm --read-only --network none "$image" compatibility --json)"
   inspected="$(docker run --rm --read-only --network none --tmpfs /tmp:rw,noexec,nosuid,nodev,size=32m \

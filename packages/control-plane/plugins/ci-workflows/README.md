@@ -17,14 +17,15 @@ A job needs a script from the candidate repository. Jobs use Sysbox by default;
 command. Projects install their own tools inside the disposable job. Images,
 resource limits, mounts and credentials belong to trusted host policy.
 
-The managed native Git service supplies `dimWorkflowCompiler`. Library callers
-can inject another `WorkflowCompiler`, including a different configuration path
-or language. Git validates immutable candidate objects and job inputs; workers
+The optional Git CI integration selects the installed compiler extension named `dim`
+(the exported implementation is `dimWorkflowCompiler`). Repository storage and human reviews do not load a compiler by
+themselves. Another `WorkflowCompiler` may use a different configuration path
+or language. Git CI validates immutable candidate objects and job inputs; workers
 verify the resulting blob identities without interpreting workflow syntax.
 
 `repositories` optionally requests a finite subset of the Project's repositories.
 The job's own repository is always included. The imported repository policy's
-`ciRepositoryIds` allowlist authorizes access; candidate YAML cannot widen it.
+`extensions["git-ci"].ciRepositoryIds` allowlist authorizes access; candidate YAML cannot widen it.
 An unknown or unauthorized repository makes the candidate plan invalid.
 
 Review creation freezes each selected repository's exact commit and tree. The
@@ -45,5 +46,6 @@ Install `@slop-lab/dim-control-plane-plugin-ci-workflows` with
 `dim installer install control-plane plugin PACKAGE...` and select it with
 `config: {}` in the standalone runtime configuration. Its `controlPlanePlugin`
 exports the workflow compiler capability only. It does not start a CI coordinator
-or worker and does not depend on DIM core or managed workspaces. Configure exactly
-one compiler when a native Git service requires workflow interpretation.
+or worker and does not depend on host core or workspace storage. Git CI selects
+the compiler extension by name (`dim` by default); the generic control-plane
+runtime only checks declared extension identities.

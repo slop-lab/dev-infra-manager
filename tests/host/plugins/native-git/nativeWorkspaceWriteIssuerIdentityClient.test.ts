@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NativeControlPlaneConnection } from "../../../../packages/host/plugins/native-git/src/nativeControlPlaneConnection.js";
-import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/ci/src/http.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/git/src/http.js";
 import {
   attestNativeWorkspaceWriteIssuer,
   NativeProjectReadinessClientError

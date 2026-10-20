@@ -23,7 +23,8 @@
   },
   "dependencies": {
     "yaml": "2.8.3",
-    "zod": "4.1.11"
+    "zod": "4.1.11",
+    "@slop-lab/dim-contracts-ci": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

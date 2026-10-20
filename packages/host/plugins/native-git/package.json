@@ -35,9 +35,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
     "commander": "14.0.0",
-    "yaml": "2.8.3"
+    "yaml": "2.8.3",
+    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-host-core": "0.10.0"

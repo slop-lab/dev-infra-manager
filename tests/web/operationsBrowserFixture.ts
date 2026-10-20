@@ -7,7 +7,7 @@ import { createReviewerWebServerFromConfigFile } from "../../packages/web/src/se
 import { initializeOperationsWeb } from "../../packages/web/src/initialize.js";
 import { configuredExecutionServer } from "../../packages/control-plane/plugins/ci/src/service.js";
 import { executionServiceConfigSchema } from "../../packages/contracts/ci/src/config.js";
-import { idleOrdinaryConfig } from "../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { idleOrdinaryConfig } from "../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { event, generation, grant, slot, result, hash } from "../contracts/ci/executionFixture.js";
 export async function createOperationsBrowserFixture() {
   const root = await mkdtemp(join(tmpdir(), "dim-operations-browser-"));

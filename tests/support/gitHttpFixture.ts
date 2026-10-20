@@ -5,8 +5,8 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { serveGitBackend } from "../../packages/control-plane/plugins/native-git/src/backend.js";
-import { nativeGitRoute } from "../../packages/control-plane/plugins/native-git/src/routing.js";
+import { serveGitBackend } from "../../packages/control-plane/plugins/git-repositories/src/backend.js";
+import { nativeGitRoute } from "../../packages/control-plane/plugins/git-repositories/src/routing.js";
 
 const run = promisify(execFile);
 const gitExecutable = "/usr/bin/git";

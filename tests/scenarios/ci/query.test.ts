@@ -8,7 +8,7 @@ import { configuredExecutionServer } from "../../../packages/control-plane/plugi
 import { executionServiceConfigSchema } from "../../../packages/contracts/ci/src/config.js";
 import { createCiQueryClient } from "../../../packages/control-plane/admin/src/ci/queryClient.js";
 import { registerCiCommands } from "../../../packages/control-plane/admin/src/cli/ci-commands.js";
-import { idleOrdinaryConfig } from "../../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { idleOrdinaryConfig } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { event, grant, result, generation, slot } from "../../contracts/ci/executionFixture.js";
 const { Command } = createRequire(new URL("../../../packages/control-plane/admin/package.json", import.meta.url))("commander") as { Command: new () => Parameters<typeof registerCiCommands>[0] };
 const cleanup: Array<() => Promise<void>> = [];

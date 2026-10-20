@@ -67,7 +67,7 @@ export class NativeProjectPendingStore {
       const current = await this.read(name, connection.hostId);
       if (!current || current.projectId !== draft.projectId) throw new NativeProjectPendingStoreError("repository import belongs to another Project");
       const candidate = { repositoryId, phase: "ready", protectedRef: draft.protectedRef, commit: draft.expectedCommit, tree: draft.expectedTree,
-        reviewPolicy: draft.reviewPolicy, importReceipt: draft.importReceipt, bundleDigest: draft.bundleDigest, bundleSize: draft.bundleSize,
+        repositoryPolicy: draft.repositoryPolicy, importReceipt: draft.importReceipt, bundleDigest: draft.bundleDigest, bundleSize: draft.bundleSize,
         readyAt: current.repositories[repositoryId]?.readyAt ?? new Date().toISOString() };
       const existing = current.repositories[repositoryId];
       if (existing && !isDeepStrictEqual(existing, candidate)) throw new NativeProjectPendingStoreError("repository replay changes immutable import intent");

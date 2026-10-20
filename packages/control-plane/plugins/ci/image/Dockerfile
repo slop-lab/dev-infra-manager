@@ -6,6 +6,7 @@ COPY packages/control-plane/plugins/ci/image/package.json packages/control-plane
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 
+COPY packages/contracts/git/dist ./node_modules/@slop-lab/dim-contracts-git
 COPY packages/contracts/ci/dist ./node_modules/@slop-lab/dim-contracts-ci
 COPY packages/control-plane/plugins/ci/dist ./node_modules/@slop-lab/dim-control-plane-plugin-ci
 COPY packages/control-plane/plugins/ci/image/dim-service /usr/local/bin/dim-service

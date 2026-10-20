@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { nativeGitExecutionSource } from "../../../packages/control-plane/plugins/ci/src/source.js";
-import { nativeBundleReviewFixture, createBundleReview, reviewProposalRef, reviewWorkspaceId, addCandidateCommit } from "../../control-plane/plugins/native-git/nativeBundleReviewFixture.js";
-import { authoritativePolicy } from "../../control-plane/plugins/native-git/authoritativeNativeCandidateFixture.js";
+import { nativeBundleReviewFixture, createBundleReview, reviewProposalRef, reviewWorkspaceId, addCandidateCommit } from "../../control-plane/plugins/git-ci/nativeBundleReviewFixture.js";
+import { authoritativePolicy } from "../../control-plane/plugins/git-repositories/authoritativeNativeCandidateFixture.js";
 import { createRootBundle, createFinalizeRoot, uploadRootBundle, parseImportReceipt, finalizeRootImport,
   importer, projectInput, generationId, humanReviewerAuthorization, hostPromoterAuthorization,
-  workspaceWriteIssuerAuthorization, runGit } from "../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
-import { idleNativeConfig } from "../../control-plane/plugins/native-git/bundleConfigFixture.js";
+  workspaceWriteIssuerAuthorization, runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
+import { idleNativeConfig } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { assignment } from "../../contracts/ci/executionFixture.js";
 
 /** Fresh actual Git repositories and authority per scenario, without test-order state. */

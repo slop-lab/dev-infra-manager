@@ -17,7 +17,7 @@ export type NativeRootBootstrapGitInput = {
   readonly repositoryId: string;
   readonly scratchRoot: string;
   readonly policySource: { readonly kind: "reviewed-manifest" }
-    | { readonly kind: "manifest-free"; readonly review: unknown };
+    | { readonly kind: "manifest-free"; readonly extensions?: unknown };
   readonly signal: AbortSignal;
 };
 
@@ -85,7 +85,7 @@ export async function prepareNativeRootBootstrapGit(
     }
     case "manifest-free":
       policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: input.repositoryId,
-        protectedRef: input.selectedRef, review: input.policySource.review });
+        protectedRef: input.selectedRef, extensions: input.policySource.extensions });
       break;
     default: {
       const exhaustive: never = input.policySource;

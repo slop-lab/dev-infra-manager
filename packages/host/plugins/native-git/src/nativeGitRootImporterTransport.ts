@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { pipeline } from "node:stream/promises";
-import type { NativeGitAdmissionHttpResponse } from "@slop-lab/dim-contracts-ci/http";
+import type { NativeGitAdmissionHttpResponse } from "@slop-lab/dim-contracts-git/http";
 import type { NativeGitRootImporterConnection } from "./nativeGitRootImporterConnection.js";
 
 const maximumBodyBytes = 256 * 1024 * 1024;

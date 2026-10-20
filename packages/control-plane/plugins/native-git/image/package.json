@@ -1,9 +1,0 @@
-{
-  "name": "@this-project/native-git-image",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "yaml": "2.8.3",
-    "zod": "4.1.11"
-  }
-}

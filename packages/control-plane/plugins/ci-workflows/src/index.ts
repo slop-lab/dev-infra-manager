@@ -1,3 +1,4 @@
+import { workflowCompilerExtension, DEFAULT_WORKFLOW_COMPILER } from "@slop-lab/dim-contracts-ci/workflow";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
 import { isScalar, parseDocument, visit } from "yaml";
 import { z } from "zod";
@@ -95,6 +96,6 @@ export const controlPlanePlugin: ControlPlanePlugin = {
   name: "ci-workflows",
   configure(raw) {
     z.object({}).strict().parse(raw);
-    return { workflowCompiler: dimWorkflowCompiler, async start() { return { async close() {} }; } };
+    return { extensions: [workflowCompilerExtension(DEFAULT_WORKFLOW_COMPILER, dimWorkflowCompiler)], async start() { return { async close() {} }; } };
   }
 };

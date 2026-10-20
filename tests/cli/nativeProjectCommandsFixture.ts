@@ -1,3 +1,4 @@
+import { managedPolicyExtensions } from "../support/git-policy.js";
 import assert from "node:assert/strict";
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { execFile, spawn } from "node:child_process";
@@ -8,10 +9,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createNodeNativeGitRootImporterClient, NativeProjectDraftStore, NativeProjectPendingStore, parseNativeControlPlaneConnection } from "@slop-lab/dim-host-plugin-native-git";
 import { compileNativeRepositoryBootstrapPolicy } from "../../packages/host/plugins/native-git/src/nativeRootBootstrapPolicy.js";
-import { parseNativeGitBundleConfig } from "../../packages/control-plane/plugins/native-git/src/bundle-config.js";
-import { configuredNativeGitBundleServer,
-  type NativeGitBundleServer } from "../../packages/control-plane/plugins/native-git/src/native-bundle-server.js";
-import { bundleSecrets, idleNativeConfig } from "../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
+import { configuredManagedGitFixture,
+  type ManagedGitFixture } from "../support/managed-git-service.js";
+import { bundleSecrets, idleNativeConfig } from "../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { prepareNativeProjectFixtureRootForRemoval } from "./nativeProjectFixtureCleanup.js";
 import type { NativeFixture, NativeFixtureOptions } from "./nativeProjectCommandsFixtureTypes.js";
 
@@ -22,7 +23,7 @@ const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.u
 const packageDirectory = fileURLToPath(new URL("../../packages/cli", import.meta.url));
 const tsxImport = createRequire(import.meta.url).resolve("tsx");
 const roots: string[] = [];
-const services: NativeGitBundleServer[] = [];
+const services: ManagedGitFixture[] = [];
 const generationId = "a".repeat(64);
 const nextGenerationId = "b".repeat(64);
 const activationToken = Buffer.alloc(32, 42).toString("base64url");
@@ -30,8 +31,7 @@ const nextActivationToken = Buffer.alloc(32, 43).toString("base64url");
 const importer = { hostId: "host-a", username: "project-root-importer-a",
   password: bundleSecrets.projectRootImporter } as const;
 const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main",
-  review: { requiredReviewerIds: ["owner"], pathReviewerRules: [],
-    requiredJobs: [], ciRepositoryIds: ["root"] } });
+  extensions: managedPolicyExtensions() });
 
 export async function cleanupNativeProjectFixtures(): Promise<void> {
   await Promise.all(services.splice(0).map((service) => service.close()));
@@ -81,7 +81,7 @@ export async function nativeFixture(options: NativeFixtureOptions = {}): Promise
     const client = await createNodeNativeGitRootImporterClient(importerPath);
     const receipt = await client.importRepository({ serviceId: "native-main", projectId: "project-a",
       repositoryId: "root", protectedRef: policy.protectedRef, expectedCommit: bundle.commit,
-      policy: policy.reviewPolicy, bundlePath }, AbortSignal.timeout(20_000));
+      policy: policy.repositoryPolicy, bundlePath }, AbortSignal.timeout(20_000));
     const drafts = new NativeProjectDraftStore(stateRoot);
     await drafts.claim({ name: "acme", projectId: "project-a", ownerHostId: importer.hostId,
       generationId, expectedCommit: bundle.commit, expectedTree: bundle.tree, bundlePath, ...policy });
@@ -173,9 +173,9 @@ async function startNativeGit(
   const configuration = idleNativeConfig();
   const { stdout: gitIdentity } = await runFile(configuration.gitExecutable, ["--version"]);
   const gitVersion = gitIdentity.trim().replace(/^git version /, "");
-  const service = await configuredNativeGitBundleServer({
+  const service = await configuredManagedGitFixture({
     workflowCompiler: dimWorkflowCompiler,
-    config: parseNativeGitBundleConfig({ ...configuration, gitVersion,
+    config: parseManagedGitServiceConfig({ ...configuration, gitVersion,
       projectRegistrars: [{ hostId: "host-a", username: "registrar-a",
         password: bundleSecrets.projectRegistrar }],
       projectRootImporters: [importer],

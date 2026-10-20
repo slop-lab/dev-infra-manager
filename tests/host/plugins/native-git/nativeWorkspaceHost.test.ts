@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceStore, type WorkspaceRecord, type WorkspaceRuntime, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import { createManagedWorkspace } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceHost.js";
 import { nativeWorkspaceAttachmentFile, readNativeWorkspaceAttachment } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
-import { cleanupFinalizeFixtures } from "../../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { managedProjectFixture } from "./nativeProjectIntegrationFixture.js";
 
 vi.mock("../../../../packages/host/plugins/native-git/src/nativeWorkspaceBrokerProcess.js", () => ({ ensureNativeWorkspaceBroker: vi.fn(async () => {}) }));

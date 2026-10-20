@@ -43,11 +43,6 @@
       "import": "./dist/connections.js",
       "default": "./dist/connections.js"
     },
-    "./http": {
-      "types": "./src/http.ts",
-      "import": "./dist/http.js",
-      "default": "./dist/http.js"
-    },
     "./workflow": {
       "types": "./src/workflow.ts",
       "import": "./dist/workflow.js",

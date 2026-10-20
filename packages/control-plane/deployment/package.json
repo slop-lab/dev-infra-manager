@@ -1,0 +1,43 @@
+{
+  "name": "@this-project/control-plane-deployment",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./deployment-cli": {
+      "types": "./src/deployment-cli.ts",
+      "import": "./dist/deployment-cli.js",
+      "default": "./dist/deployment-cli.js"
+    }
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "node ../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-package.ts"
+  },
+  "dependencies": {
+    "@slop-lab/dim-control-plane-core": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-code-review": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-merge-policy": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-ci": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-webhooks": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-ci-workflows": "workspace:0.10.0",
+    "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-admin": "workspace:0.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  }
+}

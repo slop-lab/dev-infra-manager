@@ -6,15 +6,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/ci/src/http.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/git/src/http.js";
 import {
   createNativeGitProjectRegistrarClient,
   createNodeNativeGitProjectRegistrarClient,
   NativeGitProjectRegistrarClientError
 } from "../../../../packages/host/plugins/native-git/src/nativeGitProjectRegistrarClient.js";
-import { parseNativeGitBundleConfig } from "../../../../packages/control-plane/plugins/native-git/src/bundle-config.js";
-import { configuredNativeGitBundleServer, type NativeGitBundleServer } from "../../../../packages/control-plane/plugins/native-git/src/native-bundle-server.js";
-import { idleNativeConfig } from "../../../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
+import { configuredManagedGitFixture, type ManagedGitFixture } from "../../../support/managed-git-service.js";
+import { idleNativeConfig } from "../../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 
 const run = promisify(execFile);
 const generationId = "a".repeat(64);
@@ -22,7 +22,7 @@ const registrarPassword = Buffer.alloc(32, 72).toString("base64url");
 const unissuedPassword = Buffer.alloc(32, 73).toString("base64url");
 const registrar = { hostId: "host-a", username: "project-registrar-a", password: registrarPassword } as const;
 const roots: string[] = [];
-const services: NativeGitBundleServer[] = [];
+const services: ManagedGitFixture[] = [];
 const servers: Server[] = [];
 
 afterEach(async () => {
@@ -142,8 +142,8 @@ describe("native Git Project registrar client", () => {
 
 async function startNativeGit() {
   const root = await temporaryRoot("dim-native-registrar-client-service-");
-  const service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
-    config: parseNativeGitBundleConfig({ ...idleNativeConfig(), projectRegistrars: [registrar] }),
+  const service = await configuredManagedGitFixture({ workflowCompiler: dimWorkflowCompiler,
+    config: parseManagedGitServiceConfig({ ...idleNativeConfig(), projectRegistrars: [registrar] }),
     stateDirectory: root,
     readinessToken: Buffer.alloc(32, 74).toString("base64url"),
     activationToken: Buffer.alloc(32, 75).toString("base64url"),

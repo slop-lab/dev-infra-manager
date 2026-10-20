@@ -13,9 +13,9 @@ const roots: string[] = [];
 const run = promisify(execFile);
 const bundleBytes = Buffer.from("private native root bundle\n", "utf8");
 const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main",
-  review: { ciRepositoryIds: ["root"], requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [
-    { name: "source", kind: "ordinary-sysbox" }, { name: "integration", kind: "qemu" }
-  ] } });
+  extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, "git-ci": { ciRepositoryIds: ["root"], requiredJobs: [
+    { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }, { name: "integration", kind: "qemu", evidenceClass: "candidate-controlled" }
+  ] }, "merge-policy": {} } });
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -36,7 +36,7 @@ function receipt(claim: NativeProjectDraftClaim): NativeGitRootImportResult {
     repositoryId: "root", generationId: claim.generationId,
     importNonce: "00000000-0000-4000-8000-000000000000", protectedRef: claim.protectedRef,
     expectedCommit: claim.expectedCommit,
-    policyDigest: createHash("sha256").update(JSON.stringify(claim.reviewPolicy)).digest("hex"),
+    policyDigest: createHash("sha256").update(JSON.stringify(claim.repositoryPolicy)).digest("hex"),
     bundleDigest: createHash("sha256").update(bundleBytes).digest("hex"), bundleSize: bundleBytes.length,
     resolvedTree: claim.expectedTree, phase: "repository-imported" };
 }

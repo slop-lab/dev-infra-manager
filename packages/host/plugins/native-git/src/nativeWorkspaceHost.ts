@@ -122,7 +122,7 @@ export async function ensureManagedWorkspace(record: WorkspaceRecord, context: M
 }
 function binding(proof: NativeProjectReadinessProof): NativeWorkspaceRepositoryProof {
   return { repositoryId: proof.repositoryId, protectedRef: proof.protectedRef, commit: proof.commit, tree: proof.tree,
-    policyRevision: proof.policyRevision, requiredReviewRevision: proof.requiredReviewRevision, requiredJobSetRevision: proof.requiredJobSetRevision };
+    policyRevision: proof.policyRevision };
 }
 function privateAddress(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d+\.\d+\.\d+\.\d+$/.test(value)) return false;

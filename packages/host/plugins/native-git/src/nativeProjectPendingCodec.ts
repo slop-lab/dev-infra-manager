@@ -9,7 +9,7 @@ export interface NativeProjectRepositoryRecord {
   readonly protectedRef: string;
   readonly commit: string;
   readonly tree: string;
-  readonly reviewPolicy: NativeRepositoryBootstrapPolicy["reviewPolicy"];
+  readonly repositoryPolicy: NativeRepositoryBootstrapPolicy["repositoryPolicy"];
   readonly importReceipt: NativeGitRootImportResult;
   readonly bundleDigest: string;
   readonly bundleSize: number;
@@ -51,17 +51,17 @@ export function parseNativeProjectPendingRecord(input: unknown): NativeProjectRe
     const repositories: Record<string, NativeProjectRepositoryRecord> = {};
     for (const [repositoryId, entry] of Object.entries(entries)) {
       const repository = object(entry);
-      exact(repository, ["repositoryId", "phase", "protectedRef", "commit", "tree", "reviewPolicy", "importReceipt", "bundleDigest", "bundleSize", "readyAt"]);
+      exact(repository, ["repositoryId", "phase", "protectedRef", "commit", "tree", "repositoryPolicy", "importReceipt", "bundleDigest", "bundleSize", "readyAt"]);
       if (repository.repositoryId !== repositoryId || repository.phase !== "ready" || !timestamp(repository.readyAt)) invalid();
       const receipt = object(repository.importReceipt);
       const draft = parseNativeProjectDraft({ schemaVersion: 3, recordType: "native-project-draft", phase: "repository-imported",
         name, projectId: value.projectId, serviceId: "native-main", ownerHostId: value.ownerHostId,
         generationId: receipt.generationId, repositoryId, protectedRef: repository.protectedRef,
-        expectedCommit: repository.commit, expectedTree: repository.tree, reviewPolicy: repository.reviewPolicy,
+        expectedCommit: repository.commit, expectedTree: repository.tree, repositoryPolicy: repository.repositoryPolicy,
         bundleDigest: repository.bundleDigest, bundleSize: repository.bundleSize, importReceipt: repository.importReceipt });
       if (draft.phase !== "repository-imported") invalid();
       repositories[repositoryId] = { repositoryId, phase: "ready", protectedRef: draft.protectedRef, commit: draft.expectedCommit, tree: draft.expectedTree,
-        reviewPolicy: draft.reviewPolicy, importReceipt: draft.importReceipt, bundleDigest: draft.bundleDigest, bundleSize: draft.bundleSize, readyAt: repository.readyAt };
+        repositoryPolicy: draft.repositoryPolicy, importReceipt: draft.importReceipt, bundleDigest: draft.bundleDigest, bundleSize: draft.bundleSize, readyAt: repository.readyAt };
     }
     const common: ProjectIdentity = { schemaVersion: 7, recordType: "native-project", name, projectId: value.projectId,
       serviceId: "native-main", ownerHostId: value.ownerHostId, repositories };

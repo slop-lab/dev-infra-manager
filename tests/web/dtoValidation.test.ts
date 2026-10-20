@@ -12,7 +12,9 @@ describe("authoritative review browser DTO", () => {
     const raw = await response.json() as Record<string, unknown>;
     const review = raw.review as Record<string, unknown>;
     const changes = review.changes as Record<string, unknown>[];
-    expect(reviewDto(raw)).toMatchObject({ schemaVersion: 2, repositoryId: "root", qualityRevision: raw.qualityRevision });
+    expect(raw.schemaVersion).toBe(3);
+    expect(reviewDto(raw)).toMatchObject({ schemaVersion: 2, repositoryId: "root", policyRevision: review.policyRevision });
+    expect(reviewDto(raw)).not.toHaveProperty("qualityRevision");
     for (const updated of [
       { ...review, protectedRef: "refs/heads/main\nforged" },
       { ...review, patch: `${String(review.patch)}\u0000` },

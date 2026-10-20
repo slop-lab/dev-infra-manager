@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { bootstrapNativeProjectRepository, NativeProjectBootstrapError, NativeProjectDraftStore, NativeProjectPendingStore } from "@slop-lab/dim-host-plugin-native-git";
-import { bundleSecrets } from "../../../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { bundleSecrets } from "../../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot,
   activateFinalizeServiceForGeneration, activationTokenB, closeFinalizeService, generationB,
   generationId, importer, rootRepository, startFinalizeService, startFinalizeServiceForGeneration
-} from "../../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+} from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 
 const run = promisify(execFile);
 const roots: string[] = [];
@@ -30,13 +30,14 @@ async function fixture(change: Readonly<Record<string, unknown>> = {}) {
   await writeFile(join(sourceRepository, ".dim/repos.yml"), `schemaVersion: 1
 repositories:
   root: {url: https://example.test/root.git, root: true, ref: main, protect: [main]}
-nativeReview:
-  ciRepositoryIds: [root]
-  requiredReviewerIds: [owner]
-  pathReviewerRules: []
-  requiredJobs:
-    - {name: source, kind: ordinary-sysbox}
-    - {name: integration, kind: qemu}
+policy:
+  code-review: {requiredReviewerIds: [owner], pathReviewerRules: []}
+  git-ci:
+    ciRepositoryIds: [root]
+    requiredJobs:
+      - {name: source, kind: ordinary-sysbox, evidenceClass: candidate-controlled}
+      - {name: integration, kind: qemu, evidenceClass: candidate-controlled}
+  merge-policy: {}
 `);
   await writeFile(join(sourceRepository, "README.md"), "pinned bootstrap\n");
   await run("/usr/bin/git", ["-C", sourceRepository, "add", "."]);
@@ -71,7 +72,7 @@ describe("trusted native Project bootstrap", () => {
       generationId, phase: "repository-imported", importReceipt: { phase: "repository-imported" } });
     expect(imported.schemaVersion).toBe(3);
     if (imported.schemaVersion !== 3) throw new Error("fresh native draft did not use schema 2");
-    expect(imported.reviewPolicy.requiredJobs.map(({ kind }) => kind)).toEqual(["qemu", "ordinary-sysbox"]);
+    expect(imported.repositoryPolicy.extensions["git-ci"]).toMatchObject({ requiredJobs: [{ kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }, { kind: "qemu", evidenceClass: "candidate-controlled" }] });
     expect(await new NativeProjectDraftStore(root).read("acme", "root")).toEqual(imported);
     expect((await run("/usr/bin/git", ["--git-dir", rootRepository(state), "rev-parse",
       "refs/heads/main"])).stdout.trim()).toBe(imported.expectedCommit);

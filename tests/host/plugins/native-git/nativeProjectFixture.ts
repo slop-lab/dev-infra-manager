@@ -6,10 +6,10 @@ import type { NativeWorkspaceAttachment, NativeWorkspaceRepositoryProof } from "
 
 export function repositoryRecord(repositoryId = "public"): NativeProjectRepositoryRecord {
   const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId, protectedRef: "refs/heads/main",
-    review: { ciRepositoryIds: [repositoryId], requiredReviewerIds: ["owner"], requiredJobs: [], pathReviewerRules: [] } }).reviewPolicy;
+    extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, "git-ci": { ciRepositoryIds: [repositoryId], requiredJobs: [] }, "merge-policy": {} } }).repositoryPolicy;
   const digest = (value: string) => createHash("sha256").update(value).digest("hex");
   const commit = digest(`${repositoryId}-commit`).slice(0, 40), tree = digest(`${repositoryId}-tree`).slice(0, 40);
-  return { repositoryId, phase: "ready", protectedRef: "refs/heads/main", commit, tree, reviewPolicy: policy,
+  return { repositoryId, phase: "ready", protectedRef: "refs/heads/main", commit, tree, repositoryPolicy: policy,
     bundleDigest: digest(repositoryId), bundleSize: 123, readyAt: "2026-10-19T00:00:00.000Z",
     importReceipt: { schemaVersion: 1, serviceId: "native-main", projectId: "project-a", repositoryId,
       generationId: "a".repeat(64), importNonce: "00000000-0000-4000-8000-000000000000", protectedRef: "refs/heads/main",
@@ -22,8 +22,7 @@ export function projectRecord(ids: readonly string[] = ["public", "private"]): N
 }
 export function repositoryBinding(repository: NativeProjectRepositoryRecord): NativeWorkspaceRepositoryProof {
   return { repositoryId: repository.repositoryId, protectedRef: repository.protectedRef, commit: repository.commit, tree: repository.tree,
-    policyRevision: repository.reviewPolicy.policyRevision, requiredReviewRevision: repository.reviewPolicy.requiredReviewRevision,
-    requiredJobSetRevision: repository.reviewPolicy.requiredJobSetRevision };
+    policyRevision: repository.repositoryPolicy.policyRevision };
 }
 export function attachmentRecord(root: string, workspaceId: string, workspaceName = "development"): NativeWorkspaceAttachment {
   const repository = repositoryRecord("public");

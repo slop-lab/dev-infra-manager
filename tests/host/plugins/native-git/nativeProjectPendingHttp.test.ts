@@ -1,7 +1,7 @@
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { cleanupFinalizeFixtures } from "../../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { bootstrapNativeProjectRepository } from "../../../../packages/host/plugins/native-git/src/nativeProjectBootstrap.js";
 import { NativeProjectPendingStore } from "../../../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js";
 import { managedProjectFixture } from "./nativeProjectIntegrationFixture.js";

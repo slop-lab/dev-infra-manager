@@ -666,8 +666,8 @@ describe("@slop-lab/dim-installer", () => {
         { name: "@slop-lab/dim-host-core", file: "core.tgz", version, requires: {} },
         { name: "@slop-lab/dim-cli", file: "cli.tgz", version, requires: { "@slop-lab/dim-host-core": version } },
         { name: "@slop-lab/dim-contracts-external-url", file: "contract.tgz", version, requires: {} },
-        { name: "@slop-lab/dim-control-plane-plugin-native-git", file: "native-git.tgz", version, requires: { "@slop-lab/dim-contracts-external-url": version } },
-        { name: "@slop-lab/dim-control-plane-admin", file: "managed.tgz", version, requires: { "@slop-lab/dim-host-core": version, "@slop-lab/dim-control-plane-plugin-native-git": version } },
+        { name: "@slop-lab/dim-control-plane-plugin-git-repositories", file: "native-git.tgz", version, requires: { "@slop-lab/dim-contracts-external-url": version } },
+        { name: "@slop-lab/dim-control-plane-admin", file: "managed.tgz", version, requires: { "@slop-lab/dim-host-core": version, "@slop-lab/dim-control-plane-plugin-git-repositories": version } },
         { name: "@slop-lab/dim-host-plugin-mirrors", file: "mirrors.tgz", version, requires: { "@slop-lab/dim-host-core": version } },
         { name: "@slop-lab/dim-installer", file: "installer.tgz", version, requires: {} }
       ];
@@ -691,7 +691,7 @@ describe("@slop-lab/dim-installer", () => {
       const selected = await readLocalPackageBundle(root, ["@slop-lab/dim-control-plane-admin"]);
       expect(selected.packageNames).toEqual([
         "@slop-lab/dim-host-core", "@slop-lab/dim-cli", "@slop-lab/dim-contracts-external-url",
-        "@slop-lab/dim-control-plane-plugin-native-git", "@slop-lab/dim-control-plane-admin"
+        "@slop-lab/dim-control-plane-plugin-git-repositories", "@slop-lab/dim-control-plane-admin"
       ]);
       expect(selected.packageSpecifiers).not.toContain(join(root, "mirrors.tgz"));
       expect(selected.packageSpecifiers).not.toContain(join(root, "installer.tgz"));
@@ -706,10 +706,10 @@ describe("@slop-lab/dim-installer", () => {
 
     it("rejects selected missing or version-mismatched dependencies instead of falling back to a registry", async () => {
       const { root, entries, publish } = await bundleFixture();
-      await publish(entries.filter(({ name }) => name !== "@slop-lab/dim-control-plane-plugin-native-git"));
+      await publish(entries.filter(({ name }) => name !== "@slop-lab/dim-control-plane-plugin-git-repositories"));
       await expect(readLocalPackageBundle(root, ["@slop-lab/dim-control-plane-admin"])).rejects.toThrow(/requires missing bundle package/);
       await expect(readLocalPackageBundle(root)).resolves.toMatchObject({ packageNames: ["@slop-lab/dim-host-core", "@slop-lab/dim-cli"] });
-      await publish(entries.map((entry) => entry.name === "@slop-lab/dim-control-plane-plugin-native-git" ? { ...entry, version: "0.9.0" } : entry));
+      await publish(entries.map((entry) => entry.name === "@slop-lab/dim-control-plane-plugin-git-repositories" ? { ...entry, version: "0.9.0" } : entry));
       await expect(readLocalPackageBundle(root, ["@slop-lab/dim-control-plane-admin"])).rejects.toThrow(/requires .*but the bundle contains/);
       await expect(readLocalPackageBundle(root, ["missing-plugin"])).rejects.toThrow(/does not contain required package 'missing-plugin'/);
     });

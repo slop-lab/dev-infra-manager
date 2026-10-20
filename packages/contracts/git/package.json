@@ -1,0 +1,45 @@
+{
+  "name": "@slop-lab/dim-contracts-git",
+  "version": "0.10.0",
+  "description": "Neutral repository selectors, snapshots and trusted import policy declarations",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
+    "directory": "packages/contracts/git"
+  },
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./src/http.ts",
+      "import": "./dist/http.js",
+      "default": "./dist/http.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "pack:dry-run": "pnpm run build && bash ../../../scripts/packages/pnpm-pack-dry-run.bash ./dist"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  },
+  "dependencies": {
+    "zod": "4.1.11"
+  }
+}

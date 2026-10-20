@@ -55,14 +55,39 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/contracts/git:
+    dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/control-plane/admin:
     dependencies:
       '@slop-lab/dim-contracts-ci':
         specifier: workspace:0.10.0
         version: link:../../contracts/ci
-      '@slop-lab/dim-control-plane-plugin-native-git':
+      '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
-        version: link:../plugins/native-git
+        version: link:../../contracts/git
+      '@slop-lab/dim-control-plane-plugin-code-review':
+        specifier: workspace:0.10.0
+        version: link:../plugins/code-review
+      '@slop-lab/dim-control-plane-plugin-git-ci':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-ci
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-repositories
+      '@slop-lab/dim-control-plane-plugin-merge-policy':
+        specifier: workspace:0.10.0
+        version: link:../plugins/merge-policy
       '@slop-lab/dim-host-core':
         specifier: workspace:0.10.0
         version: link:../../host/core
@@ -92,11 +117,51 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/control-plane/deployment:
+    dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/ci
+      '@slop-lab/dim-control-plane-admin':
+        specifier: workspace:0.10.0
+        version: link:../admin
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../core
+      '@slop-lab/dim-control-plane-plugin-ci-workflows':
+        specifier: workspace:0.10.0
+        version: link:../plugins/ci-workflows
+      '@slop-lab/dim-control-plane-plugin-code-review':
+        specifier: workspace:0.10.0
+        version: link:../plugins/code-review
+      '@slop-lab/dim-control-plane-plugin-git-ci':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-ci
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-repositories
+      '@slop-lab/dim-control-plane-plugin-merge-policy':
+        specifier: workspace:0.10.0
+        version: link:../plugins/merge-policy
+      '@slop-lab/dim-control-plane-plugin-webhooks':
+        specifier: workspace:0.10.0
+        version: link:../plugins/webhooks
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/control-plane/plugins/ci:
     dependencies:
       '@slop-lab/dim-contracts-ci':
         specifier: workspace:0.10.0
         version: link:../../../contracts/ci
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/git
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -113,9 +178,81 @@ importers:
 
   packages/control-plane/plugins/ci-workflows:
     dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/ci
       yaml:
         specifier: 2.8.3
         version: 2.8.3
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/code-review:
+    dependencies:
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/git
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../git-repositories
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/git-ci:
+    dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/ci
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/git
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@slop-lab/dim-control-plane-plugin-code-review':
+        specifier: workspace:0.10.0
+        version: link:../code-review
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../git-repositories
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/git-repositories:
+    dependencies:
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/git
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -143,14 +280,33 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/control-plane/plugins/native-git:
+  packages/control-plane/plugins/merge-policy:
     dependencies:
-      '@slop-lab/dim-contracts-ci':
+      '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
-        version: link:../../../contracts/ci
-      '@slop-lab/dim-control-plane-plugin-ci-workflows':
+        version: link:../../../contracts/git
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
-        version: link:../ci-workflows
+        version: link:../../core
+      '@slop-lab/dim-control-plane-plugin-code-review':
+        specifier: workspace:0.10.0
+        version: link:../code-review
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../git-repositories
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/webhooks:
+    dependencies:
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -161,9 +317,6 @@ importers:
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
       typescript:
         specifier: 5.8.3
         version: 5.8.3
@@ -213,6 +366,9 @@ importers:
       '@slop-lab/dim-contracts-ci':
         specifier: workspace:0.10.0
         version: link:../../../contracts/ci
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/git
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -294,9 +450,9 @@ importers:
 
   packages/host/plugins/native-git:
     dependencies:
-      '@slop-lab/dim-contracts-ci':
+      '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
-        version: link:../../../contracts/ci
+        version: link:../../../contracts/git
       commander:
         specifier: 14.0.0
         version: 14.0.0

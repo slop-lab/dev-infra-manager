@@ -1,11 +1,10 @@
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
-import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
+import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import type { NativeProjectRecord } from "./nativeProjectPendingCodec.js";
 
 const responseFields = ["schemaVersion", "serviceId", "ownerHostId", "projectId", "repositoryId",
-  "generationId", "protectedRef", "commit", "tree", "policyRevision", "requiredReviewRevision",
-  "requiredJobSetRevision"] as const;
+  "generationId", "protectedRef", "commit", "tree", "policyRevision"] as const;
 const issuerIdentityFields = ["schemaVersion", "serviceId", "role", "hostId", "generationId"] as const;
 
 export type NativeProjectReadinessProof = {
@@ -19,8 +18,6 @@ export type NativeProjectReadinessProof = {
   readonly commit: string;
   readonly tree: string;
   readonly policyRevision: string;
-  readonly requiredReviewRevision: string;
-  readonly requiredJobSetRevision: string;
 };
 
 export class NativeProjectReadinessClientError extends Error {
@@ -79,9 +76,7 @@ export async function proveNativeProjectReadiness(
       protectedRef: repository.protectedRef,
       commit: selected.commit,
       tree: selected.tree,
-      policyRevision: repository.reviewPolicy.policyRevision,
-      requiredReviewRevision: repository.reviewPolicy.requiredReviewRevision,
-      requiredJobSetRevision: repository.reviewPolicy.requiredJobSetRevision
+      policyRevision: repository.repositoryPolicy.policyRevision
     }),
     signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)])
   });
@@ -90,18 +85,14 @@ export async function proveNativeProjectReadiness(
     || proof.ownerHostId !== connection.hostId || proof.projectId !== record.projectId
     || proof.repositoryId !== repositoryId || proof.generationId !== generationId
     || proof.protectedRef !== repository.protectedRef || !objectId(proof.commit)
-    || !objectId(proof.tree) || proof.policyRevision !== repository.reviewPolicy.policyRevision
-    || proof.requiredReviewRevision !== repository.reviewPolicy.requiredReviewRevision
-    || proof.requiredJobSetRevision !== repository.reviewPolicy.requiredJobSetRevision
+    || !objectId(proof.tree) || proof.policyRevision !== repository.repositoryPolicy.policyRevision
     || (selected.allowFastForward !== true
       && (proof.commit !== selected.commit || proof.tree !== selected.tree))) invalid();
   return {
     schemaVersion: 1, serviceId: "native-main", ownerHostId: connection.hostId,
     projectId: record.projectId, repositoryId, generationId,
     protectedRef: repository.protectedRef, commit: proof.commit, tree: proof.tree,
-    policyRevision: repository.reviewPolicy.policyRevision,
-    requiredReviewRevision: repository.reviewPolicy.requiredReviewRevision,
-    requiredJobSetRevision: repository.reviewPolicy.requiredJobSetRevision
+    policyRevision: repository.repositoryPolicy.policyRevision
   };
 }
 

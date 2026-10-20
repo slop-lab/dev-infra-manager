@@ -49,7 +49,7 @@ async function imported(root: string, repositoryId: string): Promise<NativeGitRo
   const receipt = { ...repository.importReceipt, bundleDigest: digest, bundleSize: bytes.length };
   const drafts = new NativeProjectDraftStore(root);
   await drafts.claim({ name: "acme", projectId: "project-a", repositoryId, ownerHostId: "host-a", generationId: "a".repeat(64),
-    protectedRef: repository.protectedRef, expectedCommit: repository.commit, expectedTree: repository.tree, reviewPolicy: repository.reviewPolicy, bundlePath });
+    protectedRef: repository.protectedRef, expectedCommit: repository.commit, expectedTree: repository.tree, repositoryPolicy: repository.repositoryPolicy, bundlePath });
   await drafts.markRepositoryImported("acme", repositoryId, receipt);
   return { hostId: "host-a", generationId: "a".repeat(64), async attest() {}, async importRepository() { throw new Error("admission must not re-import"); },
     async proveRepository(projectId, selected) {

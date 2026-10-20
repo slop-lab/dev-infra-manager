@@ -1,4 +1,4 @@
-import { parseAuthoritativeNativeReviewEnvelope } from "../../../packages/control-plane/plugins/native-git/src/authoritative-native-review-schema.js";
+import { parseAuthoritativeNativeReviewEnvelope } from "../../../packages/control-plane/plugins/code-review/src/authoritative-native-review-schema.js";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,8 +7,8 @@ import { StaleExecutionSourceError } from "../../../packages/control-plane/plugi
 import { executionCandidateCredential } from "../../../packages/host/plugins/ci-worker/src/candidateLease.js";
 import { withNativeGitExecutionReadAuthority } from "../../../packages/host/plugins/ci-worker/src/nativeGitCandidateReadAuthority.js";
 import { verifyAndMaterializeCandidate } from "../../../packages/host/plugins/ci-worker/src/candidate.js";
-import { createBundleReview, reviewProposalRef, addCandidateCommit } from "../../control-plane/plugins/native-git/nativeBundleReviewFixture.js";
-import { cleanupFinalizeFixtures, createFinalizeRoot, generationId, humanReviewerAuthorization, runGit } from "../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+import { createBundleReview, reviewProposalRef, addCandidateCommit } from "../../control-plane/plugins/git-ci/nativeBundleReviewFixture.js";
+import { cleanupFinalizeFixtures, createFinalizeRoot, generationId, humanReviewerAuthorization, runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { multiRepositoryExecutionFixture, type MultiRepositoryExecutionFixture } from "./multiRepositoryExecutionFixture.js";
 
 let fixture: MultiRepositoryExecutionFixture;

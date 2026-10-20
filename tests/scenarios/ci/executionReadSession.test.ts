@@ -2,7 +2,7 @@ import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { withNativeGitExecutionReadAuthority } from "../../../packages/host/plugins/ci-worker/src/nativeGitCandidateReadAuthority.js";
-import { cleanupFinalizeFixtures, createFinalizeRoot, runGit } from "../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures, createFinalizeRoot, runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { multiRepositoryExecutionFixture, type MultiRepositoryExecutionFixture } from "./multiRepositoryExecutionFixture.js";
 
 let fixture: MultiRepositoryExecutionFixture;

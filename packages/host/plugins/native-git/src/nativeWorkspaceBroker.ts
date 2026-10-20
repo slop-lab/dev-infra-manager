@@ -53,8 +53,7 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       const proof = await proveNativeProjectReadiness(connection, project, repositoryId, AbortSignal.timeout(5000), {
         commit: repository.commit, tree: repository.tree, allowFastForward: true
       });
-      if (proof.policyRevision !== repository.policyRevision
-        || proof.requiredReviewRevision !== repository.requiredReviewRevision || proof.requiredJobSetRevision !== repository.requiredJobSetRevision) {
+      if (proof.policyRevision !== repository.policyRevision) {
         response.writeHead(409).end(); return;
       }
       const lease = await createNativeGitWorkspaceWriteIssuerClient({ schemaVersion: 1, endpoint: connection.nativeGit.endpoint,

@@ -1,15 +1,16 @@
+import { compileNativeRepositoryBootstrapPolicy } from "@slop-lab/dim-host-plugin-native-git";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/ci/src/http.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/git/src/http.js";
 import { createNativeGitRootImporterClient, createNodeNativeGitRootImporterClient, NativeGitRootImporterClientError } from "@slop-lab/dim-host-plugin-native-git";
-import { bundleSecrets } from "../../../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { bundleSecrets } from "../../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import {
   activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot, createRootBundle,
   generationId, importer, projectInput, rootRepository, runGit, startFinalizeService
-} from "../../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+} from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 
 const servers: Server[] = [];
 type ProofChange = {
@@ -48,13 +49,7 @@ describe("native Git root importer host client", () => {
     const input = {
       serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
-      policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-      ciRepositoryIds: ["root"],
-      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
-        requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
-        requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
-        requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
-        requiredReviewerIds: ["owner"], pathReviewerRules: [] },
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
       bundlePath
     } as const;
 
@@ -79,13 +74,7 @@ describe("native Git root importer host client", () => {
     const client = await createNodeNativeGitRootImporterClient(await connection(service.origin));
     const receipt = await client.importRepository({ serviceId: "native-main", projectId: "project-a",
       repositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
-      policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-      ciRepositoryIds: ["root"],
-      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
-        requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
-        requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
-        requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
-        requiredReviewerIds: ["owner"], pathReviewerRules: [] },
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
       bundlePath }, AbortSignal.timeout(20_000));
     const databasePath = join(root, "native-idle.sqlite3");
     const before = await readFile(databasePath);
@@ -110,13 +99,7 @@ describe("native Git root importer host client", () => {
     const connectionPath = await connection(service.origin);
     const input = { serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
-      policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-      ciRepositoryIds: ["root"],
-      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
-        requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
-        requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
-        requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
-        requiredReviewerIds: ["owner"], pathReviewerRules: [] },
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
       bundlePath } as const;
     const first = await (await createNodeNativeGitRootImporterClient(connectionPath))
       .importRepository(input, AbortSignal.timeout(20_000));
@@ -187,13 +170,7 @@ describe("native Git root importer host client", () => {
 
     await expect(client.importRepository({ serviceId: "native-main", projectId: "project-a",
       repositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: "a".repeat(40),
-      policy: { schemaVersion: 1, protectedRef: "refs/heads/main",
-    ciRepositoryIds: ["root"],
-      policyRevision: "815983ae87e0362278ac2079ceb2ddb3c498c9a1a8c0e65954861a3d90d4ba5a",
-        requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
-        requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
-        requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
-        requiredReviewerIds: ["owner"], pathReviewerRules: [] },
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
       bundlePath }, AbortSignal.timeout(5_000))).rejects.toThrow(NativeGitRootImporterClientError);
     expect(uploadBytes).toBeGreaterThan(bundle.length);
     expect(finalizeCalls).toBe(0);

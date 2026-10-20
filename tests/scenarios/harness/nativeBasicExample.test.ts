@@ -1,3 +1,4 @@
+import { gitCiPolicy } from "../../../packages/control-plane/plugins/git-ci/src/policy.js";
 import { object } from "../../../scripts/checks/lib/json-values.ts";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -10,7 +11,7 @@ const root = resolve(import.meta.dirname, "../../../examples/projects/native-bas
 
 test("compiles the reviewed example policy and workflow into the same required jobs", async () => {
   const [policySource, runnerSource, ordinaryScript, qemuScript] = await Promise.all([
-    readFile(resolve(root, "review-policy.json"), "utf8"),
+    readFile(resolve(root, "repository-policy.json"), "utf8"),
     readFile(resolve(root, ".dim/ci/runner.yml"), "utf8"),
     readFile(resolve(root, ".dim/ci/jobs/source.bash"), "utf8"),
     readFile(resolve(root, ".dim/ci/jobs/integration.bash"), "utf8")
@@ -19,10 +20,11 @@ test("compiles the reviewed example policy and workflow into the same required j
   assert.equal(manifest.schemaVersion, 1);
   assert(typeof manifest.repositoryId === "string");
   const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: manifest.repositoryId,
-    protectedRef: "refs/heads/main", review: manifest.review });
+    protectedRef: "refs/heads/main", extensions: manifest.extensions });
+  const selected = gitCiPolicy(policy.repositoryPolicy, manifest.repositoryId);
   const jobs = dimWorkflowCompiler.compile(Buffer.from(runnerSource));
-  assert.deepEqual(policy.reviewPolicy.ciRepositoryIds, [manifest.repositoryId]);
-  assert.deepEqual(policy.reviewPolicy.requiredJobs.map(({ name, kind }) => ({ name, kind })),
+  assert.deepEqual(selected.ciRepositoryIds, [manifest.repositoryId]);
+  assert.deepEqual(selected.requiredJobs.map(({ name, kind }) => ({ name, kind })),
     jobs.map(({ name, kind }) => ({ name, kind })));
   assert.match(ordinaryScript, /native-basic-ordinary-ok/);
   assert.match(qemuScript, /native-basic-qemu-ok/);

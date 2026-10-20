@@ -1,5 +1,5 @@
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
-import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
+import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { executionGrantSchema, executionResultSchema } from "@slop-lab/dim-contracts-ci/execution";
 import type { ExecutionAssignment, ExecutionGrant, ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
 

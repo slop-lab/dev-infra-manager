@@ -1,15 +1,14 @@
 import { executionWorkerConfigSchema } from "@slop-lab/dim-contracts-ci/worker";
 import { executionProfileSchema, type ExecutionProfile } from "@slop-lab/dim-contracts-ci/execution";
 import { ciQueryConnectionSchema } from "@slop-lab/dim-contracts-ci/connections";
-import { parseControlPlaneServicePair } from "@slop-lab/dim-control-plane-plugin-native-git/deployment";
+import { parseControlPlaneServicePair, parseManagedGitServiceConfig } from "./service-pair.js";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdir, open, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-host-core";
-import { parseNativeGitBundleConfig } from "@slop-lab/dim-control-plane-plugin-native-git/config";
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
-import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
+import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { compileNativeRepositoryBootstrapPolicy } from "@slop-lab/dim-host-plugin-native-git";
 import { parseNativeControlPlaneConnection } from "@slop-lab/dim-host-plugin-native-git";
 import { parseNativeGitProjectRegistrarConnection } from "@slop-lab/dim-host-plugin-native-git";
@@ -69,9 +68,10 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
       token: randomBytes(32).toString("base64url"), slots }]
   };
   parseControlPlaneServicePair(native, ordinary);
-  const reviewPolicy = { schemaVersion: 1, repositoryId: "root",
-    review: { requiredReviewerIds: ["owner"], requiredJobs: [], ciRepositoryIds: ["root"] } };
-  compileNativeRepositoryBootstrapPolicy({ repositoryId: reviewPolicy.repositoryId, protectedRef: "refs/heads/main", review: reviewPolicy.review });
+  const repositoryPolicy = { schemaVersion: 1, repositoryId: "root", extensions: {
+    "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] },
+    "git-ci": { requiredJobs: [], ciRepositoryIds: ["root"] }, "merge-policy": {} } };
+  compileNativeRepositoryBootstrapPolicy({ repositoryId: repositoryPolicy.repositoryId, protectedRef: "refs/heads/main", extensions: repositoryPolicy.extensions });
   const service = (name: string, image: string, publishedPort: number) => ({ image,
     configFile: path.join(directory, `${name}.json`), readinessTokenFile: path.join(directory, `${name}-readiness.token`),
     publish: { host: "127.0.0.1", port: publishedPort } });
@@ -83,7 +83,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     for (const name of ["native-git", "ordinary-ci"]) await writeFile(path.join(directory, `${name}-readiness.token`),
       `${randomBytes(32).toString("base64url")}\n`, { mode: 0o600, flag: "wx" });
     await json(path.join(directory, "install.json"), install);
-    await json(path.join(directory, "review-policy.json"), reviewPolicy);
+    await json(path.join(directory, "repository-policy.json"), repositoryPolicy);
   });
   return { configFile: path.join(directory, "install.json"), hostId };
 }
@@ -93,7 +93,7 @@ export async function connectControlPlane(directoryInput: string, options: {
   readonly endpoint?: string; readonly ciEndpoint?: string; readonly outputDirectory?: string; readonly ciWorkerStateDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
 } = {}): Promise<{ directory: string; generationId: string; hostId: string; ciWorkerCount: number; workerConfigFile?: string }> {
   const directory = path.resolve(directoryInput);
-  const native = parseNativeGitBundleConfig(await privateJson(path.join(directory, "native-git.json")));
+  const native = parseManagedGitServiceConfig(await privateJson(path.join(directory, "native-git.json")));
   const install = await privateJson(path.join(directory, "install.json")) as { nativeGit?: { publish?: { host?: unknown; port?: unknown } }; ordinaryCi?: { publish?: { host?: unknown; port?: unknown } } };
   const publish = install.nativeGit?.publish;
   if (publish?.host !== "127.0.0.1" || typeof publish.port !== "number") throw new UserError("prepared control-plane loopback endpoint is invalid");

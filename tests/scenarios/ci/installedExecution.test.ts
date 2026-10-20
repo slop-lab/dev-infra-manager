@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { StaleExecutionSourceError } from "../../../packages/control-plane/plugins/ci/src/source.js";
-import { runGit } from "../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+import { runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { installedExecutionFixture, type InstalledExecutionFixture } from "./installedExecutionFixture.js";
 import { result } from "../../contracts/ci/executionFixture.js";
 

@@ -127,7 +127,7 @@ export class NativeProjectDraftStore {
       return parseNativeProjectDraft({ schemaVersion: 3, recordType: "native-project-draft",
         phase: "import-pending", name: input.name, projectId: input.projectId, serviceId: "native-main",
         ownerHostId: input.ownerHostId, generationId: input.generationId, repositoryId: input.repositoryId, protectedRef: input.protectedRef, expectedCommit: input.expectedCommit,
-        expectedTree: input.expectedTree, reviewPolicy: input.reviewPolicy,
+        expectedTree: input.expectedTree, repositoryPolicy: input.repositoryPolicy,
         bundleDigest, bundleSize });
     } catch (error) {
       throw new NativeProjectDraftStoreError("native Project draft claim is invalid", { cause: error });

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
-import type { NativeGitAdmissionHttpClient, NativeGitAdmissionHttpResponse } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
+import type { NativeGitAdmissionHttpClient, NativeGitAdmissionHttpResponse } from "@slop-lab/dim-contracts-git/http";
 import {
   loadNativeGitRootImporterConnection,
   parseNativeGitRootImporterConnection,

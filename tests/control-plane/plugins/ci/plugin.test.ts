@@ -19,7 +19,7 @@ it("starts a generation-gated coordinator through its control-plane descriptor a
   await new Promise<void>((resolve) => probe.close(() => resolve()));
   const config = serviceConfig(), prepared = await controlPlanePlugin.configure({ service: config, stateDirectory: root,
     readinessToken, activationToken, expectedGenerationId: generation, listen: { host: "127.0.0.1", port: address.port } });
-  const running = await prepared.start({ signal: new AbortController().signal });
+  const running = await prepared.start({ signal: new AbortController().signal, extensions: [] });
   try {
     const origin = `http://127.0.0.1:${address.port}`;
     expect((await fetch(origin + "/readyz", { headers: { authorization: `Bearer ${readinessToken}` } })).status).toBe(200);
@@ -37,7 +37,7 @@ it("does not create execution state when startup is already cancelled", async ()
   try {
     const prepared = await controlPlanePlugin.configure({ service: serviceConfig(), stateDirectory,
       readinessToken, activationToken, expectedGenerationId: generation });
-    await expect(prepared.start({ signal: AbortSignal.abort() })).rejects.toThrow();
+    await expect(prepared.start({ signal: AbortSignal.abort(), extensions: [] })).rejects.toThrow();
     await expect(stat(stateDirectory)).rejects.toMatchObject({ code: "ENOENT" });
   } finally { await rm(root, { recursive: true, force: true }); }
 });

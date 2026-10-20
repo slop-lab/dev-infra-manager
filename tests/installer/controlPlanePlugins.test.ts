@@ -77,7 +77,7 @@ it("keeps home selection independent and rejects unknown targets before installi
   expect(defaultControlPlanePluginHome({ DIM_DATA_HOME: "/srv/dim", DIM_PLUGIN_HOME: "/host" })).toBe("/srv/dim/control-plane/runtime/current");
   expect(defaultPluginHome({ DIM_DATA_HOME: "/srv/dim", DIM_CONTROL_PLANE_PLUGIN_HOME: "/cp" })).toBe("/srv/dim/runtime/current");
   await expect(installerCommand(["install", "plugin", "--target", "invalid", "test@1.0.0"])).rejects.toThrow(/Unknown option/);
-  await expect(installerCommand(["install", "plugin", "@slop-lab/dim-control-plane-plugin-native-git@0.10.0"])).rejects.toThrow(/install control-plane plugin/);
+  await expect(installerCommand(["install", "plugin", "@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0"])).rejects.toThrow(/install control-plane plugin/);
 });
 
 it("installs the selected local CP artifact closure through the facade without selecting host packages", async () => {

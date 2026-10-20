@@ -6,7 +6,7 @@ import { afterEach, expect, it } from "vitest";
 import { configuredExecutionServer } from "../../../packages/control-plane/plugins/ci/src/service.js";
 import { executionServiceConfigSchema } from "../../../packages/contracts/ci/src/config.js";
 import { createCiOperatorClient } from "../../../packages/control-plane/admin/src/ci/operator.js";
-import { idleOrdinaryConfig } from "../../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { idleOrdinaryConfig } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { event, grant, result, generation } from "../../contracts/ci/executionFixture.js";
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });

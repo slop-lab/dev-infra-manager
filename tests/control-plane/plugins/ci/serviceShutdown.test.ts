@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { configuredExecutionServer } from "../../../../packages/control-plane/plugins/ci/src/service.js";
 import { ExecutionStore } from "../../../../packages/control-plane/plugins/ci/src/store.js";
 import { executionServiceConfigSchema } from "../../../../packages/contracts/ci/src/config.js";
-import { idleOrdinaryConfig } from "../native-git/bundleConfigFixture.js";
+import { idleOrdinaryConfig } from "../git-repositories/bundleConfigFixture.js";
 import { event, generation, grant, result, slot } from "../../../contracts/ci/executionFixture.js";
 
 it("stops publishing queued evidence on shutdown and leaves it durable for restart", async () => {

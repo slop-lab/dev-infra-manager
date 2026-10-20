@@ -6,13 +6,13 @@ import { join } from "node:path";
 import { configuredExecutionServer } from "../../../packages/control-plane/plugins/ci/src/service.js";
 import { executionWorkerClient } from "../../../packages/host/plugins/ci-worker/src/client.js";
 import { nativeGitExecutionSource } from "../../../packages/control-plane/plugins/ci/src/source.js";
-import { createNodeNativeGitAdmissionHttpClient } from "../../../packages/contracts/ci/src/http.js";
+import { createNodeNativeGitAdmissionHttpClient } from "../../../packages/contracts/git/src/http.js";
 import { executionServiceConfigSchema } from "../../../packages/contracts/ci/src/config.js";
-import { nativeBundleReviewFixture, publishedReviewEnvelopes, reviewProposalRef } from "../../control-plane/plugins/native-git/nativeBundleReviewFixture.js";
-import { authoritativePolicy } from "../../control-plane/plugins/native-git/authoritativeNativeCandidateFixture.js";
-import { idleOrdinaryConfig, bundleSecrets } from "../../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { nativeBundleReviewFixture, publishedReviewEnvelopes, reviewProposalRef } from "../../control-plane/plugins/git-ci/nativeBundleReviewFixture.js";
+import { authoritativePolicy } from "../../control-plane/plugins/git-repositories/authoritativeNativeCandidateFixture.js";
+import { idleOrdinaryConfig, bundleSecrets } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { cleanupFinalizeFixtures, generationId, humanReviewerAuthorization, hostPromoterAuthorization,
-  rootRepository, runGit } from "../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+  rootRepository, runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 
 /** Every call starts independent real Git authority, CI state and HTTP listeners. */
 export async function installedExecutionFixture() {

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { withNativeGitExecutionReadAuthority } from "../../../packages/host/plugins/ci-worker/src/nativeGitCandidateReadAuthority.js";
 import { verifyAndMaterializeCandidate } from "../../../packages/host/plugins/ci-worker/src/candidate.js";
-import { cleanupFinalizeFixtures, createFinalizeRoot, runGit } from "../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures, createFinalizeRoot, runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { multipleRepositoryExampleFixture } from "./multipleRepositoryExampleFixture.js";
 
 let fixture: Awaited<ReturnType<typeof multipleRepositoryExampleFixture>>;

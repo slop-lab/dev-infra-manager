@@ -20,7 +20,7 @@ test("base help describes ordinary Git development and local or SSH hosts", asyn
     const create = await run(["create", "--help"], fixture);
     assert.equal(create.status, 0);
     assert.match(create.stdout, /<source> <name>/);
-    assert.doesNotMatch(create.stdout, /--require-capability|--review-policy|--repo-ref/);
+    assert.doesNotMatch(create.stdout, /--require-capability|--policy|--repo-ref/);
     assert.deepEqual(await readdir(fixture.root), ["bin"]);
   });
 });

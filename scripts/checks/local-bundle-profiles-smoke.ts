@@ -48,7 +48,9 @@ function run(file: string, args: string[], allowFailure: boolean = false) {
 try {
   run("npm", ["install", "--prefix", path.join(scratch, "facade"), "--no-save", "--no-audit", "--no-fund",
     artifact("@slop-lab/dim-installer")]);
-  const controlPlanePlugins = ["@slop-lab/dim-control-plane-plugin-native-git",
+  const controlPlanePlugins = ["@slop-lab/dim-control-plane-plugin-git-repositories",
+    "@slop-lab/dim-control-plane-plugin-code-review", "@slop-lab/dim-control-plane-plugin-merge-policy",
+    "@slop-lab/dim-control-plane-plugin-git-ci", "@slop-lab/dim-control-plane-plugin-webhooks",
     "@slop-lab/dim-control-plane-plugin-ci-workflows", "@slop-lab/dim-control-plane-plugin-llm-router", "@slop-lab/dim-control-plane-plugin-ci"];
   run(facade, ["installer", "install", "control-plane", "plugin", "--local-packages", bundle,
     ...controlPlanePlugins.map((name) => `${name}@${packages.find((entry) => entry.name === name)?.version}`)]);
@@ -65,7 +67,8 @@ try {
     const {startControlPlanePlugins} = await load('@slop-lab/dim-control-plane-core');
     const {controlPlanePlugin} = await load('@slop-lab/dim-control-plane-plugin-ci-workflows');
     const prepared = await controlPlanePlugin.configure({});
-    const jobs = prepared.workflowCompiler.compile(Buffer.from('jobs:\\n  source: {script: check.bash}\\n'));
+    const {requireWorkflowCompiler} = await load('@slop-lab/dim-contracts-ci/workflow');
+    const jobs = requireWorkflowCompiler(prepared.extensions).compile(Buffer.from('jobs:\\n  source: {script: check.bash}\\n'));
     if (jobs[0]?.name !== 'source') throw new Error('installed workflow compiler did not compile');
     const running = await startControlPlanePlugins([{plugin:controlPlanePlugin,config:{}}],new AbortController().signal);
     await running.close();

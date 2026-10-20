@@ -4,8 +4,7 @@ import { parseNativeProjectDraft, NativeProjectDraftError } from "../../../../pa
 import { compileNativeRepositoryBootstrapPolicy } from "../../../../packages/host/plugins/native-git/src/nativeRootBootstrapPolicy.js";
 
 const compiled = compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main",
-  review: { ciRepositoryIds: ["root"], requiredReviewerIds: ["owner"], pathReviewerRules: [],
-    requiredJobs: [{ name: "source", kind: "ordinary-sysbox" }, { name: "integration", kind: "qemu" }] } });
+  extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, "git-ci": { ciRepositoryIds: ["root"], requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }, { name: "integration", kind: "qemu", evidenceClass: "candidate-controlled" }] }, "merge-policy": {} } });
 const changedKindJobs = [
   { name: "integration", kind: "qemu", evidenceClass: "candidate-controlled" },
   { name: "source", kind: "qemu", evidenceClass: "candidate-controlled" }
@@ -15,14 +14,14 @@ const pending = {
   projectId: "project-a", serviceId: "native-main", ownerHostId: "host-a", generationId: "a".repeat(64),
   repositoryId: compiled.repositoryId, protectedRef: compiled.protectedRef,
   expectedCommit: "b".repeat(40), expectedTree: "c".repeat(40),
-  reviewPolicy: compiled.reviewPolicy,
+  repositoryPolicy: compiled.repositoryPolicy,
   bundleDigest: "d".repeat(64), bundleSize: 123
 } as const;
 const importReceipt = {
   schemaVersion: 1, serviceId: "native-main", projectId: pending.projectId, repositoryId: "root",
   generationId: pending.generationId, importNonce: "00000000-0000-4000-8000-000000000000",
   protectedRef: pending.protectedRef, expectedCommit: pending.expectedCommit,
-  policyDigest: createHash("sha256").update(JSON.stringify(compiled.reviewPolicy)).digest("hex"),
+  policyDigest: createHash("sha256").update(JSON.stringify(compiled.repositoryPolicy)).digest("hex"),
   bundleDigest: pending.bundleDigest, bundleSize: pending.bundleSize,
   resolvedTree: pending.expectedTree, phase: "repository-imported"
 } as const;
@@ -39,7 +38,7 @@ describe("native Project draft codec", () => {
     for (const invalid of [
       { ...pending, phase: "ready" },
       { ...pending, credential: "secret" },
-      { ...pending, reviewPolicy: { ...pending.reviewPolicy, requiredJobs: changedKindJobs } },
+      { ...pending, repositoryPolicy: { ...pending.repositoryPolicy, requiredJobs: changedKindJobs } },
       { ...pending, phase: "repository-imported" },
       { ...pending, importReceipt },
       { ...pending, phase: "repository-imported", importReceipt: { ...importReceipt, resolvedTree: "e".repeat(40) } },

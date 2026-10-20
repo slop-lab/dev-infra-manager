@@ -1,0 +1,61 @@
+{
+  "name": "@slop-lab/dim-control-plane-plugin-merge-policy",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Protected Git ref promotion using selected review and quality checks",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./extensions": {
+      "types": "./src/extensions.ts",
+      "import": "./dist/extensions.js",
+      "default": "./dist/extensions.js"
+    },
+    "./config": {
+      "types": "./src/config.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
+    },
+    "./cli": {
+      "types": "./src/cli.ts",
+      "import": "./dist/cli.js",
+      "default": "./dist/cli.js"
+    }
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts"
+  },
+  "dependencies": {
+    "zod": "4.1.11",
+    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
+  },
+  "peerDependencies": {
+    "@slop-lab/dim-control-plane-core": "0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-repositories": "0.10.0",
+    "@slop-lab/dim-control-plane-plugin-code-review": "0.10.0"
+  },
+  "devDependencies": {
+    "@slop-lab/dim-control-plane-core": "workspace:0.10.0",
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3",
+    "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-code-review": "workspace:0.10.0"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "dim-merge-policy": "./dist/cli.js"
+  }
+}

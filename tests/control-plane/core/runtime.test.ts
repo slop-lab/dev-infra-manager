@@ -6,32 +6,32 @@ function plugin(name: string, configure: () => PreparedControlPlanePlugin): Cont
   return { apiVersion: 1, name, configure };
 }
 const signal = () => new AbortController().signal;
-const compiler = { configurationPath: ".dim/ci/jobs.yml", compile: () => [] };
+const contribution = { kind: "example.factory", name: "default", value: { create: () => ({}) } };
 describe("standalone control-plane composition", () => {
-  it("starts no implicit services and configures all plugins before starting providers and consumers", async () => {
+  it("starts no implicit services and configures all plugins before starting services", async () => {
     const events: string[] = [];
     const definition = (name: string, provides: boolean) => plugin(name, () => {
       events.push(`configure:${name}`);
-      return { ...(provides ? { workflowCompiler: compiler } : { requiresWorkflowCompiler: true }), async start(context) {
-        expect(context.workflowCompiler).toBe(compiler); events.push(`start:${name}`);
+      return { ...(provides ? { extensions: [contribution] } : { requiresExtensions: [contribution] }), async start(context) {
+        expect(context.extensions).toEqual([contribution]); events.push(`start:${name}`);
         return { async close() { events.push(`close:${name}`); } };
       } };
     });
     await (await startControlPlanePlugins([], signal())).close();
     expect(events).toEqual([]);
     const service = await startControlPlanePlugins([{ plugin: definition("git", false), config: {} }, { plugin: definition("grammar", true), config: {} }], signal());
-    expect(events).toEqual(["configure:git", "configure:grammar", "start:grammar", "start:git"]);
+    expect(events).toEqual(["configure:git", "configure:grammar", "start:git", "start:grammar"]);
     await service.close(); await service.close();
-    expect(events.slice(-2)).toEqual(["close:git", "close:grammar"]);
+    expect(events.slice(-2)).toEqual(["close:grammar", "close:git"]);
   });
-  it("rejects missing and duplicate compiler capabilities before any service starts", async () => {
+  it("rejects missing and duplicate extension contributions before any service starts", async () => {
     let starts = 0;
     const make = (name: string, provides: boolean) => plugin(name, () => ({
-      ...(provides ? { workflowCompiler: compiler } : { requiresWorkflowCompiler: true }),
+      ...(provides ? { extensions: [contribution] } : { requiresExtensions: [contribution] }),
       async start() { starts++; return { async close() {} }; }
     }));
-    await expect(startControlPlanePlugins([{ plugin: make("git", false), config: {} }], signal())).rejects.toThrow(/requires a workflow compiler/);
-    await expect(startControlPlanePlugins([{ plugin: make("one", true), config: {} }, { plugin: make("two", true), config: {} }], signal())).rejects.toThrow(/only one/);
+    await expect(startControlPlanePlugins([{ plugin: make("git", false), config: {} }], signal())).rejects.toThrow(/missing required.*example.factory/);
+    await expect(startControlPlanePlugins([{ plugin: make("one", true), config: {} }, { plugin: make("two", true), config: {} }], signal())).rejects.toThrow(/duplicate.*example.factory/);
     expect(starts).toBe(0);
   });
   it("closes every prior service in reverse order after startup failure even when cleanup rejects", async () => {

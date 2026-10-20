@@ -14,11 +14,26 @@ export async function startControlPlanePlugins(entries: readonly ControlPlanePlu
     prepared.push(await plugin.configure(config));
     signal.throwIfAborted();
   }
-  const compilers = prepared.flatMap((entry) => entry.workflowCompiler === undefined ? [] : [entry.workflowCompiler]);
-  if (compilers.length > 1) throw new Error("only one control-plane workflow compiler may be configured");
-  const workflowCompiler = compilers[0];
-  if (workflowCompiler === undefined && prepared.some((entry) => entry.requiresWorkflowCompiler)) {
-    throw new Error("a configured control-plane plugin requires a workflow compiler plugin");
+  const extensions = prepared.flatMap((entry) => entry.extensions ?? []);
+  const identities = new Set<string>();
+  const identity = ({ kind, name }: { readonly kind: string; readonly name: string }) => {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$/.test(kind)
+      || !/^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$/.test(name)) {
+      throw new Error("control-plane extension kind and name must be valid identifiers");
+    }
+    return `${kind}:${name}`;
+  };
+  for (const extension of extensions) {
+    const key = identity(extension);
+    if (!extension.value || typeof extension.value !== "object" || Array.isArray(extension.value)) {
+      throw new Error(`control-plane extension '${key}' must provide an object`);
+    }
+    if (identities.has(key)) throw new Error(`duplicate control-plane extension '${key}'`);
+    identities.add(key);
+  }
+  for (const entry of prepared) for (const required of entry.requiresExtensions ?? []) {
+    const key = identity(required);
+    if (!identities.has(key)) throw new Error(`missing required control-plane extension '${key}'`);
   }
   const running: RunningControlPlanePlugin[] = [];
   let closing: Promise<void> | undefined;
@@ -33,10 +48,9 @@ export async function startControlPlanePlugins(entries: readonly ControlPlanePlu
   })();
   try {
     // Capabilities are supplied by configured code, not a dependency policy language.
-    for (const entry of [...prepared.filter((entry) => entry.workflowCompiler !== undefined),
-      ...prepared.filter((entry) => entry.workflowCompiler === undefined)]) {
+    for (const entry of prepared) {
       signal.throwIfAborted();
-      running.push(await entry.start({ signal, ...(workflowCompiler === undefined ? {} : { workflowCompiler }) }));
+      running.push(await entry.start({ signal, extensions }));
       signal.throwIfAborted();
     }
     return { close };

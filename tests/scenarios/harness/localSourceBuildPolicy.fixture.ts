@@ -38,7 +38,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
     "packages/host/plugins/ci-worker",
     "packages/cli",
     "packages/installer",
-    "packages/control-plane/plugins/native-git",
+    "packages/control-plane/plugins/git-repositories",
     "packages/web",
     "packages/contracts/external-url",
     "packages/host/plugins/dns-cloudflare",

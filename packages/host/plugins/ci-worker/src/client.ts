@@ -1,7 +1,7 @@
 import { executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
 import { z } from "zod";
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
-import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
+import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { parseExecution, type ExecutionAssignment, type ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
 
 export class ExecutionLeaseLostError extends Error {}

@@ -15,8 +15,8 @@ import {
   type JsonObject
 } from "./httpFixture.js";
 
-import { nativeBundleReviewFixture, createBundleReview, reviewProposalRef } from "../control-plane/plugins/native-git/nativeBundleReviewFixture.js";
-import { humanReviewer, foreignHumanReviewer, generationId, generationB, activationTokenB, startFinalizeServiceForGeneration, activateFinalizeServiceForGeneration, runGit } from "../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+import { nativeBundleReviewFixture, createBundleReview, reviewProposalRef } from "../control-plane/plugins/git-ci/nativeBundleReviewFixture.js";
+import { humanReviewer, foreignHumanReviewer, generationId, generationB, activationTokenB, startFinalizeServiceForGeneration, activateFinalizeServiceForGeneration, runGit } from "../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { randomUUID } from "node:crypto";
 
 export async function installedReviewerFixture() {

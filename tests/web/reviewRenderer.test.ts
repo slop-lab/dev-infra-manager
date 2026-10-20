@@ -242,7 +242,6 @@ function review(patch: string) {
       candidateTree: "c".repeat(40),
       policyRevision: "policy-1",
       requiredReviewRevision: "review-1",
-      qualityRevision: "jobs-1",
       workspaceId: "workspace-1",
       reviewId: "d".repeat(64),
       createdAt: "2026-10-03T00:00:00Z",

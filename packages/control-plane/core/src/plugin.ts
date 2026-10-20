@@ -1,23 +1,18 @@
-/** Optional workflow language capability; no workspace or runtime backend dependency. */
-export type WorkflowJob = {
+/** Contributions are configured, trusted plugin code; the runtime does not interpret their domains. */
+export interface ControlPlaneExtension {
+  readonly kind: string;
   readonly name: string;
-  readonly kind: "ordinary-sysbox" | "qemu";
-  readonly script: string;
-  readonly repositories?: readonly string[];
-  readonly argv: readonly string[];
-};
-export interface WorkflowCompiler {
-  readonly configurationPath: string;
-  compile(bytes: Buffer): readonly WorkflowJob[];
+  readonly value: object;
 }
+export type ControlPlaneExtensionIdentity = Pick<ControlPlaneExtension, "kind" | "name">;
 export type ControlPlanePluginContext = {
   readonly signal: AbortSignal;
-  readonly workflowCompiler?: WorkflowCompiler;
+  readonly extensions: readonly ControlPlaneExtension[];
 };
 export type RunningControlPlanePlugin = { close(): Promise<void> };
 export type PreparedControlPlanePlugin = {
-  readonly workflowCompiler?: WorkflowCompiler;
-  readonly requiresWorkflowCompiler?: boolean;
+  readonly extensions?: readonly ControlPlaneExtension[];
+  readonly requiresExtensions?: readonly ControlPlaneExtensionIdentity[];
   start(context: ControlPlanePluginContext): Promise<RunningControlPlanePlugin>;
 };
 export type ControlPlanePlugin = {

@@ -4,8 +4,8 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-native-git/service";
-import { parseNativeGitBundleConfig } from "@slop-lab/dim-control-plane-plugin-native-git/config";
+import { configuredManagedGitFixture } from "../../support/managed-git-service.js";
+import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { prepareControlPlane, connectControlPlane } from "../../../packages/control-plane/admin/src/controlPlaneSetup.js";
 import { executionServiceConfigSchema } from "../../../packages/contracts/ci/src/config.js";
@@ -20,7 +20,7 @@ it("connects a prepared private worker to its activated CI generation and reject
   const profile = { runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`,
     jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`,
     bounds: { cpu: "1", memoryBytes: "2147483648", pids: "512", wallClockSeconds: "900", outputBytes: "1048576" } };
-  let native: Awaited<ReturnType<typeof configuredNativeGitBundleServer>> | undefined;
+  let native: Awaited<ReturnType<typeof configuredManagedGitFixture>> | undefined;
   let ci: ReturnType<typeof configuredExecutionServer> | undefined;
   try {
     await prepareControlPlane({ directory, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
@@ -29,7 +29,7 @@ it("connects a prepared private worker to its activated CI generation and reject
     const nativeConfig = JSON.parse(await readFile(join(directory, "native-git.json"), "utf8"));
     // The fixture executes the host Git binary; production image pins remain unchanged.
     nativeConfig.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
-    native = await configuredNativeGitBundleServer({ config: parseNativeGitBundleConfig(nativeConfig),
+    native = await configuredManagedGitFixture({ config: parseManagedGitServiceConfig(nativeConfig),
       workflowCompiler: dimWorkflowCompiler, stateDirectory: join(root, "git-state"),
       readinessToken: randomBytes(32).toString("base64url"), activationToken, expectedGenerationId: generationId });
     const nativeEndpoint = await native.listen("127.0.0.1", 0);

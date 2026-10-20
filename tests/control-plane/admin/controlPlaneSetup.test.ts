@@ -1,3 +1,4 @@
+import { managedPolicyExtensions } from "../../support/git-policy.js";
 import { repositoryBinding } from "../../host/plugins/native-git/nativeProjectFixture.js";
 import { executionWorkerConfigSchema } from "../../../packages/contracts/ci/src/worker.js";
 import { execFileSync } from "node:child_process";
@@ -16,8 +17,8 @@ const { Command } = createRequire(new URL("../../../packages/control-plane/admin
 import { registerControlPlaneCommands } from "../../../packages/control-plane/admin/src/cli/control-plane-commands.js";
 import { saveControlPlaneSelection, selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../../../packages/host/plugins/native-git/src/controlPlaneSelection.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
-import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-native-git/service";
-import { parseNativeGitBundleConfig } from "@slop-lab/dim-control-plane-plugin-native-git/config";
+import { configuredManagedGitFixture } from "../../support/managed-git-service.js";
+import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
 import { prepareControlPlane, connectControlPlane } from "../../../packages/control-plane/admin/src/controlPlaneSetup.js";
 import { readControlPlaneConfig } from "../../../packages/installer/src/controlPlaneConfig.js";
 import { readControlPlaneSources } from "../../../packages/installer/src/controlPlaneSources.js";
@@ -69,8 +70,8 @@ describe("optional control-plane setup", () => {
     const ordinary = JSON.parse(await readFile(path.join(directory, "ordinary-ci.json"), "utf8"));
     const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
     native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
-    let service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
-      config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-state"),
+    let service = await configuredManagedGitFixture({ workflowCompiler: dimWorkflowCompiler,
+      config: parseManagedGitServiceConfig(native), stateDirectory: path.join(root, "native-state"),
       readinessToken: Buffer.alloc(32, 47).toString("base64url"), activationToken: Buffer.alloc(32, 48).toString("base64url"),
       expectedGenerationId: "c".repeat(64) });
     try {
@@ -133,7 +134,7 @@ describe("optional control-plane setup", () => {
       const draft = await bootstrapNativeProjectRepository({ repositoryId: "root", name: "example", projectId: "example", stateRoot: hostState,
         scratchRoot: hostState, sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main",
         registrarConnectionFile: path.join(connected.directory, "registrar.json"), importerConnectionFile: path.join(connected.directory, "importer.json"),
-        policySource: { kind: "manifest-free", review: { ciRepositoryIds: ["root"], requiredReviewerIds: ["owner"], requiredJobs: [] } },
+        policySource: { kind: "manifest-free", extensions: managedPolicyExtensions() },
         signal: AbortSignal.timeout(10000) });
       expect(draft.phase).toBe("repository-imported");
       await store.admitRepository("example", "root", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), host, AbortSignal.timeout(10000));
@@ -163,8 +164,8 @@ describe("optional control-plane setup", () => {
         await service.close();
         const nextGeneration = "d".repeat(64);
         const nextActivationToken = Buffer.alloc(32, 49).toString("base64url");
-        service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
-          config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-state"),
+        service = await configuredManagedGitFixture({ workflowCompiler: dimWorkflowCompiler,
+          config: parseManagedGitServiceConfig(native), stateDirectory: path.join(root, "native-state"),
           readinessToken: Buffer.alloc(32, 47).toString("base64url"), activationToken: nextActivationToken,
           expectedGenerationId: nextGeneration });
         expect(await service.listen("127.0.0.1", Number(new URL(endpoint).port))).toBe(endpoint);

@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot, generationId,
-  startFinalizeService } from "../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
-import { bundleSecrets } from "../../control-plane/plugins/native-git/bundleConfigFixture.js";
+  startFinalizeService } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
+import { bundleSecrets } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { event, slot } from "../../contracts/ci/executionFixture.js";
 afterEach(cleanupFinalizeFixtures);
 it("rejects unauthorized, malformed and invented grant requests without mutating Git authority state", async () => {

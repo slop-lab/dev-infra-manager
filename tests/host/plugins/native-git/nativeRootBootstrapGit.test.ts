@@ -8,14 +8,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createNodeNativeGitRootImporterClient, prepareNativeRootBootstrapGit } from "@slop-lab/dim-host-plugin-native-git";
 import { activateFinalizeService, cleanupFinalizeFixtures, createFinalizeRoot, generationId,
   importer, projectInput, rootRepository, startFinalizeService
-} from "../../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+} from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 
 const run = promisify(execFile);
 const roots: string[] = [];
 const gitExecutable = "/usr/bin/git";
-const review = { ciRepositoryIds: ["root"], requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [
-  { name: "source", kind: "ordinary-sysbox" }, { name: "integration", kind: "qemu" }
-] } as const;
+const extensions = { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, "git-ci": { ciRepositoryIds: ["root"], requiredJobs: [
+  { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }, { name: "integration", kind: "qemu", evidenceClass: "candidate-controlled" }
+] }, "merge-policy": {} } as const;
 
 afterEach(async () => {
   await cleanupFinalizeFixtures();
@@ -40,13 +40,14 @@ async function fixture(withManifest: boolean): Promise<{ readonly source: string
     await writeFile(join(source, ".dim/repos.yml"), `schemaVersion: 1
 repositories:
   root: {url: https://example.test/root.git, root: true, ref: main, protect: [main]}
-nativeReview:
-  ciRepositoryIds: [root]
-  requiredReviewerIds: [owner]
-  pathReviewerRules: []
-  requiredJobs:
-    - {name: source, kind: ordinary-sysbox}
-    - {name: integration, kind: qemu}
+policy:
+  code-review: {requiredReviewerIds: [owner], pathReviewerRules: []}
+  git-ci:
+    ciRepositoryIds: [root]
+    requiredJobs:
+      - {name: source, kind: ordinary-sysbox, evidenceClass: candidate-controlled}
+      - {name: integration, kind: qemu, evidenceClass: candidate-controlled}
+  merge-policy: {}
 `);
   }
   await writeFile(join(source, "README.md"), "pinned root\n");
@@ -66,7 +67,7 @@ describe("native root bootstrap Git plan", () => {
       policySource: { kind: "reviewed-manifest" }, signal: AbortSignal.timeout(20_000) });
     expect(plan).toMatchObject({ expectedCommit: commit, resolvedTree: tree,
       protectedRef: "refs/heads/main", repositoryId: "root" });
-    expect(plan.reviewPolicy.requiredJobs.map(({ name }) => name)).toEqual(["integration", "source"]);
+    expect((plan.repositoryPolicy.extensions["git-ci"])).toMatchObject({ requiredJobs: [{ name: "source" }, { name: "integration" }] });
     expect((await stat(plan.bundlePath)).mode & 0o777).toBe(0o600);
 
     await writeFile(join(source, "README.md"), "moved root\n");
@@ -88,9 +89,9 @@ describe("native root bootstrap Git plan", () => {
     expect(await readdir(scratch)).toEqual([]);
     const plan = await prepareNativeRootBootstrapGit({ repositoryId: "root", gitExecutable, sourceRepository: source,
       selectedRef: "refs/heads/main", scratchRoot: scratch,
-      policySource: { kind: "manifest-free", review },
+      policySource: { kind: "manifest-free", extensions },
       signal: AbortSignal.timeout(20_000) });
-    expect(plan.reviewPolicy.requiredJobs.map(({ name }) => name)).toEqual(["integration", "source"]);
+    expect((plan.repositoryPolicy.extensions["git-ci"])).toMatchObject({ requiredJobs: [{ name: "source" }, { name: "integration" }] });
     await plan.cleanup();
     expect(await readdir(scratch)).toEqual([]);
   });
@@ -112,11 +113,11 @@ describe("native root bootstrap Git plan", () => {
 
     const imported = await client.importRepository({ serviceId: "native-main", projectId: "project-a",
       repositoryId: "root", protectedRef: plan.protectedRef, expectedCommit: plan.expectedCommit,
-      policy: plan.reviewPolicy, bundlePath: plan.bundlePath }, AbortSignal.timeout(20_000));
+      policy: plan.repositoryPolicy, bundlePath: plan.bundlePath }, AbortSignal.timeout(20_000));
 
     expect(imported).toMatchObject({ phase: "repository-imported", expectedCommit: plan.expectedCommit,
       resolvedTree: plan.resolvedTree });
-    expect(imported.policyDigest).toBe(createHash("sha256").update(JSON.stringify(plan.reviewPolicy)).digest("hex"));
+    expect(imported.policyDigest).toBe(createHash("sha256").update(JSON.stringify(plan.repositoryPolicy)).digest("hex"));
     expect(await git(["--git-dir", rootRepository(state), "show-ref", "--hash", "refs/heads/main"]))
       .toBe(plan.expectedCommit);
     const transport = await fetch(`${service.origin}/v1/projects/project-a/repositories/root.git/info/refs?service=git-upload-pack`);

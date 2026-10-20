@@ -3,7 +3,7 @@ import { open } from "node:fs/promises";
 import { z } from "zod";
 import { ciOperatorConnectionSchema } from "@slop-lab/dim-contracts-ci/connections";
 import { executionSummarySchema, ciWorkersSchema } from "@slop-lab/dim-contracts-ci/query";
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 
 export async function createCiOperatorClient(file: string) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

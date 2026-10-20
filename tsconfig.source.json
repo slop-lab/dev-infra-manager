@@ -24,8 +24,8 @@
       "@slop-lab/dim-contracts-ci/connections": [
         "packages/contracts/ci/src/connections.ts"
       ],
-      "@slop-lab/dim-contracts-ci/http": [
-        "packages/contracts/ci/src/http.ts"
+      "@slop-lab/dim-contracts-git/http": [
+        "packages/contracts/git/src/http.ts"
       ],
       "@slop-lab/dim-contracts-ci/workflow": [
         "packages/contracts/ci/src/workflow.ts"
@@ -69,20 +69,20 @@
       "@slop-lab/dim-control-plane-plugin-llm-router": [
         "packages/control-plane/plugins/llm-router/src/index.ts"
       ],
-      "@slop-lab/dim-control-plane-plugin-native-git": [
-        "packages/control-plane/plugins/native-git/src/index.ts"
+      "@slop-lab/dim-control-plane-plugin-git-repositories": [
+        "packages/control-plane/plugins/git-repositories/src/index.ts"
       ],
-      "@slop-lab/dim-control-plane-plugin-native-git/service": [
-        "packages/control-plane/plugins/native-git/src/service.ts"
+      "@slop-lab/dim-control-plane-plugin-git-repositories/service": [
+        "packages/control-plane/plugins/git-repositories/src/service.ts"
       ],
-      "@slop-lab/dim-control-plane-plugin-native-git/config": [
-        "packages/control-plane/plugins/native-git/src/bundle-config.ts"
+      "@slop-lab/dim-control-plane-plugin-git-repositories/config": [
+        "packages/control-plane/plugins/git-repositories/src/bundle-config.ts"
       ],
-      "@slop-lab/dim-control-plane-plugin-native-git/deployment": [
-        "packages/control-plane/plugins/native-git/src/service-pair.ts"
+      "@slop-lab/dim-control-plane-plugin-git-repositories/deployment": [
+        "packages/control-plane/plugins/git-repositories/src/service-pair.ts"
       ],
-      "@slop-lab/dim-control-plane-plugin-native-git/deployment-cli": [
-        "packages/control-plane/plugins/native-git/src/deployment-cli.ts"
+      "@slop-lab/dim-control-plane-plugin-git-repositories/deployment-cli": [
+        "packages/control-plane/plugins/git-repositories/src/deployment-cli.ts"
       ],
       "@slop-lab/dim-host-core": [
         "packages/host/core/src/index.ts"
@@ -143,6 +143,72 @@
       ],
       "@slop-lab/dim-host-plugin-mirrors/adapter": [
         "packages/host/plugins/mirrors/src/adapter.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-git-repositories/extensions": [
+        "packages/control-plane/plugins/git-repositories/src/extensions.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-code-review": [
+        "packages/control-plane/plugins/code-review/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-merge-policy": [
+        "packages/control-plane/plugins/merge-policy/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-git-ci": [
+        "packages/control-plane/plugins/git-ci/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-webhooks": [
+        "packages/control-plane/plugins/webhooks/src/index.ts"
+      ],
+      "@slop-lab/dim-contracts-git": [
+        "packages/contracts/git/src/index.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-code-review/*": [
+        "packages/control-plane/plugins/code-review/src/*.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-merge-policy/*": [
+        "packages/control-plane/plugins/merge-policy/src/*.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-git-ci/*": [
+        "packages/control-plane/plugins/git-ci/src/*.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-webhooks/*": [
+        "packages/control-plane/plugins/webhooks/src/*.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-git-repositories/*": [
+        "packages/control-plane/plugins/git-repositories/src/*.ts"
+      ],
+      "@slop-lab/dim-contracts-git/*": [
+        "packages/contracts/git/src/*.ts"
+      ],
+      "@this-project/control-plane-deployment": [
+        "packages/control-plane/deployment/src/index.ts"
+      ],
+      "@this-project/control-plane-deployment/deployment-cli": [
+        "packages/control-plane/deployment/src/deployment-cli.ts"
+      ],
+      "@slop-lab/dim-control-plane-admin/service-pair": [
+        "packages/control-plane/admin/src/service-pair.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-code-review/extensions": [
+        "packages/control-plane/plugins/code-review/src/extensions.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-code-review/config": [
+        "packages/control-plane/plugins/code-review/src/config.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-merge-policy/extensions": [
+        "packages/control-plane/plugins/merge-policy/src/extensions.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-merge-policy/config": [
+        "packages/control-plane/plugins/merge-policy/src/config.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-git-ci/config": [
+        "packages/control-plane/plugins/git-ci/src/config.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-git-ci/sdk": [
+        "packages/control-plane/plugins/git-ci/src/sdk.ts"
+      ],
+      "@slop-lab/dim-control-plane-plugin-webhooks/extensions": [
+        "packages/control-plane/plugins/webhooks/src/extensions.ts"
       ]
     }
   }

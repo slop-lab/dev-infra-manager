@@ -49,7 +49,7 @@ export function renderReview(elements, review, reviewerId) {
     ["Proposal ref", input.proposalRef], ["Expected head", input.expectedProtectedHead, true],
     ["Candidate commit", input.candidateCommit, true], ["Candidate tree", input.candidateTree, true],
     ["Policy revision", input.policyRevision], ["Review revision", input.requiredReviewRevision],
-    ["Quality revision", input.qualityRevision], ["Workspace", input.workspaceId],
+    ["Workspace", input.workspaceId],
     ["Required reviewers", requiredReviewerIds.join(", ")], ["Created", input.createdAt]
   ];
   for (const value of values) appendMetadata(elements.metadata, value[0], value[1], value[2] === true);

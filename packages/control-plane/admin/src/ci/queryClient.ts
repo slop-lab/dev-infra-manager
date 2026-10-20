@@ -5,7 +5,7 @@ import { z } from "zod";
 import { UserError } from "@slop-lab/dim-host-core";
 import { ciQueryConnectionSchema, type CiQueryConnection } from "@slop-lab/dim-contracts-ci/connections";
 import { selectedControlPlaneHostFile } from "@slop-lab/dim-host-plugin-native-git";
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { executionSummarySchema, executionDetailSchema } from "@slop-lab/dim-contracts-ci/query";
 
 export async function createCiQueryClient(override?: string, environment: NodeJS.ProcessEnv = process.env) {

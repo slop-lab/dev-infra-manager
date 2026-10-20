@@ -22,7 +22,7 @@ it("rejects cross-repository receipts, altered policy, missing defaults and unre
     { ...current, defaultWorkingRepositoryId: "absent" },
     { ...current, repositoryId: "root" },
     { ...current, repositories: { public: { ...repository, importReceipt: repositoryRecord("private").importReceipt } } },
-    { ...current, repositories: { public: { ...repository, reviewPolicy: { ...repository.reviewPolicy, ciRepositoryIds: ["private"] } } } },
+    { ...current, repositories: { public: { ...repository, repositoryPolicy: { ...repository.repositoryPolicy, ciRepositoryIds: ["private"] } } } },
     { ...current, repositories: { "../../private": repository } }
   ]) expect(() => parseNativeProjectPendingRecord(invalid)).toThrow();
 });

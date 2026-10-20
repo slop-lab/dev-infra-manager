@@ -14,9 +14,9 @@ import { createNodeNativeGitRootImporterClient } from "../../../packages/host/pl
 import { loadNativeControlPlaneConnection } from "../../../packages/host/plugins/native-git/src/nativeControlPlaneConnection.js";
 import { createManagedWorkspace, ensureManagedWorkspace } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceHost.js";
 import { nativeWorkspaceAttachmentFile, readNativeWorkspaceAttachment } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
-import { bundleSecrets } from "../../control-plane/plugins/native-git/bundleConfigFixture.js";
+import { bundleSecrets } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { activateFinalizeService, cleanupFinalizeFixtures, generationId, importer,
-  rootReadIssuer, runGit, startFinalizeService, workspaceWriteIssuer } from "../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+  rootReadIssuer, runGit, startFinalizeService, workspaceWriteIssuer } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 
 const image = process.env.DIM_NATIVE_MULTI_REPOSITORY_IMAGE;
 const example = resolve(import.meta.dirname, "../../../examples/projects/native-multiple-repositories");
@@ -61,13 +61,13 @@ describe("disposable multi-repository workspace runtime", () => {
         await cp(join(example, repositoryId), source, { recursive: true });
         await runGit("/usr/bin/git", ["init", "--initial-branch=main", source]);
         const policy: unknown = JSON.parse(await readFile(join(example, "policies", `${repositoryId}.json`), "utf8"));
-        if (typeof policy !== "object" || policy === null || !("review" in policy) || !("repositoryId" in policy)
+        if (typeof policy !== "object" || policy === null || !("extensions" in policy) || !("repositoryId" in policy)
           || policy.repositoryId !== repositoryId) throw new Error("invalid example policy");
         await runGit("/usr/bin/git", ["-C", source, "add", "."]);
         await runGit("/usr/bin/git", ["-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "source"]);
         await bootstrapNativeProjectRepository({ name: "example", projectId: "example", repositoryId, stateRoot: managed, scratchRoot: managed,
           sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main", registrarConnectionFile: registrarFile,
-          importerConnectionFile: importerFile, policySource: { kind: "manifest-free", review: policy.review }, signal: AbortSignal.timeout(30_000) });
+          importerConnectionFile: importerFile, policySource: { kind: "manifest-free", extensions: policy.extensions }, signal: AbortSignal.timeout(30_000) });
         await projects.admitRepository("example", repositoryId, importerClient, connection, AbortSignal.timeout(10_000));
       }
       await projects.configure("example", { configurationRepositoryId: "private", defaultWorkingRepositoryId: "public" }, connection, AbortSignal.timeout(10_000));

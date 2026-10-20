@@ -2,10 +2,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { nativeBundleReviewFixture, createBundleReview } from "../control-plane/plugins/native-git/nativeBundleReviewFixture.js";
-import { authoritativePolicy } from "../control-plane/plugins/native-git/authoritativeNativeCandidateFixture.js";
+import { nativeBundleReviewFixture, createBundleReview } from "../control-plane/plugins/git-ci/nativeBundleReviewFixture.js";
+import { authoritativePolicy } from "../control-plane/plugins/git-repositories/authoritativeNativeCandidateFixture.js";
 import { cleanupFinalizeFixtures, createRootBundle, uploadRootBundle, parseImportReceipt, finalizeRootImport,
-  generationId, importer, projectInput } from "../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+  generationId, importer, projectInput } from "../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { createReviewerWebServerFromConfigFile } from "../../packages/web/src/server.js";
 import { parseReviewerWebConfig } from "../../packages/web/src/config.js";
 import { availablePort, WEB_PASSWORD, webConfig } from "./webHarness.js";

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { createReviewerWebServerFromConfigFile } from "../../packages/web/src/server.js";
-import { humanReviewer, generationId } from "../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+import { humanReviewer, generationId } from "../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { installedReviewerFixture, availablePort } from "./webHarness.js";
 
 it("initializes a private reviewer configuration from a live generated connection and logs in", async () => {

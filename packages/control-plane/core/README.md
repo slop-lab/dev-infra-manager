@@ -1,46 +1,101 @@
 # DIM control-plane runtime
 
-`@slop-lab/dim-control-plane-core` runs explicitly installed, operator-trusted service
-plugins without installing DIM workspaces, `dim-host-core`, Docker, or a host controller.
-Node 24 or 26 is required. Services may have their own system prerequisites.
+`@slop-lab/dim-control-plane-core` runs explicitly installed, operator-trusted
+service plugins without installing host core, workspaces, Docker or a host
+controller. Node 24 or 26 is required. Each service owns its system prerequisites;
+the repository plugin additionally needs Git.
 
-Install selected plugins with
-`dim installer install control-plane plugin PACKAGE...`; this also installs the
-matching runtime into an independent control-plane installation. The installer
-prints its `node_modules/.bin/dim-control-plane` path. Run that executable as
-`dim-control-plane run /absolute/path/services.json`. Keep this file private
-(mode 0600); service configuration contains credentials.
+## Repository-only installation
 
-```json
-{
-  "schemaVersion": 1,
-  "plugins": [
-    {"package": "@slop-lab/dim-control-plane-plugin-ci-workflows", "config": {}},
-    {"package": "@slop-lab/dim-control-plane-plugin-native-git", "config": {
-      "service": {}, "stateDirectory": "/var/lib/dim-native-git",
-      "readinessToken": "REVIEWED_TOKEN", "activationToken": "REVIEWED_TOKEN",
-      "expectedGenerationId": "REVIEWED_GENERATION_SHA256"
-    }}
-  ]
-}
+The stable installer facade installs selected plugins and the matching runtime
+in an independent control-plane tree:
+
+```bash
+dim installer install control-plane plugin \
+  '@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0'
 ```
 
-Only plugins enabled in that installation’s `plugins.json` may be selected.
-`DIM_CONTROL_PLANE_PLUGIN_HOME` selects a separate installation; host
-`DIM_PLUGIN_HOME` never affects this runtime. The default is
-`$DIM_DATA_HOME/control-plane/runtime/current` (or the usual XDG data location).
-Disabling a plugin prevents its next startup; stop the running service to apply it.
+No review, merge, Git-CI, workflow compiler, CI coordinator or worker is selected
+by this command. `--local-packages DIRECTORY` uses the exact reviewed source
+bundle instead of registry artifacts. The installer prints the runtime's
+`node_modules/.bin/dim-control-plane` path.
 
-The Native Git `service` object must be the complete validated service
-configuration described by that plugin, rather than the illustrative empty object.
-The workflows plugin supplies the compiler capability; it does not start a CI
-execution coordinator or worker. Existing `dim installer install control-plane`
-Docker deployment and activation transactions remain separate and unchanged.
+Create a private configuration for an idle, loopback-only repository service.
+This example discovers the installed Git executable/version and generates
+separate random activation/readiness tokens and a generation ID:
 
-The runtime validates all configurations and required capabilities before starting
-services. It starts the compiler provider before consumers and closes services in
-reverse order on termination or failed startup, continuing cleanup after errors.
-Plugins must close their own partially started resources when `start` rejects.
-Startup failure never deletes persistent service databases or repository storage.
-The `./plugin` SDK contains only structural types. `./lock` provides a private
-inode Linux `flock` guard; using that helper also requires the system `flock` tool.
+```bash
+DIM_EXAMPLE_GIT="$(command -v git)" node --input-type=module <<'JS'
+import { randomBytes } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { realpathSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const gitExecutable = realpathSync(process.env.DIM_EXAMPLE_GIT);
+const gitVersion = /git version (\d+\.\d+\.\d+)/.exec(
+  execFileSync(gitExecutable, ['--version'], { encoding: 'utf8' })
+)?.[1];
+if (gitVersion === undefined) throw new Error('Git version could not be identified');
+const config = {
+  schemaVersion: 1,
+  plugins: [{ package: '@slop-lab/dim-control-plane-plugin-git-repositories', config: {
+    service: {
+      schemaVersion: 7, serviceId: 'native-main', host: '0.0.0.0', port: 8080,
+      storageRoot: '/var/lib/dim-native-git', gitExecutable, gitVersion,
+      projectRegistrars: [], projectRootImporters: [],
+      projectRootReadIssuers: [], workspaceWriteIssuers: []
+    },
+    stateDirectory: resolve('repository-state'),
+    readinessToken: randomBytes(32).toString('base64url'),
+    activationToken: randomBytes(32).toString('base64url'),
+    expectedGenerationId: randomBytes(32).toString('hex'),
+    listen: { host: '127.0.0.1', port: 8787 }
+  } }]
+};
+writeFileSync('services.json', `${JSON.stringify(config, null, 2)}\n`, {
+  mode: 0o600, flag: 'wx'
+});
+JS
+```
+
+Run the printed executable as `dim-control-plane run /absolute/path/services.json`.
+The example opens the repository listener but grants no operator role, registers
+no Project and starts no capacity. Business operations additionally require
+configured role credentials and exact-generation activation. See the
+[repository service](../plugins/git-repositories/README.md) for its authority and
+extension contract. Stop with SIGINT or SIGTERM; repositories and durable state
+are preserved.
+
+## Explicit plugin selection
+
+Only packages enabled in that installation's `plugins.json` may be selected by
+the service file. `DIM_CONTROL_PLANE_PLUGIN_HOME` selects another installation;
+host `DIM_PLUGIN_HOME` never affects this runtime. The default is
+`$DIM_DATA_HOME/control-plane/runtime/current`, with the normal XDG DIM data
+location used when `DIM_DATA_HOME` is absent. Restart after changing the enabled
+plugin selection. A package installed only as another package's dependency is
+not implicitly selected.
+
+Add code-review for human decisions, merge-policy for checked promotion, Git-CI
+and a compiler for candidate execution integration, or webhooks for external
+delivery. Each has its own strict configuration and private credentials. The
+repository service does not import their implementations. The separate
+`dim installer install control-plane --config FILE` command manages the fixed
+Docker deployment/activation profile; it is not required for this standalone
+plugin composition.
+
+## Generic extension lifecycle
+
+The runtime configures every selected plugin, collects generic
+`{kind, name, value}` extension contributions and validates duplicate identities
+and `requiresExtensions` before starting a service. It does not interpret Git,
+review, workflow, CI or routing settings. Feature-owned SDKs define their own
+extension values and attachment semantics.
+
+Prepared plugins start in configuration order with the complete selected
+extension set and cancellation signal. Services close in reverse order after
+termination or startup failure, continuing cleanup after errors. A plugin must
+clean its partially started resources if `start` rejects. Startup failure never
+deletes persistent databases or repository storage.
+
+The `./plugin` SDK contains structural runtime types. `./lock` provides a private
+inode Linux kernel guard and requires the system `flock` tool.

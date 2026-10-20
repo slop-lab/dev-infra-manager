@@ -143,7 +143,7 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
     }
     if (args[0] === "run") {
       if (this.failImageProbe) return failed("probe failed");
-      const stateFormat = args.some((entry) => entry.includes("native-git")) ? 8 : 6;
+      const stateFormat = args.some((entry) => entry.includes("native-git")) ? 10 : 102;
       if (args.includes("compatibility")) {
         return ok(`${JSON.stringify({ schemaVersion: 1, writeFormat: stateFormat, readableFormats: [stateFormat] })}\n`);
       }

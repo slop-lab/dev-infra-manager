@@ -11,9 +11,17 @@ const repo = path.resolve(import.meta.dirname, "../..");
 const load = (file: string): Promise<unknown> => import(pathToFileURL(path.join(repo, file)).href);
 const { ProcessRunner, WorkspaceStore, WorkspaceService, ContainerWorkspaceRuntime, workspaceRuntimeResources } = await load("packages/host/core/dist/workspace.js") as typeof import("../../packages/host/core/src/workspace.js");
 const { prepareControlPlane, connectControlPlane } = await load("packages/control-plane/admin/dist/controlPlaneSetup.js") as typeof import("../../packages/control-plane/admin/src/controlPlaneSetup.js");
-const { configuredNativeGitBundleServer } = await load("packages/control-plane/plugins/native-git/dist/service.js") as typeof import("../../packages/control-plane/plugins/native-git/src/service.js");
-const { parseNativeGitBundleConfig } = await load("packages/control-plane/plugins/native-git/dist/bundle-config.js") as typeof import("../../packages/control-plane/plugins/native-git/src/bundle-config.js");
-const { dimWorkflowCompiler } = await load("packages/control-plane/plugins/ci-workflows/dist/index.js") as typeof import("../../packages/control-plane/plugins/ci-workflows/src/index.js");
+const { configuredNativeGitBundleServer } = await load("packages/control-plane/plugins/git-repositories/dist/service.js") as typeof import("../../packages/control-plane/plugins/git-repositories/src/service.js");
+const { parseManagedGitServiceConfig, repositoryConfiguration } = await load("packages/control-plane/admin/dist/service-pair.js") as typeof import("../../packages/control-plane/admin/src/service-pair.js");
+const { managedGitPluginEntries } = await load("packages/control-plane/deployment/dist/composition.js") as typeof import("../../packages/control-plane/deployment/src/composition.js");
+async function configuredManagedArtifactService(options: Omit<Parameters<typeof configuredNativeGitBundleServer>[0], "config"> & {
+  readonly config: ReturnType<typeof parseManagedGitServiceConfig>
+}) {
+  const prepared = await Promise.all(managedGitPluginEntries(options)
+    .filter(({ plugin }) => plugin.name !== "git-repositories").map(({ plugin, config }) => plugin.configure(config)));
+  return configuredNativeGitBundleServer({ ...options, config: repositoryConfiguration(options.config),
+    extensions: prepared.flatMap(({ extensions }) => extensions ?? []) });
+}
 const { bootstrapNativeProjectRepository } = await load("packages/host/plugins/native-git/dist/nativeProjectBootstrap.js") as typeof import("../../packages/host/plugins/native-git/src/nativeProjectBootstrap.js");
 const { NativeProjectPendingStore } = await load("packages/host/plugins/native-git/dist/nativeProjectPendingStore.js") as typeof import("../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js");
 const { createNodeNativeGitRootImporterClient } = await load("packages/host/plugins/native-git/dist/nativeGitRootImporterClient.js") as typeof import("../../packages/host/plugins/native-git/src/nativeGitRootImporterClient.js");
@@ -36,13 +44,13 @@ try {
   const operator = path.join(root, "operator");
   await prepareControlPlane({ directory: operator, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
     ordinaryCiImage: `registry.example/ordinary@sha256:${"b".repeat(64)}` });
-  const native = { ...parseNativeGitBundleConfig(JSON.parse(await readFile(path.join(operator, "native-git.json"), "utf8"))),
+  const native = { ...parseManagedGitServiceConfig(JSON.parse(await readFile(path.join(operator, "native-git.json"), "utf8"))),
     gitVersion: execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().replace(/^git version /, "") };
   await writeFile(path.join(operator, "native-git.json"), JSON.stringify(native), { mode: 0o600 });
   const generationId = "c".repeat(64);
   const activationToken = Buffer.alloc(32, 71).toString("base64url");
-  service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
-    config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-service"),
+  service = await configuredManagedArtifactService({
+    config: parseManagedGitServiceConfig(native), stateDirectory: path.join(root, "native-service"),
     readinessToken: Buffer.alloc(32, 72).toString("base64url"), activationToken, expectedGenerationId: generationId });
   const endpoint = await service.listen("127.0.0.1", 0);
   const connected = await connectControlPlane(operator, { endpoint });
@@ -62,7 +70,7 @@ try {
   await bootstrapNativeProjectRepository({ name: "example", projectId: "example", stateRoot: managedRoot, scratchRoot: managedRoot,
     repositoryId: "app", sourceRepository: source, gitExecutable: "/usr/bin/git", selectedRef: "refs/heads/main",
     registrarConnectionFile: path.join(connected.directory, "registrar.json"), importerConnectionFile: path.join(connected.directory, "importer.json"),
-    policySource: { kind: "manifest-free", review: { requiredReviewerIds: ["owner"], requiredJobs: [], ciRepositoryIds: ["app"] } },
+    policySource: { kind: "manifest-free", extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, "merge-policy": {} } },
     signal: AbortSignal.timeout(30_000) });
   await projects.admitRepository("example", "app", await createNodeNativeGitRootImporterClient(path.join(connected.directory, "importer.json")), connection, AbortSignal.timeout(10_000));
   await projects.configure("example", { configurationRepositoryId: "app", defaultWorkingRepositoryId: "app" }, connection, AbortSignal.timeout(10_000));
@@ -71,7 +79,7 @@ try {
   const record: WorkspaceRecord = await createManagedWorkspace({ name, source: { url: "dim://example" }, image,
     resources: { cpuCount: "2", memory: "2g", pidsLimit: "512" } }, { runner, store });
   assert.equal(record.schemaVersion, 10);
-  assert.equal(record.source.url, "dim://example");
+  assert.equal(record.source.url, "dim://example/app");
   assert.equal((await base.list()).length, 1);
   const resources = workspaceRuntimeResources(record);
   const inspection = await runner.run("docker", ["inspect", resources.container]);
@@ -80,7 +88,14 @@ try {
   assert.equal(hostConfig.Privileged, false);
   assert.equal(hostConfig.Runtime, "sysbox-runc");
   assert(Array.isArray(actual.Mounts));
-  assert.deepEqual(actual.Mounts.map((mount: unknown) => object(mount).Type), ["volume", "volume", "volume"]);
+  assert.deepEqual(actual.Mounts.map((raw: unknown) => {
+    const mount = object(raw); return { type: mount.Type, name: mount.Name, target: mount.Destination };
+  }).sort((left, right) => String(left.target).localeCompare(String(right.target))), [
+    { type: "volume", name: resources.home, target: "/home/dim" },
+    { type: "volume", name: resources.tmp, target: "/mnt/dim-tmp" },
+    { type: "volume", name: resources.docker, target: "/var/lib/docker" },
+    { type: "volume", name: resources.checkout, target: "/workspace" }
+  ]);
   const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managedRoot, record.id));
   const repository = attachment.repositories.app; assert(repository);
   const auth = { authorization: `Basic ${Buffer.from(`dim:${repository.grant}`).toString("base64")}` };
@@ -128,8 +143,8 @@ try {
   await service.close();
   const nextGeneration = "d".repeat(64);
   const nextActivationToken = Buffer.alloc(32, 73).toString("base64url");
-  service = await configuredNativeGitBundleServer({ workflowCompiler: dimWorkflowCompiler,
-    config: parseNativeGitBundleConfig(native), stateDirectory: path.join(root, "native-service"),
+  service = await configuredManagedArtifactService({
+    config: parseManagedGitServiceConfig(native), stateDirectory: path.join(root, "native-service"),
     readinessToken: Buffer.alloc(32, 72).toString("base64url"), activationToken: nextActivationToken, expectedGenerationId: nextGeneration });
   assert.equal(await service.listen("127.0.0.1", Number(new URL(endpoint).port)), endpoint);
   const reactivated = await fetch(`${endpoint}/v1/activation`, { method: "POST",

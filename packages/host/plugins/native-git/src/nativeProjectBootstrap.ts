@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { UserError } from "@slop-lab/dim-host-core";
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { createNativeGitProjectRegistrarClient } from "./nativeGitProjectRegistrarClient.js";
 import { loadNativeGitProjectRegistrarConnection } from "./nativeGitProjectRegistrarConnection.js";
 import { createNativeGitRootImporterClient,
@@ -50,7 +50,7 @@ export async function bootstrapNativeProjectRepository(input: NativeProjectBoots
       ownerHostId: registrar.hostId, generationId: registrar.generationId,
       repositoryId: plan.repositoryId, protectedRef: plan.protectedRef,
       expectedCommit: plan.expectedCommit, expectedTree: plan.resolvedTree,
-      reviewPolicy: plan.reviewPolicy,
+      repositoryPolicy: plan.repositoryPolicy,
       bundlePath: plan.bundlePath });
     if (draft.phase === "repository-imported") {
       await requireLiveImportedRoot(importer, { draft, receipt: draft.importReceipt }, input.signal);
@@ -62,7 +62,7 @@ export async function bootstrapNativeProjectRepository(input: NativeProjectBoots
       `${draft.bundleDigest}.bundle`);
     const receipt = await importer.importRepository({ serviceId: "native-main", projectId: draft.projectId,
       repositoryId: draft.repositoryId, protectedRef: draft.protectedRef,
-      expectedCommit: draft.expectedCommit, policy: draft.reviewPolicy, bundlePath }, input.signal);
+      expectedCommit: draft.expectedCommit, policy: draft.repositoryPolicy, bundlePath }, input.signal);
     await requireLiveImportedRoot(importer, { draft, receipt }, input.signal);
     return store.markRepositoryImported(draft.name, draft.repositoryId, receipt);
   } finally {

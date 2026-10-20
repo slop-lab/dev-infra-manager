@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/ci/src/http.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../packages/contracts/git/src/http.js";
 import { createNativeGitWorkspaceWriteIssuerClient, createNodeNativeGitWorkspaceWriteIssuerClient, NativeGitWorkspaceWriteIssuerClientError } from "@slop-lab/dim-host-plugin-native-git";
 import {
   activateFinalizeService,
@@ -18,7 +18,7 @@ import {
   startFinalizeService,
   uploadRootBundle,
   workspaceWriteIssuer
-} from "../../../control-plane/plugins/native-git/nativeRootImportFinalizeFixture.js";
+} from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 
 const roots: string[] = [];
 const leaseNow = 1_000_000;

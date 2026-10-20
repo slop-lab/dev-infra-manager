@@ -119,7 +119,7 @@ describe("local source installation", () => {
     expect(metadata.find(({ name }) => name === "vm")?.runtime).toBe("vm");
     const expanded = JSON.parse(await readFile(resolve(dataHome, "runtime/current/package.json"), "utf8")) as { dependencies: Record<string, string> };
     expect(Object.keys(expanded.dependencies).sort()).toEqual(["@slop-lab/dim-cli", "@slop-lab/dim-host-core", ...pluginNames].sort());
-    for (const optional of ["@slop-lab/dim-control-plane-admin", "@slop-lab/dim-control-plane-plugin-native-git"]) {
+    for (const optional of ["@slop-lab/dim-control-plane-admin", "@slop-lab/dim-control-plane-plugin-git-repositories"]) {
       await expect(access(resolve(dataHome, "runtime/current/node_modules", optional))).rejects.toMatchObject({ code: "ENOENT" });
     }
   }, 120_000);

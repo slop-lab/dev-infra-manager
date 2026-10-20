@@ -10,8 +10,6 @@ export interface NativeWorkspaceRepositoryProof {
   commit: string;
   tree: string;
   policyRevision: string;
-  requiredReviewRevision: string;
-  requiredJobSetRevision: string;
 }
 export interface NativeWorkspaceRepositoryAttachment extends NativeWorkspaceRepositoryProof { nativeWorkspaceId: string; grant: string }
 export interface NativeWorkspaceAttachment {
@@ -62,12 +60,11 @@ export async function readNativeWorkspaceAttachment(file: string): Promise<Nativ
   } finally { await handle.close(); }
 }
 function repositoryProof(value: Record<string, unknown>, extras: readonly string[] = []): NativeWorkspaceRepositoryProof {
-  exact(value, ["repositoryId", "protectedRef", "commit", "tree", "policyRevision", "requiredReviewRevision", "requiredJobSetRevision", ...extras]);
+  exact(value, ["repositoryId", "protectedRef", "commit", "tree", "policyRevision", ...extras]);
   const repositoryId = text(value.repositoryId), commit = text(value.commit), tree = text(value.tree);
   if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(repositoryId) || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit) || tree.length !== commit.length || !/^[a-f0-9]+$/.test(tree)) throw invalid();
-  for (const field of ["policyRevision", "requiredReviewRevision", "requiredJobSetRevision"]) if (!/^[a-f0-9]{64}$/.test(text(value[field]))) throw invalid();
-  return { repositoryId, protectedRef: text(value.protectedRef), commit, tree, policyRevision: text(value.policyRevision),
-    requiredReviewRevision: text(value.requiredReviewRevision), requiredJobSetRevision: text(value.requiredJobSetRevision) };
+  for (const field of ["policyRevision"]) if (!/^[a-f0-9]{64}$/.test(text(value[field]))) throw invalid();
+  return { repositoryId, protectedRef: text(value.protectedRef), commit, tree, policyRevision: text(value.policyRevision) };
 }
 export function nativeWorkspaceBrokerCredential(attachment: NativeWorkspaceAttachment): string {
   const first = Object.values(attachment.repositories)[0];

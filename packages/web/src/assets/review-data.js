@@ -42,7 +42,7 @@ export function parseReview(value) {
   const changes = Array.isArray(input?.changes) ? input.changes.map(parseChange) : null;
   const approvals = Array.isArray(input?.approvals) ? input.approvals.map(parseApproval) : null;
   const revocations = Array.isArray(input?.revocations) ? input.revocations.map(parseRevocation) : null;
-  const requiredStrings = /** @type {const} */ (["projectId", "repositoryId", "protectedRef", "proposalRef", "expectedProtectedHead", "candidateCommit", "candidateTree", "policyRevision", "requiredReviewRevision", "qualityRevision", "workspaceId", "reviewId", "createdAt", "status", "patch"]);
+  const requiredStrings = /** @type {const} */ (["projectId", "repositoryId", "protectedRef", "proposalRef", "expectedProtectedHead", "candidateCommit", "candidateTree", "policyRevision", "requiredReviewRevision", "workspaceId", "reviewId", "createdAt", "status", "patch"]);
   if (input === null || typeof input.canDecide !== "boolean" || changes === null || !changes.every((item) => item !== null) || approvals === null || !approvals.every((item) => item !== null)
     || revocations === null || !revocations.every((item) => item !== null) || !hasStrings(input, requiredStrings)) return null;
   const staleReasons = textList(input.staleReasons);

@@ -570,8 +570,8 @@ describe("cli.ts dispatch (integration, via tsx subprocess)", () => {
     const packages = [
       { name: "@slop-lab/dim-host-core", version: "0.9.0", file: "core.tgz", requires: {} },
       { name: "@slop-lab/dim-cli", version: "0.9.0", file: "cli.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0" } },
-      { name: "@slop-lab/dim-control-plane-admin", version: "0.9.0", file: "admin.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0", "@slop-lab/dim-control-plane-plugin-native-git": "0.9.0" } },
-      { name: "@slop-lab/dim-control-plane-plugin-native-git", version: "0.9.0", file: "native-git.tgz", requires: { "@slop-lab/dim-contracts-external-url": "0.9.0" } },
+      { name: "@slop-lab/dim-control-plane-admin", version: "0.9.0", file: "admin.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0", "@slop-lab/dim-control-plane-plugin-git-repositories": "0.9.0" } },
+      { name: "@slop-lab/dim-control-plane-plugin-git-repositories", version: "0.9.0", file: "native-git.tgz", requires: { "@slop-lab/dim-contracts-external-url": "0.9.0" } },
       { name: "@slop-lab/dim-contracts-external-url", version: "0.9.0", file: "contract.tgz", requires: {} },
       { name: "@slop-lab/dim-host-plugin-native-git", version: "0.9.0", file: "native-host.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0" } },
       { name: "@slop-lab/dim-host-plugin-ci-worker", version: "0.9.0", file: "worker.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0" } },

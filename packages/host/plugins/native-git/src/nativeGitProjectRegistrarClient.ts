@@ -1,9 +1,9 @@
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-ci/http";
+import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type {
   NativeGitAdmissionHttpClient,
   NativeGitAdmissionHttpRequest,
   NativeGitAdmissionHttpResponse
-} from "@slop-lab/dim-contracts-ci/http";
+} from "@slop-lab/dim-contracts-git/http";
 import {
   loadNativeGitProjectRegistrarConnection,
   parseNativeGitProjectRegistrarConnection,

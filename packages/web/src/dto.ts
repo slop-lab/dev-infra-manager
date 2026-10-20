@@ -26,7 +26,7 @@ const nativeReview = z.object({
   protectedRef: printableText(1024).min(1), proposalRef: printableText(1024).min(1), expectedProtectedHead: objectId,
   inputs: z.record(identifier, z.object({ commit: objectId, tree: objectId }).strict()),
   candidateCommit: objectId, candidateTree: objectId, policyRevision: revision,
-  requiredReviewRevision: revision, qualityRevision: revision, workspaceId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  requiredReviewRevision: revision, workspaceId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   requiredReviewerIds: z.array(identifier).max(256).readonly(), changes: z.array(changedPath).max(MAX_CHANGES).readonly(),
   patch: printablePatch(MAX_PATCH_CODE_UNITS), reviewId: digest, createdAt: z.string().datetime(),
   status: z.enum(["pending", "approved", "revoked", "stale"]),
@@ -44,18 +44,18 @@ export function accountReviewDto(review: ReviewDto, canDecide: boolean): Account
 
 export function reviewDto(input: unknown) {
   const envelope = z.object({
-    schemaVersion: z.literal(2), review: z.record(z.string(), z.unknown()), qualityRevision: revision,
+    schemaVersion: z.literal(3), review: z.record(z.string(), z.unknown()),
     status: z.enum(["pending", "approved", "revoked", "stale"]), staleReasons: z.array(printableText(1024)),
     approvals: z.array(approval), revocations: z.array(revocation)
   }).parse(input);
-  const review = nativeReview.parse({ ...envelope.review, qualityRevision: envelope.qualityRevision,
+  const review = nativeReview.parse({ ...envelope.review,
     status: envelope.status, staleReasons: envelope.staleReasons, approvals: envelope.approvals, revocations: envelope.revocations });
   return {
     schemaVersion: review.schemaVersion, projectId: review.projectId, repositoryId: review.repositoryId,
     protectedRef: review.protectedRef, proposalRef: review.proposalRef,
     expectedProtectedHead: review.expectedProtectedHead, candidateCommit: review.candidateCommit,
     inputs: review.inputs, candidateTree: review.candidateTree, policyRevision: review.policyRevision,
-    requiredReviewRevision: review.requiredReviewRevision, qualityRevision: review.qualityRevision,
+    requiredReviewRevision: review.requiredReviewRevision,
     workspaceId: review.workspaceId, requiredReviewerIds: review.requiredReviewerIds,
     changes: review.changes.map((change) => ({
       status: change.status, ...(change.oldPath === undefined ? {} : { oldPath: change.oldPath }),

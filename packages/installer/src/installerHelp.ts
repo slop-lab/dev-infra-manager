@@ -80,10 +80,10 @@ Options:
   -h, --help                 Show this help
 
 Control-plane-only installation needs no DIM core or CLI:
-  dim installer install control-plane plugin @slop-lab/dim-control-plane-plugin-native-git@0.10.0
-  dim installer control-plane disable-plugin @slop-lab/dim-control-plane-plugin-native-git
-  dim installer control-plane enable-plugin @slop-lab/dim-control-plane-plugin-native-git
-  dim installer control-plane remove-plugin @slop-lab/dim-control-plane-plugin-native-git
+  dim installer install control-plane plugin @slop-lab/dim-control-plane-plugin-git-repositories@0.10.0
+  dim installer control-plane disable-plugin @slop-lab/dim-control-plane-plugin-git-repositories
+  dim installer control-plane enable-plugin @slop-lab/dim-control-plane-plugin-git-repositories
+  dim installer control-plane remove-plugin @slop-lab/dim-control-plane-plugin-git-repositories
 
 Installs matching @slop-lab/dim-control-plane-core beside the plugins. Its executable
 is PLUGIN_HOME/node_modules/.bin/dim-control-plane. Override the private home

@@ -11,9 +11,9 @@ test("Project CLI independently imports repositories and selects configuration a
   const policy = join(f.stateRoot, "policy.json");
   const importRepository = async (repositoryId: string) => {
     await writeFile(policy, JSON.stringify({ schemaVersion: 1, repositoryId,
-      review: { requiredReviewerIds: ["owner"], requiredJobs: [], ciRepositoryIds: [repositoryId] } }), { mode: 0o600 });
+      extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, "git-ci": { ciRepositoryIds: [repositoryId], requiredJobs: [] }, "merge-policy": {} } }), { mode: 0o600 });
     return runCli(["project", "repository", "import", "acme", repositoryId, "--source", f.sourceRepository,
-      "--ref", "refs/heads/main", "--review-policy", policy, "--registrar-connection", f.registrarPath,
+      "--ref", "refs/heads/main", "--policy", policy, "--registrar-connection", f.registrarPath,
       "--importer-connection", f.importerPath, "--json"], f.environment);
   };
   const created = await runCli(["project", "create", "acme", "--project-id", "project-a", "--json"], f.environment);

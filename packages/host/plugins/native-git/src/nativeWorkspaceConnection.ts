@@ -25,15 +25,13 @@ export async function refreshNativeWorkspaceConnection(attachment: NativeWorkspa
     for (const binding of bindings) {
       const repositoryId = binding.repositoryId;
       const repository = project.repositories[repositoryId];
-      if (!repository || repository.protectedRef !== binding.protectedRef || repository.reviewPolicy.policyRevision !== binding.policyRevision
-        || repository.reviewPolicy.requiredReviewRevision !== binding.requiredReviewRevision || repository.reviewPolicy.requiredJobSetRevision !== binding.requiredJobSetRevision) {
+      if (!repository || repository.protectedRef !== binding.protectedRef || repository.repositoryPolicy.policyRevision !== binding.policyRevision) {
         throw new UserError(`repository '${repositoryId}' no longer matches the workspace's pinned ref and review policy`);
       }
       const proof = await proveNativeProjectReadiness(selected, project, repositoryId, signal, {
         commit: binding.commit, tree: binding.tree, allowFastForward: true
       });
-      if (proof.policyRevision !== binding.policyRevision || proof.requiredReviewRevision !== binding.requiredReviewRevision
-        || proof.requiredJobSetRevision !== binding.requiredJobSetRevision) throw new UserError("workspace readiness policy changed");
+      if (proof.policyRevision !== binding.policyRevision) throw new UserError("workspace readiness policy changed");
     }
     const refreshed = { ...attachment, connectionFile };
     await writeNativeWorkspaceAttachment(refreshed);

@@ -1,0 +1,9 @@
+{
+  "name": "@this-project/control-plane-git-service-image",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "yaml": "2.8.3",
+    "zod": "4.1.11"
+  }
+}
