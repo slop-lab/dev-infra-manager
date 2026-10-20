@@ -27,13 +27,18 @@ is implied by these source changes.
   Examples own executable recipes, repository templates and development/check
   scripts. Both lightweight integration and fresh-VM workspace acceptance use
   those declarations. Run heavy VM acceptance before merging to main or
-  releasing, independently of development push checks.
+  releasing, independently of development push checks. The acceptance gate runs
+  the control plane and host in separate simultaneous VMs and can launch from
+  a DIM workspace with the optional KVM runtime; its preflight reports actual
+  KVM VM creation, tooling and resource requirements.
 
 - Develop ordinary Git repositories on local or SSH hosts without installing a
   control plane. Use `dim ls`, `create`, `exec`, `connect` and `forward` directly.
   Persistent Sysbox workspaces preserve checkout, home, private Docker data
   and a private temporary volume across recreation, with explicit resource
   limits, tool-neutral SSH and scoped in-guest lifecycle/session helpers.
+  Select the optional `container-kvm` host runtime to run QEMU inside a
+  workspace through an explicit operator-owned device grant.
   Concurrent service resume keeps one supervisor and workload across atomic
   owner-record replacement.
   Installed host plugins prepare their guest clients without repository

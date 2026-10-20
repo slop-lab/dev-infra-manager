@@ -166,6 +166,7 @@ the base CLI.
 | [host-mirrors](packages/host/plugins/mirrors/README.md) | Workspace clients for local or remote package caches |
 | [host-llm-router](packages/host/plugins/llm-router/README.md) | Workspace identity fencing, private gateway and OpenCode connection to a control-plane router |
 | [vm](packages/host/plugins/vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped browser consoles |
+| [kvm](packages/host/plugins/kvm/README.md) | Explicit KVM access inside a Sysbox workspace through the `container-kvm` runtime |
 | [tunnels](packages/host/plugins/tunnels/README.md) | Persistent TCP/UDP routes, workspace grants and operator web UI |
 | [workspace-check](packages/host/plugins/workspace-check/README.md) | Disposable lifecycle/data-preservation checks for ordinary repositories |
 
@@ -189,6 +190,11 @@ just typecheck
 just test
 just build-packages
 ```
+
+For the examples' separate control-plane and host VM acceptance, run
+`just verify examples-vm-preflight`, then `just verify examples-vm`. This also
+runs inside an explicitly KVM-enabled DIM workspace; see the
+[workspace development instructions](scripts/development.md#kvm-example-verification-inside-a-workspace).
 
 `just typecheck` checks both TypeScript and all source JavaScript (`.js`,
 `.mjs`, `.cjs`) with the shared strict compiler settings. JavaScript sources

@@ -16,7 +16,14 @@ and neither a successful skip nor TCG counts as a pass. An offline runner leaves
 the required check pending. Use test hosts without production DIM state or
 credentials. The workflow does not retain checkout credentials.
 
-From a clean exact candidate on that host, run the same gate manually:
+The same gate runs inside a DIM workspace with an explicit `container-kvm`
+runtime grant. Start with `just verify examples-vm-preflight`; it tests actual
+KVM VM creation as the current user and reports tool, memory and disk
+requirements. The [workspace development guide](../../scripts/development.md#kvm-example-verification-inside-a-workspace)
+shows installation and creation. No host Docker socket is passed into that
+workspace. The ordinary `container` runtime does not expose KVM.
+
+From a clean exact candidate in that workspace or on the test host, run:
 
 ```bash
 DIM_EXAMPLES_VM_LOG_ROOT=/absolute/private/examples-evidence \
@@ -24,8 +31,16 @@ DIM_EXAMPLES_VM_LOG_ROOT=/absolute/private/examples-evidence \
 ```
 
 The wrapper creates a Git bundle and manifest for the current commit and tree,
-verifies `GITHUB_SHA` when supplied, and delegates to the existing fresh Ubuntu
-bootstrap profile. Example `verify-vm` stages run inside those fresh guests.
+verifies `GITHUB_SHA` when supplied, and boots separate simultaneous Ubuntu
+VMs for the control plane and DIM host. The control-plane VM installs only its
+standalone runtime and declared control-plane plugins. The host VM installs the
+host runtime and declared host plugins, connects to the remote service, and runs
+the example `verify-vm` stages in its real Sysbox workspaces. The VMs have
+independent disks, processes and DIM state. Their service connection crosses
+the VM boundary through a host-key-pinned SSH tunnel; service listeners stay
+on each VM's loopback interface. It is not an in-process
+or same-VM substitute. The separate bootstrap profile still tests the
+`ordinary` and `control-qemu` installation roles independently.
 The outer invocation must succeed as well as its guest stages; teardown or
 evidence-export failure is not acceptance. Logs remain under the selected
 evidence directory, and the workflow uploads them even on failure. It uploads

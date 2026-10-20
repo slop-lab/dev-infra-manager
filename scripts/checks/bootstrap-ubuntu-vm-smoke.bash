@@ -25,7 +25,7 @@ done
 
 readonly BOOTSTRAP_IMAGE_URL=https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-amd64.img
 readonly BOOTSTRAP_IMAGE_SHA256=6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2
-BOOTSTRAP_WORK_ROOT="$(mktemp -d /tmp/dim-bootstrap-ubuntu-vm.XXXXXXXX)"
+BOOTSTRAP_WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dim-bootstrap-ubuntu-vm.XXXXXXXX")"
 BOOTSTRAP_WORK_IDENTITY="$(stat -Lc '%d:%i' "$BOOTSTRAP_WORK_ROOT")"
 BOOTSTRAP_EVIDENCE_ROOT="${DIM_BOOTSTRAP_VM_LOG_ROOT:-$PWD/.local/verification/bootstrap-ubuntu-vm-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 BOOTSTRAP_BASE_IMAGE=""
@@ -42,7 +42,8 @@ bootstrap_cleanup() {
   if [[ "$status" -ne 0 ]]; then
     for log in "$BOOTSTRAP_EVIDENCE_ROOT"/*-console.log \
       "$BOOTSTRAP_EVIDENCE_ROOT"/*-bootstrap-pass1.log "$BOOTSTRAP_EVIDENCE_ROOT"/*-bootstrap-pass2.log \
-      "$BOOTSTRAP_EVIDENCE_ROOT"/*-control-plane-install.log "$BOOTSTRAP_EVIDENCE_ROOT"/*-native-basic-lifecycle.log; do
+      "$BOOTSTRAP_EVIDENCE_ROOT"/*-control-plane-install.log "$BOOTSTRAP_EVIDENCE_ROOT"/*-native-basic-lifecycle.log \
+      "$BOOTSTRAP_EVIDENCE_ROOT"/separate-*.log "$BOOTSTRAP_EVIDENCE_ROOT"/host-build-images-artifacts.log; do
       [[ -f "$log" ]] || continue
       printf '\nfailed fresh Ubuntu VM diagnostic: %s\n' "$log" >&2
       tail -c 4096 -- "$log" >&2
@@ -52,7 +53,11 @@ bootstrap_cleanup() {
     if [[ "$BOOTSTRAP_CLEANUP_UNCERTAIN" -ne 0 ]]; then
       cleanup_status=1
     else
-      bootstrap_guest_stop || cleanup_status=1
+      if declare -F bootstrap_examples_stop_all >/dev/null; then
+        bootstrap_examples_stop_all || cleanup_status=1
+      else
+        bootstrap_guest_stop || cleanup_status=1
+      fi
     fi
     if [[ "$cleanup_status" -eq 0 && -d "$BOOTSTRAP_WORK_ROOT" && ! -L "$BOOTSTRAP_WORK_ROOT" \
       && "$(stat -Lc '%d:%i' "$BOOTSTRAP_WORK_ROOT")" == "$BOOTSTRAP_WORK_IDENTITY" ]]; then
@@ -80,6 +85,11 @@ printf 'image-url=%s\nimage-sha256=%s\nsource-sha=%s\nsource-tree=%s\n' \
   "$BOOTSTRAP_IMAGE_URL" "$BOOTSTRAP_IMAGE_SHA256" "$SOURCE_SHA" "$SOURCE_TREE" \
   >"$BOOTSTRAP_EVIDENCE_ROOT/input.txt"
 
+if [[ "${DIM_BOOTSTRAP_EXAMPLES_SEPARATE:-0}" == 1 ]]; then
+  source "$script_dir/lib/examples-separated-vms.bash"
+  bootstrap_examples_run
+  bootstrap_examples_stop_all
+else
 for role in ordinary control-qemu; do
   bootstrap_guest_start "$role"
   bootstrap_guest_copy_source
@@ -91,6 +101,8 @@ for role in ordinary control-qemu; do
   fi
   printf 'PASS fresh-ubuntu role=%s source=%s\n' "$role" "$SOURCE_SHA"
 done
+
+fi
 
 if [[ ! -d "$BOOTSTRAP_WORK_ROOT" || -L "$BOOTSTRAP_WORK_ROOT" \
   || "$(stat -Lc '%d:%i' "$BOOTSTRAP_WORK_ROOT")" != "$BOOTSTRAP_WORK_IDENTITY" ]] \

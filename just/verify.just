@@ -4,9 +4,13 @@ set shell := ["bash", "-uc"]
 environments-kvm verbose="":
     cd .. && bash scripts/checks/kvm-host-install-smoke.bash "{{verbose}}"
 
-# Fresh-VM example acceptance for the exact committed candidate before main/release.
-examples-vm:
-    cd .. && bash scripts/checks/examples-vm-smoke.bash
+# Check KVM access and tools here, including inside a DIM workspace; print setup guidance.
+examples-vm-preflight *args:
+    cd .. && node scripts/checks/examples-vm-preflight.ts {{args}}
+
+# Run the exact candidate across separate control-plane and host KVM VMs.
+examples-vm *args:
+    cd .. && bash scripts/checks/examples-vm-smoke.bash {{args}}
 
 # Execute the checked-in examples' lightweight verification commands.
 examples:

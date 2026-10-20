@@ -12,7 +12,8 @@ const facade = process.env.DIM_EXAMPLE_DIM_BIN;
 const data = process.env.DIM_DATA_HOME;
 if (!facade || !data) throw new Error("VM examples require their isolated installed facade and DIM_DATA_HOME");
 const host = createRequire(join(data, "runtime/current/package.json"));
-const controlPlane = createRequire(join(data, "control-plane/runtime/current/package.json"));
+const remoteEndpoint = process.env.DIM_EXAMPLE_REMOTE_ENDPOINT;
+const controlPlane = remoteEndpoint === undefined ? createRequire(join(data, "control-plane/runtime/current/package.json")) : undefined;
 async function load<T>(resolver: NodeJS.Require, name: string): Promise<T> {
   return import(pathToFileURL(resolver.resolve(name)).href) as Promise<T>;
 }
@@ -27,10 +28,18 @@ function run(command: string, args: readonly string[]): Promise<void> {
 const cancellation = new AbortController();
 const { prepareControlPlane, connectControlPlane } = await load<typeof import("../../packages/control-plane/admin/src/index.js")>(host, "@slop-lab/dim-control-plane-admin");
 const { parseManagedGitServiceConfig, repositoryConfiguration } = await load<typeof import("../../packages/control-plane/admin/src/service-pair.js")>(host, "@slop-lab/dim-control-plane-admin/service-pair");
-const { configuredNativeGitBundleServer } = await load<typeof import("../../packages/control-plane/plugins/git-repositories/src/index.js")>(controlPlane, "@slop-lab/dim-control-plane-plugin-git-repositories");
+const repositoryModule = controlPlane === undefined ? undefined : await load<typeof import("../../packages/control-plane/plugins/git-repositories/src/index.js")>(controlPlane, "@slop-lab/dim-control-plane-plugin-git-repositories");
 const scratch = await mkdtemp(join(tmpdir(), "dim-examples-services-"));
-let service: Awaited<ReturnType<typeof configuredNativeGitBundleServer>> | undefined;
+let service: Awaited<ReturnType<NonNullable<typeof repositoryModule>["configuredNativeGitBundleServer"]>> | undefined;
 try {
+  if (remoteEndpoint !== undefined) {
+    const setup = process.env.DIM_EXAMPLE_REMOTE_SETUP;
+    if (!setup || !process.env.DIM_EXAMPLE_REMOTE_CI_ENDPOINT) throw new Error("separate control-plane operator directory and CI endpoint required");
+    const connected = await connectControlPlane(setup, { endpoint: remoteEndpoint, ciEndpoint: process.env.DIM_EXAMPLE_REMOTE_CI_ENDPOINT });
+    process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE = join(connected.directory, "host.json");
+    process.env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE = join(connected.directory, "importer.json");
+    console.log("Host-only installed runtime connected to the separate control-plane VM");
+  } else {
   const directories: unknown = JSON.parse(await readFile(join(root, "examples/catalog.json"), "utf8"));
   if (!Array.isArray(directories) || !directories.every((entry): entry is string => typeof entry === "string")) throw new Error("invalid example catalog");
   const recipes = await Promise.all(directories.map((entry) => loadExampleRecipe(resolveExamplePath({ directory: join(root, "examples") }, entry))));
@@ -52,12 +61,12 @@ try {
   for (const name of selected) {
     if (name === "@slop-lab/dim-control-plane-plugin-git-repositories" || name === "@slop-lab/dim-control-plane-plugin-ci") continue;
     if (!(name in configurations)) throw new Error(`VM service setup has no configuration for declared plugin ${name}`);
-    const { controlPlanePlugin } = await load<{ controlPlanePlugin: ControlPlanePlugin }>(controlPlane, name);
+    const { controlPlanePlugin } = await load<{ controlPlanePlugin: ControlPlanePlugin }>(controlPlane!, name);
     const prepared = await controlPlanePlugin.configure(configurations[name]);
     extensions.push(...prepared.extensions ?? []);
   }
   const generationId = "c".repeat(64), activationToken = Buffer.alloc(32, 71).toString("base64url");
-  service = await configuredNativeGitBundleServer({ config: repositoryConfiguration(config),
+  service = await repositoryModule!.configuredNativeGitBundleServer({ config: repositoryConfiguration(config),
     stateDirectory: join(scratch, "repositories"), readinessToken: Buffer.alloc(32, 72).toString("base64url"),
     activationToken, expectedGenerationId: generationId, extensions, signal: cancellation.signal });
   const endpoint = await service.listen("127.0.0.1", 0);
@@ -68,6 +77,7 @@ try {
   if (activated.status !== 200) throw new Error("example repository activation failed");
   process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE = join(connected.directory, "host.json");
   process.env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE = join(connected.directory, "importer.json");
+  }
   const work = join(scratch, "examples"); await mkdir(work);
   process.env.DIM_EXAMPLE_WORK = work;
   await run(process.execPath, [join(root, "scripts/examples/run.ts"), "all", "verify-vm"]);

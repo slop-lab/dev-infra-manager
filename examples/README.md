@@ -94,13 +94,19 @@ they do not pretend an unconfigured provider is an accepted VM scenario.
 
 The ordinary source gate runs `all verify` on every source check, including
 development pushes, so recipe commands are exercised rather than only parsed.
-Run `just verify examples-vm` for the fresh Ubuntu/KVM gate. The fresh-VM wrapper
-prepares exact installed packages, a matching workspace
-image and temporary native services before invoking these stages. This heavy
+Run `just verify examples-vm-preflight` to discover readiness and workspace
+setup instructions, then `just verify examples-vm` for the fresh Ubuntu/KVM
+gate. The wrapper boots a standalone control-plane VM and an independent host
+VM at the same time. It prepares exact installed packages, a matching workspace
+image and remote native services before invoking these stages on the host VM. This heavy
 acceptance gate is required before merging to main and before release, rather
 than on every daily development check. It verifies workspace integration using
 the installed artifacts. It does not substitute for functional-KVM CI runner
 verification or provider/account acceptance.
+
+The gate also runs from an explicitly KVM-enabled DIM workspace; see the
+[workspace setup and commands](../scripts/development.md#kvm-example-verification-inside-a-workspace).
+The ordinary `container` runtime intentionally has no KVM device.
 
 Generic runtime support is documented in [verification](../docs/development/verification.md).
 Only exact host-plugin requirements belong in a repository's optional

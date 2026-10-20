@@ -7,14 +7,18 @@ transport. There is no required trusted outer container in the base path.
 The runtime adapter owns resource creation, inspection, command execution,
 start/stop, keep-data recreation and deletion. Workspace application logic owns
 identity, source, persisted phase and serialization; it does not interpret
-Docker output. A future VM adapter must implement these responsibilities
+Docker output. Plugin runtime adapters implement these responsibilities
 without making transport or repository workflow rules runtime-specific.
 
-The container owns three persistent named volumes: checkout, home, and private
-Docker data. Recreate preserves them. Discard removes exact owned resources.
+The container owns four named volumes: checkout, home, private Docker data,
+and private temporary data. Recreate preserves them. Discard removes exact owned resources.
 Initialized workspaces with a missing volume fail rather than silently acquire
 an empty replacement. The runtime rejects unexpected mounts, privileged mode,
-host devices and another workspace's resources.
+host devices and another workspace's resources. A trusted runtime plugin may
+explicitly construct the container adapter with reviewed device mappings; the
+adapter checks the exact source, destination and permissions on every inspection.
+The base `container` provider passes none. Repository configuration and guest
+requests cannot supply device mappings.
 
 CPU, memory and process limits apply to the agent container and its descendants.
 Explicit `unlimited` values are supported. Finite live updates are checked by
@@ -23,7 +27,12 @@ Docker updates do not reliably remove existing limits. Disk quotas are not
 provided. Runtime capability and resource enforcement must be described
 honestly rather than inferred from a configured value.
 
-VM support remains future work. No Incus or libvirt profile is currently
-supported by the base application, and no fictional schema or compatibility
-migration is reserved for it. Earlier managed VM design material is retained as
-[design notes](../guides/runtime-backends.md).
+The optional KVM host plugin supplies `container-kvm`, exposing only the reviewed
+KVM device to a Sysbox workspace. The operator prepares a private device node;
+the plugin does not change the host's `/dev/kvm` permissions, expose host directories,
+grant privileged mode, or expose the host Docker socket. Creating a VM through
+the KVM API from the actual workspace user is the functional acceptance check.
+
+The optional VM host plugin supplies an Incus VM backend with explicit host
+configuration and resource admission. Its configuration and implementation
+belong to that plugin. See the [runtime guide](../guides/runtime-backends.md).

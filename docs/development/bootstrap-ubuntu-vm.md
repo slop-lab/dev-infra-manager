@@ -155,6 +155,13 @@ passing guest stages do not establish that the complete outer invocation passed.
 
 ## Disposable fresh-VM acceptance profile
 
+This profile checks installation roles sequentially. Its service-image
+fixtures do not establish independent control-plane/host operation. For that
+acceptance, including execution from a DIM workspace, run
+`just verify examples-vm-preflight` followed by `just verify examples-vm`.
+The [examples profile](verification.md#examples-in-fresh-vms) uses two
+simultaneous VMs with separate installed roles and a remote service connection.
+
 `scripts/checks/bootstrap-ubuntu-vm-smoke.bash` drives both role commands
 through two sequential fresh guests. It uses the official dated Ubuntu 24.04
 amd64 cloud image at
@@ -173,12 +180,12 @@ with status 3; a new SSH login performs the resume. Each guest proves the
 installed `0.10.0-local-<64 lowercase hex>` facade and a real Sysbox container.
 The control/QEMU guest additionally checks the current service images and
 installs matched tarballs into isolated prefixes with `just verify installer-artifacts`.
-It then packs the exact recipe versions, installs the examples' declared host
-and control-plane plugins through an isolated facade, builds a workspace image,
-and runs `scripts/examples/verify-vm.ts`. The ordinary and native single/multiple
-repository examples execute their checked-in workspace scripts and discard
-their disposable workspaces. This establishes workspace behavior, rather than
-execution of the optional CI worker's QEMU jobs. It does not create persistent
+The separate `examples-vm` gate packs the exact recipe versions and installs
+the declared host and control-plane plugins in independent VMs. The ordinary
+and native single/multiple repository examples execute their checked-in
+workspace scripts on the host VM and discard their disposable workspaces.
+This establishes workspace behavior, rather than execution of the optional
+CI worker's QEMU jobs. Neither gate creates persistent
 operator TLS material, native global-role credentials, worker deployments, or
 a generic multi-host bridge; the gates own and clean their disposable fixtures.
 The acceptance profile installs the checkout's frozen development dependencies

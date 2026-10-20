@@ -17,3 +17,9 @@ URLs, version ranges and executable hooks are not declaration inputs.
 Developer commands live in [`scripts/development.md`](../scripts/development.md) and `scripts/dev.bash`.
 Host-run QEMU verification mechanics live in [`tests/scenarios/qemu`](../tests/scenarios/qemu).
 Those helpers are explicit repository tooling, not DIM Project configuration.
+
+For KVM acceptance inside a workspace, start with
+`bash scripts/dev.bash verify-vm --preflight-only`. The
+[development guide](../scripts/development.md#kvm-example-verification-inside-a-workspace)
+explains the operator-selected `container-kvm` runtime and the separate
+control-plane/host VM topology. No repository file grants access to host KVM.

@@ -58,11 +58,11 @@ EOF
 }
 
 bootstrap_guest_start() {
-  local role="$1" memory_mb=2048 port host_type host_key host_rest
+  local role="$1" memory_mb="${2:-2048}" port host_type host_key host_rest
   BOOTSTRAP_GUEST_ROOT="$BOOTSTRAP_WORK_ROOT/$role"
   mkdir -m 0700 "$BOOTSTRAP_GUEST_ROOT"
   BOOTSTRAP_GUEST_IDENTITY="$(stat -Lc '%d:%i' "$BOOTSTRAP_GUEST_ROOT")"
-  [[ "$role" == ordinary ]] || memory_mb=3072
+  if [[ "$#" -lt 2 && "$role" != ordinary ]]; then memory_mb=3072; fi
   ssh-keygen -q -t ed25519 -N '' -f "$BOOTSTRAP_GUEST_ROOT/login-key"
   ssh-keygen -q -t ed25519 -N '' -f "$BOOTSTRAP_GUEST_ROOT/host-key"
   bootstrap_guest_write_cloud_init "$BOOTSTRAP_GUEST_ROOT" "$role"
@@ -71,6 +71,7 @@ bootstrap_guest_start() {
   qemu-img create -q -f qcow2 -F qcow2 -b "$BOOTSTRAP_BASE_IMAGE" \
     "$BOOTSTRAP_GUEST_ROOT/root.qcow2" 32G
   port="$(bootstrap_guest_allocate_port)"
+  BOOTSTRAP_SSH_PORT="$port"
   read -r host_type host_key host_rest <"$BOOTSTRAP_GUEST_ROOT/host-key.pub"
   printf '[127.0.0.1]:%s %s %s\n' "$port" "$host_type" "$host_key" \
     >"$BOOTSTRAP_GUEST_ROOT/known_hosts"
@@ -198,14 +199,6 @@ REMOTE
       'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench && pnpm install --frozen-lockfile && just build-packages && just verify native-idle-service-images && just verify installer-artifacts' \
       >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-service-images-and-installer-artifacts.log" 2>&1
     printf 'PASS fresh-ubuntu service-images-and-installer-artifacts source=%s\n' "$SOURCE_SHA"
-    printf 'fresh-ubuntu phase=example-recipes role=%s source=%s\n' "$role" "$SOURCE_SHA"
-    timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" \
-      bash -s -- "$SOURCE_SHA" >"$BOOTSTRAP_EVIDENCE_ROOT/control-qemu-example-recipes.log" 2>&1 <<'REMOTE'
-set -euo pipefail
-export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin
-cd /home/dim/dim/workbench
-bash scripts/examples/verify-installed.bash
-REMOTE
-    printf 'PASS fresh-ubuntu example-recipes source=%s\n' "$SOURCE_SHA"
+
   fi
 }
