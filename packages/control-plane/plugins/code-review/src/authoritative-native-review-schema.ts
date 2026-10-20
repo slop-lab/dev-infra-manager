@@ -25,6 +25,7 @@ const identityObjectSchema = z.object({
   expectedProtectedHead: objectId, candidateCommit: objectId, candidateTree: objectId,
   policyRevision: digest, requiredReviewRevision: digest, workspaceId: stableWorkspaceId,
   requiredReviewerIds: z.array(identifier).readonly(),
+  changeRuleEvidence: z.array(z.object({ rule: z.number().int().nonnegative(), digest }).strict().readonly()).readonly().optional(),
   changes: z.array(authoritativeNativeChangedPathSchema).readonly(), patch: z.string(), patchBytes: base64
 }).strict();
 

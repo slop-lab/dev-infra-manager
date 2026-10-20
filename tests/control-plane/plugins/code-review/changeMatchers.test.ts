@@ -114,3 +114,31 @@ it("allows conditional-only review: ordinary changes promote directly while sens
     expect((await promote(sensitive.review.reviewId)).status).toBe(201);
   } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 }, 30_000);
+
+it("binds structured matcher evidence even when the required reviewer set stays unchanged", async () => {
+  const promoter = { hostId: "host-a", username: "promoter", password: token(10) };
+  const merge = await mergePlugin.configure({ hostPromoters: [promoter] });
+  let digest = "a".repeat(64);
+  const provider: ReviewChangeMatcher = { name: "observed", revision: "3".repeat(64), validate() {}, async matches({ readBaseFile, readCandidateFile }) {
+    expect(await readBaseFile?.("README.md")).toEqual(Buffer.from("initial\n"));
+    expect(await readCandidateFile("README.md")).toEqual(Buffer.from("candidate\n"));
+    return { matches: false, evidenceDigest: digest };
+  } };
+  const f = await fixture(true, [...(merge.extensions ?? []), reviewChangeMatcherExtension(provider)], { requiredReviewerIds: [], pathReviewerRules: [], changeReviewerRules: [{ matcher: "observed", options: {}, reviewerIds: ["owner"] }] }, [reviewer]);
+  try {
+    await writeFile(join(f.source, "README.md"), "candidate\n"); await f.commit();
+    await git("/usr/bin/git", ["-C", f.source, "push", "origin", `HEAD:${f.proposalRef}`]);
+    const extension = f.service.context.extensions.find(({ kind, name }) => kind === "dim.code-review.service" && name === "default");
+    const service = extension!.value as CodeReviewService;
+    const envelope = await service.create(f.service.context, { projectId: "project", repositoryId: "main", proposalRef: f.proposalRef });
+    expect(envelope.review.changeRuleEvidence).toEqual([{ rule: 0, digest }]);
+    const promote = () => fetch(`${f.origin}/v1/projects/project/repositories/main/reviews/${envelope.review.reviewId}/promotions`, { method: "POST", headers: { authorization: basic(promoter), "content-type": "application/json", "x-dim-generation-id": generationId }, body: JSON.stringify({ schemaVersion: 1 }) });
+    digest = "b".repeat(64);
+    expect((await promote()).status).toBe(409);
+    const newEnvelope = await service.create(f.service.context, { projectId: "project", repositoryId: "main", proposalRef: f.proposalRef });
+    expect(newEnvelope.review.requiredReviewerIds).toEqual(envelope.review.requiredReviewerIds);
+    expect(newEnvelope.review.reviewId).not.toBe(envelope.review.reviewId);
+    digest = "a".repeat(64);
+    expect((await promote()).status).toBe(201);
+  } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
+}, 30_000);

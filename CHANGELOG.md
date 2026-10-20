@@ -16,7 +16,13 @@ is implied by these source changes.
   changing it requires renewed approval. Add mandatory reviews for paths or
   specific JSON fields and extend matching through named providers. Project-owned
   matchers can change, but an independent rule requires review of their own code
-  and settings; their output cannot waive that review. Compose named protected-ref
+  and settings; their output cannot waive that review. Optional brokered review
+  tracing protects observed imports and configuration reads automatically, while
+  explicit target reads support field-level decisions. A shared tracing library
+  and separate control-plane/runtime plugins keep language execution outside
+  the review service; the Node adapter runs without a repository mount or
+  credentials in disposable Docker containers. Read evidence participates in
+  review identity and is rechecked before promotion. Compose named protected-ref
   update constraints at the repository boundary,
   alongside non-rewritable history, current approvals and quality evidence.
   Restart recovery never replays an unapplied authorization. Use `--policy` with

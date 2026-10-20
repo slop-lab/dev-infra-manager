@@ -8,7 +8,7 @@ export interface ReviewChangeMatcher {
   /** SHA256 of reviewed implementation and every provider setting affecting matching semantics. */
   readonly revision: string;
   validate(options: unknown): void;
-  matches(input: { readonly options: unknown; readonly changes: readonly AuthoritativeNativeChangedPath[]; readonly readBlob: (objectId: string) => Promise<Buffer>; readonly readCandidateFile: (path: string) => Promise<Buffer | undefined> }): Promise<boolean>;
+  matches(input: { readonly options: unknown; readonly changes: readonly AuthoritativeNativeChangedPath[]; readonly readBlob: (objectId: string) => Promise<Buffer>; readonly readCandidateFile: (path: string) => Promise<Buffer | undefined>; readonly readBaseFile?: (path: string) => Promise<Buffer | undefined> }): Promise<boolean | { readonly matches: boolean; readonly evidenceDigest: string }>;
 }
 export const reviewChangeMatcherKind = "dim.code-review.change-matcher";
 export function assertReviewChangeMatchers(matchers: readonly ReviewChangeMatcher[]): void {

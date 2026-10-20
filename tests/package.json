@@ -40,6 +40,9 @@
     "@slop-lab/dim-control-plane-plugin-webhooks": "workspace:*",
     "@slop-lab/dim-host-core": "workspace:*",
     "@slop-lab/dim-host-plugin-mirrors": "workspace:*",
-    "@slop-lab/dim-host-plugin-native-git": "workspace:*"
+    "@slop-lab/dim-host-plugin-native-git": "workspace:*",
+    "@slop-lab/dim-review-tracing": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-review-tracing": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-review-tracing-node": "workspace:*"
   }
 }

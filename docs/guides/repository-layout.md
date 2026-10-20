@@ -10,6 +10,7 @@ Production packages are grouped by where they run and what they own:
 | `packages/control-plane/plugins/<name>` | `@slop-lab/dim-control-plane-plugin-<name>` | Independent authoritative services and workflow interpretation |
 | `packages/control-plane/deployment` | `@this-project/control-plane-deployment` (private) | Composition artifact for the installer’s fixed service-image profile |
 | `packages/control-plane/admin` | `@slop-lab/dim-control-plane-admin` | Explicit service deployment and operator connection tools |
+| `packages/review-tracing` | `@slop-lab/dim-review-tracing` | Runtime-neutral file-read records, dependency comparison and tracing adapter contracts |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
 | `packages/cli` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
@@ -21,6 +22,13 @@ machine; they describe authority and installation, not physical topology.
 Host plugins own delivery of their workspace and agent helpers through the
 shared host integration mechanism. Repositories need no plugin configuration
 for capabilities selected by the operator.
+
+Review tracing is optional. The shared tracing package contains no service,
+container runner or language loader. The control-plane `review-tracing` plugin
+connects immutable Git snapshots to review requirements; runtime plugins such as
+`review-tracing-node` own isolated execution and import/file-read mediation.
+Additional runtimes implement the same tracing contract without changing review
+or ref-policy core.
 
 The mirrors consumer and cache-server deployment are separate host plugins.
 Mirrors owns its included and installed protocol adapters, scoped relay and guest

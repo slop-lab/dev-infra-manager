@@ -91,6 +91,25 @@ must execute without control-plane credentials or authority. Changing a candidat
 commit after approval invalidates that approval. The imported policy is an
 operator trust anchor and cannot be replaced by candidate configuration.
 
+An optional tracing integration can derive that closure from brokered reads.
+A language-neutral library owns bounded read manifests and snapshot comparison;
+control-plane and language-runtime plugins own policy integration and isolated
+execution respectively. The evaluator receives no repository mount. Imports and
+ordinary reads are dependencies; explicitly declared target reads are input data.
+Reading a path as a target cannot erase its dependency classification. The
+protected execution observes existing dependencies, while candidate execution
+supplies the decision. Changed/deleted dependencies, a dependency no longer read,
+or a dependency present only in the candidate execution require review regardless
+of that decision. Missing/broken baseline code requires review; candidate failure
+denies evaluation. Read evidence and runtime identity bind the review ID and are
+recomputed for approval and promotion, including when reviewer sets are unchanged.
+
+These are observations of the two current executions, not a persistent dependency
+ledger or static analysis of all branches. A dependency reached in both executions
+is compared between the two snapshots. This does not retroactively protect edits
+made before a previously dormant branch became reachable in both executions.
+Projects needing exhaustive protection should retain explicit path rules.
+
 Review preparation extensions may contribute pinned inputs and attachment
 references. Code-review rejects conflicting snapshots and revalidates source
 before publishing. Human review alone reads no workflow files. Its own startup

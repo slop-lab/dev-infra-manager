@@ -70,6 +70,7 @@ export async function createAuthoritativeNativeReview(
       proposalRef: selector.data.proposalRef
     });
     const policy = target.imported.policy;
+    const requirements = await reviewRequirementsForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead);
     let identity: AuthoritativeNativeReviewIdentity = {
       schemaVersion: 2,
       serviceId: "native-main",
@@ -82,7 +83,8 @@ export async function createAuthoritativeNativeReview(
       policyRevision: policy.policyRevision,
       requiredReviewRevision: codeReviewPolicy(policy, runtime.reviewChangeMatchers).requiredReviewRevision,
       workspaceId: selector.data.workspaceId,
-      requiredReviewerIds: await requiredReviewersForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit)
+      requiredReviewerIds: requirements.reviewerIds,
+      ...(requirements.evidence.length === 0 ? {} : { changeRuleEvidence: requirements.evidence })
     };
     const attachments: ReviewAttachment[] = [];
     for (const preparation of runtime.reviewPreparations ?? []) {
@@ -105,8 +107,10 @@ export async function createAuthoritativeNativeReview(
       || JSON.stringify(current.currentHead) !== JSON.stringify(target.currentHead)) {
       throw new AuthoritativeNativeReviewError("authoritative imported repository changed during review creation");
     }
+    const currentRequirements = await reviewRequirementsForChanges(runtime, current.imported.policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead);
     if (codeReviewPolicy(current.imported.policy, runtime.reviewChangeMatchers).requiredReviewRevision !== identity.requiredReviewRevision
-      || JSON.stringify(await requiredReviewersForChanges(runtime, current.imported.policy, evidence.changes, target.repository, evidence.candidateCommit)) !== JSON.stringify(identity.requiredReviewerIds)) {
+      || JSON.stringify(currentRequirements.reviewerIds) !== JSON.stringify(identity.requiredReviewerIds)
+      || JSON.stringify(currentRequirements.evidence) !== JSON.stringify(identity.changeRuleEvidence ?? [])) {
       throw new AuthoritativeNativeReviewError("required review matcher changed during review creation");
     }
     await assertReviewInputsCurrent(runtime, identity);
@@ -149,13 +153,10 @@ function pathRequiredReviewers(
   return [...reviewers].sort();
 }
 
-export async function requiredReviewersForChanges(
-  runtime: CodeReviewRuntime,
-  policy: NativeImportedRootPolicy,
-  changes: readonly AuthoritativeNativeChangedPath[],
-  repository: string,
-  candidateCommit: string
-): Promise<readonly string[]> {
+export async function reviewRequirementsForChanges(
+  runtime: CodeReviewRuntime, policy: NativeImportedRootPolicy, changes: readonly AuthoritativeNativeChangedPath[],
+  repository: string, candidateCommit: string, baseCommit?: string
+): Promise<{ readonly reviewerIds: readonly string[]; readonly evidence: readonly { readonly rule: number; readonly digest: string }[] }> {
   const reviewed = codeReviewPolicy(policy, runtime.reviewChangeMatchers);
   const reviewers = new Set(pathRequiredReviewers(reviewed, changes));
   const objectIds = new Set(changes.flatMap(({ oldObjectId, newObjectId }) => [oldObjectId, newObjectId]).filter((id) => id !== "0"));
@@ -167,15 +168,22 @@ export async function requiredReviewersForChanges(
     if (pending === undefined) { pending = readAuthoritativeNativeReviewBlob(git, objectId); blobs.set(objectId, pending); }
     return pending.then((value) => Buffer.from(value));
   };
-  for (const rule of reviewed.changeReviewerRules) {
+  const evidence: { rule: number; digest: string }[] = [];
+  for (const [index, rule] of reviewed.changeReviewerRules.entries()) {
     const matcher = (runtime.reviewChangeMatchers ?? defaultReviewChangeMatchers()).find(({ name }) => name === rule.matcher);
     if (matcher === undefined) throw new Error(`required review change matcher '${rule.matcher}' is unavailable`);
-    const matches = await matcher.matches({ options: rule.options, changes, readBlob,
-      readCandidateFile: (path) => readAuthoritativeNativeCandidateFile({ ...git, candidateCommit }, path) });
+    const result = await matcher.matches({ options: rule.options, changes, readBlob,
+      readCandidateFile: (path) => readAuthoritativeNativeCandidateFile({ ...git, candidateCommit }, path),
+      ...(baseCommit === undefined ? {} : { readBaseFile: (path: string) => readAuthoritativeNativeCandidateFile({ ...git, candidateCommit: baseCommit }, path) }) });
+    const matches = typeof result === "boolean" ? result : result.matches;
+    if (typeof result !== "boolean") {
+      if (!/^[0-9a-f]{64}$/.test(result.evidenceDigest)) throw new Error("review change matcher returned invalid evidence digest");
+      evidence.push({ rule: index, digest: result.evidenceDigest });
+    }
     if (typeof matches !== "boolean") throw new Error(`review change matcher '${matcher.name}' returned a non-boolean result`);
     if (matches) for (const reviewer of rule.reviewerIds) reviewers.add(reviewer);
   }
-  return [...reviewers].sort();
+  return { reviewerIds: [...reviewers].sort(), evidence };
 }
 
 export class AuthoritativeNativeReviewError extends Error {

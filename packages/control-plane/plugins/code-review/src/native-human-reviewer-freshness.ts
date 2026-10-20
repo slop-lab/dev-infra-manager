@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { AuthoritativeNativeReview } from "./authoritative-native-review-schema.js";
 import { codeReviewPolicy } from "./policy.js";
 import type { CodeReviewRuntime } from "./extensions.js";
-import { requiredReviewersForChanges } from "./authoritative-native-review.js";
+import { reviewRequirementsForChanges } from "./authoritative-native-review.js";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
 
 export async function nativeHumanReviewStaleReasons(
@@ -34,12 +34,13 @@ export async function nativeHumanReviewStaleReasons(
       expectedProtectedHead: target.currentHead.commit });
     const workspaceId = /^refs\/heads\/proposals\/([A-Za-z0-9_-]{43})\//.exec(review.proposalRef)?.[1];
     if (workspaceId === undefined) return ["review-identity-changed"];
-    const reviewerIds = await requiredReviewersForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit);
+    const requirements = await reviewRequirementsForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead);
     if (review.projectId !== target.imported.projectId || review.repositoryId !== target.imported.repositoryId
       || review.protectedRef !== policy.protectedRef || review.workspaceId !== workspaceId
       || review.patch !== evidence.patch || review.patchBytes !== evidence.patchBytes
       || !isDeepStrictEqual(review.changes, evidence.changes)
-      || !isDeepStrictEqual(review.requiredReviewerIds, reviewerIds)) {
+      || !isDeepStrictEqual(review.requiredReviewerIds, requirements.reviewerIds)
+      || !isDeepStrictEqual(review.changeRuleEvidence ?? [], requirements.evidence)) {
       reasons.push("review-identity-changed");
     }
     const currentRefs = await readAuthoritativeNativeReviewRefs(git);

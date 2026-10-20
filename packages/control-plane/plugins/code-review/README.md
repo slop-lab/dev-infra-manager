@@ -52,12 +52,14 @@ JSON comments and trailing commas are not accepted. Empty pointer selects the
 whole JSON value.
 
 `./extensions` exports `reviewChangeMatcherExtension` and `ReviewChangeMatcher`
-for custom rules. A provider validates its options and returns a boolean over
-immutable changed paths and bounded Git blobs. `readCandidateFile` reads regular
-files from the exact candidate commit, independent of any mutable checkout.
+for custom rules. A provider validates its options and returns a boolean or
+`{ matches, evidenceDigest }` over
+immutable changed paths and bounded Git blobs. `readBaseFile` and `readCandidateFile` read regular
+files from the exact protected and candidate commits, independent of any mutable checkout.
 Provider identity includes a SHA256 revision covering its implementation and
 configuration. Missing/duplicate providers, invalid options, evaluation errors
-and non-boolean results cannot silently bypass review. Provider revisions and
+and malformed results cannot silently bypass review. Structured evidence digests
+are bound into review identity and recomputed even when reviewers stay unchanged. Provider revisions and
 the complete policy are bound to the review ID; creation, approval and promotion
 recompute requirements. Installing a new matcher implementation invalidates an
 old review even if it happens to return the same reviewers.
@@ -71,6 +73,13 @@ Execute project code in an isolated evaluator rather than the credential-bearing
 control-plane process. The [security review example](../../../../examples/features/security-review/README.md)
 shows a single-file project matcher, bounded Docker execution, and unconditional
 protection of its own review directory.
+
+For automatic dependency protection, install the optional
+[review-tracing](../review-tracing/README.md) and
+[Node runtime](../review-tracing-node/README.md) plugins. Their
+[executable example](../../../../examples/features/review-tracing/README.md)
+uses imports and ordinary reads as dependencies, and explicit target reads for
+JSON field decisions. It requires no manually maintained dependency path list.
 
 These checks govern DIM's native protected refs. GitHub branch protection and
 rulesets are a separate authority; a DIM policy does not configure them.

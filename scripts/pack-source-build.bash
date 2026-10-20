@@ -108,6 +108,7 @@ packages:
   - packages/control-plane/admin
   - packages/control-plane/plugins/*
   - packages/contracts/*
+  - packages/review-tracing
   - packages/cli
   - packages/installer
   - packages/web

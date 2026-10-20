@@ -51,7 +51,8 @@ try {
   const controlPlanePlugins = ["@slop-lab/dim-control-plane-plugin-git-repositories",
     "@slop-lab/dim-control-plane-plugin-code-review", "@slop-lab/dim-control-plane-plugin-merge-policy",
     "@slop-lab/dim-control-plane-plugin-git-ci", "@slop-lab/dim-control-plane-plugin-webhooks",
-    "@slop-lab/dim-control-plane-plugin-ci-workflows", "@slop-lab/dim-control-plane-plugin-llm-router", "@slop-lab/dim-control-plane-plugin-ci"];
+    "@slop-lab/dim-control-plane-plugin-ci-workflows", "@slop-lab/dim-control-plane-plugin-llm-router", "@slop-lab/dim-control-plane-plugin-ci",
+    "@slop-lab/dim-control-plane-plugin-review-tracing", "@slop-lab/dim-control-plane-plugin-review-tracing-node"];
   run(facade, ["installer", "install", "control-plane", "plugin", "--local-packages", bundle,
     ...controlPlanePlugins.map((name) => `${name}@${packages.find((entry) => entry.name === name)?.version}`)]);
   assert.equal(existsSync(runtime), false, "control-plane plugins must not install a host runtime");
@@ -70,6 +71,11 @@ try {
     const {requireWorkflowCompiler} = await load('@slop-lab/dim-contracts-ci/workflow');
     const jobs = requireWorkflowCompiler(prepared.extensions).compile(Buffer.from('jobs:\\n  source: {script: check.bash}\\n'));
     if (jobs[0]?.name !== 'source') throw new Error('installed workflow compiler did not compile');
+    const {controlPlanePlugin: nodeTracing} = await load('@slop-lab/dim-control-plane-plugin-review-tracing-node');
+    const tracePrepared = await nodeTracing.configure({});
+    if (tracePrepared.extensions[0]?.kind !== 'dim.review-tracing.runtime') throw new Error('installed Node trace runtime is unavailable');
+    const {controlPlanePlugin: tracing} = await load('@slop-lab/dim-control-plane-plugin-review-tracing');
+    if (!(await tracing.configure({})).extensions.length) throw new Error('installed trace matcher is unavailable');
     const running = await startControlPlanePlugins([{plugin:controlPlanePlugin,config:{}}],new AbortController().signal);
     await running.close();
   `]);
