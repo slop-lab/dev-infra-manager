@@ -1,7 +1,7 @@
 # DIM Reviewer Web Design System
 
 This document is the design contract for the authenticated reviewer UI. The
-showcase beside it remains a development artifact for validating primitives; the
+showcase in [`showcase/`](showcase/index.html) remains a development artifact for validating primitives; the
 packaged product screen uses the same tokens and component contracts against the
 reviewer API.
 

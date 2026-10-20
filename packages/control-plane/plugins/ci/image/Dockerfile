@@ -2,14 +2,12 @@ FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733cee
 
 WORKDIR /usr/local/lib/dim
 
-COPY packages/control-plane/plugins/ci/image/package.json packages/control-plane/plugins/ci/image/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 
-COPY packages/contracts/git/dist ./node_modules/@slop-lab/dim-contracts-git
-COPY packages/contracts/ci/dist ./node_modules/@slop-lab/dim-contracts-ci
-COPY packages/control-plane/plugins/ci/dist ./node_modules/@slop-lab/dim-control-plane-plugin-ci
-COPY packages/control-plane/plugins/ci/image/dim-service /usr/local/bin/dim-service
+COPY modules/ ./node_modules/
+COPY dim-service /usr/local/bin/dim-service
 
 RUN groupadd --gid 10002 dim-service \
   && useradd --uid 10002 --gid 10002 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin dim-service \

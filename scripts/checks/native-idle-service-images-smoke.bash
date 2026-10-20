@@ -43,8 +43,8 @@ for (const [name, source] of [['native', 'native-git'], ['ci', 'ordinary-ci']]) 
 await writeFile(join(root, 'generation'), randomBytes(32).toString('hex'));
 JS
 generation="$(cat "$work_dir/generation")"
-docker build --tag "$native_image" --file packages/control-plane/deployment/image/Dockerfile . >/dev/null
-docker build --tag "$ci_image" --file packages/control-plane/plugins/ci/image/Dockerfile . >/dev/null
+node packages/control-plane/deployment/image/build.ts "$native_image" >/dev/null
+node packages/control-plane/plugins/ci/image/build.ts "$ci_image" >/dev/null
 docker image inspect --format 'Verified image {{.Id}}' "$native_image" "$ci_image"
 docker network create "$network" >/dev/null
 docker volume create "$native_state" >/dev/null

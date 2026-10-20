@@ -2,7 +2,7 @@
 
 Optional authenticated operations UI for local or SSH development hosts, shared
 CI, and managed Git review. Ordinary Git hosts need no control plane. CI clients
-load the optional managed package only when CI is configured. Browser accounts
+load the optional `@slop-lab/dim-control-plane-admin` package only when CI is configured. Browser accounts
 have explicit `read`, `operator`, and `reviewer` roles. Host selectors, executable
 paths, service credentials and worker leases remain on the server.
 
@@ -51,7 +51,7 @@ an action to a replacement workspace.
 
 ## Shared CI and managed Git
 
-After installing the optional managed package and connecting the control plane,
+After installing the optional control-plane administration package and connecting the control plane,
 add these settings to the operations file:
 
 ```json
@@ -64,8 +64,8 @@ add these settings to the operations file:
 }
 ```
 
-The CI package is an optional peer; install the same exact managed package
-version alongside web when selecting this backend. The two connection files
+The administration package is an optional peer; install the same exact
+`@slop-lab/dim-control-plane-admin` version alongside web when selecting CI. The two connection files
 are separate owner-only credentials bound to the connected generation. CI can
 be offline while browser configuration is initialized. The UI shows at most 100
 recent execution summaries, one execution's bounded stdout/stderr diagnostics,
@@ -174,3 +174,22 @@ Reviewer configuration explicitly lists `nativeGit.repositoryIds`. The browser
 selector and proposal list use that scope; every resolve, decision and promotion
 request includes the selected repository. Add each repository with a repeated
 `--repository` when initializing the web configuration.
+
+## Development showcase
+
+The [primitive showcase](showcase/index.html) is a static development artifact
+owned by this package. It demonstrates visual states and local interactions,
+without service credentials, network requests or review authority. It is not
+the authenticated product UI and is not included in the published package.
+
+From the repository root, serve only its asset directory:
+
+```sh
+python3 -m http.server 9082 --bind 127.0.0.1 --directory packages/web/showcase
+```
+
+Open `http://127.0.0.1:9082/`. The browser script remains plain JavaScript with
+`// @ts-check`; the repository tools type check includes it. Fonts and their
+license are kept with the showcase. Runtime UI assets stay under `src/assets`,
+and executable tests stay under [`tests/web`](../../tests/web). See
+[DESIGN.md](DESIGN.md) for the design contract.
