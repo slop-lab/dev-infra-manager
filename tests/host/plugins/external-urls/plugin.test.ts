@@ -4,16 +4,17 @@ import { RecordingRunner } from "../../../support/recordingRunner.js";
 import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configuredDimAdminController, createDimController, DIM_PLUGIN_API_VERSION, initializeControllerRoutes, registerPlugins, type LifecycleOptions } from "@slop-lab/dim-host-core/controller";
+import { configuredDimAdminController, createDimController, DIM_PLUGIN_API_VERSION, initializeControllerRoutes, registerPlugins, type LifecycleOptions, type DimPlugin } from "@slop-lab/dim-host-core/controller";
 import {
   EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
   type ExternalUrlDnsProviderDriver
 } from "@slop-lab/dim-contracts-external-url";
 import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../../../packages/host/plugins/external-urls/src/index.js";
-import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION } from "../../../../packages/host/plugins/external-urls/src/tailscale.js";
+import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, type ExternalUrlIngressDriver } from "../../../../packages/host/plugins/external-urls/src/ingressDriver.js";
 
 describe("external URLs plugin", () => {
   const close: Array<() => Promise<void>> = [];
@@ -691,6 +692,74 @@ describe("external URLs plugin", () => {
         }
       }
     })).not.toThrow();
+  });
+
+
+  it("closes deferred listeners when adapter initialization fails", async () => {
+    const port = await availablePort();
+    const registered = await registerPlugins([createExternalUrlsPlugin(async () => ({
+      ingresses: { failed: { description: "Failed adapter", scheme: "http", domain: "example.test", listenHost: "127.0.0.1", listenPort: port } },
+      async initialize() { throw new Error("adapter initialization rejected"); }
+    }))]);
+    close.push(() => registered.dispose());
+    const initialize = registered.controllerRoutes.find((route) => route.initialize)?.initialize;
+    if (!initialize) throw new Error("missing initializer");
+    const runner = new RecordingRunner();
+    await expect(initialize({ stateRoot: "/unused", runner: { run: runner.run.bind(runner), runStreaming: async () => 0 },
+      listWorkspaces: async () => [], runWorkspaceRequest: async (_workspace, operation) => operation(),
+      resolveTarget: async () => { throw new Error("unexpected target"); } })).rejects.toThrow("adapter initialization rejected");
+    const probe = http.createServer(); probe.listen(port, "127.0.0.1"); await once(probe, "listening");
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+  });
+
+  it("persists a registered third-party ingress and reloads its own runtime after all plugins register", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-custom-ingress-"));
+    close.push(() => rm(stateRoot, { recursive: true, force: true }));
+    process.env.DIM_EXTERNAL_URL_CONFIG = path.join(stateRoot, "external-urls.json");
+    const port = await availablePort();
+    const activated = vi.fn(async () => {}), pruned = vi.fn(async () => {}), verified = vi.fn(async () => {});
+    const runtime = vi.fn<ExternalUrlIngressDriver["runtime"]>(async (argument) => {
+      const parsed: unknown = JSON.parse(argument);
+      if (typeof parsed !== "object" || parsed === null || !("port" in parsed) || typeof parsed.port !== "number") throw new Error("invalid custom ingress argument");
+      return { scheme: "tcp", domain: "127.0.0.1", listenHost: "127.0.0.1", listenPort: parsed.port, initialize: activated };
+    });
+    const driver: ExternalUrlIngressDriver = {
+      async configure(scheme, args) {
+        if (scheme !== "tcp" || args[0] !== "--port" || args.length !== 2) throw new Error("custom ingress requires tcp --port PORT");
+        return JSON.stringify({ port: Number(args[1]) });
+      }, runtime, verify: verified, prune: pruned
+    };
+    const provider: DimPlugin = { name: "company-ingress", apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) { host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "company", driver); } };
+    const initial = await registerPlugins([createExternalUrlsPlugin({ ingresses: {} }), provider]);
+    const lifecycle = { stateRoot, controllerRuntimeDirectory: stateRoot, controllerSocketPath: path.join(stateRoot, "workspace.sock"), adminControllerSocketPath: path.join(stateRoot, "admin.sock") };
+    const admin = configuredDimAdminController(lifecycle, initial);
+    admin.listen(0, "127.0.0.1"); await once(admin, "listening");
+    close.push(() => new Promise<void>((resolve) => admin.close(() => resolve())));
+    const address = admin.address(); if (!address || typeof address === "string") throw new Error("missing admin address");
+    const base = `http://127.0.0.1:${address.port}/v1/external-url`;
+    const added = await fetch(`${base}/ingress-add`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      driver: "company", name: "custom", description: "Company private ingress", scheme: "tcp", arguments: ["--port", String(port)]
+    }) });
+    expect(added.status, await added.text()).toBe(200);
+    expect(JSON.parse(await readFile(process.env.DIM_EXTERNAL_URL_CONFIG, "utf8")).ingresses.custom.driver).toBe("company");
+    await initial.dispose();
+    // The provider deliberately registers AFTER the config-backed URL plugin.
+    const restarted = await registerPlugins([await externalUrlsPluginFromConfig(), provider]);
+    close.push(() => restarted.dispose());
+    const initialize = restarted.controllerRoutes.find((route) => route.initialize)?.initialize;
+    if (!initialize) throw new Error("missing URL initializer");
+    const runner = new RecordingRunner();
+    await initialize({ stateRoot, runner: { run: runner.run.bind(runner), runStreaming: async () => 0 },
+      listWorkspaces: async () => [], runWorkspaceRequest: async (_workspace, operation) => operation(),
+      resolveTarget: async () => { throw new Error("no workspace routes expected"); } });
+    expect(runtime).toHaveBeenCalledOnce();
+    expect(activated).toHaveBeenCalledOnce();
+    expect(pruned).toHaveBeenCalledWith(expect.anything(), new Set(["custom"]));
+    const socket = connect(port, "127.0.0.1"); await once(socket, "connect"); socket.destroy();
+    await restarted.dispose();
+    const probe = http.createServer(); probe.listen(port, "127.0.0.1"); await once(probe, "listening");
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
   });
 
 });

@@ -3,27 +3,14 @@ import { promisify } from "node:util";
 import { UserError } from "@slop-lab/dim-host-core";
 
 const run = promisify(execFile);
-export const EXTERNAL_URL_INGRESS_DRIVER_EXTENSION = "external-url.ingress-driver";
-
-export interface ExternalUrlIngressRuntime {
-  readonly scheme: "tcp";
-  readonly publicHost: string;
-  readonly listenHost: string;
-  readonly listenPort: number;
-}
-
-export interface ExternalUrlIngressDriver {
-  configure(scheme: "http" | "https" | "tcp", arguments_: readonly string[]): Promise<string>;
-  runtime(argument: string): Promise<ExternalUrlIngressRuntime>;
-  verify(argument: string): Promise<void>;
-}
+import type { ExternalUrlIngressDriver } from "./ingressDriver.js";
 
 type TailscaleStatus = {
   readonly BackendState?: unknown;
   readonly Self?: { readonly TailscaleIPs?: unknown };
 };
 
-export const tailscaleIngressDriver: ExternalUrlIngressDriver = {
+export const tailscaleIngressDriver = {
   async configure(scheme, arguments_) {
     if (scheme !== "tcp") throw new UserError("Tailscale ingress requires '--scheme tcp'");
     if (arguments_.length !== 2 || arguments_[0] !== "--listen-port") {
@@ -39,7 +26,7 @@ export const tailscaleIngressDriver: ExternalUrlIngressDriver = {
     const address = await currentTailscaleAddress();
     return {
       scheme: "tcp",
-      publicHost: address,
+      domain: address,
       listenHost: address,
       listenPort,
     };
@@ -48,7 +35,7 @@ export const tailscaleIngressDriver: ExternalUrlIngressDriver = {
     parseArgument(argument);
     await currentTailscaleAddress();
   }
-};
+} satisfies ExternalUrlIngressDriver;
 
 export function tailscaleSelfAddress(value: TailscaleStatus): string {
   if (value.BackendState !== "Running") throw new UserError("Tailscale is not running on the DIM host");

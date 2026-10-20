@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer, connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -44,6 +44,11 @@ it("host attachment installs private UUID-fenced guest payload and independent r
     relay = await serveTunnels(store, { async current(grant) { return grant.workspaceId === record.id; } }, { relayHost: "127.0.0.1", relayPort: 0, operatorPort: 0 });
     await run("session", "register", "--", "coding-agent", "resume");
     await runTunnels(["tunnel", "attach", record.name, "--config", store.file, "--route", "echo", "--endpoint", `127.0.0.1:${relay.relayPort}`, "--local-port", String(local.port)], { signal: controller.signal, service });
+    const guestAsset = path.join(home, ".local/share/dim-tunnels/guest.mjs");
+    expect((await lstat(guestAsset)).mode & 0o777).toBe(0o600);
+    const assetInode = (await lstat(guestAsset)).ino;
+    await runTunnels(["tunnel", "attach", record.name, "--config", store.file, "--route", "echo", "--endpoint", `127.0.0.1:${relay.relayPort}`, "--local-port", String(local.port)], { signal: controller.signal, service });
+    expect((await lstat(guestAsset)).ino).toBe(assetInode);
     const bytes = Buffer.from([0, 255, 128, 10]);
     const request = () => new Promise<Buffer>((resolve, reject) => { const socket = connect(local.port, "127.0.0.1"); const chunks: Buffer[] = []; socket.on("error", reject); socket.on("data", (chunk: Buffer) => chunks.push(chunk)); socket.once("end", () => resolve(Buffer.concat(chunks))); socket.once("connect", () => socket.end(bytes)); });
     await expect.poll(request).toEqual(bytes);
@@ -54,4 +59,35 @@ it("host attachment installs private UUID-fenced guest payload and independent r
     expect(JSON.parse(await readFile(path.join(home, ".local/state/dim/session.json"), "utf8")).argv).toEqual(["coding-agent", "resume"]);
     expect(Object.values((await store.read()).grants)[0]?.workspaceId).toBe(record.id);
   } finally { await run("service", "remove", "tunnels").catch(() => {}); await relay?.close(); await new Promise<void>((resolve) => target.close(() => resolve())); await rm(home, { recursive: true, force: true }); }
+});
+
+it("rejects a redirected guest asset directory through the common writer and revokes the new enrollment", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "dim-tunnel-unsafe-")), home = path.join(root, "home"), outside = path.join(root, "outside");
+  const record = workspaceRecord("dev"), store = new TunnelStore(path.join(root, "operator.json"));
+  const commands: string[][] = [];
+  try {
+    await mkdir(home); await mkdir(outside);
+    await writeFile(path.join(outside, "sentinel"), "untouched");
+    await symlink(outside, path.join(home, ".config"));
+    await store.initialize("operator");
+    await store.update((config) => { config.routes.echo = { protocol: "tcp", host: "127.0.0.1", port: 1234 }; });
+    const service: Pick<WorkspaceService, "show" | "exec"> = {
+      async show() { return { ...record, runtimeStatus: "running" }; },
+      async exec(name, command, options) {
+        expect(name).toBe(record.name); expect(options?.workspaceId).toBe(record.id);
+        commands.push([...command]);
+        const child = spawn(command[0] ?? "", command.slice(1), { env: { ...process.env, HOME: home }, stdio: ["pipe", "ignore", "ignore"] });
+        options?.stdin?.pipe(child.stdin);
+        return new Promise((resolve, reject) => { child.once("error", reject); child.once("close", (code) => resolve(code ?? 1)); });
+      }
+    };
+    await expect(runTunnels(["tunnel", "attach", record.name, "--config", store.file, "--route", "echo", "--endpoint", "127.0.0.1:8742", "--local-port", "1235"], { signal: new AbortController().signal, service }))
+      .rejects.toThrow(/cannot safely prepare guest integration/);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.slice(0, 2)).toEqual(["node", "--input-type=commonjs"]);
+    expect((await lstat(path.join(home, ".config"))).isSymbolicLink()).toBe(true);
+    expect(await readFile(path.join(outside, "sentinel"), "utf8")).toBe("untouched");
+    await expect(lstat(path.join(outside, "dim"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(Object.keys((await store.read()).grants)).toEqual([]);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

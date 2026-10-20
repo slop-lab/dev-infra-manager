@@ -19,6 +19,19 @@ export function workspaceServiceSubdomain(workspaceName: string, serviceName: st
   return `${workspace}${suffix}`;
 }
 
+/** Check the canonical label without assuming a particular service or delimiter-free name. */
+export function isWorkspaceServiceSubdomain(workspaceName: string, label: string): boolean {
+  if (label.length > 63) return false;
+  const identity = createHash("sha256").update(workspaceName).digest("hex").slice(0, 16);
+  const delimiter = `-${identity}--`;
+  for (let index = label.indexOf(delimiter); index >= 0; index = label.indexOf(delimiter, index + 1)) {
+    try {
+      if (workspaceServiceSubdomain(workspaceName, label.slice(index + delimiter.length)) === label) return true;
+    } catch { /* Invalid labels do not select a service. */ }
+  }
+  return false;
+}
+
 export interface ExternalUrlDnsOperation {
   providerArgument: string;
   recordArgument: string;

@@ -26,6 +26,9 @@ is implied by these source changes.
   configuration; agents discover commands and readiness inside the workspace.
   Share bounded, identity-checked file delivery across integrations, including
   explicitly selected containers in the workspace's private Docker engine.
+  Enabled host plugins own custom source acquisition and Project metadata;
+  long-lived hosts follow promoted plugin releases without borrowing ambient
+  packages from an ancestor installation.
 - Install managed Git, human review, shared CI and service plugins only when
   selected. Keep the `@slop-lab/dim-installer` facade, exact component graphs
   and transactional install/activation recovery. Prepare initial CI capacity
@@ -59,6 +62,10 @@ is implied by these source changes.
   Configured workspace OpenCode/OMO
   helpers use that router by default. Separate Docker/npm/PyPI/APT cache clients
   from optional host cache servers; external cache URLs use the same client path.
+  Select cache protocols independently and install additional protocol adapters.
+  Refresh or retire cache defaults in running workspace and nested-container
+  configuration without replacing their bound files. Registered ingress drivers
+  retain their own configuration and lifecycle through controller restart.
   Reviewed VM image downloads share a resumable checksum-verified host cache.
   Publish the versioned OpenCode static UI
   automatically from `main` and `development` through GitHub Pages.

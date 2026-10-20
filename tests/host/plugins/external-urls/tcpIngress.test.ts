@@ -225,7 +225,7 @@ printf '%s\\n' '{"BackendState":"Running","Self":{"TailscaleIPs":["100.100.10.20
       // Then: it binds and advertises only the current self address and invokes no mutating command.
       expect(runtime).toEqual({
         scheme: "tcp",
-        publicHost: "100.100.10.20",
+        domain: "100.100.10.20",
         listenHost: "100.100.10.20",
         listenPort: 49152,
       });

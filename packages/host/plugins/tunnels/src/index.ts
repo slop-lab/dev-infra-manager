@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { UserError, type WorkspaceHostPlugin, type WorkspaceService } from "@slop-lab/dim-host-core/workspace";
+import { deployGuestIntegration, UserError, type WorkspaceHostPlugin, type WorkspaceService } from "@slop-lab/dim-host-core/workspace";
 import { TunnelStore, namePattern, parseRoute, validPort } from "./store.js";
 import { serveTunnels } from "./server.js";
 export { serveTunnels } from "./server.js";
@@ -73,15 +73,19 @@ export async function runTunnels(args: string[], context: { signal: AbortSignal;
       });
       const route = config.routes[name]; if (!route) throw new Error("route disappeared");
       const value = { name, protocol: route.protocol, localPort, token };
-      const payload = ["set -euo pipefail", 'mkdir -p "$HOME/.local/share/dim-tunnels" "$HOME/.config/dim"', 'chmod 0700 "$HOME/.local/share/dim-tunnels"'];
-      for (const file of ["guest.mjs", "install.mjs"]) {
-        const asset = await readFile(new URL(`./assets/${file}`, import.meta.url));
-        payload.push(`printf '%s' '${asset.toString("base64")}' | base64 -d >"$HOME/.local/share/dim-tunnels/${file}"`);
-      }
-      payload.push(`node "$HOME/.local/share/dim-tunnels/install.mjs" ${quoted(endpoint)} ${quoted(JSON.stringify(value))}`,
-        "dim-workspace service remove tunnels", 'dim-workspace service register --name tunnels -- node "$HOME/.local/share/dim-tunnels/guest.mjs" "$HOME/.config/dim/tunnels.json"', "dim-workspace service resume");
-      const script = payload.join("\n");
       try {
+        await deployGuestIntegration({ service: context.service, workspace: record, signal: context.signal }, {
+          name: "tunnels", directories: [".config/dim"],
+          files: await Promise.all(["guest.mjs", "install.mjs"].map(async (file) => ({
+            path: `.local/share/dim-tunnels/${file}`,
+            contents: await readFile(new URL(`./assets/${file}`, import.meta.url)), mode: 0o600 as const
+          })))
+        });
+        const script = ["set -euo pipefail",
+          `node "$HOME/.local/share/dim-tunnels/install.mjs" ${quoted(endpoint)} ${quoted(JSON.stringify(value))}`,
+          "dim-workspace service remove tunnels",
+          'dim-workspace service register --name tunnels -- node "$HOME/.local/share/dim-tunnels/guest.mjs" "$HOME/.config/dim/tunnels.json"',
+          "dim-workspace service resume"].join("\n");
         const code = await context.service.exec(workspace, ["bash", "-s"], { workspaceId: record.id, stdin: Readable.from([script]), stdout: process.stdout, stderr: process.stderr, signal: context.signal });
         if (code !== 0) throw new UserError(`guest tunnel setup exited ${code}`);
       } catch (error) { await store.update((value) => { delete value.grants[token]; }); throw error; }

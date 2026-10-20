@@ -1,23 +1,16 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import net from "node:net";
-import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { DIM_PLUGIN_API_VERSION, requireControllerWorkspace, workspacePluginRequest, type AdminRouteContext, type ControllerRouteContext, type ControllerRuntimeContext, type ControllerWorkspace, type DimPlugin, type DimPluginHost, type ResolvedWorkspaceTarget, type WorkspaceTarget } from "@slop-lab/dim-host-core/controller";
 import { UserError } from "@slop-lab/dim-host-core";
 import {
   readExternalUrlConfig,
   writeExternalUrlConfig,
-  EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
-  type ExternalUrlDnsProviderDriver,
-  type ExternalUrlDnsProviderConfig,
-  type ExternalUrlIngressConfig
+  type ExternalUrlIngressConfig, type ExternalUrlConfig
 } from "@slop-lab/dim-contracts-external-url";
-import {
-  CADDY_INGRESS_DOCUMENTATION_URL,
-  parseCaddyIngressArgument,
-  renderCaddyDeployment,
-  verifyCaddyIngress
-} from "./caddy.js";
+import { caddyIngressDriver } from "./caddyRuntime.js";
+import { httpIngressDriver } from "./httpAdapter.js";
+import { dnsDriver, normalizeDnsProviderArgument } from "./dnsProvider.js";
+import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, ingressDriver, type ExternalUrlIngressRuntime } from "./ingressDriver.js";
+export { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, type ExternalUrlIngressDriver, type ExternalUrlIngressRuntime } from "./ingressDriver.js";
 import { ingressPolicyRevision } from "./approvalPolicy.js";
 import {
   WorkspaceIngressListener,
@@ -40,11 +33,7 @@ import {
   type StoredUrl
 } from "./routeStore.js";
 import { TcpIngressListener } from "./tcpIngress.js";
-import {
-  EXTERNAL_URL_INGRESS_DRIVER_EXTENSION,
-  tailscaleIngressDriver,
-  type ExternalUrlIngressDriver
-} from "./tailscale.js";
+import { tailscaleIngressDriver } from "./tailscale.js";
 
 export { TcpIngressListener } from "./tcpIngress.js";
 export { tailscaleIngressDriver } from "./tailscale.js";
@@ -66,14 +55,7 @@ export interface ExternalUrlIngressOptions {
 
 export interface ExternalUrlsPluginOptions {
   ingresses: Readonly<Record<string, ExternalUrlIngressOptions>>;
-  requiredDnsDrivers?: readonly string[];
-  managedCaddy?: Readonly<Record<string, ManagedCaddyIngress>>;
-}
-
-interface ManagedCaddyIngress {
-  argument: ReturnType<typeof parseCaddyIngressArgument> & { listenPort: number };
-  provider: ExternalUrlDnsProviderConfig;
-  routerPort: number;
+  initialize?(runtime: ControllerRuntimeContext): Promise<void>;
 }
 
 type NormalizedRequest = HttpIngressRequest;
@@ -106,14 +88,18 @@ interface RouteReconciliationContext {
   resolveTarget(target: WorkspaceTarget): Promise<ResolvedWorkspaceTarget>;
 }
 
-export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): DimPlugin {
-  validateOptions(options);
+export function createExternalUrlsPlugin(configuration: ExternalUrlsPluginOptions | ((host: DimPluginHost) => Promise<ExternalUrlsPluginOptions>)): DimPlugin {
+  if (typeof configuration !== "function") validateOptions(configuration);
 
   return {
     name: "@slop-lab/dim-host-plugin-external-urls",
     apiVersion: DIM_PLUGIN_API_VERSION,
     async register(host) {
+      host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "http", httpIngressDriver);
+      host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "caddy", caddyIngressDriver);
       host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale", tailscaleIngressDriver);
+      let options: ExternalUrlsPluginOptions = typeof configuration === "function" ? { ingresses: {} } : configuration;
+      let prepared = false;
       const registry = new WorkspaceRouteRegistry();
       const mutations = new RouteMutationQueue();
       const ingresses = new Map<string, ConfiguredIngress>();
@@ -129,70 +115,83 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
           };
         }
       });
-      try {
-        for (const [name, ingress] of Object.entries(options.ingresses)) {
-          ingresses.set(name, {
-            options: ingress,
-            policyRevision: ingressPolicyRevision(name, ingress),
-            listener: ingress.scheme === "tcp"
-              ? new TcpIngressListener({
-                  name,
-                  authorizeWorkspace: async (workspace) => { await requireControllerWorkspace(workspace); },
-                  listenHost: ingress.listenHost,
-                  listenPort: ingress.listenPort,
-                  publicHost: ingress.domain,
-                })
-              : new WorkspaceIngressListener(registry, {
-                  name,
-                  authorizeWorkspace: async (workspace) => { await requireControllerWorkspace(workspace); },
-                  listenHost: ingress.listenHost,
-                  listenPort: ingress.listenPort,
-                  scheme: ingress.scheme,
-                  domain: ingress.domain,
-                  ...(ingress.routePolicy === undefined ? {} : { routePolicy: ingress.routePolicy }),
-                  ...(ingress.port === undefined ? {} : { port: ingress.port })
-                }, host.logger)
-          });
-        }
-        await Promise.all([...ingresses.values()].map((ingress) => ingress.listener.ready()));
-
-        const initialize = async (runtime: ControllerRuntimeContext): Promise<void> => {
-          for (const driver of options.requiredDnsDrivers ?? []) dnsDriver(host, driver);
-          await removeStaleManagedCaddy(runtime, new Set(Object.keys(options.managedCaddy ?? {})));
-          for (const [name, ingress] of Object.entries(options.managedCaddy ?? {})) {
-            await reconcileManagedCaddy(host, runtime, name, ingress);
+      const prepare = async () => {
+        if (prepared) return;
+        if (typeof configuration === "function") options = await configuration(host);
+        validateOptions(options);
+        try {
+          for (const [name, ingress] of Object.entries(options.ingresses)) {
+            ingresses.set(name, {
+              options: ingress,
+              policyRevision: ingressPolicyRevision(name, ingress),
+              listener: ingress.scheme === "tcp"
+                ? new TcpIngressListener({
+                    name,
+                    authorizeWorkspace: async (workspace) => { await requireControllerWorkspace(workspace); },
+                    listenHost: ingress.listenHost,
+                    listenPort: ingress.listenPort,
+                    publicHost: ingress.domain,
+                  })
+                : new WorkspaceIngressListener(registry, {
+                    name,
+                    authorizeWorkspace: async (workspace) => { await requireControllerWorkspace(workspace); },
+                    listenHost: ingress.listenHost,
+                    listenPort: ingress.listenPort,
+                    scheme: ingress.scheme,
+                    domain: ingress.domain,
+                    ...(ingress.routePolicy === undefined ? {} : { routePolicy: ingress.routePolicy }),
+                    ...(ingress.port === undefined ? {} : { port: ingress.port })
+                  }, host.logger)
+            });
           }
-          const store = new ExternalUrlStore(runtime.stateRoot);
-          for (const workspace of await runtime.listWorkspaces()) {
-            for (const entry of deduplicateRoutes(await store.list(workspace.id))) {
-              try {
-                await runtime.runWorkspaceRequest(workspace, () => reconcileStoredRoute(
-                  entry,
-                  required(ingresses, entry.ingress),
-                  store,
-                  {
-                    workspace,
-                    resolveTarget: (target) => runtime.resolveTarget(workspace, target)
-                  }
-                ));
-              } catch (error) {
-                host.logger.error("DIM external URL route reconciliation failed", {
-                  workspace: workspace.name,
-                  route: entry.route.id,
-                  ingress: entry.ingress,
-                  error: error instanceof Error ? error.message : String(error)
-                });
+          await Promise.all([...ingresses.values()].map((ingress) => ingress.listener.ready()));
+          prepared = true;
+        } catch (error) {
+          await Promise.allSettled([...ingresses.values()].map((ingress) => ingress.listener.close()));
+          throw error;
+        }
+      };
+      try {
+        if (typeof configuration !== "function") await prepare();
+        const initialize = async (runtime: ControllerRuntimeContext): Promise<void> => {
+          try {
+            await prepare();
+            await options.initialize?.(runtime);
+            const store = new ExternalUrlStore(runtime.stateRoot);
+            for (const workspace of await runtime.listWorkspaces()) {
+              for (const entry of deduplicateRoutes(await store.list(workspace.id))) {
+                try {
+                  await runtime.runWorkspaceRequest(workspace, () => reconcileStoredRoute(
+                    entry,
+                    required(ingresses, entry.ingress),
+                    store,
+                    {
+                      workspace,
+                      resolveTarget: (target) => runtime.resolveTarget(workspace, target)
+                    }
+                  ));
+                } catch (error) {
+                  host.logger.error("DIM external URL route reconciliation failed", {
+                    workspace: workspace.name,
+                    route: entry.route.id,
+                    ingress: entry.ingress,
+                    error: error instanceof Error ? error.message : String(error)
+                  });
+                }
               }
             }
+          } catch (error) {
+            await Promise.allSettled([...ingresses.values()].map((ingress) => ingress.listener.close()));
+            throw error;
           }
         };
 
         const discovery = {
-          ingresses: Object.entries(options.ingresses).map(([name, ingress]) => ({
+          get ingresses() { return Object.entries(options.ingresses).map(([name, ingress]) => ({
             name,
             description: ingress.description,
             scheme: ingress.scheme
-          })),
+          })); },
           target: {
             containers: "zero or one workspace container name",
             maxDepth: 1
@@ -235,73 +234,27 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
   };
 }
 
-export async function externalUrlsPluginFromConfig(
-  env: NodeJS.ProcessEnv = process.env
-): Promise<DimPlugin> {
+export async function externalUrlsPluginFromConfig(env: NodeJS.ProcessEnv = process.env): Promise<DimPlugin> {
   const config = await readExternalUrlConfig(env);
-  const ingresses: Record<string, ExternalUrlIngressOptions> = {};
-  const managedCaddy: Record<string, ManagedCaddyIngress> = {};
-  const requiredDnsDrivers = new Set<string>();
-  for (const [name, ingress] of Object.entries(config.ingresses)) {
-    if (ingress.driver === "caddy") {
-      const argument = parseCaddyIngressArgument(ingress.argument);
-      const provider = config.dnsProviders[argument.dnsProvider];
-      if (!provider) throw new Error(`ingress '${name}' references missing DNS provider '${argument.dnsProvider}'`);
-      requiredDnsDrivers.add(provider.driver);
-      if (argument.listenPort === "auto") {
-        throw new Error(`ingress '${name}' has unresolved Caddy listenPort; re-add it with the DIM CLI`);
-      }
-      const routerPort = await availableTcpPort("127.0.0.1", new Set([argument.listenPort]));
-      ingresses[name] = {
-        description: ingress.description,
-        scheme: ingress.scheme,
-        domain: argument.domain,
-        ...(argument.listenPort === 443 ? {} : { port: argument.listenPort }),
-        listenHost: "127.0.0.1",
-        listenPort: routerPort,
-        ...(argument.routePolicy === undefined ? {} : { routePolicy: argument.routePolicy }),
-        ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired }),
-        approvalExposure: {
-          listenHost: argument.listenHost,
-          listenPort: argument.listenPort
-        }
-      };
-      managedCaddy[name] = {
-        argument: { ...argument, listenPort: argument.listenPort },
-        provider,
-        routerPort
-      };
-    } else if (ingress.driver === "http") {
-      const argument = parseHttpIngressArgument(ingress.driver, ingress.argument);
-      if (argument.listenPort === "auto") {
-        throw new Error(`ingress '${name}' has unresolved listenPort 'auto'; re-add it with the DIM CLI`);
-      }
-      ingresses[name] = {
-        description: ingress.description,
-        scheme: ingress.scheme,
-        domain: argument.domain,
-        ...(argument.publicPort === undefined ? {} : { port: argument.publicPort }),
-        listenHost: argument.listenHost,
-        listenPort: argument.listenPort,
-        ...(argument.routePolicy === undefined ? {} : { routePolicy: argument.routePolicy }),
-        ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired })
-      };
-    } else {
-      const runtime = await tailscaleIngressDriver.runtime(ingress.argument);
-      ingresses[name] = {
-        description: ingress.description,
-        scheme: runtime.scheme,
-        domain: runtime.publicHost,
-        listenHost: runtime.listenHost,
-        listenPort: runtime.listenPort,
-        ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired })
-      };
+  return createExternalUrlsPlugin(async (host) => {
+    const ingresses: Record<string, ExternalUrlIngressOptions> = {};
+    const prepared = new Map<string, ExternalUrlIngressRuntime>();
+    // Resolution happens after all controller plugins have registered their drivers.
+    for (const [name, ingress] of Object.entries(config.ingresses)) {
+      const runtime = await ingressDriver(host, ingress.driver).runtime(ingress.argument, { host, config }, ingress.scheme);
+      if (runtime.scheme !== ingress.scheme) throw new UserError(`ingress '${name}' runtime scheme differs from its configured scheme`);
+      const { initialize: _initialize, ...endpoint } = runtime;
+      ingresses[name] = { ...endpoint, description: ingress.description,
+        ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired }) };
+      prepared.set(name, runtime);
     }
-  }
-  return createExternalUrlsPlugin({
-    ingresses,
-    requiredDnsDrivers: [...requiredDnsDrivers],
-    managedCaddy
+    return { ingresses, async initialize(runtime) {
+      for (const driver of host.extensionsOfKind<import("./ingressDriver.js").ExternalUrlIngressDriver>(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION)) {
+        const names = new Set(Object.entries(config.ingresses).filter(([, ingress]) => ingressDriver(host, ingress.driver) === driver).map(([name]) => name));
+        await driver.prune?.(runtime, names);
+      }
+      for (const [name, ingress] of prepared) await ingress.initialize?.(runtime, name);
+    } };
   });
 }
 
@@ -360,8 +313,7 @@ async function externalUrlAdmin(
       const name = text("name");
       if (!config.dnsProviders[name]) throw new UserError(`DNS provider '${name}' is not configured`);
       const dependent = Object.entries(config.ingresses)
-        .find(([, ingress]) => ingress.driver === "caddy"
-          && parseCaddyIngressArgument(ingress.argument).dnsProvider === name);
+        .find(([, ingress]) => ingressDriver(host, ingress.driver).dependencies?.(ingress.argument).includes(name));
       if (dependent) throw new UserError(`DNS provider '${name}' is used by ingress '${dependent[0]}'`);
       delete config.dnsProviders[name];
       await writeExternalUrlConfig(config);
@@ -373,23 +325,9 @@ async function externalUrlAdmin(
       if (scheme !== "http" && scheme !== "https" && scheme !== "tcp") {
         throw new UserError("scheme must be http, https, or tcp");
       }
-      let argument = await configureIngressArguments(host, driver, scheme, strings("arguments"));
+      const argument = await ingressDriver(host, driver).configure(scheme, strings("arguments"), { host, config });
       if (input.approvalRequired !== undefined && typeof input.approvalRequired !== "boolean") {
         throw new UserError("approvalRequired must be a boolean");
-      }
-      if (driver === "caddy") {
-        const parsed = parseCaddyIngressArgument(argument);
-        const dnsProvider = parsed.dnsProvider;
-        const storedProvider = config.dnsProviders[dnsProvider];
-        if (!storedProvider) {
-          throw new UserError(
-            `DNS provider '${dnsProvider}' is not configured; `
-            + "run 'dim external-url dns-provider add --help' first"
-          );
-        }
-        const providerDriver = dnsDriver(host, storedProvider.driver);
-        parsed.dnsArgument = normalizeDnsRecordArgument(providerDriver, parsed.dnsArgument);
-        argument = JSON.stringify(parsed);
       }
       const ingress: ExternalUrlIngressConfig = {
         driver,
@@ -408,16 +346,9 @@ async function externalUrlAdmin(
       const name = text("name");
       const ingress = config.ingresses[name];
       if (!ingress) throw new UserError(`external URL ingress '${name}' is not configured`);
-      if (input.cleanupDns === true) {
-        if (ingress.driver !== "caddy") throw new UserError(`ingress '${name}' does not have provider-managed DNS`);
-        const argument = parseCaddyIngressArgument(ingress.argument);
-        const storedProvider = config.dnsProviders[argument.dnsProvider];
-        if (!storedProvider) throw new UserError(`DNS provider '${argument.dnsProvider}' is not configured`);
-        await dnsDriver(host, storedProvider.driver).remove(dnsOperation(storedProvider, argument));
-      }
-      if (ingress.driver === "caddy") {
-        await stopManagedCaddy(context, name);
-      }
+      const implementation = ingressDriver(host, ingress.driver);
+      if (input.cleanupDns === true && implementation.remove === undefined) throw new UserError(`ingress '${name}' does not have provider-managed DNS`);
+      await implementation.remove?.(name, ingress.argument, context, { host, config }, input.cleanupDns === true);
       const configured = ingresses.get(name);
       if (configured !== undefined) {
         await configured.listener.close();
@@ -432,15 +363,7 @@ async function externalUrlAdmin(
       const name = text("name");
       const ingress = config.ingresses[name];
       if (!ingress) throw new UserError(`external URL ingress '${name}' is not configured`);
-      if (ingress.driver === "caddy") {
-        const argument = parseCaddyIngressArgument(ingress.argument);
-        const storedProvider = config.dnsProviders[argument.dnsProvider];
-        if (!storedProvider) throw new UserError(`DNS provider '${argument.dnsProvider}' is not configured`);
-        await dnsDriver(host, storedProvider.driver).verify(dnsOperation(storedProvider, argument));
-        await verifyCaddyIngress(argument);
-      } else if (ingress.driver !== "http") {
-        await ingressDriver(host, ingress.driver).verify(ingress.argument);
-      }
+      await ingressDriver(host, ingress.driver).verify(ingress.argument, { host, config });
       return {};
     }
     default: throw new UserError(`unknown External URL admin action '${action}'`);
@@ -475,304 +398,6 @@ async function transitionRouteApproval(
   await store.put(updated);
   await ingress.listener.revoke(entry.route);
   return { urls: [publicEntry(updated)] };
-}
-
-async function reconcileManagedCaddy(
-  host: DimPluginHost,
-  runtime: ControllerRuntimeContext,
-  name: string,
-  ingress: ManagedCaddyIngress
-): Promise<void> {
-  const providerDriver = dnsDriver(host, ingress.provider.driver);
-  await providerDriver.ensure(dnsOperation(ingress.provider, ingress.argument));
-  const deployment = renderCaddyDeployment(
-    name,
-    ingress.argument,
-    ingress.routerPort,
-    providerDriver.caddyDns01(ingress.provider.argument)
-  );
-  const output = managedCaddyDirectory(runtime.stateRoot, name);
-  await mkdir(output, { recursive: true, mode: 0o700 });
-  await Promise.all([
-    writeFile(path.join(output, "Dockerfile"), deployment.dockerfile),
-    writeFile(path.join(output, "Caddyfile"), deployment.caddyfile),
-    writeFile(path.join(output, "compose.yml"), deployment.compose),
-    writeFile(path.join(output, ".env"), deployment.environment, { mode: 0o600 })
-  ]);
-  const result = await runtime.runner.run("docker", [
-    "compose",
-    "--project-directory",
-    output,
-    "--file",
-    path.join(output, "compose.yml"),
-    "up",
-    "--detach",
-    "--build"
-  ]);
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `could not start managed Caddy ingress '${name}': ${result.stderr.trim() || result.stdout.trim()}`
-    );
-  }
-  host.logger.info("DIM managed Caddy ingress ready", {
-    ingress: name,
-    host: ingress.argument.listenHost,
-    port: ingress.argument.listenPort
-  });
-}
-
-async function stopManagedCaddy(context: AdminRouteContext, name: string): Promise<void> {
-  await stopManagedCaddyAt(context.runner, context.lifecycle.stateRoot, name);
-}
-
-async function removeStaleManagedCaddy(
-  runtime: ControllerRuntimeContext,
-  configuredNames: ReadonlySet<string>
-): Promise<void> {
-  const root = path.join(runtime.stateRoot, "plugins", "external-urls", "caddy");
-  let names: string[];
-  try {
-    names = await readdir(root);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-  for (const name of names) {
-    if (/^[a-z0-9][a-z0-9-]{0,62}$/.test(name) && !configuredNames.has(name)) {
-      await stopManagedCaddyAt(runtime.runner, runtime.stateRoot, name);
-    }
-  }
-}
-
-async function stopManagedCaddyAt(
-  runner: ControllerRuntimeContext["runner"],
-  stateRoot: string,
-  name: string
-): Promise<void> {
-  const output = managedCaddyDirectory(stateRoot, name);
-  const composeFile = path.join(output, "compose.yml");
-  try {
-    await readFile(composeFile);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-  const result = await runner.run("docker", [
-    "compose",
-    "--project-directory",
-    output,
-    "--file",
-    composeFile,
-    "down",
-    "--remove-orphans"
-  ]);
-  if (result.exitCode !== 0) {
-    throw new UserError(
-      `could not stop managed Caddy ingress '${name}': ${result.stderr.trim() || result.stdout.trim()}`
-    );
-  }
-  await rm(output, { recursive: true, force: true });
-}
-
-function managedCaddyDirectory(stateRoot: string, name: string): string {
-  return path.join(stateRoot, "plugins", "external-urls", "caddy", name);
-}
-
-function normalizeDnsProviderArgument(host: DimPluginHost, driver: string, argument: string): string {
-  try {
-    return dnsDriver(host, driver).normalizeProviderArgument(argument);
-  } catch (error) {
-    throw new UserError(error instanceof Error ? error.message : String(error));
-  }
-}
-
-function normalizeDnsRecordArgument(driver: ExternalUrlDnsProviderDriver, argument: string): string {
-  try {
-    return driver.normalizeRecordArgument(argument);
-  } catch (error) {
-    throw new UserError(error instanceof Error ? error.message : String(error));
-  }
-}
-
-function dnsDriver(host: DimPluginHost, name: string): ExternalUrlDnsProviderDriver {
-  const driver = host.extension<ExternalUrlDnsProviderDriver>(EXTERNAL_URL_DNS_PROVIDER_EXTENSION, name);
-  if (!driver) {
-    throw new UserError(
-      `external URL DNS provider driver '${name}' is not installed; install and enable its DIM plugin first`
-    );
-  }
-  for (const method of [
-    "normalizeProviderArgument",
-    "normalizeRecordArgument",
-    "ensure",
-    "verify",
-    "remove",
-    "caddyDns01"
-  ] as const) {
-    if (typeof driver[method] !== "function") {
-      throw new UserError(`external URL DNS provider driver '${name}' has an invalid '${method}' implementation`);
-    }
-  }
-  return driver;
-}
-
-function dnsOperation(provider: ExternalUrlDnsProviderConfig, ingress: ReturnType<typeof parseCaddyIngressArgument>) {
-  return {
-    providerArgument: provider.argument,
-    recordArgument: ingress.dnsArgument,
-    domain: ingress.domain,
-    env: process.env
-  };
-}
-
-async function configureIngressArguments(
-  host: DimPluginHost,
-  driver: string,
-  scheme: "http" | "https" | "tcp",
-  arguments_: readonly string[]
-): Promise<string> {
-  if (driver !== "http" && driver !== "caddy") {
-    return ingressDriver(host, driver).configure(scheme, arguments_);
-  }
-  const argument = JSON.stringify(parseIngressCliArguments(driver, arguments_));
-  if (driver === "caddy") {
-    if (scheme !== "https") {
-      throw new UserError(
-        "Caddy ingress requires '--scheme https'; use driver 'http' for '--scheme http'. "
-        + `See ${CADDY_INGRESS_DOCUMENTATION_URL}`
-      );
-    }
-    let parsed: ReturnType<typeof parseCaddyIngressArgument>;
-    try {
-      parsed = parseCaddyIngressArgument(argument);
-    } catch (error) {
-      throw new UserError(error instanceof Error ? error.message : String(error));
-    }
-    const listenPort = parsed.listenPort === "auto"
-      ? await availableTcpPort(parsed.listenHost)
-      : parsed.listenPort;
-    return JSON.stringify({
-      ...parsed,
-      listenPort
-    });
-  }
-  const parsed = parseHttpIngressArgument(driver, argument);
-  return JSON.stringify({
-    ...parsed,
-    listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort
-  });
-}
-
-function ingressDriver(host: DimPluginHost, name: string): ExternalUrlIngressDriver {
-  const driver = host.extension<ExternalUrlIngressDriver>(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, name);
-  if (!driver || typeof driver.configure !== "function"
-    || typeof driver.runtime !== "function" || typeof driver.verify !== "function") {
-    throw new UserError(
-      `external URL ingress driver '${name}' is not installed; install and enable its DIM plugin first`
-    );
-  }
-  return driver;
-}
-
-function parseIngressCliArguments(driver: string, arguments_: readonly string[]): Record<string, unknown> {
-  const allowed = driver === "caddy"
-    ? new Set(["domain", "listen-host", "listen-port", "dns-provider", "dns-argument", "acme-email"])
-    : driver === "http"
-      ? new Set(["domain", "listen-host", "listen-port", "public-port"])
-      : undefined;
-  if (!allowed) {
-    throw new UserError(`unsupported external URL ingress driver '${driver}'; supported drivers: http, caddy`);
-  }
-  const result: Record<string, unknown> = {};
-  for (let index = 0; index < arguments_.length; index += 1) {
-    const option = arguments_[index]!;
-    if (!option.startsWith("--") || !allowed.has(option.slice(2))) {
-      throw new UserError(`unknown ${driver} ingress argument '${option}'`);
-    }
-    const value = arguments_[++index];
-    if (value === undefined) throw new UserError(`${option} requires a value`);
-    const key = option.slice(2).replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
-    result[key] = option === "--listen-port" && value === "auto"
-      ? value
-      : option === "--listen-port" || option === "--public-port"
-        ? cliInteger(value, option)
-        : value;
-  }
-  return result;
-}
-
-function cliInteger(value: string, option: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) throw new UserError(`${option} requires an integer`);
-  return parsed;
-}
-
-async function availableTcpPort(host: string, excluded: ReadonlySet<number> = new Set()): Promise<number> {
-  for (;;) {
-    const server = net.createServer();
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, host, () => resolve());
-    });
-    const address = server.address();
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-    if (!address || typeof address === "string") throw new UserError(`could not allocate a TCP port on ${host}`);
-    if (!excluded.has(address.port)) return address.port;
-  }
-}
-
-function parseHttpIngressArgument(driver: string, argument: string): {
-  domain: string;
-  listenHost: string;
-  listenPort: number | "auto";
-  publicPort?: number;
-  routePolicy?: ExternalUrlRoutePolicyConfig;
-} {
-  if (driver !== "http") {
-    throw new UserError(
-      `unsupported external URL ingress driver '${driver}'; supported drivers: http, caddy`
-    );
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(argument);
-  } catch {
-    throw httpIngressArgumentError("must be valid JSON");
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw httpIngressArgumentError("must be a JSON object");
-  }
-  const input = value as Record<string, unknown>;
-  if (typeof input.domain !== "string" || input.domain.length === 0) {
-    throw httpIngressArgumentError("requires string field 'domain'");
-  }
-  if (typeof input.listenHost !== "string" || input.listenHost.length === 0) {
-    throw httpIngressArgumentError("requires string field 'listenHost'");
-  }
-  if (input.listenPort !== "auto"
-    && (!Number.isInteger(input.listenPort) || (input.listenPort as number) < 1 || (input.listenPort as number) > 65_535)) {
-    throw httpIngressArgumentError("field 'listenPort' must be 'auto' or a port");
-  }
-  if (input.publicPort !== undefined
-    && (!Number.isInteger(input.publicPort) || (input.publicPort as number) < 1 || (input.publicPort as number) > 65_535)) {
-    throw httpIngressArgumentError("field 'publicPort' must be a port");
-  }
-  if (input.upstreamMode !== undefined) {
-    throw httpIngressArgumentError("field 'upstreamMode' is unsupported; targets always use the owned workspace relay");
-  }
-  return {
-    ...input,
-    ...(input.routePolicy === undefined
-      ? {}
-      : { routePolicy: parseRoutePolicy(input.routePolicy, httpIngressArgumentError) })
-  } as unknown as ReturnType<typeof parseHttpIngressArgument>;
-}
-
-const INGRESS_DOCUMENTATION_URL =
-  "https://github.com/slop-lab/dev-infra-manager/blob/main/docs/guides/external-urls.md#host-configuration-and-route-approval";
-
-function httpIngressArgumentError(detail: string): UserError {
-  return new UserError(`http ingress arguments ${detail}. See ${INGRESS_DOCUMENTATION_URL}`);
 }
 
 async function listUrls(
@@ -1024,11 +649,6 @@ function requestIngress(input: Readonly<Record<string, unknown>>): string {
 }
 
 function validateOptions(options: ExternalUrlsPluginOptions): void {
-  if (options.requiredDnsDrivers !== undefined
-    && (!Array.isArray(options.requiredDnsDrivers)
-      || !options.requiredDnsDrivers.every((name) => /^[a-z0-9][a-z0-9.-]*$/.test(name)))) {
-    throw new Error("external URL requiredDnsDrivers must contain valid extension names");
-  }
   const entries = Object.entries(options.ingresses);
   const domains = new Map<string, {
     name: string;

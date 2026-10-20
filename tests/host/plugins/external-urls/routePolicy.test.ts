@@ -29,14 +29,14 @@ describe("external URL route policies", () => {
     })).rejects.toThrow("must start with 'work-1--'");
   });
 
-  it("allows only the authenticated workspace exact OpenCode label", async () => {
+  it.each(["opencode", "preview", "db-admin", "code--ui"])("allows only the authenticated workspace exact %s service label", async (service) => {
     // Given: colliding legacy spellings belonging to different workspaces.
     const owner = "work.foo";
     const otherWorkspace = "work_foo";
     const request = {
       workspace: { id: "workspace-id", name: owner },
       ingress: "public",
-      requestedSubdomain: workspaceServiceSubdomain(owner, "opencode"),
+      requestedSubdomain: workspaceServiceSubdomain(owner, service),
       domain: "example.test"
     };
 
@@ -46,8 +46,8 @@ describe("external URL route policies", () => {
     // Then: the other workspace's identity is not accepted for the owner.
     await expect(applyRoutePolicy(undefined, {
       ...request,
-      requestedSubdomain: workspaceServiceSubdomain(otherWorkspace, "opencode")
-    })).rejects.toThrow(`must start with '${workspaceSubdomainPrefix(owner)}' or equal`);
+      requestedSubdomain: workspaceServiceSubdomain(otherWorkspace, service)
+    })).rejects.toThrow(`must start with '${workspaceSubdomainPrefix(owner)}' or match`);
   });
 
   it("preserves the generic workspace prefix contract", () => {

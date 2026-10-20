@@ -178,3 +178,23 @@ Inside a workspace, `dim-expose --name app --port 3000 --ingress NAME`
 requests a route through the scoped guest API; `dim-expose list`
 inspects its own routes. A pending route still needs host approval. This API
 never provides host-admin credentials or allows another workspace selector.
+
+## Ingress driver ownership
+
+The package exports `ExternalUrlIngressDriver` and
+`EXTERNAL_URL_INGRESS_DRIVER_EXTENSION`. Host controller plugins register a named
+driver through that extension. Configuration, reload and verification resolve the
+same selected driver; startup resolves it after all enabled plugins register, so
+provider ordering does not change the stored ingress implementation. Missing
+drivers fail startup instead of selecting another backend.
+
+Each driver owns its argument parsing and runtime endpoint. Optional initialization,
+removal, dependency and stale-resource hooks keep service lifecycle with the driver.
+The Caddy implementation owns DNS reconciliation, secret environment files and
+its Compose service; the common URL transport owns workspace routes, listeners
+and approval checks. Failed initialization closes newly opened URL listeners.
+
+The default route policy accepts the authenticated workspace prefix or an exact
+`workspaceServiceSubdomain(workspaceName, serviceName)` label for any valid service.
+The latter includes the workspace identity hash and does not reserve a particular
+coding-agent name.
