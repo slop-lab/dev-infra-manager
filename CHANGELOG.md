@@ -33,7 +33,8 @@ is implied by these source changes.
   KVM VM creation, tooling and resource requirements.
   Fresh VM installation inherits selected workspace package mirrors and reuses
   pinned bootstrap binaries from a shared SHA256 cache, with explicit direct
-  routing when no cache was selected.
+  routing when no cache was selected. Retry stalled or temporarily unavailable
+  artifact downloads while retaining digest verification.
 
 - Develop ordinary Git repositories on local or SSH hosts without installing a
   control plane. Use `dim ls`, `create`, `exec`, `connect` and `forward` directly.

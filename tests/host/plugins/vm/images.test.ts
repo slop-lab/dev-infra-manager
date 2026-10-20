@@ -23,6 +23,23 @@ function download(url: string, cache: string, checksum = digest) {
 }
 
 describe("host VM artifact cache", () => {
+  it("retries a transient upstream failure and promotes only verified bytes", async () => {
+    const cache = await mkdtemp(path.join(tmpdir(), "dim-artifacts-retry-"));
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      if (++requests === 1) { response.writeHead(503); response.end("temporarily unavailable"); }
+      else response.end(bytes);
+    });
+    server.listen(0, "127.0.0.1"); await once(server, "listening");
+    const address = server.address(); if (!address || typeof address === "string") throw new Error("missing HTTP listener");
+    try {
+      const result = await download(`http://127.0.0.1:${address.port}/image`, cache);
+      expect(result.status, result.stderr).toBe(0);
+      expect(requests).toBe(2);
+      expect(await readFile(path.join(cache, digest))).toEqual(bytes);
+    } finally { server.close(); await once(server, "close"); await rm(cache, { recursive: true, force: true }); }
+  });
+
   it("deduplicates concurrent cold downloads, verifies hits and resumes partial bytes", async () => {
     const cache = await mkdtemp(path.join(tmpdir(), "dim-artifacts-"));
     let requests = 0; const ranges: string[] = [];

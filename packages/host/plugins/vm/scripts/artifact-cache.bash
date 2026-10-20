@@ -29,10 +29,12 @@ dim_artifact_cache() (
   printf '[artifact] downloading %s\n' "$digest" >&2
   local status=0
   curl --silent --show-error --fail --location --proto '=http,https' --proto-redir '=https' --tlsv1.2 --connect-timeout 30 --max-time 1800 \
+    --speed-limit 1024 --speed-time 30 --retry 3 --retry-delay 2 \
     --continue-at - --output "$partial" "$url" >&2 || status=$?
   if ((status == 33)); then
     rm -f -- "$partial"
     curl --silent --show-error --fail --location --proto '=http,https' --proto-redir '=https' --tlsv1.2 --connect-timeout 30 --max-time 1800 \
+      --speed-limit 1024 --speed-time 30 --retry 3 --retry-delay 2 \
       --output "$partial" "$url" >&2
   elif ((status != 0)); then exit "$status"; fi
   if ! printf '%s  %s\n' "$digest" "$partial" | sha256sum --check --status; then
