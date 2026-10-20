@@ -1,52 +1,64 @@
 import {
-  UserError, type CommandRunner, type CreateWorkspaceInput, type StreamingCommandRunner,
-  type WorkspaceRecord, type WorkspaceService, type WorkspaceStore, type WorkspaceRuntime, type AcquiredWorkspaceSource
+  UserError, type WorkspaceRecord, type WorkspaceService, type WorkspaceSourceCreateInput,
+  type WorkspaceSourceProviderContext, type WorkspaceRuntimeFactoryContext
 } from "@slop-lab/dim-host-core/workspace";
+import { hostPluginExtensions, loadHostPlugins } from "./host-plugins.js";
 
-export interface WorkspaceHostCreateInput extends CreateWorkspaceInput {
-  readonly repositories?: readonly string[];
-  readonly workingDirectory?: string;
+export type WorkspaceHostCreateInput = WorkspaceSourceCreateInput;
+export type WorkspaceHostContext = Omit<WorkspaceSourceProviderContext, "stateRoot">;
+
+const gitSchemes = new Set(["http", "https", "ssh", "git", "file", "git+ssh", "ssh+git"]);
+function sourceScheme(url: string): string | undefined {
+  return /^([a-z][a-z0-9+.-]*):\/\//i.exec(url)?.[1]?.toLowerCase();
+}
+function isOrdinaryGit(url: string): boolean {
+  const scheme = sourceScheme(url);
+  return scheme === undefined || gitSchemes.has(scheme);
 }
 
-/** Optional features are composed on the selected host, outside the workspace kernel. */
-export interface WorkspaceHostContext {
-  readonly store: WorkspaceStore;
-  readonly runner: StreamingCommandRunner;
-  readonly cleanupRunner: CommandRunner;
-  readonly signal: AbortSignal;
-  readonly runtime?: WorkspaceRuntime;
-  readonly validateCheckout?: (directory: string, source: AcquiredWorkspaceSource) => Promise<void>;
+async function sourceProvider(url: string) {
+  const scheme = sourceScheme(url);
+  const plugins = await loadHostPlugins();
+  const providers = plugins.filter(({ source }) => scheme !== undefined && source?.schemes.includes(scheme));
+  if (providers.length > 1) throw new UserError(`multiple enabled host plugins own source scheme '${scheme}'`);
+  const provider = providers[0]?.source;
+  if (!provider) throw new UserError(`source scheme '${scheme ?? "unknown"}' has no enabled host provider; install and enable its host plugin`);
+  return { provider, extensions: hostPluginExtensions(plugins) };
 }
 
+/** Source acquisition belongs to the explicitly enabled owner of a non-Git source scheme. */
 export async function createWorkspaceOnHost(
-  input: WorkspaceHostCreateInput, service: WorkspaceService, context: WorkspaceHostContext
+  input: WorkspaceHostCreateInput, service: Pick<WorkspaceService, "create">, context: WorkspaceHostContext
 ): Promise<WorkspaceRecord> {
-  if (!managedSource(input.source.url) && (input.repositories !== undefined || input.workingDirectory !== undefined)) {
-    throw new UserError("--repository and --workdir require a managed Project source (dim://PROJECT)");
-  }
-  return managedSource(input.source.url)
-    ? (await managedHost()).createManagedWorkspace(input, context)
-    : service.create(input);
-}
-
-/** Start/exec can recover an optional broker after a host reboot or service failure. */
-export async function ensureWorkspaceIntegration(record: WorkspaceRecord, context: WorkspaceHostContext): Promise<void> {
-  if (record.initialized && record.phase === "running" && managedSource(record.source.url)) {
-    await (await managedHost()).ensureManagedWorkspace(record, context);
-  }
-}
-
-function managedSource(source: string): boolean { return source.startsWith("dim://"); }
-
-async function managedHost() {
-  try { import.meta.resolve("@slop-lab/dim-host-plugin-native-git/host"); }
-  catch (error) {
-    if (error instanceof Error && "code" in error
-      && ["ERR_MODULE_NOT_FOUND", "ERR_PACKAGE_PATH_NOT_EXPORTED"].includes(String(error.code))) {
-      throw new UserError("Native Git host integration is not installed. Install the matching package set with "
-        + "'dim installer install plugin @slop-lab/dim-host-plugin-native-git@0.10.0'.");
+  if (isOrdinaryGit(input.source.url)) {
+    if (input.repositories !== undefined || input.workingDirectory !== undefined) {
+      throw new UserError("--repository and --workdir require a source provider that supports repository selection");
     }
-    throw error;
+    return service.create(input);
   }
-  return import("@slop-lab/dim-host-plugin-native-git/host");
+  const { provider, extensions } = await sourceProvider(input.source.url);
+  return provider.create(input, { ...context, stateRoot: context.store.root, extensions });
+}
+
+/** Reapply the enabled source integration after host reboot or runtime replacement. */
+export async function ensureWorkspaceIntegration(record: WorkspaceRecord, context: WorkspaceHostContext): Promise<void> {
+  if (record.initialized && record.phase === "running" && !isOrdinaryGit(record.source.url)) {
+    const { provider, extensions } = await sourceProvider(record.source.url);
+    await provider.ensure?.(record, { ...context, stateRoot: context.store.root, extensions });
+  }
+}
+
+/** Metadata remains optional; the generic controller never loads a feature by package presence. */
+export async function resolveWorkspaceMetadata(record: WorkspaceRecord, context: WorkspaceRuntimeFactoryContext): Promise<{
+  projectId: string; projectName: string;
+} | undefined> {
+  let selected: { projectId: string; projectName: string } | undefined;
+  const plugins = await loadHostPlugins(), extensions = hostPluginExtensions(plugins);
+  for (const plugin of plugins) {
+    const metadata = await plugin.workspaceMetadata?.(record, { ...context, extensions });
+    if (metadata === undefined) continue;
+    if (selected) throw new UserError(`multiple enabled host plugins supplied metadata for workspace '${record.name}'`);
+    selected = metadata;
+  }
+  return selected;
 }

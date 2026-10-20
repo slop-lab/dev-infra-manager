@@ -6,7 +6,7 @@ import {
 } from "@slop-lab/dim-host-core/workspace";
 import { createWorkspaceOnHost, ensureWorkspaceIntegration, type WorkspaceHostCreateInput } from "./workspace-composition.js";
 import { decodeHostRequest } from "./host-transport.js";
-import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting } from "./host-plugins.js";
+import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting, hostPluginExtensions } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
 import { installRequiredPlugins, workspaceRequirements } from "./workspace-requirements.js";
 
@@ -86,9 +86,10 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
     case "plugin.cli": {
       if (!Array.isArray(input.args) || !input.args.every((arg: unknown) => typeof arg === "string" && !arg.includes("\0"))) throw new UserError("plugin command must be an argument array");
       const args = input.args as string[];
-      const plugin = (await loadHostPlugins()).find((plugin) => plugin.commands?.some(({ name }) => name === args[0]));
+      const installed = await loadHostPlugins();
+      const plugin = installed.find((plugin) => plugin.commands?.some(({ name }) => name === args[0]));
       if (!plugin?.run) throw new UserError(`unknown command '${args[0] ?? ""}'; use 'dim plugins' to inspect installed host commands`);
-      await plugin.run(args, { ...context, stateRoot: store.root, service }); return;
+      await plugin.run(args, { ...context, extensions: hostPluginExtensions(installed), stateRoot: store.root, service }); return;
     }
     case "image.build": {
       result = await buildWorkspaceImage(runner, {

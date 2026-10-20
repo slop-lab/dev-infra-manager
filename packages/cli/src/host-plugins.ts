@@ -1,11 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-  ContainerWorkspaceRuntime, UserError, type WorkspaceHostPlugin, type WorkspaceRuntime,
-  type WorkspaceRuntimeFactoryContext, type HostExecutionRouting
+  ContainerWorkspaceRuntime, UserError, resolveHostPluginModule, type WorkspaceHostPlugin, type WorkspaceRuntime,
+  type WorkspaceRuntimeFactoryContext, type HostExecutionRouting, type HostPluginExtension
 } from "@slop-lab/dim-host-core/workspace";
 
 /** Only explicitly installed host modules execute. Repository files never select host code. */
@@ -25,11 +24,10 @@ export async function loadHostPlugins(): Promise<readonly WorkspaceHostPlugin[]>
     || !raw.plugins.every((value: unknown) => typeof value === "string" && value.length > 0)) {
     throw new UserError("invalid installed DIM plugin manifest");
   }
-  const resolve = createRequire(path.join(home, "package.json"));
   const plugins: WorkspaceHostPlugin[] = [];
-  const names = new Set<string>(), commands = new Set<string>(), runtimes = new Set(["container"]);
+  const names = new Set<string>(), commands = new Set<string>(), runtimes = new Set(["container"]), schemes = new Set<string>();
   for (const specifier of new Set<string>(raw.plugins)) {
-    const module: unknown = await import(pathToFileURL(resolve.resolve(specifier)).href);
+    const module: unknown = await import(pathToFileURL(await resolveHostPluginModule(home, specifier)).href);
     if (!isObject(module) || module.hostPlugin === undefined) continue;
     const plugin = parseHostPlugin(module.hostPlugin);
     if (names.has(plugin.name)) throw new UserError(`duplicate host plugin '${plugin.name}'`);
@@ -42,8 +40,13 @@ export async function loadHostPlugins(): Promise<readonly WorkspaceHostPlugin[]>
       if (runtimes.has(plugin.runtime.name)) throw new UserError(`duplicate workspace runtime '${plugin.runtime.name}'`);
       runtimes.add(plugin.runtime.name);
     }
+    for (const scheme of plugin.source?.schemes ?? []) {
+      if (schemes.has(scheme)) throw new UserError(`duplicate workspace source scheme '${scheme}'`);
+      schemes.add(scheme);
+    }
     plugins.push(plugin);
   }
+  hostPluginExtensions(plugins);
   return plugins;
 }
 
@@ -56,6 +59,17 @@ function parseHostPlugin(value: unknown): WorkspaceHostPlugin {
     !isObject(command) || !identifier(command.name) || typeof command.description !== "string"))) {
     throw new UserError(`invalid commands in host plugin '${value.name}'`);
   }
+  if (value.extensions !== undefined && (!Array.isArray(value.extensions) || value.extensions.some((item: unknown) =>
+    !isObject(item) || typeof item.kind !== "string" || !/^[a-z][a-z0-9.-]{0,127}$/.test(item.kind)
+    || !identifier(item.name) || !isObject(item.value)))) throw new UserError(`invalid extensions in '${value.name}'`);
+  if (value.source !== undefined) {
+    const source = value.source;
+    if (!isObject(source) || !Array.isArray(source.schemes) || source.schemes.length < 1 || source.schemes.length > 32
+      || source.schemes.some((scheme: unknown) => typeof scheme !== "string" || !/^[a-z][a-z0-9+.-]{0,31}$/.test(scheme) || ["http", "https", "ssh", "git", "file", "git+ssh", "ssh+git"].includes(scheme))
+      || new Set(source.schemes).size !== source.schemes.length || typeof source.create !== "function"
+      || source.ensure !== undefined && typeof source.ensure !== "function") throw new UserError(`invalid source provider in '${value.name}'`);
+  }
+  if (value.workspaceMetadata !== undefined && typeof value.workspaceMetadata !== "function") throw new UserError(`invalid workspace metadata provider in '${value.name}'`);
   if (value.executionRouting !== undefined && typeof value.executionRouting !== "function") throw new UserError(`invalid execution routing provider in '${value.name}'`);
   if (value.run !== undefined && typeof value.run !== "function") throw new UserError(`invalid command handler in '${value.name}'`);
   if (value.workspaceReady !== undefined && typeof value.workspaceReady !== "function") throw new UserError(`invalid workspace integration in '${value.name}'`);
@@ -96,7 +110,7 @@ export function composeWorkspaceRuntime(context: WorkspaceRuntimeFactoryContext)
     if (!runtime) {
       const provider = (await installed()).find((plugin) => plugin.runtime?.name === name)?.runtime;
       if (!provider) throw new UserError(`workspace runtime '${name}' is not installed; install its host plugin first`);
-      runtime = Promise.resolve(provider.create(context)); providers.set(name, runtime);
+      runtime = Promise.resolve(provider.create({ ...context, extensions: hostPluginExtensions(await installed()) })); providers.set(name, runtime);
     }
     return runtime;
   };
@@ -138,11 +152,23 @@ export async function resolveHostExecutionRouting(
   context: WorkspaceRuntimeFactoryContext & { readonly signal: AbortSignal }
 ): Promise<HostExecutionRouting | undefined> {
   let selected: { name: string; routing: HostExecutionRouting } | undefined;
+  const routingContext = { ...context, extensions: hostPluginExtensions(plugins) };
   for (const plugin of plugins) {
-    const routing = await plugin.executionRouting?.(context);
+    const routing = await plugin.executionRouting?.(routingContext);
     if (routing === undefined) continue;
     if (selected) throw new UserError(`conflicting host execution routing providers '${selected.name}' and '${plugin.name}'`);
     selected = { name: plugin.name, routing };
   }
   return selected?.routing;
+}
+
+/** Duplicate contributions fail before any plugin hook executes. */
+export function hostPluginExtensions(plugins: readonly WorkspaceHostPlugin[]): readonly HostPluginExtension[] {
+  const result: HostPluginExtension[] = [], names = new Set<string>();
+  for (const plugin of plugins) for (const extension of plugin.extensions ?? []) {
+    const key = `${extension.kind}/${extension.name}`;
+    if (names.has(key)) throw new UserError(`duplicate host plugin extension '${key}'`);
+    names.add(key); result.push(extension);
+  }
+  return result;
 }

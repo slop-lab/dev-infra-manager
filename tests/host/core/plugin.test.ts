@@ -5,11 +5,6 @@ import {
   registerPlugin,
   registerPlugins
 } from "../../../packages/host/core/src/controller/plugin.js";
-import {
-  registerHostMirrorProvider,
-  resolveHostMirrorProvider
-} from "../../../packages/host/core/src/controller/hostMirrorProvider.js";
-
 describe("plugin contract", () => {
   it("loads plugins through a versioned contract", async () => {
     const register = vi.fn();
@@ -141,79 +136,6 @@ describe("plugin contract", () => {
         }
       }
     ])).rejects.toThrow(/already registered/);
-  });
-
-  it("registers one host-owned mirror provider without deploying services", async () => {
-    // Given
-    const provider = {
-      async ensure() { throw new Error("registration must not start services"); }
-    };
-
-    // When
-    const registered = await registerPlugin({
-      name: "host-mirrors",
-      apiVersion: DIM_PLUGIN_API_VERSION,
-      register(host) { registerHostMirrorProvider(host, provider); }
-    });
-
-    // Then
-    expect(resolveHostMirrorProvider(registered.host)).toEqual(provider);
-    await registered.dispose();
-  });
-
-  it("rejects duplicate host mirror providers", async () => {
-    // Given
-    const immutable = {
-      async ensure() { throw new Error("registration must not start services"); }
-    };
-
-    // When / Then
-    await expect(registerPlugins([
-      {
-        name: "first-mirrors",
-        apiVersion: DIM_PLUGIN_API_VERSION,
-        register(host) { registerHostMirrorProvider(host, immutable); }
-      },
-      {
-        name: "second-mirrors",
-        apiVersion: DIM_PLUGIN_API_VERSION,
-        register(host) { registerHostMirrorProvider(host, immutable); }
-      }
-    ])).rejects.toThrow(/already registered/);
-  });
-
-  it("rejects a second host mirror provider registered under another name", async () => {
-    // Given
-    const provider = {
-      async ensure() { throw new Error("registration must not start services"); }
-    };
-
-    // When
-    const registration = registerPlugin({
-      name: "ambiguous-mirrors",
-      apiVersion: DIM_PLUGIN_API_VERSION,
-      register(host) {
-        host.registerExtension("dim.host-mirror-provider", "primary", provider);
-        host.registerExtension("dim.host-mirror-provider", "secondary", provider);
-      }
-    });
-
-    // Then
-    await expect(registration).rejects.toThrow(/host mirror provider.*already registered/);
-  });
-
-  it("rejects a malformed host mirror provider registered through the generic extension API", async () => {
-    // Given / When
-    const registration = registerPlugin({
-      name: "malformed-mirrors",
-      apiVersion: DIM_PLUGIN_API_VERSION,
-      register(host) {
-        host.registerExtension("dim.host-mirror-provider", "host", {});
-      }
-    });
-
-    // Then
-    await expect(registration).rejects.toThrow(/host mirror provider must supply cache routing/);
   });
 
   it("shares named extensions between plugins and rejects duplicates", async () => {

@@ -155,3 +155,35 @@ fails before execution instead of silently reverting to direct access.
 Control-plane plugins use the separate `controlPlanePlugin` contract exported
 by `@slop-lab/dim-control-plane-core/plugin`. Their runtime validates required
 capabilities before startup and closes started services in reverse order.
+
+## Host extension contributions
+
+Enabled host plugins may contribute `hostPlugin.extensions`, an array of
+`{kind, name, value}` code contributions. The host rejects duplicate kind/name
+pairs before invoking hooks and passes the enabled contributions in each
+plugin context. Each extension owner defines and validates its own typed value;
+the host core does not interpret protocol names or application configuration.
+Repository files cannot enable host code through this registry.
+
+## Workspace source providers
+
+A host plugin may own non-Git URL schemes through `hostPlugin.source`. Its
+`create` operation receives the requested repository selection and host runtime
+context; `ensure` restores its scoped integration after readiness or recreation.
+The host selects providers from the enabled plugin manifest and rejects competing
+owners. Ordinary local, SCP-style and standard Git URLs retain the base Git
+acquisition path. Installing a dependency without enabling its plugin does not
+authorize custom source handling.
+
+`workspaceMetadata` optionally supplies Project identity to the generic host
+controller. The controller resolves enabled providers and rejects ambiguous
+metadata. Native Project attachments belong to the native Git host plugin; the
+CLI and host core do not import that feature by package name.
+
+Host module loading uses `resolveHostPluginModule(home, specifier)` from host
+core. Named npm packages, including package subpaths, must have an entry in that
+runtime's `node_modules`; resolution cannot borrow an ancestor dependency. The
+resolved entry must remain inside the selected package's real directory. Local
+pnpm/workspace symlinks remain supported. An operator may also select an explicit
+absolute, relative or `file:` module path for development. These are code
+selections in the host manifest, never repository-controlled installation paths.

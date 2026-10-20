@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { UserError } from "@slop-lab/dim-host-core";
+import { resolveHostPluginModule } from "../pluginModule.js";
 import { registerPlugins, type DimPlugin, type RegisteredDimPlugins } from "./plugin.js";
 import { builtInHostInputPlugin } from "./hostInputs.js";
 
@@ -55,13 +55,12 @@ export async function loadInstalledPlugins(home = pluginHome()): Promise<{
   registered: RegisteredDimPlugins;
 }> {
   const manifest = await readPluginManifest(home);
-  const requireFromHome = createRequire(path.join(home, "package.json"));
   const plugins: DimPlugin[] = [];
 
   for (const specifier of manifest.plugins) {
     let resolved: string;
     try {
-      resolved = requireFromHome.resolve(specifier);
+      resolved = await resolveHostPluginModule(home, specifier);
     } catch (error) {
       throw new UserError(
         `installed DIM plugin '${specifier}' cannot be resolved from ${home}: ${

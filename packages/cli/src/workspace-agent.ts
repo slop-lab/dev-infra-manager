@@ -13,7 +13,7 @@ import {
   type WorkspaceHostPluginContext, type WorkspaceRecord, type WorkspaceRuntime
 } from "@slop-lab/dim-host-core/workspace";
 import { atomicWrite } from "@slop-lab/dim-host-core";
-import { composeWorkspaceRuntime, loadHostPlugins, hostPluginHome } from "./host-plugins.js";
+import { composeWorkspaceRuntime, loadHostPlugins, hostPluginHome, hostPluginExtensions } from "./host-plugins.js";
 import { ensureWorkspaceIntegration } from "./workspace-composition.js";
 
 interface AgentConfiguration {
@@ -84,7 +84,9 @@ export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: Age
       ]
     });
   });
-  for (const plugin of await loadHostPlugins()) await plugin.workspaceReady?.(record, context);
+  const installed = await loadHostPlugins();
+  const pluginContext = { ...context, extensions: hostPluginExtensions(installed) };
+  for (const plugin of installed) await plugin.workspaceReady?.(record, pluginContext);
 }
 
 async function agentReady(root: string, config: AgentConfiguration): Promise<AgentReady | undefined> {
@@ -173,11 +175,12 @@ export function createWorkspaceAgentServer(
     }
     if (request.method === "GET" && request.url === "/v1/plugins") {
       if (!record.initialized || record.phase !== "running" || !(await context.runtime.inspect(record))?.running) { json(response, 409, { error: "workspace is not running" }); return; }
-      const plugins = [];
-      for (const plugin of await loadHostPlugins()) {
+      const plugins = [], installed = await loadHostPlugins();
+      const pluginContext = { ...context, extensions: hostPluginExtensions(installed) };
+      for (const plugin of installed) {
         const guest = plugin.guest;
         if (!guest) continue;
-        const status = await guest.inspect?.(record, context) ?? { state: "ready" as const };
+        const status = await guest.inspect?.(record, pluginContext) ?? { state: "ready" as const };
         if (!isObject(status) || !["ready", "unconfigured"].includes(status.state)
           || (status.message !== undefined && (typeof status.message !== "string" || status.message.length > 2000))) {
           throw new UserError(`invalid guest integration status from '${plugin.name}'`);
@@ -194,13 +197,14 @@ export function createWorkspaceAgentServer(
     const operationPath = /^\/v1\/plugins\/([a-z][a-z0-9-]{0,63})\/([a-z][a-z0-9-]{0,63})$/.exec(request.url ?? "");
     if (request.method === "POST" && operationPath) {
       if (!record.initialized || record.phase !== "running" || !(await context.runtime.inspect(record))?.running) { json(response, 409, { error: "workspace is not running" }); return; }
-      const plugin = (await loadHostPlugins()).find(({ name }) => name === operationPath[1]);
+      const installed = await loadHostPlugins();
+      const plugin = installed.find(({ name }) => name === operationPath[1]);
       const operation = plugin?.guest?.operations?.find(({ name }) => name === operationPath[2]);
       if (!operation) { json(response, 404, { error: "unknown workspace plugin operation" }); return; }
       const input = await readJson(request);
       const latest = await context.store.read(config.workspaceName);
       if (latest.id !== record.id || !latest.initialized || latest.phase !== "running" || !(await context.runtime.inspect(latest))?.running) { json(response, 410, { error: "workspace identity expired" }); return; }
-      json(response, 200, await operation.handle(input, latest, context)); return;
+      json(response, 200, await operation.handle(input, latest, { ...context, extensions: hostPluginExtensions(installed) })); return;
     }
     json(response, 404, { error: "unknown workspace operation" });
   }

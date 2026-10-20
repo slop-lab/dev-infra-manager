@@ -1,7 +1,6 @@
 import { UserError } from "@slop-lab/dim-host-core";
 import type { DimControllerRoute } from "./controller.js";
 import type { DimAdminRoute } from "./adminController.js";
-import { HOST_MIRROR_PROVIDER_EXTENSION, validateHostMirrorProvider } from "./hostMirrorProvider.js";
 
 export const DIM_PLUGIN_API_VERSION = 4 as const;
 
@@ -130,15 +129,9 @@ class PluginHost implements DimPluginHost {
     if (!extension || typeof extension !== "object") {
       throw new UserError(`plugin '${plugin}' registered invalid extension '${kind}/${name}'`);
     }
-    const validated = kind === HOST_MIRROR_PROVIDER_EXTENSION
-      ? validateHostMirrorProvider(extension)
-      : extension;
     const values = this.extensions.get(kind) ?? new Map<string, object>();
-    if (kind === HOST_MIRROR_PROVIDER_EXTENSION && values.size > 0) {
-      throw new UserError("host mirror provider is already registered");
-    }
     if (values.has(name)) throw new UserError(`extension '${kind}/${name}' is already registered`);
-    values.set(name, Object.freeze(validated));
+    values.set(name, Object.freeze(extension));
     this.extensions.set(kind, values);
   }
 

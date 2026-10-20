@@ -10,7 +10,7 @@ it("returns no routing for absent or installed unconfigured providers", async ()
   const unconfigured = vi.fn(async () => undefined);
   expect(await resolveHostExecutionRouting([], context)).toBeUndefined();
   expect(await resolveHostExecutionRouting([{ name: "unconfigured", executionRouting: unconfigured }, { name: "other" }], context)).toBeUndefined();
-  expect(unconfigured).toHaveBeenCalledWith(context);
+  expect(unconfigured).toHaveBeenCalledWith({ ...context, extensions: [] });
 });
 
 it("passes configured routing unchanged and rejects ambiguous configured providers", async () => {

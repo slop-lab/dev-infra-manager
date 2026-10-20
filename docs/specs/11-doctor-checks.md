@@ -14,7 +14,5 @@ Creation separately validates runtime resources and waits for private Docker
 readiness. Disposable-host verification exercises actual isolation and nested
 container execution.
 
-Managed services have additional diagnostics under `dim doctor`.
-Their linger, rootlesskit AppArmor, controller and plugin checks are scoped to
-that integration; they are not base workspace prerequisites. Host provisioning
-scripts remain responsible for installing the runtime's system dependencies.
+Optional integrations own their additional prerequisites and installation
+checks. Host provisioning scripts install the runtime's system dependencies.

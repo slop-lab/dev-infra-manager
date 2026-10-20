@@ -1,6 +1,5 @@
 import type { IncomingMessage } from "node:http";
 import { UserError } from "@slop-lab/dim-host-core";
-import type { WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 
 export function requiredString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.length === 0) throw new UserError(`${name} must be a string`);
@@ -63,10 +62,5 @@ export function stringArray(value: unknown): string[] {
 
 export function booleanValue(value: unknown): boolean {
   if (typeof value !== "boolean") throw new UserError("expected a boolean");
-  return value;
-}
-
-export function workspaceRuntimeBackend(value: unknown): WorkspaceRuntimeBackendKind {
-  if (value !== "sysbox") throw new UserError("workspace runtime backend must be 'sysbox'");
   return value;
 }

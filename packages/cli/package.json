@@ -41,18 +41,13 @@
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
     "typescript": "5.8.3",
-    "@slop-lab/dim-control-plane-admin": "workspace:0.10.0",
-    "@slop-lab/dim-host-plugin-native-git": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-admin": "workspace:0.10.0"
   },
   "peerDependencies": {
-    "@slop-lab/dim-control-plane-admin": "0.10.0",
-    "@slop-lab/dim-host-plugin-native-git": "0.10.0"
+    "@slop-lab/dim-control-plane-admin": "0.10.0"
   },
   "peerDependenciesMeta": {
     "@slop-lab/dim-control-plane-admin": {
-      "optional": true
-    },
-    "@slop-lab/dim-host-plugin-native-git": {
       "optional": true
     }
   }

@@ -9,7 +9,7 @@ const runner = new ProcessRunner();
 import {
   ADMIN_CONTROLLER_STOP_EVENT, configuredDimAdminController, configuredDimController,
   initializeControllerRoutes, lifecycleOptions, loadInstalledPlugins,
-  resolveHostMirrorProvider, resolvePluginHome
+  resolvePluginHome
 } from "../index.js";
 import {
   claimControllerPid, pidFileOwnedByCurrentProcess,
@@ -86,14 +86,12 @@ controller.command("serve")
         async () => await loadInstalledPlugins(await resolvePluginHome())
       );
       loaded = loadedPlugins;
-      const hostMirrorProvider = resolveHostMirrorProvider(loadedPlugins.registered.host);
-      const runtimeOptions = hostMirrorProvider === undefined ? options : { ...options, hostMirrorProvider };
       await controllerStartupStage(
         "initializing plugin routes",
-        async () => await initializeControllerRoutes(runtimeOptions, loadedPlugins.registered, runner, metadata)
+        async () => await initializeControllerRoutes(options, loadedPlugins.registered, runner, metadata)
       );
-      server = configuredDimController(runtimeOptions, loaded.registered, runner, metadata);
-      adminServer = configuredDimAdminController(runtimeOptions, loaded.registered, runner);
+      server = configuredDimController(options, loaded.registered, runner, metadata);
+      adminServer = configuredDimAdminController(options, loaded.registered, runner);
       const stopRequested = once(adminServer, ADMIN_CONTROLLER_STOP_EVENT);
       if (flags.socket && adminSocket) {
         await prepareControllerSocket(flags.socket);

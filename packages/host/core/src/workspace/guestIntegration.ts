@@ -11,6 +11,7 @@ export interface GuestIntegrationContext {
 export interface GuestIntegrationTarget { readonly container: string; readonly user?: string }
 export interface GuestIntegration {
   readonly name: string;
+  readonly directories?: readonly string[];
   readonly files: readonly { readonly path: string; readonly contents: string | Uint8Array; readonly mode?: 0o600 | 0o700 }[];
   readonly target?: GuestIntegrationTarget;
 }
@@ -43,28 +44,35 @@ export async function execGuestIntegrationTarget(context: GuestIntegrationContex
 
 /** Publish only explicitly supplied guest data. No host path, secret or socket is mounted. */
 export async function deployGuestIntegration(context: GuestIntegrationContext, integration: GuestIntegration): Promise<void> {
-  if (!/^[a-z][a-z0-9-]{0,63}$/.test(integration.name) || integration.files.length > maximumFiles) throw new UserError("invalid guest integration name or file count");
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(integration.name) || integration.files.length + (integration.directories?.length ?? 0) > maximumFiles) throw new UserError("invalid guest integration name or file count");
   let size = 0;
-  const paths = new Set<string>();
+  const paths = new Set<string>(), directories = new Set<string>();
+  function validatePath(path: string, seen: Set<string>): void {
+    if (!path || path.length > 4096 || /[\\\x00-\x1f\x7f]/.test(path)
+      || path.split("/").length > 64 || path.split("/").some((part) => !part || part === "." || part === "..") || seen.has(path))
+      throw new UserError("integration paths must be distinct HOME-relative paths without traversal");
+    seen.add(path);
+  }
+  for (const path of integration.directories ?? []) validatePath(path, directories);
   const files = integration.files.map((file) => {
     const path = file.path;
-    if (!path || path.length > 4096 || /[\\\x00-\x1f\x7f]/.test(path)
-      || (path.split("/").length > 64 || path.split("/").some((part) => !part || part === "." || part === "..")) || paths.has(path)) throw new UserError("integration files must have distinct HOME-relative paths without traversal");
+    validatePath(path, paths);
+    if (directories.has(path)) throw new UserError("integration files cannot also be directories");
     const mode = file.mode ?? 0o600;
     if (mode !== 0o600 && mode !== 0o700) throw new UserError("integration files must use private mode 0600 or 0700");
     const bytes = typeof file.contents === "string" ? Buffer.from(file.contents) : Buffer.from(file.contents);
     size += bytes.length;
     if (size > maximumBytes) throw new UserError("guest integration exceeds the 4 MiB file budget");
-    paths.add(path); return { path, mode, contents: bytes.toString("base64") };
+    return { path, mode, contents: bytes.toString("base64") };
   });
-  for (const path of paths) {
+  for (const path of [...paths, ...directories]) {
     const parts = path.split("/");
     for (let index = 1; index < parts.length; index++) {
       if (paths.has(parts.slice(0, index).join("/"))) throw new UserError("integration file paths cannot also be parent directories");
     }
   }
   const code = await execGuestIntegrationTarget(context, integration.target, ["node", "--input-type=commonjs", "-e", writer], {
-    stdin: Readable.from([JSON.stringify({ name: integration.name, files })]),
+    stdin: Readable.from([JSON.stringify({ name: integration.name, files, directories: [...directories] })]),
     stdout: new Writable({ write(_chunk, _encoding, done) { done(); } }),
     stderr: new Writable({ write(_chunk, _encoding, done) { done(); } })
   });
@@ -82,19 +90,25 @@ process.stdin.on('end',()=>{
  const descriptors=[];
  try {
   const payload=JSON.parse(input),uid=process.getuid();
-  if(!Array.isArray(payload.files)||payload.files.length>64)throw Error('invalid payload');
+  if(!Array.isArray(payload.files)||!Array.isArray(payload.directories)||payload.files.length+payload.directories.length>64)throw Error('invalid payload');
   const homePath=os.homedir();if(fs.realpathSync(homePath)!==homePath)throw Error('unsafe home');
   const home=fs.openSync(homePath,C.O_RDONLY|C.O_DIRECTORY|C.O_NOFOLLOW);
   descriptors.push(home);checkDirectory(home);
-  for(const file of payload.files){
-   const parents=[];try{
-   const parts=file.path.split('/');let parent=home;
-   for(const part of parts.slice(0,-1)){
+  function openDirectories(parts){
+   const parents=[];let parent=home;
+   try{for(const part of parts){
     const path='/proc/self/fd/'+parent+'/'+part;
     try{fs.mkdirSync(path,{mode:0o700})}catch(error){if(error.code!=='EEXIST')throw error}
     const child=fs.openSync(path,C.O_RDONLY|C.O_DIRECTORY|C.O_NOFOLLOW);
     parents.push(child);checkDirectory(child);parent=child;
-   }
+   }return {parents,parent}}catch(error){for(const fd of parents.reverse())fs.closeSync(fd);throw error}
+  }
+  for(const directory of payload.directories){
+   const {parents,parent}=openDirectories(directory.split('/'));
+   try{fs.fsyncSync(parent)}finally{for(const fd of parents.reverse())fs.closeSync(fd)}
+  }
+  for(const file of payload.files){
+   const parts=file.path.split('/'),{parents,parent}=openDirectories(parts.slice(0,-1));try{
    const name=parts[parts.length-1],path='/proc/self/fd/'+parent+'/'+name,bytes=Buffer.from(file.contents,'base64');
    let unchanged=false;
    for(let attempt=0;attempt<5;attempt++){

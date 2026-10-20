@@ -127,3 +127,40 @@ it("pins an explicit nested container to its inspected ID inside the immutable w
   await expect(readFile(join(workspaceHome, ".config/dim/nested"))).rejects.toMatchObject({ code: "ENOENT" });
   await expect(deployGuestIntegration(value, { name: "fixture", target: { container: "--host" }, files: [] })).rejects.toThrow(/nested integration target/);
 });
+
+it("prepares explicit directory-only integrations through the same private anchored writer", async () => {
+  const home = await directory(), { value } = context(home);
+  const integration = { name: "directories", directories: [".config/dim", ".local/share/client"], files: [] };
+  await deployGuestIntegration(value, integration);
+  const target = join(home, ".config/dim"), before = await stat(target);
+  expect(before.isDirectory()).toBe(true); expect(before.mode & 0o777).toBe(0o700);
+  await deployGuestIntegration(value, integration);
+  expect((await stat(target)).ino).toBe(before.ino);
+  await chmod(target, 0o777);
+  await expect(deployGuestIntegration(value, integration)).rejects.toThrow(/cannot safely prepare/);
+});
+
+it("rejects redirected or foreign-owned directory preparation without creating outside entries", async () => {
+  const home = await directory(), outside = await directory();
+  await symlink(outside, join(home, ".config"));
+  await expect(deployGuestIntegration(context(home).value, { name: "directories", directories: [".config/dim"], files: [] })).rejects.toThrow(/cannot safely prepare/);
+  await expect(stat(join(outside, "dim"))).rejects.toMatchObject({ code: "ENOENT" });
+  // The system temporary directory belongs to root rather than the guest user.
+  if ((await stat(tmpdir())).uid !== process.getuid?.()) {
+    const name = `dim-foreign-directory-${randomUUID()}`;
+    await expect(deployGuestIntegration(context(tmpdir()).value, { name: "directories", directories: [name], files: [] })).rejects.toThrow(/cannot safely prepare/);
+    await expect(stat(join(tmpdir(), name))).rejects.toMatchObject({ code: "ENOENT" });
+  }
+});
+
+it("rejects directory traversal, duplicate paths, file conflicts and combined path overflow before execution", async () => {
+  const { value, calls } = context(await directory());
+  for (const path of ["/absolute", "../outside", "a/../outside", "a\\b", "a//b"]) {
+    await expect(deployGuestIntegration(value, { name: "directories", directories: [path], files: [] })).rejects.toThrow(/HOME-relative/);
+  }
+  await expect(deployGuestIntegration(value, { name: "directories", directories: ["same", "same"], files: [] })).rejects.toThrow(/distinct/);
+  await expect(deployGuestIntegration(value, { name: "directories", directories: ["a"], files: [{ path: "a", contents: "x" }] })).rejects.toThrow(/also be directories/);
+  await expect(deployGuestIntegration(value, { name: "directories", directories: ["a/b"], files: [{ path: "a", contents: "x" }] })).rejects.toThrow(/parent directories/);
+  await expect(deployGuestIntegration(value, { name: "directories", directories: Array.from({ length: 64 }, (_, index) => `d${index}`), files: [{ path: "file", contents: "x" }] })).rejects.toThrow(/file count/);
+  expect(calls).toEqual([]);
+});

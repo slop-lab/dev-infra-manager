@@ -6,9 +6,11 @@ source acquisition. The host core owns workspace lifecycle and storage; the
 control-plane Native Git plugin owns repository authority, review and promotion.
 
 Install the package through the host plugin installer. `dim project` manages
-Projects and their independently imported repositories. Host composition loads
-`./host` only for Native Project workspaces. Ordinary local and remote Git
-workspaces do not require this integration.
+Projects and their independently imported repositories. Its `hostPlugin.source`
+capability owns the `dim` URL scheme and lazily loads acquisition/broker code.
+Only the enabled host-plugin manifest authorizes source acquisition, recovery
+and optional Project metadata; package presence alone does not activate them.
+Ordinary local and remote Git workspaces do not require this integration.
 
 Repository read and proposal-write grants remain private to the host. Workspace
 checkouts receive narrow local broker access. Review, registrar, importer and

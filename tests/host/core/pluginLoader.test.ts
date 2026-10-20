@@ -8,7 +8,6 @@ import {
   readPluginManifest,
   resolvePluginHome
 } from "../../../packages/host/core/src/controller/pluginLoader.js";
-import { configuredWorkspaceBackend, dimUserConfigPath } from "../../../packages/host/core/src/controller/userConfig.js";
 
 describe("plugin loader configuration", () => {
   let root: string;
@@ -32,15 +31,6 @@ describe("plugin loader configuration", () => {
       join(root, "data", "runtime", "current")
     );
     expect(await resolvePluginHome({ HOME: root, DIM_PLUGIN_HOME: root })).toBe(root);
-  });
-
-  it("reads the installed workspace backend from the shared user config", async () => {
-    const configPath = join(root, "dim.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
-    expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toBe("sysbox");
-    expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: join(root, "missing.json") })).toBeUndefined();
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "removed-backend" }));
-    expect(() => configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toThrow(/invalid workspaceBackend/);
   });
 
   it("deduplicates configured plugin packages", async () => {

@@ -20,8 +20,8 @@ output.dependencies = {
   ...source.dependencies,
   "@slop-lab/dim-host-core": output.version
 };
-output.peerDependencies = { "@slop-lab/dim-control-plane-admin": output.version, "@slop-lab/dim-host-plugin-native-git": output.version };
-output.peerDependenciesMeta = { "@slop-lab/dim-control-plane-admin": { optional: true }, "@slop-lab/dim-host-plugin-native-git": { optional: true } };
+output.peerDependencies = { "@slop-lab/dim-control-plane-admin": output.version };
+output.peerDependenciesMeta = { "@slop-lab/dim-control-plane-admin": { optional: true } };
 output.bin = {
   dim: "cli.js"
 };
