@@ -6,5 +6,6 @@
   "features/external-urls",
   "features/external-url-route-policy",
   "features/shared-execution",
-  "features/security-review"
+  "features/security-review",
+  "features/review-tracing"
 ]

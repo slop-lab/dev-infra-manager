@@ -14,6 +14,7 @@ the documentation is not a second plugin inventory.
 | [External URLs](features/external-urls/README.md) | HTTP route approval boundary | Explicit ingress and approval prerequisites |
 | [Route policy](features/external-url-route-policy/README.md) | Actual Unix HTTP allow/rewrite/deny | Operator service; no implicit deployment |
 | [Security review](features/security-review/README.md) | Conditional JSON/custom review and protection of the project matcher itself | Separate explicit isolated Docker evaluator check |
+| [Review dependency tracing](features/review-tracing/README.md) | Git/HTTP approval for automatically observed dependencies and JSON target fields | Separate explicit brokered Node/Docker evaluator check |
 | [Shared execution](features/shared-execution/README.md) | Actual Git/CI admission, results and recovery | Explicit worker/image/runtime prerequisites |
 
 ## Run a recipe

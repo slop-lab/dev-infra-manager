@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "name": "review-tracing",
+  "plugins": {
+    "host": [],
+    "controlPlane": [
+      "@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0",
+      "@slop-lab/dim-control-plane-plugin-code-review@0.10.0",
+      "@slop-lab/dim-control-plane-plugin-merge-policy@0.10.0",
+      "@slop-lab/dim-control-plane-plugin-review-tracing@0.10.0",
+      "@slop-lab/dim-control-plane-plugin-review-tracing-node@0.10.0"
+    ]
+  },
+  "repositories": [{"id":"root","path":"repository","policy":"repository-policy.json"}],
+  "commands": {
+    "dev":{"argv":["bash","scripts/dev.bash"]},
+    "verify":{"argv":["bash","scripts/verify.bash"]}
+  }
+}

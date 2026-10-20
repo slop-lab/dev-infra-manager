@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "repositoryId": "root",
+  "extensions": {
+    "code-review": {
+      "requiredReviewerIds": [],
+      "pathReviewerRules": [],
+      "changeReviewerRules": [{
+        "matcher": "tracked-project",
+        "options": {"entrypoint": ".dim/review/matcher.mjs", "runtime": "node"},
+        "reviewerIds": ["security"]
+      }]
+    },
+    "merge-policy": {}
+  }
+}
