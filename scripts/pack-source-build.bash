@@ -92,10 +92,12 @@ trap cleanup EXIT
 GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$source_archive" "$commit" -- \
   LICENSE \
   tsconfig.base.json \
+  tsconfig.source.json \
   pnpm-lock.yaml \
   package.json \
   packages \
-  scripts/packages
+  scripts/packages \
+  scripts/pack-local-packages.ts
 tar -xf "$source_archive" -C "$source_root"
 
 cat >"$source_root/pnpm-workspace.yaml" <<'EOF'
@@ -135,7 +137,7 @@ echo "[source] build production packages"
 pnpm --dir "$source_root" --recursive --workspace-concurrency=1 run build
 
 echo "[source] create install bundle"
-node "$repo_root/scripts/pack-local-packages.ts" "$source_root" "$output_stage"
+node "$source_root/scripts/pack-local-packages.ts" "$source_root" "$output_stage"
 cp -- "$source_root/.dim-source-state" "$output_stage/.dim-source-state"
 
 if [[ -d "$output_directory" ]]; then

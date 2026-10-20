@@ -26,6 +26,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
   await writeFile(log, "");
   await writeFile(resolve(root, "LICENSE"), "fixture license\n");
   await writeFile(resolve(root, "tsconfig.base.json"), "{}\n");
+  await writeFile(resolve(root, "tsconfig.source.json"), '{"extends":"./tsconfig.base.json","compilerOptions":{"customConditions":["dim-source"]}}\n');
   await writeFile(resolve(root, "pnpm-lock.yaml"), fixtureLockfile);
   await writeFile(resolve(root, ".head"), `${fixtureRootCommit}\n`);
   const productionPackageDirectories = [
