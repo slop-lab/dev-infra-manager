@@ -21,6 +21,16 @@ content, not hooks. Review matcher entrypoints and dependencies are explicitly
 selected by review policy. See the [repository configuration guide](../guides/repository-configuration.md)
 for formats and activation rules.
 
+Optional Git-sync compiles reviewed upstream/publication declarations into its
+imported policy namespace. Service credentials MUST remain outside repository
+configuration and agent containers. Fetch may update only read-only upstream
+tracking refs; workspace receive permissions MUST NOT allow writes there. Sync
+produces ordinary proposals governed by the selected review and merge policies.
+Publish uses the authoritative protected commit and explicit mapped external
+branch without force. Integration-only policy does not imply merge quality
+evidence; trusted owner metadata may distinguish it, while attached evidence
+and selected ref-update policies remain mandatory.
+
 Managed Project/service state defaults to `$HOME/.local/state/dim/managed`;
 `DIM_MANAGED_STATE_ROOT` overrides it. Managed source attachments refer to the
 core workspace UUID and store only host-side broker/connection configuration.

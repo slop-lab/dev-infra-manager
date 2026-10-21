@@ -87,13 +87,21 @@ async function inspectRefs(input: NativeRootProofGitInput): Promise<void> {
   const refs = (await runPinned(input, ["for-each-ref", "--format=%(refname)"]))
     .stdout.split("\n").filter((ref) => ref.length > 0);
   if (!refs.includes(input.protectedRef) || refs.some((ref) =>
-    ref !== input.protectedRef && !isWorkspaceProposalRef(ref))) {
+    ref !== input.protectedRef && !isWorkspaceProposalRef(ref) && !isUpstreamTrackingRef(ref))) {
     throw new NativeRootImportBundleError("native root repository contains a foreign ref");
   }
   const commit = (await runPinned(input, ["show-ref", "--verify", "--hash", input.protectedRef])).stdout.trim();
   if (commit !== input.currentCommit) {
     throw new NativeRootImportBundleError("native root protected ref conflicts");
   }
+}
+
+/** Upstream synchronization caches source heads only; workspace receive hooks cannot write this namespace. */
+function isUpstreamTrackingRef(ref: string): boolean {
+  const suffix = ref.startsWith("refs/remotes/upstream/") ? ref.slice("refs/remotes/upstream/".length) : "";
+  return suffix.length > 0 && suffix.length <= 512 && !/[\x00-\x20\x7f~^:?*[\\\]]/.test(suffix)
+    && suffix.split("/").every((part) => part.length > 0 && !part.startsWith(".") && !part.endsWith(".") && !part.endsWith(".lock"))
+    && !suffix.includes("..") && !suffix.includes("@{");
 }
 
 function isWorkspaceProposalRef(ref: string): boolean {

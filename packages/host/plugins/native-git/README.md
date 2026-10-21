@@ -13,13 +13,31 @@ Only the enabled host-plugin manifest authorizes source acquisition, recovery
 and optional Project metadata; package presence alone does not activate them.
 Ordinary local and remote Git workspaces do not require this integration.
 
-The plugin exclusively owns `.dim/repos.yml` interpretation. Its explicit
-reviewed-manifest bootstrap API reads the selected commit's policy blob;
-ordinary workspace creation and `project repository import` do not discover
-the file. CLI import uses explicit operator `--policy` input. See
-[repository configuration](../../../../docs/guides/repository-configuration.md#native-git-bootstrap-policy-reposyml)
+The plugin exclusively owns `.dim/repos.yml` interpretation. Explicit
+`project repository import --repository-policy` and the reviewed-manifest bootstrap
+API read the selected commit's policy blob; ordinary workspace creation does not
+discover the file. CLI import can instead use operator `--policy` input; the two
+options are mutually exclusive. See
+[repository configuration](../../../../docs/guides/repository-configuration.md#native-git-repository-policy-reposyml)
 for the format and activation rules. Repository connections and multi-repository
 imports are explicit commands, separate from this policy file.
+
+The optional control-plane `git-sync` plugin owns external fetching, merge
+proposals and publication. This host plugin supplies the operator CLI:
+
+```bash
+dim project repository fetch PROJECT REPOSITORY --connection /absolute/connection.json
+dim project repository sync PROJECT REPOSITORY --connection /absolute/connection.json
+dim project repository publish PROJECT REPOSITORY --connection /absolute/connection.json
+```
+
+The selected repository's reviewed upstream and publish mapping determine the
+remote. `sync` creates a proposal for the normal review/promotion path; `publish`
+pushes the authoritative protected commit without force. Remote credentials
+remain private to the control plane. New workspaces with `git-sync` policy also
+fetch read-only `upstream/...` tracking refs from their scoped `origin`, allowing
+ordinary `git fetch origin` and `git merge upstream/development` before submitting
+a proposal. See [Git synchronization](../../../../docs/guides/git-sync.md).
 
 Repository read and proposal-write grants remain private to the host. Workspace
 checkouts receive narrow local broker access. Review, registrar, importer and

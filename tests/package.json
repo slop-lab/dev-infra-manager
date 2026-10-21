@@ -35,6 +35,7 @@
     "@slop-lab/dim-control-plane-plugin-ci-workflows": "workspace:*",
     "@slop-lab/dim-control-plane-plugin-code-review": "workspace:*",
     "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-git-sync": "workspace:*",
     "@slop-lab/dim-control-plane-plugin-llm-router": "workspace:*",
     "@slop-lab/dim-control-plane-plugin-merge-policy": "workspace:*",
     "@slop-lab/dim-control-plane-plugin-webhooks": "workspace:*",

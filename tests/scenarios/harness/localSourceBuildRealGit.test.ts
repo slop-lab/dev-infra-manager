@@ -59,6 +59,7 @@ writeFileSync(join(output,"packer-marker"),"selected-packer\\n");
     "packages/cli",
     "packages/installer",
     "packages/control-plane/plugins/git-repositories",
+    "packages/control-plane/plugins/git-sync",
     "packages/web",
     "packages/contracts/external-url",
     "packages/host/plugins/dns-cloudflare",

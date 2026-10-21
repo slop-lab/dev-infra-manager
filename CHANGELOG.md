@@ -127,10 +127,19 @@ is implied by these source changes.
   state, regardless of package cache retention; owned runtime processes and
   gateway containers/networks are replaced.
 - Document `.dim` file ownership and activation explicitly. Native Git's
-  reviewed manifest contains branch policy and namespaced feature declarations;
-  remove unused repository-set connection, import/publish and bulk-creation
-  helpers and reject their obsolete manifest fields. Ordinary workspace creation
-  does not apply Native Git or workflow configuration.
+  reviewed manifest contains branch policy, namespaced feature declarations and
+  explicit upstream/publication mappings. A separate control-plane Git-sync
+  plugin fetches read-only upstream tracking refs, creates merge proposals and
+  publishes authoritative protected commits without force. DIM maps managed
+  `main` to GitHub `development`; `.dim/` changes require `owner` approval while
+  ordinary changes need no human approval. Import selects repository policy
+  explicitly; ordinary workspace creation does not apply it. Remove retired
+  repository-set connection and bulk-creation helpers.
+- Extend the security-review example with separate agent-dind and secure-dind
+  daemons. A reviewed `.dim` boundary selects secret access; only secure-dind
+  receives the read-only operator secret. Real container and Git/HTTP checks
+  cover secret isolation, review-required boundary changes and ordinary changes
+  promoted without human approval.
 - Align documentation and disposable verification with the current architecture;
   remove tests and gates that enforce retired internal contracts. Preserve the
   exported issue backup and map its 32 open issues into the architecture plan.

@@ -17,6 +17,9 @@ it("fails closed for trusted CI policy even if an absent preparation left no rev
   expect(() => assertRequiredMergeQualityGuards(policy, [], [guard])).not.toThrow();
   expect(() => assertRequiredMergeQualityGuards(policy, [], [guard, guard])).toThrow(/duplicate/);
   expect(() => assertRequiredMergeQualityGuards({ "code-review": {}, "merge-policy": {} }, [], [])).not.toThrow();
+  expect(() => assertRequiredMergeQualityGuards({ "git-sync": {} }, [], [], [], ["git-sync"])).not.toThrow();
+  expect(() => assertRequiredMergeQualityGuards({ "git-sync": {} }, [{ kind: "git-sync", id: "check", digest: "a".repeat(64) }], [], [], ["git-sync"])).toThrow(/git-sync.*unavailable/);
+  expect(() => assertRequiredMergeQualityGuards({ "git-sync": {}, "git-ci": {} }, [], [], [], ["git-sync"])).toThrow(/git-ci.*unavailable/);
 });
 it("persists exact approved evidence independently, preserving pending versus finalized receipts through restart", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-merge-evidence-")); roots.push(root);

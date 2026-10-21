@@ -1,5 +1,5 @@
 import { readAuthoritativeNativeDecisions, readAuthoritativeNativeReviewEnvelope, nativeHumanReviewStaleReasons, reviewChangeMatchers } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
-import { refUpdatePolicies, compareAndSwapProtectedRef, resolveAuthoritativeNativeRepositoryTarget, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { repositoryExtensionFactories, refUpdatePolicies, compareAndSwapProtectedRef, resolveAuthoritativeNativeRepositoryTarget, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { assertRequiredMergeQualityGuards, type MergeQualityGuard } from "./plugin-api.js";
 import { MergeAuthorizationStore, type MergeAuthorization } from "./state.js";
 export type NativeInstalledPromotionHooks = { readonly afterIntent?: () => void | Promise<void>; readonly afterCompareAndSwap?: () => void | Promise<void> };
@@ -17,7 +17,8 @@ export async function promoteInstalledNativeReview(context: NativeInstalledPromo
   const decisions = await readAuthoritativeNativeDecisions(target.repository, reviewId);
   const approvals = [...decisions.activeApprovals].sort((a, b) => a.reviewerId.localeCompare(b.reviewerId));
   if (JSON.stringify(approvals.map(({ reviewerId }) => reviewerId)) !== JSON.stringify(review.requiredReviewerIds)) throw new Error("human approval evidence is incomplete");
-  assertRequiredMergeQualityGuards(target.imported.policy.extensions, envelope.attachments, context.guards, refUpdatePolicies(context.repository.extensions).map(({ name }) => name));
+  assertRequiredMergeQualityGuards(target.imported.policy.extensions, envelope.attachments, context.guards, refUpdatePolicies(context.repository.extensions).map(({ name }) => name),
+    repositoryExtensionFactories(context.repository.extensions).filter((factory) => factory.requiresMergeQualityGuard === false).flatMap((factory) => factory.policyName === undefined ? [] : [factory.policyName]));
   const attachments = [];
   for (const guard of context.guards) attachments.push(...await guard.check({ projectId, repositoryId, reviewId, repository: target.repository,
     candidateCommit: review.candidateCommit, candidateTree: review.candidateTree, expectedProtectedHead: review.expectedProtectedHead, policyDigest: envelope.policyDigest, attachments: envelope.attachments }));

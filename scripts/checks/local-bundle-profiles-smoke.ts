@@ -49,6 +49,7 @@ try {
   run("npm", ["install", "--prefix", path.join(scratch, "facade"), "--no-save", "--no-audit", "--no-fund",
     artifact("@slop-lab/dim-installer")]);
   const controlPlanePlugins = ["@slop-lab/dim-control-plane-plugin-git-repositories",
+    "@slop-lab/dim-control-plane-plugin-git-sync",
     "@slop-lab/dim-control-plane-plugin-code-review", "@slop-lab/dim-control-plane-plugin-merge-policy",
     "@slop-lab/dim-control-plane-plugin-git-ci", "@slop-lab/dim-control-plane-plugin-webhooks",
     "@slop-lab/dim-control-plane-plugin-ci-workflows", "@slop-lab/dim-control-plane-plugin-llm-router", "@slop-lab/dim-control-plane-plugin-execution-scheduler",
@@ -67,6 +68,8 @@ try {
     const require = createRequire(${JSON.stringify(path.join(controlPlaneRuntime, "package.json"))});
     const load = async name => import(pathToFileURL(require.resolve(name)).href);
     const {startControlPlanePlugins} = await load('@slop-lab/dim-control-plane-core');
+    const {controlPlanePlugin: gitSync} = await load('@slop-lab/dim-control-plane-plugin-git-sync');
+    if (gitSync.name !== 'git-sync') throw new Error('installed Git synchronization plugin is unavailable');
     const {controlPlanePlugin} = await load('@slop-lab/dim-control-plane-plugin-ci-workflows');
     const prepared = await controlPlanePlugin.configure({});
     const {requireWorkflowCompiler} = await load('@slop-lab/dim-contracts-ci/workflow-plugin-api');

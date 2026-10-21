@@ -304,6 +304,25 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/control-plane/plugins/git-sync:
+    dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../git-repositories
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/control-plane/plugins/llm-router:
     dependencies:
       '@slop-lab/dim-control-plane-core':
@@ -764,6 +783,9 @@ importers:
       '@slop-lab/dim-control-plane-plugin-git-repositories':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/git-repositories
+      '@slop-lab/dim-control-plane-plugin-git-sync':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/git-sync
       '@slop-lab/dim-control-plane-plugin-llm-router':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/llm-router

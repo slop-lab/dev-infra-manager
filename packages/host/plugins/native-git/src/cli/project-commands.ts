@@ -3,6 +3,7 @@ import { UserError } from "@slop-lab/dim-host-core";
 import { print, printList, type JsonFlags } from "@slop-lab/dim-host-core/controller/cli";
 import { nativePendingProjectView, selectNativeProject } from "./native-project-selector.js";
 import { registerNativeProjectBootstrapCommand } from "./native-project-bootstrap-command.js";
+import { registerGitSyncCommands } from "./git-sync-commands.js";
 
 export function registerProjectCommands(program: Command): void {
   const project = program.command("project").description("Manage native Projects and their independent repositories");
@@ -15,6 +16,7 @@ export function registerProjectCommands(program: Command): void {
     });
   const repository = project.command("repository").description("Import and inspect independently reviewed repositories");
   registerNativeProjectBootstrapCommand(repository);
+  registerGitSyncCommands(repository);
   repository.command("list").alias("ls").argument("<project>").option("--json", "print machine-readable JSON")
     .action(async (name: string, flags: JsonFlags) => {
       const native = await selectNativeProject(), record = await native.store.read(name, native.connection.hostId);

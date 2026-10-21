@@ -68,6 +68,7 @@ credentials or the workspace lifecycle token as a shortcut.
 | --- | --- |
 | `@slop-lab/dim-control-plane-core` | Standalone service plugin runtime; loading, capability validation and shutdown |
 | `@slop-lab/dim-control-plane-plugin-git-repositories` | Repository storage, scoped Git transport and durable protected-ref CAS |
+| `@slop-lab/dim-control-plane-plugin-git-sync` | Explicit upstream fetch, merge proposals and nonforce publication of protected commits |
 | `@slop-lab/dim-control-plane-plugin-code-review` | Immutable review evidence and human approvals/revocations |
 | `@slop-lab/dim-control-plane-plugin-merge-policy` | Promotion authorization from current review and selected quality evidence |
 | `@slop-lab/dim-control-plane-plugin-git-ci` | Candidate planning, execution grants/evidence and CI event delivery |
@@ -84,6 +85,10 @@ merge-policy implementation. Trusted repository policy sections must have enable
 owners. The repository-owned `./plugin-api` SDK supplies attachment and serialized
 repository ports; the control-plane core only composes generic named extensions.
 Feature code and its state remain in the owning plugin.
+
+[Git synchronization](git-sync.md) is an optional repository attachment. Its
+upstream endpoints and branch mapping are reviewed repository policy; remote
+credentials and permitted operator identities remain private service configuration.
 
 The workflow compiler does not execute jobs. The execution-scheduler control-plane plugin owns
 generic task and CI execution coordination; `@slop-lab/dim-host-plugin-execution-worker` runs configured

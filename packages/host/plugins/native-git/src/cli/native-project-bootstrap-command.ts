@@ -9,7 +9,7 @@ import { print, type JsonFlags } from "@slop-lab/dim-host-core/controller/cli";
 import { readNativeRepositoryPolicyFile } from "./repository-policy-file.js";
 import { nativeProjectImporter, selectNativeProject } from "./native-project-selector.js";
 
-type ImportFlags = JsonFlags & { source: string; ref: string; policy?: string; registrarConnection?: string; importerConnection?: string; gitExecutable: string };
+type ImportFlags = JsonFlags & { source: string; ref: string; policy?: string; repositoryPolicy?: boolean; registrarConnection?: string; importerConnection?: string; gitExecutable: string };
 export function registerNativeProjectBootstrapCommand(repository: Command): void {
   repository.command("import")
     .description("Import an independently reviewed repository into a native Project")
@@ -17,11 +17,13 @@ export function registerNativeProjectBootstrapCommand(repository: Command): void
     .requiredOption("--source <absolute-path>", "already-local reviewed Git repository")
     .requiredOption("--ref <full-branch-ref>", "protected ref such as refs/heads/main")
     .option("--policy <absolute-file>", "trusted policy declarations for selected plugins")
+    .option("--repository-policy", "read reviewed .dim/repos.yml from the selected commit")
     .option("--registrar-connection <absolute-path>", "override the selected host's registrar connection")
     .option("--importer-connection <absolute-path>", "override the selected host's importer connection")
     .option("--git-executable <absolute-path>", "trusted host Git executable", "/usr/bin/git")
     .option("--json", "print machine-readable JSON")
     .action(async (name: string, repositoryId: string, flags: ImportFlags) => {
+      if (flags.policy !== undefined && flags.repositoryPolicy) throw new UserError("choose --policy or --repository-policy");
       const native = await selectNativeProject();
       const project = await native.store.read(name, native.connection.hostId);
       if (!project) throw new UserError(`Project '${name}' does not exist; create it before importing repositories`);
@@ -39,7 +41,7 @@ export function registerNativeProjectBootstrapCommand(repository: Command): void
       await bootstrapNativeProjectRepository({ name, projectId: project.projectId, repositoryId,
         stateRoot, scratchRoot: stateRoot, sourceRepository: flags.source, selectedRef: flags.ref,
         registrarConnectionFile, importerConnectionFile, gitExecutable: flags.gitExecutable,
-        policySource: { kind: "manifest-free", extensions: policy.extensions }, signal: AbortSignal.timeout(120_000) });
+        policySource: flags.repositoryPolicy ? { kind: "reviewed-manifest" } : { kind: "manifest-free", extensions: policy.extensions }, signal: AbortSignal.timeout(120_000) });
       const record = await native.store.admitRepository(name, repositoryId, importer, native.connection, AbortSignal.timeout(30_000));
       print(record.repositories[repositoryId], flags);
     });

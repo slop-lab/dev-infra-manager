@@ -116,6 +116,8 @@ belongs to the agent-tools plugin; the default path does not execute host-side
 
 [Repository configuration](docs/guides/repository-configuration.md) lists `.dim`
 files, their owning plugins and the operations that read them.
+The optional [Git-sync plugin](docs/guides/git-sync.md) fetches upstream changes
+as reviewed proposals and publishes protected commits to configured branches.
 
 ```bash
 # Permanently removes checkout, home, private Docker data and temporary storage.

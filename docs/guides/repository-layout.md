@@ -63,8 +63,10 @@ Mirrors owns its included and installed protocol adapters, scoped relay and gues
 client configuration; cache-server owns local cache service resources. Their
 shared placement input is a URL catalog, with only selected protocols required.
 
-Repository hosting, code review, merge policy, Git-CI and external webhook
-transport are separate control-plane plugins. Repository storage owns protected
+Repository hosting, external Git synchronization, code review, merge policy,
+Git-CI and external webhook transport are separate control-plane plugins.
+The `git-sync` attachment owns upstream fetching, merge proposals and publication;
+it never owns promotion authority or writes protected refs directly. Repository storage owns protected
 ref CAS and its recovery journal; review owns human evidence, merge policy owns
 authorization, and Git-CI owns workflow planning and execution evidence. Their
 shared attachment SDK belongs to the repository plugin. Neutral Git contracts

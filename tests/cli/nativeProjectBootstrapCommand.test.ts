@@ -24,10 +24,21 @@ test("native root bootstrap help requires explicit local source and separate ope
   for (const option of ["--source <absolute-path>",
     "--ref <full-branch-ref>", "--registrar-connection <absolute-path>",
     "--importer-connection <absolute-path>", "--git-executable <absolute-path>",
-    "--policy <absolute-file>"]) {
+    "--policy <absolute-file>", "--repository-policy"]) {
     assert.match(help.stdout, new RegExp(option.replace(/[<>]/g, "\\$&")));
   }
   assert.doesNotMatch(help.stdout, /bootstrap-git-url|password|token/);
+});
+
+test("explicit repository policy imports the selected committed .dim manifest", async () => {
+  const fixture = await nativeFixture({ seedImportedDraft: false });
+  await writeFile(join(fixture.sourceRepository, ".dim/repos.yml"), "schemaVersion: 1\nrepositories:\n  root: {ref: main, protect: [main]}\npolicy:\n  code-review: {requiredReviewerIds: [], pathReviewerRules: [{pathPrefix: .dim/, reviewerIds: [owner]}]}\n  merge-policy: {}\n");
+  await runFile("/usr/bin/git", ["-C", fixture.sourceRepository, "add", "."]);
+  await runFile("/usr/bin/git", ["-C", fixture.sourceRepository, "-c", "user.name=DIM Test", "-c", "user.email=dim@example.invalid", "commit", "-m", "reviewed repository configuration"]);
+  const result = await runCli(["project", "repository", "import", "acme", "root", "--source", fixture.sourceRepository,
+    "--ref", "refs/heads/main", "--registrar-connection", fixture.registrarPath, "--importer-connection", fixture.importerPath, "--repository-policy", "--json"], fixture.environment);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).repositoryPolicy.extensions["code-review"], { requiredReviewerIds: [], pathReviewerRules: [{ pathPrefix: ".dim/", reviewerIds: ["owner"] }] });
 });
 
 test("native root bootstrap ignores an unselected repository manifest and imports explicit reviewed policy", async () => {

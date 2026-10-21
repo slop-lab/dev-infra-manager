@@ -15,6 +15,8 @@ export type RepositoryExtensionContext = {
   readonly extensions: readonly ControlPlaneExtension[];
   readonly knownCredentials: readonly { readonly username: string; readonly password: string }[];
   readonly available: () => boolean;
+  /** Notify enabled integrations after an already serialized proposal write. Does not acquire the mutation lock. */
+  readonly reconcileProposals: (projectId: string, repositoryId: string, refs: readonly string[]) => Promise<void>;
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 };
 export type RepositoryAttachment = {
@@ -29,6 +31,8 @@ export type RepositoryAttachment = {
 export type RepositoryExtensionFactory = {
   readonly name: string;
   readonly policyName?: string;
+  /** Integration configuration may declare that it adds no merge evidence. Ref-update policies and attached evidence still apply. */
+  readonly requiresMergeQualityGuard?: boolean;
   readonly requiresRefUpdatePolicies?: readonly string[];
   readonly credentials?: readonly { readonly username: string; readonly password: string }[];
   attach(context: RepositoryExtensionContext): Promise<RepositoryAttachment>;

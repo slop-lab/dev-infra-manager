@@ -22,6 +22,7 @@ export const packageDirectories = [
   "packages/host/plugins/native-git/dist",
   "packages/host/plugins/execution-worker/dist",
   "packages/control-plane/plugins/git-repositories/dist",
+  "packages/control-plane/plugins/git-sync/dist",
   "packages/control-plane/plugins/code-review/dist",
   "packages/control-plane/plugins/merge-policy/dist",
   "packages/control-plane/plugins/git-ci/dist",

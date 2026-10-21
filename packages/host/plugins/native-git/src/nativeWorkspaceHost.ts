@@ -72,9 +72,11 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
     for (const [repositoryId, repository] of Object.entries(repositories)) {
       const remote = `http://${gateway}:${attachment.port}/v1/projects/${project.projectId}/repositories/${repositoryId}.git`;
       const helper = `!f() { if [ "$1" = get ]; then printf 'username=dim\\npassword=${repository.grant}\\n'; fi; }; f`;
+      const syncFetch = Object.hasOwn(project.repositories[repositoryId]!.repositoryPolicy.extensions, "git-sync")
+        ? [["config", "--local", "--add", "remote.origin.fetch", "+refs/remotes/upstream/*:refs/remotes/upstream/*"]] : [];
       for (const args of [["remote", "set-url", "origin", remote], ["config", "--local", "credential.helper", helper],
         ["config", "--local", "credential.useHttpPath", "true"], ["config", "--local", "remote.origin.push",
-          `HEAD:refs/heads/proposals/${repository.nativeWorkspaceId}/${repository.protectedRef.slice("refs/heads/".length)}`]]) {
+          `HEAD:refs/heads/proposals/${repository.nativeWorkspaceId}/${repository.protectedRef.slice("refs/heads/".length)}`], ...syncFetch]) {
         if (await runtime.exec(record, ["git", "-C", `/workspace/${repositoryId}`, ...args], { signal }) !== 0) throw new UserError(`cannot configure scoped Git origin for '${repositoryId}'`);
       }
     }

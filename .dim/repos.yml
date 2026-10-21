@@ -3,3 +3,14 @@ repositories:
   root:
     ref: main
     protect: [main]
+    upstream:
+      url: https://github.com/slop-lab/dev-infra-manager.git
+      branch: development
+    publish: {main: development}
+policy:
+  code-review:
+    requiredReviewerIds: []
+    pathReviewerRules:
+      - pathPrefix: .dim/
+        reviewerIds: [owner]
+  merge-policy: {}

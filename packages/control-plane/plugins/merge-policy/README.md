@@ -30,9 +30,14 @@ Promotion checks the exact current proposal, protected head, imported policy
 and human approvals. The complete canonical policy digest binds the review, so
 changing quality policy requires a fresh review. Optional quality providers
 contribute `dim.merge-policy.quality-guard` extensions through `/plugin-api`.
-Every review attachment and every trusted policy namespace other than
-`code-review` and `merge-policy` requires its matching guard. A required CI
-policy therefore fails closed if the CI plugin or its preparation is missing.
+Every review attachment requires its matching guard. Other feature policy
+namespaces require a guard unless their trusted repository extension declares
+integration-only configuration with `requiresMergeQualityGuard: false`, or they
+are enforced as selected ref-update policies. This is installed plugin metadata,
+not a repository-controlled opt-out. Integration configuration remains validated
+by its owner and bound into the review's policy digest; all attached evidence
+and selected ref-update policies are still checked. A required CI policy fails
+closed if the CI plugin or its preparation is missing.
 A repository using only human review requires no CI installation.
 
 Merge evidence and decisions live in this plugin's private extension state

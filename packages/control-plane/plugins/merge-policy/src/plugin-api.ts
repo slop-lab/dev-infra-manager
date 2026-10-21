@@ -28,10 +28,10 @@ export function mergeQualityGuards(extensions: readonly ControlPlaneExtension[])
   });
 }
 
-export function assertRequiredMergeQualityGuards(policyExtensions: Readonly<Record<string, unknown>>, attachments: readonly MergeEvidenceAttachment[], guards: readonly MergeQualityGuard[], refPolicyNames: readonly string[] = []): void {
+export function assertRequiredMergeQualityGuards(policyExtensions: Readonly<Record<string, unknown>>, attachments: readonly MergeEvidenceAttachment[], guards: readonly MergeQualityGuard[], refPolicyNames: readonly string[] = [], integrationPolicyNames: readonly string[] = []): void {
   const names = new Set(guards.map(({ name }) => name));
   if (names.size !== guards.length) throw new Error("duplicate merge quality guard");
   const required = new Set(attachments.map(({ kind }) => kind));
-  for (const name of Object.keys(policyExtensions)) if (name !== "code-review" && name !== "merge-policy" && !refPolicyNames.includes(name)) required.add(name);
+  for (const name of Object.keys(policyExtensions)) if (name !== "code-review" && name !== "merge-policy" && !refPolicyNames.includes(name) && !integrationPolicyNames.includes(name)) required.add(name);
   for (const name of required) if (!names.has(name)) throw new Error(`required merge quality guard '${name}' is unavailable`);
 }

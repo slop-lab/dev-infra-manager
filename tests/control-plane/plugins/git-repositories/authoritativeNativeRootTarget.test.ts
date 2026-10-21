@@ -11,7 +11,7 @@ import {
   matchingRunner,
   proofBytes
 } from "./authoritativeNativeCandidateFixture.js";
-import { cleanupFinalizeFixtures, rootRepository } from "./nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures, rootRepository, runGit } from "./nativeRootImportFinalizeFixture.js";
 
 afterEach(cleanupFinalizeFixtures);
 
@@ -55,6 +55,24 @@ describe("authoritative imported-root target", () => {
     await expect(read).rejects.toBeInstanceOf(AuthoritativeRepositoryError);
     expect(await proofBytes(fixture.root)).toEqual(before);
     await fixture.close();
+  });
+
+  it("accepts only the upstream tracking namespace while retaining protected-head and foreign-ref checks", async () => {
+    const fixture = await finalizedCandidateRoot("tracking-namespace", matchingRunner(), authoritativePolicy());
+    try {
+      const read = () => resolveAuthoritativeNativeRepositoryTarget(fixture.context, { projectId: "project-a", repositoryId: "root" });
+      for (const ref of ["refs/remotes/upstream/development", "refs/remotes/upstream/feature/nested"]) {
+        await runGit("/usr/bin/git", ["--git-dir", fixture.repository, "update-ref", ref, fixture.bundle.commit]);
+        expect((await read()).currentHead.commit).toBe(fixture.bundle.commit);
+        await runGit("/usr/bin/git", ["--git-dir", fixture.repository, "update-ref", "-d", ref]);
+      }
+      for (const ref of ["refs/remotes/origin/development", "refs/tags/release", "refs/heads/development"]) {
+        await runGit("/usr/bin/git", ["--git-dir", fixture.repository, "update-ref", ref, fixture.bundle.commit]);
+        await expect(read()).rejects.toBeInstanceOf(AuthoritativeRepositoryError);
+        await runGit("/usr/bin/git", ["--git-dir", fixture.repository, "update-ref", "-d", ref]);
+      }
+      expect((await read()).currentHead.commit).toBe(fixture.bundle.commit);
+    } finally { await fixture.close(); }
   });
 
   it("refuses a released owner before returning a target", async () => {

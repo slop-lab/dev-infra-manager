@@ -8,9 +8,10 @@ repository declaration. Unknown files are ordinary checkout content.
 | Path | Owner | When it is read |
 | --- | --- | --- |
 | `.dim/workspace.json` | `@slop-lab/dim-cli` host composition | Workspace creation checks exact required host plugins in the acquired checkout before creating runtime resources. |
-| `.dim/repos.yml` | `@slop-lab/dim-host-plugin-native-git` | An explicitly selected `reviewed-manifest` repository bootstrap reads the selected commit's Git blob. Ordinary creation and CLI repository import do not discover it. |
+| `.dim/repos.yml` | `@slop-lab/dim-host-plugin-native-git` | An explicitly selected `reviewed-manifest` bootstrap or `project repository import --repository-policy` reads the selected commit's Git blob. Ordinary workspace creation does not discover it. |
 | `.dim/ci/runner.yml` | `@slop-lab/dim-control-plane-plugin-ci-workflows` | Git CI selects the `dim` workflow compiler to compile the immutable candidate's jobs. |
 | `.dim/ci/jobs/*` | The repository | Example job scripts run only when a workflow names them. Scripts can instead live elsewhere in the repository. |
+| `.dim/security-boundary.json` | The security-review example | Its trusted `boundary.ts` operator launcher reads reviewed configuration; the `.dim/` path rule requires review of changes. DIM does not discover this filename. |
 | `.dim/review/*` | The repository and its selected review matcher/runtime | Operator-configured review policy names the entrypoint and its inputs explicitly. This directory has no automatic discovery behavior. |
 | `.dim/README.md` | The repository | Human documentation; no DIM component parses it. |
 
@@ -43,7 +44,7 @@ For a multi-repository Native Git Project, this declaration comes from the
 Project's selected configuration repository, including when that repository is
 not among the workspace's selected checkouts. It is not merged from every repo.
 
-## Native Git bootstrap policy: `repos.yml`
+## Native Git repository policy: `repos.yml`
 
 The Native Git host plugin supports a reviewed, commit-pinned policy file:
 
@@ -53,9 +54,17 @@ repositories:
   root:
     ref: main
     protect: [main]
+    upstream:
+      url: https://github.com/slop-lab/dev-infra-manager.git
+      branch: development
+    publish: {main: development}
 policy:
   code-review:
-    requiredReviewerIds: [owner]
+    requiredReviewerIds: []
+    pathReviewerRules:
+      - pathPrefix: .dim/
+        reviewerIds: [owner]
+  merge-policy: {}
 ```
 
 `schemaVersion` must be `1`. `repositories` is a nonempty map keyed by repository
@@ -69,23 +78,44 @@ selected repository. It becomes that repository's `extensions` policy and is
 bound into its policy revision. Enabled control-plane plugins validate their
 own namespaces, such as `code-review`, `git-ci` and `merge-policy`.
 
-This file supplies bootstrap policy when a trusted host integration explicitly
-calls the plugin's `prepareNativeRootBootstrapGit` or
-`bootstrapNativeProjectRepository` API with
-`policySource: { kind: "reviewed-manifest" }`. The loader reads a regular Git
-blob from the same selected commit it bundles; worktree edits cannot replace
-the reviewed policy. The map selects one repository per import; it does not
-clone or import its other entries.
+Optional repository `upstream` and `publish` fields compile into the `git-sync`
+policy namespace, owned by the optional control-plane Git synchronization plugin.
+`upstream` selects a URL and branch; `publish` maps managed branches to upstream
+branches. The example publishes managed `main` to GitHub `development`. Do not
+also set `policy.git-sync` when using these fields. Endpoint credentials and
+permitted operator identities belong in private service configuration. See
+[Git synchronization](git-sync.md) for installation and commands.
 
-The ordinary `dim project repository import` command uses the operator's
-explicit `--policy /absolute/policy.json`, or empty feature declarations when
-that option is omitted. It does not automatically apply `repos.yml`. Project
-creation, repository import and source configuration are separate plugin
+Select the policy explicitly during repository import:
+
+```bash
+dim project repository import dim root --source /absolute/checkout \
+  --ref refs/heads/main --repository-policy
+```
+
+The selected branch must exist in the import checkout. For this repository,
+prepare a fresh clone of GitHub `development` and create local `main` at that
+commit before importing; the [synchronization guide](git-sync.md#reviewed-repository-declaration)
+shows the commands without changing an existing checkout.
+
+`--repository-policy` and `--policy /absolute/policy.json` are mutually exclusive.
+Without either option, import uses empty feature declarations. The manifest
+loader reads a regular Git blob from the same selected commit it bundles;
+worktree edits cannot replace reviewed policy. The bootstrap APIs also accept
+`policySource: { kind: "reviewed-manifest" }`. The map selects one repository per
+import; it does not clone or import its other entries.
+
+The example requires the `owner` reviewer for `.dim/` changes and no human
+reviewers for other changes. A candidate still needs a current review and a
+merge-policy-authorized promotion; an empty reviewer set makes review automated.
+Configured quality gates can independently block promotion. Protect matcher
+code and dependencies outside `.dim/` explicitly if they influence security
+review. The [security review example](../../examples/features/security-review/README.md)
+shows that boundary for a secret-bearing secure runtime.
+
+Project creation, repository import and source configuration are separate plugin
 operations, as shown by the [multiple-repository example](../../examples/projects/native-multiple-repositories/README.md).
-
-Repository connection, upstream, branch import/publish and force-push settings
-are not fields in this manifest. Configure service behavior through the owning
-plugin's explicit policy and commands; no core `--apply-repos` operation exists.
+The host core does not interpret this manifest and has no `--apply-repos` option.
 
 ## Candidate workflow: `ci/runner.yml`
 
@@ -123,6 +153,11 @@ policy must protect the matcher and relevant dependencies independently of its
 own verdict. The [security review](../../examples/features/security-review/README.md)
 and [TypeScript tracing](../../examples/features/review-tracing/README.md)
 examples show explicit entrypoints, field checks and observed dependency reads.
+The security-review example keeps secrets in `secure-dind`, outside the coding
+agent's `agent-dind`. Its project-owned `.dim/security-boundary.json` describes
+the reviewed boundary. Its `.dim/` path rule requires `security` review of
+boundary and matcher changes; separate matchers protect selected application
+fields. The filename has no built-in DIM meaning.
 
 Keep this distinction visible in repository documentation: name each file's
 owning plugin, the command or policy that activates it, and any scripts it

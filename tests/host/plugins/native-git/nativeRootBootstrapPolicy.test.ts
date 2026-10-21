@@ -45,10 +45,17 @@ describe("repository bootstrap policy", () => {
     for (const extra of ["unknown: true\n", "nativeReview: {}\n", "policy: {}\npolicy: {}\n"]) expect(() => parseNativeRootBootstrapManifestYaml(manifest(extra), "refs/heads/main", "root")).toThrow();
   });
   it("rejects retired repository routing fields instead of accepting settings it cannot apply", () => {
-    for (const field of ["url: https://example.test/root.git", "upstream: origin", "root: true", "import: {main: main}", "publish: {main: main}", "blockForcePush: [main]"]) {
+    for (const field of ["url: https://example.test/root.git", "root: true", "import: {main: main}", "blockForcePush: [main]"]) {
       expect(() => parseNativeRootBootstrapManifestYaml(manifest().replace("ref: main", `ref: main, ${field}`), "refs/heads/main", "root")).toThrow(/unknown fields/);
     }
     expect(() => parseNativeRootBootstrapManifestYaml(`${manifest()}upstreams: {}\n`, "refs/heads/main", "root")).toThrow(/unknown fields/);
+  });
+  it("binds per-repository upstream and publish declarations into the owning plugin policy", () => {
+    const yaml = manifest("").replace("ref: main", "ref: main, upstream: {url: https://example.test/root.git, branch: development}, publish: {main: development}");
+    const policy = parseNativeRootBootstrapManifestYaml(yaml, "refs/heads/main", "root").repositoryPolicy;
+    expect(policy.extensions["git-sync"]).toEqual({ upstream: { url: "https://example.test/root.git", branch: "development" }, publish: { main: "development" } });
+    expect(parseNativeRootBootstrapManifestYaml(yaml.replace("main: development", "main: staging"), "refs/heads/main", "root").repositoryPolicy.policyRevision).not.toBe(policy.policyRevision);
+    expect(() => parseNativeRootBootstrapManifestYaml(`${yaml}policy: {git-sync: {}}\n`, "refs/heads/main", "root")).toThrow(/either/);
   });
   it("accepts reviewed branch patterns while validating all repository entries", () => {
     const wildcard = manifest("").replace("ref: main, protect: [main]", 'protect: ["release/*"]');

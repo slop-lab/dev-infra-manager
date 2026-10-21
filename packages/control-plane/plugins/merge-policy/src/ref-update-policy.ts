@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { readAuthoritativeNativeReviewEnvelope, readAuthoritativeNativeDecisions, nativeHumanReviewStaleReasons, reviewChangeMatchers } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
-import { refUpdatePolicyExtension, refUpdatePolicies } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { repositoryExtensionFactories, refUpdatePolicyExtension, refUpdatePolicies } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { z } from "zod";
 import { assertRequiredMergeQualityGuards, mergeQualityGuards } from "./plugin-api.js";
@@ -31,7 +31,8 @@ export function mergeRefUpdatePolicyExtension(
         const approvals = decisions.activeApprovals.map(({ reviewerId, recordDigest }) => ({ reviewerId, recordDigest })).sort((a, b) => a.reviewerId.localeCompare(b.reviewerId));
         if (JSON.stringify(approvals) !== JSON.stringify(value.approvals)) throw new Error("merge authorization approvals changed");
         const guards = mergeQualityGuards(context.extensions);
-        assertRequiredMergeQualityGuards(target.imported.policy.extensions, envelope.attachments, guards, refUpdatePolicies(context.extensions).map(({ name }) => name));
+        assertRequiredMergeQualityGuards(target.imported.policy.extensions, envelope.attachments, guards, refUpdatePolicies(context.extensions).map(({ name }) => name),
+          repositoryExtensionFactories(context.extensions).filter((factory) => factory.requiresMergeQualityGuard === false).flatMap((factory) => factory.policyName === undefined ? [] : [factory.policyName]));
         const attachments = [];
         for (const guard of guards) attachments.push(...await guard.check({ projectId: value.projectId, repositoryId: value.repositoryId,
           reviewId: value.reviewId, repository: target.repository, candidateCommit: value.candidateCommit,
