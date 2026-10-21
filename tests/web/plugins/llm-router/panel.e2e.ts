@@ -55,6 +55,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   await page.getByRole("button", { name: "Sign out", exact: true }).click(); await page.getByLabel("Username", { exact: true }).fill("observer"); await page.getByLabel("Password", { exact: true }).fill(fixture.password); await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("button", { name: "LLM router", exact: true }).click(); await page.getByRole("button", { name: "Open example", exact: true }).waitFor(); assert.equal(await page.getByRole("button", { name: "Create routing project", exact: true }).count(), 0);
+  for (const name of ["Add provider account", "Save route"]) assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
   assert.equal(fixture.inferenceRequests(), 0); assert.deepEqual(errors, []);
   console.log("LLM Web plugin: real operator API, auth health, accepted write/read-failure receipts, independent traffic availability, project policy CAS/state, reconnect/navigation drafts, read-only and mobile PASS");
 } finally { await browser.close(); await fixture.close(); }

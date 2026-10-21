@@ -9,9 +9,12 @@ import { ArchiveError, ExchangeArchive, captureBody, captureManifest } from "./a
 import { UsageObserver } from "./usage.js";
 
 import { handleRouterOperator } from "./operator-http.js";
+import { effectiveRouterConfig } from "./account-catalog.js";
+import { ensureManagedBackend, closeManagedBackends } from "./managed-backend.js";
 import { RequestError, body, send } from "./http.js";
 
-export async function createRouter(config: RouterConfig) {
+export async function createRouter(baseConfig: RouterConfig) {
+  const config = baseConfig;
   const ledger = new RouterLedger(config.stateDirectory);
   const guard = await tryAcquireKernelGuard(join(config.stateDirectory, "service.guard"), { timeoutMilliseconds: 2000 });
   if (guard === undefined) { ledger.close(); throw new Error("LLM router is already running for this state directory"); }
@@ -38,11 +41,12 @@ export async function createRouter(config: RouterConfig) {
   return { server, ledger, close() { return closing ??= (async () => {
     cancellation.abort(); server.closeAllConnections();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
-    await Promise.allSettled(active); ledger.close(); await guard.release();
+    await Promise.allSettled(active); await closeManagedBackends(config); ledger.close(); await guard.release();
   })(); } };
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const config = await effectiveRouterConfig(baseConfig);
     const url = new URL(request.url ?? "/", "http://dim-llm-router");
-    if (url.pathname.startsWith("/v1/operator/operations/")) return handleRouterOperator(config, ledger, request, response);
+    if (url.pathname.startsWith("/v1/operator/operations/")) return handleRouterOperator(baseConfig, ledger, request, response);
     if (url.pathname === "/v1/host-principals" || url.pathname === "/v1/host-principals/revoke") {
       if (request.method !== "POST" || url.search !== "") throw new RequestError(404, "unsupported endpoint");
       const credential = /^Basic ([A-Za-z0-9+/=]+)$/.exec(request.headers.authorization ?? "")?.[1];
@@ -119,6 +123,7 @@ export async function createRouter(config: RouterConfig) {
       if (payload[name] !== undefined && payload[name] !== false && payload[name] !== null) throw new RequestError(400, `unsupported request field: ${name}`, "unsupported_capability");
     }
     if (payload.stream !== undefined && typeof payload.stream !== "boolean") throw new RequestError(400, "stream must be boolean");
+    if (account.provider) await ensureManagedBackend(config, account);
     const key = (await privateFile(account.keyFile, 16 * 1024)).trim();
     if (!key || /[\r\n]/.test(key)) throw new Error("invalid upstream access key");
     const admission = ledger.reserve(grant, model.id, hash(JSON.stringify({ route, account: { id: account.id, reference: account.reference, endpoint: account.endpoint }, limits: config.limits })), bytes.length, config.limits, { ...route, backend: config.backend });

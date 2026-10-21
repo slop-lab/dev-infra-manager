@@ -137,6 +137,13 @@ is implied by these source changes.
   in optional plugins. Fence guest capabilities by current workspace UUID;
   control-plane router plugins own backend keys and usage, while the separate
   host router adapter owns workspace fencing and guest gateway tokens.
+  Connect multiple Codex accounts through device authorization and multiple
+  OpenAI-compatible or Anthropic-compatible API accounts from Web or the operator
+  CLI. Keep each account's credentials and backend partition private and separate
+  from its model routes; account and route changes apply to new requests without
+  restarting the router. Preserve authentication, request history and account
+  attribution across local reinstall. Usage-based account selection remains a
+  separate routing feature.
   Configured workspace OpenCode/OMO
   helpers use that router by default. Separate Docker/npm/PyPI/APT cache clients
   from optional host cache servers; external cache URLs use the same client path.

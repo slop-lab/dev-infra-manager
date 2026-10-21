@@ -4,6 +4,7 @@ import { chmod, mkdir, open, readdir, readFile, writeFile } from "node:fs/promis
 import { join, relative, resolve, sep } from "node:path";
 import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import { object, parseConfig, privateFile, text, type RouterConfig } from "./config.js";
+import { effectiveRouterConfig } from "./account-catalog.js";
 import { RouterLedger, hash } from "./ledger.js";
 
 export function effectivePolicy(config: RouterConfig, ledger: RouterLedger, projectId: string) {
@@ -45,7 +46,8 @@ async function privateTree(source: string, destination: string, files: Record<st
     else throw new Error("backup rejects special files");
   }
 }
-export async function backupRouter(config: RouterConfig, destination: string, options: { backendStateQuiesced?: boolean } = {}): Promise<void> {
+export async function backupRouter(baseConfig: RouterConfig, destination: string, options: { backendStateQuiesced?: boolean } = {}): Promise<void> {
+  const config = await effectiveRouterConfig(baseConfig);
   if (config.accounts.some((account) => account.credentialDirectory) && options.backendStateQuiesced !== true) throw new Error("stop configured backend credential writers and explicitly confirm backendStateQuiesced before backup");
   const guard = await tryAcquireKernelGuard(join(config.stateDirectory, "service.guard"));
   if (!guard) throw new Error("stop the LLM router before taking a consistent backup");
@@ -59,6 +61,7 @@ export async function backupRouter(config: RouterConfig, destination: string, op
     const files: Record<string, string> = { "state/router.sqlite3": hash(await safeBytes(database)) };
     try { await privateTree(join(config.stateDirectory, "captures"), join(destination, "state/captures"), files, "state/captures"); }
     catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
+    if (config.accounts.some((account) => account.provider)) await privateTree(join(config.stateDirectory, "managed-accounts"), join(destination, "state/managed-accounts"), files, "state/managed-accounts");
     await mkdir(join(destination, "accounts"), { mode: 0o700 });
     const backendCredentials: BackupManifest["backendCredentials"] = {};
     for (const account of config.accounts) {
@@ -96,13 +99,19 @@ export async function restoreRouter(source: string, destination: string): Promis
   const restored = parseConfig({ ...config, stateDirectory: join(destination, "state"),
     ...(config.operators === undefined ? {} : { operators: config.operators.map((actor) => ({ ...actor, keyFile: join(destination, "operators", `${actor.id}.key`) })) }),
     hostIssuers: config.hostIssuers.map((issuer) => ({ ...issuer, keyFile: join(destination, "host-issuers", `${issuer.id}.key`) })),
-    accounts: config.accounts.map((account) => ({ ...account, keyFile: join(destination, "accounts", account.id, "access.key"),
-      ...(account.credentialDirectory === undefined ? {} : { credentialDirectory: join(destination, "accounts", account.id, "backend-auth") }) })) });
+    accounts: config.accounts.map((account) => ({ ...account, keyFile: account.provider ? join(destination, "state/managed-accounts", account.id, "access.key") : join(destination, "accounts", account.id, "access.key"),
+      ...(account.credentialDirectory === undefined ? {} : { credentialDirectory: account.provider ? join(destination, "state/managed-accounts", account.id, "auth") : join(destination, "accounts", account.id, "backend-auth") }) })) });
   for (const actor of restored.operators ?? []) await safeBytes(actor.keyFile, 16 * 1024);
   for (const issuer of restored.hostIssuers) await safeBytes(issuer.keyFile, 16 * 1024);
   for (const account of restored.accounts) {
     await safeBytes(account.keyFile, 16 * 1024);
-    if (account.credentialDirectory) { const directory = await open(account.credentialDirectory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); await directory.close(); }
+    if (account.provider) {
+      const file = join(destination, "state/managed-accounts", account.id, "config.yaml");
+      const worker = object(JSON.parse(await privateFile(file)));
+      worker.oauth = { ...object(worker.oauth), "auth-dir": account.credentialDirectory };
+      await writeFile(file, JSON.stringify(worker, null, 2) + "\n", { mode: 0o600 });
+    }
+    if (account.credentialDirectory) { await mkdir(account.credentialDirectory, { recursive: true, mode: 0o700 }); const directory = await open(account.credentialDirectory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); await directory.close(); }
   }
   const ledger = new RouterLedger(restored.stateDirectory);
   try { ledger.recoverInterrupted(); ledger.audit("operator", "backup.restore", "router", { replayed: false }); } finally { ledger.close(); }

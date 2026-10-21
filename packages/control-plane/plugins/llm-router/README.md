@@ -8,31 +8,13 @@ dim installer install control-plane plugin @slop-lab/dim-control-plane-plugin-ll
 
 ## Backend boundary
 
-Use a separately operated **CLIProxyAPI v8.0.33** instance for each eligible
-account partition. CLIProxyAPI owns login and refresh; this plugin makes no
-parallel refresh loop and never reads a user's Codex authentication implicitly.
-Its configuration records an explicit `exclusive-worker` account binding,
-`request-only` attempt visibility and `best-effort` cancellation. Other profiles
-are rejected. Operator account references are stable identifiers, not inferred
-from model names, array positions or filenames.
+Every account has a separate **CLIProxyAPI v8.0.33** worker. Existing operator-provided exclusive worker endpoints remain usable. Configure `accountManagement: { backendExecutable: "/absolute/path/to/cli-proxy-api" }` in the private router config to enable account enrollment. The executable must be a regular file, executable, and not writable by other users; DIM checks the pinned version before launching it.
 
-An exclusive binding means the selected backend endpoint contains only the
-permitted account, with retries and paid-provider fallback disabled. Model
-aliases do not establish that boundary. The operator must verify the running
-backend's version and partition; this wrapper cannot attest its internal account
-selection or hidden retries. Recorded attribution explicitly says configured
-exclusive binding rather than an observed provider account identity. Unsupported
-attempt-exact accounting, strict token/currency ceilings, stateful continuation
-and asynchronous provider work are not enabled.
+The operator API, CLI and Web console can connect multiple independent Codex accounts and OpenAI-compatible or Anthropic-compatible API credentials. Codex enrollment starts a device login and returns only the authorization URL and code. CLIProxyAPI owns OAuth login and refresh; DIM never implicitly imports host Codex authentication. Each managed account gets its own private auth directory, access key and loopback listener under `stateDirectory/managed-accounts/ACCOUNT`. API keys live only in the private worker configuration. API base URLs may include `/v1`; they must use HTTPS, or an explicit loopback HTTP address for local services.
 
-CLIProxyAPI's tagged host-side login flags are `-config /absolute/config.yaml
--codex-login` and `-codex-device-login`. Keep its `oauth.auth-dir` private and
-persistent. Reauthorization concerns the relevant backend account only. Backend
-configuration, OAuth access and real provider inference remain operator-managed.
-A separate operator-approved live check completed device login and real Codex
-inference through OpenCode inside a Sysbox workspace. Automated source tests
-continue to use isolated fake backends. Forced token refresh and multiple real
-account switching are separate checks; see [attachment acceptance](docs/attachment-acceptance.md).
+Account credentials and routes are separate. `route.upsert` selects an account and explicit models; API-worker model aliases are reconciled from all routes selecting that account. CLIProxyAPI watches its configuration. New admissions read the atomically published account catalog without restarting the router. A running request keeps its admitted account. There is no automatic retry, fallback, usage-based account selection or provider-quota inference. Usage-based routing can be added independently of account enrollment; request records already retain the selected account ID.
+
+Each worker disables credential fallback and inference retry and contains only one configured API credential or Codex login partition. CLIProxyAPI performs provider protocol conversion, including Anthropic-compatible responses to the router's OpenAI-facing APIs. Attribution remains a configured exclusive-worker binding rather than proof of the provider's internal account identity. Strict token/currency ceilings, attempt-exact accounting and backend-confirmed cancellation remain unavailable.
 
 Primary references reviewed for this integration:
 
@@ -61,7 +43,7 @@ dim-control-plane-llm-router serve /home/operator/.config/dim/llm/router.json
 
 Use a persistent service manager for `serve`, or load the package's `controlPlanePlugin` in `dim-control-plane` with its private config filename as the plugin configuration. The runtime starts/closes this listener; the plugin never reads a host workspace store. No host plugin or backend login is implicitly activated.
 
-Review the schema-3 configuration before serving. `hostIssuers` explicitly lists `{id,keyFile,projects:[{id,routeIds}]}`. Arrays may be empty when no host may attach. Issuers can issue/revoke only principals derived from their own ID, project, immutable workspace UUID, route and fresh attachment UUID. They cannot change policy, export archives or administer accounts. Model/account/issuer configuration changes require service restart. Project policy changes apply transactionally to new admissions.
+Review the schema-3 configuration before serving. `hostIssuers` explicitly lists `{id,keyFile,projects:[{id,routeIds}]}`. Arrays may be empty when no host may attach. Issuers can issue/revoke only principals derived from their own ID, project, immutable workspace UUID, route and fresh attachment UUID. They cannot change policy, export archives or administer accounts. Trusted executable and host-issuer configuration changes require service restart. Account enrollment, route bindings and project policy changes apply to new admissions without restart.
 
 Ledger format 3 requires a fresh CP state directory. Combined host-router format-2 ledgers are rejected without migration because their bearer tokens were guest-visible; those tokens cannot become host-private CP principals. Existing CLIProxyAPI account/OAuth directories are separate and are not modified.
 
@@ -208,3 +190,19 @@ The CLI plugin `@slop-lab/dim-cli-plugin-llm-router` and corresponding Web plugi
 `dim-control-plane-llm-router operator-serve /absolute/operator-service.json` starts an operator-only listener. Give it a separate loopback listen port and the same private state directory, accounts, routes and service limits as the inference service, plus dedicated `operators`. It attaches to an existing SQLite WAL only after checking the complete table/index/trigger schema against the canonical operation schema, and holds its own `operator-service.guard`. The inference service retains ownership of its database format marker: attachment never initializes a database, migrates it, or changes `user_version`. Extra triggers, columns, indexes or missing objects are rejected even when the format marker is recognized. It never performs inference recovery, takes the inference service lock, issues workspace principals, or accepts inference requests. This allows operator API deployment to run separately from inference lifecycle and workspace admission checks. Stop both listeners before a consistent backup; backup checks both ownership locks.
 
 Operator key separation checks every stored workspace credential hash, including revoked principals and disabled projects. Missing or unreadable unrelated backend/issuer keys do not block operator diagnostics; health reports those credentials as unknown. The selected actor always requires its own valid private key.
+
+## Account and route operations
+
+The separate CLI operator plugin uses the same checked operations as Web:
+
+```sh
+dim llm-router account.create --connection /absolute/operator.json --account personal --reference "Personal Codex" --provider codex
+dim llm-router account.login.start --connection /absolute/operator.json --account personal
+dim llm-router account.login.status --connection /absolute/operator.json --account personal --session SESSION_UUID
+dim llm-router account.create --connection /absolute/operator.json --account company-api --reference "Company API" --provider openai --endpoint https://api.openai.com/v1 --api-key-file /absolute/private-api.key
+dim llm-router route.upsert --connection /absolute/operator.json --route company --account company-api --models-file /absolute/models.json
+```
+
+Credential, connection and model files must be private mode 0600. A model file is an array such as `[{"id":"MODEL_ID","name":"MODEL_ID","api":"responses","context":128000,"output":16384}]`. Select `chat` for Chat Completions clients. Account IDs are stable identities; multiple accounts may use the same provider URL. Creating an account does not grant any project access: explicitly add a route to that project's policy and to the trusted host issuer's allowed routes when host attachment is needed.
+
+Consistent backups require stopping inference, operator and credential writers. They include dynamic account/route state, API worker configuration and OAuth directories, and restore rewrites managed credential paths. A different host must provision its own trusted pinned CLIProxyAPI executable and update `accountManagement.backendExecutable`; backup archives do not contain executable code. Local reinstall retains the selected backend executable, the entire router state directory and configured operator keys. Raw keys, backend paths, refresh tokens and prompt content never appear in account-list DTOs or enrollment audit records.

@@ -1,4 +1,5 @@
 // @ts-check
+import { mountAccounts } from "./accounts.js";
 /** @typedef {{operations:Array<{name:string,description:string,access:string}>,invoke(name:string,input?:unknown):Promise<unknown>,isCurrent():boolean}} Context */
 /** @param {unknown} value @returns {Record<string,unknown>} */
 function object(value) { return value !== null && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string,unknown>} */ (value) : {}; }
@@ -52,6 +53,8 @@ export function mount(container, context) {
   const projectList = node("div"), projectMessage = node("p"); projectMessage.setAttribute("role", "status");
   projects.append(node("h2", "Projects"), projectList, projectMessage);
   const health = node("div");
+  const accountsContainer = node("div"); overview.after(accountsContainer);
+  const accountManager = mountAccounts(accountsContainer, context, refresh);
   /** @type {HTMLSelectElement|null} */ let routeSelect = null;
   if (has("project.create")) {
     const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "New routing project"; details.append(summary); projects.append(details);
@@ -159,14 +162,15 @@ export function mount(container, context) {
     overview.replaceChildren(node("h2", "Accounts & routes"), node("p", `${text(object(value.backend).name)} ${text(object(value.backend).version)} · Provider sign-in is managed by the backend.`));
     table(overview, ["Account", "Configured reference"], rows(value.accounts).map((account) => [account.id, account.reference]));
     table(overview, ["Route", "Account", "Models"], rows(value.routes).map((route) => [route.id, route.accountId, rows(route.models).map((model) => `${text(model.id)} (${text(model.api)})`).join(", ")]));
-    if (routeSelect && routeSelect.options.length === 0) for (const route of rows(value.routes)) { const option = document.createElement("option"); option.value = text(route.id); option.textContent = text(route.id); routeSelect.append(option); }
+    if (routeSelect) { const selected = routeSelect.value; routeSelect.replaceChildren(); for (const route of rows(value.routes)) { const option = document.createElement("option"); option.value = text(route.id); option.textContent = text(route.id); routeSelect.append(option); } if (rows(value.routes).some((route) => route.id === selected)) routeSelect.value = selected; }
+    accountManager.setRoutes(value.routes);
     overview.append(health);
     if (has("health")) action(overview, "Check backend authentication", async () => {
       const result = await context.invoke("health"); if (!current()) return; health.replaceChildren();
       table(health, ["Account", "Authentication", "Observed at"], rows(result).map((account) => [account.accountId, account.backendAuthentication, account.observedAt]));
       message.textContent = "Authentication checked without an inference request. Provider quota remains unknown.";
     }, message);
-    const results = await Promise.allSettled([refreshProjects(), refreshTraffic()]); if (!current()) return;
+    const results = await Promise.allSettled([refreshProjects(), refreshTraffic(), accountManager.refresh()]); if (!current()) return;
     if (results[0]?.status === "rejected") { projectMessage.setAttribute("role", "alert"); projectMessage.textContent = "Project list could not refresh. Previously loaded rows and policy drafts are kept; use Refresh router to retry this read."; }
     message.textContent = results.some((result) => result.status === "rejected" || result.value === false)
       ? "Some router sections could not refresh. Available results are shown below; retry the affected reads with Refresh router."
@@ -174,5 +178,5 @@ export function mount(container, context) {
   }
   action(toolbar, "Refresh router", refresh, message); message.textContent = "Loading router state…";
   void refresh().catch((error) => { if (current()) { message.setAttribute("role", "alert"); message.textContent = error instanceof Error ? error.message : "Router unavailable. Check the operator connection and retry."; } });
-  return () => { alive = false; };
+  return () => { alive = false; accountManager.dispose(); };
 }

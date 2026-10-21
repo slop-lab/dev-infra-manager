@@ -13,3 +13,5 @@ The key file must also be mode 0600 and contain a separately generated 32-byte b
 `capabilities`, `overview`, `health`, `projects`, `project.policy`, `usage`, `principals`, and `requests` require read access. Mutation operations require operator access. Prompt/response captures, credential paths, raw keys and token hashes are intentionally absent.
 
 `client.capabilities()` queries the service for operations allowed to the authenticated actor. Presenters intersect this result with their own session roles, so a read-only router connection never advertises mutation controls. The service still rechecks permission on every invocation.
+
+Account operations keep credentials independent of routes. `accounts` returns only account ID, reference, provider and connection state. Operator-only `account.create` takes a Codex partition or a compatible API endpoint/key; API keys are write-only. `account.login.start` and `account.login.status` expose a bounded Codex device authorization session. `route.upsert` binds explicit models to a selected account. No account is selected automatically from usage and no provider credential is returned to Web or workspace clients.

@@ -2,15 +2,34 @@ import { llmOperation, llmOperations } from "@slop-lab/dim-llm-router-client";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
 import { object, parsePolicy, text, type RouterConfig } from "./config.js";
 import { type RouterLedger, type Usage } from "./ledger.js";
+import { effectiveRouterConfig, addRouterAccount, upsertRouterRoute } from "./account-catalog.js";
+import { accountLoginStatus, startAccountLogin, managedAccountConnected } from "./managed-backend.js";
+import type { RouterAccount, RouterRoute } from "./config.js";
 import { accountHealth } from "./operator.js";
 /** One implementation for local operator CLI and authenticated remote clients. */
-export async function invokeRouterOperation(config: RouterConfig, ledger: RouterLedger, name: string, raw: unknown, actor = "operator", role: "read" | "operator" = "operator"): Promise<unknown> {
+export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: RouterLedger, name: string, raw: unknown, actor = "operator", role: "read" | "operator" = "operator"): Promise<unknown> {
+  const config = await effectiveRouterConfig(baseConfig);
   const operation = llmOperation(name), input = object(operation.parseInput(raw));
   const projectId = () => text(input.projectId);
   const policy = (value: unknown) => { const result = parsePolicy(value); if (result.allowedRoutes.some((id) => !config.routes.some((route) => route.id === id))) throw new Error("policy refers to an unknown route"); return result; };
   let output: unknown;
   switch (name) {
-    case "capabilities": output = operationDescriptors(llmOperations.filter((op) => op.access === "read" || role === "operator" && op.access === "operator")); break;
+    case "capabilities": output = operationDescriptors(llmOperations.filter((op) => (op.access === "read" || role === "operator" && op.access === "operator") && (!op.name.startsWith("account.") && op.name !== "route.upsert" || config.accountManagement !== undefined))); break;
+    case "accounts": output = await Promise.all(config.accounts.map((account) => accountSummary(config, account))); break;
+    case "account.create": {
+      if (!config.accountManagement) throw new Error("account management is not configured");
+      const account = await addRouterAccount(baseConfig, input as unknown as Parameters<typeof addRouterAccount>[1]); output = await accountSummary(config, account); break;
+    }
+    case "account.login.start": case "account.login.status": {
+      const account = config.accounts.find(({ id }) => id === input.accountId);
+      if (!config.accountManagement || !account || account.provider !== "codex") throw new Error("managed Codex account was not found");
+      const result = name === "account.login.start" ? await startAccountLogin(config, account) : await accountLoginStatus(config, account, text(input.sessionId));
+      output = name === "account.login.start" ? { accountId: result.accountId, sessionId: result.sessionId, verificationUrl: result.verificationUrl ?? "https://auth.openai.com/codex/device", ...(result.userCode === undefined ? {} : { userCode: result.userCode }), status: result.status, expiresAt: result.expiresAt } : { accountId: result.accountId, sessionId: result.sessionId, status: result.status, ...(result.message === undefined ? {} : { message: result.message }) }; break;
+    }
+    case "route.upsert": {
+      if (!config.accountManagement) throw new Error("account management is not configured");
+      output = await upsertRouterRoute(baseConfig, { id: text(input.routeId), accountId: text(input.accountId), models: input.models as RouterRoute["models"] }); break;
+    }
     case "overview": output = { backend: config.backend, accounts: config.accounts.map(({ id, reference }) => ({ id, reference })), routes: config.routes, limits: config.limits }; break;
     case "health": output = await accountHealth(config); break;
     case "projects": output = ledger.projects(); break;
@@ -42,4 +61,9 @@ export async function invokeRouterOperation(config: RouterConfig, ledger: Router
   const result = operation.parseOutput(output);
   ledger.audit(actor, `remote.${name}`, typeof input.projectId === "string" ? input.projectId : "router");
   return result;
+}
+
+async function accountSummary(config: RouterConfig, account: RouterAccount) {
+  const connected = account.provider !== "codex" || await managedAccountConnected(config, account);
+  return { id: account.id, reference: account.reference, provider: account.provider ?? "backend", status: !account.provider ? "configured" : connected ? "connected" : "authorization_required" };
 }

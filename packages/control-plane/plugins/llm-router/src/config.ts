@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { isIP } from "node:net";
 
 export interface RouterModel { id: string; name: string; api: "responses" | "chat"; context: number; output: number }
-export interface RouterAccount { id: string; reference: string; endpoint: string; keyFile: string; credentialDirectory?: string }
+export interface RouterAccount { id: string; reference: string; endpoint: string; keyFile: string; credentialDirectory?: string; provider?: "codex" | "openai" | "anthropic" }
 export interface RouterRoute { id: string; accountId: string; models: RouterModel[] }
 export interface RouterLimits { concurrent: number; requestsPerUtcDay: number; requestBytes: number; responseBytes: number; captureBytesPerProject: number; deadlineMilliseconds: number }
 export interface ProjectPolicy { allowedRoutes: string[]; limits: RouterLimits; captureMode: "required" | "best-effort" | "metadata";
@@ -12,6 +12,7 @@ export interface ProjectPolicy { allowedRoutes: string[]; limits: RouterLimits; 
 export interface RouterHostIssuer { id: string; keyFile: string; projects: { id: string; routeIds: string[] }[] }
 export interface RouterOperator { id: string; keyFile: string; role: "read" | "operator" }
 export interface RouterConfig {
+  accountManagement?: { backendExecutable: string };
   schemaVersion: 3; stateDirectory: string; operators?: RouterOperator[]; hostIssuers: RouterHostIssuer[]; listen: { host: string; port: number };
   backend: { name: "CLIProxyAPI"; version: "8.0.33"; accountSelection: "exclusive-worker"; attemptVisibility: "request-only"; cancellation: "best-effort" };
   accounts: RouterAccount[]; routes: RouterRoute[]; limits: RouterLimits;
@@ -50,8 +51,13 @@ export function parsePolicy(value: unknown): ProjectPolicy {
     tokenMode: row.tokenMode === "estimate" ? "estimate" : "observe", ...(row.tokensPerUtcDay === undefined ? {} : { tokensPerUtcDay: integer(row.tokensPerUtcDay) }),
     ...(row.estimatedTokensPerRequest === undefined ? {} : { estimatedTokensPerRequest: integer(row.estimatedTokensPerRequest) }) };
 }
+export function parseModel(value: unknown): RouterModel {
+  const model = object(value); exact(model, ["id", "name", "api", "context", "output"]); const id = text(model.id);
+  if (id.length > 200 || /[\s\x00-\x1f]/.test(id) || (model.api !== "responses" && model.api !== "chat")) throw new Error("invalid model");
+  return { id, name: text(model.name), api: model.api, context: integer(model.context), output: integer(model.output) };
+}
 export function parseConfig(value: unknown): RouterConfig {
-  const row = object(value); exact(row, ["schemaVersion", "stateDirectory", "hostIssuers", "listen", "backend", "accounts", "routes", "limits"], ["operators"]);
+  const row = object(value); exact(row, ["schemaVersion", "stateDirectory", "hostIssuers", "listen", "backend", "accounts", "routes", "limits"], ["operators", "accountManagement"]);
   const operators = row.operators === undefined ? undefined : (() => {
     if (!Array.isArray(row.operators)) throw new Error("operators must be an explicit array");
     const actors = row.operators.map((raw: unknown): RouterOperator => {
@@ -64,12 +70,13 @@ export function parseConfig(value: unknown): RouterConfig {
   })();
   const listen = object(row.listen), backend = object(row.backend); exact(listen, ["host", "port"]); exact(backend, Object.keys(backendProfile));
   if (Object.entries(backendProfile).some(([key, value]) => backend[key] !== value)) throw new Error("unsupported backend capabilities; only pinned exclusive-worker/request-level CLIProxyAPI profile is enabled");
-  if (row.schemaVersion !== 3 || !Array.isArray(row.routes) || !row.routes.length || !Array.isArray(row.accounts) || !row.accounts.length) throw new Error("unsupported router configuration");
+  if (row.schemaVersion !== 3 || !Array.isArray(row.routes) || !Array.isArray(row.accounts)) throw new Error("unsupported router configuration");
   const accounts = row.accounts.map((value: unknown): RouterAccount => {
-    const account = object(value); exact(account, ["id", "reference", "endpoint", "keyFile"], ["credentialDirectory"]);
+    const account = object(value); exact(account, ["id", "reference", "endpoint", "keyFile"], ["credentialDirectory", "provider"]);
+    if (account.provider !== undefined && !["codex", "openai", "anthropic"].includes(String(account.provider))) throw new Error("unsupported account provider");
     const endpoint = origin(account.endpoint), url = new URL(endpoint);
     if (url.protocol === "http:" && !["127.0.0.1", "[::1]"].includes(url.hostname)) throw new Error("HTTP upstream must use loopback");
-    return { id: identifier(account.id), reference: text(account.reference), endpoint, keyFile: absolute(account.keyFile), ...(account.credentialDirectory === undefined ? {} : { credentialDirectory: absolute(account.credentialDirectory) }) };
+    return { id: identifier(account.id), reference: text(account.reference), endpoint, keyFile: absolute(account.keyFile), ...(account.credentialDirectory === undefined ? {} : { credentialDirectory: absolute(account.credentialDirectory) }), ...(account.provider === undefined ? {} : { provider: account.provider as "codex" | "openai" | "anthropic" }) };
   });
   if (new Set(accounts.map((account) => account.id)).size !== accounts.length || new Set(accounts.map((account) => account.endpoint)).size !== accounts.length) throw new Error("account IDs and exclusive backend endpoints must be unique");
   if (!Array.isArray(row.hostIssuers)) throw new Error("host issuers must be an explicit array");
@@ -90,18 +97,15 @@ export function parseConfig(value: unknown): RouterConfig {
   const routes = row.routes.map((value: unknown): RouterRoute => {
     const route = object(value); exact(route, ["id", "accountId", "models"]);
     if (!Array.isArray(route.models) || !route.models.length || !accounts.some((account) => account.id === route.accountId)) throw new Error("route requires models and an exclusive account reference");
-    const models = route.models.map((value: unknown): RouterModel => {
-      const model = object(value); exact(model, ["id", "name", "api", "context", "output"]); const id = text(model.id);
-      if (id.length > 200 || /[\s\x00-\x1f]/.test(id) || (model.api !== "responses" && model.api !== "chat")) throw new Error("invalid model");
-      return { id, name: text(model.name), api: model.api, context: integer(model.context), output: integer(model.output) };
-    });
+    const models = route.models.map(parseModel);
     if (new Set(models.map((model) => model.id)).size !== models.length) throw new Error("duplicate model");
     return { id: identifier(route.id), accountId: identifier(route.accountId), models };
   });
   if (new Set(routes.map((route) => route.id)).size !== routes.length || typeof listen.host !== "string" || !isIP(listen.host)) throw new Error("invalid routes or listen address");
   if (hostIssuers.some((issuer) => issuer.projects.some((project) => project.routeIds.some((id) => !routes.some((route) => route.id === id))))) throw new Error("issuer refers to unknown route");
   if (operators?.some((actor) => [...hostIssuers, ...accounts].some((other) => other.keyFile === actor.keyFile))) throw new Error("operators require dedicated credential files");
-  return { ...(operators === undefined ? {} : { operators }), schemaVersion: 3, stateDirectory: absolute(row.stateDirectory), hostIssuers, listen: { host: listen.host, port: integer(listen.port, 65535) }, backend: { ...backendProfile }, accounts, routes, limits: parseLimits(row.limits) };
+  const accountManagement = row.accountManagement === undefined ? undefined : (() => { const manager = object(row.accountManagement); exact(manager, ["backendExecutable"]); return { backendExecutable: absolute(manager.backendExecutable) }; })();
+  return { ...(accountManagement === undefined ? {} : { accountManagement }), ...(operators === undefined ? {} : { operators }), schemaVersion: 3, stateDirectory: absolute(row.stateDirectory), hostIssuers, listen: { host: listen.host, port: integer(listen.port, 65535) }, backend: { ...backendProfile }, accounts, routes, limits: parseLimits(row.limits) };
 }
 export async function privateFile(path: string, maximum = 1024 * 1024): Promise<string> {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

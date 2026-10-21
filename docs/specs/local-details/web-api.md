@@ -189,6 +189,16 @@ The LLM router Web feature and its CLI plugin use the same operation/client
 contracts. Service-side actor credentials and browser roles independently bound
 authority. Provider credentials, router keys, prompt/response captures and
 internal raw records are not public operation results.
+Account enrollment and route changes require both browser and service operator
+authority. Codex authorization returns a bounded device challenge and account-bound
+session status; the service never borrows host Codex credentials. API keys are
+write-only inputs, retained in private per-account backend partitions and cleared
+from successful Web forms. The operator cannot supply a backend executable or
+credential path through Web operations. A server-owned pinned executable serves
+one credential partition per account. Accounts and model routes are independent;
+each inference reserves its selected account and route snapshot for attribution.
+Later route edits affect new requests, without rewriting historical usage or
+retrying an already dispatched request on another account.
 
 ## Verification and resource priority
 

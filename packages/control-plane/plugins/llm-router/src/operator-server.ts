@@ -4,6 +4,7 @@ import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import type { RouterConfig } from "./config.js";
 import { RouterLedger } from "./ledger.js";
 import { handleRouterOperator } from "./operator-http.js";
+import { closeManagedLogins } from "./managed-backend.js";
 import { RequestError, send } from "./http.js";
 /** Independent operator listener. It never owns inference recovery or workspace admission. */
 export async function createRouterOperatorServer(config: RouterConfig) {
@@ -24,6 +25,6 @@ export async function createRouterOperatorServer(config: RouterConfig) {
   return { server, ledger, close() { return closing ??= (async () => {
     server.closeAllConnections();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
-    await Promise.allSettled(active); ledger.close(); await guard.release();
+    await Promise.allSettled(active); await closeManagedLogins(config); ledger.close(); await guard.release();
   })(); } };
 }
