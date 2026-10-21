@@ -122,5 +122,6 @@ It needs mise, npm, Docker and the digest-pinned Node image selected in
 `tests/scenarios/harness/localUninstallLive.test.ts` already available locally.
 The check uses an isolated HOME and mise configuration, installs the real
 facade/core, removes recorded Docker resources, verifies unrelated resources
-survive, and repeats installation/removal. It does not uninstall the operator's
+survive, and repeats installation/removal while checking Docker/npm/PyPI/apt
+cache payload retention and a subsequent complete purge. It does not uninstall the operator's
 DIM installation or establish reboot or separate-host acceptance.

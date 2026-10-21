@@ -125,6 +125,21 @@ just reinstall-local --with-managed   # Destructive removal, then installation.
 # Omit --with-managed for the base workspace profile.
 ```
 
+To retain only local registry/package mirror payloads during reinstall:
+
+```bash
+just reinstall-local --with-managed --keep-cache-data
+# Preview the corresponding removal first:
+just uninstall-local --keep-cache-data
+```
+
+This keeps cache-server data volumes (including Docker, npm, PyPI and apt) and
+only their ownership ledgers. Cache containers, networks, endpoint catalogs and
+runtime configuration are removed. After reinstall, install the cache-server
+plugin again and run `dim cache-server ensure` to reuse the volumes and publish
+fresh endpoints. Without the option, removal also deletes the cache payloads.
+Retries after interrupted removal must use the same cache retention option.
+
 `reinstall-local` invokes removal with `--yes`, then the existing source
 installer. It does not prepare a new candidate: rerun `just prepare-local` after
 source changes. The source checkout and its `.local` prepared artifact bundle

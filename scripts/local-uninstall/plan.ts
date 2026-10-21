@@ -11,9 +11,12 @@ import { planProcesses, stopProcesses, type OwnedProcess } from "./processes.ts"
 import { inside, removalDirectories, validatePaths } from "./paths.ts";
 import { planMise, removeMise } from "./mise.ts";
 import { inspectVm, removeVms } from "./vm.ts";
+import { retainedCacheData, removeExcept, type RetainedCacheData } from "./cache-data.ts";
 import type { RemovalPaths } from "./types.ts";
 export interface RemovalPlan {
   readonly schemaVersion: 1;
+  readonly keepCacheData: boolean;
+  readonly retainedCache: RetainedCacheData;
   readonly paths: RemovalPaths;
   readonly docker: readonly DockerResource[];
   readonly vms: readonly VmClaim[];
@@ -34,6 +37,14 @@ function restoredPlan(raw: unknown, paths: RemovalPaths): RemovalPlan {
   const value = object(raw);
   if (value.schemaVersion !== 1 || JSON.stringify(value.paths) !== JSON.stringify(paths)
     || !Array.isArray(value.docker) || !Array.isArray(value.vms) || !Array.isArray(value.mise)) throw new Error("incompatible local uninstall journal");
+  const retained = object(value.retainedCache);
+  if (typeof value.keepCacheData !== "boolean" || !Array.isArray(retained.files) || !Array.isArray(retained.volumes)) throw new Error("invalid retained cache journal");
+  for (const file of retained.files) {
+    const path = text(file);
+    if (![paths.state, paths.managed].some((root) => inside(path, join(root, "plugins/cache-server/services")))) throw new Error("invalid retained cache path");
+  }
+  for (const volume of retained.volumes) text(volume);
+  if (!value.keepCacheData && (retained.files.length || retained.volumes.length)) throw new Error("unexpected retained cache data");
   for (const raw of value.docker) {
     const item = object(raw), claim = object(item.claim);
     if (!["container", "volume", "network"].includes(text(claim.kind)) || !/^[A-Za-z0-9][A-Za-z0-9_.-]+$/.test(text(claim.name))) throw new Error("invalid journal resource");
@@ -45,13 +56,14 @@ function restoredPlan(raw: unknown, paths: RemovalPaths): RemovalPlan {
   for (const version of value.mise) if (!/^npm:@slop-lab\/dim-installer@[a-zA-Z0-9][a-zA-Z0-9.+-]*$/.test(text(version))) throw new Error("invalid journal mise registration");
   return value as unknown as RemovalPlan;
 }
-export async function createRemovalPlan(paths: RemovalPaths, run: Command = command, env: NodeJS.ProcessEnv = process.env): Promise<RemovalPlan> {
+export async function createRemovalPlan(paths: RemovalPaths, run: Command = command, env: NodeJS.ProcessEnv = process.env, options: { keepCacheData?: boolean } = {}): Promise<RemovalPlan> {
   await validatePaths(paths);
   const file = journal(paths), prior = await readJson(file);
   if (prior !== undefined && ((await metadata(file))!.mode & 0o777) !== 0o600) throw new Error("unsafe local uninstall journal permissions");
   const active = await planProcesses(paths), unit = await ownedControllerUnit(paths), bin = await managedBin(paths);
   if (prior !== undefined) {
     const previous = restoredPlan(prior, paths);
+    if (previous.keepCacheData !== (options.keepCacheData === true)) throw new Error("retry uninstall with the same --keep-cache-data selection");
     // The durable snapshot authorizes retry after its Caddy container was removed;
     // IDs, labels and creation times are rechecked before any further deletion.
     for (const resource of previous.docker) await inspectDocker(run, resource.claim);
@@ -62,7 +74,9 @@ export async function createRemovalPlan(paths: RemovalPaths, run: Command = comm
     ...await collectWorkerClaims([...new Set([paths.state, paths.managed, ...active.workerRoots])])];
   const vms = await collectVmClaims(paths);
   for (const vm of vms) await inspectVm(run, vm);
-  return { schemaVersion: 1, paths, docker: await planDocker(run, claims), vms, mise: await planMise(run, env), processes: active.processes, unit, bin };
+  const docker = await planDocker(run, claims), keepCacheData = options.keepCacheData === true;
+  const retainedCache = keepCacheData ? await retainedCacheData(paths, docker) : { volumes: [], files: [] };
+  return { schemaVersion: 1, paths, keepCacheData, retainedCache, docker, vms, mise: await planMise(run, env), processes: active.processes, unit, bin };
 }
 export async function executeRemoval(plan: RemovalPlan, run: Command = command): Promise<void> {
   const paths = plan.paths;
@@ -76,13 +90,13 @@ export async function executeRemoval(plan: RemovalPlan, run: Command = command):
   await stopProcesses(plan.processes);
   // Check that no newly launched producer/worker can recreate resources during removal.
   if ((await planProcesses(paths)).processes.length) throw new Error("a DIM process started during uninstall; stop it and retry");
-  await removeDocker(run, plan.docker);
+  await removeDocker(run, plan.docker, plan.retainedCache.volumes);
   await removeVms(run, plan.vms);
   // Retain runtime and its ownership records until all external cleanup succeeds.
   await removeMise(run, plan.mise);
   if (plan.unit) { await rm(paths.unit); await checked(run, "systemctl", ["--user", "daemon-reload"]); }
   if (plan.bin) await rm(paths.bin);
-  await rm(paths.config, { force: true });
-  for (const root of removalDirectories(paths).filter((root) => root !== paths.data)) await rm(root, { recursive: true, force: true });
-  await rm(paths.data, { recursive: true, force: true });
+  await removeExcept(paths.config, plan.retainedCache.files);
+  for (const root of removalDirectories(paths).filter((root) => root !== paths.data)) await removeExcept(root, plan.retainedCache.files);
+  await removeExcept(paths.data, plan.retainedCache.files);
 }

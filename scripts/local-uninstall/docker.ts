@@ -47,7 +47,7 @@ export async function assertNoForeignUsers(run: Command, selected: readonly Dock
     if (users.some((id) => !containers.has(id))) throw new Error(`foreign container uses Docker ${claim.kind} ${claim.name}; nothing removed`);
   }
 }
-export async function removeDocker(run: Command, selected: readonly DockerResource[]): Promise<void> {
+export async function removeDocker(run: Command, selected: readonly DockerResource[], retainedVolumes: readonly string[] = []): Promise<void> {
   // Recheck the whole snapshot before mutation; state journals remain until every resource is gone.
   for (const item of selected) {
     const actual = await inspectDocker(run, item.claim);
@@ -55,6 +55,7 @@ export async function removeDocker(run: Command, selected: readonly DockerResour
   }
   await assertNoForeignUsers(run, selected);
   for (const kind of ["container", "volume", "network"] as const) for (const item of selected.filter(({ claim }) => claim.kind === kind)) {
+    if (kind === "volume" && retainedVolumes.includes(item.claim.name)) continue;
     const actual = await inspectDocker(run, item.claim);
     if (!actual) continue;
     if (JSON.stringify(resource(item.claim, actual)) !== JSON.stringify(item)) throw new Error(`Docker identity changed: ${item.claim.name}`);

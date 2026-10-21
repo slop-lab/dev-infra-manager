@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { ownedControllerUnit } from "../../../scripts/local-uninstall/controller-unit.ts";
+import { collectHostClaims } from "../../../scripts/local-uninstall/host-resources.ts";
 import { planDocker, removeDocker } from "../../../scripts/local-uninstall/docker.ts";
 import { removalPaths, validatePaths } from "../../../scripts/local-uninstall/paths.ts";
 import { createRemovalPlan, executeRemoval } from "../../../scripts/local-uninstall/plan.ts";
@@ -121,4 +122,39 @@ it("rejects a missing or stale reinstall candidate before executing removal", as
   await writeFile(join(scripts, "local-preparation-state.bash"), "printf 'changed-candidate\\n'\n");
   await expect(run("bash", [join(scripts, "reinstall-source-build.bash"), "--with-managed"])).rejects.toMatchObject({ stderr: expect.stringContaining("stale or mismatched") });
   await expect(readFile(marker)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("retains only owned package cache data and its reuse ledger when requested, and permits a later complete purge", async () => {
+  const f = await fixture(), ledgerFile = join(f.paths.state, "plugins/cache-server/services/cache-dim-cache.json");
+  const resourceIds: Record<string, string> = { network: "n".repeat(43) };
+  const kinds = ["docker", "npm", "pypi", "apt"];
+  for (const [index, kind] of kinds.entries()) {
+    resourceIds[`cache:${kind}`] = String(index + 1).repeat(43);
+    resourceIds[`data:${kind}`] = String(index + 5).repeat(43);
+  }
+  const ledger = { schemaVersion: 2, serviceId: "s".repeat(43), resourceIds };
+  await mkdir(join(ledgerFile, ".."), { recursive: true, mode: 0o700 });
+  await writeFile(ledgerFile, JSON.stringify(ledger), { mode: 0o600 });
+  const endpoints = join(f.paths.state, "services/package-caches.json");
+  await mkdir(join(endpoints, ".."), { recursive: true, mode: 0o700 }); await writeFile(endpoints, JSON.stringify({ endpoints: { npm: "old-endpoint" } }));
+  const workspace = join(f.paths.state, "workspaces/dev.json");
+  await mkdir(join(workspace, ".."), { recursive: true, mode: 0o700 });
+  await writeFile(workspace, JSON.stringify({ schemaVersion: 10, id: "22222222-2222-2222-2222-222222222222", name: "dev", runtime: "container" }));
+  await mkdir(join(f.paths.config, ".."), { recursive: true }); await writeFile(f.paths.config, JSON.stringify({ authentication: "remove-me" }));
+  const docker = dockerFixture(await collectHostClaims(f.paths));
+  const defaultPlan = await createRemovalPlan(f.paths, docker.run);
+  expect(defaultPlan.docker.filter(({ claim }) => claim.kind === "volume" && claim.name.startsWith("dim-cache-"))).toHaveLength(4);
+  const keep = { keepCacheData: true };
+  const plan = await createRemovalPlan(f.paths, docker.run, undefined, keep);
+  docker.fail("network"); await expect(executeRemoval(plan, docker.run)).rejects.toThrow("injected removal failure");
+  await expect(createRemovalPlan(f.paths, docker.run)).rejects.toThrow(/cache|mode|option/i);
+  docker.fail(); await executeRemoval(await createRemovalPlan(f.paths, docker.run, undefined, keep), docker.run);
+  expect([...docker.resources.keys()].sort()).toEqual(kinds.map((kind) => `volume:dim-cache-${kind}-data`).sort());
+  expect(JSON.parse(await readFile(ledgerFile, "utf8"))).toEqual(ledger);
+  for (const removed of [f.paths.config, workspace, endpoints]) await expect(readFile(removed)).rejects.toMatchObject({ code: "ENOENT" });
+  const reused = await collectHostClaims(f.paths);
+  const dataClaims = reused.filter(({ kind }) => kind === "volume"); expect(dataClaims).toHaveLength(4);
+  for (const claim of dataClaims) expect(docker.resources.get(`volume:${claim.name}`)?.Labels).toEqual(claim.labels);
+  await executeRemoval(await createRemovalPlan(f.paths, docker.run), docker.run);
+  expect(docker.resources.size).toBe(0); await expect(readFile(ledgerFile)).rejects.toMatchObject({ code: "ENOENT" });
 });
