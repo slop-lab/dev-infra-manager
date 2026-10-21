@@ -29,7 +29,7 @@ async function fixture(change: Readonly<Record<string, unknown>> = {}) {
   await mkdir(join(sourceRepository, ".dim"));
   await writeFile(join(sourceRepository, ".dim/repos.yml"), `schemaVersion: 1
 repositories:
-  root: {url: https://example.test/root.git, root: true, ref: main, protect: [main]}
+  root: {ref: main, protect: [main]}
 policy:
   code-review: {requiredReviewerIds: [owner], pathReviewerRules: []}
   git-ci:

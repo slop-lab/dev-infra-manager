@@ -30,10 +30,9 @@ test("native root bootstrap help requires explicit local source and separate ope
   assert.doesNotMatch(help.stdout, /bootstrap-git-url|password|token/);
 });
 
-test("native root bootstrap imports a manifest-free source from an explicit reviewed policy", async () => {
+test("native root bootstrap ignores an unselected repository manifest and imports explicit reviewed policy", async () => {
   // Given
   const fixture = await nativeFixture({ seedImportedDraft: false });
-  await removeReviewedManifest(fixture);
   const repositoryPolicy = join(fixture.stateRoot, "repository-policy.json");
   await writeFile(repositoryPolicy, JSON.stringify({ schemaVersion: 1, repositoryId: "root",
     extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, "git-ci": { ciRepositoryIds: ["root"], requiredJobs: [] }, "merge-policy": {} } }), { mode: 0o600 });

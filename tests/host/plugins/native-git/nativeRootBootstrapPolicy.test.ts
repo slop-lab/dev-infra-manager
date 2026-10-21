@@ -7,7 +7,7 @@ const extensions = {
   "merge-policy": {}
 };
 function manifest(policy = `policy:\n  code-review:\n    requiredReviewerIds: [owner, security]\n    pathReviewerRules: [{pathPrefix: .dim/, reviewerIds: [security]}]\n  git-ci:\n    ciRepositoryIds: [root]\n    requiredJobs: [{name: source, kind: ordinary-sysbox, evidenceClass: candidate-controlled}, {name: integration, kind: qemu, evidenceClass: candidate-controlled}]\n  merge-policy: {}\n`): string {
-  return `schemaVersion: 1\nrepositories:\n  root: {url: https://example.test/team/root.git, root: true, ref: main, protect: [main]}\n${policy}`;
+  return `schemaVersion: 1\nrepositories:\n  root: {ref: main, protect: [main]}\n${policy}`;
 }
 describe("repository bootstrap policy", () => {
   it("transports namespaced feature declarations and binds the whole policy", () => {
@@ -44,11 +44,23 @@ describe("repository bootstrap policy", () => {
   it("rejects unknown manifest fields, duplicate keys and obsolete unnamespaced review recipes", () => {
     for (const extra of ["unknown: true\n", "nativeReview: {}\n", "policy: {}\npolicy: {}\n"]) expect(() => parseNativeRootBootstrapManifestYaml(manifest(extra), "refs/heads/main", "root")).toThrow();
   });
-  it("rejects unsafe repository identities, unprotected refs and nonportable origins", () => {
+  it("rejects retired repository routing fields instead of accepting settings it cannot apply", () => {
+    for (const field of ["url: https://example.test/root.git", "upstream: origin", "root: true", "import: {main: main}", "publish: {main: main}", "blockForcePush: [main]"]) {
+      expect(() => parseNativeRootBootstrapManifestYaml(manifest().replace("ref: main", `ref: main, ${field}`), "refs/heads/main", "root")).toThrow(/unknown fields/);
+    }
+    expect(() => parseNativeRootBootstrapManifestYaml(`${manifest()}upstreams: {}\n`, "refs/heads/main", "root")).toThrow(/unknown fields/);
+  });
+  it("accepts reviewed branch patterns while validating all repository entries", () => {
+    const wildcard = manifest("").replace("ref: main, protect: [main]", 'protect: ["release/*"]');
+    expect(parseNativeRootBootstrapManifestYaml(wildcard, "refs/heads/release/1", "root").protectedRef).toBe("refs/heads/release/1");
+    for (const protect of ["[]", "[1]", '["bad pattern"]']) expect(() => parseNativeRootBootstrapManifestYaml(manifest().replace("protect: [main]", `protect: ${protect}`), "refs/heads/main", "root")).toThrow();
+    expect(() => parseNativeRootBootstrapManifestYaml(`${manifest("")}  invalid_id: {protect: [main]}\n`, "refs/heads/main", "root")).toThrow(/repository ID/);
+  });
+  it("rejects unsafe repository identities, unprotected refs and obsolete routing fields", () => {
     for (const repositoryId of ["root.bad", "root_bad", "../root"]) expect(() => compileNativeRepositoryBootstrapPolicy({ repositoryId, protectedRef: "refs/heads/main" })).toThrow();
     for (const protectedRef of ["refs/heads/proposals/agent/a", "refs/heads/.hidden", "refs/heads/main/../secret"]) expect(() => compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef })).toThrow();
     expect(() => parseNativeRootBootstrapManifestYaml(manifest(), "refs/heads/development", "root")).toThrow();
     expect(() => parseNativeRootBootstrapManifestYaml(manifest().replace("protect: [main]", "protect: []"), "refs/heads/main", "root")).toThrow();
-    expect(() => parseNativeRootBootstrapManifestYaml(manifest().replace("https://example.test/team/root.git", "../../root.git"), "refs/heads/main", "root")).toThrow(/relative filesystem path/);
+    expect(() => parseNativeRootBootstrapManifestYaml(manifest().replace("ref: main", "ref: main, url: ../../root.git"), "refs/heads/main", "root")).toThrow(/unknown fields/);
   });
 });

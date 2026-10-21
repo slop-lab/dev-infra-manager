@@ -39,7 +39,7 @@ async function fixture(withManifest: boolean): Promise<{ readonly source: string
     await mkdir(join(source, ".dim"));
     await writeFile(join(source, ".dim/repos.yml"), `schemaVersion: 1
 repositories:
-  root: {url: https://example.test/root.git, root: true, ref: main, protect: [main]}
+  root: {ref: main, protect: [main]}
 policy:
   code-review: {requiredReviewerIds: [owner], pathReviewerRules: []}
   git-ci:

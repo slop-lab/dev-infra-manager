@@ -114,6 +114,9 @@ Project-specific setup runs inside the workspace. Optional tool integration
 belongs to the agent-tools plugin; the default path does not execute host-side
 `.dim` hooks.
 
+[Repository configuration](docs/guides/repository-configuration.md) lists `.dim`
+files, their owning plugins and the operations that read them.
+
 ```bash
 # Permanently removes checkout, home, private Docker data and temporary storage.
 dim discard dev --yes

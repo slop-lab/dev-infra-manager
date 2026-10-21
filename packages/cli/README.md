@@ -48,6 +48,10 @@ grouping is helpful.
 
 ### Required workspace plugins
 
+The [repository configuration guide](../../docs/guides/repository-configuration.md)
+lists all `.dim` readers. The CLI's generic declaration is `workspace.json`;
+repository-policy and workflow YAML belong to optional plugins.
+
 A repository may declare exact host plugin packages in `.dim/workspace.json`:
 
 ```json

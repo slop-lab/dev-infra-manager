@@ -126,6 +126,11 @@ is implied by these source changes.
   authentication, history and captures, plus Tailscale gateway identity and
   state, regardless of package cache retention; owned runtime processes and
   gateway containers/networks are replaced.
+- Document `.dim` file ownership and activation explicitly. Native Git's
+  reviewed manifest contains branch policy and namespaced feature declarations;
+  remove unused repository-set connection, import/publish and bulk-creation
+  helpers and reject their obsolete manifest fields. Ordinary workspace creation
+  does not apply Native Git or workflow configuration.
 - Align documentation and disposable verification with the current architecture;
   remove tests and gates that enforce retired internal contracts. Preserve the
   exported issue backup and map its 32 open issues into the architecture plan.

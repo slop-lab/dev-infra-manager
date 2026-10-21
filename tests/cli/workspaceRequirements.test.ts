@@ -75,6 +75,19 @@ test("requirements check enabled exact installed metadata; obsolete versions and
   });
 });
 
+test("workspace preflight ignores plugin YAML and project-owned scripts", async () => {
+  await fixture(async (root) => {
+    await mkdir(path.join(root, ".dim/ci"), { recursive: true });
+    await mkdir(path.join(root, ".dim/review"));
+    await writeFile(path.join(root, ".dim/workspace.json"), '{"plugins":[]}');
+    for (const file of ["repos.yml", "ci/runner.yml"]) await writeFile(path.join(root, ".dim", file), "deliberately invalid: [ YAML");
+    const marker = path.join(root, "executed");
+    await writeFile(path.join(root, ".dim/review/matcher.mjs"), `// @ts-check\nimport{writeFileSync}from'node:fs';writeFileSync(${JSON.stringify(marker)},'executed');`);
+    const check = workspaceRequirements(); await check.validateCheckout(root, required.source);
+    assert.equal(check.missing, undefined); await assert.rejects(readFile(marker), { code: "ENOENT" });
+  });
+});
+
 test("checkout config refuses symlink traversal, oversized files, unknown keys, and duplicate package names", async () => {
   await fixture(async (root) => {
     const checkout = path.join(root, "checkout"); await mkdir(checkout);

@@ -1,5 +1,8 @@
 # DIM plugins
 
+[Repository configuration](repository-configuration.md) documents each `.dim`
+file, its owning component and the operation that reads it.
+
 Ordinary Git workspaces, local/SSH host selection, shell execution and loopback
 forwarding run without plugins or a control plane. Host plugins add workspace and CI-worker capabilities; control-plane plugins
 provide shared authority and service capabilities. Workflow syntax belongs to

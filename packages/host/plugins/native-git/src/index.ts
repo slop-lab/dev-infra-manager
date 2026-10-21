@@ -14,7 +14,6 @@ export * from "./nativeProjectPendingCodec.js";
 export * from "./nativeProjectPendingStore.js";
 export * from "./nativeProjectReadinessClient.js";
 export * from "./nativeControlPlaneConnection.js";
-export * from "./repositorySet.js";
 export * from "./controlPlaneSelection.js";
 export * from "./nativeWorkspaceMetadata.js";
 export { hostPlugin } from "./plugin.js";

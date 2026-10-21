@@ -2,7 +2,6 @@ import { nativeRepositoryPolicyRevision, parseAuthoritativeImportedRootPolicy, t
 import { parseDocument } from "yaml";
 import { UserError } from "@slop-lab/dim-host-core";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
-import { assertRepositorySetUrlsArePortable, normalizeRepositorySet } from "./repositorySetValidation.js";
 
 const maximumManifestBytes = 64 * 1024;
 export type NativeRepositoryBootstrapPolicy = {
@@ -51,19 +50,29 @@ export function parseNativeRootBootstrapManifestYaml(
     throw new UserError(`native bootstrap manifest is invalid YAML: ${document.errors[0]?.message ?? "unknown error"}`);
   }
   const manifest = exactRecord(document.toJS({ maxAliasCount: 0 }),
-    ["schemaVersion", "repositories"], ["upstreams", "policy"], "native bootstrap manifest");
-  const set = normalizeRepositorySet({
-    schemaVersion: manifest.schemaVersion, repositories: manifest.repositories, upstreams: manifest.upstreams
-  }, "native bootstrap manifest");
-  assertRepositorySetUrlsArePortable(set, "native bootstrap manifest");
-  const entry = set.repositories[repositoryId];
+    ["schemaVersion", "repositories"], ["policy"], "native bootstrap manifest");
+  if (manifest.schemaVersion !== 1 || !isRecord(manifest.repositories) || !Object.keys(manifest.repositories).length) {
+    throw new UserError("native bootstrap manifest requires schemaVersion 1 and nonempty repositories");
+  }
+  const entries = new Map<string, { ref?: string; protect: readonly string[] }>();
+  for (const [id, value] of Object.entries(manifest.repositories)) {
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(id)) throw new UserError("invalid repository ID in native bootstrap manifest");
+    const entry = exactRecord(value, ["protect"], ["ref"], `native bootstrap repository '${id}'`);
+    if (entry.ref !== undefined && typeof entry.ref !== "string") throw new UserError("repository ref must be a string");
+    if (!Array.isArray(entry.protect) || !entry.protect.length || entry.protect.length > 64
+      || !entry.protect.every((pattern: unknown) => typeof pattern === "string" && pattern.length > 0 && pattern.length <= 512 && !/[\x00-\x20\x7f]/.test(pattern))) {
+      throw new UserError("repository protect must contain 1–64 branch patterns");
+    }
+    entries.set(id, { ...(entry.ref === undefined ? {} : { ref: normalizeRepositoryRef(entry.ref) }), protect: entry.protect });
+  }
+  const entry = entries.get(repositoryId);
   if (!entry) throw new UserError("native bootstrap manifest does not name the selected repository");
   const normalizedRef = normalizeRepositoryRef(selectedRef);
   if (entry.ref !== undefined && entry.ref !== normalizedRef) {
     throw new UserError("native bootstrap selected ref conflicts with the reviewed root ref");
   }
   const branch = normalizedRef.slice("refs/heads/".length);
-  if (!entry.protectedPatterns.some((pattern) => matchesProtectionPattern(branch, pattern))) {
+  if (!entry.protect.some((pattern) => matchesProtectionPattern(branch, pattern))) {
     throw new UserError("native bootstrap root branch is not protected by the reviewed manifest");
   }
   return compileNativeRepositoryBootstrapPolicy({ repositoryId, protectedRef: normalizedRef, extensions: manifest.policy });

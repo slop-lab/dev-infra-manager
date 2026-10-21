@@ -217,15 +217,8 @@ async function createRootBundle(root: string) {
   const path = join(root, "source.bundle");
   await runFile("/usr/bin/git", ["init", "--initial-branch=main", source]);
   await runFile("mkdir", ["-m", "700", join(source, ".dim")]);
-  await writeFile(join(source, ".dim", "repos.yml"), `schemaVersion: 1
-repositories:
-  root: {url: https://example.test/root.git, root: true, ref: main, protect: [main]}
-nativeReview:
-  requiredReviewerIds: [owner]
-  pathReviewerRules: []
-  requiredJobs: []
-  ciRepositoryIds: [root]
-`);
+  // CLI import must not parse a repository manifest unless an integration explicitly selects it.
+  await writeFile(join(source, ".dim", "repos.yml"), "deliberately invalid: [ YAML\n");
   await writeFile(join(source, "README.md"), "native CLI root\n");
   await runFile("/usr/bin/git", ["-C", source, "add", "."]);
   await runFile("/usr/bin/git", ["-C", source, "-c", "user.name=DIM Test", "-c",

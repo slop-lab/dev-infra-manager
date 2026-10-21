@@ -11,6 +11,16 @@ access. Base configuration needs neither a backend-selection file nor a
 controller, native Git role, workflow or CI service. `DIM_WORKSPACE_IMAGE` and
 explicit command flags select the workspace image and resource bounds.
 
+Repository `.dim` configuration has component-specific ownership.
+`workspace.json` is a generic CLI prerequisite declaration; `repos.yml` belongs
+to the Native Git host plugin's explicitly selected reviewed-manifest bootstrap;
+`ci/runner.yml` belongs to the selected control-plane workflow compiler. The host
+core MUST NOT discover or apply plugin policy, repository connections or job
+syntax during ordinary workspace creation. Unknown repository files are checkout
+content, not hooks. Review matcher entrypoints and dependencies are explicitly
+selected by review policy. See the [repository configuration guide](../guides/repository-configuration.md)
+for formats and activation rules.
+
 Managed Project/service state defaults to `$HOME/.local/state/dim/managed`;
 `DIM_MANAGED_STATE_ROOT` overrides it. Managed source attachments refer to the
 core workspace UUID and store only host-side broker/connection configuration.
