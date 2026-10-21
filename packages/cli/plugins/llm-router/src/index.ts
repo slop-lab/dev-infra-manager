@@ -2,7 +2,8 @@ import { createLlmRouterClient, llmOperation, llmOperations, privateOperatorFile
 import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 const help = `dim llm-router OPERATION --connection /absolute/operator.json [options]
   capabilities | overview | accounts | health | projects | principals
-  account.create --account ID --reference NAME --provider codex|openai|anthropic [--endpoint URL --api-key-file PRIVATE_FILE]
+  account.create [--account ID --reference NAME] --provider codex|openai|anthropic [--endpoint URL --api-key-file PRIVATE_FILE]
+  account.rename --account ID --reference NAME
   account.login.start --account ID
   account.login.status --account ID --session UUID
   route.upsert --route ID --account ID --models-file PRIVATE_JSON
@@ -30,6 +31,7 @@ export async function runLlmRouterCommand(args: readonly string[], signal?: Abor
     take("--reference", "reference"); take("--provider", "provider"); take("--endpoint", "endpoint"); allowed.add("--api-key-file");
     if (flags.has("--api-key-file")) input.apiKey = (await privateOperatorFile(required("--api-key-file"))).trim();
   }
+  if (name === "account.rename") take("--reference", "reference");
   if (name === "account.login.status") take("--session", "sessionId");
   if (name === "route.upsert") { take("--route", "routeId"); allowed.add("--models-file"); input.models = JSON.parse(await privateOperatorFile(required("--models-file"))) as unknown; }
   if (name === "project.create") take("--route", "routeId");

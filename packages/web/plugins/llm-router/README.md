@@ -23,7 +23,11 @@ explicit model mappings. The route editor supports multiple models and changing
 the account without replacing its credentials. Account selection remains
 explicit; usage-based automatic account routing is a future policy. Read-only
 users can inspect accounts but cannot create accounts, start sign-in, or save
-routes.
+routes. **Connect Codex account** starts sign-in directly: no account ID or label
+is required. The router creates an internal ID and the authenticated email becomes
+the default display name. API connections also generate IDs automatically and
+accept an optional label. Rename an account later without changing its credentials,
+routes or recorded usage.
 
 The UI lists accounts/routes/models and projects, checks backend authentication
 without inference, creates projects, edits routing/limits, pauses or disables
@@ -31,6 +35,6 @@ admission, reads usage and request metadata, requests cancellation and revokes
 workspace principals. Unknown upstream outcomes remain explicit. Codex sign-in
 is performed on the provider authorization page and belongs to that account’s
 isolated backend, independently of the DIM Web session. The panel displays the
-authorization code and allows checking the connection; multiple accounts may
+authorization code and checks completion automatically; multiple accounts may
 authorize independently. The corresponding CLI plugin and Web plugin use the
 same typed operation API.

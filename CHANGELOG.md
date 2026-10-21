@@ -139,7 +139,10 @@ is implied by these source changes.
   host router adapter owns workspace fencing and guest gateway tokens.
   Connect multiple Codex accounts through device authorization and multiple
   OpenAI-compatible or Anthropic-compatible API accounts from Web or the operator
-  CLI. Keep each account's credentials and backend partition private and separate
+  CLI. Start Codex sign-in directly from Web without entering an account ID or
+  label, detect completion automatically and use the authenticated email as the
+  default display name. API labels are optional, and renaming preserves identity
+  and usage. Keep each account's credentials and backend partition private and separate
   from its model routes; account and route changes apply to new requests without
   restarting the router. Preserve authentication, request history and account
   attribution across local reinstall. Usage-based account selection remains a

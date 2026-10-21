@@ -69,8 +69,45 @@ it("routes live admissions through separate account workers and records account-
     const response = await fetch(`http://127.0.0.1:${address.port}/v1/chat/completions`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ model: model.id, messages: [] }) });
     expect(response.status).toBe(200); await response.json();
   }
+  await invokeRouterOperation(config, router.ledger, "account.rename", { accountId: "one", reference: "Renamed after usage" });
+  expect((await effectiveRouterConfig(config)).routes.find(({ id }) => id === "one")?.accountId).toBe("one");
   expect(router.ledger.database.prepare("SELECT account_id,outcome,input_tokens,output_tokens FROM requests ORDER BY rowid").all()).toEqual([
     { account_id: "one", outcome: "completed", input_tokens: 1, output_tokens: 2 },
     { account_id: "two", outcome: "completed", input_tokens: 1, output_tokens: 2 }
   ]);
+});
+
+it("enrolls accounts without manual metadata, derives a safe Codex email and keeps identity stable when renamed", async () => {
+  const { config, ledger, model } = await fixture();
+  const first = await invokeRouterOperation(config, ledger, "account.create", { provider: "codex" }) as { id: string; reference: string };
+  const second = await invokeRouterOperation(config, ledger, "account.create", { provider: "codex" }) as { id: string; reference: string };
+  expect(first).toMatchObject({ reference: "Codex", provider: "codex", status: "authorization_required" });
+  expect(first.id).toMatch(/^codex-[a-f0-9-]{36}$/);
+  expect(second.id).not.toBe(first.id);
+  const effective = await effectiveRouterConfig(config), account = effective.accounts.find(({ id }) => id === first.id)!;
+  const credential = { type: "codex", email: "person@example.com", refresh_token: "private-refresh-token", access_token: "private-access-token", account_id: "private-provider-identity" };
+  await writeFile(join(account.credentialDirectory!, "credential.json"), JSON.stringify(credential), { mode: 0o600 });
+  const summaries = await invokeRouterOperation(config, ledger, "accounts", {}) as { id: string; reference: string }[];
+  expect(summaries.find(({ id }) => id === first.id)).toMatchObject({ reference: "person@example.com", status: "connected" });
+  for (const value of ["private-refresh-token", "private-access-token", "private-provider-identity", account.credentialDirectory!, account.keyFile]) expect(JSON.stringify(summaries)).not.toContain(value);
+  await invokeRouterOperation(config, ledger, "route.upsert", { routeId: "codex", accountId: first.id, models: [model] });
+  const renamed = await invokeRouterOperation(config, ledger, "account.rename", { accountId: first.id, reference: " Work account " });
+  expect(renamed).toMatchObject({ id: first.id, reference: "Work account", status: "connected" });
+  const after = await effectiveRouterConfig(config);
+  expect(after.accounts.find(({ id }) => id === first.id)).toEqual({ ...account, reference: "Work account" });
+  expect(after.routes.find(({ id }) => id === "codex")?.accountId).toBe(first.id);
+  expect(JSON.parse(await readFile(join(account.credentialDirectory!, "credential.json"), "utf8"))).toEqual(credential);
+  await expect(invokeRouterOperation(config, ledger, "account.rename", { accountId: "existing", reference: "External" })).rejects.toThrow("configuration accounts");
+  await expect(invokeRouterOperation(config, ledger, "account.rename", { accountId: first.id, reference: "  " })).rejects.toThrow();
+  await expect(invokeRouterOperation(config, ledger, "account.create", { provider: "codex", accountId: "../escape" })).rejects.toThrow();
+});
+it("uses provider labels for API connections and ignores unsafe credential display metadata", async () => {
+  const { config, ledger } = await fixture();
+  const api = await invokeRouterOperation(config, ledger, "account.create", { provider: "openai", endpoint: "https://first.example/v1", apiKey: "private-key" }) as { id: string; reference: string };
+  expect(api).toMatchObject({ reference: "OpenAI compatible API", status: "connected" });
+  const codex = await addRouterAccount(config, { provider: "codex" });
+  await writeFile(join(codex.credentialDirectory!, "credential.json"), JSON.stringify({ type: "codex", email: "<script>@example.com", refresh_token: "private-token" }), { mode: 0o600 });
+  const summaries = await invokeRouterOperation(config, ledger, "accounts", {}) as { id: string; reference: string }[];
+  expect(summaries.find(({ id }) => id === codex.id)).toMatchObject({ reference: "Codex", status: "connected" });
+  expect(JSON.stringify(summaries)).not.toContain("private-key");
 });

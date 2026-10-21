@@ -35,12 +35,15 @@ async function changeCatalog<T>(config: RouterConfig, update: (catalog: Catalog)
     await rename(temporary, catalogPath(config)); return result;
   } finally { await rm(temporary, { force: true }); await guard.release(); }
 }
-export async function addRouterAccount(config: RouterConfig, input: { accountId: string; reference: string; provider: "codex" | "openai" | "anthropic"; endpoint?: string; apiKey?: string }): Promise<RouterAccount> {
+export function defaultAccountReference(provider: "codex" | "openai" | "anthropic"): string { return { codex: "Codex", openai: "OpenAI compatible API", anthropic: "Anthropic compatible API" }[provider]; }
+export async function addRouterAccount(config: RouterConfig, input: { accountId?: string; reference?: string; provider: "codex" | "openai" | "anthropic"; endpoint?: string; apiKey?: string }): Promise<RouterAccount> {
   let created: RouterAccount | undefined;
   try {
     return await changeCatalog(config, async (catalog) => {
-      if ([...config.accounts, ...catalog.accounts].some(({ id }) => id === input.accountId)) throw new Error("account already exists");
-      const account = await createManagedAccount({ ...config, accounts: [...config.accounts, ...catalog.accounts] }, input);
+      const accountId = input.accountId ?? `${input.provider}-${randomUUID()}`;
+      const reference = input.reference ?? defaultAccountReference(input.provider);
+      if ([...config.accounts, ...catalog.accounts].some(({ id }) => id === accountId)) throw new Error("account already exists");
+      const account = await createManagedAccount({ ...config, accounts: [...config.accounts, ...catalog.accounts] }, { ...input, accountId, reference });
       created = account; catalog.accounts.push(account); return account;
     });
   } catch (error) {
@@ -52,6 +55,16 @@ export async function addRouterAccount(config: RouterConfig, input: { accountId:
     }
     throw error;
   }
+}
+
+/** Labels are mutable; account IDs, credential partitions and usage attribution are not. */
+export async function renameRouterAccount(config: RouterConfig, accountId: string, reference: string): Promise<RouterAccount> {
+  if (!reference.trim() || reference.trim().length > 200) throw new Error("account label requires 1 to 200 characters");
+  return changeCatalog(config, async (catalog) => {
+    const account = catalog.accounts.find(({ id }) => id === accountId);
+    if (!account) throw new Error("managed account was not found; configuration accounts must be renamed in their configuration");
+    account.reference = reference.trim(); return account;
+  });
 }
 
 export async function upsertRouterRoute(config: RouterConfig, route: RouterRoute): Promise<RouterRoute> {

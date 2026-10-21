@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -128,15 +128,23 @@ async function saveLogin(path: string, value: AccountLogin): Promise<void> {
   const stage = join(path, `login-${value.sessionId}.tmp-${randomUUID()}`), target = join(path, `login-${value.sessionId}.json`);
   await writeFile(stage, JSON.stringify(value), { mode: 0o600, flag: "wx" }); await rename(stage, target);
 }
-async function hasCredential(path: string): Promise<boolean> {
+async function codexCredential(path: string): Promise<Record<string, unknown> | undefined> {
   for (const name of await readdir(join(path, "auth"))) {
     if (!name.endsWith(".json")) continue;
     const file = join(path, "auth", name), stat = await lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== process.geteuid?.() || stat.size > 1024 * 1024) throw new Error("unsafe managed OAuth credential");
-    const value: unknown = JSON.parse(await readFile(file, "utf8"));
-    if (typeof value === "object" && value !== null && "type" in value && value.type === "codex" && "refresh_token" in value && typeof value.refresh_token === "string" && value.refresh_token.length) return true;
+    const value: unknown = JSON.parse(await privateFile(file));
+    if (typeof value === "object" && value !== null && "type" in value && value.type === "codex" && "refresh_token" in value && typeof value.refresh_token === "string" && value.refresh_token.length) return value as Record<string, unknown>;
   }
-  return false;
+  return undefined;
+}
+async function hasCredential(path: string): Promise<boolean> { return (await codexCredential(path)) !== undefined; }
+/** Only the provider email is public; token claims and saved credential paths stay private. */
+export async function managedAccountEmail(config: RouterConfig, account: RouterAccount): Promise<string | undefined> {
+  if (account.provider !== "codex") return undefined;
+  const value = await codexCredential(directory(config, account.id));
+  const email = value?.email;
+  return typeof email === "string" && email.length <= 200 && /^[^\s@<>]+@[^\s@<>]+$/.test(email) ? email : undefined;
 }
 export async function startAccountLogin(config: RouterConfig, account: RouterAccount): Promise<AccountLogin> {
   if (account.provider !== "codex") throw new Error("device login is available only for managed Codex accounts");

@@ -2,8 +2,8 @@ import { llmOperation, llmOperations } from "@slop-lab/dim-llm-router-client";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
 import { object, parsePolicy, text, type RouterConfig } from "./config.js";
 import { type RouterLedger, type Usage } from "./ledger.js";
-import { effectiveRouterConfig, addRouterAccount, upsertRouterRoute } from "./account-catalog.js";
-import { accountLoginStatus, startAccountLogin, managedAccountConnected } from "./managed-backend.js";
+import { effectiveRouterConfig, addRouterAccount, renameRouterAccount, defaultAccountReference, upsertRouterRoute } from "./account-catalog.js";
+import { accountLoginStatus, startAccountLogin, managedAccountConnected, managedAccountEmail } from "./managed-backend.js";
 import type { RouterAccount, RouterRoute } from "./config.js";
 import { accountHealth } from "./operator.js";
 /** One implementation for local operator CLI and authenticated remote clients. */
@@ -19,6 +19,10 @@ export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: Ro
     case "account.create": {
       if (!config.accountManagement) throw new Error("account management is not configured");
       const account = await addRouterAccount(baseConfig, input as unknown as Parameters<typeof addRouterAccount>[1]); output = await accountSummary(config, account); break;
+    }
+    case "account.rename": {
+      if (!config.accountManagement) throw new Error("account management is not configured");
+      output = await accountSummary(config, await renameRouterAccount(baseConfig, text(input.accountId), text(input.reference))); break;
     }
     case "account.login.start": case "account.login.status": {
       const account = config.accounts.find(({ id }) => id === input.accountId);
@@ -65,5 +69,7 @@ export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: Ro
 
 async function accountSummary(config: RouterConfig, account: RouterAccount) {
   const connected = account.provider !== "codex" || await managedAccountConnected(config, account);
-  return { id: account.id, reference: account.reference, provider: account.provider ?? "backend", status: !account.provider ? "configured" : connected ? "connected" : "authorization_required" };
+  const email = account.provider === "codex" && connected ? await managedAccountEmail(config, account) : undefined;
+  const reference = account.provider && account.reference === defaultAccountReference(account.provider) && email ? email : account.reference;
+  return { id: account.id, reference, provider: account.provider ?? "backend", status: !account.provider ? "configured" : connected ? "connected" : "authorization_required" };
 }
