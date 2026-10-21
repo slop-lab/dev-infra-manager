@@ -28,8 +28,9 @@ installer commands use the same implementation. Without mise, add the printed
 facade directory to PATH.
 Preparation rejects dirty source by default; use a reviewed clean commit.
 
-`install-local` also installs the matched Web UI and the LLM router, execution
-and Native Git Web plugins in a separate runtime under `DIM_DATA_HOME/web/runtime`. It configures the built-in
+`install-local` also installs the matched Web UI and the LLM router, execution,
+Native Git and Workspace tools Web plugins in a separate runtime under
+`DIM_DATA_HOME/web/runtime`. It configures the built-in
 `local` host and creates a browser account on first installation. With user
 systemd available, `dim-web.service` starts at `http://127.0.0.1:9081`; otherwise
 installation prints the command to serve it manually. Read the initial username

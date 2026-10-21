@@ -22,7 +22,8 @@ and explicitly select them in the private Web configuration:
       "config": { "connectionFile": "/absolute/operator/llm.json" }
     },
     { "package": "@slop-lab/dim-web-plugin-execution" },
-    { "package": "@slop-lab/dim-web-plugin-native-git" }
+    { "package": "@slop-lab/dim-web-plugin-native-git" },
+    { "package": "@slop-lab/dim-web-plugin-agent-tools" }
   ]
 }
 ```
@@ -54,10 +55,18 @@ it cannot change connection paths or grant account authority.
 Reconnect is also available for an active feature after service replacement.
 Mounted forms retain drafts; refresh the feature's data after reconnecting.
 
-`install-local` installs the three Web plugins and their matching dependency
+`install-local` installs these Web plugins and their matching dependency
 closure in the separate `DIM_DATA_HOME/web/runtime` runtime. It adds missing
 selections while preserving accounts and all existing plugin configuration.
 Explicit feature configuration always takes precedence over controller discovery.
+The Workspace tools panel discovers the optional `agent-tools` host plugin and
+its workspaces. In a running workspace, explicitly install OpenCode or Codex,
+then start, inspect or stop the OpenCode server. Server actions bind the selected
+workspace UUID so a stale page cannot stop a replacement workspace's process.
+Tool installation and server changes require the operator role. The server stays
+on workspace loopback; the panel explains approved ingress or local forwarding
+and the workspace-private credential location. No tool credential is returned
+to the browser, and starting a server does not grant public network exposure.
 Only a newly added LLM router selection discovers the conventional private
 `XDG_CONFIG_HOME/dim/llm/operator.json` connection automatically. Native Git and
 Execution discover their own connections through configured controllers. Execution

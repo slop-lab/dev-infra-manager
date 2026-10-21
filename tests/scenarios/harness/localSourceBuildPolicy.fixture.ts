@@ -41,6 +41,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
     "packages/web/plugins/llm-router",
     "packages/web/plugins/execution",
     "packages/web/plugins/native-git",
+    "packages/web/plugins/agent-tools",
     "packages/review-tracing",
     "packages/review-tracing-node",
     "packages/execution-scheduler",

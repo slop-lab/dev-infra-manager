@@ -25,6 +25,13 @@ user action. Setup neither logs in nor copies credentials from the DIM host.
 `dim tools setup` works on the selected local or SSH host and streams its
 progress through the normal workspace transport.
 
+The optional `@slop-lab/dim-web-plugin-agent-tools` package adds a **Workspace
+tools** panel to DIM Web. It discovers this host plugin automatically through
+configured controllers. Select a running workspace to inspect or explicitly
+install OpenCode/Codex and start, inspect or stop its OpenCode server. Mutations
+require an operator Web session; every request binds the workspace's current ID.
+No repository configuration or extra control-plane connection is required.
+
 ## Continue after restart
 
 Opt in when launching the tool:
@@ -64,6 +71,9 @@ continuation command, use `dim-workspace session register -- COMMAND...`.
 
 ```sh
 dim tools server development
+# Inspect or stop only the server owned by this helper:
+dim tools server development status --json
+dim tools server development stop --json
 ```
 
 Only `opencode serve` runs in the workspace, bound to its loopback port 4096.

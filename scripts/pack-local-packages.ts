@@ -36,6 +36,7 @@ export const packageDirectories = [
   "packages/web/plugins/llm-router/dist",
   "packages/web/plugins/execution/dist",
   "packages/web/plugins/native-git/dist",
+  "packages/web/plugins/agent-tools/dist",
   "packages/control-plane/plugins/ci-workflows/dist",
   "packages/contracts/external-url/dist",
   "packages/host/plugins/dns-cloudflare/dist",

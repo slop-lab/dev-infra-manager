@@ -92,7 +92,7 @@ The host CLI in that fixture is synthetic; HTTP authentication is real. It does 
 
 ## Feature plugins
 
-LLM routing, execution and Native Git review belong to optional Web plugins.
+LLM routing, execution, Native Git review and workspace tools belong to optional Web plugins.
 The console shell provides authentication, sessions, origin and CSRF checks,
 workspace lifecycle controls, feature discovery and trusted packaged assets.
 It has no required control-plane package or built-in service API proxy.

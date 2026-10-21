@@ -860,6 +860,25 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/web/plugins/agent-tools:
+    dependencies:
+      '@slop-lab/dim-contracts-operations':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/operations
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-web':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/web/plugins/execution:
     dependencies:
       '@slop-lab/dim-contracts-ci':
@@ -1021,6 +1040,9 @@ importers:
       '@slop-lab/dim-review-tracing-node':
         specifier: workspace:*
         version: link:../packages/review-tracing-node
+      '@slop-lab/dim-web-plugin-agent-tools':
+        specifier: workspace:*
+        version: link:../packages/web/plugins/agent-tools
       '@slop-lab/dim-web-plugin-execution':
         specifier: workspace:*
         version: link:../packages/web/plugins/execution

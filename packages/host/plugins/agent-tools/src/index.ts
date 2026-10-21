@@ -1,6 +1,7 @@
 import { deployToolHelpers, inspectTools } from "./integration.js";
 import { UserError } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
+import { runToolsConsole } from "./console.js";
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "agent-tools",
@@ -16,6 +17,10 @@ export const hostPlugin: WorkspaceHostPlugin = {
   },
   commands: [{ name: "tools", description: "Set up and run user-owned coding-agent tools without repository bootstrap files" }],
   async run(args, context) {
+    if (args[0] === "tools" && args[1] === "console") {
+      await runToolsConsole(args.slice(2), context);
+      return;
+    }
     const [name, operation, workspace, ...rest] = args;
     if (name !== "tools" || !workspace) throw new UserError("usage: dim tools setup|run|server WORKSPACE [TOOL] [ARGS...]");
     if (operation === "setup") {
