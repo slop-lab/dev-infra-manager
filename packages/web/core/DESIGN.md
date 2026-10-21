@@ -48,6 +48,12 @@ settings under advanced options. Group resource edits, recreation and discard
 under workspace settings. Discard requires confirmation naming the workspace and
 persistent data; cancellation sends no mutation and reports no success.
 
+Each host owns its refresh, name search and state filter. Filtering hides rows
+without replacing their DOM, so open settings, focus and drafts survive. A filtered
+empty result says that no rows match and offers a clear-filter action; it is not the
+same as an empty host. Host refreshes are serialized. A refresh requested after a
+mutation always performs a later read instead of sharing an older in-flight read.
+
 Refresh and unrelated actions preserve unfinished creation and resource drafts.
 Errors belong beside the affected form, row or host and explain what was kept
 and how to retry. One unavailable host does not erase results for other hosts.
@@ -74,6 +80,19 @@ When a write response is lost, the outcome may be unknown. Tell the user to chec
 current state rather than inventing success or rejection. Operations with explicit
 idempotency keys, such as execution retry, reuse the same key when retrying that
 logical request, including after response loss.
+
+Workspace mutations with a lost response, or an accepted write followed by a
+failed workspace read, disable repeat submission and expose Check current state.
+A successful explicit check re-enables lifecycle and resource actions. Creation
+remains blocked for the same name when that name exists after reconciliation;
+finding it does not prove which request created it. Known validation and domain
+rejections remain editable and retryable, except a known name conflict stays
+blocked until the name changes or a current-state read shows it absent.
+
+Resource fields show the last host-returned limits, mark unsaved edits and provide
+a scoped reset. Guidance includes concrete CPU, memory and PID examples plus
+`unlimited`. Removing a limit may require host-side runtime replacement while data
+is kept; the UI never claims replacement occurred unless host state says so.
 
 Load independent sections independently. Requests and workspace access can show
 their own results even when the other query is unavailable. Retain previously
