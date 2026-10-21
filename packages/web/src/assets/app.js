@@ -51,8 +51,9 @@ function showSignedOut(message = "") {
   elements.loginView.hidden = false;
   elements.loginError.textContent = message;
   elements.alertAnnouncer.textContent = message;
-  elements.username.setAttribute("aria-invalid", String(message.startsWith("Sign-in")));
-  elements.password.setAttribute("aria-invalid", String(message.startsWith("Sign-in")));
+  const invalidCredentials = message.startsWith("Sign-in failed.");
+  elements.username.setAttribute("aria-invalid", String(invalidCredentials));
+  elements.password.setAttribute("aria-invalid", String(invalidCredentials));
   elements.username.focus();
 }
 
@@ -73,7 +74,7 @@ function showWorkspace(activeSession) {
   elements.username.removeAttribute("aria-invalid");
   elements.password.removeAttribute("aria-invalid");
 
-  elements.workspaceTitle.focus();
+  (activeSession.capabilities.review ? elements.workspaceTitle : document.getElementById("operations-title"))?.focus();
 }
 
 /** @param {HTMLButtonElement} button */
@@ -173,7 +174,11 @@ elements.loginForm.addEventListener("submit", async (event) => {
     const result = await request("/v1/session", operation, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: elements.username.value, password: elements.password.value }) });
     if (!operations.isCurrent(operation)) return;
     const activeSession = result.ok ? parseSession(result.body) : null;
-    if (activeSession === null) return showSignedOut("Sign-in failed. Check your credentials and try again.");
+    if (activeSession === null) {
+      const error = record(result.body);
+      const originMessage = result.status === 403 && text(error?.error)?.startsWith("Open this console at ") ? text(error?.error) : null;
+      return showSignedOut(originMessage ?? (result.status === 0 ? "Cannot reach this console. Check your connection and try again." : result.status === 503 ? "Sign-in is busy. Wait a moment and try again." : "Sign-in failed. Check your credentials and try again."));
+    }
     showWorkspace(activeSession);
   } finally {
     if (operations.isCurrent(operation)) {

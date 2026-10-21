@@ -104,7 +104,11 @@ is implied by these source changes.
   CI jobs and bounded diagnostics through a separate read-only query role.
 - Provide the separate `dim-web` operations application for workspace creation,
   lifecycle, resources, CI diagnostics and authoritative Git review. Separate
-  read, operator and reviewer roles. Deliver external Git events through signed,
+  read, operator and reviewer roles. Organize workspaces by host, disclose
+  creation and advanced settings on demand, preserve drafts across refresh and
+  failed operations, and provide scoped recovery and explicit discard cancellation.
+  Login origin failures identify the configured console URL.
+  Deliver external Git events through signed,
   durable webhook subscriptions with bounded retry and restart recovery.
 - Keep LLM routing/account governance, Incus VM workspaces and SPICE consoles,
   durable TCP/UDP tunnels, mirrors, agent tools and disposable workspace checks

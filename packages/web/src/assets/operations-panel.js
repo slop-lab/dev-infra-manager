@@ -1,5 +1,6 @@
 // @ts-check
 import { record, text } from "./review-data.js";
+import { createWorkspaceHosts } from "./workspace-hosts.js";
 /** @param {string} id */
 function element(id) {
   const value = document.getElementById(id);
@@ -34,10 +35,12 @@ async function request(path, body, timeout = 35_000) {
   const response = await fetch(path, { method: body === undefined ? "GET" : "POST", credentials: "same-origin",
     headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json", "x-dim-csrf": active.csrfToken }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeout) });
-  if (!response.ok) throw new Error("operation failed");
+  if (!response.ok) throw new Error(response.status === 401 ? "session expired" : "operation failed");
   /** @type {unknown} */ const value = await response.json(); return value;
 }
-export function clearOperations() { session = null; epoch++; retries.clear(); panel.hidden = true; hosts.replaceChildren(); jobs.replaceChildren(); workersView.replaceChildren(); reviews.replaceChildren(); details.textContent = ""; element("view-navigation").hidden = true; }
+const workspaceHosts = createWorkspaceHosts(hosts, request);
+
+export function clearOperations() { session = null; epoch++; retries.clear(); panel.hidden = true; workspaceHosts.clear(); element("operations-consoles").replaceChildren(); jobs.replaceChildren(); workersView.replaceChildren(); reviews.replaceChildren(); details.textContent = ""; element("view-navigation").hidden = true; }
 /** @param {import("./types.js").Session} active @param {(id:string, repositoryId:string)=>void} open */
 export function showOperations(active, open) {
   clearOperations(); session = active; openReview = open; panel.hidden = !active.capabilities.operations && !active.capabilities.review;
@@ -46,26 +49,24 @@ export function showOperations(active, open) {
   element("operations-ci-section").hidden = true;
   element("operations-execution-section").hidden = true;
   if (active.capabilities.review) panel.hidden = true;
-  if (active.capabilities.operations || active.capabilities.review) void refresh().catch(() => { status.textContent = "Some services are unavailable. Refresh after checking their connected generation."; });
+  if (active.capabilities.operations || active.capabilities.review) void refresh().catch(() => { status.textContent = "Some services could not refresh. Your workspace drafts are kept; retry the affected host below."; });
 }
 async function refresh() {
   const active = session, selected = epoch; if (!active) return;
-  hosts.replaceChildren(); jobs.replaceChildren(); workersView.replaceChildren(); reviews.replaceChildren(); details.textContent = "";
+  jobs.replaceChildren(); workersView.replaceChildren(); reviews.replaceChildren(); details.textContent = "";
   status.textContent = "Loading services…";
+  let hostsUnavailable = false;
   /** @type {Promise<void>[]} */ const loads = [];
   if (active.capabilities.operations) loads.push((async () => {
     const state = record(await request("/v1/operations/status")); if (selected !== epoch) return;
-    for (const host of rows(state?.hosts)) {
-      const id = text(host.id); if (!id) continue;
-      const section = document.createElement("section"); section.className = "operations-card"; hosts.append(section); line(section, `Host: ${id}`);
-      if (active.roles.includes("operator")) renderCreateWorkspace(section, id);
-      const workspaces = rows(await request(`/v1/operations/hosts/${encodeURIComponent(id)}/workspaces`)); if (selected !== epoch) return;
-      for (const workspace of workspaces) renderWorkspace(section, id, workspace, active.roles.includes("operator"));
-    }
+    const hostLoad = workspaceHosts.refresh(rows(state?.hosts).map((host) => text(host.id)).filter((id) => id !== null), active.roles.includes("operator"));
+    const consoles = element("operations-consoles"); consoles.replaceChildren();
     for (const console of rows(state?.consoles)) {
       const name = text(console.name), url = text(console.url); if (!name || !url) continue;
-      const link = document.createElement("a"); link.textContent = name; link.href = url; link.rel = "noopener noreferrer"; link.target = "_blank"; hosts.append(link);
+      const link = document.createElement("a"); link.textContent = name; link.href = url; link.rel = "noopener noreferrer"; link.target = "_blank"; consoles.append(link);
     }
+    const hostsReady = await hostLoad;
+    if (selected !== epoch) return;
     if (active.roles.includes("operator") && state?.executionOperator === true) {
       element("operations-execution-section").hidden = false;
       const workers = rows(await request("/v1/operations/execution/workers")); if (selected !== epoch) return;
@@ -76,6 +77,7 @@ async function refresh() {
       const list = rows(await request("/v1/operations/ci/jobs")); if (selected !== epoch) return;
       for (const job of list) renderJob(job, active.roles.includes("operator") && state?.executionOperator === true);
     }
+    hostsUnavailable = !hostsReady;
   })());
   if (active.capabilities.review) loads.push((async () => {
     const lists = await Promise.all(active.repositoryIds.map(async (repositoryId) => rows(await request(`/v1/projects/${active.projectId}/repositories/${repositoryId}/reviews`)).map((review) => ({ ...review, repositoryId }))));
@@ -91,64 +93,7 @@ async function refresh() {
     }
   })());
   const results = await Promise.allSettled(loads); if (selected !== epoch) return;
-  status.textContent = results.some((result) => result.status === "rejected") ? "Some services are unavailable. Refresh after checking their connected generation." : "Services refreshed.";
-}
-/** @param {HTMLElement} parent @param {string} host */
-function renderCreateWorkspace(parent, host) {
-  const form = document.createElement("form"); form.className = "operations-create"; parent.append(form);
-  const heading = document.createElement("h3"); heading.textContent = "Create workspace"; form.append(heading);
-  /** @param {string} name @param {string} label @param {string} [value] */
-  function input(name, label, value = "") {
-    const field = document.createElement("label"), control = document.createElement("input");
-    field.textContent = `${label} `; control.name = name; control.value = value;
-    control.setAttribute("aria-label", `${label} on ${host}`); field.append(control); form.append(field); return control;
-  }
-  const source = input("source", "Git URL or dim://PROJECT"); source.type = "url"; source.required = true; source.placeholder = "ssh://git@example.com/project.git";
-  const name = input("name", "Workspace name"); name.required = true; name.pattern = "[a-z0-9][a-z0-9._-]{0,47}";
-  const repositories = input("repositories", "Managed repositories (comma separated, optional)");
-  const workingDirectory = input("workingDirectory", "Managed working repository (optional)");
-  const ref = input("ref", "Git ref (optional)");
-  const runtime = input("runtime", "Runtime", "container"); runtime.required = true; runtime.pattern = "[a-z][a-z0-9-]{0,31}";
-  const image = input("image", "Image (optional)"); image.placeholder = "Container image or VM fingerprint";
-  const cpuCount = input("cpuCount", "CPU limit (optional)"), memory = input("memory", "Memory limit (optional)"), pidsLimit = input("pidsLimit", "PID limit (optional)");
-  line(form, "Empty limits use the host defaults. Use unlimited to remove a host limit.");
-  button(form, `Create workspace on ${host}`, async () => {
-    if (!form.reportValidity()) throw new Error("complete the workspace fields");
-    /** @type {Record<string,string>} */ const resources = {};
-    for (const field of [cpuCount, memory, pidsLimit]) if (field.value.trim()) resources[field.name] = field.value.trim();
-    await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces/create`, {
-      ...(repositories.value.trim() ? { repositories: repositories.value.split(",").map((id) => id.trim()) } : {}),
-      ...(workingDirectory.value.trim() ? { workingDirectory: workingDirectory.value.trim() } : {}),
-      source: source.value.trim(), name: name.value.trim(), runtime: runtime.value.trim(),
-      ...(ref.value.trim() ? { ref: ref.value.trim() } : {}), ...(image.value.trim() ? { image: image.value.trim() } : {}),
-      ...(Object.keys(resources).length ? { resources } : {})
-    }, 300_000);
-    await refresh();
-  });
-  form.addEventListener("submit", (event) => event.preventDefault());
-}
-/** @param {HTMLElement} parent @param {string} host @param {Record<string,unknown>} workspace @param {boolean} canOperate */
-function renderWorkspace(parent, host, workspace, canOperate) {
-  const name = text(workspace.name), expectedId = text(workspace.id); if (!name || !expectedId) return;
-  const row = document.createElement("div"); row.className = "operations-row"; parent.append(row);
-  const resources = record(workspace.resources);
-  line(row, `${name} · ${text(workspace.runtime) ?? ""} · ${text(workspace.phase) ?? ""} / ${text(workspace.runtimeStatus) ?? ""}`);
-  line(row, `CPU ${text(resources?.cpuCount) ?? ""}, memory ${text(resources?.memory) ?? ""}, PIDs ${text(resources?.pidsLimit) ?? ""}`);
-  if (!canOperate) return;
-  for (const action of ["start", "stop", "restart", "recreate", "discard"]) button(row, `${action} ${name}`, async () => {
-    if (action === "discard" && !window.confirm(`Discard ${name} and its persistent data?`)) return;
-    await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces`, { name, expectedId, action }); await refresh();
-  });
-  const form = document.createElement("form"); row.append(form);
-  /** @type {Record<string,string>} */ const fields = {};
-  for (const [key, label] of [["cpuCount", "CPUs"], ["memory", "Memory"], ["pidsLimit", "PIDs"]]) {
-    if (!key || !label) continue;
-    const field = document.createElement("label"), input = document.createElement("input"); field.textContent = `${label} `;
-    input.value = text(resources?.[key]) ?? ""; input.name = key; input.setAttribute("aria-label", `${label} for ${name}`);
-    input.addEventListener("input", () => { fields[key] = input.value; }); field.append(input); form.append(field);
-  }
-  button(form, `Apply resources for ${name}`, async () => { await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces`, { name, expectedId, action: "resources", resources: fields }); await refresh(); });
-  form.addEventListener("submit", (event) => event.preventDefault());
+  status.textContent = results.some((result) => result.status === "rejected") ? "Some services could not refresh. Workspace drafts are kept. Refresh services to retry." : hostsUnavailable ? "Service connections loaded. Workspace status is shown per host." : "Services refreshed.";
 }
 /** @param {Record<string,unknown>} job @param {boolean} canOperate */
 function renderJob(job, canOperate) {

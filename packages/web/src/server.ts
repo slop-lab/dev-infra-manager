@@ -191,6 +191,9 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
 }
 
 async function login(context: RequestContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
+  if (request.headers.origin !== context.config.publicOrigin) {
+    throw new HttpResponseError(403, `Open this console at ${context.config.publicOrigin} and sign in again. The address must match the configured public URL.`);
+  }
   requireOrigin(context.config, request);
   context.sessions.pruneExpired();
   let input;

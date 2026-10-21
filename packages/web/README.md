@@ -55,6 +55,34 @@ workspace UUID through the public CLI's `--expect-id` guard; the host checks it
 inside its workspace lock before changing state. A reused name cannot redirect
 an action to a replacement workspace.
 
+The workspace list is the starting view. Choose **New workspace** on a host;
+only the repository URL and name are needed for the default container runtime.
+**Advanced options** contains Git refs, managed repository selection, runtime,
+image and resource limits. Refreshing services or acting on another workspace
+keeps unfinished creation and resource edits. Cancel closes the creation form
+without clearing its draft; successful creation resets it after the host accepts
+the request. Errors stay beside the affected form or host, with a retry for host
+lookup. **Settings** holds resource edits, recreation and explicit discard
+confirmation; canceling discard sends no mutation.
+
+Sign in at the exact configured `publicOrigin`, including hostname and port.
+`localhost` and `127.0.0.1` are different browser origins. A rejected login from
+another origin identifies the configured URL without weakening the origin check.
+
+The disposable browser regression covers workspace creation/recovery, retained
+drafts, resource updates, discard cancellation, host retry, read-only access and
+existing execution operations. From the repository root after dependencies are
+installed:
+
+```sh
+DIM_CHROMIUM=/absolute/path/to/chromium node \
+  --import ./tests/node_modules/tsx/dist/loader.mjs --conditions=dim-source \
+  tests/web/operations.e2e.ts
+```
+
+The host CLI in that fixture is synthetic; HTTP authentication and execution
+services are real. It does not replace Docker/Sysbox runtime verification.
+
 ## Shared execution, CI and managed Git
 
 After installing the optional control-plane administration package and connecting the control plane,

@@ -30,15 +30,22 @@ export async function createOperationsBrowserFixture(options: { ci?: boolean } =
     const queued = ci.store.enqueue(event("queued"));
     for (const role of ["query", "operator"] as const) await writeFile(join(root, role === "query" ? "ci-query.json" : "execution-operator.json"), JSON.stringify({ schemaVersion: 1, role, endpoint, generationId: generation, credential: config.credentials[role] }), { mode: 0o600 });
     const workspace = { id: randomUUID(), name: "development", runtime: "container", phase: "running", runtimeStatus: "running", resources: { cpuCount: "1", memory: "2g", pidsLimit: "512" } };
-    const state = join(root, "workspace.json"), executable = join(root, "dim"); await writeFile(state, JSON.stringify([workspace]));
+    const state = join(root, "workspace.json"), executable = join(root, "dim"), failures = join(root, "failures.json"), actions = join(root, "actions.json");
+    await writeFile(state, JSON.stringify([workspace])); await writeFile(failures, "{}"); await writeFile(actions, "[]");
     await writeFile(executable, `#!${process.execPath}
 import fs from 'node:fs';import { randomUUID } from 'node:crypto';
-const path=${JSON.stringify(state)}, rows=JSON.parse(fs.readFileSync(path,'utf8')), args=process.argv.slice(2);
+const path=${JSON.stringify(state)}, failuresPath=${JSON.stringify(failures)}, actionsPath=${JSON.stringify(actions)}, rows=JSON.parse(fs.readFileSync(path,'utf8')), args=process.argv.slice(2);
 const flag=(name,fallback)=>{const index=args.indexOf(name);return index<0?fallback:args[index+1]};
 if(args[0]!=='--host'||args[1]!=='configured-host')process.exit(1);
+const failures=JSON.parse(fs.readFileSync(failuresPath,'utf8'));
+if(failures[args[2]]){delete failures[args[2]];fs.writeFileSync(failuresPath,JSON.stringify(failures));console.error('Temporary host connection failure');process.exit(1);}
+const actions=JSON.parse(fs.readFileSync(actionsPath,'utf8'));actions.push(args[2]);fs.writeFileSync(actionsPath,JSON.stringify(actions));
 let selected=rows.find(row=>row.name===args[3]);
 if(args.includes('--expect-id')&&flag('--expect-id')!==selected?.id)process.exit(1);
 if(args[2]==='stop'){selected.phase='stopped';selected.runtimeStatus='stopped';}
+if(['start','restart','recreate'].includes(args[2])){selected.phase='running';selected.runtimeStatus='running';}
+if(args[2]==='discard'){rows.splice(rows.indexOf(selected),1);}
+if(args[2]==='resources'){for(const [key,option] of [['cpuCount','--cpus'],['memory','--memory'],['pidsLimit','--pids']])if(args.includes(option))selected.resources[key]=flag(option);}
 if(args[2]==='create'){
  selected={id:randomUUID(),name:args[4],source:args[3],runtime:flag('--runtime','container'),image:flag('--image'),phase:'running',runtimeStatus:'running',resources:{cpuCount:flag('--cpus','2'),memory:flag('--memory','4g'),pidsLimit:flag('--pids','2048')}};
  rows.push(selected);
@@ -57,7 +64,11 @@ fs.writeFileSync(path,JSON.stringify(rows));console.log(JSON.stringify(args[2]==
     await writeFile(file, JSON.stringify(generated), { mode: 0o600 });
     const web = await createReviewerWebServerFromConfigFile(file);
     return { origin: await web.listen(), username: browser.username, password: browser.password, queuedId: queued.id,
-      workspace: async () => (JSON.parse(await readFile(state, "utf8")) as Array<{ id: string; name: string; phase: string }>).find((row) => row.name === "development")!,
+      failNextCreate: async () => writeFile(failures, JSON.stringify({ create: true })),
+      failNextList: async () => writeFile(failures, JSON.stringify({ ls: true })),
+      clearWorkspaces: async () => writeFile(state, "[]"),
+      actions: async () => JSON.parse(await readFile(actions, "utf8")) as string[],
+      workspace: async () => (JSON.parse(await readFile(state, "utf8")) as Array<{ id: string; name: string; phase: string; resources: { cpuCount: string; memory: string; pidsLimit: string } }>).find((row) => row.name === "development")!,
       createdWorkspace: async () => (JSON.parse(await readFile(state, "utf8")) as Array<{ name: string; source: string; runtime: string; image: string; resources: { cpuCount: string } }>).find((row) => row.name === "browser-created"),
       execution: () => ci.store.get(queued.id), ci,
       async close() { await web.close(); await ci.close(); await rm(root, { recursive: true, force: true }); } };

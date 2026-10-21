@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Review immutable DIM repository evidence in the configured Project scope">
+    <meta name="description" content="Manage DIM development workspaces, execution and reviewed changes">
     <title>DIM Console</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/assets/tokens.css">
@@ -11,7 +11,7 @@
     <script src="/assets/app.js" type="module"></script>
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to reviewer workspace</a>
+    <a class="skip-link" href="#main">Skip to main content</a>
     <header class="site-header">
       <div class="header-inner">
         <div class="identity" aria-label="DIM Console">
@@ -41,7 +41,7 @@
       <section id="login-view" class="centered-stage" aria-labelledby="login-title" hidden>
         <div class="auth-card">
           <div class="auth-intro">
-            <p class="eyebrow">Reviewer access</p>
+            <p class="eyebrow">Development console</p>
             <h1 id="login-title">Sign in to DIM</h1>
             <p>Use your configured browser account to access development hosts, execution results and reviewed changes.</p>
           </div>
@@ -49,7 +49,7 @@
             <div class="field">
               <label for="username">Username</label>
           <input id="username" name="username" type="text" autocomplete="username" required aria-describedby="username-hint login-error">
-              <p id="username-hint" class="field-hint">Use the local account configured for this reviewer service.</p>
+              <p id="username-hint" class="field-hint">Use the browser account configured for this console.</p>
             </div>
             <div class="field">
               <label for="password">Password</label>
@@ -66,9 +66,10 @@
       </section>
 
       <section id="operations-panel" class="operations-panel" aria-labelledby="operations-title" hidden>
-        <div class="section-heading"><h1 id="operations-title">Development operations</h1><button id="operations-refresh" class="button button-secondary" type="button">Refresh services</button></div>
+        <div class="operations-heading"><div><p class="eyebrow">Development console</p><h1 id="operations-title" tabindex="-1">Workspaces</h1><p class="operations-intro">Your development environments, grouped by host.</p></div><button id="operations-refresh" class="button button-secondary" type="button">Refresh services</button></div>
         <p id="operations-message" role="status"></p>
         <div id="operations-hosts"></div>
+        <div id="operations-consoles" class="operations-consoles" aria-label="Connected consoles"></div>
         <section id="operations-ci-section" hidden><h2>CI executions</h2><div id="operations-jobs"></div>
         <pre id="operations-details" class="operations-diagnostics" aria-label="Execution diagnostics"></pre></section>
         <section id="operations-execution-section" hidden><h2>Execution worker capacity</h2><div id="operations-workers"></div></section>
