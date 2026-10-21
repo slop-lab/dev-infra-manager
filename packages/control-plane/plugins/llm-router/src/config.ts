@@ -5,7 +5,7 @@ import { isIP } from "node:net";
 
 export interface RouterModel { id: string; name: string; api: "responses" | "chat"; context: number; output: number }
 export interface RouterAccount { id: string; reference: string; endpoint: string; keyFile: string; credentialDirectory?: string; provider?: "codex" | "openai" | "anthropic" }
-export interface RouterRoute { id: string; accountId: string; models: RouterModel[] }
+export interface RouterRoute { id: string; accountId: string; models: RouterModel[] | "all" }
 export interface RouterLimits { concurrent: number; requestsPerUtcDay: number; requestBytes: number; responseBytes: number; captureBytesPerProject: number; deadlineMilliseconds: number }
 export interface ProjectPolicy { allowedRoutes: string[]; limits: RouterLimits; captureMode: "required" | "best-effort" | "metadata";
   tokenMode: "observe" | "estimate"; tokensPerUtcDay?: number; estimatedTokensPerRequest?: number }
@@ -96,9 +96,9 @@ export function parseConfig(value: unknown): RouterConfig {
   if (new Set(hostIssuers.map(({ id }) => id)).size !== hostIssuers.length) throw new Error("duplicate host issuer");
   const routes = row.routes.map((value: unknown): RouterRoute => {
     const route = object(value); exact(route, ["id", "accountId", "models"]);
-    if (!Array.isArray(route.models) || !route.models.length || !accounts.some((account) => account.id === route.accountId)) throw new Error("route requires models and an exclusive account reference");
-    const models = route.models.map(parseModel);
-    if (new Set(models.map((model) => model.id)).size !== models.length) throw new Error("duplicate model");
+    if (route.models !== "all" && (!Array.isArray(route.models) || !route.models.length) || !accounts.some((account) => account.id === route.accountId)) throw new Error("route requires models and an exclusive account reference");
+    const models = route.models === "all" ? "all" : (route.models as unknown[]).map(parseModel);
+    if (models !== "all" && new Set(models.map((model) => model.id)).size !== models.length) throw new Error("duplicate model");
     return { id: identifier(route.id), accountId: identifier(route.accountId), models };
   });
   if (new Set(routes.map((route) => route.id)).size !== routes.length || typeof listen.host !== "string" || !isIP(listen.host)) throw new Error("invalid routes or listen address");

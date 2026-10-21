@@ -152,8 +152,10 @@ is implied by these source changes.
   label, detect completion automatically and use the authenticated email as the
   default display name. API labels are optional, and renaming preserves identity
   and usage. Keep each account's credentials and backend partition private and separate
-  from its model routes; account and route changes apply to new requests without
-  restarting the router. Preserve authentication, request history and account
+  from its model routes. Routes can allow the account’s whole discovered model
+  catalog or an explicit list; Web and CLI offer both choices. OpenCode loads
+  current route models through its scoped gateway at startup. Account and route
+  changes apply to new requests without restarting the router. Preserve authentication, request history and account
   attribution across local reinstall. Usage-based account selection remains a
   separate routing feature.
   Configured workspace OpenCode/OMO

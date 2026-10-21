@@ -11,6 +11,7 @@ import { UsageObserver } from "./usage.js";
 import { handleRouterOperator } from "./operator-http.js";
 import { effectiveRouterConfig } from "./account-catalog.js";
 import { ensureManagedBackend, closeManagedBackends } from "./managed-backend.js";
+import { resolveRouteModels } from "./model-catalog.js";
 import { RequestError, body, send } from "./http.js";
 
 export async function createRouter(baseConfig: RouterConfig) {
@@ -68,9 +69,10 @@ export async function createRouter(baseConfig: RouterConfig) {
       if (url.pathname.endsWith("/revoke")) { ledger.revoke(principalId); ledger.audit(issuer.id, "host.principal.revoke", principalId, { projectId, workspaceId, routeId }); return send(response, 200, { revoked: true }); }
       const route = config.routes.find(({ id }) => id === routeId);
       if (!route) throw new RequestError(403, "route is unavailable", "authorization_failed");
+      const models = await resolveRouteModels(config, route);
       const token = ledger.issue({ id: workspaceId, name: workspaceName }, routeId, projectId, principalId);
       ledger.audit(issuer.id, "host.principal.issue", principalId, { projectId, workspaceId, routeId });
-      return send(response, 201, { schemaVersion: 1, principalId, token, models: route.models });
+      return send(response, 201, { schemaVersion: 1, principalId, token, models });
     }
     const token = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.authorization ?? "")?.[1];
     const grant = token === undefined ? undefined : ledger.authenticate(token);
@@ -81,10 +83,10 @@ export async function createRouter(baseConfig: RouterConfig) {
     if (url.search !== "") throw new RequestError(404, "unsupported endpoint");
     if (request.method === "GET" && url.pathname === "/v1/usage") return send(response, 200, ledger.usage(grant.projectId, config.limits));
     if (request.method === "GET" && url.pathname === "/v1/capabilities") return send(response, 200, { projectId: grant.projectId, principalId: grant.principalId,
-      backend: config.backend, routeId: route.id, accountId: account.id, accountAttribution: "operator exclusive-worker binding", models: route.models,
+      backend: config.backend, routeId: route.id, accountId: account.id, accountAttribution: "operator exclusive-worker binding", models: await resolveRouteModels(config, route),
       streaming: true, maximumSseEventBytes: 1024 * 1024, toolCalls: "unchanged application protocol", multimodal: "unchanged inline/referenced fields; referenced bytes not fetched", statefulContinuation: false,
       strictTokenBounds: false, captureBoundary: "client application bodies", policy: ledger.project(grant.projectId).policy, serviceLimits: config.limits, scheduling: "no queue; capacity rejection is immediate" });
-    if (request.method === "GET" && url.pathname === "/v1/models") return send(response, 200, { object: "list", data: route.models.map((model) => ({ id: model.id, object: "model", owned_by: "dim-route" })) });
+    if (request.method === "GET" && url.pathname === "/v1/models") return send(response, 200, { object: "list", data: (await resolveRouteModels(config, route)).map((model) => ({ ...model, object: "model", owned_by: "dim-route" })) });
     const match = /^\/v1\/requests\/([a-f0-9-]{36})(?:\/(capture|request|response|cancel))?$/.exec(url.pathname);
     if (match?.[1]) {
       const id = match[1], operation = match[2];
@@ -117,7 +119,7 @@ export async function createRouter(baseConfig: RouterConfig) {
     const bytes = await body(request, Math.min(policy.limits.requestBytes, config.limits.requestBytes));
     let payload: Record<string, unknown>;
     try { const value: unknown = JSON.parse(bytes.toString("utf8")); payload = object(value); } catch { throw new RequestError(400, "request must be a JSON object"); }
-    const model = route.models.find((model) => model.id === payload.model && model.api === api);
+    const model = (await resolveRouteModels(config, route)).find((model) => model.id === payload.model && model.api === api);
     if (!model) throw new RequestError(403, "model is not permitted by this principal route", "authorization_failed");
     for (const name of ["previous_response_id", "conversation", "background", "api_key", "apiKey", "base_url", "account", "account_id", "route", "provider", "project_id"]) {
       if (payload[name] !== undefined && payload[name] !== false && payload[name] !== null) throw new RequestError(400, `unsupported request field: ${name}`, "unsupported_capability");

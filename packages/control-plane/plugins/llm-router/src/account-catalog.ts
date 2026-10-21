@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import { object, parseConfig, privateFile, type RouterAccount, type RouterConfig, type RouterRoute } from "./config.js";
+import { discoverAccountModels } from "./model-catalog.js";
 import { createManagedAccount, configureManagedAccountModels } from "./managed-backend.js";
 
 interface Catalog { schemaVersion: 1; accounts: RouterAccount[]; routes: RouterRoute[] }
@@ -75,7 +76,10 @@ export async function upsertRouterRoute(config: RouterConfig, route: RouterRoute
     parseConfig({ ...config, accounts: [...config.accounts, ...catalog.accounts], routes: [...config.routes.filter(({ id }) => !catalog.routes.some((candidate) => candidate.id === id)), ...catalog.routes] });
     if (account.provider && account.provider !== "codex") {
       const allRoutes = [...config.routes.filter(({ id }) => !catalog.routes.some((candidate) => candidate.id === id)), ...catalog.routes];
-      const models = allRoutes.filter(({ accountId }) => accountId === account.id).flatMap(({ models }) => models);
+      const accountRoutes = allRoutes.filter(({ accountId }) => accountId === account.id);
+      const explicit = accountRoutes.flatMap(({ models }) => models === "all" ? [] : models);
+      const discovered = accountRoutes.some(({ models }) => models === "all") ? await discoverAccountModels({ ...config, routes: allRoutes }, account) : [];
+      const models = [...new Map([...explicit, ...discovered].map((model) => [model.id, model])).values()];
       await configureManagedAccountModels(config, account, models);
     }
     return route;

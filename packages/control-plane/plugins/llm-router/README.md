@@ -12,7 +12,7 @@ Every account has a separate **CLIProxyAPI v8.0.33** worker. Existing operator-p
 
 The operator API, CLI and Web console can connect multiple independent Codex accounts and OpenAI-compatible or Anthropic-compatible API credentials. Codex enrollment requires no manually chosen account ID or label: the service generates an independent identity and starts device login from Web. After authentication, the account list uses the saved provider email when available unless the operator supplied a custom label. API connections also receive generated IDs and provider labels by default. Device login returns only the authorization URL and code. CLIProxyAPI owns OAuth login and refresh; DIM never implicitly imports host Codex authentication. Each managed account gets its own private auth directory, access key and loopback listener under `stateDirectory/managed-accounts/ACCOUNT`. API keys live only in the private worker configuration. API base URLs may include `/v1`; they must use HTTPS, or an explicit loopback HTTP address for local services.
 
-Account credentials and routes are separate. `route.upsert` selects an account and explicit models; API-worker model aliases are reconciled from all routes selecting that account. CLIProxyAPI watches its configuration. New admissions read the atomically published account catalog without restarting the router. A running request keeps its admitted account. There is no automatic retry, fallback, usage-based account selection or provider-quota inference. Usage-based routing can be added independently of account enrollment; request records already retain the selected account ID.
+Account credentials and routes are separate. `route.upsert` selects an account and either an explicit model list or `models: "all"`. All-model routes discover the selected account’s catalog, refresh it every 30 seconds and admit only models in that catalog. API-worker model aliases are reconciled from the routes selecting that account. CLIProxyAPI watches its configuration. New admissions read the atomically published account catalog without restarting the router. A running request keeps its admitted account. There is no automatic retry, fallback, usage-based account selection or provider-quota inference. Usage-based routing can be added independently of account enrollment; request records already retain the selected account ID.
 
 Each worker disables credential fallback and inference retry and contains only one configured API credential or Codex login partition. CLIProxyAPI performs provider protocol conversion, including Anthropic-compatible responses to the router's OpenAI-facing APIs. Attribution remains a configured exclusive-worker binding rather than proof of the provider's internal account identity. Strict token/currency ceilings, attempt-exact accounting and backend-confirmed cancellation remain unavailable.
 
@@ -204,8 +204,24 @@ dim llm-router account.login.start --connection /absolute/operator.json --accoun
 dim llm-router account.login.status --connection /absolute/operator.json --account personal --session SESSION_UUID
 dim llm-router account.rename --connection /absolute/operator.json --account personal --reference "Work account"
 dim llm-router account.create --connection /absolute/operator.json --account company-api --reference "Company API" --provider openai --endpoint https://api.openai.com/v1 --api-key-file /absolute/private-api.key
-dim llm-router route.upsert --connection /absolute/operator.json --route company --account company-api --models-file /absolute/models.json
+# Permit every model offered by this account, including later catalog additions.
+dim llm-router route.upsert --connection /absolute/operator.json --route company --account company-api --models all
+# Or restrict the route to an explicit list.
+dim llm-router route.upsert --connection /absolute/operator.json --route restricted --account company-api --models-file /absolute/models.json
+dim llm-router account.models --connection /absolute/operator.json --account company-api
 ```
+
+The Web account panel offers the same **All models from this account** selection.
+Static route configuration uses `{"id":"default","accountId":"default","models":"all"}`.
+All-model routes require an authenticated account catalog endpoint; compatible API
+accounts use their configured provider’s model-list endpoint. Paginated catalogs
+currently require an explicit list; partial catalogs are rejected. Catalog failure stops
+new model admissions rather than silently reusing an expired list. This grants
+models within one account, without granting access to other accounts or routes.
+The router still serves Responses and Chat Completions; catalog entries requiring
+other endpoints, such as image generation, do not acquire those APIs. When the
+provider supplies no token limits, discovery uses conservative client defaults
+rather than claiming to know the model’s actual limits.
 
 Credential, connection and model files must be private mode 0600. A model file is an array such as `[{"id":"MODEL_ID","name":"MODEL_ID","api":"responses","context":128000,"output":16384}]`. Select `chat` for Chat Completions clients. Account IDs are stable identities. `account.rename` changes only a managed account label and preserves its credentials, routes and usage; static configuration accounts must be renamed in their configuration. Multiple accounts may share a label; multiple accounts may use the same provider URL. Creating an account does not grant any project access: explicitly add a route to that project's policy and to the trusted host issuer's allowed routes when host attachment is needed.
 

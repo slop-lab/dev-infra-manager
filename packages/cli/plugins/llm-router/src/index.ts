@@ -4,9 +4,10 @@ const help = `dim llm-router OPERATION --connection /absolute/operator.json [opt
   capabilities | overview | accounts | health | projects | principals
   account.create [--account ID --reference NAME] --provider codex|openai|anthropic [--endpoint URL --api-key-file PRIVATE_FILE]
   account.rename --account ID --reference NAME
+  account.models --account ID
   account.login.start --account ID
   account.login.status --account ID --session UUID
-  route.upsert --route ID --account ID --models-file PRIVATE_JSON
+  route.upsert --route ID --account ID (--models all | --models-file PRIVATE_JSON)
   project.create --project ID --route ID
   project.policy --project ID
   project.policy.update --project ID --policy-file /absolute/policy.json
@@ -33,7 +34,14 @@ export async function runLlmRouterCommand(args: readonly string[], signal?: Abor
   }
   if (name === "account.rename") take("--reference", "reference");
   if (name === "account.login.status") take("--session", "sessionId");
-  if (name === "route.upsert") { take("--route", "routeId"); allowed.add("--models-file"); input.models = JSON.parse(await privateOperatorFile(required("--models-file"))) as unknown; }
+  if (name === "route.upsert") {
+    take("--route", "routeId"); allowed.add("--models"); allowed.add("--models-file");
+    if (flags.has("--models") === flags.has("--models-file")) throw new Error("select --models all or --models-file PRIVATE_JSON");
+    if (flags.has("--models")) {
+      if (required("--models") !== "all") throw new Error("--models requires all; use --models-file for a restricted list");
+      input.models = "all";
+    } else input.models = JSON.parse(await privateOperatorFile(required("--models-file"))) as unknown;
+  }
   if (name === "project.create") take("--route", "routeId");
   if (name === "project.state") take("--action", "action");
   if (name === "project.policy.update") { allowed.add("--policy-file"); input.policy = JSON.parse(await privateOperatorFile(required("--policy-file"))) as unknown; }

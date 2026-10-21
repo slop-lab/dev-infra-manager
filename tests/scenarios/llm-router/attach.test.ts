@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -83,7 +84,7 @@ it("attaches a local-only guest credential and forwards through independently co
   expect(JSON.stringify(f.connection)).not.toContain(f.backendKey); expect(JSON.stringify(f.connection)).not.toContain(f.issuerKey);
   expect((await fetch(f.cpOrigin + "/v1/models", { headers: { authorization: `Bearer ${f.token}` } })).status).toBe(401);
   const connectionPath = f.connectionPath, adapterPath = join(f.home, ".config/opencode/plugins/dim-llm-router.js");
-  const result = execFileSync(process.execPath, ["--input-type=module", "-e", `
+  const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `
     const {default: plugin} = await import(process.env.DIM_TEST_ADAPTER);
     const hooks = await plugin();
     const config = { theme: "preserved", provider: { existing: { name: "keep" } } };
@@ -107,7 +108,7 @@ it("attaches a local-only guest credential and forwards through independently co
     await hooks.config(config).then(() => { throw Error("provider conflict accepted"); }, () => {});
     console.log("adapter-configured");
   `], { encoding: "utf8", env: { ...process.env, DIM_LLM_ROUTER_CONNECTION_FILE: connectionPath, DIM_TEST_ADAPTER: pathToFileURL(adapterPath).href } });
-  expect(result.trim()).toBe("adapter-configured");
+  expect(result.stdout.trim()).toBe("adapter-configured");
 });
 it("denies issuer scope escalation and keeps control-plane operator endpoints unreachable from the guest gateway", async () => {
   const f = await fixture(), scope = { bindingId: randomUUID(), workspaceId: f.workspace.id, workspaceName: f.workspace.name, projectId: "foreign", routeId: "default" };
@@ -204,13 +205,13 @@ it("honors an in-HOME XDG config root and rejects an outside-HOME replacement be
   await runLlmCommand(attach, f.context);
   const adapter = join(customConfig, "opencode/plugins/dim-llm-router.js");
   expect(await readFile(adapter, "utf8")).toContain("DimLlmRouter");
-  const result = execFileSync(process.execPath, ["--input-type=module", "-e", `
+  const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `
     const {default: factory}=await import(process.env.DIM_TEST_ADAPTER);
     const hook=await factory(),config={};await hook.config(config);
     if(config.model!=="dim-responses/reviewed-model")throw Error("custom XDG router not selected");
     console.log("custom-xdg-router-ready");
   `], { encoding: "utf8", env: { ...f.guestEnvironment, DIM_TEST_ADAPTER: pathToFileURL(adapter).href } });
-  expect(result.trim()).toBe("custom-xdg-router-ready");
+  expect(result.stdout.trim()).toBe("custom-xdg-router-ready");
   expect(await hostPlugin.guest!.inspect!(f.workspace, f.context)).toMatchObject({ state: "ready" });
   const before = await readFile(f.connectionPath, "utf8"), connection: unknown = JSON.parse(before);
   if (!connection || typeof connection !== "object" || !("token" in connection) || typeof connection.token !== "string") throw new Error("missing attached token");

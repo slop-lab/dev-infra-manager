@@ -5,7 +5,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
-import { identifier, privateFile, type RouterAccount, type RouterConfig, type RouterModel } from "./config.js";
+import { identifier, object, privateFile, type RouterAccount, type RouterConfig, type RouterModel } from "./config.js";
 
 const execute = promisify(execFile);
 const workers = new Map<string, { child: ChildProcess; close(): Promise<void> }>();
@@ -210,4 +210,18 @@ export async function configureManagedAccountModels(config: RouterConfig, accoun
 /** This checks a dedicated partition's saved credential, never a host Codex auth store. */
 export async function managedAccountConnected(config: RouterConfig, account: RouterAccount): Promise<boolean> {
   return account.provider === "codex" ? hasCredential(directory(config, account.id)) : !!account.provider;
+}
+
+/** Only the control plane reads the provider key; workspace discovery never receives it. */
+export async function managedAccountDiscovery(config: RouterConfig, account: RouterAccount): Promise<{ endpoint: string; headers: Record<string, string> } | undefined> {
+  if (!account.provider || account.provider === "codex") return undefined;
+  const value = object(JSON.parse(await privateFile(join(directory(config, account.id), "config.yaml"))) as unknown);
+  const providers = object(value["api-keys"]), rows = providers[account.provider === "anthropic" ? "claude" : "openai-compatibility"];
+  if (!Array.isArray(rows) || rows.length !== 1) throw new Error("managed account provider partition is invalid");
+  const row = object(rows[0]), keys = row.keys;
+  if (!Array.isArray(keys) || keys.length !== 1) throw new Error("managed account credential partition is invalid");
+  const key = object(keys[0])["api-key"], base = row["base-url"];
+  if (typeof key !== "string" || !key || /[\r\n]/.test(key) || typeof base !== "string") throw new Error("invalid managed provider discovery configuration");
+  const endpoint = base.replace(/\/$/, "") + (/\/v1\/?$/.test(base) ? "/models" : "/v1/models");
+  return { endpoint, headers: account.provider === "anthropic" ? { "x-api-key": key, "anthropic-version": "2023-06-01" } : { authorization: `Bearer ${key}` } };
 }

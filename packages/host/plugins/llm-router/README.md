@@ -25,7 +25,7 @@ private connection at `~/.config/dim/llm-router.json` and a self-contained
 OpenCode adapter at `~/.config/opencode/plugins/dim-llm-router.js`, preserving
 unrelated configuration files. `dim tools run WORKSPACE opencode`, its saved
 continuation, and `dim tools server WORKSPACE` automatically select the attached
-route's first reviewed model (or attachment `--model ID`). Main, small/background,
+route's first available model (or attachment `--model ID`). Main, small/background,
 OMO agents and categories use that model; paid-provider fallback is rejected
 before inference. Responses requests use `store:false` and full message history,
 not provider-side continuation identifiers. Conflicting provider IDs are rejected.
@@ -41,7 +41,11 @@ keeps the provider registrations but does not override models or OMO profiles.
 If attachment/model/token/configuration changes after the owned OpenCode server
 was launched, rerun `dim tools server WORKSPACE`: its private configuration
 fingerprint restarts only that owned process while retaining Web credentials.
-Unchanged configuration reuses the process. Open TUI/run/resume sessions read the
+Unchanged configuration reuses the process. The adapter fetches the current route
+catalog through the authenticated host gateway at each OpenCode process startup;
+all-model routes need no reattachment after models change. Restart an existing
+OpenCode server to reload its model catalog. An unavailable catalog fails visibly
+instead of falling back to the attachment’s stale snapshot. Open TUI/run/resume sessions read the
 new configuration at their next launch; an already active session is not killed.
 `DIM_LLM_ROUTER_CONNECTION_FILE` can select another private guest connection.
 The adapter is also exported at `@slop-lab/dim-host-plugin-llm-router/opencode`.

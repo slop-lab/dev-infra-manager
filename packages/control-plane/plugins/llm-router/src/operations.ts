@@ -5,6 +5,7 @@ import { type RouterLedger, type Usage } from "./ledger.js";
 import { effectiveRouterConfig, addRouterAccount, renameRouterAccount, defaultAccountReference, upsertRouterRoute } from "./account-catalog.js";
 import { accountLoginStatus, startAccountLogin, managedAccountConnected, managedAccountEmail } from "./managed-backend.js";
 import type { RouterAccount, RouterRoute } from "./config.js";
+import { discoverAccountModels } from "./model-catalog.js";
 import { accountHealth } from "./operator.js";
 /** One implementation for local operator CLI and authenticated remote clients. */
 export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: RouterLedger, name: string, raw: unknown, actor = "operator", role: "read" | "operator" = "operator"): Promise<unknown> {
@@ -14,8 +15,13 @@ export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: Ro
   const policy = (value: unknown) => { const result = parsePolicy(value); if (result.allowedRoutes.some((id) => !config.routes.some((route) => route.id === id))) throw new Error("policy refers to an unknown route"); return result; };
   let output: unknown;
   switch (name) {
-    case "capabilities": output = operationDescriptors(llmOperations.filter((op) => (op.access === "read" || role === "operator" && op.access === "operator") && (!op.name.startsWith("account.") && op.name !== "route.upsert" || config.accountManagement !== undefined))); break;
+    case "capabilities": output = operationDescriptors(llmOperations.filter((op) => (op.access === "read" || role === "operator" && op.access === "operator") && ((!op.name.startsWith("account.") || op.name === "account.models") && op.name !== "route.upsert" || config.accountManagement !== undefined))); break;
     case "accounts": output = await Promise.all(config.accounts.map((account) => accountSummary(config, account))); break;
+    case "account.models": {
+      const account = config.accounts.find(({ id }) => id === input.accountId);
+      if (!account) throw new Error("account was not found");
+      output = await discoverAccountModels(config, account); break;
+    }
     case "account.create": {
       if (!config.accountManagement) throw new Error("account management is not configured");
       const account = await addRouterAccount(baseConfig, input as unknown as Parameters<typeof addRouterAccount>[1]); output = await accountSummary(config, account); break;

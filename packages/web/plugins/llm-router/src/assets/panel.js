@@ -161,7 +161,7 @@ export function mount(container, context) {
     const value = object(await context.invoke("overview")); if (!current()) return;
     overview.replaceChildren(node("h2", "Accounts & routes"), node("p", `${text(object(value.backend).name)} ${text(object(value.backend).version)} · Provider sign-in is managed by the backend.`));
     table(overview, ["Account", "Configured reference"], rows(value.accounts).map((account) => [account.id, account.reference]));
-    table(overview, ["Route", "Account", "Models"], rows(value.routes).map((route) => [route.id, route.accountId, rows(route.models).map((model) => `${text(model.id)} (${text(model.api)})`).join(", ")]));
+    table(overview, ["Route", "Account", "Models"], rows(value.routes).map((route) => [route.id, route.accountId, route.models === "all" ? "All models from this account" : rows(route.models).map((model) => `${text(model.id)} (${text(model.api)})`).join(", ")]));
     if (routeSelect) { const selected = routeSelect.value; routeSelect.replaceChildren(); for (const route of rows(value.routes)) { const option = document.createElement("option"); option.value = text(route.id); option.textContent = text(route.id); routeSelect.append(option); } if (rows(value.routes).some((route) => route.id === selected)) routeSelect.value = selected; }
     accountManager.setRoutes(value.routes);
     overview.append(health);

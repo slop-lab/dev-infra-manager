@@ -181,3 +181,16 @@ it("keeps operator diagnostics available when an unrelated backend key is unavai
   expect(response.status).toBe(401);
   expect(await response.text()).not.toContain(fx.adminPath);
 });
+
+it("remote CLI selects all account models without a model file and rejects ambiguous selectors", async () => {
+  const fx = await fixture((_request, response) => response.writeHead(200, { "content-type": "application/json" }).end('{"data":[{"id":"model-one"},{"id":"model-two"}]}'));
+  fx.config.accountManagement = { backendExecutable: "/unused-for-exclusive-backend" };
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  const args = ["llm-router", "route.upsert", "--connection", fx.connection, "--route", "default", "--account", "provider"];
+  await runLlmRouterCommand([...args, "--models", "all"]);
+  expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toEqual({ id: "default", accountId: "provider", models: "all" });
+  await runLlmRouterCommand(["llm-router", "account.models", "--connection", fx.connection, "--account", "provider"]);
+  expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toMatchObject([{ id: "model-one" }, { id: "model-two" }]);
+  await expect(runLlmRouterCommand([...args, "--models", "all", "--models-file", "/unused"])).rejects.toThrow("select --models all or --models-file");
+  await expect(runLlmRouterCommand([...args, "--models", "*"])).rejects.toThrow("--models requires all");
+});
