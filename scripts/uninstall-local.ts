@@ -15,7 +15,7 @@ try {
     showRemovalPlan(plan);
     if (await confirmRemoval(flags, questions)) {
       await executeRemoval(plan);
-      console.log(`Local DIM installation removed. Prepared source artifacts${keepCacheData ? " and cache data" : ""} are retained.`);
+      console.log(`Local DIM installation removed. Service data/authentication, prepared source artifacts${keepCacheData ? " and cache data" : ""} are retained.`);
     } else console.log(flags.dryRun || !questions.tty ? "Preview only. Use -y to execute noninteractively." : "Removal cancelled.");
   }
 } catch (error) { console.error(`uninstall-local: ${error instanceof Error ? error.message : String(error)}`); process.exitCode = 1; }

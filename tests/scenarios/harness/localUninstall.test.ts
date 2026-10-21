@@ -104,6 +104,13 @@ it("recognizes the owned controller entrypoint and rejects a sibling installatio
   const unit = (entrypoint: string) => `[Unit]\nDescription=DIM managed controller\n[Service]\nExecStart="/usr/bin/node" ${JSON.stringify(entrypoint)} "controller" "serve"\n`;
   await writeFile(f.paths.unit, unit(join(f.paths.data, "runtime/current/cli.js")));
   expect(await ownedControllerUnit(f.paths)).toBe(true);
+  const directory = join(f.paths.data, "runtime/current/node_modules/.bin");
+  await mkdir(directory, { recursive: true });
+  const target = join(f.paths.data, "runtime/current/cli.js"); await writeFile(target, "// owned CLI");
+  const binary = join(directory, "dim"); await symlink(target, binary);
+  await writeFile(f.paths.unit, unit(binary)); expect(await ownedControllerUnit(f.paths)).toBe(true);
+  await rm(binary); const foreign = join(f.home, "foreign.js"); await writeFile(foreign, "// foreign"); await symlink(foreign, binary);
+  await expect(ownedControllerUnit(f.paths)).rejects.toThrow("does not belong to the selected installation");
   await writeFile(f.paths.unit, unit(join(`${f.paths.data}-foreign`, "cli.js")));
   await expect(ownedControllerUnit(f.paths)).rejects.toThrow("does not belong to the selected installation");
 });

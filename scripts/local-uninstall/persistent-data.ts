@@ -56,16 +56,18 @@ export async function retainedPersistentData(paths: RemovalPaths, registeredConf
     if (!stat) return;
     if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.()) throw new Error(`unsafe service configuration directory: ${directory}`);
     if (depth > 6) throw new Error("service configuration discovery exceeds its depth bound");
+    const serviceDirectory = files.has(directory);
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       if (++count > 2048) throw new Error("service configuration discovery exceeds its entry bound");
       const path = join(directory, entry.name);
       if (entry.isSymbolicLink()) continue;
-      if (entry.isDirectory()) await scan(path, depth + 1);
-      else if (entry.isFile() && entry.name.endsWith(".json")) await config(path);
+      if (entry.isDirectory() && !serviceDirectory) await scan(path, depth + 1);
+      else if (entry.isFile() && entry.name.endsWith(".json")
+        && (!serviceDirectory || ["router.json", "gateway.json", "config.json"].includes(entry.name))) await config(path);
     }
   }
   for (const root of new Set([paths.configuration, paths.data, paths.state, paths.managed, paths.controlPlane])) {
-    for (const name of ["llm", "llm-host", "llm-router", "tailscale"]) await retain(join(root, name));
+    for (const name of ["llm", "llm-host", "llm-router", "llm-backend", "tailscale"]) await retain(join(root, name));
     for (const name of ["llm-router", "tailscale"]) await retain(join(root, "plugins", name));
   }
   // Only private service configuration, never workspace checkouts or arbitrary source trees.

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { checked, type Command } from "./command.ts";
 import { metadata } from "./files.ts";
 import { inside } from "./paths.ts";
@@ -12,7 +12,16 @@ export async function ownedControllerUnit(paths: RemovalPaths): Promise<boolean>
     try { return (token.startsWith('"') ? JSON.parse(token) as string : token).replaceAll("%%", "%"); }
     catch { throw new Error("unsupported DIM controller unit argument quoting"); }
   });
-  const entrypoint = tokens.findIndex((token) => token.startsWith("/") && /\.(?:js|mjs|ts)$/.test(token));
+  let entrypoint = -1;
+  for (let index = 1; index < tokens.length; index++) {
+    const token = tokens[index]!;
+    if (!token.startsWith("/") || !inside(token, paths.data)) continue;
+    // npm bin links need not have a .js suffix. Verify their actual owned target.
+    let target: string;
+    try { target = await realpath(token); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; target = token; }
+    if (inside(target, paths.data) && /\.(?:js|mjs|ts)$/.test(target)) { entrypoint = index; break; }
+  }
   if (start.length !== 1 || !unit.includes("Description=DIM managed controller\n") || entrypoint < 0
     || !inside(tokens[entrypoint]!, paths.data) || tokens[entrypoint + 1] !== "controller" || tokens[entrypoint + 2] !== "serve") {
     throw new Error("DIM controller unit does not belong to the selected installation");

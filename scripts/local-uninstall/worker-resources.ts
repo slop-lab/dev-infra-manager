@@ -2,15 +2,17 @@ import { createHash } from "node:crypto";
 import { readdir, realpath } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { metadata, object, readJson, text, uuid } from "./files.ts";
+import { inside } from "./paths.ts";
 import type { DockerClaim } from "./types.ts";
 
 /** Read only approved worker roots; a slot journal ends traversal before candidate files. */
-export async function collectWorkerClaims(roots: readonly string[]): Promise<DockerClaim[]> {
+export async function collectWorkerClaims(roots: readonly string[], exclusions: readonly string[] = []): Promise<DockerClaim[]> {
   const claims: DockerClaim[] = [], visited = new Set<string>();
   let entries = 0;
   async function walk(path: string, depth: number): Promise<void> {
-    if (depth > 8 || ++entries > 10_000) throw new Error("worker state traversal exceeds its bound");
     const absolute = resolve(path);
+    if (exclusions.some((excluded) => inside(absolute, resolve(excluded)))) return;
+    if (depth > 8 || ++entries > 10_000) throw new Error("worker state traversal exceeds its bound");
     if (visited.has(absolute)) return;
     visited.add(absolute);
     const stat = await metadata(absolute);

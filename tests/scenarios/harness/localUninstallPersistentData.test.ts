@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
@@ -87,5 +87,28 @@ it("retains only Tailscale authentication among its exactly identified Docker re
     expect(persistence.volumes).toEqual([claims.find((claim) => claim.kind === "volume")!.name]);
     expect(persistence.files).toContain(directory);
     expect(await readFile(ledger, "utf8")).toContain(id);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+it("preserves a group-writable backend service and skips retained credential/capture payloads during discovery", async () => {
+  const home = await mkdtemp(join(tmpdir(), "dim-retain-backend-"));
+  const paths = removalPaths({ HOME: home, XDG_RUNTIME_DIR: join(home, "run") });
+  const configuration = join(paths.configuration, "llm-backend"), backend = join(paths.state, "llm-backend");
+  const captures = join(paths.configuration, "llm", "state", "captures", "request-id");
+  const run: Command = async (file) => ({ status: 0, stdout: file === "mise" ? "[]" : "", stderr: "" });
+  try {
+    for (const directory of [configuration, backend, captures]) await mkdir(directory, { recursive: true, mode: 0o700 });
+    await chmod(backend, 0o775);
+    await writeFile(join(configuration, "config.yaml"), "auth-dir: private-backend-state\n", { mode: 0o600 });
+    await writeFile(join(configuration, "access.key"), "keep-backend-key", { mode: 0o600 });
+    await writeFile(join(backend, "execution.json"), '{"provider":"credential data, not a worker journal"}', { mode: 0o600 });
+    await writeFile(join(captures, "response.json"), '["opaque captured content"]', { mode: 0o600 });
+    const plan = await createRemovalPlan(paths, run, { HOME: home });
+    expect(plan.persistent.files).toContain(backend);
+    await executeRemoval(plan, run);
+    expect(await readFile(join(configuration, "access.key"), "utf8")).toBe("keep-backend-key");
+    expect(await readFile(join(backend, "execution.json"), "utf8")).toContain("credential data");
+    expect(await readFile(join(captures, "response.json"), "utf8")).toBe('["opaque captured content"]');
+    expect((await stat(backend)).mode & 0o777).toBe(0o775);
   } finally { await rm(home, { recursive: true, force: true }); }
 });

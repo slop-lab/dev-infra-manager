@@ -76,12 +76,14 @@ export async function createRemovalPlan(paths: RemovalPaths, run: Command = comm
     for (const vm of previous.vms) await inspectVm(run, vm);
     return { ...previous, processes: active.processes, unit, bin, mise: await planMise(run, env) };
   }
+  const serviceConfigs = active.processes.flatMap((process) => process.configFile === undefined ? [] : [process.configFile]);
+  const preliminaryPersistence = await retainedPersistentData(paths, serviceConfigs);
   const claims = [...await collectHostClaims(paths), ...await collectControlPlaneClaims(paths.controlPlane),
-    ...await collectWorkerClaims([...new Set([paths.state, paths.managed, ...active.workerRoots])])];
+    ...await collectWorkerClaims([...new Set([paths.state, paths.managed, ...active.workerRoots])], preliminaryPersistence.files)];
   const vms = await collectVmClaims(paths);
   for (const vm of vms) await inspectVm(run, vm);
   const docker = await planDocker(run, claims), keepCacheData = options.keepCacheData === true;
-  const persistent = await retainedPersistentData(paths, active.processes.flatMap((process) => process.configFile === undefined ? [] : [process.configFile]), docker);
+  const persistent = await retainedPersistentData(paths, serviceConfigs, docker);
   const retainedCache = keepCacheData ? await retainedCacheData(paths, docker) : { volumes: [], files: [] };
   return { schemaVersion: 1, paths, keepCacheData, retainedCache, persistent, docker, vms, mise: await planMise(run, env), processes: active.processes, unit, bin };
 }
