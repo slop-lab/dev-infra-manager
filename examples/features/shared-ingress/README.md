@@ -2,7 +2,9 @@
 
 One existing `*.dev.example.com` wildcard DNS record points to the control-plane
 edge. Workspace hosts register scoped service names through their External URLs
-plugin; they need no separate public DNS record or Cloudflare account. Two hosts
+plugin; their relay listeners need only reachable private IPs and ports, without
+a domain, TLS certificate or Cloudflare account. Only the final edge needs DNS
+and its HTTPS certificate. Two hosts
 can use the same workspace name because the returned flat hostname incorporates
 host and workspace identity. Use the returned URL rather than constructing it.
 

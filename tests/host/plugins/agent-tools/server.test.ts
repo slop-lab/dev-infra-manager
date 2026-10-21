@@ -22,7 +22,16 @@ async function fixture() {
   await new Promise<void>((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
   const env = { ...process.env, HOME: home, XDG_STATE_HOME: path.join(home, ".local/state"), PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`, OPENCODE_WEB_PORT: String(port), NPM_CONFIG_CACHE: undefined, npm_config_cache: undefined };
   const run = async (operation: string) => JSON.parse((await execute("bash", [launcher, operation, "--json"], { env, timeout: 30_000 })).stdout) as { state: string; port: number; credentialsFile: string; logFile: string; username: string; url: string };
-  return { root, home, bin, port, env, run };
+  const setPassword = async (password: string) => new Promise<{ state: string }>((resolve, reject) => {
+    const child = spawn("bash", [launcher, "password", "--json"], { env, stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", chunk => { stdout += chunk.toString(); });
+    child.stderr.on("data", chunk => { stderr += chunk.toString(); });
+    child.once("error", reject);
+    child.once("close", code => { if (code !== 0) reject(Error(stderr)); else resolve(JSON.parse(stdout)); });
+    child.stdin.end(JSON.stringify({ password }));
+  });
+  return { root, home, bin, port, env, run, setPassword };
 }
 
 it("inspects an unconfigured guest without installing tools, evaluating hooks, or creating state", async () => {
@@ -54,11 +63,21 @@ http.createServer((req, res) => { res.statusCode = req.headers.authorization ===
     const credential = await readFile(started.credentialsFile, "utf8");
     expect(JSON.stringify(started)).not.toContain(credential.trim().split("\n")[1]);
     expect(await f.run("status")).toEqual(started);
+    const password = 'quotes" backslash\\ spaces : secure  ';
+    expect((await f.setPassword(password)).state).toBe("running");
+    const credentials = await f.run("credentials") as unknown as { username: string; password: string };
+    expect(credentials).toEqual({ username: "opencode", password });
+    const authentication = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
+    expect((await fetch(`http://127.0.0.1:${f.port}/global/health`, { headers: { authorization: authentication } })).status).toBe(200);
+    const oldAuthentication = `Basic ${Buffer.from(credential.trim().split("\n").join(":")).toString("base64")}`;
+    expect((await fetch(`http://127.0.0.1:${f.port}/global/health`, { headers: { authorization: oldAuthentication } })).status).toBe(401);
+    expect(JSON.stringify(await f.run("status"))).not.toContain(password);
+    expect(await readFile(started.logFile, "utf8")).not.toContain(password);
     await rm(fake);
     expect((await f.run("status")).state).toBe("running");
     expect((await f.run("stop")).state).toBe("stopped");
     expect((await f.run("status")).state).toBe("stopped");
-    expect(await readFile(started.credentialsFile, "utf8")).toBe(credential);
+    expect(await readFile(started.credentialsFile, "utf8")).toBe(`opencode\n${password}\n`);
     await expect(access(path.join(path.dirname(started.credentialsFile), "server.pid"))).rejects.toThrow();
   } finally { await f.run("stop").catch(() => {}); await rm(f.root, { recursive: true, force: true }); }
 }, 40_000);
@@ -77,7 +96,21 @@ it("never signals an unrelated listener even when a PID record points at it", as
     expect((await f.run("stop")).state).toBe("stopped");
     await writeFile(path.join(state, "server.pid"), `${child.pid} ${Number(start) + 1} ${f.port} ${"a".repeat(64)}\n`);
     expect((await f.run("stop")).state).toBe("stopped");
+    expect((await f.setPassword("do not signal unrelated processes")).state).toBe("stopped");
     expect(child.exitCode).toBeNull();
     expect(process.kill(child.pid!, 0)).toBe(true);
   } finally { child.kill(); await rm(f.root, { recursive: true, force: true }); }
+});
+
+it("sets a password before installation without launching tools and rejects unsafe input", async () => {
+  const f = await fixture();
+  try {
+    expect((await f.setPassword("configured before installation")).state).toBe("stopped");
+    expect(await f.run("credentials")).toEqual({ username: "opencode", password: "configured before installation" });
+    for (const password of ["short", "x".repeat(129), "a secure password\nnewline", "unicode password é"]) {
+      await expect(f.setPassword(password)).rejects.toThrow("12–128");
+    }
+    expect(await f.run("credentials")).toEqual({ username: "opencode", password: "configured before installation" });
+    expect((await f.run("status")).state).toBe("stopped");
+  } finally { await rm(f.root, { recursive: true, force: true }); }
 });

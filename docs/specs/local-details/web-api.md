@@ -58,7 +58,9 @@ NUL and `--host`/`--json` overrides are rejected. Output is bounded to 2 MiB and
 execution to 30 seconds by default. A trusted plugin may request a positive
 integral deadline up to 180 seconds; the browser operation transport separately
 permits an explicit deadline up to 185 seconds (35 seconds by default). Invalid
-or unknown timeout options reject before dispatch. Errors do not include subprocess output or credentials.
+or unknown command options reject before dispatch. An optional `input` string is
+bounded to 128 KiB UTF-8 and sent through stdin, never command arguments. The
+core closes stdin even when no input is provided. Errors do not include subprocess output or credentials.
 
 Plugins own optional `autoConnect(context)`, their discovery commands and all
 feature-specific schemas, connection validation and scope. The core supplies no
@@ -115,8 +117,11 @@ served only to authenticated sessions. The server rejects undeclared paths,
 unsafe asset names, invalid module declarations, duplicate IDs/packages, unsafe
 links and non-files. Browser entry modules use the shared authenticated request
 transport; the console does not expose arbitrary command execution or an HTTP
-proxy. Inputs, handler results and public errors cannot include raw service
-credentials. Feature browser code renders untrusted results as text, never HTML.
+proxy. Host/control-plane credentials and public errors never expose raw service
+capabilities. A plugin may declare a separate operator-only operation to read or
+change workspace application credentials. Those secrets stay out of ordinary
+status results and command arguments; credential reads happen only on an explicit
+operator action. Feature browser code renders untrusted results as text, never HTML.
 
 All operation POSTs require CSRF, including read operations sent using POST.
 JSON request bodies are bounded to 128 KiB UTF-8, including their encoded

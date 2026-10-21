@@ -155,8 +155,10 @@ Configuration and connection files are owned mode-0600 regular files; symbolic
 links and hard links are rejected. Browser passwords use scrypt. Sessions use
 opaque HttpOnly SameSite=Strict cookies, Secure for HTTPS, rotating login,
 monotonic idle/absolute expiry, bounded concurrency and bounded guessing.
-Credentials, host executable paths, server connection files and raw service
-capabilities never reach the browser. Console assets use a same-origin CSP,
+Host control credentials, executable paths, private connection files and raw
+service capabilities never reach the browser. Reviewed plugins can offer an
+explicit operator-only read of workspace application credentials, such as an
+OpenCode server password; normal status responses exclude these secrets. Console assets use a same-origin CSP,
 no-store caching and text-safe rendering.
 
 Tests live under [`tests/web`](../../../tests/web); feature tests live under

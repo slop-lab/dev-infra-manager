@@ -2,7 +2,7 @@
 /** @typedef {{name:string,id:string,phase:string}} Workspace */
 /** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'>}} Controller */
 /** @typedef {{operations:Array<{name:string}>,invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean,workspace:{hostId:string,name:string,id:string,phase:string}}} Context */
-/** @typedef {{state:'running'|'stopped',port:number,url:string,username:string,credentialsFile:string,logFile:string}} Server */
+/** @typedef {{state:'running'|'stopped',port:number,url:string,username:string,credentialsFile:string,logFile:string,externalUrls?:Array<{url:string,ingress:string,approval:string}>,externalUrlsAvailable?:boolean}} Server */
 /** @param {string} tag @param {string} [text] */
 function element(tag, text = '') { const node = document.createElement(tag); node.textContent = text; return node; }
 /** @param {HTMLElement} container @param {Context} context */
@@ -50,12 +50,44 @@ export function mount(container, context) {
       if (!scoped()) return;
       const value = /** @type {Server} */ (result);
       server.replaceChildren(element('h4', 'OpenCode server'), element('p', `Server ${value.state}. Port ${value.port} is inside the workspace.`));
+      const publicRoutes = (value.externalUrls || []).filter((route) => ['approved', 'not-required'].includes(route.approval));
+      if (publicRoutes.length) {
+        server.append(element('p', value.state === 'running' ? 'External server URLs:' : 'Configured external URLs (server stopped):'));
+        for (const route of publicRoutes) {
+          if (value.state === 'running') {
+            const routeLink = document.createElement('a'); routeLink.href = route.url; routeLink.target = '_blank'; routeLink.rel = 'noopener noreferrer'; routeLink.textContent = route.url; server.append(routeLink);
+          } else server.append(element('p', route.url));
+        }
+      } else server.append(element('p', value.externalUrlsAvailable === false ? 'External route status unavailable. Refresh status or inspect External routes for this workspace.' : 'No approved external URL. Create a route for this server port in External routes, then refresh status.'));
+      server.append(element('p', `Username: ${value.username}.`));
+      const credentialActions = element('div'); credentialActions.className = 'feature-actions'; server.append(credentialActions);
+      if (allowed.has('server.credentials')) button(credentialActions, 'Copy server password', async () => {
+        const credential = /** @type {{password:string}} */ (await invoke('server.credentials'));
+        if (!scoped()) return;
+        try { await navigator.clipboard.writeText(credential.password); }
+        catch {
+          if (!scoped()) return;
+          const label = document.createElement('label'); label.textContent = 'Select and copy server password';
+          const fallback = document.createElement('input'); fallback.type = 'text'; fallback.readOnly = true; fallback.value = credential.password; fallback.autocomplete = 'off'; label.append(fallback); server.append(label); fallback.focus(); fallback.select();
+          button(label, 'Hide password', async () => { fallback.value = ''; label.remove(); });
+        }
+      });
+      if (allowed.has('server.password')) {
+        const form = document.createElement('form'), label = document.createElement('label'), password = document.createElement('input');
+        label.textContent = 'New server password'; password.type = 'password'; password.autocomplete = 'new-password'; password.minLength = 12; password.maxLength = 128; password.required = true; password.pattern = '[ -~]{12,128}'; label.append(password); form.append(label, element('p', 'Use 12–128 printable ASCII characters. Changing it restarts a running server.'));
+        const save = button(form, 'Set server password', async () => {
+          if (!form.reportValidity()) return;
+          const next = password.value; password.value = '';
+          renderServer(await invoke('server.password', { password: next }));
+        });
+        form.addEventListener('submit', (event) => { event.preventDefault(); save.click(); }); server.append(form);
+      }
       if (value.state !== 'running') return;
-      server.append(element('p', 'Starting the server does not expose a public endpoint. Use approved workspace networking, or run this command on your computer and keep it running:'));
+      server.append(element('p', 'For local forwarding, run this command on your computer and keep it running:'));
       server.append(element('pre', `dim --host ${controller.id} forward ${selectedWorkspace.name} ${value.port}:${value.port}`));
       server.append(element('p', `After forwarding, the server address is ${value.url}. This is the workspace-local address until forwarding is active.`));
       const link = document.createElement('a'); link.href = 'https://slop-lab.github.io/dev-infra-manager/opencode-web/'; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open OpenCode Web'; server.append(link);
-      server.append(element('p', `Add your forwarded or approved HTTPS server in OpenCode Web. Username: ${value.username}. Retrieve the password inside the workspace from ${value.credentialsFile}; it is not sent to this page.`));
+      server.append(element('p', 'Add your forwarded or approved HTTPS server in OpenCode Web. An operator can copy or change the server password here.'));
       server.append(element('p', 'If the browser blocks a local HTTP connection from the HTTPS client, use your configured HTTPS workspace endpoint.'));
     }
     const toolbar = element('div'); toolbar.className = 'feature-actions'; content.prepend(toolbar);
@@ -82,5 +114,5 @@ export function mount(container, context) {
     } catch { if (current()) notice.textContent = 'Could not discover workspace tools. Refresh workspaces to retry.'; }
   }
   void discover();
-  return () => { disposed = true; ++revision; };
+  return () => { disposed = true; ++revision; content.replaceChildren(); };
 }

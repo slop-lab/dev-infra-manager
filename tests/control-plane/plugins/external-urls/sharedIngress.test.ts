@@ -17,7 +17,7 @@ import type { ExternalRoute } from "../../../../packages/host/plugins/external-u
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const operation of cleanup.splice(0).reverse()) await operation(); });
 
-it("routes two hosts through one wildcard, scopes identical workspace names and revokes live streams and upgrades", async () => {
+it("routes two IP-only host relays through one public wildcard, scopes identical names and revokes streams", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dim-shared-ingress-")); cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const first = await backend("first"), second = await backend("second");
   const relayPorts = [await freePort(), await freePort()];
@@ -36,6 +36,10 @@ it("routes two hosts through one wildcard, scopes identical workspace names and 
     cleanup.push(() => listener.close()); listeners.push(listener);
     const claim = await listener.provision({ id: `workspace-${index}`, name: "same-name" }, { ingress: "shared", subdomain: "same-name--opencode", target: { containers: [], port: target.port, protocol: "http" } }, { host: "127.0.0.1", port: target.port, protocol: "http", fingerprint: `owned-${index}` }, randomUUID(), "approved", randomUUID());
     claims.push(claim.route);
+  }
+  for (const claim of claims) {
+    expect(new URL(claim.url!).hostname).toMatch(/^[^.]+\.dev\.example\.test$/);
+    expect(claim.url).not.toContain("127.0.0.1");
   }
   expect(claims[0]!.authority).not.toBe(claims[1]!.authority);
   expect(await get(service.publicOrigin, claims[0]!.authority)).toEqual({ status: 200, body: "first" });

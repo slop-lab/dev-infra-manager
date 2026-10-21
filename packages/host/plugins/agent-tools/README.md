@@ -121,3 +121,13 @@ root-owned `~/.npm` cache without changing its ownership or contents. An explici
 `NPM_CONFIG_CACHE` or `npm_config_cache` is retained when it names an absolute,
 owned directory without a symlink. Changing this cache selection refreshes an
 owned server on the next `dim tools server` invocation.
+
+OpenCode credentials can be read explicitly by an operator using the
+`server.credentials` console operation. The `server.password` operation takes
+`{workspace, workspaceId, password}` through `--input-stdin` only; the password
+never belongs in process arguments. Passwords contain 12–128 printable ASCII
+characters, including spaces and punctuation. Status and mutation responses
+exclude passwords. Updating the password restarts only the identified owned
+running server and verifies its authenticated health; setting it before launch
+preserves stopped state. Credentials remain private in the workspace home across
+stop and restart.

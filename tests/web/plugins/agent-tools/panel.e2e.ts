@@ -9,8 +9,9 @@ const panel = await readFile(new URL("../../../../packages/web/plugins/agent-too
 const workspaceId = "17094660-a627-4a17-acd2-6418c0b79967", stoppedId = "27094660-a627-4a17-acd2-6418c0b79967";
 const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
 let installed = false, running = false, holdStatus = true;
-let pending: ServerResponse | undefined;
-function status() { return { workspace: "development", workspaceId, state: running ? "running" : "stopped", port: 4096, url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log" }; }
+let pending: ServerResponse | undefined, pendingCredential: ServerResponse | undefined, holdCredential = false;
+let password = "private-server-password";
+function status() { return { workspace: "development", workspaceId, state: running ? "running" : "stopped", port: 4096, url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log", externalUrlsAvailable: true, externalUrls: [{ url: "https://opencode.example.test:8443", ingress: "shared", approval: "approved" }, { url: "https://pending.example.test", ingress: "shared", approval: "pending" }] }; }
 const server = createServer((request, response) => {
   if (request.url === "/panel.js") { response.setHeader("Content-Type", "text/javascript"); response.end(panel); return; }
   if (request.url === "/") { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><div id="panel"></div>'); return; }
@@ -25,6 +26,8 @@ const server = createServer((request, response) => {
     if (name.startsWith("tools.")) { response.end(JSON.stringify({ workspace: "development", workspaceId, tools: [{ name: "opencode", installed, version: installed ? "1.18.31" : "" }] })); return; }
     if (name === "server.start") running = true;
     if (name === "server.stop") running = false;
+    if (name === "server.credentials") { if (holdCredential) { pendingCredential = response; return; } response.end(JSON.stringify({ workspace: "development", workspaceId, username: "opencode", password })); return; }
+    if (name === "server.password") password = String(input.password);
     if (name === "server.status" && holdStatus) { pending = response; return; }
     response.end(JSON.stringify(status()));
   });
@@ -36,9 +39,11 @@ const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.m
 async function mount(operator: boolean, stopped = false) {
   await page.goto(origin);
   await page.addScriptTag({ type: "module", content: `import { mount } from '/panel.js';
-    mount(document.querySelector('#panel'), {
-      operations: ${JSON.stringify(["controllers.list", "tools.status", "server.status", ...(operator ? ["tools.setup", "server.start", "server.stop"] : [])].map((name) => ({ name })))},
-      isCurrent: () => true,
+    window.sessionCurrent = true;
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText() { throw new Error('clipboard unavailable'); } } });
+    window.disposePanel = mount(document.querySelector('#panel'), {
+      operations: ${JSON.stringify(["controllers.list", "tools.status", "server.status", ...(operator ? ["tools.setup", "server.start", "server.stop", "server.credentials", "server.password"] : [])].map((name) => ({ name })))},
+      isCurrent: () => window.sessionCurrent,
       workspace: ${JSON.stringify({hostId:"local",name:stopped ? "offline":"development",id:stopped ? stoppedId:workspaceId,phase:stopped ? "stopped":"running"})},
       async invoke(name, input) { const response = await fetch('/invoke', {method:'POST',body:JSON.stringify({name,input})}); return response.json(); }
     });` });
@@ -61,6 +66,20 @@ try {
   assert.match(await page.locator("#panel").innerText(), /dim --host local forward development 4096:4096/);
   assert.equal(await page.getByRole("link", { name: "Open OpenCode Web", exact: true }).getAttribute("href"), "https://slop-lab.github.io/dev-infra-manager/opencode-web/");
   assert.equal(await page.locator('a[href^="http://127.0.0.1"]').count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'https://opencode.example.test:8443', exact: true }).getAttribute('href'), 'https://opencode.example.test:8443');
+  assert.equal(await page.locator('a[href="https://pending.example.test"]').count(), 0);
+  assert.equal(calls.filter(({ name }) => name === 'server.credentials').length, 0);
+  await page.getByRole('button', { name: 'Copy server password', exact: true }).click();
+  const fallback = page.getByLabel('Select and copy server password'); await fallback.waitFor();
+  assert.equal(await fallback.inputValue(), password);
+  await page.getByRole('button', { name: 'Hide password', exact: true }).click();
+  assert.equal(await fallback.count(), 0);
+  await page.getByLabel('New server password', { exact: true }).fill('updated-secret-password');
+  await page.getByRole('button', { name: 'Set server password', exact: true }).click();
+  await page.getByText('Set server password completed.', { exact: true }).waitFor();
+  assert.equal(password, 'updated-secret-password');
+  assert.equal(await page.getByLabel('New server password', { exact: true }).inputValue(), '');
+  assert.equal(await page.locator('input').evaluateAll((inputs) => inputs.some((input) => (input as HTMLInputElement).value === 'updated-secret-password')), false);
   await page.getByRole("button", { name: "Stop OpenCode server", exact: true }).click();
   await page.getByText("Server stopped. Port 4096 is inside the workspace.", { exact: true }).waitFor();
   assert.equal(await page.locator("select").count(), 0);
@@ -72,9 +91,21 @@ try {
   await page.getByText("opencode: 1.18.31", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Install opencode", exact: true }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "Start OpenCode server", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Copy server password", exact: true }).count(), 0);
+  assert.equal(await page.getByLabel("New server password", { exact: true }).count(), 0);
+  await mount(true); await page.getByRole('button', { name: 'Copy server password', exact: true }).waitFor(); holdCredential = true;
+  const credentialRequest = page.waitForRequest((request) => request.method() === 'POST' && request.postDataJSON().name === 'server.credentials');
+  await page.getByRole('button', { name: 'Copy server password', exact: true }).click();
+  await credentialRequest;
+  assert(pendingCredential); await page.evaluate('window.sessionCurrent = false; window.disposePanel();');
+  const staleResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.request().postDataJSON().name === 'server.credentials');
+  pendingCredential.end(JSON.stringify({ workspace: 'development', workspaceId, username: 'opencode', password })); pendingCredential = undefined;
+  await (await staleResponse).finished();
+  assert.equal(await page.locator('#panel input').count(), 0);
   assert.deepEqual(errors, []);
   process.stdout.write("Workspace tool installation, OpenCode lifecycle, scoped identities and read-only browser controls passed.\n");
 } finally {
   pending?.end(JSON.stringify(status()));
+  pendingCredential?.end('{}');
   await browser.close(); await new Promise<void>((resolve) => server.close(() => resolve()));
 }

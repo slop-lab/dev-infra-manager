@@ -147,7 +147,7 @@ controllers from the console's private `operations.hosts` settings:
 interface WebPluginContext {
   readonly controllers: readonly {
     readonly id: string;
-    run(args: readonly string[], options?: { timeoutMilliseconds: number }): Promise<unknown>;
+    run(args: readonly string[], options?: { timeoutMilliseconds: number; input?: string }): Promise<unknown>;
   }[];
 }
 ```
@@ -173,3 +173,9 @@ seconds and accepts positive integral deadlines up to 185 seconds. Controller
 and browser deadlines reject unknown options and out-of-range values before
 issuing work. Plugins choose the budget; no business-operation names are encoded
 in the core transport.
+
+Trusted controller commands may pass bounded private text using
+`controller.run(args, { timeoutMilliseconds, input })`. The core writes `input`
+to stdin and closes it; it never appends it to argv. Keep passwords out of args,
+status results and logs, and expose any explicit application credential read
+as an operator operation. JSON responses use `Cache-Control: no-store`.

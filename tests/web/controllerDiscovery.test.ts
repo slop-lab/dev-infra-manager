@@ -13,7 +13,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "dim-controller-discovery-")); roots.push(root);
   const calls = join(root, "calls.json"), state = join(root, "state.json"), executable = join(root, "dim");
   await writeFile(calls, "[]"); await writeFile(state, "true");
-  await writeFile(executable, `#!${process.execPath}\nimport fs from 'node:fs';const args=process.argv.slice(2),path=${JSON.stringify(calls)},calls=JSON.parse(fs.readFileSync(path));calls.push(args);fs.writeFileSync(path,JSON.stringify(calls));if(!JSON.parse(fs.readFileSync(${JSON.stringify(state)}))){console.error('PRIVATE_SECRET /private/controller/path');process.exit(1);}if(args.includes('slow'))await new Promise(resolve=>setTimeout(resolve,1000));if(args.includes('oversized'))console.log('x'.repeat(3*1024*1024));else console.log(JSON.stringify({args}));`, { mode: 0o700 });
+  await writeFile(executable, `#!${process.execPath}\nimport fs from 'node:fs';const args=process.argv.slice(2),path=${JSON.stringify(calls)},calls=JSON.parse(fs.readFileSync(path));calls.push(args);fs.writeFileSync(path,JSON.stringify(calls));if(!JSON.parse(fs.readFileSync(${JSON.stringify(state)}))){console.error('PRIVATE_SECRET /private/controller/path');process.exit(1);}if(args.includes('stdin')){let input='';for await(const chunk of process.stdin)input+=chunk;console.log(JSON.stringify({args,input}));process.exit(0);}if(args.includes('slow'))await new Promise(resolve=>setTimeout(resolve,1000));if(args.includes('oversized'))console.log('x'.repeat(3*1024*1024));else console.log(JSON.stringify({args}));`, { mode: 0o700 });
   const directory = join(root, "node_modules/fixture-feature"); await mkdir(directory, { recursive: true });
   await writeFile(join(directory, "package.json"), JSON.stringify({ name: "fixture-feature", type: "module", main: "index.js" }));
   await writeFile(join(directory, "index.js"), `const operation={name:'change',description:'Trusted fixture',access:'operator',parseInput(v){if(v && typeof v==='object'&&(Object.keys(v).length===0||Object.keys(v).length===1&&typeof v.manifest==='string'))return v;throw new Error('invalid');},parseOutput(v){return v;}};export const webPlugin={id:'fixture',title:'Fixture',description:'Controller discovery',operations:[operation],assets:{'panel.js':new URL('./panel.js',import.meta.url)},browserEntry:'panel.js',async create(config){if(config.reject)throw new Error("manual connection denied");return {invoke:async()=>({manual:config})};},async autoConnect(context){const controller=context.controllers[0];await controller.run(['fixture','discover']);return {invoke:(_name,input)=>controller.run(['fixture','change',...(input.manifest?[JSON.stringify(input)]:[])])};}};`);
@@ -87,4 +87,13 @@ it("passes a realistic manifest through authenticated Web JSON and the actual co
     expect(() => operation.parseInput({ projectId: "my-project", manifest: "한".repeat(22 * 1024) })).toThrow();
     expect(() => operation.parseInput({ projectId: "my-project", manifest: "\n".repeat(50 * 1024) })).toThrow();
   } finally { await web.close(); }
+});
+
+it("delivers bounded private input over stdin without placing it in argv", async () => {
+  const f = await fixture(), controller = f.context.controllers[0]!;
+  const input = JSON.stringify({ password: "quoted \" secret with spaces " });
+  expect(await controller.run(["stdin"], { timeoutMilliseconds: 1000, input })).toEqual({ args: ["--host", "selected-host", "stdin", "--json"], input });
+  expect(JSON.parse(await readFile(f.calls, "utf8"))).toEqual([["--host", "selected-host", "stdin", "--json"]]);
+  await expect(controller.run(["stdin"], { timeoutMilliseconds: 1000, input: "한".repeat(44 * 1024) })).rejects.toThrow("invalid controller command input");
+  expect(JSON.parse(await readFile(f.calls, "utf8"))).toHaveLength(1);
 });

@@ -51,3 +51,22 @@ it("requires a running initialized workspace without starting it implicitly", as
   await expect(invokeToolsConsole("tools.setup", { workspace: workspace.name, workspaceId: workspace.id, tool: "codex" }, context)).rejects.toThrow("Start the workspace");
   expect(execute).not.toHaveBeenCalled();
 }));
+
+it("transports password updates only through guest stdin and returns credentials only on explicit read", async () => fixture(async (context, workspace) => {
+  const password = 'private custom password "quotes"';
+  vi.spyOn(context.service, "exec").mockImplementation(async (_name, command, options) => {
+    if (command[0] === "node") return 0;
+    expect(JSON.stringify(command)).not.toContain(password);
+    if (command.at(-1) === "password") {
+      let input = "";
+      for await (const chunk of options!.stdin!) input += chunk.toString();
+      expect(JSON.parse(input)).toEqual({ password });
+      options?.stdout?.write(JSON.stringify({ state: "stopped", password }));
+    } else options?.stdout?.write(JSON.stringify({ username: "opencode", password }));
+    return 0;
+  });
+  const identity = { workspace: workspace.name, workspaceId: workspace.id };
+  expect(await invokeToolsConsole("server.password", { ...identity, password }, context)).toEqual({ ...identity, state: "stopped" });
+  expect(await invokeToolsConsole("server.credentials", identity, context)).toEqual({ ...identity, username: "opencode", password });
+  await expect(invokeToolsConsole("server.password", { ...identity, password: "too short" }, context)).rejects.toThrow("12–128");
+}));

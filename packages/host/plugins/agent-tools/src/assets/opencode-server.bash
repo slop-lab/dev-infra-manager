@@ -19,12 +19,12 @@ json_output=false
 operation_selected=false
 for argument in "$@"; do
   case "$argument" in
-    start|status|stop) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation="$argument"; operation_selected=true ;;
+    start|status|stop|credentials|password) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation="$argument"; operation_selected=true ;;
     --json) json_output=true ;;
-    *) fail 'usage: opencode-server.bash [start|status|stop] [--json]' ;;
+    *) fail 'usage: opencode-server.bash [start|status|stop|credentials|password] [--json]' ;;
   esac
 done
-for command_name in curl flock jq node; do
+for command_name in curl flock jq node base64; do
   require_command "$command_name"
 done
 
@@ -67,7 +67,7 @@ for (const segment of path.join(relative, "opencode-web").split(path.sep).filter
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`unsafe state directory: ${current}`)
   } catch (error) {
     if (error?.code !== "ENOENT") throw error
-    if (process.argv[4] !== "start") {
+    if (!["start", "password"].includes(process.argv[4])) {
       process.stdout.write(path.join(home, relative, "opencode-web"))
       process.exit(0)
     }
@@ -80,6 +80,7 @@ for (const segment of path.join(relative, "opencode-web").split(path.sep).filter
   }
   current = canonical
 }
+if (fs.statSync(current).uid !== process.getuid()) throw new Error("state directory must be user-owned")
 process.stdout.write(current)
 NODE
 )" || fail 'could not create a safe OpenCode Web state directory below HOME'
@@ -106,7 +107,10 @@ NODE
     printf 'state: %s\nurl: %s\nusername: %s\ncredentials: %s\n' "$state" "http://127.0.0.1:$port" "$SERVER_USERNAME" "$credentials_file"
   fi
 }
-if [[ "$operation" != start && ! -d "$state_dir" ]]; then
+if [[ "$operation" = credentials && ! -d "$state_dir" ]]; then
+  fail "OpenCode credentials have not been configured; start the server or set a password first"
+fi
+if [[ "$operation" != start && "$operation" != password && ! -d "$state_dir" ]]; then
   print_result stopped
   exit 0
 fi
@@ -131,8 +135,12 @@ if [[ -e "$credentials_file" ]]; then
   [[ "$(stat -c %a "$credentials_file")" = 600 ]] || \
     fail "credential file must have mode 0600: $credentials_file"
   mapfile -t credentials <"$credentials_file"
-  [[ "${#credentials[@]}" = 2 && "${credentials[0]}" = "$SERVER_USERNAME" && \
-    "${credentials[1]}" =~ ^[A-Za-z0-9_-]{32}$ ]] || fail "invalid credential file: $credentials_file"
+  node - "$credentials_file" <<'NODE' || fail 'invalid credential file'
+const fs = require("node:fs")
+const file = process.argv[2], stat = fs.statSync(file)
+const lines = fs.readFileSync(file, "utf8").split("\n")
+if (stat.nlink !== 1 || lines.length !== 3 || lines[0] !== "opencode" || lines[2] !== "" || !/^[\x20-\x7e]{12,128}$/.test(lines[1])) process.exit(1)
+NODE
   password="${credentials[1]}"
 fi
 
@@ -231,11 +239,22 @@ authenticated_health() {
   unauthenticated_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --connect-timeout 1 --max-time 1 \
     "http://127.0.0.1:$port/global/health" 2>/dev/null)" || return 1
   [[ "$unauthenticated_status" = 401 ]] || return 1
-  response="$(printf 'user = "%s:%s"\n' "$SERVER_USERNAME" "$password" |
+  response="$(printf 'header = "Authorization: Basic %s"\n' "$(printf '%s:%s' "$SERVER_USERNAME" "$password" | base64 -w0)" |
     curl --config - --fail --silent --show-error --connect-timeout 1 --max-time 1 \
       "http://127.0.0.1:$port/global/health" 2>/dev/null)" || return 1
   jq -e '.healthy == true' >/dev/null 2>&1 <<<"$response"
 }
+
+# Only this explicit operation discloses a credential; status and logs never do.
+if [[ "$operation" = credentials ]]; then
+  [[ -n "$password" ]] || fail 'OpenCode credentials have not been configured'
+  node - "$credentials_file" <<'NODE'
+const fs = require("node:fs")
+const [username, password] = fs.readFileSync(process.argv[2], "utf8").split("\n")
+console.log(JSON.stringify({username, password}))
+NODE
+  exit 0
+fi
 
 # Inspection never evaluates integration hooks, installs tools, or creates credentials.
 if [[ "$operation" != start ]]; then
@@ -251,17 +270,44 @@ if [[ "$operation" != start ]]; then
       owned_pid="$recorded_pid"
     fi
   fi
+  if [[ "$operation" = password ]]; then
+    temporary_credentials="$(mktemp "$state_dir/.credentials.XXXXXX")"
+    if ! node -e '
+const fs = require("node:fs")
+let bytes = 0; const chunks = []
+process.stdin.on("data", chunk => { bytes += chunk.length; if (bytes > 4096) process.exit(1); chunks.push(chunk) })
+process.stdin.on("end", () => {
+  try {
+    const value = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 1 || typeof value.password !== "string" || !/^[\x20-\x7e]{12,128}$/.test(value.password)) throw Error("invalid")
+    fs.writeFileSync(process.argv[1], `opencode\n${value.password}\n`, {mode: 0o600})
+  } catch { process.exitCode = 1 }
+})' "$temporary_credentials"; then
+      rm -f -- "$temporary_credentials"
+      fail 'password must contain 12–128 printable ASCII characters'
+    fi
+    if [[ -n "$owned_pid" ]]; then
+      stop_process "$owned_pid" "$recorded_start" "$recorded_instance" || { rm -f -- "$temporary_credentials"; fail 'owned OpenCode Web process did not stop'; }
+      rm -f -- "$pid_file"
+    fi
+    mv -- "$temporary_credentials" "$credentials_file"
+    mapfile -t credentials <"$credentials_file"
+    password="${credentials[1]}"
+    if [[ -n "$owned_pid" ]]; then operation=start; else print_result stopped; exit 0; fi
+  fi
   if [[ "$operation" = stop && -n "$owned_pid" ]]; then
     stop_process "$owned_pid" "$recorded_start" "$recorded_instance" || fail 'owned OpenCode Web process did not stop'
     rm -f -- "$pid_file"
     owned_pid=""
   fi
-  if [[ -n "$owned_pid" && -n "$password" ]] && authenticated_health; then
-    print_result running
-  else
-    print_result stopped
+  if [[ "$operation" != start ]]; then
+    if [[ -n "$owned_pid" && -n "$password" ]] && authenticated_health; then
+      print_result running
+    else
+      print_result stopped
+    fi
+    exit 0
   fi
-  exit 0
 fi
 require_command nohup
 require_command opencode
