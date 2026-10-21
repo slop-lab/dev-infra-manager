@@ -1,6 +1,6 @@
 import { identifier, object, privateFile, text } from "./config.js";
 
-export interface RouterModel { id: string; name: string; api: "responses" | "chat"; context: number; output: number }
+export interface RouterModel { id: string; name: string; api: "responses" | "chat"; context?: number; output?: number }
 export interface RouterIssuerConnection { schemaVersion: 1; endpoint: string; issuerId: string; issuerKeyFile: string }
 export interface PrincipalScope { bindingId: string; projectId: string; routeId: string; workspaceId: string; workspaceName: string }
 export interface IssuedPrincipal { principalId: string; token: string; models: RouterModel[] }
@@ -11,9 +11,10 @@ export async function issuePrincipal(connection: RouterIssuerConnection, scope: 
     || !Array.isArray(row.models) || !row.models.length) throw new Error("invalid issued router principal");
   const models = row.models.map((value: unknown): RouterModel => {
     const model = object(value);
-    if ((model.api !== "responses" && model.api !== "chat") || typeof model.context !== "number" || typeof model.output !== "number"
-      || !Number.isSafeInteger(model.context) || !Number.isSafeInteger(model.output) || model.context < 1 || model.output < 1) throw new Error("invalid router model");
-    return { id: text(model.id), name: text(model.name), api: model.api, context: model.context, output: model.output };
+    if (model.api !== "responses" && model.api !== "chat") throw new Error("invalid router model");
+    return { id: text(model.id), name: text(model.name), api: model.api,
+      ...(model.context === undefined ? {} : { context: positiveLimit(model.context) }),
+      ...(model.output === undefined ? {} : { output: positiveLimit(model.output) }) };
   });
   return { principalId: identifier(row.principalId), token: row.token, models };
 }
@@ -27,4 +28,8 @@ async function issuerRequest(connection: RouterIssuerConnection, path: string, s
     headers: { authorization: `Basic ${Buffer.from(`${connection.issuerId}:${key}`).toString("base64")}`, "content-type": "application/json" }, body: JSON.stringify(scope) });
   if (!response.ok) { await response.body?.cancel(); throw new Error(`router principal operation denied (${response.status})`); }
   return response;
+}
+
+function positiveLimit(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new Error("invalid router model"); return value;
 }

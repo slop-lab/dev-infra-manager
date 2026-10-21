@@ -3,7 +3,7 @@ import { open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { isIP } from "node:net";
 
-export interface RouterModel { id: string; name: string; api: "responses" | "chat"; context: number; output: number }
+export interface RouterModel { id: string; name: string; api: "responses" | "chat"; context?: number; output?: number }
 export interface RouterAccount { id: string; reference: string; endpoint: string; keyFile: string; credentialDirectory?: string; provider?: "codex" | "openai" | "anthropic" }
 export interface RouterRoute { id: string; accountId: string; models: RouterModel[] | "all" }
 export interface RouterLimits { concurrent: number; requestsPerUtcDay: number; requestBytes: number; responseBytes: number; captureBytesPerProject: number; deadlineMilliseconds: number }
@@ -52,9 +52,9 @@ export function parsePolicy(value: unknown): ProjectPolicy {
     ...(row.estimatedTokensPerRequest === undefined ? {} : { estimatedTokensPerRequest: integer(row.estimatedTokensPerRequest) }) };
 }
 export function parseModel(value: unknown): RouterModel {
-  const model = object(value); exact(model, ["id", "name", "api", "context", "output"]); const id = text(model.id);
+  const model = object(value); exact(model, ["id", "name", "api"], ["context", "output"]); const id = text(model.id);
   if (id.length > 200 || /[\s\x00-\x1f]/.test(id) || (model.api !== "responses" && model.api !== "chat")) throw new Error("invalid model");
-  return { id, name: text(model.name), api: model.api, context: integer(model.context), output: integer(model.output) };
+  return { id, name: text(model.name), api: model.api, ...(model.context === undefined ? {} : { context: integer(model.context) }), ...(model.output === undefined ? {} : { output: integer(model.output) }) };
 }
 export function parseConfig(value: unknown): RouterConfig {
   const row = object(value); exact(row, ["schemaVersion", "stateDirectory", "hostIssuers", "listen", "backend", "accounts", "routes", "limits"], ["operators", "accountManagement"]);

@@ -71,8 +71,11 @@ try {
   await page.getByLabel('Load route', { exact: true }).selectOption('');
   await page.getByLabel('Allowed models', { exact: true }).selectOption('selected');
   await page.getByLabel('Route ID', { exact: true }).fill('secondary'); await page.getByLabel('Route account', { exact: true }).selectOption('anthropic-4'); await page.getByLabel('Model ID', { exact: true }).fill('claude-test'); await page.getByLabel('Model name', { exact: true }).fill('Claude test'); await page.getByLabel('Model API', { exact: true }).selectOption('chat'); await page.getByRole('button', { name: 'Save route', exact: true }).click(); await page.getByText('Route secondary saved.', { exact: true }).waitFor();
-  assert.equal(writes.filter((value) => value.name === 'route.upsert').at(-1)?.input.accountId, 'anthropic-4');
+  assert.deepEqual(writes.filter((value) => value.name === 'route.upsert').at(-1)?.input, { routeId: 'secondary', accountId: 'anthropic-4', models: [{ id: 'claude-test', name: 'Claude test', api: 'chat' }] });
   await page.getByLabel('Load route', { exact: true }).selectOption('secondary'); assert.equal(await page.getByLabel('Allowed models', { exact: true }).inputValue(), 'selected'); assert.equal(await page.getByLabel('Model ID', { exact: true }).inputValue(), 'claude-test');
+  assert.equal(await page.getByLabel('Context tokens', { exact: true }).inputValue(), ''); assert.equal(await page.getByLabel('Output tokens', { exact: true }).inputValue(), '');
+  await page.getByLabel('Context tokens', { exact: true }).fill('1050000'); await page.getByLabel('Output tokens', { exact: true }).fill('128000'); await page.getByRole('button', { name: 'Save route', exact: true }).click(); await page.getByText('Route secondary saved.', { exact: true }).waitFor();
+  assert.deepEqual(writes.filter((value) => value.name === 'route.upsert').at(-1)?.input.models, [{ id: 'claude-test', name: 'Claude test', api: 'chat', context: 1050000, output: 128000 }]);
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   assert.deepEqual(errors, []); assert.equal(fixture.inferenceRequests(), 0);
   console.log('LLM account UI: multiple providers, Codex device authorization, secret wiping, accepted write receipts, account route selection, all/selected model policy round trips and mobile PASS');

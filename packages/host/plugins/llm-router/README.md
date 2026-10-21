@@ -36,6 +36,12 @@ fast-tier execution. Other unavailable models fail rather than switching to a
 direct OpenAI connection. The OpenAI SDK's transport also uses the gateway when
 an existing OpenCode authentication plugin is installed.
 
+Model discovery leaves unknown context/output limits unset. Native `openai/*`
+models, including `-fast` aliases, then inherit OpenCode's own model catalog
+instead of receiving invented context or output bounds. Explicit per-model
+limits remain user-owned; custom DIM providers need route/user metadata when
+OpenCode has no catalog entry for them.
+
 Main, small/background and role-specific model choices belong to OpenCode and
 OMO. Attachment installs only routing credentials and helpers; it neither selects
 a default model nor changes user model choices. Responses requests use

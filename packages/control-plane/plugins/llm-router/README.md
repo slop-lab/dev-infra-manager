@@ -220,8 +220,10 @@ new model admissions rather than silently reusing an expired list. This grants
 models within one account, without granting access to other accounts or routes.
 The router still serves Responses and Chat Completions; catalog entries requiring
 other endpoints, such as image generation, do not acquire those APIs. When the
-provider supplies no token limits, discovery uses conservative client defaults
-rather than claiming to know the model’s actual limits.
+provider supplies no token limits, discovery omits those limits. Clients retain
+their own model metadata instead of receiving invented context or output bounds.
+Explicit model lists may also omit `context` and `output`; supplied limits must be
+positive safe integers.
 
 Credential, connection and model files must be private mode 0600. A model file is an array such as `[{"id":"MODEL_ID","name":"MODEL_ID","api":"responses","context":128000,"output":16384}]`. Select `chat` for Chat Completions clients. Account IDs are stable identities. `account.rename` changes only a managed account label and preserves its credentials, routes and usage; static configuration accounts must be renamed in their configuration. Multiple accounts may share a label; multiple accounts may use the same provider URL. Creating an account does not grant any project access: explicitly add a route to that project's policy and to the trusted host issuer's allowed routes when host attachment is needed.
 

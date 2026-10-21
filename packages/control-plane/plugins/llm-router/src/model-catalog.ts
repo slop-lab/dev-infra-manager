@@ -43,11 +43,11 @@ async function discover(config: RouterConfig, account: RouterAccount): Promise<R
   if (value.has_more === true || value.next_page || value.next_cursor) throw new Error("paginated provider model catalogs require an explicit model list");
   const models = value.data.map((raw: unknown): RouterModel => {
     const row = object(raw);
-    // Providers expose different optional limits; use conservative limits when absent.
+    // Preserve unknown limits: clients may have authoritative model metadata of their own.
     return parseModel({ id: row.id, name: row.name ?? row.display_name ?? row.id,
       api: row.api ?? (account.provider === "openai" || account.provider === "anthropic" ? "chat" : "responses"),
-      context: row.context ?? row.context_length ?? row.context_window ?? row.max_input_tokens ?? 128_000,
-      output: row.output ?? row.max_output_tokens ?? 16_384 });
+      context: row.context ?? row.context_length ?? row.context_window ?? row.max_input_tokens,
+      output: row.output ?? row.max_output_tokens });
   });
   if (!models.length || new Set(models.map(({ id }) => id)).size !== models.length) throw new Error("account model catalog is empty or contains duplicate models");
   if (direct) {

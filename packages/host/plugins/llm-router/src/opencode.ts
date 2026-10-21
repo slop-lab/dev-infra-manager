@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-type Model = { id: string; name: string; api: "responses" | "chat"; context: number; output: number };
+type Model = { id: string; name: string; api: "responses" | "chat"; context?: number; output?: number };
 function record(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("invalid DIM LLM connection");
   return value as Record<string, unknown>;
@@ -43,11 +43,20 @@ async function routeModels(endpoint: string, token: string): Promise<Model[]> {
     const model = record(value);
     if (typeof model.id !== "string" || !/^[^\s\x00-\x1f\x7f]{1,200}$/.test(model.id) || ids.has(model.id)
       || typeof model.name !== "string" || model.name.length === 0 || (model.api !== "responses" && model.api !== "chat")
-      || typeof model.context !== "number" || !Number.isSafeInteger(model.context) || model.context < 1
-      || typeof model.output !== "number" || !Number.isSafeInteger(model.output) || model.output < 1) throw new Error("invalid DIM model metadata");
+      || model.context !== undefined && (typeof model.context !== "number" || !Number.isSafeInteger(model.context) || model.context < 1)
+      || model.output !== undefined && (typeof model.output !== "number" || !Number.isSafeInteger(model.output) || model.output < 1)) throw new Error("invalid DIM model metadata");
     ids.add(model.id);
-    return { id: model.id, name: model.name, api: model.api, context: model.context, output: model.output };
+    return { id: model.id, name: model.name, api: model.api,
+      ...(model.context === undefined ? {} : { context: model.context }),
+      ...(model.output === undefined ? {} : { output: model.output }) };
   });
+}
+/** Omitted limits let OpenCode retain its own catalog metadata, including input limits. */
+function modelLimits(model: Model, configured?: unknown): Record<string, unknown> {
+  const limit = { ...(model.context === undefined ? {} : { context: model.context }),
+    ...(model.output === undefined ? {} : { output: model.output }),
+    ...(configured === undefined ? {} : record(configured)) };
+  return Object.keys(limit).length ? { limit } : {};
 }
 async function DimLlmRouter() {
   const value: unknown = JSON.parse(await readFile(process.env.DIM_LLM_ROUTER_CONNECTION_FILE ?? join(homedir(), ".config/dim/llm-router.json"), "utf8"));
@@ -89,7 +98,7 @@ async function DimLlmRouter() {
       if (providers[name] !== undefined) throw new Error(`OpenCode provider '${name}' already exists; refusing to replace it`);
       providers[name] = { npm: api === "responses" ? "@ai-sdk/openai" : "@ai-sdk/openai-compatible", name: "DIM workspace router",
         options: { baseURL: `${connection.endpoint}/v1`, apiKey: connection.token },
-        models: Object.fromEntries(selected.map((model) => [model.id, { name: model.name, ...(api === "responses" ? { options: { store: false } } : {}), limit: { context: model.context, output: model.output } }])) };
+        models: Object.fromEntries(selected.map((model) => [model.id, { name: model.name, ...(api === "responses" ? { options: { store: false } } : {}), ...modelLimits(model) }])) };
     }
     config.provider = providers;
     if (mode === "router") {
@@ -120,7 +129,7 @@ async function DimLlmRouter() {
           const existing = configured[id] === undefined ? {} : record(configured[id]);
           const modelOptions = existing.options === undefined ? {} : record(existing.options);
           return [id, { ...existing, ...(id === model.id ? {} : { id: model.id }), name: id === model.id ? model.name : `${id} (via ${model.id})`, options: { ...modelOptions, store: false },
-            limit: existing.limit ?? { context: model.context, output: model.output } }];
+            ...modelLimits(model, existing.limit) }];
         })) };
     }
   } };

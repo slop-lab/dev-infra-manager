@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
-import { backendProfile, defaultLimits, parseConfig } from "../../../packages/control-plane/plugins/llm-router/src/config.js";
+import { backendProfile, defaultLimits, parseConfig, parseModel } from "../../../packages/control-plane/plugins/llm-router/src/config.js";
 import { discoverAccountModels } from "../../../packages/control-plane/plugins/llm-router/src/model-catalog.js";
 import { createRouter } from "../../../packages/control-plane/plugins/llm-router/src/server.js";
 import { invokeRouterOperation } from "../../../packages/control-plane/plugins/llm-router/src/operations.js";
@@ -54,7 +54,7 @@ it("discovers compatible API models with private provider keys and configures ba
   await writeFile(file, JSON.stringify({ "api-keys": { "openai-compatibility": [{ "base-url": fx.endpoint + "/v1", keys: [{ "api-key": "provider-secret" }], models: [] }] } }), { mode: 0o600 });
   const account = { ...fx.config.accounts[0]!, id: "api", provider: "openai" as const };
   const models = await discoverAccountModels(fx.config, account);
-  expect(models).toEqual([{ id: "compatible-model", name: "compatible-model", api: "chat", context: 128000, output: 16384 }]);
+  expect(models).toEqual([{ id: "compatible-model", name: "compatible-model", api: "chat" }]);
   const worker = JSON.parse(await readFile(file, "utf8"));
   expect(worker["api-keys"]["openai-compatibility"][0].models).toEqual([{ name: "compatible-model", alias: "compatible-model" }]);
   expect(JSON.stringify(models)).not.toContain("provider-secret");
@@ -68,4 +68,22 @@ it("rejects duplicate catalog entries and unsupported wildcard policy", async ()
 it("rejects partial paginated catalogs instead of silently limiting all models", async () => {
   const fx = await fixture((_request, response) => response.end(JSON.stringify({ data: [{ id: "first-page" }], has_more: true, last_id: "first-page" })));
   await expect(discoverAccountModels(fx.config, fx.config.accounts[0]!)).rejects.toThrow("paginated");
+});
+
+it("preserves unknown model limits through discovery, the account API and workspace catalog", async () => {
+  const fx = await fixture((_request, response) => response.end(JSON.stringify({ data: [{ id: "unknown" }, { id: "output-only", max_output_tokens: 128_000 }] })));
+  const expected = [{ id: "unknown", name: "unknown", api: "responses" }, { id: "output-only", name: "output-only", api: "responses", output: 128_000 }];
+  expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toEqual(expected);
+  expect(await invokeRouterOperation(fx.config, fx.router.ledger, "account.models", { accountId: "one" })).toEqual(expected);
+  const catalog = await fetch(fx.origin + "/v1/models", { headers: fx.headers });
+  expect((await catalog.json()).data).toEqual(expected.map((model) => ({ ...model, object: "model", owned_by: "dim-route" })));
+});
+it("accepts omitted explicit model limits and strictly validates supplied bounds", () => {
+  const model = { id: "model", name: "Model", api: "responses" };
+  expect(parseModel(model)).toEqual(model);
+  expect(parseModel({ ...model, context: 1_050_000 })).toEqual({ ...model, context: 1_050_000 });
+  for (const invalid of [null, 0, -1, 1.5, "128000", Number.MAX_SAFE_INTEGER + 1]) {
+    expect(() => parseModel({ ...model, context: invalid })).toThrow();
+    expect(() => parseModel({ ...model, output: invalid })).toThrow();
+  }
 });

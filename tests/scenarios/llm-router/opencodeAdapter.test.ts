@@ -128,3 +128,19 @@ it("uses a -fast alias only when the exact model is absent and the unsuffixed Re
   expect(chatConfig).toMatchObject({ provider: { openai: { whitelist: ["reviewed"] } } });
   await expect(chatOnly["chat.params"]({ model: { providerID: "openai", id: "reviewed-fast" } })).rejects.toThrow("unavailable");
 });
+
+it("leaves unknown model limits unset so OpenCode retains its native catalog and explicit user limits", async () => {
+  await fixture();
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json({ models: [{ id: "native", name: "Native", api: "responses" }] })));
+  const hooks = await DimLlmRouter();
+  const config: Record<string, unknown> = {};
+  await hooks.config(config);
+  const providers = config.provider as Record<string, { models: Record<string, { id?: string; limit?: unknown }> }>;
+  expect(providers.openai!.models.native).not.toHaveProperty("limit");
+  expect(providers.openai!.models["native-fast"]).toMatchObject({ id: "native" });
+  expect(providers.openai!.models["native-fast"]).not.toHaveProperty("limit");
+  expect(providers["dim-responses"]!.models.native).not.toHaveProperty("limit");
+  const explicit: Record<string, unknown> = { provider: { openai: { models: { native: { limit: { context: 1050000, input: 922000, output: 128000 } } } } } };
+  await hooks.config(explicit);
+  expect(explicit).toMatchObject({ provider: { openai: { models: { native: { limit: { context: 1050000, input: 922000, output: 128000 } } } } } });
+});
