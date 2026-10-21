@@ -77,3 +77,59 @@ it("never advertises management with a foreign selected role or revoked registra
   expect(f.calls).toEqual([]);
   expect(await f.store.read("codyssey", f.connection.hostId)).toBeUndefined();
 });
+
+it("previews and imports a reviewed multi-repository manifest, maps source branches and freezes retries", async () => {
+  const f = await fixture(), runtime = await createNativeProjectConsole(f.env, generationId, f.deps);
+  await runtime.invoke("projects.create", { projectId: "manifest-project" });
+  const manifest = `schemaVersion: 1
+repositories:
+  public:
+    ref: protected
+    protect: [protected]
+    upstream: {url: https://github.com/mjy9088/codyssey-public.git, branch: main}
+    publish: {protected: main}
+  private:
+    ref: main
+    protect: [main]
+    upstream: {url: https://github.com/mjy9088/codyssey-private.git, branch: main}
+policy:
+  code-review: {requiredReviewerIds: [], pathReviewerRules: [{pathPrefix: .dim/, reviewerIds: [owner]}]}
+  merge-policy: {}
+`;
+  const input = { projectId: "manifest-project", manifest };
+  expect(await runtime.invoke("repositories.preview-manifest", input)).toMatchObject({ configurationRepositoryId: "public", defaultWorkingRepositoryId: "public", repositories: [{ repositoryId: "public", branch: "main", protectedRef: "refs/heads/protected", policy: { "git-sync": { publish: { protected: "main" } } } }, { repositoryId: "private" }] });
+  expect(f.calls).toEqual([]);
+  const result = await runtime.invoke("repositories.import-manifest", input);
+  expect(result).toMatchObject({ projectId: "manifest-project", repositories: [{ repositoryId: "public", protectedRef: "refs/heads/protected" }, { repositoryId: "private", protectedRef: "refs/heads/main" }] });
+  expect(await runtime.invoke("repositories.import-manifest", input)).toEqual(result);
+  expect(f.calls).toHaveLength(2);
+  await expect(runtime.invoke("repositories.import-manifest", { ...input, manifest: manifest.replace("protected: main", "protected: development") })).rejects.toThrow("immutable import plan");
+  const record = await f.store.read("manifest-project", f.connection.hostId);
+  expect(record).toMatchObject({ phase: "ready", configurationRepositoryId: "public", defaultWorkingRepositoryId: "public" });
+  expect(record!.repositories.public!.repositoryPolicy.extensions["git-sync"]).toEqual({ upstream: { url: "https://github.com/mjy9088/codyssey-public.git", branch: "main" }, publish: { protected: "main" } });
+  await f.store.configure("manifest-project", { configurationRepositoryId: "private", defaultWorkingRepositoryId: "private" }, f.connection, AbortSignal.timeout(5000));
+  expect(await runtime.invoke("repositories.preview-manifest", input)).toMatchObject({ configurationRepositoryId: "private", defaultWorkingRepositoryId: "private" });
+});
+
+it("validates every manifest source before importing any repository", async () => {
+  const f = await fixture(), runtime = await createNativeProjectConsole(f.env, generationId, f.deps);
+  await runtime.invoke("projects.create", { projectId: "manifest-project" });
+  const manifest = `schemaVersion: 1\nrepositories:\n  public: {ref: main, protect: [main], upstream: {url: https://github.com/mjy9088/codyssey-public.git, branch: main}}\n  private: {ref: main, protect: [main], upstream: {url: http://localhost/private.git, branch: main}}\n`;
+  await expect(runtime.invoke("repositories.import-manifest", { projectId: "manifest-project", manifest })).rejects.toThrow();
+  expect(f.calls).toEqual([]);
+  expect((await f.store.read("manifest-project", f.connection.hostId))!.repositories).toEqual({});
+});
+
+it("resumes a partial manifest import without refetching the completed repository", async () => {
+  const f = await fixture(); let blockSecond = true;
+  const deps: PublicRepositoryImportDependencies = { async prepareSource(input, dependencies) { if (blockSecond && input.url.endsWith("private.git")) throw new Error("temporary upstream failure"); return f.deps.prepareSource!(input, dependencies); } };
+  const runtime = await createNativeProjectConsole(f.env, generationId, deps);
+  await runtime.invoke("projects.create", { projectId: "manifest-retry" });
+  const manifest = `schemaVersion: 1\nrepositories:\n  public: {ref: main, protect: [main], upstream: {url: https://github.com/mjy9088/codyssey-public.git, branch: main}}\n  private: {ref: main, protect: [main], upstream: {url: https://github.com/mjy9088/codyssey-private.git, branch: main}}\n`;
+  const input = { projectId: "manifest-retry", manifest };
+  await expect(runtime.invoke("repositories.import-manifest", input)).rejects.toThrow("Repository 'private' import failed");
+  expect(Object.keys((await f.store.read("manifest-retry", f.connection.hostId))!.repositories)).toEqual(["public"]);
+  blockSecond = false;
+  expect(await runtime.invoke("repositories.import-manifest", input)).toMatchObject({ repositories: [{ repositoryId: "public" }, { repositoryId: "private" }] });
+  expect(f.calls.filter((url) => url.endsWith("public.git"))).toHaveLength(1);
+});

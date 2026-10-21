@@ -111,6 +111,9 @@ is implied by these source changes.
   read, operator and reviewer roles. Organize workspaces by host, disclose
   creation and advanced settings on demand, preserve drafts across refresh and
   failed operations, and provide scoped recovery and explicit discard cancellation.
+  Explain ordinary Git URLs and managed project sources, suggest workspace names
+  and report actionable image, runtime and repository failures without exposing
+  private host diagnostics. Distinguish incomplete setup from a stopped workspace.
   Login origin failures identify the configured console URL.
   Keep unrelated features usable when a service is unavailable; reconnect a
   configured feature without losing drafts. Distinguish accepted changes from
@@ -130,6 +133,12 @@ is implied by these source changes.
   across retries, ignore remote policy declarations and require review for later
   `.dim/` changes. Public acquisition uses credential-free, bounded Git transport
   without executing repository code.
+  Explicitly import `.dim/repos.yml` from a local CLI file or Web paste/upload
+  after previewing its repository graph, protected refs, defaults and policies.
+  Preserve upstream/publish mappings and resume completed repository imports when
+  a later import fails. Managed deployment accepts these synchronization policies
+  without implicitly granting synchronization operator authority. Controller
+  discovery proves retained repositories against the current service generation.
   Deliver external Git events through signed,
   durable webhook subscriptions with bounded retry and restart recovery.
 - Keep LLM routing/account governance, Incus VM workspaces and SPICE consoles,

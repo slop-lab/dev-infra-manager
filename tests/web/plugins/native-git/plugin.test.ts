@@ -164,3 +164,27 @@ it("delegates controller-only project creation and public imports with exact sco
   expect(() => importing.parseInput({ controllerId: "devbox", projectId: "new-project", repositoryId: "extra", url: "https://github.com/example/public.git", policy: { allow: "all" } })).toThrow();
   for (const url of ["http://github.com/example/a.git", "https://user:secret@github.com/example/a.git", "file:///host/secret"]) expect(() => importing.parseInput({ controllerId: "devbox", projectId: "new-project", repositoryId: "private", url })).toThrow();
 });
+
+it("keeps manifest preview/import controller-scoped and gives imports their bounded deadline", async () => {
+  const calls: Array<{ args: readonly string[]; timeout?: number }> = [];
+  const policy = { "code-review": { requiredReviewerIds: ["owner"] } };
+  const preview = { projectId: "project-a", repositories: [{ repositoryId: "root", url: "https://github.com/example/root.git", branch: "main", protectedRef: "refs/heads/main", policy }], configurationRepositoryId: "root", defaultWorkingRepositoryId: "root" };
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "devbox", async run(args, options) {
+    if (args[2] === "describe") return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [{ projectId: "project-a", name: "project-a", repositoryIds: [] }], operations: operations.map(({ name, description, access }) => ({ name, description, access })) };
+    calls.push({ args, ...(options ? { timeout: options.timeoutMilliseconds } : {}) });
+    return args[3] === "repositories.preview-manifest" ? preview : { projectId: "project-a", repositories: [{ projectId: "project-a", repositoryId: "root", protectedRef: "refs/heads/main", commit: "b".repeat(40), tree: "c".repeat(40), projectReady: true }] };
+  } }] });
+  const input = { controllerId: "devbox", projectId: "project-a", manifest: "schemaVersion: 1\nrepositories: {}\n" };
+  expect(await runtime.invoke("repositories.preview-manifest", input)).toEqual(preview);
+  expect(calls.at(-1)?.timeout).toBeUndefined();
+  expect(await runtime.invoke("repositories.import-manifest", input)).toMatchObject({ projectId: "project-a", repositories: [{ repositoryId: "root" }] });
+  expect(calls.at(-1)?.timeout).toBe(180_000);
+  const count = calls.length;
+  await expect(runtime.invoke("repositories.import-manifest", { ...input, projectId: "foreign" })).rejects.toThrow("scope");
+  expect(calls).toHaveLength(count);
+  for (const name of ["repositories.preview-manifest", "repositories.import-manifest"]) {
+    const operation = operations.find((operation) => operation.name === name)!;
+    expect(operation.access).toBe("operator");
+    expect(() => operation.parseInput({ ...input, path: "/host/.dim/repos.yml" })).toThrow();
+  }
+});

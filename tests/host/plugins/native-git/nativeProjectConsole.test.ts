@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { managedProjectFixture } from "./nativeProjectIntegrationFixture.js";
 import { createNativeProjectConsole, describeNativeProjectConsole, invokeNativeProjectConsole } from "../../../../packages/host/plugins/native-git/src/projectConsole.js";
 import { runNativeGitCli } from "../../../../packages/host/plugins/native-git/src/cli/index.js";
-import { cleanupFinalizeFixtures, generationId, humanReviewer, hostPromoter } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures, generationId, humanReviewer, hostPromoter, closeFinalizeService, startFinalizeServiceForGeneration, activateFinalizeServiceForGeneration, generationB, activationTokenB } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await cleanupFinalizeFixtures(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -35,13 +35,29 @@ it("discovers ready multi-repository projects dynamically through the CLI withou
   await runNativeGitCli(["project", "console", "invoke", "reviews.list", "--expected-generation", generationId, "--input", JSON.stringify({ projectId: "project-a", repositoryId: "public" }), "--json"]);
   expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toEqual([]);
 });
-it("does not advertise repositories imported for a previous control-plane generation", async () => {
+it("keeps immutable generation-A imports visible when the current generation-B service proves readiness", async () => {
   const f = await fixture(); await f.importRepository("public");
-  const file = join(f.state, "projects/acme.json"), record = JSON.parse(await readFile(file, "utf8")) as { repositories: { public: { importReceipt: { generationId: string } } } };
-  record.repositories.public.importReceipt.generationId = "b".repeat(64);
-  await writeFile(file, JSON.stringify(record), { mode: 0o600 });
-  expect(await (await createNativeProjectConsole(f.env)).invoke("projects.list", {})).toMatchObject({ projects: [{ projectId: "project-a", repositoryIds: [] }] });
-  await expect(invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).rejects.toThrow("current project catalog");
+  const recordFile = join(f.state, "projects/acme.json"), original = await readFile(recordFile);
+  await closeFinalizeService(f.service);
+  const current = await startFinalizeServiceForGeneration(f.serviceRoot, generationB, activationTokenB);
+  await activateFinalizeServiceForGeneration(current.origin, generationB, activationTokenB);
+  const selected = { ...f.connection, nativeGit: { ...f.connection.nativeGit, endpoint: current.origin, generationId: generationB } };
+  await writeFile(f.hostFile, JSON.stringify(selected));
+  for (const file of [f.reviewer, f.promoter, f.importerConnectionFile, f.registrarConnectionFile]) {
+    const value = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+    await writeFile(file, JSON.stringify({ ...value, generationId: generationB, ...(Object.hasOwn(value, "baseUrl") ? { baseUrl: current.origin } : { endpoint: current.origin }) }));
+  }
+  const runtime = await createNativeProjectConsole(f.env, generationB);
+  expect(await runtime.invoke("projects.list", {})).toMatchObject({ projects: [{ projectId: "project-a", repositoryIds: ["public"] }] });
+  expect(await runtime.invoke("projects.create", { projectId: "project-a" })).toEqual({ projectId: "project-a", name: "acme", repositoryIds: ["public"] });
+  expect(await runtime.invoke("reviews.list", { projectId: "project-a", repositoryId: "public" })).toEqual([]);
+  expect(await readFile(recordFile)).toEqual(original);
+  await expect(invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).rejects.toThrow("generation changed");
+
+  // A local receipt alone is insufficient when current authority rejects the readiness credential.
+  await writeFile(f.hostFile, JSON.stringify({ ...selected, nativeGit: { ...selected.nativeGit,
+    workspaceWriteIssuer: { ...selected.nativeGit.workspaceWriteIssuer, password: Buffer.alloc(32, 99).toString("base64url") } } }));
+  expect(await (await createNativeProjectConsole(f.env, generationB)).invoke("projects.list", {})).toMatchObject({ projects: [{ projectId: "project-a", repositoryIds: [] }] });
 });
 it("rejects same-directory reviewer/promoter files for a different selected endpoint, generation or host", async () => {
   const f = await fixture();

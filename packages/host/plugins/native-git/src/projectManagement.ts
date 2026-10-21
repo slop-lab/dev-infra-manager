@@ -10,7 +10,9 @@ import { loadNativeGitRootImporterConnection } from "./nativeGitRootImporterConn
 import { createNativeGitProjectRegistrarClient } from "./nativeGitProjectRegistrarClient.js";
 import { createNativeGitRootImporterClient } from "./nativeGitRootImporterClient.js";
 import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
+import { nativeProjectCatalogEntry } from "./nativeProjectCatalog.js";
 import { importNativeProjectPublicRepository, type PublicRepositoryImportDependencies } from "./publicRepositoryImport.js";
+import { importNativeRepositoryManifest, previewNativeRepositoryManifest } from "./repositoryManifestImport.js";
 async function present(path: string): Promise<boolean> { try { await lstat(path); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; } }
 /** Management requires distinct attested registrar and importer roles on this controller. */
 export async function createNativeProjectManagement(input: { selected: NativeControlPlaneConnection; hostConnectionFile: string; reviewerId: string; environment: NodeJS.ProcessEnv }, dependencies: PublicRepositoryImportDependencies = {}) {
@@ -32,9 +34,18 @@ export async function createNativeProjectManagement(input: { selected: NativeCon
     const projectId = parsed.projectId, catalog = await store.list(selected.hostId), existing = catalog.find((project) => project.projectId === projectId);
     if (name === "projects.create") {
       const record = existing ?? await store.create({ name: projectId, projectId, ownerHostId: selected.hostId });
-      return operation.parseOutput({ projectId: record.projectId, name: record.name, repositoryIds: Object.values(record.repositories).filter((repository) => repository.importReceipt.generationId === selected.nativeGit.generationId).map((repository) => repository.repositoryId).sort() });
+      return operation.parseOutput(await nativeProjectCatalogEntry(record, selected));
     }
-    if (!existing || !("repositoryId" in parsed) || !("url" in parsed) || typeof parsed.repositoryId !== "string" || typeof parsed.url !== "string") throw new Error("Project does not exist on this controller");
+    if (!existing) throw new Error("Project does not exist on this controller");
+    if ("manifest" in parsed && typeof parsed.manifest === "string") {
+      if (name === "repositories.preview-manifest") {
+        const plan = previewNativeRepositoryManifest(projectId, parsed.manifest);
+        return operation.parseOutput({ ...plan, configurationRepositoryId: existing.configurationRepositoryId ?? plan.configurationRepositoryId, defaultWorkingRepositoryId: existing.defaultWorkingRepositoryId ?? plan.defaultWorkingRepositoryId });
+      }
+      return operation.parseOutput(await importNativeRepositoryManifest({ name: existing.name, projectId, manifest: parsed.manifest,
+        selected, stateRoot, registrarConnectionFile: registrarFile, importerConnectionFile: importerFile, reviewerId: input.reviewerId, signal: AbortSignal.timeout(150_000) }, dependencies));
+    }
+    if (!("repositoryId" in parsed) || !("url" in parsed) || typeof parsed.repositoryId !== "string" || typeof parsed.url !== "string") throw new Error("Repository import input is invalid");
     const branch = "branch" in parsed && typeof parsed.branch === "string" ? parsed.branch : undefined;
     return operation.parseOutput(await importNativeProjectPublicRepository({ name: existing.name, projectId, repositoryId: parsed.repositoryId, url: parsed.url, ...(branch === undefined ? {} : { branch }),
       selected, stateRoot, registrarConnectionFile: registrarFile, importerConnectionFile: importerFile, reviewerId: input.reviewerId, signal: AbortSignal.timeout(150_000) }, dependencies));

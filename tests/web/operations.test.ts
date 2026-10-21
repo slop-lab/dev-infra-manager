@@ -91,3 +91,36 @@ it("executes only configured public DIM host ports, projects safe summaries and 
   await expect(operations.workspaceCreate("attacker-host", { name: "new-dev", source: "git://example.test/repo.git", runtime: "container" })).rejects.toThrow("host not found");
   await expect(operations.workspaces("attacker-host")).rejects.toThrow("host not found");
 });
+it("returns fixed actionable host failure categories without raw stderr, credentials or host paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-web-safe-failure-")); cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const executable = join(root, "dim"), diagnostic = join(root, "diagnostic");
+  await writeFile(executable, `#!${process.execPath}\nimport fs from 'node:fs'; console.error(fs.readFileSync(${JSON.stringify(diagnostic)},'utf8'));process.exit(2);\n`, { mode: 0o700 });
+  const operations = configuredWebOperations({ hosts: [{ id: "devbox", selector: "host-only", executable }], consoles: [] });
+  for (const [message, code, guidance] of [
+    ["workspace 'new-dev' already exists", "workspace_exists", "choose another name"],
+    ["Docker run failed: pull access denied for private/image", "image_unavailable", "build or pull"],
+    ["Cannot connect to the Docker daemon", "runtime_unavailable", "dim doctor"],
+    ["project 'my-project' not found", "project_unavailable", "ordinary Git"],
+    ["fatal: couldn't find remote ref missing", "ref_unavailable", "Git ref empty"],
+    ["fatal: Authentication failed", "repository_unavailable", "host Git credentials"],
+    ["Unexpected diagnostic", "host_operation_failed", "dim doctor"]
+  ]) {
+    await writeFile(diagnostic, `${message}\nhttps://user:PRIVATE_SECRET@example.test/repo /private/host/path\n`);
+    const failure = await operations.workspaceCreate("devbox", workspaceCreateSchema.parse({ name: "new-dev", source: "https://example.test/repo.git" })).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ code, publicMessage: expect.stringContaining(guidance!) });
+    expect(JSON.stringify(failure)).not.toMatch(/PRIVATE_SECRET|\/private\/host\/path|user:/);
+  }
+  const unavailable = configuredWebOperations({ hosts: [{ id: "missing", selector: "host-only", executable: join(root, "missing") }], consoles: [] });
+  await expect(unavailable.workspaces("missing")).rejects.toMatchObject({ code: "host_unavailable", status: 503 });
+});
+it("projects failed workspace setup state into a safe recovery category", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-web-safe-state-")); cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const executable = join(root, "dim"), row = { id: uuid, name: "incomplete", runtime: "container", runtimeStatus: "missing", phase: "error", initialized: false,
+    resources: { cpuCount: "1", memory: "2g", pidsLimit: "512" }, error: "pull access denied PRIVATE_SECRET /private/path", source: { url: "PRIVATE_REPO" } };
+  await writeFile(executable, `#!${process.execPath}\nconsole.log(${JSON.stringify(JSON.stringify([row]))});\n`, { mode: 0o700 });
+  const operations = configuredWebOperations({ hosts: [{ id: "devbox", selector: "host-only", executable }], consoles: [] });
+  const rows = await operations.workspaces("devbox");
+  expect(rows).toEqual([{ id: uuid, name: "incomplete", runtime: "container", runtimeStatus: "missing", phase: "error", initialized: false,
+    resources: row.resources, failureCode: "image_unavailable" }]);
+  expect(JSON.stringify(rows)).not.toMatch(/PRIVATE_SECRET|\/private\/path|PRIVATE_REPO/);
+});

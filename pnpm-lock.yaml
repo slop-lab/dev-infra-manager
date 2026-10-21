@@ -253,6 +253,9 @@ importers:
       '@slop-lab/dim-control-plane-plugin-git-repositories':
         specifier: workspace:0.10.0
         version: link:../plugins/git-repositories
+      '@slop-lab/dim-control-plane-plugin-git-sync':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-sync
       '@slop-lab/dim-control-plane-plugin-merge-policy':
         specifier: workspace:0.10.0
         version: link:../plugins/merge-policy

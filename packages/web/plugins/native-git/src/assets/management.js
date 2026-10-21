@@ -1,4 +1,5 @@
 // @ts-check
+import { mountManifestImport } from "./manifest.js";
 /** @typedef {{controllerId:string,projectId:string}} Target */
 /** @typedef {{operations:Array<{name:string}>,invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean}} Context */
 /** @typedef {{scope():Target,has(name:string):boolean,refresh(preferred:{controllerId:string,projectId:string,repositoryId?:string}):Promise<void>}} Navigation */
@@ -11,6 +12,7 @@ function field(form, label, required = true) {
 }
 /** @param {HTMLElement} container @param {Context} context @param {Navigation} navigation */
 export function mountManagement(container, context, navigation) {
+  const manifest = mountManifestImport(container, context, navigation);
   let disposed = false, activeController = "", activeProject = "";
   const current = () => !disposed && context.isCurrent();
   /** @param {Target} target */ const selected = (target) => current() && target.controllerId === navigation.scope().controllerId && target.projectId === navigation.scope().projectId;
@@ -76,7 +78,7 @@ export function mountManagement(container, context, navigation) {
     finally { draft.pending = false; if (selected(target)) paint(); }
   });
   return {
-    update() { const target = navigation.scope(); activeController = target.controllerId; activeProject = target.projectId; paint(); },
-    dispose() { disposed = true; }
+    update() { const target = navigation.scope(); activeController = target.controllerId; activeProject = target.projectId; paint(); manifest.update(); },
+    dispose() { disposed = true; manifest.dispose(); }
   };
 }

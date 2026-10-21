@@ -14,6 +14,8 @@ export type NativeRootBootstrapGitInput = {
   readonly gitExecutable: string;
   readonly sourceRepository: string;
   readonly selectedRef: string;
+  /** Explicit acquisition branch when the managed protected branch has another name. */
+  readonly sourceRef?: string;
   readonly repositoryId: string;
   readonly scratchRoot: string;
   readonly policySource: { readonly kind: "reviewed-manifest" }
@@ -34,7 +36,8 @@ export async function prepareNativeRootBootstrapGit(
   input.signal.throwIfAborted();
   if (!isAbsolute(input.gitExecutable) || !isAbsolute(input.sourceRepository)
     || !isAbsolute(input.scratchRoot) || !input.selectedRef.startsWith("refs/heads/")
-    || input.selectedRef !== normalizeRepositoryRef(input.selectedRef)) {
+    || input.selectedRef !== normalizeRepositoryRef(input.selectedRef)
+    || input.sourceRef !== undefined && (!input.sourceRef.startsWith("refs/heads/") || input.sourceRef !== normalizeRepositoryRef(input.sourceRef))) {
     throw new UserError("native root bootstrap requires absolute local paths and a concrete branch ref");
   }
   const scratch = await lstat(input.scratchRoot);
@@ -63,7 +66,7 @@ export async function prepareNativeRootBootstrapGit(
   const format = (await git([...sourceArgs, "rev-parse", "--show-object-format"], "object format")).trim();
   if (format !== "sha1" && format !== "sha256") throw new UserError("native root object format is unsupported");
   const expectedCommit = (await git([...sourceArgs, "rev-parse", "--verify",
-    `${input.selectedRef}^{commit}`], "protected commit lookup")).trim();
+    `${input.sourceRef ?? input.selectedRef}^{commit}`], "protected commit lookup")).trim();
   if (expectedCommit.length !== (format === "sha1" ? 40 : 64)
     || !/^[0-9a-f]+$/.test(expectedCommit)) throw new UserError("native root commit is invalid");
   const resolvedTree = (await git([...sourceArgs, "rev-parse", "--verify",

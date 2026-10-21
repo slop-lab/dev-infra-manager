@@ -5,6 +5,7 @@ import { nativePendingProjectView, selectNativeProject } from "./native-project-
 import { registerNativeProjectBootstrapCommand } from "./native-project-bootstrap-command.js";
 import { registerProjectConsoleCommands } from "./project-console-commands.js";
 import { registerGitSyncCommands } from "./git-sync-commands.js";
+import { registerNativeProjectManifestCommand } from "./native-project-manifest-command.js";
 
 export function registerProjectCommands(program: Command): void {
   const project = program.command("project").description("Manage native Projects and their independent repositories");
@@ -18,6 +19,7 @@ export function registerProjectCommands(program: Command): void {
     });
   const repository = project.command("repository").description("Import and inspect independently reviewed repositories");
   registerNativeProjectBootstrapCommand(repository);
+  registerNativeProjectManifestCommand(repository);
   registerGitSyncCommands(repository);
   repository.command("list").alias("ls").argument("<project>").option("--json", "print machine-readable JSON")
     .action(async (name: string, flags: JsonFlags) => {

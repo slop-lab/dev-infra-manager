@@ -11,8 +11,8 @@ export function webPluginContext(hosts: OperationsConfig["hosts"] = []): WebPlug
       if (options !== undefined && (typeof options !== "object" || options === null || Object.keys(options).some((key) => key !== "timeoutMilliseconds"))
         || !Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 180_000) throw new Error("invalid controller command timeout");
       if (!Array.isArray(args) || args.length === 0 || args.length > 128 || typeof args[0] !== "string" || args[0].startsWith("-")
-        || args.some((arg) => typeof arg !== "string" || arg.length > 4096 || arg.includes("\0") || /^(?:--host|--json)(?:=|$)/.test(arg))
-        || args.reduce((bytes, arg) => bytes + Buffer.byteLength(arg, "utf8"), 0) > 32 * 1024) throw new Error("invalid controller command arguments");
+        || args.some((arg) => typeof arg !== "string" || Buffer.byteLength(arg, "utf8") > 96 * 1024 || arg.includes("\0") || /^(?:--host|--json)(?:=|$)/.test(arg))
+        || args.reduce((bytes, arg) => bytes + Buffer.byteLength(arg, "utf8"), 0) > 128 * 1024) throw new Error("invalid controller command arguments");
       try {
         const result = await execute(executable, ["--host", selector, ...args, "--json"], {
           timeout, maxBuffer: 2 * 1024 * 1024, encoding: "utf8", windowsHide: true

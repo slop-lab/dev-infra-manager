@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-const MAX_BODY_BYTES = 16 * 1024;
+const MAX_BODY_BYTES = 128 * 1024;
 const CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
 export type JsonResponse = {
@@ -53,7 +53,7 @@ function securityHeaders(extra: Readonly<Record<string, string>>): Readonly<Reco
 
 export class HttpResponseError extends Error {
   readonly name = "HttpResponseError";
-  constructor(readonly status: number, readonly publicMessage: string) {
+  constructor(readonly status: number, readonly publicMessage: string, readonly code?: string) {
     super(publicMessage);
   }
 }

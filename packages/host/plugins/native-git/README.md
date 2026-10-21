@@ -65,3 +65,40 @@ dim project repository import examples spoon --source https://github.com/octocat
 The first imported repository becomes the configuration and default working repository; subsequent imports preserve those defaults. Local source imports still require `--ref`. For URL imports, optional `--ref refs/heads/BRANCH` selects a branch instead of `--branch`. Public acquisition never checks out files, runs hooks or submodules, reads ambient Git credentials, or interprets the remote `.dim/repos.yml`. Default controller policy allows ordinary changes without review and requires the selected reviewer's approval for `.dim/` changes, with the merge-policy integration enabled. A CLI operator may explicitly choose a trusted host `--policy` file; `--repository-policy` is forbidden for URL sources.
 
 URL imports retain private source intent under `native-project-url-imports/`, alongside immutable draft bundles under `native-project-drafts/`. Retry uses the original artifact and proves its existing protected root even when upstream has moved or the prior response was lost. Changing URL, requested branch or an explicit policy is rejected instead of replacing that initial import. Updating an existing repository is a separate reviewed sync operation.
+
+The project console advertises admitted repositories only after the currently
+selected service proves readiness. A valid service generation update preserves
+their original immutable import receipts; those historical generation IDs do not
+hide repositories that the current authority still serves. Console requests
+remain fenced to the selected serving generation.
+
+### Import a `.dim/repos.yml` manifest
+
+A reviewed manifest can import several repositories in one action. In **Git
+review**, create/select a project, paste or upload the manifest, inspect the
+preview, then explicitly import it. The equivalent CLI is:
+
+```sh
+dim project repository import-manifest my-project --manifest /absolute/path/.dim/repos.yml --preview --json
+dim project repository import-manifest my-project --manifest /absolute/path/.dim/repos.yml --json
+```
+
+Each entry must declare `ref`, `protect`, and `upstream: {url, branch}`. Acquisition
+uses the public HTTPS upstream branch; DIM imports that commit under the managed
+`ref`, so `main` can start from upstream `development`. Per-repository `publish`
+and manifest `policy` become the imported policy, including reviewer identities
+exactly as supplied. Inspect those identities against the configured service;
+DIM does not translate `owner` into another reviewer. This explicit action trusts
+the supplied declarative policy; ordinary URL import continues to ignore remote
+`.dim/repos.yml`. No repository code, hooks or checkout runs during import.
+
+The preview includes every source, managed ref, complete policy, and proposed
+configuration/default repository. A new project's first declared entry supplies
+both defaults; an existing project's defaults remain unchanged. All entries are
+validated before import starts. Up to 16 repositories and a 64 KiB UTF-8 manifest are
+supported. The console accepts at most 96 KiB of encoded JSON input; manifest
+operations reserve 1 KiB for transport metadata and reject documents whose JSON
+encoding exceeds 95 KiB, including unusually escape-heavy YAML. Imports are sequential and may complete partly before a deadline or
+source failure. Retry the same manifest to resume its original durable repository
+artifacts. The normalized import plan is immutable; changes are rejected rather
+than silently replacing a completed or pending import.

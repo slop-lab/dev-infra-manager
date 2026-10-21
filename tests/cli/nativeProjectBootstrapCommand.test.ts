@@ -33,6 +33,19 @@ test("native repository import help distinguishes local refs and public HTTPS br
   assert.doesNotMatch(help.stdout, /bootstrap-git-url|password|token/);
 });
 
+test("manifest import previews host-side YAML sources and rejects an unsafe manifest file", async () => {
+  const fixture = await nativeFixture({ seedImportedDraft: false });
+  const manifest = join(fixture.stateRoot, "repos.yml");
+  await writeFile(manifest, "schemaVersion: 1\nrepositories:\n  root: {ref: main, protect: [main], upstream: {url: https://github.com/octocat/Hello-World.git, branch: master}}\n", { mode: 0o600 });
+  const result = await runCli(["project", "repository", "import-manifest", "acme", "--manifest", manifest, "--preview", "--json"], fixture.environment);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).repositories[0], { repositoryId: "root", url: "https://github.com/octocat/Hello-World.git", branch: "master", protectedRef: "refs/heads/main", policy: { "git-sync": { upstream: { url: "https://github.com/octocat/Hello-World.git", branch: "master" } } } });
+  await chmod(manifest, 0o620);
+  const rejected = await runCli(["project", "repository", "import-manifest", "acme", "--manifest", manifest, "--json"], fixture.environment);
+  assert.equal(rejected.status, 2, rejected.stderr);
+  assert.match(rejected.stderr, /non-group\/world-writable/);
+});
+
 test("explicit repository policy imports the selected committed .dim manifest", async () => {
   const fixture = await nativeFixture({ seedImportedDraft: false });
   await writeFile(join(fixture.sourceRepository, ".dim/repos.yml"), "schemaVersion: 1\nrepositories:\n  root: {ref: main, protect: [main]}\npolicy:\n  code-review: {requiredReviewerIds: [], pathReviewerRules: [{pathPrefix: .dim/, reviewerIds: [owner]}]}\n  merge-policy: {}\n");

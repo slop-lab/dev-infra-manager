@@ -17,7 +17,10 @@ async function request(path, body, timeout = 35_000) {
     headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json", "x-dim-csrf": active.csrfToken }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeout) });
   if (response.status === 401) window.dispatchEvent(new Event("dim-session-expired"));
-  if (!response.ok) throw new Error(response.status === 401 ? "session expired" : "operation failed");
+  if (!response.ok) {
+    const failure = record(await response.json().catch(() => null));
+    throw Object.assign(new Error(response.status === 401 ? "session expired" : "operation failed"), { code: text(failure?.code) });
+  }
   /** @type {unknown} */ const value = await response.json(); return value;
 }
 const workspaceHosts = createWorkspaceHosts(hosts, request);

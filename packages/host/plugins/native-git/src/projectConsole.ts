@@ -8,6 +8,7 @@ import { createNativeGitOperator } from "@slop-lab/dim-native-git-client";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
+import { nativeProjectCatalogEntry } from "./nativeProjectCatalog.js";
 
 async function optionalFile(path: string): Promise<string | undefined> {
   try { await lstat(path); return path; }
@@ -22,8 +23,7 @@ export async function createNativeProjectConsole(environment: NodeJS.ProcessEnv 
   const operator = await createNativeGitOperator({ reviewerConnection: join(directory, "reviewer.json"),
     ...(promoterConnection ? { promoterConnection } : {}), ...(syncConnection ? { syncConnection } : {}),
     selectedService: { endpoint: selected.nativeGit.endpoint, generationId: selected.nativeGit.generationId, hostId: selected.hostId },
-    projects: async () => (await store.list(selected.hostId)).map((project) => ({ projectId: project.projectId, name: project.name,
-      repositoryIds: Object.values(project.repositories).filter((repository) => repository.phase === "ready" && repository.importReceipt.generationId === selected.nativeGit.generationId).map(({ repositoryId }) => repositoryId).sort() }))
+    projects: async () => Promise.all((await store.list(selected.hostId)).map((project) => nativeProjectCatalogEntry(project, selected)))
   });
   const catalog = await operator.invoke("projects.list", {});
   if (!catalog || typeof catalog !== "object" || !("reviewerId" in catalog) || typeof catalog.reviewerId !== "string") throw new Error("Invalid Native Git reviewer identity");

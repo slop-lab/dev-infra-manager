@@ -53,7 +53,7 @@ The core builds a readonly `WebPluginContext.controllers` list from private
 host settings. Each entry exposes an ID and a JSON-returning `run(args)` method.
 Only the reviewed server-side plugin receives it. Executable and host selector
 are fixed; the invocation is `[--host, SELECTOR, ...ARGS, --json]` without a shell.
-Arguments are bounded to 128 entries, 4,096 characters each and 32 KiB UTF-8 total;
+Arguments are bounded to 128 entries, 96 KiB UTF-8 each and 128 KiB UTF-8 total;
 NUL and `--host`/`--json` overrides are rejected. Output is bounded to 2 MiB and
 execution to 30 seconds by default. A trusted plugin may request a positive
 integral deadline up to 180 seconds; the browser operation transport separately
@@ -119,7 +119,8 @@ proxy. Inputs, handler results and public errors cannot include raw service
 credentials. Feature browser code renders untrusted results as text, never HTML.
 
 All operation POSTs require CSRF, including read operations sent using POST.
-Requests and handler responses are bounded; a backend error is sanitized.
+JSON request bodies are bounded to 128 KiB UTF-8, including their encoded
+envelope. Handler responses are bounded; a backend error is sanitized.
 Feature UI pending operations cannot populate a later account's view, and
 sign-out clears mounted panels, drafts and session-owned content.
 
@@ -128,7 +129,9 @@ sign-out clears mounted panels, drafts and session-owned content.
 Authenticated status exposes only configured host IDs and credential-free
 console URLs. Host IDs map to trusted server-side DIM executables and existing
 host selectors. GET workspace lists project only immutable ID, name, runtime,
-phase, observed runtime status and resource limits. POST creation accepts safe
+phase, observed runtime status, initialization status and resource limits. Failed
+workspaces may include a fixed public failure category, never raw saved errors.
+POST creation accepts safe
 Git source input and explicit runtime/resource selection. POST lifecycle actions
 allow only start, stop, restart, recreate, discard and resources; each requires
 operator role, Origin/CSRF and an expected workspace UUID. The adapter invokes
@@ -136,6 +139,13 @@ the public CLI without a shell and with separate arguments. The host verifies
 the UUID under its lifecycle lock before mutation. Executable paths, state
 locations and host selectors never come from the browser. Subprocess time and
 output are bounded. Unsafe inputs fail before dispatch.
+Host failures return only reviewed messages and public categories for missing
+images, unavailable runtimes/hosts, duplicate names, unavailable projects/refs,
+repository access, timeouts or an unknown host failure. Raw subprocess output,
+credentials and private paths never cross this boundary. The browser maps those
+categories to fixed recovery text and retains submitted input. An uninitialized
+workspace cannot be offered Start or Recreate; its existing explicit discard
+confirmation remains required before deletion.
 
 ## Feature authority
 

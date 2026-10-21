@@ -11,6 +11,11 @@ export type NativeRepositoryPolicyFile = {
 };
 
 export async function readNativeRepositoryPolicyFile(policyPath: string): Promise<NativeRepositoryPolicyFile> {
+  return parseNativeRepositoryPolicyFile(await readNativeReviewedPolicyText(policyPath));
+}
+
+/** Both JSON policy and YAML manifests authorize host-managed protected policy. */
+export async function readNativeReviewedPolicyText(policyPath: string): Promise<string> {
   if (!path.isAbsolute(policyPath)) {
     throw new UserError("repository policy path must be absolute");
   }
@@ -44,7 +49,7 @@ export async function readNativeRepositoryPolicyFile(policyPath: string): Promis
     if (!sameFile(metadata, after)) {
       throw new UserError("repository policy changed during inspection");
     }
-    return parseNativeRepositoryPolicyFile(bytes.toString("utf8", 0, length));
+    return bytes.toString("utf8", 0, length);
   } finally {
     await file.close();
   }

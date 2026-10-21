@@ -4,6 +4,7 @@ import { controlPlanePlugin as repositories } from "@slop-lab/dim-control-plane-
 import { controlPlanePlugin as review } from "@slop-lab/dim-control-plane-plugin-code-review";
 import { controlPlanePlugin as merge } from "@slop-lab/dim-control-plane-plugin-merge-policy";
 import { controlPlanePlugin as gitCi } from "@slop-lab/dim-control-plane-plugin-git-ci";
+import { controlPlanePlugin as gitSync } from "@slop-lab/dim-control-plane-plugin-git-sync";
 import { controlPlanePlugin as workflows } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { controlPlanePlugin as webhooks } from "@slop-lab/dim-control-plane-plugin-webhooks";
 import { parseManagedGitServiceConfig, repositoryConfiguration } from "@slop-lab/dim-control-plane-admin/service-pair";
@@ -22,6 +23,8 @@ export function managedGitPluginEntries(input: {
     { plugin: review, config: { humanReviewers: config.humanReviewers } },
     { plugin: gitCi, config: config.ci },
     { plugin: merge, config: { hostPromoters: config.hostPromoters } },
+    // Reviewed upstream declarations are accepted without granting synchronization authority.
+    { plugin: gitSync, config: { operators: [] } },
     { plugin: repositories, config: { service: repositoryConfiguration(config), stateDirectory: input.stateDirectory,
       readinessToken: input.readinessToken, activationToken: input.activationToken,
       expectedGenerationId: input.expectedGenerationId } },

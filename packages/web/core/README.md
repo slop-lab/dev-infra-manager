@@ -64,6 +64,15 @@ the request. Errors stay beside the affected form or host, with a retry for host
 lookup. **Settings** holds resource edits, recreation and explicit discard
 confirmation; canceling discard sends no mutation.
 
+Source examples and suggested names distinguish ordinary Git URLs from
+`dim://my-project` managed sources. The latter requires an existing project on
+the selected host; repository selection appears only for managed sources.
+Missing images, runtime prerequisites, repository access, unknown refs and name
+conflicts produce fixed recovery guidance. Raw host diagnostics, repository
+credentials and private paths stay outside Web responses. Incomplete initial
+setup is identified separately from a stopped workspace: inspect it before an
+explicit discard and replacement; Start and Recreate require completed setup.
+
 Sign in at the exact configured `publicOrigin`, including hostname and port.
 `localhost` and `127.0.0.1` are different browser origins. A rejected login from
 another origin identifies the configured URL without weakening the origin check.

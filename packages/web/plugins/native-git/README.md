@@ -51,3 +51,13 @@ connections are optional; the SDK attests each serving identity and verifies the
 same endpoint/generation before exposing their operations. Manual mode exposes a
 single **Direct connection** controller with the explicit project scope above.
 Upstream merging creates a proposal and does not bypass protected review.
+
+**Import .dim/repos.yml** accepts pasted YAML or a local file selected in the
+browser. Preview first: it shows every repository URL/branch, protected ref,
+configuration repository, default checkout and the complete policy/configuration.
+The subsequent import explicitly accepts that manifest configuration; the ordinary
+single-URL form continues to ignore a remote repository's manifest. Neither flow
+executes repository scripts. Edits invalidate the preview, drafts remain scoped to
+the selected controller/project, and an unchanged accepted import stays locked if
+the catalog refresh fails. Retry the same manifest after a partial import to
+resume completed repositories safely.

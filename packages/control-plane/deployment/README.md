@@ -5,6 +5,12 @@ policy, workflow and CI integration plugins. This package is not published to np
 It owns deployment entrypoints and cross-service credential checks; individual
 plugins do not depend on it and can be installed independently.
 
+The managed preset includes Git synchronization policy validation, so explicitly
+reviewed repository manifests can declare upstream and publish mappings during
+import. Its synchronization operator list is empty: the preset grants no fetch,
+merge or publish authority. Those operations require an explicitly configured
+`git-sync` operator in a separately composed service configuration.
+
 After building the workspace packages, build its image from the repository root:
 
 ```bash

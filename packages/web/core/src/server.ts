@@ -61,7 +61,7 @@ function createWebServer(config: WebConfig, options: WebServerOptions, plugins: 
   const context = { plugins, authenticator, config, operations: options.operations ?? (config.operations === undefined ? undefined : configuredWebOperations(config.operations)), sessions, secureCookie: new URL(config.publicOrigin).protocol === "https:" };
   const server = createServer((request, response) => {
     void handleRequest(context, request, response).catch((error: unknown) => {
-      if (error instanceof HttpResponseError) return sendJson(response, { status: error.status, body: { error: error.publicMessage } });
+      if (error instanceof HttpResponseError) return sendJson(response, { status: error.status, body: { error: error.publicMessage, ...(error.code ? { code: error.code } : {}) } });
       if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof BodyError) {
         return sendJson(response, { status: 400, body: { error: "invalid request" } });
       }

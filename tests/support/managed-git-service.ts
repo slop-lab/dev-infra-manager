@@ -4,6 +4,7 @@ import { parseManagedGitServiceConfig, repositoryConfiguration } from "../../pac
 import { prepareCodeReview } from "../../packages/control-plane/plugins/code-review/src/index.js";
 import { prepareGitCi } from "../../packages/control-plane/plugins/git-ci/src/index.js";
 import { controlPlanePlugin as merge } from "../../packages/control-plane/plugins/merge-policy/src/index.js";
+import { controlPlanePlugin as gitSync } from "../../packages/control-plane/plugins/git-sync/src/index.js";
 import { workflowCompilerExtension, type WorkflowCompiler } from "../../packages/contracts/ci/src/workflow-plugin-api.js";
 import { dimWorkflowCompiler } from "../../packages/control-plane/plugins/ci-workflows/src/index.js";
 import type { CodeReviewService } from "../../packages/control-plane/plugins/code-review/src/plugin-api.js";
@@ -30,7 +31,8 @@ export async function configuredManagedGitFixture(options: ManagedGitFixtureOpti
       ...(options.ordinaryIdentityHttpClient === undefined ? {} : { httpClient: options.ordinaryIdentityHttpClient }),
       ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })
     }),
-    await merge.configure({ hostPromoters: config.hostPromoters })
+    await merge.configure({ hostPromoters: config.hostPromoters }),
+    await gitSync.configure({ operators: [] })
   ];
   const extensions = [workflowCompilerExtension(config.ci.compiler, options.workflowCompiler ?? dimWorkflowCompiler),
     ...prepared.flatMap((entry) => entry.extensions ?? []), ...(options.extensions ?? [])];

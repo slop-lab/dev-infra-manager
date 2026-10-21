@@ -29,6 +29,19 @@ function feedback(target, message, error = false) {
 /** @param {unknown} error */
 function recovery(error) {
   if (error instanceof Error && error.message === "session expired") return "Your session ended. Sign in again; this draft stays here until you leave.";
+  const code = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "";
+  /** @type {Record<string,string>} */ const guidance = {
+    workspace_exists: "That name already exists. Refresh the host and recover the existing workspace, or choose another name. Your input is kept.",
+    image_unavailable: "The workspace image is unavailable on this host. Choose an installed image under Advanced options, or ask the operator to build or pull the host default image. Refresh the host before retrying; a failed workspace may already be listed. Your input is kept.",
+    runtime_unavailable: "The selected host runtime is unavailable. Ask the operator to run dim doctor on that host and repair its runtime prerequisites. Your input is kept.",
+    host_unavailable: "The configured DIM executable is unavailable. Ask the operator to repair the Web server's host connection. Your input is kept.",
+    host_timeout: "The operation timed out. Refresh the host before retrying; workspace data may already have been created. Your input is kept.",
+    project_unavailable: "That managed project is not available on this host. Check the managed project connection, or enter an ordinary Git repository URL. Your input is kept.",
+    ref_unavailable: "That Git ref was not found. Leave Git ref empty for the repository default, or enter an existing branch or commit. Your input is kept.",
+    repository_unavailable: "The selected host could not access that repository. Check its URL and host Git credentials, or use another accessible repository. Your input is kept.",
+    host_operation_failed: "The host operation failed. Refresh the host before retrying and ask the operator to inspect it with dim doctor. Your input is kept."
+  };
+  if (guidance[code]) return guidance[code];
   return "Refresh the host to check its current state, then retry. Your input is kept.";
 }
 
@@ -112,20 +125,42 @@ function createHost(id, canOperate, request, active) {
 /** @param {string} host @param {Request} request @param {()=>Promise<boolean>} refresh @param {()=>boolean} active @param {()=>void} close */
 function createWorkspaceForm(host, request, refresh, active, close) {
   const form = document.createElement("form"); form.hidden = true; form.className = "workspace-create panel"; form.setAttribute("aria-label", `New workspace on ${host}`);
-  form.append(node("h3", "", "New workspace"), node("p", "field-hint", `Create an isolated development environment on ${host}.`));
+  form.append(node("h3", "", "New workspace"), node("p", "field-hint", `Create an isolated development environment on ${host}. Enter a Git clone URL, or dim:// followed by the ID of a managed project already imported on this host.`));
   const basic = node("div", "workspace-fields"); form.append(basic);
   const source = input(basic, "source", "Git URL or dim://PROJECT", `on ${host}`); source.type = "url"; source.required = true; source.placeholder = "https://github.com/team/project.git";
+  const sourceHelp = node("p", "field-hint", "Examples: https://github.com/octocat/Hello-World.git or dim://my-project. A project name alone is not a repository URL. Private Git URLs use credentials configured on the selected host.");
+  sourceHelp.id = `workspace-source-help-${host}`; source.setAttribute("aria-describedby", sourceHelp.id); basic.append(sourceHelp);
   const name = input(basic, "name", "Workspace name", `on ${host}`); name.required = true; name.pattern = "[a-z0-9][a-z0-9._-]{0,47}"; name.placeholder = "my-project"; name.maxLength = 48;
+  name.title = "1–48 lowercase letters, digits, dots, underscores or hyphens; start with a letter or digit.";
+  basic.append(node("p", "field-hint", "Workspace name is a new name for this environment, for example my-project-dev. It must be unique on this host. Your project and repository names stay unchanged."));
   const advanced = disclosure(form, "Advanced options"); advanced.className = "workspace-advanced";
   const options = node("div", "workspace-fields"); advanced.append(options);
   const ref = input(options, "ref", "Git ref (optional)", `on ${host}`); ref.placeholder = "Repository default";
   const runtime = input(options, "runtime", "Runtime", `on ${host}`, "container"); runtime.required = true; runtime.pattern = "[a-z][a-z0-9-]{0,31}";
+  options.append(node("p", "field-hint", "Leave Runtime as container for the usual Docker workspace. vm requires the VM runtime and KVM configured on the host."));
   const image = input(options, "image", "Image (optional)", `on ${host}`); image.placeholder = "Host default";
   const repositories = input(options, "repositories", "Managed repositories (comma separated, optional)", `on ${host}`);
   const workingDirectory = input(options, "workingDirectory", "Managed working repository (optional)", `on ${host}`);
   options.append(node("p", "field-hint", "Managed repository selection applies to dim://PROJECT sources."));
   const cpuCount = input(options, "cpuCount", "CPU limit (optional)", `on ${host}`), memory = input(options, "memory", "Memory limit (optional)", `on ${host}`), pidsLimit = input(options, "pidsLimit", "PID limit (optional)", `on ${host}`);
-  advanced.append(node("p", "field-hint", "Empty limits use host defaults. Use unlimited to remove a limit."));
+  advanced.append(node("p", "field-hint", "Empty limits use host defaults. Examples: CPUs 2 or 1.5, memory 4g, PIDs 2048. Use unlimited to remove a limit."));
+  function updateSource() {
+    const managed = source.value.trim().startsWith("dim://");
+    for (const field of [repositories, workingDirectory]) { field.disabled = !managed; if (field.parentElement) field.parentElement.hidden = !managed; }
+  }
+  let nameEdited = false;
+  name.addEventListener("input", () => { nameEdited = true; });
+  source.addEventListener("input", () => {
+    updateSource();
+    if (nameEdited) return;
+    try {
+      const url = new URL(source.value.trim());
+      const candidate = (url.protocol === "dim:" ? url.hostname : url.pathname.split("/").filter(Boolean).at(-1) ?? "")
+        .replace(/\.git$/, "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z0-9]+/, "").slice(0, 48);
+      name.value = candidate;
+    } catch { /* Native URL validity reports malformed input on submission. */ }
+  });
+  updateSource();
   const result = node("p", "workspace-feedback"); result.setAttribute("role", "status");
   const actions = node("div", "workspace-actions"), submit = button("Create workspace", "button-primary"), cancel = button("Cancel"); submit.type = "submit";
   submit.setAttribute("aria-label", `Create workspace on ${host}`); cancel.setAttribute("aria-label", `Cancel new workspace on ${host}`); actions.append(submit, cancel); form.append(result, actions);
@@ -138,8 +173,8 @@ function createWorkspaceForm(host, request, refresh, active, close) {
     for (const field of [cpuCount, memory, pidsLimit]) if (field.value.trim()) resources[field.name] = field.value.trim();
     const payload = {
       source: source.value.trim(), name: selectedName, runtime: runtime.value.trim(),
-      ...(repositories.value.trim() ? { repositories: repositories.value.split(",").map((id) => id.trim()) } : {}),
-      ...(workingDirectory.value.trim() ? { workingDirectory: workingDirectory.value.trim() } : {}),
+      ...(source.value.trim().startsWith("dim://") && repositories.value.trim() ? { repositories: repositories.value.split(",").map((id) => id.trim()) } : {}),
+      ...(source.value.trim().startsWith("dim://") && workingDirectory.value.trim() ? { workingDirectory: workingDirectory.value.trim() } : {}),
       ...(ref.value.trim() ? { ref: ref.value.trim() } : {}), ...(image.value.trim() ? { image: image.value.trim() } : {}),
       ...(Object.keys(resources).length ? { resources } : {})
     };
@@ -150,11 +185,11 @@ function createWorkspaceForm(host, request, refresh, active, close) {
       try {
         await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces/create`, payload, 300_000);
         if (!active()) return;
-        form.reset(); advanced.open = false;
+        form.reset(); nameEdited = false; updateSource(); advanced.open = false;
         const loaded = await refresh();
         feedback(result, `${selectedName} created on ${host}.${loaded ? " The workspace is listed below." : " Refresh the host to see its current state; do not submit it again."}`);
       } catch (error) { if (active()) feedback(result, `Could not create ${selectedName} on ${host}. ${recovery(error)}`, true); }
-      finally { busy = false; submit.disabled = false; cancel.disabled = false; for (const field of inputs) field.disabled = false; form.removeAttribute("aria-busy"); }
+      finally { busy = false; submit.disabled = false; cancel.disabled = false; for (const field of inputs) field.disabled = false; updateSource(); form.removeAttribute("aria-busy"); }
     })();
   });
   return { form, source };
@@ -162,7 +197,7 @@ function createWorkspaceForm(host, request, refresh, active, close) {
 
 /** @param {string} host @param {Record<string,unknown>} initial @param {boolean} canOperate @param {Request} request @param {()=>Promise<boolean>} refresh @param {()=>boolean} active */
 function createWorkspace(host, initial, canOperate, request, refresh, active) {
-  let workspace = initial, busy = false;
+  let workspace = initial, busy = false, showingStoredFailure = false;
   const name = text(initial.name) ?? "workspace", expectedId = text(initial.id);
   const row = node("article", "workspace-row"), overview = node("div", "workspace-overview"), identity = node("div", "workspace-identity"), title = node("h3", "", name), badge = node("span", "badge"), meta = node("p", "workspace-meta"), limits = node("p", "workspace-limits");
   identity.append(title, badge); overview.append(identity, meta, limits); row.append(overview);
@@ -174,6 +209,7 @@ function createWorkspace(host, initial, canOperate, request, refresh, active) {
   /** @param {string} action @param {Record<string,string>} [resources] */
   async function mutate(action, resources) {
     if (busy) return; busy = true; update(workspace);
+    showingStoredFailure = false;
     feedback(result, `${action === "resources" ? "Updating resources for" : action === "discard" ? "Discarding" : `${action[0]?.toUpperCase()}${action.slice(1)} requested for`} ${name} on ${host}…`);
     try {
       await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces`, { name, expectedId, action, ...(resources ? { resources } : {}) });
@@ -220,11 +256,20 @@ function createWorkspace(host, initial, canOperate, request, refresh, active) {
     badge.textContent = phase; badge.className = `badge ${phase === "running" ? "badge-approved" : phase === "error" ? "badge-error" : phase === "stopped" ? "badge-neutral" : "badge-pending"}`;
     meta.textContent = `${text(next.runtime) ?? "unknown runtime"}${runtimeStatus === phase ? "" : ` · runtime ${runtimeStatus}`}`;
     limits.textContent = `CPU ${text(resources?.cpuCount) ?? "—"} · Memory ${text(resources?.memory) ?? "—"} · PIDs ${text(resources?.pidsLimit) ?? "—"}`;
+    if (phase !== "error" && showingStoredFailure) { feedback(result, ""); showingStoredFailure = false; }
+    if (phase === "error" && !busy && (!result.textContent || showingStoredFailure)) {
+      const reason = recovery(Object.assign(new Error("workspace failed"), { code: text(next.failureCode) }));
+      feedback(result, next.initialized === false
+        ? `Initial setup did not finish. ${reason} Ask the operator to inspect the failed setup before discarding it and creating a replacement. Discard permanently deletes its workspace data.`
+        : `Startup failed. ${reason} After fixing host prerequisites, use Start to retry. Recreate keeps workspace data.`, true);
+      showingStoredFailure = true;
+    }
     for (const [key, field] of fields) { if (!dirty.has(key)) field.value = text(resources?.[key]) ?? ""; field.disabled = busy; }
     const transient = ["creating", "discarding"].includes(phase);
     for (const { control, action } of controls) {
       control.disabled = busy || transient;
-      control.hidden = action === "start" ? !(phase === "stopped" || phase === "error" && runtimeStatus !== "running") : ["stop", "restart"].includes(action) ? phase !== "running" && runtimeStatus !== "running" : false;
+      control.hidden = ["start", "restart", "recreate"].includes(action) && next.initialized === false
+        || (action === "start" ? !(phase === "stopped" || phase === "error" && runtimeStatus !== "running") : ["stop", "restart"].includes(action) ? phase !== "running" && runtimeStatus !== "running" : false);
     }
     row.setAttribute("aria-busy", String(busy));
   }

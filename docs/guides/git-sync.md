@@ -8,6 +8,12 @@ does not require CI or a workspace runtime.
 
 ## Install and configure
 
+DIM's managed control-plane image already includes this attachment with an empty
+operator list. This accepts reviewed upstream/publish policy during manifest
+import, while granting no synchronization authority. To enable fetch, merge or
+publish commands, use an explicit service composition with the private operator
+configuration below; the managed preset does not provision that connection.
+
 On the control-plane machine, install the attachment alongside repository
 storage and the review/promotion services used by the Project:
 

@@ -6,6 +6,7 @@ const packages = [
   "control-plane/core", "control-plane/admin", "control-plane/deployment",
   "control-plane/plugins/git-repositories", "control-plane/plugins/code-review",
   "control-plane/plugins/merge-policy", "control-plane/plugins/git-ci",
+  "control-plane/plugins/git-sync",
   "control-plane/plugins/webhooks", "control-plane/plugins/ci-workflows",
   "contracts/git", "contracts/ci", "contracts/execution",
   // The managed pair validates scheduler configuration without loading its runtime.
