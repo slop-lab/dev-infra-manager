@@ -4,7 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { metadata, object, readJson, text } from "./files.ts";
 import { inside, removalDirectories } from "./paths.ts";
 import type { RemovalPaths } from "./types.ts";
-export interface OwnedProcess { readonly pid: number; readonly start: string; readonly command: string }
+export interface OwnedProcess { readonly pid: number; readonly start: string; readonly command: string; readonly configFile?: string }
 async function identity(pid: number): Promise<{ start: string; args: string[] } | undefined> {
   try {
     const root = `/proc/${pid}`, stat = await metadata(root);
@@ -35,7 +35,20 @@ export async function planProcesses(paths: RemovalPaths): Promise<{ processes: O
       if (!roots.some((root) => inside(directory, root))) throw new Error(`worker state lies outside selected DIM roots: ${directory}; stop and clean that worker separately`);
       workerRoots.push(directory);
     }
-    processes.push({ pid: Number(entry), start, command: worker === -1 ? "DIM runtime" : "execution worker" });
+    const configIndex = args.indexOf("--config");
+    let configFile: string | undefined;
+    if (configIndex !== -1) {
+      const selected = args[configIndex + 1];
+      if (!selected?.startsWith("/") || args.lastIndexOf("--config") !== configIndex) throw new Error("running DIM service requires one absolute --config path before uninstall");
+      configFile = resolve(selected);
+    } else {
+      const llm = args.indexOf("llm");
+      if (llm !== -1 && ["serve", "health"].includes(args[llm + 1] ?? "")) configFile = args[llm + 2];
+      const controlPlane = args.findIndex((arg) => /\/dim-control-plane-core\/(?:dist\/)?cli\.js$/.test(arg));
+      if (controlPlane !== -1 && args[controlPlane + 1] === "run") configFile = args[controlPlane + 2];
+      if (configFile !== undefined && !configFile.startsWith("/")) throw new Error("running DIM service uses relative configuration; stop it before uninstall");
+    }
+    processes.push({ ...(configFile === undefined ? {} : { configFile }), pid: Number(entry), start, command: worker === -1 ? "DIM runtime" : "execution worker" });
   }
   return { processes, workerRoots };
 }

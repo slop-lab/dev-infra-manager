@@ -54,6 +54,20 @@ export async function collectHostClaims(paths: RemovalPaths): Promise<DockerClai
         labels: { "dim.managed": "true", "dim.workspace-id": id, "dim.resource": role, "dim.workspace-schema": "10" }
       });
     }
+    const tailscaleDirectory = join(root, "plugins/tailscale");
+    if (await directory(tailscaleDirectory)) {
+      const file = join(tailscaleDirectory, "gateway.json"), raw = await readJson(file);
+      if (raw !== undefined) {
+        const state = object(raw), id = uuid(state.id);
+        if (state.schemaVersion !== 1 || Object.keys(state).some((key) => !["schemaVersion", "id", "image", "hostname", "loginServer"].includes(key))
+          || !/^[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}$/.test(text(state.image))
+          || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(text(state.hostname))) throw new Error("invalid Tailscale gateway ownership");
+        const prefix = `dim-tailscale-${createHash("sha256").update(id).digest("hex").slice(0, 20)}`;
+        for (const [kind, resource, name] of [["container", "gateway", prefix], ["network", "network", `${prefix}-network`], ["volume", "auth", `${prefix}-state`]] as const) {
+          claims.push({ kind, name, labels: { "dim.managed": "true", "dim.owner": "dim", "dim.tailscale-id": id, "dim.resource": resource } });
+        }
+      }
+    }
     const services = join(root, "plugins", "cache-server", "services");
     if (await directory(services)) for (const file of await jsonFiles(services)) {
       const match = /^cache-([a-z][a-z0-9-]{0,31})\.json$/.exec(basename(file));
