@@ -6,7 +6,7 @@
       "requiredReviewerIds": [],
       "pathReviewerRules": [
         {
-          "pathPrefix": ".dim/review/",
+          "pathPrefix": ".dim/",
           "reviewerIds": [
             "security"
           ]

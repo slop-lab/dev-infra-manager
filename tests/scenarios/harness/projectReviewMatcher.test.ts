@@ -9,7 +9,7 @@ function change(path: string): AuthoritativeNativeChangedPath {
 describe("project-owned review matcher", () => {
   it("unconditionally guards evaluator changes before reading or running candidate code", async () => {
     const matcher = await createProjectReviewMatcher({ revision: "e".repeat(64), execute: async () => { throw Error("must not execute"); } });
-    for (const path of [".dim/review/matcher.mjs", ".dim/review/dependency.mjs", ".dim/review/settings.json", ".dim/review"]) {
+    for (const path of [".dim/security-boundary.json", ".dim/workspace.json", ".dim", ".dim/review/matcher.mjs", ".dim/review/dependency.mjs", ".dim/review/settings.json", ".dim/review"]) {
       expect(await matcher.matches({ options: {}, changes: [change(path)], readCandidateFile: async () => { throw Error("must not read"); }, readBlob: async () => { throw Error("must not read"); } })).toBe(true);
     }
     const renamed = { ...change("ordinary.txt"), oldPath: ".dim/review/matcher.mjs" };

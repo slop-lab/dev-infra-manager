@@ -71,6 +71,25 @@ it("enforces project-owned and JSON rules through real protected-ref promotion, 
     config = { ...config, runtime: { isolation: "host" } }; await writeConfig();
     await requireSecurity(await propose());
 
+    // Service, mount and runtime authority live under .dim and are guarded even
+    // though the application matcher deliberately does not inspect this file.
+    const boundaryFile = join(f.source, ".dim/security-boundary.json");
+    const boundary = JSON.parse(await readFile(new URL("../../../examples/features/security-review/repository/.dim/security-boundary.json", import.meta.url), "utf8"));
+    await writeFile(boundaryFile, JSON.stringify(boundary));
+    await requireSecurity(await propose());
+    boundary.services["agent-dind"].secretAccess = true;
+    await writeFile(boundaryFile, JSON.stringify(boundary));
+    await requireSecurity(await propose());
+    boundary.services["agent-dind"].network = "service-network";
+    boundary.runtime = "runc";
+    await writeFile(boundaryFile, JSON.stringify(boundary));
+    await requireSecurity(await propose());
+    await writeFile(join(f.source, "ordinary.txt"), "documentation and application changes remain unguarded\n");
+    const unguarded = await propose();
+    expect(unguarded.review.requiredReviewerIds).toEqual([]);
+    expect((await promote(unguarded)).status).toBe(201);
+    expect(await head()).toBe(unguarded.candidate);
+
     // This candidate tries to disable its own evaluator. Mandatory review remains.
     await writeFile(join(f.source, ".dim/review/matcher.mjs"), "// @ts-check\nexport function matches(){return false;}\n");
     await requireSecurity(await propose());

@@ -2,11 +2,13 @@
 
 This recipe requires the control-plane Git repositories, code-review and
 merge-policy plugins declared in `recipe.json`. It needs no DIM host plugins.
+The explicit runtime stage additionally needs a rootful Docker daemon with `sysbox-runc`; it starts two disposable DinD services.
 The reviewed operator adapter in `project-matcher.ts` additionally requires a
-local Docker daemon and this exact pre-pulled Node evaluator image:
+local Docker daemon and these exact pre-pulled images:
 
 ```bash
 docker pull docker.io/library/node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+docker pull docker@sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c9995f190ef6f3f5
 ```
 
 Compose both `await projectReviewMatcherExtension()` from `project-matcher.ts`
@@ -17,12 +19,13 @@ revision must cover its implementation and every setting that affects matching.
 The provider combines that revision with the adapter source digest. Configure
 a human reviewer named `security` through code-review's operator
 configuration. Ordinary changes need no extra human approval. It requires security
-review for changes under `.dim/review/`, changes to `/runtime/isolation` inside
+review for every change under `.dim/`, changes to `/runtime/isolation` inside
 `app/config.json`, and matches returned by the project's own evaluator. Policy
 changes remain an operator action; candidate repositories cannot replace that
 policy or install adapters.
 
-The `.dim/review/` directory is owned by this example, not an automatic DIM hook.
+The `.dim/review/` directory and `.dim/security-boundary.json` are owned by this
+example, not automatic DIM hooks.
 Only the explicitly composed adapter reads or executes its matcher.
 
 The candidate's `.dim/review/matcher.mjs` decides which application-specific
@@ -35,7 +38,7 @@ any source inputs for that bundle under `.dim/review/` too, so their changes
 always require security review.
 
 The evaluator is allowed to change. Changing, deleting or renaming anything in
-its guarded directory requires security review **before the candidate evaluator
+`.dim/` requires security review **before the candidate evaluator
 is run**, regardless of whether its new implementation returns false. Ordinary
 changes run the evaluator from the candidate tree. The adapter does not freeze
 an evaluator from an earlier protected commit.
@@ -83,3 +86,38 @@ the evaluator content remains allowed after the required review. The provider
 uses the pinned Git executable with literal paths and sanitized configuration;
 it never runs candidate code. It participates in the common protected-ref
 compare-and-swap boundary rather than a code-review-specific endpoint.
+
+## Separate untrusted and secret-bearing services
+
+`repository/.dim/security-boundary.json` declares two separate Sysbox containers,
+`agent-dind` and `secure-dind`, each with its own Docker daemon. Only `secure-dind`
+receives a read-only `/run/secrets/service-token` mount. Neither role receives the
+host Docker socket; the agent cannot select the secure daemon. Both have no
+service network, so the agent cannot contact a privileged API by service name.
+A project that needs a shared service must add an explicitly reviewed narrow
+interface rather than sharing the secure Docker socket or raw token.
+
+The reviewed operator module `boundary.ts` reads that configuration through
+`parseBoundaryConfiguration` and `startBoundary`. Supply a private regular
+secret file owned by the operator, outside the repository. Invoke it using the
+configuration from the exact promoted protected commit; never execute a mutable
+agent checkout as an operator. The launcher deliberately supports one pinned
+image/runtime and isolated networks. Changing supported isolation mechanisms
+also requires reviewing the operator module. Call the returned `close()` when
+the service session ends.
+
+The explicit runtime acceptance generates a random dummy token in a private
+temporary directory and launches those two actual daemons. It verifies the
+secure role can read it, the mount rejects writes, the agent has no token mount
+or environment entry, the daemon identities differ, agent Docker cannot inspect
+secure containers, and the secure daemon is unreachable over the network. It
+then deletes exact fixture containers and volumes. It never reads real operator
+credentials or reconfigures the host daemon.
+
+The ordinary Git/HTTP integration also proposes changes to service secret
+mounts, service networking and runtime selection under `.dim/`. Each promotion
+fails before human security approval and succeeds afterward. Application or
+documentation changes outside `.dim/` require no human review unless they match
+the example's explicit JSON/custom rules. The path rule applies to additions,
+deletions and renames as well as edits. Repository code cannot disable it by
+rewriting its own matcher.

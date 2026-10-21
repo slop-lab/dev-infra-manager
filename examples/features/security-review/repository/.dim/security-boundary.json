@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "runtime": "sysbox-runc",
+  "image": "docker@sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c9995f190ef6f3f5",
+  "services": {
+    "agent-dind": {
+      "network": "none",
+      "secretAccess": false
+    },
+    "secure-dind": {
+      "network": "none",
+      "secretAccess": true
+    }
+  }
+}

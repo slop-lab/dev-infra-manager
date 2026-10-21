@@ -62,7 +62,7 @@ export async function createProjectReviewMatcher(custom?: { readonly execute: Pr
     async matches(input) {
       // Evaluator code, its dependencies and configuration are unconditionally guarded.
       // Do not run a candidate evaluator when it changes its own guard.
-      if (input.changes.some(({ oldPath, newPath }) => [oldPath, newPath].some((path) => path === ".dim/review" || path?.startsWith(".dim/review/") === true))) return true;
+      if (input.changes.some(({ oldPath, newPath }) => [oldPath, newPath].some((path) => path === ".dim" || path?.startsWith(".dim/") === true))) return true;
       const source = await input.readCandidateFile(".dim/review/matcher.mjs");
       if (source === undefined || source.length > 64 * 1024) throw new Error("candidate project matcher is missing or exceeds 64 KiB");
       const changes: ProjectMatcherInput["changes"][number][] = [];
