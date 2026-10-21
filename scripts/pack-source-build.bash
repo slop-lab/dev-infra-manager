@@ -110,7 +110,7 @@ packages:
   - packages/contracts/*
   - packages/review-tracing
   - packages/review-tracing-node
-  - packages/task-scheduling
+  - packages/execution-scheduler
   - packages/cli
   - packages/installer
   - packages/web

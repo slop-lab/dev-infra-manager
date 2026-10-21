@@ -32,16 +32,16 @@ describe("first control-plane installation", () => {
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom()
     });
 
-    // Then: services start ordinary-first and publication follows exact topology verification.
+    // Then: services start execution-first and publication follows exact topology verification.
     expect(installed.record.generationId).toMatch(/^[0-9a-f]{64}$/);
-    expect(readiness.events).toEqual(["ready:ordinary", "ready:native"]);
+    expect(readiness.events).toEqual(["ready:execution", "ready:native"]);
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(false);
     expect(runner.composeMode).toBe(0o600);
     for (const secret of Object.values(controlPlaneSecrets)) expect(runner.composeText).not.toContain(secret);
     const significant = runner.calls.map(({ args }) => args).filter((args) =>
       args.includes("config") || args[1] === "create" || args.includes("up"));
     expect(significant.map(commandKind)).toEqual([
-      "compose-config", "network-create", "volume-native", "volume-ordinary", "up-ordinary", "up-native"
+      "compose-config", "network-create", "volume-native", "volume-execution", "up-execution", "up-native"
     ]);
     expect(runner.calls.filter(({ args }) => args[1] === "exec" && args[6] === "activate").map(({ args }) => args[4]))
       .toEqual(["2".repeat(64), "1".repeat(64)]);
@@ -117,7 +117,7 @@ describe("first control-plane installation", () => {
         stage,
         pulledRefs: [
           `registry.example/dim/native-git@sha256:${"a".repeat(64)}`,
-          `registry.example/dim/ordinary-ci@sha256:${"b".repeat(64)}`
+          `registry.example/dim/execution@sha256:${"b".repeat(64)}`
         ]
       }
     });
@@ -128,10 +128,10 @@ describe("first control-plane installation", () => {
   });
 
   it("distinguishes a failed pull from confirmed cache presence", async () => {
-    // Given: native pulls successfully but the ordinary pull fails with hostile daemon output.
+    // Given: native pulls successfully but the execution pull fails with hostile daemon output.
     const input = await installFixture();
     const runner = new ProbeFailureRunner({
-      kind: "pull", image: "ordinary-ci", output: `hostile-${controlPlaneSecrets.grantIssuer}`
+      kind: "pull", image: "execution", output: `hostile-${controlPlaneSecrets.grantIssuer}`
     });
 
     // When: image pulling stops before metadata or configuration probes.
@@ -139,15 +139,15 @@ describe("first control-plane installation", () => {
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom()
     }).catch((failure: unknown) => failure);
 
-    // Then: native is confirmed pulled while ordinary is reported only as possibly partial.
+    // Then: native is confirmed pulled while execution is reported only as possibly partial.
     if (!(error instanceof ControlPlaneInstallError) || error.details?.kind !== "preflight") {
       throw new TypeError("expected typed control-plane preflight details");
     }
     expect(error.details).toEqual({
       kind: "preflight",
-      stage: "ordinary-ci image pull",
+      stage: "execution image pull",
       pulledRefs: [`registry.example/dim/native-git@sha256:${"a".repeat(64)}`],
-      incompletePullRef: `registry.example/dim/ordinary-ci@sha256:${"b".repeat(64)}`
+      incompletePullRef: `registry.example/dim/execution@sha256:${"b".repeat(64)}`
     });
     expect(JSON.stringify(error)).not.toContain(controlPlaneSecrets.grantIssuer);
   });
@@ -158,9 +158,9 @@ describe("first control-plane installation", () => {
     const runner = new FirstInstallRunner();
     runner.network = true;
     runner.nativeVolume = true;
-    runner.ordinaryVolume = true;
+    runner.executionVolume = true;
     runner.nativeContainer = true;
-    runner.ordinaryContainer = true;
+    runner.executionContainer = true;
 
     // When: first installation classifies the existing resource boundary.
     const action = installFirstControlPlane({
@@ -200,7 +200,7 @@ describe("first control-plane installation", () => {
       runner.runtimeFaultAt = { start: 1, kind: fault };
       const readiness = new ObservingReadiness(input.stateRoot, runner);
 
-      // When: the first ordinary service is started.
+      // When: the first execution service is started.
       const action = installFirstControlPlane({
         configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom()
       });
@@ -213,7 +213,7 @@ describe("first control-plane installation", () => {
   );
 
   it.each(isolationRuntimeFaults)("rejects prohibited %s before first readiness", async (fault) => {
-    // Given: Compose starts the ordinary service with one prohibited device or namespace field.
+    // Given: Compose starts the execution service with one prohibited device or namespace field.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
     runner.runtimeFaultAt = { start: 1, kind: fault };
@@ -236,7 +236,7 @@ describe("first control-plane installation", () => {
     const runner = new FirstInstallRunner();
     const readiness = new ObservingReadiness(input.stateRoot, runner, true);
 
-    // When: ordinary readiness fails after resources and its container exist.
+    // When: execution readiness fails after resources and its container exist.
     const action = installFirstControlPlane({
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom(),
       readinessPolicy: immediateReadinessDeadline
@@ -244,15 +244,15 @@ describe("first control-plane installation", () => {
 
     // Then: owned containers/network are removed while volumes and generation evidence remain.
     await expect(action).rejects.toThrow(/first control-plane installation failed/);
-    expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
-    expect(runner.network || runner.nativeContainer || runner.ordinaryContainer).toBe(false);
+    expect(runner.nativeVolume && runner.executionVolume).toBe(true);
+    expect(runner.network || runner.nativeContainer || runner.executionContainer).toBe(false);
     expect(runner.calls.some(({ args }) => args[0] === "volume" && args[1] === "rm")).toBe(false);
     expect(runner.calls.some(({ args }) => args[0] === "compose" && args.includes("down"))).toBe(false);
-    const ordinaryRemoval = runner.calls.findIndex(({ args }) => args[0] === "container" && args[1] === "rm");
-    const ordinaryCheck = runner.calls.findLastIndex(({ args }, index) => index < ordinaryRemoval
-      && args[0] === "container" && args[1] === "inspect" && args[2] === "dim-control-plane-ordinary-ci-1");
-    expect(ordinaryCheck).toBeGreaterThan(-1);
-    expect(runner.calls[ordinaryRemoval]?.args.at(-1)).toBe("2".repeat(64));
+    const executionRemoval = runner.calls.findIndex(({ args }) => args[0] === "container" && args[1] === "rm");
+    const executionCheck = runner.calls.findLastIndex(({ args }, index) => index < executionRemoval
+      && args[0] === "container" && args[1] === "inspect" && args[2] === "dim-control-plane-execution-1");
+    expect(executionCheck).toBeGreaterThan(-1);
+    expect(runner.calls[executionRemoval]?.args.at(-1)).toBe("2".repeat(64));
     const networkRemoval = runner.calls.findIndex(({ args }) => args[0] === "network" && args[1] === "rm");
     const networkCheck = runner.calls.findLastIndex(({ args }, index) => index < networkRemoval
       && args[0] === "network" && args[1] === "inspect" && args[2] === "dim-control-plane");
@@ -290,7 +290,7 @@ describe("first control-plane installation", () => {
     // Given
     const input = await installFixture();
     const runner = new FirstInstallRunner();
-    runner.uncertainReadinessEvent = "ready:ordinary";
+    runner.uncertainReadinessEvent = "ready:execution";
 
     // When
     const action = installFirstControlPlane({
@@ -299,7 +299,7 @@ describe("first control-plane installation", () => {
 
     // Then
     await expect(action).rejects.toMatchObject({ name: "ControlPlaneDockerUncertainError" });
-    expect(runner.ordinaryContainer).toBe(true);
+    expect(runner.executionContainer).toBe(true);
     expect(runner.calls.some(({ args }) => args[1] === "rm")).toBe(false);
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(true);
   });
@@ -308,6 +308,6 @@ describe("first control-plane installation", () => {
 function commandKind(args: readonly string[]): string {
   if (args.includes("config")) return "compose-config";
   if (args[0] === "network") return "network-create";
-  if (args[0] === "volume") return args.at(-1)?.includes("native-git") ? "volume-native" : "volume-ordinary";
-  return args.at(-1) === "ordinary-ci" ? "up-ordinary" : "up-native";
+  if (args[0] === "volume") return args.at(-1)?.includes("native-git") ? "volume-native" : "volume-execution";
+  return args.at(-1) === "execution" ? "up-execution" : "up-native";
 }

@@ -34,7 +34,7 @@ credentials or access to private product code.
 
 On the selected workspace host, `dim installer install core --with-managed`
 installs `@slop-lab/dim-host-plugin-native-git`,
-`@slop-lab/dim-host-plugin-ci-worker` and `@slop-lab/dim-control-plane-admin`.
+`@slop-lab/dim-host-plugin-execution-worker` and `@slop-lab/dim-control-plane-admin`.
 Prepare/install/connect the services using
 [administration](../../../packages/host/plugins/native-git/docs/cli.md).
 The policies in this example select the following control-plane plugins:
@@ -46,7 +46,7 @@ dim installer install control-plane plugin \
   '@slop-lab/dim-control-plane-plugin-git-ci@0.10.0' \
   '@slop-lab/dim-control-plane-plugin-merge-policy@0.10.0' \
   '@slop-lab/dim-control-plane-plugin-ci-workflows@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-ci@0.10.0'
+  '@slop-lab/dim-control-plane-plugin-execution-scheduler@0.10.0'
 ```
 
 These install without workspace core on the control-plane machine. Repository

@@ -51,7 +51,7 @@ numbers, and files above 1 MiB conservatively require the selected reviewer.
 JSON comments and trailing commas are not accepted. Empty pointer selects the
 whole JSON value.
 
-`./extensions` exports `reviewChangeMatcherExtension` and `ReviewChangeMatcher`
+`./plugin-api` exports `reviewChangeMatcherExtension` and `ReviewChangeMatcher`
 for custom rules. A provider validates its options and returns a boolean or
 `{ matches, evidenceDigest }` over
 immutable changed paths and bounded Git blobs. `readBaseFile` and `readCandidateFile` read regular
@@ -99,5 +99,5 @@ dim-code-review revoke /absolute/path/reviewer.json PROJECT REPOSITORY REVIEW_ID
 ```
 
 The CLI checks file ownership, mode 0600, reviewer identity and deployment
-generation before an operation. `./extensions` exports the typed review service
+generation before an operation. `./plugin-api` exports the typed review service
 and preparation ports for separately installed trusted features.

@@ -1,4 +1,4 @@
-import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "native-git",

@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { cacheEndpoint, mirrorAdapterExtension, type MirrorAdapterModule } from "./adapter.js";
+import { cacheEndpoint, mirrorAdapterExtension, type MirrorAdapterModule } from "./protocol-plugin-api.js";
 import { isIP } from "node:net";
 import type { MirrorRelayConfig } from "./relay.js";
 export function object(value: unknown): Record<string, unknown> { if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("invalid private mirror state"); return value as Record<string, unknown>; }

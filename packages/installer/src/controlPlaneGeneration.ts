@@ -23,10 +23,10 @@ const snapshotNames = {
     readinessToken: "native-git-readiness.token",
     activationToken: "native-git-activation.token"
   },
-  ordinaryCi: {
-    config: "ordinary-ci.json",
-    readinessToken: "ordinary-ci-readiness.token",
-    activationToken: "ordinary-ci-activation.token"
+  execution: {
+    config: "execution.json",
+    readinessToken: "execution-readiness.token",
+    activationToken: "execution-activation.token"
   }
 } as const;
 
@@ -44,8 +44,8 @@ export type ControlPlaneStaging = {
   readonly sourceDigests: {
     readonly nativeGitConfig: string;
     readonly nativeGitReadinessToken: string;
-    readonly ordinaryCiConfig: string;
-    readonly ordinaryCiReadinessToken: string;
+    readonly executionConfig: string;
+    readonly executionReadinessToken: string;
   };
 };
 
@@ -57,7 +57,7 @@ export type ControlPlaneCandidateGeneration = {
   readonly composeBytes: Buffer;
   readonly config: ControlPlaneConfig;
   readonly sourceDigests: ControlPlaneStaging["sourceDigests"];
-  readonly activationDigests: { readonly nativeGit: string; readonly ordinaryCi: string };
+  readonly activationDigests: { readonly nativeGit: string; readonly execution: string };
 };
 
 export async function stageControlPlaneSources(input: {
@@ -79,8 +79,8 @@ export async function stageControlPlaneSources(input: {
     sourceDigests: {
       nativeGitConfig: input.sources.nativeGit.config.sha256,
       nativeGitReadinessToken: input.sources.nativeGit.readinessToken.sha256,
-      ordinaryCiConfig: input.sources.ordinaryCi.config.sha256,
-      ordinaryCiReadinessToken: input.sources.ordinaryCi.readinessToken.sha256
+      executionConfig: input.sources.execution.config.sha256,
+      executionReadinessToken: input.sources.execution.readinessToken.sha256
     }
   };
   await writeControlPlaneJournal(staging, "staging");
@@ -89,8 +89,8 @@ export async function stageControlPlaneSources(input: {
   await Promise.all([
     writeExclusiveStateFile(join(path, snapshotNames.nativeGit.config), input.sources.nativeGit.config.bytes, 0o444),
     writeExclusiveStateFile(join(path, snapshotNames.nativeGit.readinessToken), input.sources.nativeGit.readinessToken.bytes, 0o444),
-    writeExclusiveStateFile(join(path, snapshotNames.ordinaryCi.config), input.sources.ordinaryCi.config.bytes, 0o444),
-    writeExclusiveStateFile(join(path, snapshotNames.ordinaryCi.readinessToken), input.sources.ordinaryCi.readinessToken.bytes, 0o444)
+    writeExclusiveStateFile(join(path, snapshotNames.execution.config), input.sources.execution.config.bytes, 0o444),
+    writeExclusiveStateFile(join(path, snapshotNames.execution.readinessToken), input.sources.execution.readinessToken.bytes, 0o444)
   ]);
   await syncStateDirectory(path);
   return staging;
@@ -108,7 +108,7 @@ export async function finalizeControlPlaneGeneration(input: {
   const stagedPaths = snapshotPaths(input.staging.path);
   await Promise.all([
     writeExclusiveStateFile(stagedPaths.nativeGit.activationToken, input.sources.activationTokens.nativeGit.bytes, 0o444),
-    writeExclusiveStateFile(stagedPaths.ordinaryCi.activationToken, input.sources.activationTokens.ordinaryCi.bytes, 0o444)
+    writeExclusiveStateFile(stagedPaths.execution.activationToken, input.sources.activationTokens.execution.bytes, 0o444)
   ]);
   await syncStateDirectory(input.staging.path);
   await rename(input.staging.path, generationPath);
@@ -122,8 +122,8 @@ export async function finalizeControlPlaneGeneration(input: {
     operatorSourcePaths: [
       input.config.nativeGit.configFile,
       input.config.nativeGit.readinessTokenFile,
-      input.config.ordinaryCi.configFile,
-      input.config.ordinaryCi.readinessTokenFile
+      input.config.execution.configFile,
+      input.config.execution.readinessTokenFile
     ],
     forbiddenSecrets: input.sources.allSecretValues
   });
@@ -137,7 +137,7 @@ export async function finalizeControlPlaneGeneration(input: {
     sourceDigests: input.staging.sourceDigests,
     activationDigests: {
       nativeGit: input.sources.activationTokens.nativeGit.sha256,
-      ordinaryCi: input.sources.activationTokens.ordinaryCi.sha256
+      execution: input.sources.activationTokens.execution.sha256
     }
   };
 }
@@ -163,10 +163,10 @@ function snapshotPaths(root: string): ControlPlaneSnapshotPaths {
       readinessToken: join(root, snapshotNames.nativeGit.readinessToken),
       activationToken: join(root, snapshotNames.nativeGit.activationToken)
     },
-    ordinaryCi: {
-      config: join(root, snapshotNames.ordinaryCi.config),
-      readinessToken: join(root, snapshotNames.ordinaryCi.readinessToken),
-      activationToken: join(root, snapshotNames.ordinaryCi.activationToken)
+    execution: {
+      config: join(root, snapshotNames.execution.config),
+      readinessToken: join(root, snapshotNames.execution.readinessToken),
+      activationToken: join(root, snapshotNames.execution.activationToken)
     }
   };
 }
@@ -177,20 +177,20 @@ export async function assertControlPlaneStagedSources(
 ): Promise<void> {
   if (staging.sourceDigests.nativeGitConfig !== sources.nativeGit.config.sha256
     || staging.sourceDigests.nativeGitReadinessToken !== sources.nativeGit.readinessToken.sha256
-    || staging.sourceDigests.ordinaryCiConfig !== sources.ordinaryCi.config.sha256
-    || staging.sourceDigests.ordinaryCiReadinessToken !== sources.ordinaryCi.readinessToken.sha256) {
+    || staging.sourceDigests.executionConfig !== sources.execution.config.sha256
+    || staging.sourceDigests.executionReadinessToken !== sources.execution.readinessToken.sha256) {
     throw new ControlPlaneGenerationError("completed source preflight does not match staged source bytes");
   }
   const paths = snapshotPaths(staging.path);
   const staged = await Promise.all([
     readStateFile(paths.nativeGit.config, 0o444, 1024 * 1024),
     readStateFile(paths.nativeGit.readinessToken, 0o444, 4096),
-    readStateFile(paths.ordinaryCi.config, 0o444, 1024 * 1024),
-    readStateFile(paths.ordinaryCi.readinessToken, 0o444, 4096)
+    readStateFile(paths.execution.config, 0o444, 1024 * 1024),
+    readStateFile(paths.execution.readinessToken, 0o444, 4096)
   ]);
   const expected = [
     sources.nativeGit.config.bytes, sources.nativeGit.readinessToken.bytes,
-    sources.ordinaryCi.config.bytes, sources.ordinaryCi.readinessToken.bytes
+    sources.execution.config.bytes, sources.execution.readinessToken.bytes
   ];
   if (staged.some((bytes, index) => {
     const expectedBytes = expected[index];

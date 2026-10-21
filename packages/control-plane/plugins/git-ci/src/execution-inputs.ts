@@ -2,7 +2,7 @@ import { gitCiPolicy } from "./policy.js";
 import type { GitCiRuntime } from "./runtime.js";
 import { isDeepStrictEqual } from "node:util";
 import { CandidateExecutionError, executionInputsSchema, type ExecutionInputs } from "@slop-lab/dim-contracts-ci/descriptor";
-import { resolveAuthoritativeNativeRepositoryTarget, AuthoritativeRepositoryError } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { resolveAuthoritativeNativeRepositoryTarget, AuthoritativeRepositoryError } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 /** Resolve candidate-requested repositories only inside the imported, trusted allowlist. */
 export async function captureExecutionInputs(runtime: GitCiRuntime,

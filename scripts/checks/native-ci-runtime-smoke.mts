@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProcessRunner } from "../../packages/host/core/src/runner.js";
-import { nativeRunnerScript } from "../../packages/host/plugins/ci-worker/src/backends/containers.js";
+import { nativeRunnerScript } from "../../packages/host/plugins/execution-worker/src/backends/containers.js";
 
 const [runtime, supervisor, image] = process.argv.slice(2);
 if (!["container", "vm"].includes(runtime ?? "") || !supervisor || !image || !/@sha256:[0-9a-f]{64}$/.test(image)) throw new Error("usage: tsx native-ci-runtime-smoke.mts container|vm SUPERVISOR_IMAGE UBUNTU_IMAGE@sha256:DIGEST");

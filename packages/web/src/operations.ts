@@ -8,7 +8,8 @@ const repositoryId = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const file = z.string().refine(isAbsolute);
 export const operationsConfigSchema = z.object({
   hosts: z.array(z.object({ id: identifier, selector: identifier, executable: file }).strict()).max(64).default([]),
-  ci: z.object({ queryConnection: file, operatorConnection: file.optional() }).strict().optional(),
+  ci: z.object({ queryConnection: file }).strict().optional(),
+  execution: z.object({ operatorConnection: file }).strict().optional(),
   consoles: z.array(z.object({ name: z.string().min(1).max(128), url: z.string().url().refine((value) => {
     const url = new URL(value); return !url.username && !url.password && !url.search && !url.hash && (url.protocol === "https:" || url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname));
   }) }).strict()).max(64).default([])
@@ -75,9 +76,9 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
     return module.createCiQueryClient(config.ci.queryConnection);
   }
   async function operator() {
-    if (!config.ci?.operatorConnection) throw new HttpResponseError(403, "CI operator connection is not configured");
-    const module = await import("@slop-lab/dim-control-plane-admin/ci");
-    return module.createCiOperatorClient(config.ci.operatorConnection);
+    if (!config.execution?.operatorConnection) throw new HttpResponseError(403, "execution operator connection is not configured");
+    const module = await import("@slop-lab/dim-control-plane-admin/execution");
+    return module.createExecutionOperatorClient(config.execution.operatorConnection);
   }
   return {
     async hosts() { return config.hosts.map(({ id }) => ({ id })); },

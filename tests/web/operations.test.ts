@@ -71,10 +71,10 @@ it("creates Git workspaces only with operator, origin and CSRF authority and rej
   expect((await fetch(path, { method: "POST", headers: operator, body })).status).toBe(200);
   expect(f.calls).toEqual([{ create: "devbox", ...input }]);
 });
-it("gates CI mutation separately from diagnostics and forwards an explicit retry idempotency key", async () => {
+it("gates execution mutation separately from diagnostics and forwards an explicit retry idempotency key", async () => {
   const f = await operationsFixture(), reader = await f.login("reader"), operator = await f.login("operator");
   expect((await fetch(`${f.base}/v1/operations/ci/jobs/${uuid}`, { headers: reader })).status).toBe(200);
-  const path = `${f.base}/v1/operations/ci/jobs/${uuid}`;
+  const path = `${f.base}/v1/operations/execution/jobs/${uuid}`;
   expect((await fetch(path + "/cancel", { method: "POST", headers: reader, body: "{}" })).status).toBe(403);
   expect((await fetch(path + "/cancel", { method: "POST", headers: operator, body: "{}" })).status).toBe(200);
   expect((await fetch(path + "/retry", { method: "POST", headers: operator, body: "{}" })).status).toBe(400);
@@ -105,7 +105,7 @@ it("executes only configured public DIM host ports, projects safe summaries and 
   await expect(operations.workspaces("attacker-host")).rejects.toThrow("host not found");
 });
 
-it("connects the default optional adapter to real generated role files and live CI operator/query endpoints", async () => {
+it("connects the default optional adapter to real generated role files and live execution operator and CI query endpoints", async () => {
   const { createOperationsBrowserFixture } = await import("./operationsBrowserFixture.js");
   const f = await createOperationsBrowserFixture();
   try {
@@ -115,12 +115,29 @@ it("connects the default optional adapter to real generated role files and live 
     const headers = { cookie: login.headers.get("set-cookie")!.split(";")[0]!, origin: f.origin, "x-dim-csrf": body.csrfToken, "content-type": "application/json" };
     const jobs = await fetch(f.origin + "/v1/operations/ci/jobs", { headers });
     expect(jobs.status).toBe(200); expect(JSON.stringify(await jobs.json())).toContain("completed");
-    expect((await fetch(f.origin + "/v1/operations/ci/workers", { headers })).status).toBe(200);
-    expect((await fetch(`${f.origin}/v1/operations/ci/jobs/${f.queuedId}/cancel`, { method: "POST", headers, body: "{}" })).status).toBe(200);
+    expect((await fetch(f.origin + "/v1/operations/execution/workers", { headers })).status).toBe(200);
+    expect((await fetch(`${f.origin}/v1/operations/execution/jobs/${f.queuedId}/cancel`, { method: "POST", headers, body: "{}" })).status).toBe(200);
     expect(f.execution()).toMatchObject({ phase: "finished", publication: "stale" });
     const requestId = randomUUID();
-    const retry = () => fetch(`${f.origin}/v1/operations/ci/jobs/${f.queuedId}/retry`, { method: "POST", headers, body: JSON.stringify({ requestId }) });
+    const retry = () => fetch(`${f.origin}/v1/operations/execution/jobs/${f.queuedId}/retry`, { method: "POST", headers, body: JSON.stringify({ requestId }) });
     const first = await retry(), second = await retry(); expect(first.status).toBe(200); expect(second.status).toBe(200);
     expect(await first.json()).toEqual(await second.json());
+  } finally { await f.close(); }
+});
+
+it("exposes execution workers without a CI query connection and rejects the obsolete mixed settings", async () => {
+  const { operationsConfigSchema } = await import("../../packages/web/src/operations.js");
+  expect(operationsConfigSchema.safeParse({ ci: { queryConnection: "/query", operatorConnection: "/operator" } }).success).toBe(false);
+  const { createOperationsBrowserFixture } = await import("./operationsBrowserFixture.js");
+  const f = await createOperationsBrowserFixture({ ci: false });
+  try {
+    const login = await fetch(f.origin + "/v1/session", { method: "POST", headers: { origin: f.origin, "content-type": "application/json" }, body: JSON.stringify({ username: f.username, password: f.password }) });
+    expect(login.status).toBe(201);
+    const headers = { cookie: login.headers.get("set-cookie")!.split(";")[0]! };
+    const status = await fetch(f.origin + "/v1/operations/status", { headers });
+    expect(await status.json()).toMatchObject({ ci: false, executionOperator: true });
+    expect((await fetch(f.origin + "/v1/operations/execution/workers", { headers })).status).toBe(200);
+    expect((await fetch(f.origin + "/v1/operations/ci/jobs", { headers })).status).toBe(404);
+    expect((await fetch(f.origin + "/v1/operations/ci/workers", { headers })).status).toBe(404);
   } finally { await f.close(); }
 });

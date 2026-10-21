@@ -28,7 +28,7 @@ export async function installControlPlaneCommand(commandArgs: readonly string[])
     stateRoot: defaultControlPlaneStateRoot()
   });
   console.log(`Installed control-plane generation ${installed.record.generationId}`);
-  console.log("Services: native-git, ordinary-ci");
+  console.log("Services: native-git, execution");
 }
 
 export async function recoverControlPlaneCommand(commandArgs: readonly string[]): Promise<void> {
@@ -57,5 +57,5 @@ export async function recoverControlPlaneCommand(commandArgs: readonly string[])
     expectedGenerationId: parsed.values.generation
   });
   console.log(`Recovered control-plane generation ${installed.record.generationId}`);
-  console.log("Services: native-git, ordinary-ci");
+  console.log("Services: native-git, execution");
 }

@@ -7,7 +7,7 @@ or evidence-proof chain. A QEMU CI guest is not a persistent development VM.
 
 The operator configures QEMU slots and reviewed runner/job image digests in the
 execution service. A private host file selects matching slots and credentials.
-`dim ci worker FILE` checks Docker and access to a real `/dev/kvm`
+`dim execution worker FILE` checks Docker and access to a real `/dev/kvm`
 before claiming work. Missing KVM is unavailable; TCG and ordinary execution
 cannot be substituted. Build the trusted supervisor with `dim ci
 qemu-image IMAGE:TAG`, then select its reviewed deployed digest.

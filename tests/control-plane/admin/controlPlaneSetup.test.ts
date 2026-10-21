@@ -1,6 +1,6 @@
 import { managedPolicyExtensions } from "../../support/git-policy.js";
 import { repositoryBinding } from "../../host/plugins/native-git/nativeProjectFixture.js";
-import { executionWorkerConfigSchema } from "../../../packages/contracts/ci/src/worker.js";
+import { executionWorkerConfigSchema } from "../../../packages/host/plugins/execution-worker/src/config.js";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -41,7 +41,7 @@ async function fixture(options: Partial<Parameters<typeof prepareControlPlane>[0
   const root = await mkdtemp(path.join(os.tmpdir(), "dim-control-plane-setup-")); roots.push(root);
   const directory = path.join(root, "operator");
   const result = await prepareControlPlane({ directory, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
-    ordinaryCiImage: `registry.example/ordinary@sha256:${"b".repeat(64)}`, ...options });
+    executionImage: `registry.example/ordinary@sha256:${"b".repeat(64)}`, ...options });
   return { root, directory, result };
 }
 
@@ -51,13 +51,13 @@ describe("optional control-plane setup", () => {
     expect((await stat(directory)).mode & 0o777).toBe(0o700);
     const config = await readControlPlaneConfig(result.configFile, ["127.0.0.1"]);
     const sources = await readControlPlaneSources(config);
-    expect(JSON.parse(sources.ordinaryCi.config.bytes.toString()).workers).toEqual([]);
+    expect(JSON.parse(sources.execution.config.bytes.toString()).workers).toEqual([]);
     expect(JSON.parse(sources.nativeGit.config.bytes.toString()).projectRegistrars).toHaveLength(1);
-    for (const file of ["install.json", "native-git.json", "ordinary-ci.json", "native-git-readiness.token", "ordinary-ci-readiness.token"]) {
+    for (const file of ["install.json", "native-git.json", "execution.json", "native-git-readiness.token", "execution-readiness.token"]) {
       expect((await stat(path.join(directory, file))).mode & 0o777).toBe(0o600);
     }
     expect(sources.credentialValues.every((secret) => !JSON.stringify(result).includes(secret))).toBe(true);
-    await expect(prepareControlPlane({ directory, nativeGitImage: config.nativeGit.image, ordinaryCiImage: config.ordinaryCi.image }))
+    await expect(prepareControlPlane({ directory, nativeGitImage: config.nativeGit.image, executionImage: config.execution.image }))
       .rejects.toThrow(/refusing to replace/);
   });
 
@@ -65,9 +65,9 @@ describe("optional control-plane setup", () => {
     const profile = { runnerBaseImage: `registry.example/qemu@sha256:${"e".repeat(64)}`,
       jobBaseImage: `registry.example/job@sha256:${"f".repeat(64)}`,
       bounds: { cpu: "1", memoryBytes: "2147483648", pids: "512", wallClockSeconds: "900", outputBytes: "1048576" } };
-    const { root, directory } = await fixture({ ciWorker: "worker-1", ciContainerSlots: 1, ciVmSlots: 1,
+    const { root, directory } = await fixture({ executionWorker: "worker-1", ciContainerSlots: 1, ciVmSlots: 1,
       ciRunnerImage: `registry.example/sysbox@sha256:${"e".repeat(64)}`, ciJobImage: profile.jobBaseImage, ciVmProfile: profile });
-    const ordinary = JSON.parse(await readFile(path.join(directory, "ordinary-ci.json"), "utf8"));
+    const ordinary = JSON.parse(await readFile(path.join(directory, "execution.json"), "utf8"));
     const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
     native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
     let service = await configuredManagedGitFixture({ workflowCompiler: dimWorkflowCompiler,
@@ -94,8 +94,8 @@ describe("optional control-plane setup", () => {
       const printed = vi.spyOn(console, "log").mockImplementation(() => {});
       const program = new Command(); registerControlPlaneCommands(program);
       await program.parseAsync(["control-plane", "connect", directory, "--endpoint", endpoint,
-        "--output-directory", output, "--ci-endpoint", "http://127.0.0.1:1",
-        "--ci-worker-state-directory", path.join(root, "worker-host", "state")], { from: "user" });
+        "--output-directory", output, "--execution-endpoint", "http://127.0.0.1:1",
+        "--execution-worker-state-directory", path.join(root, "worker-host", "state")], { from: "user" });
       expect(await selectedControlPlaneHostFile()).toBe(path.join(output, "host.json"));
       expect(await selectedControlPlaneImporterFile()).toBe(path.join(output, "importer.json"));
       expect(JSON.parse(await readFile(path.join(output, "ci-query.json"), "utf8"))).toMatchObject({ role: "query",
@@ -103,7 +103,7 @@ describe("optional control-plane setup", () => {
       expect((await stat(path.join(output, "ci-query.json"))).mode & 0o777).toBe(0o600);
       expect((await stat(path.join(selectedState, "active-control-plane.json"))).mode & 0o777).toBe(0o600);
       expect(printed.mock.calls.flat().join("\n")).toContain("Selected this control plane");
-      expect(printed.mock.calls.flat().join("\n")).toContain(`dim ci worker '${path.join(output, "worker.json")}'`);
+      expect(printed.mock.calls.flat().join("\n")).toContain(`dim execution worker '${path.join(output, "worker.json")}'`);
       expect(printed.mock.calls.flat().join("\n")).not.toContain(worker.token);
       expect(JSON.parse(await readFile(path.join(output, "worker.json"), "utf8")))
         .toMatchObject({ stateDirectory: path.join(root, "worker-host", "state"), endpoint: "http://127.0.0.1:1" });
@@ -220,13 +220,13 @@ describe("optional control-plane setup", () => {
     const printed = vi.spyOn(console, "log").mockImplementation(() => {});
     await program.parseAsync(["control-plane", "prepare", directory,
       "--native-git-image", `registry.example/native@sha256:${"a".repeat(64)}`,
-      "--ordinary-ci-image", `registry.example/ordinary@sha256:${"b".repeat(64)}`,
-      "--ci-worker", "local-ci", "--ci-container-slots", "2",
+      "--execution-image", `registry.example/ordinary@sha256:${"b".repeat(64)}`,
+      "--execution-worker", "local-ci", "--ci-container-slots", "2",
       "--ci-runner-image", `registry.example/runner@sha256:${"c".repeat(64)}`,
       "--ci-job-image", `registry.example/job@sha256:${"d".repeat(64)}`], { from: "user" });
     const config = await readControlPlaneConfig(path.join(directory, "install.json"), ["127.0.0.1"]);
     const sources = await readControlPlaneSources(config);
-    const ordinary = JSON.parse(sources.ordinaryCi.config.bytes.toString());
+    const ordinary = JSON.parse(sources.execution.config.bytes.toString());
     expect(ordinary.workers).toHaveLength(1);
     expect(ordinary.workers[0].slots.map(({ id }: { id: string }) => id)).toEqual(["container-1", "container-2"]);
     expect(ordinary.workers[0].slots[0].profile.bounds).toMatchObject({ cpu: "1", memoryBytes: "2147483648", pids: "512" });
@@ -236,22 +236,22 @@ describe("optional control-plane setup", () => {
   });
 
   it.each([
-    { ciContainerSlots: 1 }, { ciWorker: "worker" }, { ciWorker: "worker", ciContainerSlots: 1 },
-    { ciWorker: "worker", ciVmSlots: 1 }, { ciWorker: "worker", ciContainerSlots: -1 },
-    { ciWorker: "worker", ciContainerSlots: 65 }, { ciWorker: "worker", ciContainerSlots: 0.5 },
-    { ciWorker: "worker", ciContainerSlots: 1, ciRunnerImage: "runner:latest", ciJobImage: "job:latest" },
-    { ciWorker: "worker", ciContainerSlots: 1, ciContainerProfile: {}, ciRunnerImage: "runner:latest" }
+    { ciContainerSlots: 1 }, { executionWorker: "worker" }, { executionWorker: "worker", ciContainerSlots: 1 },
+    { executionWorker: "worker", ciVmSlots: 1 }, { executionWorker: "worker", ciContainerSlots: -1 },
+    { executionWorker: "worker", ciContainerSlots: 65 }, { executionWorker: "worker", ciContainerSlots: 0.5 },
+    { executionWorker: "worker", ciContainerSlots: 1, ciRunnerImage: "runner:latest", ciJobImage: "job:latest" },
+    { executionWorker: "worker", ciContainerSlots: 1, ciContainerProfile: {}, ciRunnerImage: "runner:latest" }
   ])("rejects incomplete or unreviewed initial capacity before writing files: %j", async (options) => {
     const root = await mkdtemp(path.join(os.tmpdir(), "dim-ci-prepare-reject-")); roots.push(root);
     const directory = path.join(root, "operator");
     await expect(prepareControlPlane({ directory, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
-      ordinaryCiImage: `registry.example/ordinary@sha256:${"b".repeat(64)}`, ...options })).rejects.toThrow();
+      executionImage: `registry.example/ordinary@sha256:${"b".repeat(64)}`, ...options })).rejects.toThrow();
     await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects unpinned images and non-loopback credential destinations before mutation or requests", async () => {
     const { root, directory } = await fixture();
-    await expect(prepareControlPlane({ directory: path.join(root, "invalid"), nativeGitImage: "native:latest", ordinaryCiImage: "ordinary:latest" }))
+    await expect(prepareControlPlane({ directory: path.join(root, "invalid"), nativeGitImage: "native:latest", executionImage: "ordinary:latest" }))
       .rejects.toThrow(/sha256/);
     await expect(stat(path.join(root, "invalid"))).rejects.toMatchObject({ code: "ENOENT" });
     const client = { request: async () => { throw new Error("credentials must never be sent"); } };

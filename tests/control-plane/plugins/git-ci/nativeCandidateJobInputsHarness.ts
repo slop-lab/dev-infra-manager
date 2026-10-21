@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { NativeCandidateRequiredJob } from "../../../../packages/contracts/ci/src/workflow.js";
+import type { NativeCandidateRequiredJob } from "../../../../packages/contracts/ci/src/workflow-plugin-api.js";
 import type { CandidateGitReader } from "../../../../packages/control-plane/plugins/git-ci/src/candidate-execution-git.js";
 import { assertGitVersion, type GitRepositoryRuntime } from "../../../../packages/control-plane/plugins/git-repositories/src/repository.js";
 import { git, gitExecutable } from "../../../support/gitCommands.js";

@@ -140,10 +140,10 @@ async function retainedState(root: string, installBytes: Buffer, composeBytes: B
   const snapshots = await readGeneration(generationPath);
   assertSnapshotDigests(record, snapshots);
   const generationId = controlPlaneGenerationIdFromFields([
-    Buffer.from(record.nativeGitImage), Buffer.from(record.ordinaryCiImage),
+    Buffer.from(record.nativeGitImage), Buffer.from(record.executionImage),
     snapshots.nativeGit.config, snapshots.nativeGit.readinessToken,
-    snapshots.ordinaryCi.config, snapshots.ordinaryCi.readinessToken,
-    snapshots.nativeGit.activationToken, snapshots.ordinaryCi.activationToken
+    snapshots.execution.config, snapshots.execution.readinessToken,
+    snapshots.nativeGit.activationToken, snapshots.execution.activationToken
   ]);
   if (generationId !== record.generationId) throw new ControlPlaneInstallError("control-plane recovery generation ID is inconsistent");
   const names = controlPlaneSnapshotNames();
@@ -156,10 +156,10 @@ async function retainedState(root: string, installBytes: Buffer, composeBytes: B
         readinessToken: join(generationPath, names.nativeGit.readinessToken),
         activationToken: join(generationPath, names.nativeGit.activationToken)
       },
-      ordinaryCi: {
-        config: join(generationPath, names.ordinaryCi.config),
-        readinessToken: join(generationPath, names.ordinaryCi.readinessToken),
-        activationToken: join(generationPath, names.ordinaryCi.activationToken)
+      execution: {
+        config: join(generationPath, names.execution.config),
+        readinessToken: join(generationPath, names.execution.readinessToken),
+        activationToken: join(generationPath, names.execution.activationToken)
       }
     },
     snapshots
@@ -219,11 +219,11 @@ function installedConfig(installed: ControlPlaneInstalledState): ControlPlaneCon
       readinessTokenFile: join(installed.generationPath, names.nativeGit.readinessToken),
       publish: installed.record.nativeGitPublish
     },
-    ordinaryCi: {
-      image: installed.record.ordinaryCiImage,
-      configFile: join(installed.generationPath, names.ordinaryCi.config),
-      readinessTokenFile: join(installed.generationPath, names.ordinaryCi.readinessToken),
-      publish: installed.record.ordinaryCiPublish
+    execution: {
+      image: installed.record.executionImage,
+      configFile: join(installed.generationPath, names.execution.config),
+      readinessTokenFile: join(installed.generationPath, names.execution.readinessToken),
+      publish: installed.record.executionPublish
     }
   };
 }

@@ -141,7 +141,7 @@ async function verify(state: State) {
     const setupDirectory = "/var/lib/dim-test/managed-setup";
     await cli(["--host", "smoke", "managed", "control-plane", "prepare", setupDirectory,
       "--native-git-image", `registry.example/native@sha256:${"a".repeat(64)}`,
-      "--ordinary-ci-image", `registry.example/execution@sha256:${"b".repeat(64)}`]);
+      "--execution-image", `registry.example/execution@sha256:${"b".repeat(64)}`]);
     assert.equal((await docker(["exec", state.container, "stat", "-c", "%a", `${setupDirectory}/install.json`])).stdout.toString().trim(), "600");
     await assert.rejects(access(setupDirectory));
     console.log("managed preparation executes on selected SSH host with host-local private files: passed");

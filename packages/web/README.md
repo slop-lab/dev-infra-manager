@@ -49,7 +49,7 @@ workspace UUID through the public CLI's `--expect-id` guard; the host checks it
 inside its workspace lock before changing state. A reused name cannot redirect
 an action to a replacement workspace.
 
-## Shared CI and managed Git
+## Shared execution, CI and managed Git
 
 After installing the optional control-plane administration package and connecting the control plane,
 add these settings to the operations file:
@@ -58,18 +58,21 @@ add these settings to the operations file:
 {
   "hosts": [],
   "ci": {
-    "queryConnection": "/absolute/SETUP/connections/ci-query.json",
-    "operatorConnection": "/absolute/SETUP/connections/ci-operator.json"
+    "queryConnection": "/absolute/SETUP/connections/ci-query.json"
+  },
+  "execution": {
+    "operatorConnection": "/absolute/SETUP/connections/execution-operator.json"
   }
 }
 ```
 
 The administration package is an optional peer; install the same exact
-`@slop-lab/dim-control-plane-admin` version alongside web when selecting CI. The two connection files
+`@slop-lab/dim-control-plane-admin` version alongside web when selecting execution or CI. The two connection files
 are separate owner-only credentials bound to the connected generation. CI can
 be offline while browser configuration is initialized. The UI shows at most 100
 recent execution summaries, one execution's bounded stdout/stderr diagnostics,
-and configured worker slot occupancy. Occupancy does not assert worker liveness.
+and configured execution worker slot occupancy. The execution operator connection
+works independently of the CI query connection. Occupancy does not assert worker liveness.
 Cancellation fences running capacity until owned cleanup; explicit retries use
 a stable request UUID and preserve intake uniqueness. Query accounts cannot
 mutate executions. There is no browser worker-token or arbitrary HTTP proxy.

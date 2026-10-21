@@ -36,11 +36,11 @@ describe("control-plane candidate activation fence", () => {
     expect((await readFile(join(input.stateRoot, "compose.yml"))).equals(priorCompose)).toBe(true);
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(false);
     expect(runner.nativeRuntime?.image).toBe(prior.record.nativeGitImage);
-    expect(runner.ordinaryRuntime?.image).toBe(prior.record.ordinaryCiImage);
+    expect(runner.executionRuntime?.image).toBe(prior.record.executionImage);
     expect(runner.calls.filter(({ args }) => args.includes("--force-recreate"))).toHaveLength(4);
   });
 
-  it.each(["ordinary-ci", "native-git"] as const)(
+  it.each(["execution", "native-git"] as const)(
     "retains the published candidate and prior generation when %s activation fails",
     async (service) => {
       // Given: generation A is installed and generation B is ready to activate.
@@ -65,8 +65,8 @@ describe("control-plane candidate activation fence", () => {
       expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(true);
       expect(await readdir(join(input.stateRoot, "generations"))).toHaveLength(2);
       expect(runner.nativeRuntime?.generationId).not.toBe(prior.record.generationId);
-      expect(runner.ordinaryRuntime?.generationId).not.toBe(prior.record.generationId);
-      expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
+      expect(runner.executionRuntime?.generationId).not.toBe(prior.record.generationId);
+      expect(runner.nativeVolume && runner.executionVolume).toBe(true);
       expect(runner.calls.filter(({ args }) => args.includes("--force-recreate"))).toHaveLength(2);
       expect(runner.calls.some(({ args }) => args[1] === "rm")).toBe(false);
     }
@@ -95,17 +95,17 @@ describe("control-plane candidate activation fence", () => {
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(true);
     expect(await readdir(join(input.stateRoot, "generations"))).toHaveLength(2);
     expect(runner.nativeRuntime?.generationId).not.toBe(prior.record.generationId);
-    expect(runner.ordinaryRuntime?.generationId).not.toBe(prior.record.generationId);
-    expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
+    expect(runner.executionRuntime?.generationId).not.toBe(prior.record.generationId);
+    expect(runner.nativeVolume && runner.executionVolume).toBe(true);
     expect(runner.calls.filter(({ args }) => args.includes("--force-recreate"))).toHaveLength(2);
     expect(runner.calls.some(({ args }) => args[1] === "rm")).toBe(false);
   });
 
   it("retains first-install resources when candidate activation fails", async () => {
-    // Given: an absent deployment whose ordinary candidate activation will fail.
+    // Given: an absent deployment whose execution candidate activation will fail.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
-    runner.failActivationService = "ordinary-ci";
+    runner.failActivationService = "execution";
 
     // When: first-install activation fails after installed-state publication.
     const action = installFirstControlPlane({
@@ -118,8 +118,8 @@ describe("control-plane candidate activation fence", () => {
     expect(await exists(join(input.stateRoot, "compose.yml"))).toBe(true);
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(true);
     expect(await readdir(join(input.stateRoot, "generations"))).toHaveLength(1);
-    expect(runner.network && runner.nativeContainer && runner.ordinaryContainer).toBe(true);
-    expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
+    expect(runner.network && runner.nativeContainer && runner.executionContainer).toBe(true);
+    expect(runner.nativeVolume && runner.executionVolume).toBe(true);
     expect(runner.calls.some(({ args }) => args[1] === "rm")).toBe(false);
   });
 });

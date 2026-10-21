@@ -18,7 +18,7 @@ export interface ControlPlaneDockerRunner {
 
 export type ControlPlaneProbeSnapshots = {
   readonly nativeGit: string;
-  readonly ordinaryCi: string;
+  readonly execution: string;
 };
 
 export type ControlPlaneDockerPreflightInput = {
@@ -28,7 +28,7 @@ export type ControlPlaneDockerPreflightInput = {
 
 export type ControlPlaneDockerState =
   | { readonly kind: "absent" }
-  | { readonly kind: "owned"; readonly nativeGitContainerId: string; readonly ordinaryCiContainerId: string };
+  | { readonly kind: "owned"; readonly nativeGitContainerId: string; readonly executionContainerId: string };
 
 export class ControlPlaneDockerError extends Error {
   readonly name = "ControlPlaneDockerError";

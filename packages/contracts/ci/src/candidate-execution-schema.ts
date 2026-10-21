@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isCandidatePath, isCandidateArgv } from "./workflow.js";
+import { isCandidatePath, isCandidateArgv } from "./workflow-plugin-api.js";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);

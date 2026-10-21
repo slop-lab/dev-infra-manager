@@ -28,11 +28,11 @@ type HardenedProbe = ImageProbe & {
 };
 
 export function assertControlPlaneProbeSnapshots(config: ControlPlaneConfig, snapshots: ControlPlaneProbeSnapshots): void {
-  const paths = [snapshots.nativeGit, snapshots.ordinaryCi];
+  const paths = [snapshots.nativeGit, snapshots.execution];
   if (paths.some((path) => !isAbsolute(path) || path.includes("\0") || path.includes(",")) || new Set(paths).size !== paths.length) {
     throw new ControlPlaneDockerError("image probes require distinct absolute staged snapshot paths");
   }
-  const operatorPaths = new Set([config.nativeGit.configFile, config.ordinaryCi.configFile]);
+  const operatorPaths = new Set([config.nativeGit.configFile, config.execution.configFile]);
   if (paths.some((path) => operatorPaths.has(path))) {
     throw new ControlPlaneDockerError("image probes require staged snapshots, not mutable operator files");
   }
@@ -45,11 +45,11 @@ export async function probeControlPlaneImages(
 ): Promise<void> {
   const images = [
     { image: config.nativeGit.image, user: "10001:10001", source: snapshots.nativeGit },
-    { image: config.ordinaryCi.image, user: "10002:10002", source: snapshots.ordinaryCi }
+    { image: config.execution.image, user: "10002:10002", source: snapshots.execution }
   ] as const satisfies readonly ImageProbe[];
   const pulledRefs: string[] = [];
   for (const image of images) {
-    const service = image.user === "10001:10001" ? "native-git" : "ordinary-ci";
+    const service = image.user === "10001:10001" ? "native-git" : "execution";
     await probeStage({
       stage: `${service} image pull`, pulledRefs, incompletePullRef: image.image,
       operation: () => pull(runner, image.image)
@@ -57,14 +57,14 @@ export async function probeControlPlaneImages(
     pulledRefs.push(image.image);
   }
   for (const image of images) {
-    const service = image.user === "10001:10001" ? "native-git" : "ordinary-ci";
+    const service = image.user === "10001:10001" ? "native-git" : "execution";
     await probeStage({
       stage: `${service} image verification`, pulledRefs,
       operation: () => inspectImage(runner, image)
     });
   }
   for (const image of images) {
-    const service = image.user === "10001:10001" ? "native-git" : "ordinary-ci";
+    const service = image.user === "10001:10001" ? "native-git" : "execution";
     await probeStage({
       stage: `${service} configuration`, pulledRefs,
       operation: () => runProbe(runner, serviceProbeArgs(image))
@@ -129,11 +129,11 @@ function serviceProbeArgs(probe: ImageProbe): readonly string[] {
   });
 }
 
-function bundleProbeArgs(nativeGit: ImageProbe, ordinaryCi: ImageProbe): readonly string[] {
+function bundleProbeArgs(nativeGit: ImageProbe, execution: ImageProbe): readonly string[] {
   return hardenedArgs({
     ...nativeGit,
-    mounts: [mount(nativeGit.source, "/run/native.json"), mount(ordinaryCi.source, "/run/ordinary.json")],
-    command: ["check-bundle-config", "/run/native.json", "/run/ordinary.json"]
+    mounts: [mount(nativeGit.source, "/run/native.json"), mount(execution.source, "/run/execution.json")],
+    command: ["check-bundle-config", "/run/native.json", "/run/execution.json"]
   });
 }
 

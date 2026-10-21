@@ -17,7 +17,7 @@ registration, imports and durable protected-ref CAS. Code-review owns human
 review evidence, and merge-policy authorizes promotion from current decisions.
 Git-CI separately owns candidate planning, execution grants and evidence; its
 selected workflow compiler interprets candidate `.dim/ci/runner.yml` files.
-The shared CI service owns durable job demand, claims, leases and result
+The shared execution scheduler owns durable job demand, claims, leases and result
 publication. Repository hosting works without any of these feature plugins;
 human review works without Git-CI or a workflow compiler. Workspace hosts and CI workers are separate
 consumers of these services. Native Project and workspace readiness depend on
@@ -82,7 +82,7 @@ job.
   behavior, workspace isolation and physical KVM mechanics. Missing hardware is
   an unavailable verification prerequisite, not a passing VM check.
 
-See [candidate-controlled ordinary CI](0001-candidate-controlled-native-ordinary-ci.md),
+See [candidate-controlled ordinary CI](0001-candidate-controlled-native-execution.md),
 [CI runners](../../guides/ci-runners.md), [workspace configuration](../03-configuration.md),
 [repository lifecycle](../13-repo-workspace-lifecycle.md), and the
 [installer facade](../14-installer-facade.md).

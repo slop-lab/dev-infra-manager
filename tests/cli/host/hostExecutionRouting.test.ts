@@ -1,5 +1,7 @@
 import { expect, it, vi } from "vitest";
-import { ProcessRunner, type HostExecutionRouting, type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import { ProcessRunner } from "@slop-lab/dim-host-core/workspace";
+import { type HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
+import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { resolveHostExecutionRouting } from "../../../packages/cli/src/host-plugins.js";
 
 const runner = new ProcessRunner();

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
-import { readBoundedJson, sendJson, readNativeProjectRegistrations, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { readBoundedJson, sendJson, readNativeProjectRegistrations, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import type { NativeInstalledPromotionResult } from "./native-installed-promotion.js";
 export type HostPromoter = { readonly hostId: string; readonly username: string; readonly password: string };
 export function createNativeHostPromoterService(input: {

@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executionServiceConfigSchema } from "../../packages/contracts/ci/src/config.js";
-import { configuredExecutionServer } from "../../packages/control-plane/plugins/ci/src/service.js";
-import { executionWorkerClient } from "../../packages/host/plugins/ci-worker/src/client.js";
-import { runExecutionWorker } from "../../packages/host/plugins/ci-worker/src/worker.js";
-import type { ExecutionTaskHandler } from "../../packages/task-scheduling/src/worker-handler.js";
+import { executionServiceConfigSchema } from "../../packages/control-plane/plugins/execution-scheduler/src/config.js";
+import { configuredExecutionServer } from "../../packages/control-plane/plugins/execution-scheduler/src/service.js";
+import { executionWorkerClient } from "../../packages/host/plugins/execution-worker/src/client.js";
+import { runExecutionWorker } from "../../packages/host/plugins/execution-worker/src/worker.js";
+import type { ExecutionTaskHandler } from "@slop-lab/dim-contracts-execution/plugin-api";
 import { createScheduledReviewTraceRuntime } from "../../packages/control-plane/plugins/review-tracing-scheduled/src/index.js";
 
 export const generationId = "a".repeat(64);

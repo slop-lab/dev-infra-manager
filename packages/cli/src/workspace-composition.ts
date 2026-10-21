@@ -1,7 +1,5 @@
-import {
-  UserError, type WorkspaceRecord, type WorkspaceService, type WorkspaceSourceCreateInput,
-  type WorkspaceSourceProviderContext, type WorkspaceRuntimeFactoryContext
-} from "@slop-lab/dim-host-core/workspace";
+import { UserError, type WorkspaceRecord, type WorkspaceService } from "@slop-lab/dim-host-core/workspace";
+import { type WorkspaceSourceCreateInput, type WorkspaceSourceProviderContext, type WorkspaceRuntimeFactoryContext } from "@slop-lab/dim-host-core/plugin-api";
 import { hostPluginExtensions, loadHostPlugins } from "./host-plugins.js";
 
 export type WorkspaceHostCreateInput = WorkspaceSourceCreateInput;

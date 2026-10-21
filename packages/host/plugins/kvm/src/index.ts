@@ -1,7 +1,8 @@
 import { lstat, mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import { workspaceImageReference } from "@slop-lab/dim-host-core";
-import { ContainerWorkspaceRuntime, UserError, type CommandRunner, type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import { ContainerWorkspaceRuntime, UserError, type CommandRunner } from "@slop-lab/dim-host-core/workspace";
+import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 
 const kvmDeviceNumber = 10 * 256 + 232;
 const probe = `import os,fcntl,sys

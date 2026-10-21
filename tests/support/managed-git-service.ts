@@ -1,12 +1,12 @@
-import type { PreparedControlPlanePlugin } from "../../packages/control-plane/core/src/plugin.js";
+import type { PreparedControlPlanePlugin } from "../../packages/control-plane/core/src/plugin-api.js";
 import { configuredNativeGitBundleServer, type NativeGitBundleServerOptions } from "../../packages/control-plane/plugins/git-repositories/src/native-bundle-server.js";
 import { parseManagedGitServiceConfig, repositoryConfiguration } from "../../packages/control-plane/admin/src/service-pair.js";
 import { prepareCodeReview } from "../../packages/control-plane/plugins/code-review/src/index.js";
 import { prepareGitCi } from "../../packages/control-plane/plugins/git-ci/src/index.js";
 import { controlPlanePlugin as merge } from "../../packages/control-plane/plugins/merge-policy/src/index.js";
-import { workflowCompilerExtension, type WorkflowCompiler } from "../../packages/contracts/ci/src/workflow.js";
+import { workflowCompilerExtension, type WorkflowCompiler } from "../../packages/contracts/ci/src/workflow-plugin-api.js";
 import { dimWorkflowCompiler } from "../../packages/control-plane/plugins/ci-workflows/src/index.js";
-import type { CodeReviewService } from "../../packages/control-plane/plugins/code-review/src/extensions.js";
+import type { CodeReviewService } from "../../packages/control-plane/plugins/code-review/src/plugin-api.js";
 
 export interface ManagedGitFixtureOptions extends Omit<NativeGitBundleServerOptions, "config"> {
   readonly config: unknown;

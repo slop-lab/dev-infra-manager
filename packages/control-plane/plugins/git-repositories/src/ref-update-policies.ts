@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin";
-import { repositoryExtensionFactories, type RepositoryExtensionContext } from "./extensions.js";
+import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin-api";
+import { repositoryExtensionFactories, type RepositoryExtensionContext } from "./plugin-api.js";
 import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";
 import type { AuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
 import type { ProtectedRefChange } from "./repository-cas.js";

@@ -1,8 +1,8 @@
 import type { ReviewChangeMatcher } from "./change-matchers.js";
 import type { CodeReviewConfig } from "./config.js";
 import { codeReviewPolicy } from "./policy.js";
-import type { NativeImportedRootPolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { NativeProjectRootImportStateError } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import type { NativeImportedRootPolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { NativeProjectRootImportStateError } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 export function assertConfiguredHumanReviewers(
   config: Pick<CodeReviewConfig, "humanReviewers">,

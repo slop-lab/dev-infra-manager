@@ -1,4 +1,4 @@
-import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin";
+import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin-api";
 import type { AuthoritativeNativeChangedPath } from "./authoritative-native-review-schema.js";
 import { jsonFieldMatcher } from "./json-field-matcher.js";
 

@@ -6,10 +6,10 @@ const generationDomain = Buffer.from("dim-control-plane-generation-v1", "ascii")
 
 export function controlPlaneGenerationId(config: ControlPlaneConfig, sources: CompleteControlPlaneSourcePreflight): string {
   return controlPlaneGenerationIdFromFields([
-    Buffer.from(config.nativeGit.image), Buffer.from(config.ordinaryCi.image),
+    Buffer.from(config.nativeGit.image), Buffer.from(config.execution.image),
     sources.nativeGit.config.bytes, sources.nativeGit.readinessToken.bytes,
-    sources.ordinaryCi.config.bytes, sources.ordinaryCi.readinessToken.bytes,
-    sources.activationTokens.nativeGit.bytes, sources.activationTokens.ordinaryCi.bytes
+    sources.execution.config.bytes, sources.execution.readinessToken.bytes,
+    sources.activationTokens.nativeGit.bytes, sources.activationTokens.execution.bytes
   ]);
 }
 

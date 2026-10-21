@@ -8,7 +8,7 @@ export function ownedNetwork(foreign = false): ControlPlaneDockerCommandResult {
 }
 
 export function ownedVolume(name: string, foreign = false): ControlPlaneDockerCommandResult {
-  const service = name.includes("native-git") ? "native-git" : "ordinary-ci";
+  const service = name.includes("native-git") ? "native-git" : "execution";
   return ok(`${name}\nlocal\n${JSON.stringify({
     ...labels("volume", service),
     ...(foreign ? { "org.dim.deployment": "foreign" } : {}),
@@ -16,7 +16,7 @@ export function ownedVolume(name: string, foreign = false): ControlPlaneDockerCo
   })}\n`);
 }
 
-export function ownedContainer(service: "native-git" | "ordinary-ci"): ControlPlaneDockerCommandResult {
+export function ownedContainer(service: "native-git" | "execution"): ControlPlaneDockerCommandResult {
   const id = service === "native-git" ? "1".repeat(64) : "2".repeat(64);
   return ok(`${id}\n/dim-control-plane-${service}-1\n${JSON.stringify({
     ...labels("service", service),
@@ -26,7 +26,7 @@ export function ownedContainer(service: "native-git" | "ordinary-ci"): ControlPl
   })}\n`);
 }
 
-function labels(resource: "network" | "volume" | "service", service?: "native-git" | "ordinary-ci"): Readonly<Record<string, string>> {
+function labels(resource: "network" | "volume" | "service", service?: "native-git" | "execution"): Readonly<Record<string, string>> {
   return {
     "com.docker.compose.project": "dim-control-plane",
     ...(resource === "network" ? { "com.docker.compose.network": "dim-control-plane" } : {}),

@@ -7,7 +7,7 @@ import { cleanupFinalizeFixtures, generationId, rootRepository } from "./nativeR
 afterEach(cleanupFinalizeFixtures);
 it("redelivers reviewed jobs after generation replacement while preserving idempotent current-generation receipts", async () => {
   const fixture = await nativeBundleReviewFixture("delivery-generation");
-  const repository = rootRepository(fixture.root), binding = authoritativeNativeDeliveryBinding("ci", "http://ordinary-ci:8080/v1/jobs");
+  const repository = rootRepository(fixture.root), binding = authoritativeNativeDeliveryBinding("ci", "http://execution:8080/v1/jobs");
   const pending = await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, generationId);
   expect(pending.map((job) => job.event.executionKind).sort()).toEqual(["ordinary-sysbox", "qemu"]);
   const job = pending[0]!;

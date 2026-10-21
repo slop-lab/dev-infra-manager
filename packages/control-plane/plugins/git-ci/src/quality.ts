@@ -1,7 +1,7 @@
 import type { GitCiRuntime } from "./runtime.js";
 import { readAuthoritativeNativeReviewEnvelope } from "./plan-store.js";
 import { currentExecutionEvidence } from "./execution-evidence.js";
-import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { gitCiPolicy } from "./policy.js";
 
 export type GitCiQualityInput = { readonly projectId: string; readonly repositoryId: string; readonly reviewId: string;

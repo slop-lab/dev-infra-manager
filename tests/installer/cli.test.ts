@@ -342,8 +342,8 @@ describe("cli.ts dispatch (integration, via tsx subprocess)", () => {
     expect(args).toContain("@slop-lab/dim-cli@0.10.0");
     expect(args).toContain("@slop-lab/dim-control-plane-admin@0.10.0");
     expect(args).toContain("@slop-lab/dim-host-plugin-native-git@0.10.0");
-    expect(args).toContain("@slop-lab/dim-host-plugin-ci-worker@0.10.0");
-    expect(JSON.parse(await readFile(join(dataHome, "runtime/current/plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-ci-worker", "@slop-lab/dim-host-plugin-native-git"] });
+    expect(args).toContain("@slop-lab/dim-host-plugin-execution-worker@0.10.0");
+    expect(JSON.parse(await readFile(join(dataHome, "runtime/current/plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-execution-worker", "@slop-lab/dim-host-plugin-native-git"] });
   });
 
   it("retains an already selected managed component at the new matched version", async () => {
@@ -574,7 +574,7 @@ describe("cli.ts dispatch (integration, via tsx subprocess)", () => {
       { name: "@slop-lab/dim-control-plane-plugin-git-repositories", version: "0.9.0", file: "native-git.tgz", requires: { "@slop-lab/dim-contracts-external-url": "0.9.0" } },
       { name: "@slop-lab/dim-contracts-external-url", version: "0.9.0", file: "contract.tgz", requires: {} },
       { name: "@slop-lab/dim-host-plugin-native-git", version: "0.9.0", file: "native-host.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0" } },
-      { name: "@slop-lab/dim-host-plugin-ci-worker", version: "0.9.0", file: "worker.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0" } },
+      { name: "@slop-lab/dim-host-plugin-execution-worker", version: "0.9.0", file: "worker.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0" } },
       { name: "@slop-lab/dim-host-plugin-mirrors", version: "0.9.0", file: "mirrors.tgz", requires: { "@slop-lab/dim-host-core": "0.9.0" } },
       { name: "@slop-lab/dim-installer", version: "0.9.0", file: "installer.tgz", requires: {} }
     ];
@@ -603,7 +603,7 @@ describe("cli.ts dispatch (integration, via tsx subprocess)", () => {
     const args = JSON.parse(await readFile(npmArgs, "utf8"));
     for (const file of ["core.tgz", "cli.tgz", "admin.tgz", "native-git.tgz", "contract.tgz", "native-host.tgz", "worker.tgz"]) expect(args).toContain(join(bundle, file));
     expect(args).not.toContain(join(bundle, "mirrors.tgz"));
-    expect(JSON.parse(await readFile(join(dataHome, "runtime/current/plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-ci-worker", "@slop-lab/dim-host-plugin-native-git"] });
+    expect(JSON.parse(await readFile(join(dataHome, "runtime/current/plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-execution-worker", "@slop-lab/dim-host-plugin-native-git"] });
   });
 
   it("upgrades enabled local plugins and their required component peers from the matched bundle", async () => {

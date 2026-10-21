@@ -19,7 +19,7 @@ const activationTimeoutMilliseconds = 2_000;
 
 const USAGE = [
   "usage: dim-service check-config /run/secrets/service.json",
-  "       dim-service check-bundle-config /run/native.json /run/ordinary.json",
+  "       dim-service check-bundle-config /run/native.json /run/execution.json",
   "       dim-service compatibility --json",
   "       dim-service check-state --read-only /var/lib/dim-native-git --json",
   "       dim-service serve /run/secrets/service.json GENERATION_ID",
@@ -40,8 +40,8 @@ export async function runNativeGitServiceCli(
     return;
   }
   if (command === "check-bundle-config" && arguments_.length === 3) {
-    const [native, ordinary] = await Promise.all([readJson(arguments_[1]), readJson(arguments_[2])]);
-    parseControlPlaneServicePair(native, ordinary);
+    const [native, execution] = await Promise.all([readJson(arguments_[1]), readJson(arguments_[2])]);
+    parseControlPlaneServicePair(native, execution);
     return;
   }
   if (command === "compatibility" && arguments_.length === 2 && arguments_[1] === "--json") {

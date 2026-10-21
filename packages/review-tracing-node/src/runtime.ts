@@ -3,7 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createReadTracker, type ReviewTraceRuntime } from "@slop-lab/dim-review-tracing";
+import { createReadTracker } from "@slop-lab/dim-review-tracing";
+import { type ReviewTraceRuntime } from "@slop-lab/dim-review-tracing/plugin-api";
 
 const image = "docker.io/library/node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df";
 const limits = { fileBytes: 1024 * 1024, totalBytes: 4 * 1024 * 1024, requests: 128, executionMs: 15_000, stdoutBytes: 256 * 1024, stderrBytes: 16 * 1024 };

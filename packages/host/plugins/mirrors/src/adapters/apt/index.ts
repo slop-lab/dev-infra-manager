@@ -1,4 +1,4 @@
-import { cacheEndpoint, type MirrorAdapter } from "../../adapter.js";
+import { cacheEndpoint, type MirrorAdapter } from "../../protocol-plugin-api.js";
 import { clientConfiguration } from "./client.js";
 const hosts = new Set(["deb.debian.org", "security.debian.org", "archive.ubuntu.com", "security.ubuntu.com", "ports.ubuntu.com"]);
 export const mirrorAdapter: MirrorAdapter = {

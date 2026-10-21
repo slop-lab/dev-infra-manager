@@ -1,5 +1,5 @@
-import type { HostPluginExtension } from "@slop-lab/dim-host-core/workspace";
-import { MIRROR_ADAPTER_EXTENSION, mirrorAdapterExtension, type MirrorAdapter, type MirrorAdapterModule } from "./adapter.js";
+import type { HostPluginExtension } from "@slop-lab/dim-host-core/plugin-api";
+import { MIRROR_ADAPTER_EXTENSION, mirrorAdapterExtension, type MirrorAdapter, type MirrorAdapterModule } from "./protocol-plugin-api.js";
 import { mirrorAdapter as docker } from "./adapters/docker/index.js";
 import { mirrorAdapter as npm } from "./adapters/npm/index.js";
 import { mirrorAdapter as pypi } from "./adapters/pypi/index.js";

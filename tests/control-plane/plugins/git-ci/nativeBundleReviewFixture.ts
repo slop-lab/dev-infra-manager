@@ -2,7 +2,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type { AuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-ci/src/plan-schema.js";
-import type { AuthoritativeNativeReviewHooks, CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
+import type { AuthoritativeNativeReviewHooks, CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
 import { gitCiEnvelope, readAuthoritativeNativeReviewEnvelopes } from "../../../../packages/control-plane/plugins/git-ci/src/plan-store.js";
 import type { NativeHumanReviewerHooks } from "../../../../packages/control-plane/plugins/code-review/src/native-human-reviewer-http.js";
 import type { CiDeliveryPublicationFaults } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-publication.js";

@@ -91,7 +91,7 @@ maintainers assess before protected promotion.
   judgment.
 - Git-CI validates descriptor-bound attempts, terminal evidence and current
   repository inputs. Merge-policy checks selected quality evidence and human
-  decisions, then requests the repository engine's checked CAS. The shared CI service coordinates
+  decisions, then requests the repository engine's checked CAS. The shared execution scheduler coordinates
   authenticated workers, while host executors own isolated runtime creation and
   cleanup. Unavailable authority or unverifiable evidence fails closed.
 - Service restart, generation rollover, lease expiry, and dependency outage

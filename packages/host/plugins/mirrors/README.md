@@ -74,7 +74,7 @@ A host plugin registers its local adapter module using the public SDK:
 
 ```ts
 import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
-import { mirrorAdapterExtension } from "@slop-lab/dim-host-plugin-mirrors/adapter";
+import { mirrorAdapterExtension } from "@slop-lab/dim-host-plugin-mirrors/protocol-plugin-api";
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "artifact-cache-client",
@@ -85,7 +85,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
 ```
 
 The referenced module exports `mirrorAdapter`, typed as `MirrorAdapter` from
-`@slop-lab/dim-host-plugin-mirrors/adapter`. Its `kind` must match the registration.
+`@slop-lab/dim-host-plugin-mirrors/protocol-plugin-api`. Its `kind` must match the registration.
 For a reviewed Cargo implementation the registration would instead use
 `mirrorAdapterExtension("cargo", new URL("./adapter.js", import.meta.url))`;
 this is registration syntax, not a bundled Cargo implementation.

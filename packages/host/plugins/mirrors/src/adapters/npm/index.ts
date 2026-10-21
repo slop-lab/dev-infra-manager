@@ -1,4 +1,4 @@
-import { cacheEndpoint, type MirrorAdapter } from "../../adapter.js";
+import { cacheEndpoint, type MirrorAdapter } from "../../protocol-plugin-api.js";
 import { clientConfiguration } from "./client.js";
 import { repositoryTarget, within } from "../url.js";
 export const mirrorAdapter: MirrorAdapter = {

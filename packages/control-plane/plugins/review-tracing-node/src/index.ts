@@ -1,5 +1,5 @@
-import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
-import { reviewTraceRuntimeExtension } from "@slop-lab/dim-review-tracing";
+import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
+import { reviewTraceRuntimeExtension } from "@slop-lab/dim-review-tracing/plugin-api";
 import { createNodeReviewTraceRuntime } from "@slop-lab/dim-review-tracing-node";
 
 export { createNodeReviewTraceRuntime } from "@slop-lab/dim-review-tracing-node";

@@ -72,7 +72,7 @@ credentials or the workspace lifecycle token as a shortcut.
 | `@slop-lab/dim-control-plane-plugin-merge-policy` | Promotion authorization from current review and selected quality evidence |
 | `@slop-lab/dim-control-plane-plugin-git-ci` | Candidate planning, execution grants/evidence and CI event delivery |
 | `@slop-lab/dim-control-plane-plugin-webhooks` | Independent external subscriptions and durable signed delivery |
-| `@slop-lab/dim-control-plane-plugin-ci` | Durable execution coordination and worker admission |
+| `@slop-lab/dim-control-plane-plugin-execution-scheduler` | Durable execution coordination and worker admission |
 | `@slop-lab/dim-control-plane-plugin-ci-workflows` | Repository workflow language compiler consumed by Git-CI |
 | `@slop-lab/dim-control-plane-plugin-llm-router` | Upstream accounts and secrets, routing, admission, usage and exchange capture |
 | `@slop-lab/dim-host-plugin-llm-router` | Workspace identity checks, scoped router enrollment, local gateway and guest/OpenCode configuration |
@@ -80,12 +80,12 @@ credentials or the workspace lifecycle token as a shortcut.
 Repository hosting does not require review, merge policy, a compiler or CI.
 Human review works without Git-CI; protected-ref promotion requires a selected
 merge-policy implementation. Trusted repository policy sections must have enabled
-owners. The repository-owned `./extensions` SDK supplies attachment and serialized
+owners. The repository-owned `./plugin-api` SDK supplies attachment and serialized
 repository ports; the control-plane core only composes generic named extensions.
 Feature code and its state remain in the owning plugin.
 
-The workflow compiler does not execute jobs. The CI control-plane plugin owns
-execution coordination; `@slop-lab/dim-host-plugin-ci-worker` runs configured
+The workflow compiler does not execute jobs. The execution-scheduler control-plane plugin owns
+generic task and CI execution coordination; `@slop-lab/dim-host-plugin-execution-worker` runs configured
 container/VM slots on a host. A host may own workspaces and CI workers together.
 `@slop-lab/dim-control-plane-admin` composes operator setup and clients; it is
 separate from the standalone control-plane runtime and service plugin closure.

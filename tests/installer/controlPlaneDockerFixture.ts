@@ -6,7 +6,7 @@ import type {
 } from "../../packages/installer/src/controlPlaneDocker.js";
 
 export const nativeImage = `registry.example/dim/native-git@sha256:${"a".repeat(64)}`;
-export const ordinaryImage = `registry.example/dim/ordinary-ci@sha256:${"b".repeat(64)}`;
+export const executionImage = `registry.example/dim/execution@sha256:${"b".repeat(64)}`;
 export const config = parseControlPlaneConfig({
   schemaVersion: 1,
   deploymentId: "main",
@@ -16,14 +16,14 @@ export const config = parseControlPlaneConfig({
     readinessTokenFile: "/operator/native.token",
     publish: { host: "127.0.0.1", port: 7443 }
   },
-  ordinaryCi: {
-    image: ordinaryImage,
-    configFile: "/operator/ordinary.json",
-    readinessTokenFile: "/operator/ordinary.token",
+  execution: {
+    image: executionImage,
+    configFile: "/operator/execution.json",
+    readinessTokenFile: "/operator/execution.token",
     publish: { host: "127.0.0.1", port: 7410 }
   }
 }, ["127.0.0.1"]);
-export const snapshots = { nativeGit: "/staged/native.json", ordinaryCi: "/staged/ordinary.json" } as const;
+export const snapshots = { nativeGit: "/staged/native.json", execution: "/staged/execution.json" } as const;
 
 export class AbsentRunner implements ControlPlaneDockerRunner {
   readonly calls: ControlPlaneDockerCommand[] = [];
@@ -141,7 +141,7 @@ function responseForOwned(args: readonly string[]): ControlPlaneDockerCommandRes
   if (args[0] === "network" && args[1] === "inspect") return ownedNetwork();
   if (args[0] === "volume" && args[1] === "inspect") return ownedVolume(args[2] ?? "");
   if (isProjectList(args, "network")) return ok(`${"c".repeat(64)}\n`);
-  if (isProjectList(args, "volume")) return ok("dim-control-plane-native-git-data\ndim-control-plane-ordinary-ci-data\n");
+  if (isProjectList(args, "volume")) return ok("dim-control-plane-native-git-data\ndim-control-plane-execution-data\n");
   if (isProjectList(args, "container")) return ok(`${"1".repeat(64)}\n${"2".repeat(64)}\n`);
   if (isUserList(args, "network")) return ok(`${"1".repeat(64)}\n${"2".repeat(64)}\n`);
   if (isUserList(args, "volume")) return ok(`${(args.some((arg) => arg.includes("native-git-data")) ? "1" : "2").repeat(64)}\n`);
@@ -160,7 +160,7 @@ function ownedNetwork(overrides: Readonly<Record<string, string>> = {}): Control
 }
 
 function ownedVolume(name: string): ControlPlaneDockerCommandResult {
-  const service = name.includes("native-git") ? "native-git" : "ordinary-ci";
+  const service = name.includes("native-git") ? "native-git" : "execution";
   return ok(`${name}\nlocal\n${JSON.stringify({
     "com.docker.compose.project": "dim-control-plane", "com.docker.compose.volume": name,
     "org.dim.managed": "true", "org.dim.bundle": "control-plane", "org.dim.deployment": "main",
@@ -169,7 +169,7 @@ function ownedVolume(name: string): ControlPlaneDockerCommandResult {
 }
 
 function ownedContainer(name: string): ControlPlaneDockerCommandResult {
-  const service = name.includes("native-git") ? "native-git" : "ordinary-ci";
+  const service = name.includes("native-git") ? "native-git" : "execution";
   const id = service === "native-git" ? "1".repeat(64) : "2".repeat(64);
   return ok(`${id}\n/${name}\n${JSON.stringify({
     "com.docker.compose.project": "dim-control-plane", "com.docker.compose.service": service,
@@ -205,9 +205,9 @@ export function bundleProbeArgs(): readonly string[] {
     "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
     "--security-opt", "no-new-privileges:true", "--user", "10001:10001",
     "--mount", "type=bind,src=/staged/native.json,dst=/run/native.json,readonly",
-    "--mount", "type=bind,src=/staged/ordinary.json,dst=/run/ordinary.json,readonly",
+    "--mount", "type=bind,src=/staged/execution.json,dst=/run/execution.json,readonly",
     "--entrypoint", "/usr/local/bin/dim-service", nativeImage,
-    "check-bundle-config", "/run/native.json", "/run/ordinary.json"
+    "check-bundle-config", "/run/native.json", "/run/execution.json"
   ];
 }
 

@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { ContainerWorkspaceRuntime, ProcessRunner, WorkspaceService, WorkspaceStore, type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/workspace";
+import { ContainerWorkspaceRuntime, ProcessRunner, WorkspaceService, WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
+import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 import { hostPlugin } from "../../../../packages/host/plugins/agent-tools/src/index.js";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
 

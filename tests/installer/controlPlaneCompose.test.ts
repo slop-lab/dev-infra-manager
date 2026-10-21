@@ -12,10 +12,10 @@ const config = parseControlPlaneConfig({
     readinessTokenFile: "/operator/native.token",
     publish: { host: "127.0.0.1", port: 7443 }
   },
-  ordinaryCi: {
-    image: `registry.example/dim/ordinary-ci@sha256:${"b".repeat(64)}`,
-    configFile: "/operator/ordinary.json",
-    readinessTokenFile: "/operator/ordinary.token",
+  execution: {
+    image: `registry.example/dim/execution@sha256:${"b".repeat(64)}`,
+    configFile: "/operator/execution.json",
+    readinessTokenFile: "/operator/execution.token",
     publish: { host: "::1", port: 7410 }
   }
 }, ["127.0.0.1", "::1"]);
@@ -26,10 +26,10 @@ const snapshots = {
     readinessToken: "/state/generations/abc/native-git-readiness.token",
     activationToken: "/state/generations/abc/native-git-activation.token"
   },
-  ordinaryCi: {
-    config: "/state/generations/abc/ordinary-ci.json",
-    readinessToken: "/state/generations/abc/ordinary-ci-readiness.token",
-    activationToken: "/state/generations/abc/ordinary-ci-activation.token"
+  execution: {
+    config: "/state/generations/abc/execution.json",
+    readinessToken: "/state/generations/abc/execution-readiness.token",
+    activationToken: "/state/generations/abc/execution-activation.token"
   }
 } as const;
 const generationId = "c".repeat(64);
@@ -43,7 +43,7 @@ describe("control-plane Compose rendering", () => {
     expect(first.equals(second)).toBe(true);
     const yaml = first.toString("utf8");
     expect(yaml).toContain('name: "dim-control-plane"');
-    expect(yaml.match(/^  (native-git|ordinary-ci):$/gm)).toHaveLength(2);
+    expect(yaml.match(/^  (native-git|execution):$/gm)).toHaveLength(2);
     expect(yaml).toContain('user: "10001:10001"');
     expect(yaml).toContain('user: "10002:10002"');
     expect(yaml.match(/- "serve"/g)).toHaveLength(2);
@@ -53,7 +53,7 @@ describe("control-plane Compose rendering", () => {
     expect(yaml.match(/- "no-new-privileges:true"/g)).toHaveLength(2);
     expect(yaml.match(/\/tmp:rw,nosuid,nodev,noexec/g)).toHaveLength(2);
     expect(yaml).toContain('name: "dim-control-plane-native-git-data"');
-    expect(yaml).toContain('name: "dim-control-plane-ordinary-ci-data"');
+    expect(yaml).toContain('name: "dim-control-plane-execution-data"');
     expect(yaml).toContain('name: "dim-control-plane"');
     expect(yaml).not.toContain("/operator/");
     for (const secret of Object.values(controlPlaneSecrets)) expect(yaml).not.toContain(secret);
@@ -102,7 +102,7 @@ function operatorPaths(): readonly string[] {
   return [
     config.nativeGit.configFile,
     config.nativeGit.readinessTokenFile,
-    config.ordinaryCi.configFile,
-    config.ordinaryCi.readinessTokenFile
+    config.execution.configFile,
+    config.execution.readinessTokenFile
   ];
 }

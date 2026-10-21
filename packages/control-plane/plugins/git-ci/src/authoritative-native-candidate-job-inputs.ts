@@ -1,6 +1,6 @@
 import type { GitCiRuntime } from "./runtime.js";
 import { z } from "zod";
-import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
 import {
   readNativeCandidateJobInputsFromGit,

@@ -305,11 +305,12 @@ async function handleOperations(context: RequestContext, session: ReviewerSessio
   }
   const host = /^\/v1\/operations\/hosts\/([a-z0-9._-]{1,128})\/workspaces$/.exec(path);
   const creation = /^\/v1\/operations\/hosts\/([a-z0-9._-]{1,128})\/workspaces\/create$/.exec(path);
-  const job = /^\/v1\/operations\/ci\/jobs\/([0-9a-f-]{36})(?:\/(cancel|retry))?$/.exec(path);
+  const job = /^\/v1\/operations\/ci\/jobs\/([0-9a-f-]{36})$/.exec(path);
+  const execution = /^\/v1\/operations\/execution\/jobs\/([0-9a-f-]{36})\/(cancel|retry)$/.exec(path);
   let body: unknown;
   try {
     if (request.method === "GET" && path === "/v1/operations/status") {
-      body = { hosts: await operations.hosts(), ci: context.config.operations.ci !== undefined, ciOperator: context.config.operations.ci?.operatorConnection !== undefined, review: context.native !== undefined,
+      body = { hosts: await operations.hosts(), ci: context.config.operations.ci !== undefined, executionOperator: context.config.operations.execution !== undefined, review: context.native !== undefined,
         consoles: context.config.operations.consoles, generationId: context.config.nativeGit?.generationId ?? null };
     } else if (creation?.[1] !== undefined && mutation) {
       await operations.workspaceCreate(creation[1], workspaceCreateSchema.parse(await readJson(request))); body = { accepted: true };
@@ -317,13 +318,13 @@ async function handleOperations(context: RequestContext, session: ReviewerSessio
     else if (host?.[1] !== undefined && mutation) {
       await operations.workspaceAction(host[1], workspaceActionSchema.parse(await readJson(request))); body = { accepted: true };
     } else if (request.method === "GET" && path === "/v1/operations/ci/jobs") body = await operations.jobs();
-    else if (request.method === "GET" && path === "/v1/operations/ci/workers") body = await operations.workers();
-    else if (job?.[1] !== undefined && request.method === "GET" && job[2] === undefined) body = await operations.detail(z.string().uuid().parse(job[1]));
-    else if (job?.[1] !== undefined && mutation && job[2] === "cancel") {
-      emptySchema.parse(await readJson(request)); body = await operations.cancel(z.string().uuid().parse(job[1]));
-    } else if (job?.[1] !== undefined && mutation && job[2] === "retry") {
+    else if (request.method === "GET" && path === "/v1/operations/execution/workers") body = await operations.workers();
+    else if (job?.[1] !== undefined && request.method === "GET") body = await operations.detail(z.string().uuid().parse(job[1]));
+    else if (execution?.[1] !== undefined && mutation && execution[2] === "cancel") {
+      emptySchema.parse(await readJson(request)); body = await operations.cancel(z.string().uuid().parse(execution[1]));
+    } else if (execution?.[1] !== undefined && mutation && execution[2] === "retry") {
       const input = z.object({ requestId: z.string().uuid() }).strict().parse(await readJson(request));
-      body = await operations.retry(z.string().uuid().parse(job[1]), input.requestId);
+      body = await operations.retry(z.string().uuid().parse(execution[1]), input.requestId);
     } else throw new HttpResponseError(404, "not found");
   } catch (error) {
     if (error instanceof HttpResponseError || error instanceof z.ZodError || error instanceof BodyError) throw error;

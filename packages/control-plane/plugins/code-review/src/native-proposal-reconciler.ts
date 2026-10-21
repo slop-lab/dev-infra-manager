@@ -1,7 +1,7 @@
-import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { createAuthoritativeNativeReview, type AuthoritativeNativeReviewHooks } from "./authoritative-native-review.js";
 import type { AuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-schema.js";
-import { readNativeProposalRefs, readNativeProjectRegistrations, type AuthoritativeNativeCandidateRuntime } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { readNativeProposalRefs, readNativeProjectRegistrations, type AuthoritativeNativeCandidateRuntime } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 export async function reconcileNativeProposalRefs(
   runtime: AuthoritativeNativeCandidateRuntime,
   projectId: string,

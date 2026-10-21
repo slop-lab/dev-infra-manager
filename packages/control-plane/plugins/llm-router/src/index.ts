@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
+import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { loadConfig } from "./config.js";
 import { createRouter } from "./server.js";
 

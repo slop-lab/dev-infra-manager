@@ -43,7 +43,8 @@
   "dependencies": {
     "zod": "4.1.11",
     "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
-    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-git": "workspace:0.10.0",
+    "@slop-lab/dim-contracts-execution": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-control-plane-core": "0.10.0",

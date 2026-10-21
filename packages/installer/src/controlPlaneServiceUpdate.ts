@@ -11,12 +11,12 @@ export async function replaceOwnedControlPlaneService(input: {
   readonly runner: ControlPlaneDockerRunner;
   readonly composePath: string;
   readonly deploymentId: string;
-  readonly service: "native-git" | "ordinary-ci";
+  readonly service: "native-git" | "execution";
   readonly target: {
     readonly config: ControlPlaneConfig;
     readonly generationPath: string;
     readonly generationId: string;
-    readonly images?: { readonly nativeGit: string; readonly ordinaryCi: string };
+    readonly images?: { readonly nativeGit: string; readonly execution: string };
   };
 }): Promise<void> {
   const state = await inspectControlPlaneDocker(input.runner, input.deploymentId);

@@ -1,4 +1,4 @@
-import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { deployRouterHelpers, hasRouterConnection } from "./integration.js";
 import { runLlmCommand } from "./cli.js";
 export const hostPlugin: WorkspaceHostPlugin = { name: "host-llm-router", commands: [

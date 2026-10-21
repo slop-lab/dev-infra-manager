@@ -55,8 +55,6 @@ export const executionResultSchema = z.object({ executionId: z.string().uuid(),
 });
 export type ExecutionResult = z.infer<typeof executionResultSchema>;
 
-export const executionCredentialSchema = z.object({ username: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
-  password: z.string().regex(/^[A-Za-z0-9_-]{43,}$/).refine((value) => Buffer.from(value, "base64url").toString("base64url") === value)
-}).strict().readonly();
+import { executionCredentialSchema } from "@slop-lab/dim-contracts-execution/config";
 export const executionSourceCredentialsSchema = z.object({ grantIssuer: executionCredentialSchema,
   candidateReader: executionCredentialSchema, resultReporter: executionCredentialSchema }).strict();

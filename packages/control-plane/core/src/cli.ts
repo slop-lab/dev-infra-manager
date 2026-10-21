@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { startControlPlanePlugins, type ControlPlanePluginEntry } from "./runtime.js";
-import type { ControlPlanePlugin, RunningControlPlanePlugin } from "./plugin.js";
+import type { ControlPlanePlugin, RunningControlPlanePlugin } from "./plugin-api.js";
 
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
 export async function startControlPlaneFile(path: string, signal: AbortSignal, environment: NodeJS.ProcessEnv = process.env): Promise<RunningControlPlanePlugin> {

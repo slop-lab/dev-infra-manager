@@ -1,4 +1,4 @@
-import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ensureLocalCaches } from "./provider.js";

@@ -1,7 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import type { DurableWebhookEventSource } from "./extensions.js";
+import type { DurableWebhookEventSource } from "./plugin-api.js";
 import type { ExternalWebhookSubscriber } from "./external-webhook-config.js";
 import { ExternalWebhookStore, type ExternalWebhookEvent } from "./external-webhook-store.js";
 

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { AuthoritativeNativeChangedPath } from "./authoritative-native-review-schema.js";
-import { assertGitExecutableIdentity, type GitExecutableIdentity } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { assertGitExecutableIdentity, type GitExecutableIdentity } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 const execute = promisify(execFile);
 const maximumOutputBytes = 128 * 1024 * 1024;

@@ -4,7 +4,7 @@ import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { codeReviewPolicy } from "../../../../packages/control-plane/plugins/code-review/src/policy.js";
-import { reviewChangeMatchers, reviewChangeMatcherExtension, type ReviewChangeMatcher, type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
+import { reviewChangeMatchers, reviewChangeMatcherExtension, type ReviewChangeMatcher, type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
 import { nativeRepositoryPolicyRevision, type NativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
 import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-merge-policy";
 import { basic, fixture, generationId, git, record, reviewer, text, token } from "../git-repositories/optionalFeaturesFixture.js";

@@ -48,7 +48,7 @@ Options:
   --no-local-bin  Install privately for facade use without ~/.local/bin/dim
   --local-bin     Create a managed dim symlink in the user bin directory
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
-  --with-managed Install native Git host + CI worker plugins and control-plane administration
+  --with-managed Install native Git host + execution worker plugins and control-plane administration
   --host-mirror-plugin PACKAGE@EXACT_VERSION
                    Optionally enable the cache client (does not deploy cache servers)
   --local-packages PATH

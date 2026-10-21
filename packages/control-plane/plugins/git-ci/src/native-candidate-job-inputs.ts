@@ -8,7 +8,7 @@ import {
   readCandidateBlob
 } from "./candidate-execution-git.js";
 import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
-import { isCandidatePath, isCandidateArgv, type WorkflowCompiler, type NativeCandidateRequiredJob } from "@slop-lab/dim-contracts-ci/workflow";
+import { isCandidatePath, isCandidateArgv, type WorkflowCompiler, type NativeCandidateRequiredJob } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
 
 export type NativeCandidateBlobIdentity = {
   readonly objectId: string;

@@ -1,8 +1,0 @@
-{
-  "name": "@slop-lab/dim-control-plane-ci-image",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "zod": "4.1.11"
-  }
-}

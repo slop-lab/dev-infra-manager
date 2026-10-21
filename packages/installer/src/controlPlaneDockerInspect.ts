@@ -16,7 +16,7 @@ type ResourceKind = "network" | "volume" | "container";
 type ResourcePlan = {
   readonly kind: ResourceKind;
   readonly name: string;
-  readonly service?: "native-git" | "ordinary-ci";
+  readonly service?: "native-git" | "execution";
 };
 type ResourceInspection =
   | { readonly kind: "missing"; readonly plan: ResourcePlan }
@@ -25,9 +25,9 @@ type ResourceInspection =
 const resources = [
   { kind: "network", name: project },
   { kind: "volume", name: "dim-control-plane-native-git-data", service: "native-git" },
-  { kind: "volume", name: "dim-control-plane-ordinary-ci-data", service: "ordinary-ci" },
+  { kind: "volume", name: "dim-control-plane-execution-data", service: "execution" },
   { kind: "container", name: "dim-control-plane-native-git-1", service: "native-git" },
-  { kind: "container", name: "dim-control-plane-ordinary-ci-1", service: "ordinary-ci" }
+  { kind: "container", name: "dim-control-plane-execution-1", service: "execution" }
 ] as const satisfies readonly ResourcePlan[];
 
 export async function inspectControlPlaneDocker(
@@ -63,22 +63,22 @@ export async function inspectControlPlaneDocker(
 
   const network = requiredInspection(inspections, "network");
   const nativeGit = requiredInspection(inspections, "container", "native-git");
-  const ordinaryCi = requiredInspection(inspections, "container", "ordinary-ci");
+  const execution = requiredInspection(inspections, "container", "execution");
   const nativeVolume = requiredInspection(inspections, "volume", "native-git");
-  const ordinaryVolume = requiredInspection(inspections, "volume", "ordinary-ci");
+  const executionVolume = requiredInspection(inspections, "volume", "execution");
   assertExactSet(projectResources[0] ?? [], [network.id], "Compose network");
-  assertExactSet(projectResources[1] ?? [], [nativeVolume.plan.name, ordinaryVolume.plan.name], "Compose volume");
-  assertExactSet(projectResources[2] ?? [], [nativeGit.id, ordinaryCi.id], "Compose container");
-  await assertExactUsers(runner, { kind: "network", name: project, expected: [nativeGit.id, ordinaryCi.id] });
+  assertExactSet(projectResources[1] ?? [], [nativeVolume.plan.name, executionVolume.plan.name], "Compose volume");
+  assertExactSet(projectResources[2] ?? [], [nativeGit.id, execution.id], "Compose container");
+  await assertExactUsers(runner, { kind: "network", name: project, expected: [nativeGit.id, execution.id] });
   await assertExactUsers(runner, { kind: "volume", name: nativeVolume.plan.name, expected: [nativeGit.id] });
-  await assertExactUsers(runner, { kind: "volume", name: ordinaryVolume.plan.name, expected: [ordinaryCi.id] });
-  return { kind: "owned", nativeGitContainerId: nativeGit.id, ordinaryCiContainerId: ordinaryCi.id };
+  await assertExactUsers(runner, { kind: "volume", name: executionVolume.plan.name, expected: [execution.id] });
+  return { kind: "owned", nativeGitContainerId: nativeGit.id, executionContainerId: execution.id };
 }
 
 export async function inspectControlPlaneServiceContainer(
   runner: ControlPlaneDockerRunner,
   deploymentId: string,
-  service: "native-git" | "ordinary-ci"
+  service: "native-git" | "execution"
 ): Promise<string> {
   await assertCompose(runner);
   const plan = resources.find((resource) => resource.kind === "container" && resource.service === service);
@@ -219,7 +219,7 @@ function parseLabels(value: string | undefined): Readonly<Record<string, string>
 function requiredInspection(
   inspections: readonly ResourceInspection[],
   kind: ResourceKind,
-  service?: "native-git" | "ordinary-ci"
+  service?: "native-git" | "execution"
 ): Extract<ResourceInspection, { readonly kind: "present" }> {
   const inspection = inspections.find((entry) => entry.plan.kind === kind && entry.plan.service === service);
   if (inspection === undefined) return conflict("control-plane Docker resources are partial");

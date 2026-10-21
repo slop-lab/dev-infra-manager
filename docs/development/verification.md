@@ -109,7 +109,7 @@ The [public/private Project example](../../examples/projects/native-multiple-rep
 is also exercised directly from its checked-in files:
 
 ```bash
-pnpm --dir tests exec vitest run scenarios/ci/multipleRepositoryExample.test.ts
+pnpm --dir tests exec vitest run scenarios/execution/multipleRepositoryExample.test.ts
 DIM_NATIVE_MULTI_REPOSITORY_IMAGE=REVIEWED_WORKSPACE_IMAGE pnpm --dir tests exec vitest run host/core/multiRepositoryWorkspaceRuntime.test.ts
 ```
 
@@ -139,8 +139,8 @@ pnpm --dir tests exec tsx ../scripts/checks/native-ci-runtime-smoke.mts vm QEMU_
 ```
 
 Use the reviewed Docker-in-Docker base for the container supervisor. Build the
-VM supervisor with `dim ci qemu-image IMAGE:TAG` or its source Dockerfile
-under `packages/host/plugins/ci-worker/src/native-qemu-runner-assets`. The VM lane requires
+VM supervisor with `dim execution qemu-image IMAGE:TAG` or its source Dockerfile
+under `packages/host/plugins/execution-worker/src/native-qemu-runner-assets`. The VM lane requires
 KVM. Both lanes use an ordinary Ubuntu job image, install an OS package through
 real DNS/egress, deliver read-only plugin configuration and verify workspace
 output. The VM lane also checks that job root cannot remove its PID fence.
@@ -152,7 +152,7 @@ canonical Node interpreter and root filesystem operations. Run
 This profile tests filesystem ownership, bounded subprocesses, startup, signal
 handling and cleanup. It does not execute a VM or prove KVM availability.
 
-For a local container run, use an immutable source-built ordinary CI service
+For a local container run, use an immutable source-built execution scheduler service
 image as `BASE_IMAGE`. Build a test-only tools image from that image ID:
 
 ```bash

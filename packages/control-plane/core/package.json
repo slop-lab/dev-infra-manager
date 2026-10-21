@@ -17,14 +17,14 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./plugin": {
+    "./plugin-api": {
       "dim-source": {
-        "types": "./src/plugin.ts",
-        "default": "./src/plugin.ts"
+        "types": "./src/plugin-api.ts",
+        "default": "./src/plugin-api.ts"
       },
-      "types": "./dist/plugin.d.ts",
-      "import": "./dist/plugin.js",
-      "default": "./dist/plugin.js"
+      "types": "./dist/plugin-api.d.ts",
+      "import": "./dist/plugin-api.js",
+      "default": "./dist/plugin-api.js"
     },
     "./lock": {
       "dim-source": {

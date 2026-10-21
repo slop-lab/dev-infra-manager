@@ -1,8 +1,8 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { workflowCompilerExtension } from "@slop-lab/dim-contracts-ci/workflow";
-import { parseAuthoritativeNativeReviewEnvelope } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
+import { workflowCompilerExtension } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
+import { parseAuthoritativeNativeReviewEnvelope } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
 import { prepareGitCi } from "../../../../packages/control-plane/plugins/git-ci/src/index.js";
 import type { GitCiQualityInput } from "../../../../packages/control-plane/plugins/git-ci/src/quality.js";
 import { basic, fixture, generationId, git, reviewer, token } from "../git-repositories/optionalFeaturesFixture.js";

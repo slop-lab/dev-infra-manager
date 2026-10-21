@@ -1,4 +1,4 @@
-import { executionWorkerConfigSchema } from "@slop-lab/dim-contracts-ci/worker";
+import { executionWorkerConfigSchema } from "@slop-lab/dim-host-plugin-execution-worker/config";
 import { executionProfileSchema, type ExecutionProfile } from "@slop-lab/dim-contracts-ci/execution";
 import { ciQueryConnectionSchema } from "@slop-lab/dim-contracts-ci/connections";
 import { parseControlPlaneServicePair, parseManagedGitServiceConfig } from "./service-pair.js";
@@ -20,11 +20,11 @@ const imagePattern = /^(?:[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?\/)?[a-z0-9]+(?
 export interface PrepareControlPlaneOptions {
   readonly directory: string;
   readonly nativeGitImage: string;
-  readonly ordinaryCiImage: string;
+  readonly executionImage: string;
   readonly hostId?: string;
   readonly nativeGitPort?: number;
-  readonly ordinaryCiPort?: number;
-  readonly ciWorker?: string;
+  readonly executionPort?: number;
+  readonly executionWorker?: string;
   readonly ciContainerSlots?: number;
   readonly ciVmSlots?: number;
   readonly ciRunnerImage?: string;
@@ -38,12 +38,12 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
   const directory = path.resolve(options.directory);
   const hostId = options.hostId ?? "operator";
   if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(hostId)) throw new UserError("host ID must contain 1–40 lower-case letters, digits or hyphens");
-  if (![options.nativeGitImage, options.ordinaryCiImage].every((image) => imagePattern.test(image))) {
+  if (![options.nativeGitImage, options.executionImage].every((image) => imagePattern.test(image))) {
     throw new UserError("control-plane images must be registry references pinned by complete sha256 digests");
   }
   const nativePort = port(options.nativeGitPort ?? 8787);
-  const ordinaryPort = port(options.ordinaryCiPort ?? 8788);
-  if (nativePort === ordinaryPort) throw new UserError("control-plane published ports must be distinct");
+  const executionPort = port(options.executionPort ?? 8788);
+  if (nativePort === executionPort) throw new UserError("control-plane published ports must be distinct");
   const slots = initialWorkerSlots(options);
   const credential = (username: string): Credential => ({ username, password: randomBytes(32).toString("base64url") });
   const roles = Object.fromEntries(["query", "operator", "grantIssuer", "candidateReader", "resultReporter", "webhook"]
@@ -57,17 +57,17 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     workspaceWriteIssuers: [hostRole("writer")],
     humanReviewers: [{ reviewerId: "owner", ...credential("reviewer-owner") }], hostPromoters: [hostRole("promoter")],
     ci: { grantIssuer: roles.grantIssuer, candidateReader: roles.candidateReader, resultReporter: roles.resultReporter,
-      webhook: { endpoint: "http://ordinary-ci:8080/v1/jobs", ...roles.webhook } }
+      webhook: { endpoint: "http://execution:8080/v1/jobs", ...roles.webhook } }
   };
-  const ordinary = {
+  const execution = {
     schemaVersion: 1, claimLeaseMilliseconds: 60_000,
     nativeGit: { endpoint: "http://native-git:8080", grantIssuer: roles.grantIssuer,
       candidateReader: roles.candidateReader, resultReporter: roles.resultReporter },
     credentials: { webhook: roles.webhook, query: roles.query, operator: roles.operator },
-    workers: options.ciWorker === undefined ? [] : [{ id: options.ciWorker,
+    workers: options.executionWorker === undefined ? [] : [{ id: options.executionWorker,
       token: randomBytes(32).toString("base64url"), slots }]
   };
-  parseControlPlaneServicePair(native, ordinary);
+  parseControlPlaneServicePair(native, execution);
   const repositoryPolicy = { schemaVersion: 1, repositoryId: "root", extensions: {
     "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] },
     "git-ci": { requiredJobs: [], ciRepositoryIds: ["root"] }, "merge-policy": {} } };
@@ -76,11 +76,11 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     configFile: path.join(directory, `${name}.json`), readinessTokenFile: path.join(directory, `${name}-readiness.token`),
     publish: { host: "127.0.0.1", port: publishedPort } });
   const install = { schemaVersion: 1, deploymentId: "dim", nativeGit: service("native-git", options.nativeGitImage, nativePort),
-    ordinaryCi: service("ordinary-ci", options.ordinaryCiImage, ordinaryPort) };
+    execution: service("execution", options.executionImage, executionPort) };
   await privateDirectory(directory, async () => {
     await json(path.join(directory, "native-git.json"), native);
-    await json(path.join(directory, "ordinary-ci.json"), ordinary);
-    for (const name of ["native-git", "ordinary-ci"]) await writeFile(path.join(directory, `${name}-readiness.token`),
+    await json(path.join(directory, "execution.json"), execution);
+    for (const name of ["native-git", "execution"]) await writeFile(path.join(directory, `${name}-readiness.token`),
       `${randomBytes(32).toString("base64url")}\n`, { mode: 0o600, flag: "wx" });
     await json(path.join(directory, "install.json"), install);
     await json(path.join(directory, "repository-policy.json"), repositoryPolicy);
@@ -90,11 +90,11 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
 
 /** Bind client credentials to the generation attested by the live deployed service. */
 export async function connectControlPlane(directoryInput: string, options: {
-  readonly endpoint?: string; readonly ciEndpoint?: string; readonly outputDirectory?: string; readonly ciWorkerStateDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
-} = {}): Promise<{ directory: string; generationId: string; hostId: string; ciWorkerCount: number; workerConfigFile?: string }> {
+  readonly endpoint?: string; readonly executionEndpoint?: string; readonly outputDirectory?: string; readonly executionWorkerStateDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
+} = {}): Promise<{ directory: string; generationId: string; hostId: string; executionWorkerCount: number; workerConfigFile?: string }> {
   const directory = path.resolve(directoryInput);
   const native = parseManagedGitServiceConfig(await privateJson(path.join(directory, "native-git.json")));
-  const install = await privateJson(path.join(directory, "install.json")) as { nativeGit?: { publish?: { host?: unknown; port?: unknown } }; ordinaryCi?: { publish?: { host?: unknown; port?: unknown } } };
+  const install = await privateJson(path.join(directory, "install.json")) as { nativeGit?: { publish?: { host?: unknown; port?: unknown } }; execution?: { publish?: { host?: unknown; port?: unknown } } };
   const publish = install.nativeGit?.publish;
   if (publish?.host !== "127.0.0.1" || typeof publish.port !== "number") throw new UserError("prepared control-plane loopback endpoint is invalid");
   const endpoint = options.endpoint ?? `http://127.0.0.1:${port(publish.port)}`;
@@ -149,18 +149,18 @@ export async function connectControlPlane(directoryInput: string, options: {
     transport: "loopback-http", endpoint, serviceId: "native-main", generationId,
     workspaceWriteIssuer: selected(native.workspaceWriteIssuers), rootReadIssuer: selected(native.projectRootReadIssuers)
   } });
-  const ciPublish = install.ordinaryCi?.publish;
-  if (ciPublish?.host !== "127.0.0.1" || typeof ciPublish.port !== "number") throw new UserError("prepared CI loopback endpoint is invalid");
-  const { ordinary } = parseControlPlaneServicePair(native, await privateJson(path.join(directory, "ordinary-ci.json")));
+  const executionPublish = install.execution?.publish;
+  if (executionPublish?.host !== "127.0.0.1" || typeof executionPublish.port !== "number") throw new UserError("prepared execution loopback endpoint is invalid");
+  const { execution } = parseControlPlaneServicePair(native, await privateJson(path.join(directory, "execution.json")));
   const ciQueryConnection = ciQueryConnectionSchema.parse({ schemaVersion: 1, role: "query", generationId,
-    endpoint: options.ciEndpoint ?? `http://127.0.0.1:${port(ciPublish.port)}`, credential: ordinary.credentials.query });
+    endpoint: options.executionEndpoint ?? `http://127.0.0.1:${port(executionPublish.port)}`, credential: execution.credentials.query });
   const output = path.resolve(options.outputDirectory ?? path.join(directory, "connections"));
-  const worker = ordinary.workers.length === 1 ? ordinary.workers[0] : undefined;
-  if (worker === undefined && options.ciWorkerStateDirectory !== undefined) throw new UserError("no CI worker was prepared");
+  const worker = execution.workers.length === 1 ? execution.workers[0] : undefined;
+  if (worker === undefined && options.executionWorkerStateDirectory !== undefined) throw new UserError("no execution worker was prepared");
   const workerConfig = worker === undefined ? undefined : executionWorkerConfigSchema.parse({ schemaVersion: 1,
     workerId: worker.id, token: worker.token, generationId, gitExecutable: "/usr/bin/git",
     endpoint: ciQueryConnection.endpoint, nativeGitEndpoint: endpoint,
-    stateDirectory: options.ciWorkerStateDirectory ?? path.join(directory, "worker-state"),
+    stateDirectory: options.executionWorkerStateDirectory ?? path.join(directory, "worker-state"),
     slots: worker.slots.map((slot) => "runtime" in slot ? { id: slot.id, runtime: slot.runtime }
       : { id: slot.id, taskType: slot.taskType, handlerRevision: slot.handlerRevision }) });
   await privateDirectory(output, async () => {
@@ -168,14 +168,14 @@ export async function connectControlPlane(directoryInput: string, options: {
     await json(path.join(output, "importer.json"), importerConnection);
     await json(path.join(output, "host.json"), hostConnection);
     await json(path.join(output, "ci-query.json"), ciQueryConnection);
-    await json(path.join(output, "ci-operator.json"), { ...ciQueryConnection, role: "operator", credential: ordinary.credentials.operator });
+    await json(path.join(output, "execution-operator.json"), { ...ciQueryConnection, role: "operator", credential: execution.credentials.operator });
     if (workerConfig !== undefined) await json(path.join(output, "worker.json"), workerConfig);
     await json(path.join(output, "reviewer.json"), { schemaVersion: 1, serviceId: "native-main", baseUrl: endpoint,
       reviewerId: reviewer.reviewerId, username: reviewer.username, password: reviewer.password, generationId });
     await json(path.join(output, "promoter.json"), { schemaVersion: 1, serviceId: "native-main", endpoint,
       role: "host-promoter", hostId, generationId, credential: promoterCredential });
   });
-  return { directory: output, generationId, hostId, ciWorkerCount: ordinary.workers.length, ...(workerConfig === undefined ? {} : { workerConfigFile: path.join(output, "worker.json") }) };
+  return { directory: output, generationId, hostId, executionWorkerCount: execution.workers.length, ...(workerConfig === undefined ? {} : { workerConfigFile: path.join(output, "worker.json") }) };
 }
 
 async function privateDirectory(directory: string, write: () => Promise<void>): Promise<void> {
@@ -208,11 +208,11 @@ function initialWorkerSlots(options: PrepareControlPlaneOptions): { id: string; 
   }
   const configured = sysbox + qemu > 0 || [options.ciRunnerImage, options.ciJobImage,
     options.ciContainerProfile, options.ciVmProfile].some((value) => value !== undefined);
-  if (options.ciWorker === undefined) {
-    if (configured) throw new UserError("CI capacity requires --ci-worker");
+  if (options.executionWorker === undefined) {
+    if (configured) throw new UserError("CI capacity requires --execution-worker");
     return [];
   }
-  if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(options.ciWorker) || sysbox + qemu === 0) {
+  if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(options.executionWorker) || sysbox + qemu === 0) {
     throw new UserError("CI worker requires a valid ID and at least one explicit slot");
   }
   if (options.ciContainerProfile !== undefined && (options.ciRunnerImage !== undefined || options.ciJobImage !== undefined)) {

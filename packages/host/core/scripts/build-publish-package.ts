@@ -22,6 +22,7 @@ output.exports = {
     types: "./index.d.ts",
     import: "./index.js"
   },
+  "./plugin-api": { types: "./plugin-api.d.ts", import: "./plugin-api.js", default: "./plugin-api.js" },
   "./workspace": { types: "./workspace.d.ts", import: "./workspace.js" },
   "./controller": { types: "./controller/index.d.ts", import: "./controller/index.js", default: "./controller/index.js" },
   "./controller/cli": { types: "./controller/cli/index.d.ts", import: "./controller/cli/index.js", default: "./controller/cli/index.js" }

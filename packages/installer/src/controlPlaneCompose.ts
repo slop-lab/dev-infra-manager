@@ -9,7 +9,7 @@ type ControlPlaneComposeServiceConfig = {
 export type ControlPlaneComposeConfig = {
   readonly deploymentId: string;
   readonly nativeGit: ControlPlaneComposeServiceConfig;
-  readonly ordinaryCi: ControlPlaneComposeServiceConfig;
+  readonly execution: ControlPlaneComposeServiceConfig;
 };
 
 export type ControlPlaneServiceSnapshots = {
@@ -20,7 +20,7 @@ export type ControlPlaneServiceSnapshots = {
 
 export type ControlPlaneSnapshotPaths = {
   readonly nativeGit: ControlPlaneServiceSnapshots;
-  readonly ordinaryCi: ControlPlaneServiceSnapshots;
+  readonly execution: ControlPlaneServiceSnapshots;
 };
 
 export type ControlPlaneComposeInput = {
@@ -32,10 +32,10 @@ export type ControlPlaneComposeInput = {
 };
 
 type ServiceRender = {
-  readonly name: "native-git" | "ordinary-ci";
+  readonly name: "native-git" | "execution";
   readonly uid: "10001:10001" | "10002:10002";
-  readonly stateVolume: "dim-control-plane-native-git-data" | "dim-control-plane-ordinary-ci-data";
-  readonly stateTarget: "/var/lib/dim-native-git" | "/var/lib/dim-ordinary-ci";
+  readonly stateVolume: "dim-control-plane-native-git-data" | "dim-control-plane-execution-data";
+  readonly stateTarget: "/var/lib/dim-native-git" | "/var/lib/dim-execution";
   readonly config: ControlPlaneComposeServiceConfig;
   readonly snapshots: ControlPlaneServiceSnapshots;
 };
@@ -48,15 +48,15 @@ export function renderControlPlaneCompose(input: ControlPlaneComposeInput): Buff
       stateTarget: "/var/lib/dim-native-git", config: input.config.nativeGit, snapshots: input.snapshots.nativeGit
     },
     {
-      name: "ordinary-ci", uid: "10002:10002", stateVolume: "dim-control-plane-ordinary-ci-data",
-      stateTarget: "/var/lib/dim-ordinary-ci", config: input.config.ordinaryCi, snapshots: input.snapshots.ordinaryCi
+      name: "execution", uid: "10002:10002", stateVolume: "dim-control-plane-execution-data",
+      stateTarget: "/var/lib/dim-execution", config: input.config.execution, snapshots: input.snapshots.execution
     }
   ] satisfies readonly ServiceRender[];
   const lines = ['name: "dim-control-plane"', "services:"];
   for (const service of services) lines.push(...renderService(service, input.config.deploymentId, input.generationId));
   lines.push("volumes:");
   lines.push(...renderVolume("dim-control-plane-native-git-data", "native-git", input.config.deploymentId));
-  lines.push(...renderVolume("dim-control-plane-ordinary-ci-data", "ordinary-ci", input.config.deploymentId));
+  lines.push(...renderVolume("dim-control-plane-execution-data", "execution", input.config.deploymentId));
   lines.push("networks:", "  dim-control-plane:", '    name: "dim-control-plane"', "    driver: bridge", "    labels:");
   lines.push(...renderLabels("network", input.config.deploymentId, undefined, 6));
   const bytes = Buffer.from(`${lines.join("\n")}\n`, "utf8");
@@ -116,7 +116,7 @@ function bindMount(source: string, target: string): readonly string[] {
   ];
 }
 
-function renderVolume(name: string, service: "native-git" | "ordinary-ci", deploymentId: string): readonly string[] {
+function renderVolume(name: string, service: "native-git" | "execution", deploymentId: string): readonly string[] {
   return [
     `  ${name}:`,
     `    name: ${quoted(name)}`,
@@ -128,7 +128,7 @@ function renderVolume(name: string, service: "native-git" | "ordinary-ci", deplo
 function renderLabels(
   resource: "network" | "volume" | "service",
   deploymentId: string,
-  service: "native-git" | "ordinary-ci" | undefined,
+  service: "native-git" | "execution" | undefined,
   spaces: number
 ): readonly string[] {
   const indentation = " ".repeat(spaces);
@@ -146,9 +146,9 @@ function validateSnapshotPaths(input: ControlPlaneComposeInput): void {
     input.snapshots.nativeGit.config,
     input.snapshots.nativeGit.readinessToken,
     input.snapshots.nativeGit.activationToken,
-    input.snapshots.ordinaryCi.config,
-    input.snapshots.ordinaryCi.readinessToken,
-    input.snapshots.ordinaryCi.activationToken
+    input.snapshots.execution.config,
+    input.snapshots.execution.readinessToken,
+    input.snapshots.execution.activationToken
   ];
   if (paths.some((path) => !isAbsolute(path) || path.includes("\0"))) {
     throw new ControlPlaneComposeError("generation snapshot paths must be absolute");

@@ -19,7 +19,7 @@ export class ObservingReadiness {
     stateRoot: string,
     readonly runner: FirstInstallRunner,
     failReadiness = false,
-    failOnEvent?: "ready:native" | "ready:ordinary",
+    failOnEvent?: "ready:native" | "ready:execution",
     expectInstalled = false
   ) {
     runner.readinessStateRoot = stateRoot;
@@ -56,7 +56,7 @@ export async function writeChangedImages(configPath: string): Promise<void> {
   await writePrivate(configPath, `${JSON.stringify({
     ...config,
     nativeGit: { ...config.nativeGit, image: `registry.example/dim/native-git@sha256:${"c".repeat(64)}` },
-    ordinaryCi: { ...config.ordinaryCi, image: `registry.example/dim/ordinary-ci@sha256:${"d".repeat(64)}` }
+    execution: { ...config.execution, image: `registry.example/dim/execution@sha256:${"d".repeat(64)}` }
   })}\n`);
 }
 
@@ -69,10 +69,10 @@ export async function writeChangedPorts(configPath: string, changeImages = false
       ...(changeImages ? { image: `registry.example/dim/native-git@sha256:${"c".repeat(64)}` } : {}),
       publish: { ...config.nativeGit.publish, port: 7543 }
     },
-    ordinaryCi: {
-      ...config.ordinaryCi,
-      ...(changeImages ? { image: `registry.example/dim/ordinary-ci@sha256:${"d".repeat(64)}` } : {}),
-      publish: { ...config.ordinaryCi.publish, port: 7510 }
+    execution: {
+      ...config.execution,
+      ...(changeImages ? { image: `registry.example/dim/execution@sha256:${"d".repeat(64)}` } : {}),
+      publish: { ...config.execution.publish, port: 7510 }
     }
   })}\n`);
 }

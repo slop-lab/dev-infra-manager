@@ -20,7 +20,7 @@ export type ControlPlaneToken = PrivateControlPlaneFile & { readonly value: stri
 
 export type ControlPlaneSources = {
   readonly nativeGit: { readonly config: PrivateControlPlaneFile; readonly readinessToken: ControlPlaneToken };
-  readonly ordinaryCi: { readonly config: PrivateControlPlaneFile; readonly readinessToken: ControlPlaneToken };
+  readonly execution: { readonly config: PrivateControlPlaneFile; readonly readinessToken: ControlPlaneToken };
   readonly credentialValues: readonly string[];
   readonly roleValues: readonly string[];
   readonly serviceConfigPreflight: {
@@ -30,7 +30,7 @@ export type ControlPlaneSources = {
 };
 
 export type CompleteControlPlaneSourcePreflight = ControlPlaneSources & {
-  readonly activationTokens: { readonly nativeGit: ControlPlaneToken; readonly ordinaryCi: ControlPlaneToken };
+  readonly activationTokens: { readonly nativeGit: ControlPlaneToken; readonly execution: ControlPlaneToken };
   readonly allSecretValues: readonly string[];
 };
 
@@ -61,21 +61,21 @@ export async function readPrivateControlPlaneFile(
 }
 
 export async function readControlPlaneSources(config: ControlPlaneConfig): Promise<ControlPlaneSources> {
-  const [nativeConfig, nativeReadinessFile, ordinaryConfig, ordinaryReadinessFile] = await Promise.all([
+  const [nativeConfig, nativeReadinessFile, executionConfig, executionReadinessFile] = await Promise.all([
     readPrivateControlPlaneFile(config.nativeGit.configFile, "native Git service config", maximumServiceConfigBytes),
     readPrivateControlPlaneFile(config.nativeGit.readinessTokenFile, "native Git readiness token", 4096),
-    readPrivateControlPlaneFile(config.ordinaryCi.configFile, "ordinary CI service config", maximumServiceConfigBytes),
-    readPrivateControlPlaneFile(config.ordinaryCi.readinessTokenFile, "ordinary CI readiness token", 4096)
+    readPrivateControlPlaneFile(config.execution.configFile, "execution scheduler config", maximumServiceConfigBytes),
+    readPrivateControlPlaneFile(config.execution.readinessTokenFile, "execution readiness token", 4096)
   ]);
   const nativeConfigValue = parseJson(nativeConfig.bytes, "native Git service config");
-  const ordinaryConfigValue = parseJson(ordinaryConfig.bytes, "ordinary CI service config");
-  const { credentialValues, roleValues } = serviceCredentialValues(nativeConfigValue, ordinaryConfigValue);
+  const executionConfigValue = parseJson(executionConfig.bytes, "execution scheduler config");
+  const { credentialValues, roleValues } = serviceCredentialValues(nativeConfigValue, executionConfigValue);
   const nativeReadiness = parseTokenFile(nativeReadinessFile, "native Git readiness token");
-  const ordinaryReadiness = parseTokenFile(ordinaryReadinessFile, "ordinary CI readiness token");
-  assertDistinct([...roleValues, nativeReadiness.value, ordinaryReadiness.value]);
+  const executionReadiness = parseTokenFile(executionReadinessFile, "execution readiness token");
+  assertDistinct([...roleValues, nativeReadiness.value, executionReadiness.value]);
   return {
     nativeGit: { config: nativeConfig, readinessToken: nativeReadiness },
-    ordinaryCi: { config: ordinaryConfig, readinessToken: ordinaryReadiness },
+    execution: { config: executionConfig, readinessToken: executionReadiness },
     credentialValues,
     roleValues,
     serviceConfigPreflight: {
@@ -87,25 +87,25 @@ export async function readControlPlaneSources(config: ControlPlaneConfig): Promi
 
 export function completeControlPlaneSourcePreflight(
   sources: ControlPlaneSources,
-  activationBytes: { readonly nativeGit: Buffer; readonly ordinaryCi: Buffer }
+  activationBytes: { readonly nativeGit: Buffer; readonly execution: Buffer }
 ): CompleteControlPlaneSourcePreflight {
   const nativeGit = tokenFromBytes(activationBytes.nativeGit, "native Git activation token");
-  const ordinaryCi = tokenFromBytes(activationBytes.ordinaryCi, "ordinary CI activation token");
+  const execution = tokenFromBytes(activationBytes.execution, "execution activation token");
   const allSecretValues = [
     ...sources.credentialValues,
     sources.nativeGit.readinessToken.value,
-    sources.ordinaryCi.readinessToken.value,
+    sources.execution.readinessToken.value,
     nativeGit.value,
-    ordinaryCi.value
+    execution.value
   ];
   assertDistinct([
     ...sources.roleValues,
     sources.nativeGit.readinessToken.value,
-    sources.ordinaryCi.readinessToken.value,
+    sources.execution.readinessToken.value,
     nativeGit.value,
-    ordinaryCi.value
+    execution.value
   ]);
-  return { ...sources, activationTokens: { nativeGit, ordinaryCi }, allSecretValues };
+  return { ...sources, activationTokens: { nativeGit, execution }, allSecretValues };
 }
 
 function assertPrivateMetadata(metadata: BigIntStats, label: string, maximumBytes: number): void {

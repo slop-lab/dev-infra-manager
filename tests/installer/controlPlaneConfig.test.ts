@@ -27,7 +27,7 @@ describe("control-plane installer configuration", () => {
 
     expect(config.schemaVersion).toBe(1);
     expect(config.nativeGit.publish).toEqual({ host: "127.0.0.1", port: 7443 });
-    expect(config.ordinaryCi.image).toMatch(/@sha256:b{64}$/);
+    expect(config.execution.image).toMatch(/@sha256:b{64}$/);
   });
 
   it.each([
@@ -35,7 +35,7 @@ describe("control-plane installer configuration", () => {
     ["tagged image", (value: Record<string, unknown>) => ({ ...value, nativeGit: { ...record(value.nativeGit), image: "registry.example/native:latest" } })],
     ["wildcard host", (value: Record<string, unknown>) => ({ ...value, nativeGit: { ...record(value.nativeGit), publish: { host: "0.0.0.0", port: 7443 } } })],
     ["foreign address", (value: Record<string, unknown>) => ({ ...value, nativeGit: { ...record(value.nativeGit), publish: { host: "192.0.2.20", port: 7443 } } })],
-    ["shared port", (value: Record<string, unknown>) => ({ ...value, ordinaryCi: { ...record(value.ordinaryCi), publish: { host: "127.0.0.1", port: 7443 } } })]
+    ["shared port", (value: Record<string, unknown>) => ({ ...value, execution: { ...record(value.execution), publish: { host: "127.0.0.1", port: 7443 } } })]
   ])("rejects %s", async (_label, mutate) => {
     const input = await fixture();
     expect(() => parseControlPlaneConfig(mutate({ ...input.config }), ["127.0.0.1", "::1"])).toThrow();

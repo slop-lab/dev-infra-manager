@@ -29,7 +29,7 @@ const containerFormat = [
   "{{json .HostConfig.NetworkMode}}"
 ].join("\n");
 
-type Service = "native-git" | "ordinary-ci";
+type Service = "native-git" | "execution";
 
 type ServiceExpectation = {
   readonly service: Service;
@@ -48,7 +48,7 @@ type ControlPlaneRuntimeTarget = {
   readonly config: ControlPlaneComposeConfig;
   readonly generationPath: string;
   readonly generationId: string;
-  readonly images?: { readonly nativeGit: string; readonly ordinaryCi: string };
+  readonly images?: { readonly nativeGit: string; readonly execution: string };
 };
 
 export async function assertControlPlaneRuntimeTopology(
@@ -59,7 +59,7 @@ export async function assertControlPlaneRuntimeTopology(
     config: {
       deploymentId: installed.record.deploymentId,
       nativeGit: { image: installed.record.nativeGitImage, publish: installed.record.nativeGitPublish },
-      ordinaryCi: { image: installed.record.ordinaryCiImage, publish: installed.record.ordinaryCiPublish }
+      execution: { image: installed.record.executionImage, publish: installed.record.executionPublish }
     },
     generationPath: installed.generationPath,
     generationId: installed.record.generationId
@@ -156,9 +156,9 @@ function serviceExpectations(target: ControlPlaneRuntimeTarget): readonly Servic
       generationPath: target.generationPath, generationId: target.generationId
     }),
     expectation({
-      service: "ordinary-ci", image: target.images?.ordinaryCi ?? config.ordinaryCi.image, user: "10002:10002",
-      volume: "dim-control-plane-ordinary-ci-data", stateTarget: "/var/lib/dim-ordinary-ci",
-      publishHost: config.ordinaryCi.publish.host, publishPort: config.ordinaryCi.publish.port,
+      service: "execution", image: target.images?.execution ?? config.execution.image, user: "10002:10002",
+      volume: "dim-control-plane-execution-data", stateTarget: "/var/lib/dim-execution",
+      publishHost: config.execution.publish.host, publishPort: config.execution.publish.port,
       generationPath: target.generationPath, generationId: target.generationId
     })
   ];
@@ -171,7 +171,7 @@ function assertExactStrings(actual: readonly unknown[], expected: readonly strin
 }
 
 function expectation(input: Omit<ServiceExpectation, "snapshots"> & { readonly generationPath: string }): ServiceExpectation {
-  const prefix = input.service === "native-git" ? "native-git" : "ordinary-ci";
+  const prefix = input.service === "native-git" ? "native-git" : "execution";
   return {
     service: input.service, image: input.image, user: input.user, volume: input.volume,
     stateTarget: input.stateTarget, publishHost: input.publishHost, publishPort: input.publishPort,

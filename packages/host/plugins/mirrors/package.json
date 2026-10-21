@@ -22,14 +22,14 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./adapter": {
+    "./protocol-plugin-api": {
       "dim-source": {
-        "types": "./src/adapter.ts",
-        "default": "./src/adapter.ts"
+        "types": "./src/protocol-plugin-api.ts",
+        "default": "./src/protocol-plugin-api.ts"
       },
-      "types": "./dist/adapter.d.ts",
-      "import": "./dist/adapter.js",
-      "default": "./dist/adapter.js"
+      "types": "./dist/protocol-plugin-api.d.ts",
+      "import": "./dist/protocol-plugin-api.js",
+      "default": "./dist/protocol-plugin-api.js"
     }
   },
   "scripts": {

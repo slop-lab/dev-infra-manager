@@ -5,9 +5,9 @@
 the existing execution scheduler; it does not start Docker, SSH or a second queue
 in the repository-owning control plane.
 
-Install the `ci` coordinator plugin on the scheduler service and configure a task
+Install the `execution-scheduler` plugin on the scheduler service and configure a task
 slot with `taskType: "review-tracing"` and an exact `handlerRevision`. Install
-`@slop-lab/dim-host-plugin-ci-worker` and
+`@slop-lab/dim-host-plugin-execution-worker` and
 `@slop-lab/dim-host-plugin-review-tracing-node` on the execution host. The same
 worker claim, lease renewal, durable journal, cancellation, cleanup and restart
 recovery loop handles CI and detector work. Task-only slots require Docker but
@@ -38,7 +38,7 @@ Configure the scheduler worker slot:
 ```
 
 Use the same slot identity, type and revision in the host worker config. Start it
-through the installed worker command, `dim ci worker /absolute/worker.json`.
+through the installed worker command, `dim execution worker /absolute/worker.json`.
 Configure a separate `credentials.tasks` credential on the scheduler, distinct
 from worker/query/operator/webhook and native Git credentials. Configure this
 control-plane plugin with:

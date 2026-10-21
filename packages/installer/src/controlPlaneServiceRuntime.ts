@@ -41,7 +41,7 @@ export async function establishFirstControlPlaneResources(
     ...labelArgs(labels("network", deploymentId)), project
   ], /^[0-9a-f]{64}\n$/, "control-plane network creation failed");
   await assertUnusedOwned({ runner, kind: "network", name: project, deploymentId });
-  for (const service of ["native-git", "ordinary-ci"] as const) {
+  for (const service of ["native-git", "execution"] as const) {
     const name = volumeName(service);
     await created(runner, [
       "volume", "create", "--driver", "local",
@@ -58,7 +58,7 @@ export async function startFirstControlPlaneService(input: {
   readonly runner: ControlPlaneDockerRunner;
   readonly composePath: string;
   readonly deploymentId: string;
-  readonly service: "native-git" | "ordinary-ci";
+  readonly service: "native-git" | "execution";
 }): Promise<void> {
   await completed(input.runner, composeArgs(input.composePath, [
     "up", "--detach", "--no-deps", "--no-build", "--pull", "never", input.service
@@ -79,7 +79,7 @@ export async function cleanupFailedFirstControlPlane(input: {
   readonly runner: ControlPlaneDockerRunner;
   readonly deploymentId: string;
 }): Promise<void> {
-  for (const service of ["native-git", "ordinary-ci"] as const) {
+  for (const service of ["native-git", "execution"] as const) {
     const owned = await inspectOwned(input.runner, "container", containerName(service), input.deploymentId, service);
     if (owned !== undefined) await removed(input.runner, ["container", "rm", "--force", owned], owned,
       "owned replacement container cleanup failed");
@@ -94,7 +94,7 @@ async function inspectOwned(
   kind: "container" | "network" | "volume",
   name: string,
   deploymentId: string,
-  service?: "native-git" | "ordinary-ci"
+  service?: "native-git" | "execution"
 ): Promise<string | undefined> {
   const format = kind === "container" ? formatContainer : kind === "network" ? formatNetwork : formatVolume;
   const result = await run(runner, [kind, "inspect", name, "--format", format]);
@@ -129,7 +129,7 @@ async function assertUnusedOwned(input: {
   readonly kind: "network" | "volume";
   readonly name: string;
   readonly deploymentId: string;
-  readonly service?: "native-git" | "ordinary-ci";
+  readonly service?: "native-git" | "execution";
 }): Promise<void> {
   const identity = await inspectOwned(input.runner, input.kind, input.name, input.deploymentId, input.service);
   if (identity === undefined) throw new ControlPlaneRuntimeError(`created control-plane ${input.kind} is missing`);
@@ -144,7 +144,7 @@ async function assertUnusedOwned(input: {
 function labels(
   resource: "network" | "volume" | "service",
   deploymentId: string,
-  service?: "native-git" | "ordinary-ci"
+  service?: "native-git" | "execution"
 ): Readonly<Record<string, string>> {
   return {
     "com.docker.compose.project": project,
@@ -172,11 +172,11 @@ function composeArgs(path: string, action: readonly string[]): readonly string[]
   return ["compose", "--project-name", project, "--file", path, ...action];
 }
 
-function containerName(service: "native-git" | "ordinary-ci"): string {
+function containerName(service: "native-git" | "execution"): string {
   return `${project}-${service}-1`;
 }
 
-function volumeName(service: "native-git" | "ordinary-ci"): string {
+function volumeName(service: "native-git" | "execution"): string {
   return `${project}-${service}-data`;
 }
 

@@ -5,7 +5,7 @@ transport. It can consume any installed durable event-source contribution;
 it does not require Git, human review, merge policy or CI. Producers expose
 `{kind:"dim.webhooks.event-source", name, value:{name, read}}` descriptors.
 `read()` returns durable events with `identity`, `projectId`, `type`, `subject`
-and scalar metadata `data`. The public `/extensions` types and helper are
+and scalar metadata `data`. The public `/plugin-api` types and helper are
 optional conveniences; structurally compatible producers need no package
 runtime dependency. A `subscribeWake` callback is an optional latency hint;
 startup backfill and periodic durable scans remain authoritative.

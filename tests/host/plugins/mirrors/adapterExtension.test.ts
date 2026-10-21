@@ -10,7 +10,7 @@ import { loadHostPlugins, resolveHostExecutionRouting } from "../../../../packag
 import { hostPlugin } from "../../../../packages/host/plugins/mirrors/src/index.js";
 import { WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
-import { mirrorAdapterExtension } from "../../../../packages/host/plugins/mirrors/src/adapter.js";
+import { mirrorAdapterExtension } from "../../../../packages/host/plugins/mirrors/src/protocol-plugin-api.js";
 import { adapterModules, loadMirrorAdapters } from "../../../../packages/host/plugins/mirrors/src/registry.js";
 import { mirrorRouting } from "../../../../packages/host/plugins/mirrors/src/cache-routing.js";
 import { parseCacheCatalog } from "../../../../packages/host/plugins/mirrors/src/provider.js";

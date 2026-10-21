@@ -28,7 +28,7 @@
   "dependencies": {
     "@slop-lab/dim-review-tracing": "workspace:0.10.0",
     "@slop-lab/dim-review-tracing-node": "workspace:0.10.0",
-    "@slop-lab/dim-task-scheduling": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-execution": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-host-core": "0.10.0"

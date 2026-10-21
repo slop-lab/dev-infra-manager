@@ -89,10 +89,10 @@ export async function readControlPlaneInstalledState(lock: ControlPlaneStateLock
   const snapshots = await readGeneration(generationPath);
   assertSnapshotDigests(record, snapshots);
   const generationId = controlPlaneGenerationIdFromFields([
-    Buffer.from(record.nativeGitImage), Buffer.from(record.ordinaryCiImage),
+    Buffer.from(record.nativeGitImage), Buffer.from(record.executionImage),
     snapshots.nativeGit.config, snapshots.nativeGit.readinessToken,
-    snapshots.ordinaryCi.config, snapshots.ordinaryCi.readinessToken,
-    snapshots.nativeGit.activationToken, snapshots.ordinaryCi.activationToken
+    snapshots.execution.config, snapshots.execution.readinessToken,
+    snapshots.nativeGit.activationToken, snapshots.execution.activationToken
   ]);
   if (generationId !== record.generationId) throw new ControlPlaneStateError("control-plane generation ID is inconsistent");
   const names = controlPlaneSnapshotNames();
@@ -105,10 +105,10 @@ export async function readControlPlaneInstalledState(lock: ControlPlaneStateLock
         readinessToken: join(generationPath, names.nativeGit.readinessToken),
         activationToken: join(generationPath, names.nativeGit.activationToken)
       },
-      ordinaryCi: {
-        config: join(generationPath, names.ordinaryCi.config),
-        readinessToken: join(generationPath, names.ordinaryCi.readinessToken),
-        activationToken: join(generationPath, names.ordinaryCi.activationToken)
+      execution: {
+        config: join(generationPath, names.execution.config),
+        readinessToken: join(generationPath, names.execution.readinessToken),
+        activationToken: join(generationPath, names.execution.activationToken)
       }
     },
     snapshots
@@ -123,15 +123,15 @@ export function isControlPlaneInstalledInput(
 ): boolean {
   return installed.record.deploymentId === config.deploymentId
     && installed.record.nativeGitImage === config.nativeGit.image
-    && installed.record.ordinaryCiImage === config.ordinaryCi.image
+    && installed.record.executionImage === config.execution.image
     && installed.record.nativeGitPublish.host === config.nativeGit.publish.host
     && installed.record.nativeGitPublish.port === config.nativeGit.publish.port
-    && installed.record.ordinaryCiPublish.host === config.ordinaryCi.publish.host
-    && installed.record.ordinaryCiPublish.port === config.ordinaryCi.publish.port
+    && installed.record.executionPublish.host === config.execution.publish.host
+    && installed.record.executionPublish.port === config.execution.publish.port
     && installed.record.nativeGitConfigSha256 === sources.nativeGit.config.sha256
     && installed.record.nativeGitReadinessTokenSha256 === sources.nativeGit.readinessToken.sha256
-    && installed.record.ordinaryCiConfigSha256 === sources.ordinaryCi.config.sha256
-    && installed.record.ordinaryCiReadinessTokenSha256 === sources.ordinaryCi.readinessToken.sha256;
+    && installed.record.executionConfigSha256 === sources.execution.config.sha256
+    && installed.record.executionReadinessTokenSha256 === sources.execution.readinessToken.sha256;
 }
 
 export async function stageControlPlaneSources(input: {
@@ -180,15 +180,15 @@ export async function publishControlPlaneInstalledState(
     generationId: candidate.generationId,
     composeSha256: digest(candidate.composeBytes),
     nativeGitImage: candidate.config.nativeGit.image,
-    ordinaryCiImage: candidate.config.ordinaryCi.image,
+    executionImage: candidate.config.execution.image,
     nativeGitPublish: candidate.config.nativeGit.publish,
-    ordinaryCiPublish: candidate.config.ordinaryCi.publish,
+    executionPublish: candidate.config.execution.publish,
     nativeGitConfigSha256: candidate.sourceDigests.nativeGitConfig,
     nativeGitReadinessTokenSha256: candidate.sourceDigests.nativeGitReadinessToken,
-    ordinaryCiConfigSha256: candidate.sourceDigests.ordinaryCiConfig,
-    ordinaryCiReadinessTokenSha256: candidate.sourceDigests.ordinaryCiReadinessToken,
+    executionConfigSha256: candidate.sourceDigests.executionConfig,
+    executionReadinessTokenSha256: candidate.sourceDigests.executionReadinessToken,
     nativeGitActivationTokenSha256: candidate.activationDigests.nativeGit,
-    ordinaryCiActivationTokenSha256: candidate.activationDigests.ordinaryCi,
+    executionActivationTokenSha256: candidate.activationDigests.execution,
     volumesEstablished: publication.volumesEstablished
   };
   await replaceStateFile(join(candidate.staging.root, "compose.yml"), candidate.composeBytes);

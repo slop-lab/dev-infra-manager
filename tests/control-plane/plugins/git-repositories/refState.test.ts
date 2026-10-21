@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-git-repositories";
-import { atomicPromote, compareAndSwapProtectedRef, readNativeProjectRootCurrentHeadFromDatabase, readProtectedRefTransition, repositoryTransitionId, saveRepositoryRefIntent, type RepositoryRefTransition } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { atomicPromote, compareAndSwapProtectedRef, readNativeProjectRootCurrentHeadFromDatabase, readProtectedRefTransition, repositoryTransitionId, saveRepositoryRefIntent, type RepositoryRefTransition } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { fixture, git } from "./optionalFeaturesFixture.js";
 
 async function candidate(f: Awaited<ReturnType<typeof fixture>>) {
@@ -34,7 +34,7 @@ it.each([false, true])("finalizes accepted ref changes and cancels unaccepted in
   try {
     const input = await candidate(f);
     const current = readNativeProjectRootCurrentHeadFromDatabase(f.service.context.runtime.state.database, "project", "main");
-    const imported = (await import("@slop-lab/dim-control-plane-plugin-git-repositories/extensions")).readNativeProjectRootImportsFromDatabase(f.service.context.runtime.state.database)[0];
+    const imported = (await import("@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api")).readNativeProjectRootImportsFromDatabase(f.service.context.runtime.state.database)[0];
     if (imported === undefined) throw new Error("import is missing");
     const transition: RepositoryRefTransition = { ...input, sequence: 1, importNonce: imported.importNonce, expectedTree: current.tree, protectedRef: current.protectedRef, policyDigest: current.policyDigest, refPolicyRevision: "e".repeat(64), generationId: f.service.context.runtime.expectedGenerationId };
     saveRepositoryRefIntent(f.service.context.runtime.state.database, transition);

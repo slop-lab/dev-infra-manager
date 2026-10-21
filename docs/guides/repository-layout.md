@@ -10,9 +10,9 @@ Production packages are grouped by where they run and what they own:
 | `packages/control-plane/plugins/<name>` | `@slop-lab/dim-control-plane-plugin-<name>` | Independent authoritative services and workflow interpretation |
 | `packages/control-plane/deployment` | `@this-project/control-plane-deployment` (private) | Composition artifact for the installer’s fixed service-image profile |
 | `packages/control-plane/admin` | `@slop-lab/dim-control-plane-admin` | Explicit service deployment and operator connection tools |
-| `packages/task-scheduling` | `@slop-lab/dim-task-scheduling` | Shared durable task queue, lease state transitions and typed handler/client SDK |
+| `packages/execution-scheduler` | `@slop-lab/dim-execution-scheduler` | Durable queue and lease implementation; isolated `/client` transport entrypoint |
 | `packages/review-tracing-node` | `@slop-lab/dim-review-tracing-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
-| `packages/review-tracing` | `@slop-lab/dim-review-tracing` | Runtime-neutral file-read records, dependency comparison and tracing adapter contracts |
+| `packages/review-tracing` | `@slop-lab/dim-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
 | `packages/cli` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
@@ -34,6 +34,29 @@ or ref-policy core. The Node implementation is a neutral package; control-plane
 and host plugins register it in their owning runtimes. The scheduled adapter
 uses the same task queue, leases and worker loop as CI; it retains immutable Git
 reads and dependency evidence in the repository-owning control plane.
+
+Plugin implementation entrypoints are named explicitly:
+
+| API | Implemented by |
+| --- | --- |
+| `@slop-lab/dim-host-core/plugin-api` | Host plugins and their contributions |
+| `@slop-lab/dim-control-plane-core/plugin-api` | Control-plane plugins |
+| `@slop-lab/dim-contracts-execution/plugin-api` | Worker task handlers |
+| `@slop-lab/dim-review-tracing/plugin-api` | Review detector runtime adapters |
+| `@slop-lab/dim-contracts-ci/workflow-plugin-api` | CI workflow compilers |
+| `@slop-lab/dim-host-plugin-mirrors/protocol-plugin-api` | Mirror protocol adapters |
+
+Repository attachments, review matchers, merge guards and webhook publishers use
+their owning control-plane plugin’s `/plugin-api` entrypoint. Runtime operations
+remain separate from the interfaces that plugin authors implement.
+
+Repository, review, merge-policy and webhook contributions similarly use their
+owning plugin's `/plugin-api` entrypoint. Schemas crossing process boundaries
+belong to `contracts`; service and host implementations expose their composed
+configuration from `/config`. Generic execution contracts do not import CI or the
+scheduler implementation. CI contracts contain CI events, grants, results and
+configuration fragments. The deployed scheduler and host worker compose those
+fragments with generic task configuration.
 
 The mirrors consumer and cache-server deployment are separate host plugins.
 Mirrors owns its included and installed protocol adapters, scoped relay and guest

@@ -6,7 +6,7 @@ function element(id) {
   if (!(value instanceof HTMLElement)) throw new Error(`Missing operations element ${id}`);
   return value;
 }
-const panel = element("operations-panel"), status = element("operations-message"), hosts = element("operations-hosts"), jobs = element("operations-jobs"), reviews = element("operations-reviews"), details = element("operations-details");
+const panel = element("operations-panel"), status = element("operations-message"), hosts = element("operations-hosts"), jobs = element("operations-jobs"), workersView = element("operations-workers"), reviews = element("operations-reviews"), details = element("operations-details");
 /** @type {import("./types.js").Session | null} */
 let session = null;
 let epoch = 0;
@@ -37,19 +37,20 @@ async function request(path, body, timeout = 35_000) {
   if (!response.ok) throw new Error("operation failed");
   /** @type {unknown} */ const value = await response.json(); return value;
 }
-export function clearOperations() { session = null; epoch++; retries.clear(); panel.hidden = true; hosts.replaceChildren(); jobs.replaceChildren(); reviews.replaceChildren(); details.textContent = ""; element("view-navigation").hidden = true; }
+export function clearOperations() { session = null; epoch++; retries.clear(); panel.hidden = true; hosts.replaceChildren(); jobs.replaceChildren(); workersView.replaceChildren(); reviews.replaceChildren(); details.textContent = ""; element("view-navigation").hidden = true; }
 /** @param {import("./types.js").Session} active @param {(id:string, repositoryId:string)=>void} open */
 export function showOperations(active, open) {
   clearOperations(); session = active; openReview = open; panel.hidden = !active.capabilities.operations && !active.capabilities.review;
   element("view-navigation").hidden = !active.capabilities.review;
   element("operations-review-section").hidden = !active.capabilities.review;
   element("operations-ci-section").hidden = true;
+  element("operations-execution-section").hidden = true;
   if (active.capabilities.review) panel.hidden = true;
   if (active.capabilities.operations || active.capabilities.review) void refresh().catch(() => { status.textContent = "Some services are unavailable. Refresh after checking their connected generation."; });
 }
 async function refresh() {
   const active = session, selected = epoch; if (!active) return;
-  hosts.replaceChildren(); jobs.replaceChildren(); reviews.replaceChildren(); details.textContent = "";
+  hosts.replaceChildren(); jobs.replaceChildren(); workersView.replaceChildren(); reviews.replaceChildren(); details.textContent = "";
   status.textContent = "Loading services…";
   /** @type {Promise<void>[]} */ const loads = [];
   if (active.capabilities.operations) loads.push((async () => {
@@ -65,14 +66,15 @@ async function refresh() {
       const name = text(console.name), url = text(console.url); if (!name || !url) continue;
       const link = document.createElement("a"); link.textContent = name; link.href = url; link.rel = "noopener noreferrer"; link.target = "_blank"; hosts.append(link);
     }
+    if (active.roles.includes("operator") && state?.executionOperator === true) {
+      element("operations-execution-section").hidden = false;
+      const workers = rows(await request("/v1/operations/execution/workers")); if (selected !== epoch) return;
+      for (const worker of workers) line(workersView, `Worker ${text(worker.id) ?? ""}: ${rows(worker.slots).map((slot) => `${text(slot.id) ?? ""} ${text(slot.state) ?? ""}`).join(", ")} (configured capacity)`);
+    }
     if (state?.ci === true) {
       element("operations-ci-section").hidden = false;
       const list = rows(await request("/v1/operations/ci/jobs")); if (selected !== epoch) return;
-      for (const job of list) renderJob(job, active.roles.includes("operator") && state.ciOperator === true);
-      if (active.roles.includes("operator") && state.ciOperator === true) {
-        const workers = rows(await request("/v1/operations/ci/workers")); if (selected !== epoch) return;
-        for (const worker of workers) line(jobs, `Worker ${text(worker.id) ?? ""}: ${rows(worker.slots).map((slot) => `${text(slot.id) ?? ""} ${text(slot.state) ?? ""}`).join(", ")} (configured capacity)`);
-      }
+      for (const job of list) renderJob(job, active.roles.includes("operator") && state?.executionOperator === true);
     }
   })());
   if (active.capabilities.review) loads.push((async () => {
@@ -165,10 +167,10 @@ function renderJob(job, canOperate) {
     if (!logs) line(details, "No completed diagnostics are available.");
   });
   if (!canOperate) return;
-  if (job.phase !== "finished") button(row, "Cancel execution", async () => { await request(`/v1/operations/ci/jobs/${id}/cancel`, {}); await refresh(); });
+  if (job.phase !== "finished") button(row, "Cancel execution", async () => { await request(`/v1/operations/execution/jobs/${id}/cancel`, {}); await refresh(); });
   else button(row, "Retry execution", async () => {
     let requestId = retries.get(id); if (!requestId) { requestId = crypto.randomUUID(); retries.set(id, requestId); }
-    await request(`/v1/operations/ci/jobs/${id}/retry`, { requestId }); await refresh();
+    await request(`/v1/operations/execution/jobs/${id}/retry`, { requestId }); await refresh();
   });
 }
 element("operations-refresh").addEventListener("click", () => { void refresh().catch(() => { status.textContent = "Service refresh failed."; }); });

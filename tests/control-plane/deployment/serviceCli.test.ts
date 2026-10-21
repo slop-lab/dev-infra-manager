@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
-import { bundleSecrets, idleNativeConfig, idleOrdinaryConfig } from "../plugins/git-repositories/bundleConfigFixture.js";
+import { bundleSecrets, idleNativeConfig, idleExecutionConfig } from "../plugins/git-repositories/bundleConfigFixture.js";
 
 const run = promisify(execFile);
 const workspaceRoot = resolve(import.meta.dirname, "../../..");
@@ -18,19 +18,19 @@ afterAll(async () => {
 });
 
 describe("native Git image configuration preflight CLI", () => {
-  it("accepts exact read-only idle native and ordinary bundle files without changing their bytes", async () => {
+  it("accepts exact read-only idle native and execution bundle files without changing their bytes", async () => {
     // Given
     const native = await fixtureFile("native.json", idleNativeConfig());
-    const ordinary = await fixtureFile("ordinary.json", idleOrdinaryConfig());
-    const before = await Promise.all([readFile(native), readFile(ordinary)]);
+    const execution = await fixtureFile("execution.json", idleExecutionConfig());
+    const before = await Promise.all([readFile(native), readFile(execution)]);
 
     // When
     const own = await invoke(["check-config", native]);
-    const bundle = await invoke(["check-bundle-config", native, ordinary]);
+    const bundle = await invoke(["check-bundle-config", native, execution]);
 
     // Then
     expect([own.status, bundle.status]).toEqual([0, 0]);
-    expect(await Promise.all([readFile(native), readFile(ordinary)])).toEqual(before);
+    expect(await Promise.all([readFile(native), readFile(execution)])).toEqual(before);
   });
 
   it.each([
@@ -82,7 +82,7 @@ describe("native Git image configuration preflight CLI", () => {
     }, /invalid native Git bundle configuration/],
     ["an obsolete documented shape", {
       ...idleNativeConfig(),
-      ordinaryCi: { endpoint: "http://ordinary-ci:8080", serviceId: "ordinary-main" }
+      execution: { endpoint: "http://execution:8080", serviceId: "execution-main" }
     }, /invalid native Git bundle configuration/],
     ["a repository registration", {
       ...idleNativeConfig(),
@@ -294,45 +294,45 @@ describe("native Git image configuration preflight CLI", () => {
 
   it.each([
     ["mismatched paired credentials", () => {
-      const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, nativeGit: { ...ordinary.nativeGit, grantIssuer: { ...ordinary.nativeGit.grantIssuer, password: bundleSecrets.unpaired } } };
+      const execution = idleExecutionConfig();
+      return { ...execution, nativeGit: { ...execution.nativeGit, grantIssuer: { ...execution.nativeGit.grantIssuer, password: bundleSecrets.unpaired } } };
     }, /paired credentials/],
     ["shared role secrets", () => {
-      const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, workers: ordinary.workers.map((host) => ({
+      const execution = idleExecutionConfig();
+      return { ...execution, workers: execution.workers.map((host) => ({
         ...host, token: bundleSecrets.webhook
       })) };
-    }, /invalid CI service configuration/],
-    ["an unknown ordinary field", () => ({ ...idleOrdinaryConfig(), obsolete: true }), /invalid CI service configuration/],
+    }, /invalid execution scheduler configuration/],
+    ["an unknown execution field", () => ({ ...idleExecutionConfig(), obsolete: true }), /invalid execution scheduler configuration/],
     ["the wrong native service origin", () => {
-      const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, nativeGit: { ...ordinary.nativeGit, endpoint: "http://localhost:8080" } };
+      const execution = idleExecutionConfig();
+      return { ...execution, nativeGit: { ...execution.nativeGit, endpoint: "http://localhost:8080" } };
     }, /paired CI deployment requires its private native Git endpoint/],
     ["the wrong reciprocal service ID", () => {
-      const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, nativeGit: { ...ordinary.nativeGit, serviceId: "native-other" } };
-    }, /invalid CI service configuration/],
+      const execution = idleExecutionConfig();
+      return { ...execution, nativeGit: { ...execution.nativeGit, serviceId: "native-other" } };
+    }, /invalid execution scheduler configuration/],
     ["a short decoded host token", () => {
-      const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, workers: ordinary.workers.map((host) => ({
+      const execution = idleExecutionConfig();
+      return { ...execution, workers: execution.workers.map((host) => ({
         ...host,
         token: Buffer.alloc(31, 8).toString("base64url")
       })) };
-    }, /invalid CI service configuration/]
-  ])("check-bundle-config rejects %s before state access", async (_label, ordinaryValue, message) => {
+    }, /invalid execution scheduler configuration/]
+  ])("check-bundle-config rejects %s before state access", async (_label, executionValue, message) => {
     // Given
     const native = await fixtureFile("native.json", idleNativeConfig());
-    const ordinary = await fixtureFile("ordinary.json", ordinaryValue());
-    const before = await Promise.all([readFile(native), readFile(ordinary)]);
+    const execution = await fixtureFile("execution.json", executionValue());
+    const before = await Promise.all([readFile(native), readFile(execution)]);
 
     // When
-    const result = await invoke(["check-bundle-config", native, ordinary]);
+    const result = await invoke(["check-bundle-config", native, execution]);
 
     // Then
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(message);
     expect(result.stderr).not.toContain(bundleSecrets.webhook);
-    expect(await Promise.all([readFile(native), readFile(ordinary)])).toEqual(before);
+    expect(await Promise.all([readFile(native), readFile(execution)])).toEqual(before);
   });
 
   it("reports exact schema-8 compatibility metadata from the built executable", async () => {

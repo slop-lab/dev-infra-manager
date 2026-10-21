@@ -1,4 +1,4 @@
-import type { RepositoryAttachment } from "./extensions.js";
+import type { RepositoryAttachment } from "./plugin-api.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { bindExactActivation } from "./native-bundle-activation.js";

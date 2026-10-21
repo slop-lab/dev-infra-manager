@@ -31,7 +31,7 @@ describe("control-plane exact roll-forward recovery", () => {
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: allocate
     });
     await writeChangedPorts(input.configPath);
-    runner.failActivationService = "ordinary-ci";
+    runner.failActivationService = "execution";
     await expect(installControlPlane({
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: allocate
     })).rejects.toThrow(/activation outcome is uncertain/);
@@ -57,7 +57,7 @@ describe("control-plane exact roll-forward recovery", () => {
     expect(activationCalls(runner)).toEqual(["2".repeat(64), "1".repeat(64)]);
   });
 
-  it.each(["ordinary-ci", "native-git"] as const)(
+  it.each(["execution", "native-git"] as const)(
     "recovers the exact retained update after %s activation fails without replacing resources or rewriting data",
     async (service) => {
       // Given
@@ -102,7 +102,7 @@ describe("control-plane exact roll-forward recovery", () => {
     // Given
     const input = await installFixture();
     const runner = new FirstInstallRunner();
-    runner.failActivationService = "ordinary-ci";
+    runner.failActivationService = "execution";
     await expect(installFirstControlPlane({
       configPath: input.configPath,
       stateRoot: input.stateRoot,
@@ -137,7 +137,7 @@ describe("control-plane exact roll-forward recovery", () => {
     ["malformed Compose", async (retained: RetainedEvidence) => writeFile(join(retained.stateRoot, "compose.yml"), "services: {}\n")]
   ] as const)("refuses %s with the journal intact and no activation or resource mutation", async (_case, corrupt) => {
     // Given
-    const retained = await retainedUpdate({ activationFailure: "ordinary-ci" });
+    const retained = await retainedUpdate({ activationFailure: "execution" });
     await corrupt(retained);
     const journal = await readFile(join(retained.stateRoot, "transaction.json"));
 
@@ -157,7 +157,7 @@ describe("control-plane exact roll-forward recovery", () => {
 
   it("refuses the wrong requested generation before activation", async () => {
     // Given
-    const retained = await retainedUpdate({ activationFailure: "ordinary-ci" });
+    const retained = await retainedUpdate({ activationFailure: "execution" });
     const journal = await readFile(join(retained.stateRoot, "transaction.json"));
 
     // When
@@ -177,7 +177,7 @@ describe("control-plane exact roll-forward recovery", () => {
     "refuses %s before activation and leaves the journal intact",
     async (fault) => {
       // Given
-      const retained = await retainedUpdate({ activationFailure: "ordinary-ci" });
+      const retained = await retainedUpdate({ activationFailure: "execution" });
       if (fault === "mixed runtime" && retained.priorNativeRuntime !== undefined) {
         retained.runner.nativeRuntime = retained.priorNativeRuntime;
       }
@@ -204,7 +204,7 @@ describe("control-plane exact roll-forward recovery", () => {
 
   it("retains the journal and exact candidate when replayed activation fails", async () => {
     // Given
-    const retained = await retainedUpdate({ activationFailure: "ordinary-ci" });
+    const retained = await retainedUpdate({ activationFailure: "execution" });
     retained.runner.failActivationService = "native-git";
     const journal = await readFile(join(retained.stateRoot, "transaction.json"));
 
@@ -235,7 +235,7 @@ type RetainedEvidence = {
 };
 
 async function retainedUpdate(failure: {
-  readonly activationFailure?: "native-git" | "ordinary-ci";
+  readonly activationFailure?: "native-git" | "execution";
   readonly completionFailure?: true;
 }): Promise<RetainedEvidence> {
   const input = await installFixture();

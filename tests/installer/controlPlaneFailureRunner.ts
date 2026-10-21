@@ -6,7 +6,7 @@ import { FirstInstallRunner } from "./controlPlaneInstallFixture.js";
 
 type ProbeFailure =
   | { readonly kind: "probe"; readonly command: "check-config" | "check-bundle-config"; readonly output: string }
-  | { readonly kind: "pull"; readonly image: "native-git" | "ordinary-ci"; readonly output: string };
+  | { readonly kind: "pull"; readonly image: "native-git" | "execution"; readonly output: string };
 
 export class ProbeFailureRunner extends FirstInstallRunner {
   constructor(private readonly failure: ProbeFailure) {

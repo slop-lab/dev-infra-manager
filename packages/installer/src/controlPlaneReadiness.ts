@@ -26,13 +26,13 @@ export type ControlPlaneReadinessTarget = {
   readonly config: ControlPlaneConfig;
   readonly generationPath: string;
   readonly generationId: string;
-  readonly images?: { readonly nativeGit: string; readonly ordinaryCi: string };
+  readonly images?: { readonly nativeGit: string; readonly execution: string };
 };
 
 export async function waitForControlPlaneServiceReady(input: {
   readonly runner: ControlPlaneDockerRunner;
   readonly target: ControlPlaneReadinessTarget;
-  readonly service: "native-git" | "ordinary-ci";
+  readonly service: "native-git" | "execution";
   readonly policy?: ControlPlaneReadinessPolicy;
 }): Promise<void> {
   const policy = input.policy ?? defaultReadinessPolicy;

@@ -1,5 +1,5 @@
-import { cacheEndpoint } from "./adapter.js";
-import type { HostExecutionRouting } from "@slop-lab/dim-host-core/workspace";
+import { cacheEndpoint } from "./protocol-plugin-api.js";
+import type { HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
 import { builtinMirrorAdapters, type MirrorAdapters } from "./registry.js";
 export type CacheEndpoints = Readonly<Record<string, string>>;
 export function parseEndpoints(input: unknown, adapters: MirrorAdapters = builtinMirrorAdapters): CacheEndpoints {

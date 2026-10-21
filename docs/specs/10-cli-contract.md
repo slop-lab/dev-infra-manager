@@ -49,7 +49,7 @@ command publishes a Docker port or requires a managed service.
 
 Optional feature commands are owned by explicitly installed host plugins.
 Native Git owns `dim project` and `dim://` source acquisition; the worker plugin
-owns `dim ci worker`. Control-plane operator tools own `dim control-plane`.
+owns `dim execution worker`. Control-plane operator tools own `dim control-plane`.
 Missing optional components produce actionable installation guidance. Base
 workspace commands and the generic controller use host core only. See the
 [Native Git guide](../../packages/host/plugins/native-git/docs/cli.md).

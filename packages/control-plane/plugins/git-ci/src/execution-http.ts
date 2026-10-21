@@ -8,10 +8,10 @@ import { z } from "zod";
 import type { GitCiConfig } from "./config.js";
 import { authorizeExecution, assertCurrentExecution, readExecutionGrant, recordExecutionEvidence, ExecutionConflictError } from "./execution-evidence.js";
 import { executionGrantRequestSchema, type ExecutionGrant } from "@slop-lab/dim-contracts-ci/execution";
-import { AuthoritativeRepositoryError, nativeBasicAuthorized, nativeBasicCredential } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { readBoundedJson, sendJson, sendNotFound, NativeGitBundleHttpError } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { serveGitBackend } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import type { NativeGitRoute } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { AuthoritativeRepositoryError, nativeBasicAuthorized, nativeBasicCredential } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { readBoundedJson, sendJson, sendNotFound, NativeGitBundleHttpError } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { serveGitBackend } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import type { NativeGitRoute } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 type Input = { readonly config: GitCiConfig; readonly runtime: GitCiRuntime;
   readonly stateDirectory: string; readonly serialize: <T>(operation: () => Promise<T>) => Promise<T>;

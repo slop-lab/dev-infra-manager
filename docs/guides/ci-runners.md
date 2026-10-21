@@ -53,12 +53,12 @@ there is no automatic public artifact export.
 
 ## Configure capacity
 
-The control-plane facade retains its `nativeGit` and `ordinaryCi` deployment
+The control-plane facade retains its `nativeGit` and `execution` deployment
 slots. The second slot hosts the shared execution service for both Sysbox and
 QEMU. Configure private service workers/slots with trusted images and bounds;
 an empty worker list is a valid idle deployment.
 
-For fresh setup, `dim control-plane prepare` accepts `--ci-worker ID`,
+For fresh setup, `dim control-plane prepare` accepts `--execution-worker ID`,
 `--ci-container-slots COUNT` and digest-pinned `--ci-runner-image`/`--ci-job-image`.
 It generates matching service credentials and stable slot IDs. The common
 Sysbox profile uses 1 CPU, 2 GiB memory, 512 PIDs, 900 seconds and 1 MiB output;
@@ -68,9 +68,9 @@ The profile schema below is shared with the service; setup adds no relaxed form.
 
 After installation, `control-plane connect` writes a mode-0600 `worker.json`
 for a single configured initial worker using the attested generation, token,
-slot IDs and endpoints. `--ci-worker-state-directory` selects an absolute path
+slot IDs and endpoints. `--execution-worker-state-directory` selects an absolute path
 on the worker host. Starting capacity remains explicit with
-`dim ci worker FILE`. A copied worker file needs authenticated SSH
+`dim execution worker FILE`. A copied worker file needs authenticated SSH
 forwards for its loopback endpoints; deployment master role files stay on the
 control-plane host. Setup does not mutate an existing deployment, enroll a
 remote worker or automatically start capacity.
@@ -119,7 +119,7 @@ and workspace data. Owned stopped image-export containers and anonymous volumes
 are removed before capacity is returned.
 
 Service grammar and worker grammar belong to the execution implementation in
-`packages/host/plugins/ci-worker/src/`; Git owns only its job/grant/evidence wire contract.
+`packages/host/plugins/execution-worker/src/`; Git owns only its job/grant/evidence wire contract.
 Installation, image/state checks and activation remain installer responsibilities.
 
 ## Inspect executions

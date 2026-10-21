@@ -2,10 +2,9 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import {
-  ContainerWorkspaceRuntime, UserError, resolveHostPluginModule, type WorkspaceHostPlugin, type WorkspaceRuntime,
-  type WorkspaceRuntimeFactoryContext, type HostExecutionRouting, type HostPluginExtension
-} from "@slop-lab/dim-host-core/workspace";
+import { ContainerWorkspaceRuntime, UserError, resolveHostPluginModule, type WorkspaceRuntime } from "@slop-lab/dim-host-core/workspace";
+import { type WorkspaceRuntimeFactoryContext, type HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
+import { type WorkspaceHostPlugin, type HostPluginExtension } from "@slop-lab/dim-host-core/plugin-api";
 
 /** Only explicitly installed host modules execute. Repository files never select host code. */
 export function hostPluginHome(): string {

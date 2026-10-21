@@ -35,7 +35,7 @@ while discard and same-name replacement revoke the old authority.
 
 ## Optional features
 
-Features attach through the repository-owned `./extensions` SDK:
+Features attach through the repository-owned `./plugin-api` SDK:
 
 | Plugin | Responsibility |
 | --- | --- |
@@ -105,14 +105,14 @@ before replacing incompatible state. The separate installer Docker deployment
 and activation transaction retains its own facade contract.
 
 `./config` parses repository service settings without loading the server;
-`./service` exposes the service entry points; `./extensions` exposes the trusted
+`./service` exposes the service entry points; `./plugin-api` exposes the trusted
 feature ports and repository primitives. Package tests exercise real Git/HTTP
 repository-only and review-only operation, scoped transport, CAS recovery,
 malformed state and failure cleanup.
 
 ## Protected-ref update policies
 
-`./extensions` exports `RefUpdatePolicy` and `refUpdatePolicyExtension` for
+`./plugin-api` exports `RefUpdatePolicy` and `refUpdatePolicyExtension` for
 additional constraints. Each provider owns one named section of the imported
 repository policy, validates its own options, and throws to deny an update.
 Every selected provider must accept; there are no override/allow modes that

@@ -13,9 +13,9 @@ export const controlPlaneSecrets = {
   registrar: token(6),
   host: token(7),
   nativeReadiness: token(8),
-  ordinaryReadiness: token(9),
+  executionReadiness: token(9),
   nativeActivation: token(10),
-  ordinaryActivation: token(11),
+  executionActivation: token(11),
   projectRegistrar: token(12),
   projectRootImporter: token(13),
   projectRootReadIssuer: token(14),
@@ -41,10 +41,10 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
     hostPromoters: [],
     ci: {
       grantIssuer: { username: "ci-grants", password: controlPlaneSecrets.grantIssuer },
-      candidateReader: { username: "ordinary-candidate-reader", password: controlPlaneSecrets.candidateReader },
-      resultReporter: { username: "ordinary-results", password: controlPlaneSecrets.resultReporter },
+      candidateReader: { username: "execution-candidate-reader", password: controlPlaneSecrets.candidateReader },
+      resultReporter: { username: "execution-results", password: controlPlaneSecrets.resultReporter },
       webhook: {
-        endpoint: "http://ordinary-ci:8080/v1/jobs",
+        endpoint: "http://execution:8080/v1/jobs",
         username: "native-events",
         password: controlPlaneSecrets.webhook
       }
@@ -52,22 +52,22 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
   };
 }
 
-export function ordinaryServiceConfig(): Readonly<Record<string, unknown>> {
+export function executionServiceConfig(): Readonly<Record<string, unknown>> {
   return {
     schemaVersion: 1,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
       grantIssuer: { username: "ci-grants", password: controlPlaneSecrets.grantIssuer },
-      candidateReader: { username: "ordinary-candidate-reader", password: controlPlaneSecrets.candidateReader },
-      resultReporter: { username: "ordinary-results", password: controlPlaneSecrets.resultReporter }
+      candidateReader: { username: "execution-candidate-reader", password: controlPlaneSecrets.candidateReader },
+      resultReporter: { username: "execution-results", password: controlPlaneSecrets.resultReporter }
     },
     credentials: {
       webhook: { username: "native-events", password: controlPlaneSecrets.webhook },
       query: { username: "native-query", password: controlPlaneSecrets.query },
       operator: { username: "ci-operator", password: controlPlaneSecrets.operator }
     },
-    workers: [{ id: "host-a", token: controlPlaneSecrets.host, slots: [{ id: "ordinary", runtime: "container", profile: {
+    workers: [{ id: "host-a", token: controlPlaneSecrets.host, slots: [{ id: "execution", runtime: "container", profile: {
       runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`,
       jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`,
       bounds: { cpu: "1", memoryBytes: "1073741824", pids: "256", wallClockSeconds: "60", outputBytes: "1048576" }
@@ -81,8 +81,8 @@ export type ControlPlaneFixture = {
   readonly paths: {
     readonly nativeConfig: string;
     readonly nativeReadiness: string;
-    readonly ordinaryConfig: string;
-    readonly ordinaryReadiness: string;
+    readonly executionConfig: string;
+    readonly executionReadiness: string;
   };
 };
 
@@ -91,14 +91,14 @@ export async function writeControlPlaneFixture(directory: string): Promise<Contr
   const paths = {
     nativeConfig: join(directory, "native.json"),
     nativeReadiness: join(directory, "native-readiness.token"),
-    ordinaryConfig: join(directory, "ordinary.json"),
-    ordinaryReadiness: join(directory, "ordinary-readiness.token")
+    executionConfig: join(directory, "execution.json"),
+    executionReadiness: join(directory, "execution-readiness.token")
   } as const;
   await Promise.all([
     writePrivate(paths.nativeConfig, `${JSON.stringify(nativeServiceConfig())}\n`),
     writePrivate(paths.nativeReadiness, `${controlPlaneSecrets.nativeReadiness}\n`),
-    writePrivate(paths.ordinaryConfig, `${JSON.stringify(ordinaryServiceConfig())}\n`),
-    writePrivate(paths.ordinaryReadiness, `${controlPlaneSecrets.ordinaryReadiness}\n`)
+    writePrivate(paths.executionConfig, `${JSON.stringify(executionServiceConfig())}\n`),
+    writePrivate(paths.executionReadiness, `${controlPlaneSecrets.executionReadiness}\n`)
   ]);
   const config = {
     schemaVersion: 1,
@@ -109,10 +109,10 @@ export async function writeControlPlaneFixture(directory: string): Promise<Contr
       readinessTokenFile: paths.nativeReadiness,
       publish: { host: "127.0.0.1", port: 7443 }
     },
-    ordinaryCi: {
-      image: `registry.example/dim/ordinary-ci@sha256:${"b".repeat(64)}`,
-      configFile: paths.ordinaryConfig,
-      readinessTokenFile: paths.ordinaryReadiness,
+    execution: {
+      image: `registry.example/dim/execution@sha256:${"b".repeat(64)}`,
+      configFile: paths.executionConfig,
+      readinessTokenFile: paths.executionReadiness,
       publish: { host: "127.0.0.1", port: 7410 }
     }
   } as const;

@@ -80,7 +80,7 @@ async function install(options: ControlPlaneInstallOptions, firstOnly: boolean):
     let docker: ControlPlaneDockerState;
     try {
       await assertControlPlaneStagedSources({ lock, staging, sources });
-      const snapshots = { nativeGit: join(staging.path, "native-git.json"), ordinaryCi: join(staging.path, "ordinary-ci.json") };
+      const snapshots = { nativeGit: join(staging.path, "native-git.json"), execution: join(staging.path, "execution.json") };
       assertControlPlaneProbeSnapshots(config, snapshots);
       docker = await inspectControlPlaneDocker(runner, config.deploymentId, prior?.record.volumesEstablished);
       assertResourceState(prior, docker);
@@ -89,19 +89,19 @@ async function install(options: ControlPlaneInstallOptions, firstOnly: boolean):
       if (prior !== undefined) {
         await probeControlPlaneUpdate(runner, {
           nativeGit: { candidate: config.nativeGit.image, prior: prior.record.nativeGitImage },
-          ordinaryCi: { candidate: config.ordinaryCi.image, prior: prior.record.ordinaryCiImage }
+          execution: { candidate: config.execution.image, prior: prior.record.executionImage }
         });
       }
       await probeControlPlanePublishedAddresses(runner, config, prior === undefined ? undefined : {
         nativeGit: prior.record.nativeGitPublish,
-        ordinaryCi: prior.record.ordinaryCiPublish
+        execution: prior.record.executionPublish
       });
     } catch (error) {
       await discardControlPlanePreflight(lock, staging, error);
     }
 
     const completed = completeControlPlaneSourcePreflight(sources, {
-      nativeGit: activationTokenBytes(allocate), ordinaryCi: activationTokenBytes(allocate)
+      nativeGit: activationTokenBytes(allocate), execution: activationTokenBytes(allocate)
     });
     const candidate = await finalizeControlPlaneGeneration({ lock, staging, config, sources: completed });
     const compose = await createControlPlaneComposeFile(candidate.composeBytes);

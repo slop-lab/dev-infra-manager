@@ -44,7 +44,7 @@ describe("control-plane installed state", () => {
 
     // When: the generation and guarded installed record are published.
     const candidate = await finalizeControlPlaneGeneration({ lock: input.lock, staging: beforeTokens, config: input.config, sources: completed });
-    expect(candidate.generationId).toBe("74d760355e846a7cecf5f8d90de23f9eff8afbd46087ac701a8ad976216dbb5c");
+    expect(candidate.generationId).toBe("26da9766f0bab69d8eee983aea5fb60105479be570f416e70a1931a6f18bd7db");
     await publishControlPlaneInstalledState(input.lock, candidate, { volumesEstablished: true });
     await expect(readControlPlaneInstalledState(input.lock)).rejects.toThrow(/incomplete transaction/);
     await completeControlPlaneInstalledState(input.lock, candidate);
@@ -54,11 +54,11 @@ describe("control-plane installed state", () => {
     expect(installed).toBeDefined();
     if (installed === undefined) throw new Error("installed state is missing");
     expect(installed.record.nativeGitImage).toBe(input.config.nativeGit.image);
-    expect(installed.record.ordinaryCiImage).toBe(input.config.ordinaryCi.image);
+    expect(installed.record.executionImage).toBe(input.config.execution.image);
     expect(installed.record.nativeGitPublish).toEqual(input.config.nativeGit.publish);
-    expect(installed.record.ordinaryCiPublish).toEqual(input.config.ordinaryCi.publish);
+    expect(installed.record.executionPublish).toEqual(input.config.execution.publish);
     expect(installed.snapshots.nativeGit.config.equals(input.sources.nativeGit.config.bytes)).toBe(true);
-    expect(installed.snapshots.ordinaryCi.readinessToken.equals(input.sources.ordinaryCi.readinessToken.bytes)).toBe(true);
+    expect(installed.snapshots.execution.readinessToken.equals(input.sources.execution.readinessToken.bytes)).toBe(true);
     expect((await lstat(input.root)).mode & 0o777).toBe(0o700);
     expect((await lstat(installed.generationPath)).mode & 0o777).toBe(0o700);
     const generationFiles = await readdir(installed.generationPath);
@@ -115,7 +115,7 @@ describe("control-plane installed state", () => {
     expect(isControlPlaneInstalledInput(installed, {
       ...input.config,
       nativeGit: { ...input.config.nativeGit, publish: { ...input.config.nativeGit.publish, port: 7543 } },
-      ordinaryCi: { ...input.config.ordinaryCi, publish: { ...input.config.ordinaryCi.publish, port: 7510 } }
+      execution: { ...input.config.execution, publish: { ...input.config.execution.publish, port: 7510 } }
     }, input.sources)).toBe(false);
     expect(allocations).toBe(0);
     expect(await treeDigest(input.root)).toBe(before);
@@ -147,7 +147,7 @@ describe("control-plane installed state", () => {
     await install(input);
     const installPath = join(input.root, "install.json");
     const draft = (await readFile(installPath, "utf8")).replace(
-      /  "nativeGitPublish": \{[\s\S]*?  \},\n  "ordinaryCiPublish": \{[\s\S]*?  \},\n/,
+      /  "nativeGitPublish": \{[\s\S]*?  \},\n  "executionPublish": \{[\s\S]*?  \},\n/,
       ""
     );
     await writeFile(installPath, draft, { mode: 0o600 });
@@ -229,7 +229,7 @@ describe("control-plane installed state", () => {
       config: changed,
       sources: completeControlPlaneSourcePreflight(input.sources, {
         nativeGit: Buffer.from(`${Buffer.alloc(32, 12).toString("base64url")}\n`),
-        ordinaryCi: Buffer.from(`${Buffer.alloc(32, 13).toString("base64url")}\n`)
+        execution: Buffer.from(`${Buffer.alloc(32, 13).toString("base64url")}\n`)
       })
     });
 
@@ -261,7 +261,7 @@ async function fixture() {
 function activationBytes() {
   return {
     nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
-    ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+    execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
   } as const;
 }
 

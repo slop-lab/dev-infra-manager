@@ -66,7 +66,7 @@ configuration with reviewed digest-pinned native Git and ordinary CI images:
 ```bash
 dim control-plane prepare /absolute/private/operator \
   --native-git-image registry.example/native@sha256:EXACT_DIGEST \
-  --ordinary-ci-image registry.example/ci@sha256:EXACT_DIGEST
+  --execution-image registry.example/ci@sha256:EXACT_DIGEST
 ```
 
 Review the generated private files, then follow the printed facade install and

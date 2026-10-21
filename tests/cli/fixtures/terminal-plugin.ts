@@ -1,5 +1,5 @@
 
-export const hostPlugin: import('@slop-lab/dim-host-core/workspace').WorkspaceHostPlugin = {
+export const hostPlugin: import('@slop-lab/dim-host-core/plugin-api').WorkspaceHostPlugin = {
   name: "terminal-probe",
   commands: [{ name: "terminalprobe", description: "Test inherited operator terminal" }],
   async run(args) {

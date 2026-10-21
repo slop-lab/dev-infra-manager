@@ -4,7 +4,8 @@
 manifest and comparison between protected and candidate Git snapshots. It does
 not import the control plane, start an interpreter or execute repository code.
 
-A runtime implements `ReviewTraceRuntime` and receives immutable repository read
+A runtime imports `ReviewTraceRuntime` and registration helpers from
+`@slop-lab/dim-review-tracing/plugin-api`. It implements `ReviewTraceRuntime` and receives immutable repository read
 callbacks. The orchestrator observes those callbacks itself: a runtime's returned
 manifest is useful for diagnostics, but cannot erase observed reads. Code imports
 and ordinary reads are dependencies. Explicit `readTargetFile(path, view)` reads

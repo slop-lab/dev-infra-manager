@@ -1,4 +1,4 @@
-import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin";
+import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";

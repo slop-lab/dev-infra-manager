@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { MergeAuthorizationStore, promoteInstalledNativeReview, controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-merge-policy";
 import { startWebhookService, webhookConfigurationSchema } from "@slop-lab/dim-control-plane-plugin-webhooks";
-import { webhookEventSources } from "@slop-lab/dim-control-plane-plugin-webhooks/extensions";
+import { webhookEventSources } from "@slop-lab/dim-control-plane-plugin-webhooks/plugin-api";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-git-repositories";
 import { fixture, git, basic, reviewer, token, generationId, record, text } from "../git-repositories/optionalFeaturesFixture.js";
 const promoter = { hostId: "host-a", username: "promoter", password: token(10) };

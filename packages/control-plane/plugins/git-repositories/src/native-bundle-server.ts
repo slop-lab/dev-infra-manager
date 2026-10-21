@@ -16,7 +16,7 @@ import { executeNativeProjectPreparation } from "./native-project-registration.j
 import { NativeGitBundleServerError, type NativeGitBundleServer, type NativeGitBundleServerOptions } from "./native-bundle-server-types.js";
 import { nativeBundleKnownCredentials } from "./native-bundle-known-credentials.js";
 import { createNativeBundleHttpServer } from "./native-bundle-http-server.js";
-import { repositoryExtensionFactories, type RepositoryAttachment, type RepositoryExtensionContext } from "./extensions.js";
+import { repositoryExtensionFactories, type RepositoryAttachment, type RepositoryExtensionContext } from "./plugin-api.js";
 import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-import-transitions.js";
 import { NativeProjectRootImportStateError } from "./native-project-root-import-codec.js";
 import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";

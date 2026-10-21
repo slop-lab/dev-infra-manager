@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { NativeImportedRootPolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import type { NativeImportedRootPolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 export const gitCiPolicySchema = z.object({

@@ -156,7 +156,7 @@ describe("control-plane published-address preflight", () => {
     await expect(action).rejects.toThrow(/preflight failed before resource mutation/);
     expect(runner.calls.some(({ args }) => args.includes("--force-recreate"))).toBe(false);
     expect(runner.nativeRuntime?.publishPort).toBe(7443);
-    expect(runner.ordinaryRuntime?.publishPort).toBe(7410);
+    expect(runner.executionRuntime?.publishPort).toBe(7410);
   });
 });
 

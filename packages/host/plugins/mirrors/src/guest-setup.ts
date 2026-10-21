@@ -7,7 +7,7 @@ import { request } from "node:http";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { MirrorClientConfiguration as ClientConfiguration, MirrorGuestClient as ClientModule } from "./adapter.js";
+import type { MirrorClientConfiguration as ClientConfiguration, MirrorGuestClient as ClientModule } from "./protocol-plugin-api.js";
 export interface GuestMirrorPayload {
   clients: readonly { kind: string; endpoint: string; source: string }[];
   proxy: string;

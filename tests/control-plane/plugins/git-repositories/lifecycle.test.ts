@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-git-repositories";
-import { repositoryExtension } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { repositoryExtension } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { fixture } from "./optionalFeaturesFixture.js";
 
 it("closes every extension in reverse order and releases the actual listener and storage owner despite a feature failure", async () => {

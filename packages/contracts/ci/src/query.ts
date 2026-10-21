@@ -3,9 +3,6 @@ import { executionEventSchema } from "./execution-protocol.js";
 import { executionSchema, executionResultSchema, type Execution } from "./aggregate.js";
 
 const event = executionEventSchema.unwrap().shape;
-export const taskSummarySchema = z.object({ id: z.string().uuid(), taskType: z.string(), executionKind: z.string().regex(/^task\//),
-  phase: z.enum(["queued", "assigned", "running", "recovering", "finished"]), generationId: z.string().regex(/^[0-9a-f]{64}$/),
-  createdAt: z.number().int().nonnegative(), publication: z.enum(["pending", "accepted", "stale"]) }).strict();
 const state = executionSchema.shape;
 export const executionSummarySchema = z.object({ id: state.id, eventId: event.eventId, projectId: event.projectId, repositoryId: event.repositoryId,
   jobName: event.jobName, executionKind: event.executionKind, phase: state.phase, generationId: state.generationId,
@@ -13,7 +10,6 @@ export const executionSummarySchema = z.object({ id: state.id, eventId: event.ev
   outcome: executionResultSchema.shape.result.optional(), completion: executionResultSchema.shape.completion.optional(),
   finishedAt: executionResultSchema.shape.finishedAt.optional()
 }).strict();
-export const scheduledSummarySchema = z.union([executionSummarySchema, taskSummarySchema]);
 export type ExecutionSummary = z.infer<typeof executionSummarySchema>;
 export const executionDetailSchema = z.object({ job: executionSummarySchema, result: executionResultSchema.optional() }).strict();
 
@@ -32,8 +28,3 @@ const { logs: _logs, ...metadata } = executionResultSchema.shape;
 export const executionSummaryRowSchema = z.object({ ...executionSchema.shape,
   grant: z.undefined().optional(), leaseToken: z.undefined().optional(), profile: z.undefined().optional(), result: z.object(metadata).strict().optional()
 }).strict();
-
-export const ciWorkersSchema = z.array(z.object({ id: z.string(), slots: z.array(z.object({ id: z.string(),
-  executionKind: z.union([z.enum(["ordinary-sysbox", "qemu"]), z.string().regex(/^task\//)]), state: z.enum(["idle", "busy", "cleanup-required"]),
-  job: scheduledSummarySchema.optional(), leaseExpiresAt: z.number().int().optional()
-}).strict()) }).strict()).max(256);

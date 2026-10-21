@@ -1,4 +1,4 @@
-import type { CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
+import type { CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
 import type { RunningService } from "../git-repositories/nativeRootImportFinalizeTypes.js";
 import { reviewProposalRef } from "../git-ci/nativeBundleReviewFixture.js";
 export * from "../git-ci/nativeBundleReviewFixture.js";

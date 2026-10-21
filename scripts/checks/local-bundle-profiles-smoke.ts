@@ -51,7 +51,7 @@ try {
   const controlPlanePlugins = ["@slop-lab/dim-control-plane-plugin-git-repositories",
     "@slop-lab/dim-control-plane-plugin-code-review", "@slop-lab/dim-control-plane-plugin-merge-policy",
     "@slop-lab/dim-control-plane-plugin-git-ci", "@slop-lab/dim-control-plane-plugin-webhooks",
-    "@slop-lab/dim-control-plane-plugin-ci-workflows", "@slop-lab/dim-control-plane-plugin-llm-router", "@slop-lab/dim-control-plane-plugin-ci",
+    "@slop-lab/dim-control-plane-plugin-ci-workflows", "@slop-lab/dim-control-plane-plugin-llm-router", "@slop-lab/dim-control-plane-plugin-execution-scheduler",
     "@slop-lab/dim-control-plane-plugin-review-tracing", "@slop-lab/dim-control-plane-plugin-review-tracing-node",
     "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled"];
   run(facade, ["installer", "install", "control-plane", "plugin", "--local-packages", bundle,
@@ -59,7 +59,7 @@ try {
   assert.equal(existsSync(runtime), false, "control-plane plugins must not install a host runtime");
   assert.deepEqual(object(parseJson(readFileSync(path.join(controlPlaneRuntime, "plugins.json"), "utf8"))).plugins,
     [...controlPlanePlugins].sort());
-  for (const name of ["@slop-lab/dim-host-core", "@slop-lab/dim-cli", "@slop-lab/dim-control-plane-admin", "@slop-lab/dim-host-plugin-native-git", "@slop-lab/dim-host-plugin-ci-worker"]) {
+  for (const name of ["@slop-lab/dim-host-core", "@slop-lab/dim-cli", "@slop-lab/dim-control-plane-admin", "@slop-lab/dim-host-plugin-native-git", "@slop-lab/dim-host-plugin-execution-worker"]) {
     assert.equal(existsSync(path.join(controlPlaneRuntime, "node_modules", name)), false);
   }
   run(process.execPath, ["--input-type=module", "--eval", `
@@ -69,7 +69,7 @@ try {
     const {startControlPlanePlugins} = await load('@slop-lab/dim-control-plane-core');
     const {controlPlanePlugin} = await load('@slop-lab/dim-control-plane-plugin-ci-workflows');
     const prepared = await controlPlanePlugin.configure({});
-    const {requireWorkflowCompiler} = await load('@slop-lab/dim-contracts-ci/workflow');
+    const {requireWorkflowCompiler} = await load('@slop-lab/dim-contracts-ci/workflow-plugin-api');
     const jobs = requireWorkflowCompiler(prepared.extensions).compile(Buffer.from('jobs:\\n  source: {script: check.bash}\\n'));
     if (jobs[0]?.name !== 'source') throw new Error('installed workflow compiler did not compile');
     const {controlPlanePlugin: nodeTracing} = await load('@slop-lab/dim-control-plane-plugin-review-tracing-node');
@@ -92,7 +92,7 @@ try {
   console.log("base artifacts: installed CLI/core only, no managed service or backend configuration required");
 
   run(facade, [...install, "--with-managed"]);
-  const profilePlugins = ["@slop-lab/dim-host-plugin-native-git", "@slop-lab/dim-host-plugin-ci-worker"];
+  const profilePlugins = ["@slop-lab/dim-host-plugin-native-git", "@slop-lab/dim-host-plugin-execution-worker"];
   assert.deepEqual(plugins().sort(), [...profilePlugins].sort());
   for (const name of ["@slop-lab/dim-cli", "@slop-lab/dim-host-core", "@slop-lab/dim-control-plane-admin", ...profilePlugins]) {
     assert.ok(existsSync(path.join(runtime, "node_modules", name)), `profile is missing ${name}`);
@@ -104,7 +104,7 @@ try {
     const expected = entry.version;
     assert.equal(object(parseJson(readFileSync(path.join(runtime, "node_modules", name, "package.json"), "utf8"))).version, expected);
   }
-  console.log("host profile: explicit native Git and CI worker plugins with operator tools");
+  console.log("host profile: explicit native Git and execution worker plugins with operator tools");
 
   const selectedHostPlugins = ["@slop-lab/dim-host-plugin-mirrors", "@slop-lab/dim-host-plugin-cache-server", "@slop-lab/dim-host-plugin-external-urls", "@slop-lab/dim-host-plugin-review-tracing-node"];
   run(facade, ["installer", "install", "plugin", "--local-packages", bundle,

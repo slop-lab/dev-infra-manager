@@ -45,7 +45,7 @@ export async function validateControlPlaneNoOp(input: {
       config: input.config,
       generationPath: input.prior.generationPath,
       generationId: input.prior.record.generationId,
-      images: { nativeGit: input.prior.record.nativeGitImage, ordinaryCi: input.prior.record.ordinaryCiImage }
+      images: { nativeGit: input.prior.record.nativeGitImage, execution: input.prior.record.executionImage }
     }, input.readinessPolicy);
   } finally {
     await compose.close();
@@ -59,12 +59,12 @@ export async function runFirstControlPlaneInstall(input: {
   readonly readinessPolicy?: ControlPlaneReadinessPolicy;
 }): Promise<void> {
   await establishFirstControlPlaneResources(input.runner, input.candidate.config.deploymentId);
-  await startFirstControlPlaneService({ ...input, deploymentId: input.candidate.config.deploymentId, service: "ordinary-ci" });
+  await startFirstControlPlaneService({ ...input, deploymentId: input.candidate.config.deploymentId, service: "execution" });
   await assertControlPlaneServiceRuntimeTopology(input.runner, {
     config: input.candidate.config, generationPath: input.candidate.generationPath,
-    generationId: input.candidate.generationId, service: "ordinary-ci"
+    generationId: input.candidate.generationId, service: "execution"
   });
-  await ready(input.runner, input.candidate, "ordinary-ci", input.readinessPolicy);
+  await ready(input.runner, input.candidate, "execution", input.readinessPolicy);
   await startFirstControlPlaneService({ ...input, deploymentId: input.candidate.config.deploymentId, service: "native-git" });
   await assertControlPlaneServiceRuntimeTopology(input.runner, {
     config: input.candidate.config, generationPath: input.candidate.generationPath,
@@ -80,8 +80,8 @@ export async function runControlPlaneUpdate(input: {
   readonly composePath: string;
   readonly readinessPolicy?: ControlPlaneReadinessPolicy;
 }): Promise<void> {
-  await replace(input, "ordinary-ci");
-  await ready(input.runner, input.candidate, "ordinary-ci", input.readinessPolicy);
+  await replace(input, "execution");
+  await ready(input.runner, input.candidate, "execution", input.readinessPolicy);
   await replace(input, "native-git");
   await ready(input.runner, input.candidate, "native-git", input.readinessPolicy);
 }
@@ -118,12 +118,12 @@ export async function rollbackControlPlaneUpdate(input: {
           generationId: input.prior.record.generationId,
           images: {
             nativeGit: input.prior.record.nativeGitImage,
-            ordinaryCi: input.prior.record.ordinaryCiImage
+            execution: input.prior.record.executionImage
           }
         }
       };
-      await replace(replacement, "ordinary-ci");
-       await ready(input.runner, replacement.target, "ordinary-ci", input.readinessPolicy);
+      await replace(replacement, "execution");
+       await ready(input.runner, replacement.target, "execution", input.readinessPolicy);
       await replace(replacement, "native-git");
        await ready(input.runner, replacement.target, "native-git", input.readinessPolicy);
       await restorePriorControlPlaneInstalledState(input.lock, input.candidate, input.prior);
@@ -179,9 +179,9 @@ async function replace(input: {
     readonly config: ControlPlaneConfig;
     readonly generationPath: string;
     readonly generationId: string;
-    readonly images?: { readonly nativeGit: string; readonly ordinaryCi: string };
+    readonly images?: { readonly nativeGit: string; readonly execution: string };
   };
-}, service: "native-git" | "ordinary-ci"): Promise<void> {
+}, service: "native-git" | "execution"): Promise<void> {
   await replaceOwnedControlPlaneService({
     runner: input.runner, composePath: input.composePath,
     deploymentId: input.candidate.config.deploymentId, service,
@@ -200,19 +200,19 @@ type ActivationTarget = {
 };
 
 export async function activateControlPlaneTarget(runner: ControlPlaneDockerRunner, target: ActivationTarget): Promise<void> {
-  await activateService(runner, target, "ordinary-ci", "10002:10002");
+  await activateService(runner, target, "execution", "10002:10002");
   await activateService(runner, target, "native-git", "10001:10001");
 }
 
 async function activateService(
   runner: ControlPlaneDockerRunner,
   target: ActivationTarget,
-  service: "native-git" | "ordinary-ci",
+  service: "native-git" | "execution",
   user: "10001:10001" | "10002:10002"
 ): Promise<void> {
   const state = await inspectControlPlaneDocker(runner, target.config.deploymentId);
   if (state.kind !== "owned") throw new ControlPlaneInstallError("control-plane activation requires complete owned resources");
-  const containerId = service === "native-git" ? state.nativeGitContainerId : state.ordinaryCiContainerId;
+  const containerId = service === "native-git" ? state.nativeGitContainerId : state.executionContainerId;
   await assertControlPlaneServiceRuntimeTopology(runner, { ...target, service, containerId });
   const result = await runner.run({
     args: [
@@ -232,7 +232,7 @@ async function readyBoth(
   target: ControlPlaneReadinessTarget,
   policy?: ControlPlaneReadinessPolicy
 ): Promise<void> {
-  await ready(runner, target, "ordinary-ci", policy);
+  await ready(runner, target, "execution", policy);
   await ready(runner, target, "native-git", policy);
 }
 
@@ -240,14 +240,14 @@ function priorConfig(config: ControlPlaneConfig, prior: ControlPlaneInstalledSta
   return {
     ...config,
     nativeGit: { ...config.nativeGit, image: prior.record.nativeGitImage, publish: prior.record.nativeGitPublish },
-    ordinaryCi: { ...config.ordinaryCi, image: prior.record.ordinaryCiImage, publish: prior.record.ordinaryCiPublish }
+    execution: { ...config.execution, image: prior.record.executionImage, publish: prior.record.executionPublish }
   };
 }
 
 async function ready(
   runner: ControlPlaneDockerRunner,
   target: ControlPlaneReadinessTarget,
-  service: "native-git" | "ordinary-ci",
+  service: "native-git" | "execution",
   policy?: ControlPlaneReadinessPolicy
 ): Promise<void> {
   await waitForControlPlaneServiceReady({ runner, target, service, ...(policy === undefined ? {} : { policy }) });

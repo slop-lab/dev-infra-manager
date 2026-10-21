@@ -26,7 +26,7 @@ describe("control-plane replacement resource fence", () => {
     readiness.events.splice(0);
     readiness.expectInstalled = true;
 
-    // When: the candidate ordinary service is replaced.
+    // When: the candidate execution service is replaced.
     const action = installControlPlane({
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom()
     });
@@ -34,12 +34,12 @@ describe("control-plane replacement resource fence", () => {
     // Then: readiness occurs only after rollback has replaced the bad candidate again.
     await expect(action).rejects.toThrow(/exact prior generation was restored/);
     const replacements = runner.calls.filter(({ args }) => args.includes("--force-recreate"));
-    expect(replacements.map(({ args }) => args.at(-1))).toEqual(["ordinary-ci", "ordinary-ci", "native-git"]);
-    expect(readiness.events).toEqual(["ready:ordinary", "ready:native"]);
+    expect(replacements.map(({ args }) => args.at(-1))).toEqual(["execution", "execution", "native-git"]);
+    expect(readiness.events).toEqual(["ready:execution", "ready:native"]);
   });
 
   it("fails rollback before readiness when the replacement target has wrong mounts", async () => {
-    // Given: native candidate readiness triggers rollback and rollback ordinary has a foreign bind.
+    // Given: native candidate readiness triggers rollback and rollback execution has a foreign bind.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
     await installControlPlane({
@@ -51,7 +51,7 @@ describe("control-plane replacement resource fence", () => {
     runner.readinessEvents.splice(0);
     const readiness = new ObservingReadiness(input.stateRoot, runner, false, "ready:native", true);
 
-    // When: rollback recreates ordinary from the retained prior Compose bytes.
+    // When: rollback recreates execution from the retained prior Compose bytes.
     const action = installControlPlane({
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom(),
       readinessPolicy: immediateReadinessDeadline
@@ -59,7 +59,7 @@ describe("control-plane replacement resource fence", () => {
 
     // Then: rollback refuses readiness/publication and retains recovery evidence.
     await expect(action).rejects.toThrow(/update and rollback failed/);
-    expect(readiness.events).toEqual(["ready:ordinary", "ready:native"]);
+    expect(readiness.events).toEqual(["ready:execution", "ready:native"]);
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(true);
   });
 });

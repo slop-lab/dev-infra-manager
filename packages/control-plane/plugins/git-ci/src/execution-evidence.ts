@@ -10,7 +10,7 @@ import { executionGrantSchema, executionGrantRequestSchema, executionResultSchem
 import { loadAuthoritativeExecutionReview, loadCurrentAuthoritativeExecutionInputs } from "./authoritative-execution-review-inputs.js";
 import { candidateExecutionDescriptorSchema } from "@slop-lab/dim-contracts-ci/descriptor";
 import { descriptorDigest } from "@slop-lab/dim-contracts-ci/digest";
-import { ownedReviewDirectory, readReviewJson as readStoredJson, writeImmutableReviewRecord } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
+import { ownedReviewDirectory, readReviewJson as readStoredJson, writeImmutableReviewRecord } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
 
 export async function authorizeExecution(runtime: GitCiRuntime, value: unknown): Promise<ExecutionGrant> {
   const request = executionGrantRequestSchema.parse(value);

@@ -8,7 +8,7 @@
     "test": "pnpm run test:unit && pnpm run test:cli && pnpm run test:scenarios",
     "test:unit": "vitest run host control-plane contracts installer web cli/host --exclude 'scenarios/**' --maxWorkers=2",
     "test:cli": "tsx --conditions=dim-source --test --test-reporter=./support/node-failure-reporter.ts cli/*.test.ts",
-    "test:scenarios": "vitest run scenarios/harness scenarios/llm-router scenarios/ci --no-file-parallelism --exclude 'scenarios/harness/qemu*.test.ts' --exclude 'scenarios/harness/kvm*.test.ts' --exclude 'scenarios/harness/bootstrapInstallerSafety.test.ts'",
+    "test:scenarios": "vitest run scenarios/harness scenarios/llm-router scenarios/execution --no-file-parallelism --exclude 'scenarios/harness/qemu*.test.ts' --exclude 'scenarios/harness/kvm*.test.ts' --exclude 'scenarios/harness/bootstrapInstallerSafety.test.ts'",
     "test:qemu-service": "node -e 'if (process.getuid?.() !== 0) { console.error(\"QEMU service fixtures require a disposable root environment; see docs/development/verification.md\"); process.exit(2); }' && vitest run --config vitest.privileged.config.ts"
   },
   "engines": {
@@ -44,9 +44,12 @@
     "@slop-lab/dim-review-tracing": "workspace:*",
     "@slop-lab/dim-control-plane-plugin-review-tracing": "workspace:*",
     "@slop-lab/dim-control-plane-plugin-review-tracing-node": "workspace:*",
-    "@slop-lab/dim-task-scheduling": "workspace:*",
+    "@slop-lab/dim-execution-scheduler": "workspace:*",
     "@slop-lab/dim-review-tracing-node": "workspace:*",
     "@slop-lab/dim-host-plugin-review-tracing-node": "workspace:*",
-    "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled": "workspace:*"
+    "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled": "workspace:*",
+    "@slop-lab/dim-contracts-execution": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-execution-scheduler": "workspace:*",
+    "@slop-lab/dim-host-plugin-execution-worker": "workspace:*"
   }
 }

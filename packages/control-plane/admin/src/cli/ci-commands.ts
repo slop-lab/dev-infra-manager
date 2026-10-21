@@ -2,7 +2,7 @@ import { UserError } from "@slop-lab/dim-host-core";
 import { createCiQueryClient } from "../ci/queryClient.js";
 import type { Command } from "commander";
 export function registerCiCommands(program: Command): void {
-  const ci = program.command("ci").description("Run isolated candidate jobs");
+  const ci = program.command("ci").description("Query candidate CI jobs and diagnostics");
   ci.command("jobs").description("List the 100 most recent CI executions")
     .option("--connection <file>", "private CI query connection (defaults beside the selected host connection)")
     .option("--json", "print execution summaries as JSON")

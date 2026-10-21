@@ -3,9 +3,9 @@ import { inspectAuthoritativeNativeReviewGit, readAuthoritativeNativeReviewRefs 
 import { isDeepStrictEqual } from "node:util";
 import type { AuthoritativeNativeReview } from "./authoritative-native-review-schema.js";
 import { codeReviewPolicy } from "./policy.js";
-import type { CodeReviewRuntime } from "./extensions.js";
+import type { CodeReviewRuntime } from "./plugin-api.js";
 import { reviewRequirementsForChanges } from "./authoritative-native-review.js";
-import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 export async function nativeHumanReviewStaleReasons(
   runtime: CodeReviewRuntime,

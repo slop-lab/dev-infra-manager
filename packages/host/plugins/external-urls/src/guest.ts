@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { deployGuestIntegration, type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import { deployGuestIntegration } from "@slop-lab/dim-host-core/workspace";
+import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { UserError } from "@slop-lab/dim-host-core";
 import { workspacePluginRequest } from "@slop-lab/dim-host-core/controller";
 import { readExternalUrlConfig } from "@slop-lab/dim-contracts-external-url";

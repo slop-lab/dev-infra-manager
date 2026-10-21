@@ -1,9 +1,10 @@
-import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { assertTracePath, type TraceChange } from "@slop-lab/dim-review-tracing";
+import { assertTracePath } from "@slop-lab/dim-review-tracing";
+import type { TraceChange } from "@slop-lab/dim-review-tracing/plugin-api";
 import { cleanupNodeReviewTraceExecution, createNodeReviewTraceRuntime } from "@slop-lab/dim-review-tracing-node";
-import { executionTaskHandlerKind, type ExecutionTaskHandler } from "@slop-lab/dim-task-scheduling";
+import { executionTaskHandlerKind, type ExecutionTaskHandler } from "@slop-lab/dim-contracts-execution/plugin-api";
 
 const installed = await createNodeReviewTraceRuntime();
 function detectorInput(raw: unknown): { entrypoint: string; changes: readonly TraceChange[] } {

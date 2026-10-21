@@ -1,5 +1,6 @@
 import { deployToolHelpers, inspectTools } from "./integration.js";
-import { UserError, type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import { UserError } from "@slop-lab/dim-host-core/workspace";
+import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "agent-tools",

@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { parseEndpoints, type CacheEndpoints } from "./cache-routing.js";
-import type { MirrorAdapterModule } from "./adapter.js";
+import type { MirrorAdapterModule } from "./protocol-plugin-api.js";
 import { loadMirrorAdapters } from "./registry.js";
 import { WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import type { Socket } from "node:net";

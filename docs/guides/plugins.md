@@ -155,7 +155,7 @@ this port without importing cache implementations. Invalid explicit configuratio
 fails before execution instead of silently reverting to direct access.
 
 Control-plane plugins use the separate `controlPlanePlugin` contract exported
-by `@slop-lab/dim-control-plane-core/plugin`. Their runtime validates required
+by `@slop-lab/dim-control-plane-core/plugin-api`. Their runtime validates required
 capabilities before startup and closes started services in reverse order.
 
 ## Host extension contributions

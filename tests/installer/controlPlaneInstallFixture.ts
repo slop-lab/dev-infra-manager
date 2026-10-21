@@ -22,26 +22,26 @@ export { isolationRuntimeFaults, type RuntimeFault } from "./controlPlaneRuntime
 
 const networkId = "c".repeat(64);
 const nativeId = "1".repeat(64);
-const ordinaryId = "2".repeat(64);
+const executionId = "2".repeat(64);
 
 export class FirstInstallRunner implements ControlPlaneDockerRunner {
   readonly calls: ControlPlaneDockerCommand[] = [];
   network = false;
   nativeVolume = false;
-  ordinaryVolume = false;
+  executionVolume = false;
   nativeContainer = false;
-  ordinaryContainer = false;
+  executionContainer = false;
   failImageProbe = false;
   composeMode: number | undefined;
   composeText: string | undefined;
   nativeRuntime: RuntimeService | undefined;
-  ordinaryRuntime: RuntimeService | undefined;
+  executionRuntime: RuntimeService | undefined;
   failReplacementNumber: number | undefined;
-  failActivationService: "native-git" | "ordinary-ci" | undefined;
+  failActivationService: "native-git" | "execution" | undefined;
   failCompletionAfterActivation = false;
-  failReadinessEvent: "ready:native" | "ready:ordinary" | undefined;
+  failReadinessEvent: "ready:native" | "ready:execution" | undefined;
   failEveryReadiness = false;
-  uncertainReadinessEvent: "ready:native" | "ready:ordinary" | undefined;
+  uncertainReadinessEvent: "ready:native" | "ready:execution" | undefined;
   readonly readinessEvents: string[] = [];
   readinessStateRoot: string | undefined;
   readinessExpectedInstalled = false;
@@ -64,15 +64,15 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
     }
     if (args[0] === "volume" && args[1] === "inspect") {
       const name = args[2] ?? "";
-      const present = name.includes("native-git") ? this.nativeVolume : this.ordinaryVolume;
+      const present = name.includes("native-git") ? this.nativeVolume : this.executionVolume;
       return present ? ownedVolume(name, this.foreignNativeVolumeOnCreate && name.includes("native-git")) : missing(`get ${name}: no such volume`);
     }
     if (args[0] === "container" && args[1] === "inspect") {
       const target = args[2] ?? "";
       const native = target.includes("native-git") || target === nativeId;
-      const present = native ? this.nativeContainer : this.ordinaryContainer;
+      const present = native ? this.nativeContainer : this.executionContainer;
       if (present && args.at(-1)?.includes(".Image")) {
-        const runtime = native ? this.nativeRuntime : this.ordinaryRuntime;
+        const runtime = native ? this.nativeRuntime : this.executionRuntime;
         const inspected = runtime === undefined || this.runtimeInspectionFault === undefined
           ? runtime
           : { ...runtime, fault: this.runtimeInspectionFault };
@@ -80,19 +80,19 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
           ? failed("missing runtime metadata")
           : runtimeContainer(inspected, args.at(-1)?.includes("DeviceRequests") ?? false);
       }
-      return present ? ownedContainer(native ? "native-git" : "ordinary-ci") : missing(`No such container: ${target}`);
+      return present ? ownedContainer(native ? "native-git" : "execution") : missing(`No such container: ${target}`);
     }
     if (args[0] === "container" && args[1] === "exec") {
       const id = args[4];
-      const service = id === ordinaryId ? "ordinary-ci" : id === nativeId ? "native-git" : undefined;
+      const service = id === executionId ? "execution" : id === nativeId ? "native-git" : undefined;
       if (service === undefined) return failed("service command targeted an unknown container ID");
-      const runtime = service === "ordinary-ci" ? this.ordinaryRuntime : this.nativeRuntime;
+      const runtime = service === "execution" ? this.executionRuntime : this.nativeRuntime;
       if (runtime === undefined) return failed("service command targeted a service without runtime metadata");
-      const expectedUser = service === "ordinary-ci" ? "10002:10002" : "10001:10001";
+      const expectedUser = service === "execution" ? "10002:10002" : "10001:10001";
       if (args[6] === "ready") {
         if (args.length !== 7 || args[2] !== "--user" || args[3] !== expectedUser
           || args[5] !== "/usr/local/bin/dim-service") return failed("readiness command differs from the owned runtime");
-        const event = service === "ordinary-ci" ? "ready:ordinary" : "ready:native";
+        const event = service === "execution" ? "ready:execution" : "ready:native";
         this.readinessEvents.push(event);
         if (this.uncertainReadinessEvent === event) {
           throw new ControlPlaneDockerUncertainError("Docker readiness exec termination could not be established");
@@ -157,7 +157,7 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
     if (args[0] === "volume" && args[1] === "create") {
       const name = args.at(-1) ?? "";
       if (name.includes("native-git")) this.nativeVolume = true;
-      else this.ordinaryVolume = true;
+      else this.executionVolume = true;
       return ok(`${name}\n`);
     }
     if (args[0] === "compose" && args.includes("config")) {
@@ -174,7 +174,7 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
         }
         if (this.replacementCount === this.failReplacementNumber) return failed("replacement failed");
       }
-      const service = args.at(-1) === "ordinary-ci" ? "ordinary-ci" : "native-git";
+      const service = args.at(-1) === "execution" ? "execution" : "native-git";
       this.startCount += 1;
       if (this.startCount === this.uncertainStartNumber) {
         throw new ControlPlaneDockerUncertainError("Docker command termination could not be established");
@@ -182,9 +182,9 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
       const parsed = runtimeFromCompose(await readFile(composeFile(args), "utf8"), service);
       const fault = this.runtimeFaultAt?.start === this.startCount ? this.runtimeFaultAt.kind : undefined;
       const runtime: RuntimeService = fault === undefined ? parsed : { ...parsed, fault };
-      if (service === "ordinary-ci") {
-        this.ordinaryContainer = true;
-        this.ordinaryRuntime = runtime;
+      if (service === "execution") {
+        this.executionContainer = true;
+        this.executionRuntime = runtime;
       } else {
         this.nativeContainer = true;
         this.nativeRuntime = runtime;
@@ -193,7 +193,7 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
     }
     if (args[0] === "container" && args[1] === "rm") {
       if (args.at(-1) === nativeId) this.nativeContainer = false;
-      if (args.at(-1) === ordinaryId) this.ordinaryContainer = false;
+      if (args.at(-1) === executionId) this.executionContainer = false;
       return ok(`${args.at(-1) ?? ""}\n`);
     }
     if (args[0] === "network" && args[1] === "rm") {
@@ -208,16 +208,16 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
     if (args[0] === "volume") {
       return ok([
         ...(this.nativeVolume ? ["dim-control-plane-native-git-data"] : []),
-        ...(this.ordinaryVolume ? ["dim-control-plane-ordinary-ci-data"] : [])
+        ...(this.executionVolume ? ["dim-control-plane-execution-data"] : [])
       ].map((entry) => `${entry}\n`).join(""));
     }
     if (args.some((entry) => entry === "network=dim-control-plane")) {
-      return ok([this.nativeContainer ? nativeId : undefined, this.ordinaryContainer ? ordinaryId : undefined]
+      return ok([this.nativeContainer ? nativeId : undefined, this.executionContainer ? executionId : undefined]
         .filter(isString).map((entry) => `${entry}\n`).join(""));
     }
     if (args.some((entry) => entry.includes("native-git-data"))) return ok(this.nativeContainer ? `${nativeId}\n` : "");
-    if (args.some((entry) => entry.includes("ordinary-ci-data"))) return ok(this.ordinaryContainer ? `${ordinaryId}\n` : "");
-    return ok([this.nativeContainer ? nativeId : undefined, this.ordinaryContainer ? ordinaryId : undefined]
+    if (args.some((entry) => entry.includes("execution-data"))) return ok(this.executionContainer ? `${executionId}\n` : "");
+    return ok([this.nativeContainer ? nativeId : undefined, this.executionContainer ? executionId : undefined]
       .filter(isString).map((entry) => `${entry}\n`).join(""));
   }
 }

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { deployGuestIntegration, type WorkspaceHostPluginContext, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
+import { deployGuestIntegration, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
+import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 
 export async function deployToolHelpers(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void> {
   if (!workspace.initialized || workspace.phase !== "running") return;

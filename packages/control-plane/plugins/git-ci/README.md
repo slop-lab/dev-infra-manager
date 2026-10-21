@@ -9,8 +9,8 @@ or general-purpose outgoing webhooks.
 
 Install it as a control-plane plugin alongside `git-repositories`, `code-review`
 and a workflow compiler such as `ci-workflows`. Add `merge-policy` when protected
-ref promotion must require these results; run the separate `ci` coordinator and
-host `ci-worker` plugin for execution. A repository service and human review can
+ref promotion must require these results; run the separate `execution-scheduler` coordinator and
+host `execution-worker` plugin for execution. A repository service and human review can
 run without Git CI or any workflow compiler. In that composition candidate
 workflow files are never interpreted.
 

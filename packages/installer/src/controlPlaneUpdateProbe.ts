@@ -5,7 +5,7 @@ const probeTimeout = 30_000;
 const executable = "/usr/local/bin/dim-service";
 
 type ServiceProbe = {
-  readonly service: "native-git" | "ordinary-ci";
+  readonly service: "native-git" | "execution";
   readonly user: "10001:10001" | "10002:10002";
   readonly volume: string;
   readonly statePath: string;
@@ -22,7 +22,7 @@ export async function probeControlPlaneUpdate(
   runner: ControlPlaneDockerRunner,
   images: {
     readonly nativeGit: { readonly candidate: string; readonly prior: string };
-    readonly ordinaryCi: { readonly candidate: string; readonly prior: string };
+    readonly execution: { readonly candidate: string; readonly prior: string };
   }
 ): Promise<void> {
   const probes = [
@@ -31,8 +31,8 @@ export async function probeControlPlaneUpdate(
       statePath: "/var/lib/dim-native-git", candidateImage: images.nativeGit.candidate, priorImage: images.nativeGit.prior
     },
     {
-      service: "ordinary-ci", user: "10002:10002", volume: "dim-control-plane-ordinary-ci-data",
-      statePath: "/var/lib/dim-ordinary-ci", candidateImage: images.ordinaryCi.candidate, priorImage: images.ordinaryCi.prior
+      service: "execution", user: "10002:10002", volume: "dim-control-plane-execution-data",
+      statePath: "/var/lib/dim-execution", candidateImage: images.execution.candidate, priorImage: images.execution.prior
     }
   ] as const satisfies readonly ServiceProbe[];
   for (const probe of probes) await probeService(runner, probe);

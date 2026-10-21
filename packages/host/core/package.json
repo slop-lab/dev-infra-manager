@@ -54,6 +54,15 @@
       "types": "./dist/controller/cli/index.d.ts",
       "import": "./dist/controller/cli/index.js",
       "default": "./dist/controller/cli/index.js"
+    },
+    "./plugin-api": {
+      "dim-source": {
+        "types": "./src/plugin-api.ts",
+        "default": "./src/plugin-api.ts"
+      },
+      "types": "./dist/plugin-api.d.ts",
+      "import": "./dist/plugin-api.js",
+      "default": "./dist/plugin-api.js"
     }
   },
   "scripts": {

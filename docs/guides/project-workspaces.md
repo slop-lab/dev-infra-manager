@@ -8,7 +8,7 @@ provides two independent runnable repository templates, reviewed import policies
 and linked Git/CI and workspace runtime verification for this layout.
 
 The optional `dim installer install core --with-managed` profile installs the
-native-Git host plugin, CI worker plugin and control-plane administration tools.
+native-Git host plugin, execution worker plugin and control-plane administration tools.
 Control-plane service plugins are installed and selected separately. Use `dim control-plane prepare` and `connect` to configure services and
 host connections. A Project groups independent repositories. Import each with
 its own trusted repository policy, then select the configuration and default working

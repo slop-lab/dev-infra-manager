@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/local/lib/dim/node_modules/@slop-lab/dim-control-plane-plugin-execution-scheduler/cli.js "$@"

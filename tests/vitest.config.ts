@@ -12,7 +12,7 @@ export default defineConfig({
     include: [
       "{host,control-plane,contracts,installer,web}/**/*.test.ts",
       "cli/host/**/*.test.ts",
-      "scenarios/{harness,ci,llm-router}/**/*.test.ts"
+      "scenarios/{harness,execution,llm-router}/**/*.test.ts"
     ],
     exclude: ["scenarios/harness/{qemu*,kvm*,bootstrapInstallerSafety}.test.ts"]
   },

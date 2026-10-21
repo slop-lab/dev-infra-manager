@@ -4,8 +4,8 @@ import { z } from "zod";
 import { executionInputsSchema } from "@slop-lab/dim-contracts-ci/descriptor";
 import { authoritativeNativeReviewEventSchema } from "@slop-lab/dim-contracts-ci/events";
 export { authoritativeNativeReviewEventSchema } from "@slop-lab/dim-contracts-ci/events";
-import { authoritativeNativeReviewSchema, authoritativeNativeReviewDigest, type AuthoritativeNativeReview, type AuthoritativeNativeReviewIdentity } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
-import { isCandidatePath, isCandidateArgv } from "@slop-lab/dim-contracts-ci/workflow";
+import { authoritativeNativeReviewSchema, authoritativeNativeReviewDigest, type AuthoritativeNativeReview, type AuthoritativeNativeReviewIdentity } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import { isCandidatePath, isCandidateArgv } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);

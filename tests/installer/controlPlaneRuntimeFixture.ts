@@ -22,7 +22,7 @@ export type RuntimeFault =
   | (typeof isolationRuntimeFaults)[number];
 
 export type RuntimeService = {
-  readonly service: "native-git" | "ordinary-ci";
+  readonly service: "native-git" | "execution";
   readonly image: string;
   readonly generationPath: string;
   readonly generationId: string;
@@ -34,7 +34,7 @@ export type RuntimeService = {
 export function runtimeContainer(runtime: RuntimeService, includeIsolation: boolean): ControlPlaneDockerCommandResult {
   const native = runtime.service === "native-git";
   const prefix = runtime.service;
-  const stateTarget = native ? "/var/lib/dim-native-git" : "/var/lib/dim-ordinary-ci";
+  const stateTarget = native ? "/var/lib/dim-native-git" : "/var/lib/dim-execution";
   const mounts = [
     { Type: "bind", Source: `${runtime.generationPath}/${prefix}.json`, Destination: "/run/secrets/service.json", RW: false },
     { Type: "bind", Source: `${runtime.generationPath}/${prefix}-readiness.token`, Destination: "/run/secrets/readiness.token", RW: false },
@@ -81,8 +81,8 @@ export function runtimeContainer(runtime: RuntimeService, includeIsolation: bool
   return { exitCode: 0, stdout: `${fields.join("\n")}\n`, stderr: "" };
 }
 
-export function runtimeFromCompose(text: string, service: "native-git" | "ordinary-ci"): RuntimeService {
-  const section = new RegExp(`  ${service}:\\n([\\s\\S]*?)(?=\\n  (?:native-git|ordinary-ci):|\\nvolumes:)`).exec(text)?.[1];
+export function runtimeFromCompose(text: string, service: "native-git" | "execution"): RuntimeService {
+  const section = new RegExp(`  ${service}:\\n([\\s\\S]*?)(?=\\n  (?:native-git|execution):|\\nvolumes:)`).exec(text)?.[1];
   const image = /    image: "([^"]+)"/.exec(section ?? "")?.[1];
   const configSource = new RegExp(`source: "([^"]+/${service}\\.json)"`).exec(section ?? "")?.[1];
   const publishPortText = /        published: "([0-9]+)"/.exec(section ?? "")?.[1];

@@ -10,7 +10,7 @@ test("checks KVM launch scripts and refuses guest delegation outside its disposa
   for (const script of [
     join(root, "scripts/checks/native-qemu-guest-mechanics-kvm-smoke.bash"),
     join(root, "scripts/checks/kvm-guest-group-delegate.bash"),
-    join(root, "packages/host/plugins/ci-worker/src/native-qemu-runner-assets/dim-native-qemu-run")
+    join(root, "packages/host/plugins/execution-worker/src/native-qemu-runner-assets/dim-native-qemu-run")
   ]) {
     const result = spawnSync("bash", ["-n", script], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);

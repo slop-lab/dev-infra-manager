@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createReadTracker, evaluateTrackedProject, type ReviewTraceRuntime } from "../../../../packages/review-tracing/src/index.js";
+import { createReadTracker, evaluateTrackedProject } from "../../../../packages/review-tracing/src/index.js";
+import { type ReviewTraceRuntime } from "@slop-lab/dim-review-tracing/plugin-api";
 
 const file = (files: Record<string, string>) => async (path: string) => files[path] === undefined ? undefined : Buffer.from(files[path]);
 const runtime = (evaluate: ReviewTraceRuntime["evaluate"]): ReviewTraceRuntime => ({ name: "test", revision: "a".repeat(64), evaluate });

@@ -8,10 +8,8 @@ import { isIP } from "node:net";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import {
-  ProcessRunner, UserError, WorkspaceService, WorkspaceStore, deployGuestIntegration, workspaceGuestAssets,
-  type WorkspaceHostPluginContext, type WorkspaceRecord, type WorkspaceRuntime
-} from "@slop-lab/dim-host-core/workspace";
+import { ProcessRunner, UserError, WorkspaceService, WorkspaceStore, deployGuestIntegration, workspaceGuestAssets, type WorkspaceRecord, type WorkspaceRuntime } from "@slop-lab/dim-host-core/workspace";
+import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 import { atomicWrite } from "@slop-lab/dim-host-core";
 import { composeWorkspaceRuntime, loadHostPlugins, hostPluginHome, hostPluginExtensions } from "./host-plugins.js";
 import { ensureWorkspaceIntegration } from "./workspace-composition.js";

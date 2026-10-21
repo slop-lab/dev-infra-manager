@@ -105,7 +105,7 @@ A prepared source bundle can also install managed services and integrations:
 just install-local --with-managed
 ```
 
-This explicit profile installs the native-Git host and CI worker plugins plus
+This explicit profile installs the native-Git host and execution worker plugins plus
 control-plane administration tools. It does not start a controller or worker,
 build another workspace image or deploy a control plane. Other plugins remain
 separate installer operations. For a
@@ -116,7 +116,7 @@ Prepare and connect the explicit Git/review/CI service profile through the contr
 ```bash
 dim control-plane prepare /absolute/operator/deployment \
   --native-git-image registry.example/native-git@sha256:DIGEST \
-  --ordinary-ci-image registry.example/ci@sha256:DIGEST
+  --execution-image registry.example/ci@sha256:DIGEST
 dim installer install control-plane --config /absolute/operator/deployment/install.json
 dim control-plane connect /absolute/operator/deployment
 ```

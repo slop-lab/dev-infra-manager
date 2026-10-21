@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { resolveAuthoritativeNativeRepositoryTarget, type RepositoryRuntime } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { resolveAuthoritativeNativeRepositoryTarget, type RepositoryRuntime } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import type { AuthoritativeNativeReviewIdentity } from "./authoritative-native-review-schema.js";
 export async function assertReviewInputsCurrent(runtime: RepositoryRuntime, review: Pick<AuthoritativeNativeReviewIdentity, "projectId" | "repositoryId" | "candidateCommit" | "candidateTree" | "inputs">): Promise<void> {
   const primary = review.inputs[review.repositoryId];

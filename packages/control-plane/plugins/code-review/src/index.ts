@@ -1,10 +1,10 @@
 import { codeReviewRefUpdatePolicyExtension } from "./ref-update-policy.js";
 import { join } from "node:path";
-import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
-import { repositoryExtension, readNativeProjectRegistrations, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
+import { repositoryExtension, readNativeProjectRegistrations, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { parseCodeReviewConfig, type CodeReviewConfig } from "./config.js";
 import { reviewChangeMatchers } from "./change-matchers.js";
-import { reviewPreparations, type CodeReviewRuntime } from "./extensions.js";
+import { reviewPreparations, type CodeReviewRuntime } from "./plugin-api.js";
 import { createAuthoritativeNativeReview, type AuthoritativeNativeReviewHooks } from "./authoritative-native-review.js";
 import { assertConfiguredHumanReviewers } from "./native-human-reviewer-policy.js";
 import { createNativeHumanReviewerService, type NativeHumanReviewerHooks } from "./native-human-reviewer-http.js";
@@ -15,7 +15,6 @@ import { assertAuthoritativeNativeApprovalStore } from "./authoritative-native-a
 import { assertAuthoritativeNativeRevocationStore } from "./authoritative-native-revocation-store.js";
 import { readAuthoritativeNativeDecisions } from "./authoritative-native-decision-store.js";
 
-export * from "./extensions.js";
 export * from "./config.js";
 export * from "./policy.js";
 export const controlPlanePlugin: ControlPlanePlugin = { apiVersion: 1, name: "code-review", configure(raw) { return prepareCodeReview(parseCodeReviewConfig(raw)); } };

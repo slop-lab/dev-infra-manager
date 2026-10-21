@@ -152,7 +152,7 @@ Base `installer install core` requires no control plane, configured container
 backend, mirror plugin or controller. Fresh TTY and non-TTY installations must
 not prompt for or implicitly install an optional integration.
 
-`--with-managed` selects exact-version Native Git and CI worker host plugins
+`--with-managed` selects exact-version Native Git and execution worker host plugins
 and control-plane operator tools. Selected host plugins become activation
 manifest entries. This profile does not deploy shared services or start a
 controller. Later core installation retains operator tools and enabled plugins
@@ -365,7 +365,7 @@ dim installer install control-plane --config FILE
 The command installs or updates one Docker Compose v2 project named
 `dim-control-plane`. It contains exactly two long-running services:
 `native-git`, whose explicit composition selects repository hosting, code-review,
-merge-policy, Git-CI and a workflow compiler, and `ordinary-ci`, which owns CI admission,
+merge-policy, Git-CI and a workflow compiler, and `execution`, which owns CI admission,
 webhook inbox, demand, queueing, claim receipts, leases, and report retry.
 The private deployment composition owns this fixed image profile; it is not the
 repository plugin's dependency closure. Standalone control-plane plugin
@@ -388,10 +388,10 @@ keys are errors.
     "readinessTokenFile": "/etc/dim-control-plane/native-git-readiness.token",
     "publish": { "host": "127.0.0.1", "port": 7443 }
   },
-  "ordinaryCi": {
-    "image": "registry.example/dim/ordinary-ci@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    "configFile": "/etc/dim-control-plane/ordinary-ci.json",
-    "readinessTokenFile": "/etc/dim-control-plane/ordinary-ci-readiness.token",
+  "execution": {
+    "image": "registry.example/dim/execution@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configFile": "/etc/dim-control-plane/execution.json",
+    "readinessTokenFile": "/etc/dim-control-plane/execution-readiness.token",
     "publish": { "host": "127.0.0.1", "port": 7410 }
   }
 }
@@ -410,7 +410,7 @@ data volume, Compose environment, image, log, or generated Compose file.
 
 The bundle has these fixed runtime properties:
 
-| Property | `native-git` | `ordinary-ci` |
+| Property | `native-git` | `execution` |
 | --- | --- | --- |
 | Numeric user/group | `10001:10001` | `10002:10002` |
 | Container listener | `0.0.0.0:8080` | `0.0.0.0:8080` |
@@ -418,7 +418,7 @@ The bundle has these fixed runtime properties:
 | Config mount | generation snapshot at `/run/secrets/service.json`, read-only | generation snapshot at `/run/secrets/service.json`, read-only |
 | Readiness token | generation snapshot at `/run/secrets/readiness.token`, read-only | generation snapshot at `/run/secrets/readiness.token`, read-only |
 | Activation token | generated snapshot at `/run/secrets/activation.token`, read-only | generated snapshot at `/run/secrets/activation.token`, read-only |
-| Persistent volume | `dim-control-plane-native-git-data` at `/var/lib/dim-native-git` | `dim-control-plane-ordinary-ci-data` at `/var/lib/dim-ordinary-ci` |
+| Persistent volume | `dim-control-plane-native-git-data` at `/var/lib/dim-native-git` | `dim-control-plane-execution-data` at `/var/lib/dim-execution` |
 
 Each container's exact startup argv is `dim-service serve
 /run/secrets/service.json <generationId>`. The non-secret generation ID is a
@@ -429,7 +429,7 @@ The fixed bridge network is `dim-control-plane`. Only these two services attach
 to it. Each volume is service-private: the other service MUST NOT mount it, and
 no host path, Project, workspace, worker, or additional container may share it.
 The native Git service stores bare repositories and review/CI evidence only in
-its volume. The ordinary CI service stores its versioned SQLite database and
+its volume. The execution scheduler service stores its versioned SQLite database and
 WAL files only in its volume. The installer MUST create a new empty volume only
 when it is absent; an absent volume after a prior successful installation is a
 fatal data-loss condition, not permission to recreate it.
@@ -437,7 +437,7 @@ fatal data-loss condition, not permission to recreate it.
 Every bundle resource carries `org.dim.managed=true`,
 `org.dim.bundle=control-plane`, `org.dim.deployment=<deploymentId>`, and
 `org.dim.resource=network|volume|service`. A service container or volume also
-carries `org.dim.service=native-git|ordinary-ci`; the network MUST omit that
+carries `org.dim.service=native-git|execution`; the network MUST omit that
 label. Inspection requires this complete exact set in addition to Compose's
 own labels. A partial, malformed, foreign, or mismatched set is a conflict and
 MUST NOT be adopted, relabelled, started, stopped, or removed.
@@ -470,15 +470,15 @@ mode `0600`. `install.json` is mode `0600` with this exact schema:
   "generationId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "composeSha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
   "nativeGitImage": "registry.example/dim/native-git@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "ordinaryCiImage": "registry.example/dim/ordinary-ci@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "executionImage": "registry.example/dim/execution@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "nativeGitPublish": { "host": "127.0.0.1", "port": 7443 },
-  "ordinaryCiPublish": { "host": "127.0.0.1", "port": 7410 },
+  "executionPublish": { "host": "127.0.0.1", "port": 7410 },
   "nativeGitConfigSha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   "nativeGitReadinessTokenSha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  "ordinaryCiConfigSha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-  "ordinaryCiReadinessTokenSha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "executionConfigSha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "executionReadinessTokenSha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
   "nativeGitActivationTokenSha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-  "ordinaryCiActivationTokenSha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "executionActivationTokenSha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
   "volumesEstablished": true
 }
 ```
@@ -647,7 +647,7 @@ for current ordinary CI.
 array of unique positive integers. The installer also runs both candidate and
 prior images' `dim-service check-state --read-only /var/lib/dim-native-git
 --json` for native Git and `dim-service check-state --read-only
-/var/lib/dim-ordinary-ci --json` for ordinary CI, with only that service's data
+/var/lib/dim-execution --json` for ordinary CI, with only that service's data
 volume mounted read-only. Each returns exact JSON
 `{"schemaVersion":1,"stateFormat":10}` for current native Git or
 `{"schemaVersion":1,"stateFormat":102}` for current ordinary CI and performs no
@@ -667,7 +667,7 @@ Compose bytes and image digests before replacement. The only supported order is:
 
 1. create or inspect the network and both volumes without adopting foreign or
    partially labelled resources;
-2. replace `ordinary-ci` in standby mode and use its image-local `dim-service
+2. replace `execution` in standby mode and use its image-local `dim-service
    ready` command to require authenticated service-local `GET /readyz` to
    return `200` and exact JSON
    `{"status":"ready","schemaVersion":1}` based only on its parsed immutable
@@ -743,7 +743,7 @@ On a failure after resource mutation but before candidate activation starts,
 the installer stops and removes only replacement containers whose complete
 bundle/deployment/service labels match, restores the prior rendered Compose
 bytes, exact prior image digests, prior generation ID, and all six prior
-snapshots, starts `ordinary-ci` before `native-git`, and uses exact-ID
+snapshots, starts `execution` before `native-git`, and uses exact-ID
 service-local readiness execs followed by reactivation of that exact prior
 generation. Operator source files are never rewritten. Data volumes are never
 rolled back, deleted, copied, or replaced; prior-image readability of candidate

@@ -1,7 +1,7 @@
 import { atomicWrite } from "@slop-lab/dim-host-core";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
+import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { findCacheEndpoints, mirrorStateRoot, parseCacheCatalog, resolveMirrorRouting } from "./provider.js";
 import { attachWorkspaceMirrors } from "./attachment.js";
 import { adapterModules, loadMirrorAdapters } from "./registry.js";

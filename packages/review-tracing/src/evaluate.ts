@@ -1,5 +1,6 @@
+import type { ReadManifest, ReviewTraceRuntime, TraceChange } from "./plugin-api.js";
 import { createHash } from "node:crypto";
-import { assertTracePath, createReadTracker, traceDigest, type ReadManifest, type ReviewTraceRuntime, type TraceChange } from "./index.js";
+import { assertTracePath, createReadTracker, traceDigest } from "./index.js";
 
 /** The broker observes every read itself: a runtime cannot omit reads from its returned manifest. */
 export async function evaluateTrackedProject(input: {

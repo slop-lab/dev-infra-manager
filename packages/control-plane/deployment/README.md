@@ -9,7 +9,7 @@ After building the workspace packages, build its image from the repository root:
 
 ```bash
 node packages/control-plane/deployment/image/build.ts dim-git-service:local
-node packages/control-plane/plugins/ci/image/build.ts dim-ci-service:local
+node packages/control-plane/plugins/execution-scheduler/image/build.ts dim-execution-scheduler:local
 ```
 
 Each builder copies its selected compiled packages and image inputs into a

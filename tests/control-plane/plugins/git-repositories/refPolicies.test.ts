@@ -1,11 +1,11 @@
 import { MergeAuthorizationStore, promoteInstalledNativeReview, controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-merge-policy";
-import { mergeQualityGuardExtension, type MergeQualityGuard } from "@slop-lab/dim-control-plane-plugin-merge-policy/extensions";
+import { mergeQualityGuardExtension, type MergeQualityGuard } from "@slop-lab/dim-control-plane-plugin-merge-policy/plugin-api";
 import { randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { compareAndSwapProtectedRef, readProtectedRefTransition, refUpdatePolicyExtension, refUpdatePolicies, repositoryExtension, type RefUpdatePolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
+import { compareAndSwapProtectedRef, readProtectedRefTransition, refUpdatePolicyExtension, refUpdatePolicies, repositoryExtension, type RefUpdatePolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
 import { basic, fixture, generationId, git, reviewer } from "./optionalFeaturesFixture.js";
 
 async function candidate(f: Awaited<ReturnType<typeof fixture>>) {

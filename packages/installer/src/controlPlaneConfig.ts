@@ -24,7 +24,7 @@ export type ControlPlaneConfig = {
   readonly schemaVersion: 1;
   readonly deploymentId: string;
   readonly nativeGit: ControlPlaneServiceConfig;
-  readonly ordinaryCi: ControlPlaneServiceConfig;
+  readonly execution: ControlPlaneServiceConfig;
 };
 
 export async function readControlPlaneConfig(
@@ -48,16 +48,16 @@ export function parseControlPlaneConfig(
   input: unknown,
   localAddresses: readonly string[] = controlPlaneLocalAddresses()
 ): ControlPlaneConfig {
-  const root = exactRecord(input, ["schemaVersion", "deploymentId", "nativeGit", "ordinaryCi"]);
+  const root = exactRecord(input, ["schemaVersion", "deploymentId", "nativeGit", "execution"]);
   if (root.schemaVersion !== 1) invalid("schemaVersion must be 1");
   if (typeof root.deploymentId !== "string" || !deploymentPattern.test(root.deploymentId)) {
     invalid("deploymentId must be a safe lower-case identifier");
   }
   const addresses = new Set(localAddresses.map(normalizeAddress));
   const nativeGit = parseService(root.nativeGit, "nativeGit", addresses);
-  const ordinaryCi = parseService(root.ordinaryCi, "ordinaryCi", addresses);
-  if (nativeGit.publish.port === ordinaryCi.publish.port) invalid("published ports must be distinct");
-  return { schemaVersion: 1, deploymentId: root.deploymentId, nativeGit, ordinaryCi };
+  const execution = parseService(root.execution, "execution", addresses);
+  if (nativeGit.publish.port === execution.publish.port) invalid("published ports must be distinct");
+  return { schemaVersion: 1, deploymentId: root.deploymentId, nativeGit, execution };
 }
 
 export function controlPlaneLocalAddresses(): readonly string[] {
@@ -74,7 +74,7 @@ export class ControlPlaneConfigError extends Error {
 
 function parseService(
   value: unknown,
-  label: "nativeGit" | "ordinaryCi",
+  label: "nativeGit" | "execution",
   localAddresses: ReadonlySet<string>
 ): ControlPlaneServiceConfig {
   const input = exactRecord(value, serviceKeys);

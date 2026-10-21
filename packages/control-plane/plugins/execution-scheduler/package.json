@@ -1,0 +1,67 @@
+{
+  "name": "@slop-lab/dim-control-plane-plugin-execution-scheduler",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Durable execution scheduling, worker leases and task coordination",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./config": {
+      "dim-source": {
+        "types": "./src/config.ts",
+        "default": "./src/config.ts"
+      },
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
+    },
+    "./query": {
+      "dim-source": {
+        "types": "./src/query.ts",
+        "default": "./src/query.ts"
+      },
+      "types": "./dist/query.d.ts",
+      "import": "./dist/query.js",
+      "default": "./dist/query.js"
+    }
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts"
+  },
+  "dependencies": {
+    "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
+    "zod": "4.1.11",
+    "@slop-lab/dim-contracts-git": "workspace:0.10.0",
+    "@slop-lab/dim-execution-scheduler": "workspace:0.10.0",
+    "@slop-lab/dim-contracts-execution": "workspace:0.10.0"
+  },
+  "peerDependencies": {
+    "@slop-lab/dim-control-plane-core": "0.10.0"
+  },
+  "devDependencies": {
+    "@slop-lab/dim-control-plane-core": "workspace:0.10.0",
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "dim-execution-scheduler": "./dist/cli.js"
+  }
+}

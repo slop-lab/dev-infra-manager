@@ -71,14 +71,14 @@
       "import": "./dist/connections.js",
       "default": "./dist/connections.js"
     },
-    "./workflow": {
+    "./workflow-plugin-api": {
       "dim-source": {
-        "types": "./src/workflow.ts",
-        "default": "./src/workflow.ts"
+        "types": "./src/workflow-plugin-api.ts",
+        "default": "./src/workflow-plugin-api.ts"
       },
-      "types": "./dist/workflow.d.ts",
-      "import": "./dist/workflow.js",
-      "default": "./dist/workflow.js"
+      "types": "./dist/workflow-plugin-api.d.ts",
+      "import": "./dist/workflow-plugin-api.js",
+      "default": "./dist/workflow-plugin-api.js"
     },
     "./descriptor": {
       "dim-source": {
@@ -125,7 +125,7 @@
   },
   "dependencies": {
     "zod": "4.1.11",
-    "@slop-lab/dim-task-scheduling": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-execution": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

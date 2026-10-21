@@ -1,9 +1,10 @@
+import { reviewTraceRuntimes, type ReviewTraceRuntime } from "@slop-lab/dim-review-tracing/plugin-api";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
-import { repositoryExtension } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { reviewChangeMatcherExtension } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
-import { assertTracePath, reviewTracingRevision, evaluateTrackedProject, reviewTraceRuntimes, traceDigest, type ReviewTraceRuntime } from "@slop-lab/dim-review-tracing";
+import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
+import { repositoryExtension } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { reviewChangeMatcherExtension } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import { assertTracePath, reviewTracingRevision, evaluateTrackedProject, traceDigest } from "@slop-lab/dim-review-tracing";
 
 function parseOptions(raw: unknown): { entrypoint: string; runtime: string } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw) || Object.keys(raw).some((key) => key !== "entrypoint" && key !== "runtime")) throw new Error("tracked-project requires entrypoint and runtime");

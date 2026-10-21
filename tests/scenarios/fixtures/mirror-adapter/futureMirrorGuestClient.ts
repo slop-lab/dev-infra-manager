@@ -1,4 +1,4 @@
-import type { MirrorClientConfiguration, MirrorGuestClient } from "@slop-lab/dim-host-plugin-mirrors/adapter";
+import type { MirrorClientConfiguration, MirrorGuestClient } from "@slop-lab/dim-host-plugin-mirrors/protocol-plugin-api";
 
 export function clientConfiguration(endpoint: string): MirrorClientConfiguration {
   return { files: [{ target: "/etc/future-mirror.conf", contents: `endpoint=${endpoint}\n` }],

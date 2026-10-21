@@ -19,7 +19,7 @@ try {
   await page.getByRole("button", { name: "stop development", exact: true }).click();
   await page.getByText("development · container · stopped / stopped", { exact: true }).waitFor();
   assert.equal((await fixture.workspace()).phase, "stopped");
-  await page.getByLabel("Git URL on devbox", { exact: true }).fill("https://example.test/daily.git");
+  await page.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).fill("https://example.test/daily.git");
   await page.getByLabel("Workspace name on devbox", { exact: true }).fill("browser-created");
   await page.getByLabel("Runtime on devbox", { exact: true }).fill("container");
   await page.getByLabel("Image (optional) on devbox", { exact: true }).fill("registry.example.test/dev:reviewed");
@@ -39,7 +39,7 @@ try {
   const completed = page.locator("#operations-jobs .operations-row").filter({ hasText: "completed · finished" });
   await completed.getByRole("button", { name: "Read diagnostics" }).click();
   await page.getByText(/browser-safe-diagnostic/).waitFor();
-  assert.match(await page.locator("#operations-jobs").innerText(), /configured capacity/);
+  assert.match(await page.locator("#operations-workers").innerText(), /configured capacity/);
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.locator("#login-view").waitFor({ state: "visible" });
   assert.equal(await page.locator("#operations-panel").isHidden(), true);
@@ -50,6 +50,17 @@ try {
   await page.getByText("Services refreshed.", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Create workspace on devbox", exact: true }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "stop development", exact: true }).count(), 0);
+  const executionOnly = await createOperationsBrowserFixture({ ci: false });
+  try {
+    await page.goto(executionOnly.origin);
+    await page.getByLabel("Username").fill(executionOnly.username);
+    await page.getByLabel("Password").fill(executionOnly.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByText("Services refreshed.", { exact: true }).waitFor();
+    assert.equal(await page.locator("#operations-ci-section").isHidden(), true);
+    assert.equal(await page.locator("#operations-execution-section").isVisible(), true);
+    assert.match(await page.locator("#operations-workers").innerText(), /configured capacity/);
+  } finally { await executionOnly.close(); }
   assert.deepEqual(errors, []);
   console.log("operations-browser: ordinary host create/stop, live CI cancel/retry/logs, configured worker capacity and logout PASS");
 } finally { await browser.close(); await fixture.close(); }

@@ -19,9 +19,9 @@ This provider/service recipe has no automatic `verify-vm` stage: its explicit
 runtime prerequisites are not silently provisioned by the generic VM journey.
 See the [recipe runner](../../README.md) for shared options and the heavy VM gate.
 
-Required components: `@slop-lab/dim-host-plugin-ci-worker` on the runtime host,
+Required components: `@slop-lab/dim-host-plugin-execution-worker` on the runtime host,
 a private generation-bound worker connection, and the separate
-`@slop-lab/dim-control-plane-plugin-ci` coordinator. The native Git integration
+`@slop-lab/dim-control-plane-plugin-execution-scheduler` coordinator. The native Git integration
 also uses `@slop-lab/dim-host-plugin-native-git` and operator tools from
 `@slop-lab/dim-control-plane-admin`; the convenience host profile is
 `dim installer install core --with-managed`.
@@ -90,7 +90,7 @@ dim --host devbox ci worker /srv/dim/worker-a.json
 ```
 
 A QEMU slot uses the same shape with `runtime: "vm"`. Its runner image is the
-trusted QEMU supervisor built with `dim ci qemu-image IMAGE:TAG`; its job
+trusted QEMU supervisor built with `dim execution qemu-image IMAGE:TAG`; its job
 image supplies the guest root and reviewed tools. That host requires functional
 KVM. Hardware absence does not enable a fallback.
 

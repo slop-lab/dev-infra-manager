@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
-import type { WorkflowCompiler } from "../../../../packages/contracts/ci/src/workflow.js";
+import type { WorkflowCompiler } from "../../../../packages/contracts/ci/src/workflow-plugin-api.js";
 import { nativeCandidateJobInputsFixture, type NativeCandidateJobInputsFixture } from "./nativeCandidateJobInputsHarness.js";
 
 const fixtures: NativeCandidateJobInputsFixture[] = [];

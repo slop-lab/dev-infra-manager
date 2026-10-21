@@ -1,5 +1,5 @@
-import { workflowCompilerExtension, DEFAULT_WORKFLOW_COMPILER } from "@slop-lab/dim-contracts-ci/workflow";
-import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin";
+import { workflowCompilerExtension, DEFAULT_WORKFLOW_COMPILER } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
+import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { isScalar, parseDocument, visit } from "yaml";
 import { z } from "zod";
 export const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;

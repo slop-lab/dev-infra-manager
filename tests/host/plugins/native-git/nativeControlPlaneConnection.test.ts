@@ -54,7 +54,7 @@ describe("native control-plane host connection", () => {
     // Given
     const invalid = [
       { ...valid, projects: { acme: {} } },
-      { ...valid, ordinaryCi: {} },
+      { ...valid, execution: {} },
       { ...valid, capacities: {} },
       { ...valid, schemaVersion: 2 },
       { ...valid, nativeGit: { ...valid.nativeGit, serviceId: "foreign" } },

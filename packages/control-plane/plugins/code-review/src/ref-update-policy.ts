@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { refUpdatePolicyExtension, type RefUpdatePolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { refUpdatePolicyExtension, type RefUpdatePolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { codeReviewPolicySchema } from "./policy.js";
 import { reviewChangeMatchers } from "./change-matchers.js";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";

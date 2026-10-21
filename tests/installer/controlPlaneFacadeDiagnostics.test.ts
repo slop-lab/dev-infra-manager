@@ -44,12 +44,12 @@ describe("control-plane failure diagnostics", () => {
     const diagnostics = formatControlPlaneInstallError(error).join("\n");
     expect(diagnostics).toContain(`preflight stage: ${stage}`);
     expect(diagnostics).toContain(`pulled image may remain cached: ${config.nativeGit.image}`);
-    expect(diagnostics).toContain(`pulled image may remain cached: ${config.ordinaryCi.image}`);
+    expect(diagnostics).toContain(`pulled image may remain cached: ${config.execution.image}`);
     expect(diagnostics).not.toContain(controlPlaneSecrets.query);
     expect(diagnostics).not.toContain("arbitrary-");
     expect((await readFile(pullLog, "utf8")).trim().split("\n")).toEqual([
       config.nativeGit.image,
-      config.ordinaryCi.image
+      config.execution.image
     ]);
   });
 });

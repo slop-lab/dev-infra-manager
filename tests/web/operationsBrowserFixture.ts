@@ -5,13 +5,13 @@ import { join } from "node:path";
 import { createServer } from "node:net";
 import { createReviewerWebServerFromConfigFile } from "../../packages/web/src/server.js";
 import { initializeOperationsWeb } from "../../packages/web/src/initialize.js";
-import { configuredExecutionServer } from "../../packages/control-plane/plugins/ci/src/service.js";
-import { executionServiceConfigSchema } from "../../packages/contracts/ci/src/config.js";
-import { idleOrdinaryConfig } from "../control-plane/plugins/git-repositories/bundleConfigFixture.js";
+import { configuredExecutionServer } from "../../packages/control-plane/plugins/execution-scheduler/src/service.js";
+import { executionServiceConfigSchema } from "../../packages/control-plane/plugins/execution-scheduler/src/config.js";
+import { idleExecutionConfig } from "../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { event, generation, grant, slot, result, hash } from "../contracts/ci/executionFixture.js";
-export async function createOperationsBrowserFixture() {
+export async function createOperationsBrowserFixture(options: { ci?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "dim-operations-browser-"));
-  const config = executionServiceConfigSchema.parse(idleOrdinaryConfig());
+  const config = executionServiceConfigSchema.parse(idleExecutionConfig());
   const ci = configuredExecutionServer({ config, stateDirectory: join(root, "ci-state"), readinessToken: "ready", activationToken: "activate", expectedGenerationId: generation,
     source: { authorize: async (job) => grant(job), candidate: async () => { throw new Error("unused"); }, publish: async () => {} } });
   try {
@@ -28,7 +28,7 @@ export async function createOperationsBrowserFixture() {
     evidence.logs.stdout.base64 = output.toString("base64");
     ci.store.finish(authorized.id, "host-a", slot.id, authorized.leaseToken, evidence);
     const queued = ci.store.enqueue(event("queued"));
-    for (const role of ["query", "operator"] as const) await writeFile(join(root, `ci-${role}.json`), JSON.stringify({ schemaVersion: 1, role, endpoint, generationId: generation, credential: config.credentials[role] }), { mode: 0o600 });
+    for (const role of ["query", "operator"] as const) await writeFile(join(root, role === "query" ? "ci-query.json" : "execution-operator.json"), JSON.stringify({ schemaVersion: 1, role, endpoint, generationId: generation, credential: config.credentials[role] }), { mode: 0o600 });
     const workspace = { id: randomUUID(), name: "development", runtime: "container", phase: "running", runtimeStatus: "running", resources: { cpuCount: "1", memory: "2g", pidsLimit: "512" } };
     const state = join(root, "workspace.json"), executable = join(root, "dim"); await writeFile(state, JSON.stringify([workspace]));
     await writeFile(executable, `#!${process.execPath}
@@ -46,7 +46,7 @@ if(args[2]==='create'){
 fs.writeFileSync(path,JSON.stringify(rows));console.log(JSON.stringify(args[2]==='ls'?rows:selected??{}));
 `, { mode: 0o700 });
     const settings = join(root, "operations.json"), file = join(root, "web.json");
-    await writeFile(settings, JSON.stringify({ hosts: [{ id: "devbox", selector: "configured-host", executable }], ci: { queryConnection: join(root, "ci-query.json"), operatorConnection: join(root, "ci-operator.json") } }), { mode: 0o600 });
+    await writeFile(settings, JSON.stringify({ hosts: [{ id: "devbox", selector: "configured-host", executable }], ...(options.ci === false ? {} : { ci: { queryConnection: join(root, "ci-query.json") } }), execution: { operatorConnection: join(root, "execution-operator.json") } }), { mode: 0o600 });
     const portServer = createServer(); await new Promise<void>((resolve) => portServer.listen(0, "127.0.0.1", resolve));
     const portAddress = portServer.address(); if (!portAddress || typeof portAddress === "string") throw new Error("port missing");
     await new Promise<void>((resolve) => portServer.close(() => resolve()));

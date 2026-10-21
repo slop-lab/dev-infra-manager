@@ -8,8 +8,8 @@ import {
   type AuthoritativeNativePendingDelivery
 } from "./authoritative-native-delivery-store.js";
 import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
-import { AuthoritativeNativeReviewAdmissionBusyError } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
-import { readNativeProjectRegistrations, type NativeGitBundleState } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { AuthoritativeNativeReviewAdmissionBusyError } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import { readNativeProjectRegistrations, type NativeGitBundleState } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import type { NativeGitAdmissionHttpClient, NativeGitAdmissionHttpResponse } from "@slop-lab/dim-contracts-git/http";
 
 

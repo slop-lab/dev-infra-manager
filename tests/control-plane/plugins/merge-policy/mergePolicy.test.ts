@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { assertRequiredMergeQualityGuards, type MergeQualityGuard } from "../../../../packages/control-plane/plugins/merge-policy/src/extensions.js";
+import { assertRequiredMergeQualityGuards, type MergeQualityGuard } from "../../../../packages/control-plane/plugins/merge-policy/src/plugin-api.js";
 import { MergeAuthorizationStore, authorizationIdentity, type MergeAuthorization } from "../../../../packages/control-plane/plugins/merge-policy/src/state.js";
 import { controlPlanePlugin } from "../../../../packages/control-plane/plugins/merge-policy/src/index.js";
 import { startControlPlanePlugins } from "@slop-lab/dim-control-plane-core";

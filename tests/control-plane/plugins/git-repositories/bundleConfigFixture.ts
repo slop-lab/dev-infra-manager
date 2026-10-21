@@ -39,12 +39,12 @@ export function idleNativeConfig() {
       grantIssuer: { username: "ci-grants", password: bundleSecrets.attemptIssuer },
       candidateReader: { username: "ci-candidate-reader", password: bundleSecrets.candidateReader },
       resultReporter: { username: "ci-results", password: bundleSecrets.resultReporter },
-      webhook: { endpoint: "http://ordinary-ci:8080/v1/jobs", username: "native-events", password: bundleSecrets.webhook }
+      webhook: { endpoint: "http://execution:8080/v1/jobs", username: "native-events", password: bundleSecrets.webhook }
     }
   };
 }
 
-export function idleOrdinaryConfig() {
+export function idleExecutionConfig() {
   const native = idleNativeConfig();
   return { schemaVersion: 1, claimLeaseMilliseconds: 60_000,
     nativeGit: { endpoint: "http://native-git:8080", grantIssuer: native.ci.grantIssuer,

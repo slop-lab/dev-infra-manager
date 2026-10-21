@@ -33,7 +33,7 @@ it("rejects floating plugin versions, role confusion and paths outside the ownin
     if (!recipe || typeof recipe !== "object") throw new Error("invalid fixture");
     for (const plugins of [
       { host: ["@slop-lab/dim-host-plugin-agent-tools@latest"], controlPlane: [] },
-      { host: ["@slop-lab/dim-control-plane-plugin-ci@0.10.0"], controlPlane: [] }
+      { host: ["@slop-lab/dim-control-plane-plugin-execution-scheduler@0.10.0"], controlPlane: [] }
     ]) {
       await writeFile(join(directory, "recipe.json"), JSON.stringify({ ...recipe, plugins }));
       await expect(loadExampleRecipe(directory)).rejects.toThrow(/exact role/);

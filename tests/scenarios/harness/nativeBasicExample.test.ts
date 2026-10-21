@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { resolve, join } from "node:path";
 import { afterEach, test } from "vitest";
-import { multipleRepositoryExampleFixture } from "../ci/multipleRepositoryExampleFixture.js";
-import { closeExampleServices } from "../ci/exampleServiceFixture.js";
+import { multipleRepositoryExampleFixture } from "../execution/multipleRepositoryExampleFixture.js";
+import { closeExampleServices } from "../execution/exampleServiceFixture.js";
 import { cleanupFinalizeFixtures, createFinalizeRoot, runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
-import { withNativeGitExecutionReadAuthority } from "../../../packages/host/plugins/ci-worker/src/nativeGitCandidateReadAuthority.js";
-import { verifyAndMaterializeCandidate } from "../../../packages/host/plugins/ci-worker/src/candidate.js";
+import { withNativeGitExecutionReadAuthority } from "../../../packages/host/plugins/execution-worker/src/nativeGitCandidateReadAuthority.js";
+import { verifyAndMaterializeCandidate } from "../../../packages/host/plugins/execution-worker/src/candidate.js";
 afterEach(async () => { await closeExampleServices(); await cleanupFinalizeFixtures(); });
 test("imports the declared basic recipe, plans its actual workflow and executes the pinned container job", async () => {
   const f = await multipleRepositoryExampleFixture(resolve(import.meta.dirname, "../../../examples/projects/native-basic-root"));
@@ -21,7 +21,7 @@ test("imports the declared basic recipe, plans its actual workflow and executes 
 }, 30_000);
 test("the declared compiler is required rather than silently supplied by the test harness", async () => {
   const { loadExampleRecipe } = await import("../../../scripts/examples/recipe.ts");
-  const { startExampleService } = await import("../ci/exampleServiceFixture.js");
+  const { startExampleService } = await import("../execution/exampleServiceFixture.js");
   const recipe = await loadExampleRecipe(resolve(import.meta.dirname, "../../../examples/projects/native-basic-root"));
   await assert.rejects(startExampleService({ ...recipe, plugins: { ...recipe.plugins,
     controlPlane: recipe.plugins.controlPlane.filter((specifier) => !specifier.startsWith("@slop-lab/dim-control-plane-plugin-ci-workflows@"))

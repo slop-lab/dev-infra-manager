@@ -12,10 +12,10 @@ const config: ControlPlaneConfig = {
     readinessTokenFile: "/native.token",
     publish: { host: "127.0.0.1", port: 7443 }
   },
-  ordinaryCi: {
-    image: `registry.example/ordinary@sha256:${"b".repeat(64)}`,
-    configFile: "/ordinary.json",
-    readinessTokenFile: "/ordinary.token",
+  execution: {
+    image: `registry.example/execution@sha256:${"b".repeat(64)}`,
+    configFile: "/execution.json",
+    readinessTokenFile: "/execution.token",
     publish: { host: "127.0.0.1", port: 7410 }
   }
 };
@@ -39,7 +39,7 @@ describe("control-plane container-local readiness", () => {
         generationPath: "/state/generations/fixture",
         generationId: "a".repeat(64)
       },
-      service: "ordinary-ci",
+      service: "execution",
       policy: { timeoutMilliseconds: 60_001, retryIntervalMilliseconds: 1, execTimeoutMilliseconds: 3_000 }
     });
 

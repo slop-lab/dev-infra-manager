@@ -30,7 +30,7 @@ import { readManifest, readPackageJson } from "./runtimeFiles.js";
 
 const HOST_MIRROR_PLUGIN = "@slop-lab/dim-host-plugin-mirrors";
 const CONTROL_PLANE_ADMIN = "@slop-lab/dim-control-plane-admin";
-const HOST_PROFILE_PLUGINS = ["@slop-lab/dim-host-plugin-native-git", "@slop-lab/dim-host-plugin-ci-worker"] as const;
+const HOST_PROFILE_PLUGINS = ["@slop-lab/dim-host-plugin-native-git", "@slop-lab/dim-host-plugin-execution-worker"] as const;
 
 export async function installerCommand(input: readonly string[]): Promise<void> {
   let commandArgs = input;

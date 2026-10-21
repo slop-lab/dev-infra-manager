@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { readAuthoritativeNativeReviewEnvelope, readAuthoritativeNativeDecisions, nativeHumanReviewStaleReasons, reviewChangeMatchers } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
-import { refUpdatePolicyExtension, refUpdatePolicies } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin";
+import { readAuthoritativeNativeReviewEnvelope, readAuthoritativeNativeDecisions, nativeHumanReviewStaleReasons, reviewChangeMatchers } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import { refUpdatePolicyExtension, refUpdatePolicies } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { z } from "zod";
-import { assertRequiredMergeQualityGuards, mergeQualityGuards } from "./extensions.js";
+import { assertRequiredMergeQualityGuards, mergeQualityGuards } from "./plugin-api.js";
 import type { MergeAuthorizationStore } from "./state.js";
 
 /** Final authorization check shared by every repository CAS caller. */

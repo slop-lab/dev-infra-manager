@@ -29,7 +29,7 @@ it, install the services, then connect to their live generation:
 ```bash
 dim control-plane prepare "$HOME/dim-control-plane" \
   --native-git-image 'registry.example/dim-native-git@sha256:REVIEWED_DIGEST' \
-  --ordinary-ci-image 'registry.example/dim-ordinary-ci@sha256:REVIEWED_DIGEST'
+  --execution-image 'registry.example/dim-execution@sha256:REVIEWED_DIGEST'
 dim installer install control-plane --config "$HOME/dim-control-plane/install.json"
 dim control-plane connect "$HOME/dim-control-plane"
 ```
@@ -66,13 +66,13 @@ preparing a fresh deployment:
 ```bash
 dim control-plane prepare "$HOME/dim-control-plane" \
   --native-git-image 'registry.example/dim-native-git@sha256:REVIEWED_DIGEST' \
-  --ordinary-ci-image 'registry.example/dim-ordinary-ci@sha256:REVIEWED_DIGEST' \
-  --ci-worker local-ci --ci-container-slots 1 \
+  --execution-image 'registry.example/dim-execution@sha256:REVIEWED_DIGEST' \
+  --execution-worker local-ci --ci-container-slots 1 \
   --ci-runner-image 'registry.example/sysbox-runner@sha256:REVIEWED_DIGEST' \
   --ci-job-image 'registry.example/job-environment@sha256:REVIEWED_DIGEST'
 dim installer install control-plane --config "$HOME/dim-control-plane/install.json"
 dim control-plane connect "$HOME/dim-control-plane"
-dim ci worker "$HOME/dim-control-plane/connections/worker.json"
+dim execution worker "$HOME/dim-control-plane/connections/worker.json"
 ```
 
 Preparing generates the service's matching worker token and slots. Connecting
@@ -91,7 +91,7 @@ KVM host; it does not fall back to emulation. Both runtimes may share this worke
 For a different worker host, copy only its generated `worker.json` with mode
 0600. Keep deployment role files on the control-plane host. Establish authenticated
 SSH forwards on the worker host matching the file's loopback Git/CI endpoints;
-`connect --ci-worker-state-directory /absolute/worker/path` chooses its private
+`connect --execution-worker-state-directory /absolute/worker/path` chooses its private
 state path before copying. The default state path is `worker-state` beneath the
 prepared deployment directory. Reconnect after a service generation update and
 replace the worker file before restarting the worker.
@@ -99,8 +99,8 @@ replace the worker file before restarting the worker.
 For an explicitly configured worker, run:
 
 ```bash
-dim ci worker /absolute/operator/worker.json
-dim ci qemu-image registry.example/qemu-supervisor:reviewed
+dim execution worker /absolute/operator/worker.json
+dim execution qemu-image registry.example/qemu-supervisor:reviewed
 ```
 
 The owner-only host file binds a worker, installed generation, endpoints, owned
@@ -128,7 +128,7 @@ dim --host devbox control-plane ci logs EXECUTION_ID --json
 `control-plane connect` writes an owner-only `ci-query.json` beside the saved
 host connection. Query commands use it by default; `--connection FILE` selects
 another private query connection. Connecting does not require the CI service to
-be online. Use `connect --ci-endpoint http://127.0.0.1:PORT` for a separate SSH
+be online. Use `connect --execution-endpoint http://127.0.0.1:PORT` for a separate SSH
 forward to CI. Actual queries require the exact connected service generation
 and a distinct read-only credential, never a worker token.
 
@@ -138,7 +138,7 @@ bytes on their original streams and reports truncation. JSON includes result
 metadata and base64 prefixes. A cleaned result can still await Git publication;
 the list shows publication separately from execution outcome.
 
-`connect` also writes a separate owner-only `ci-operator.json` for trusted
+`connect` also writes a separate owner-only `execution-operator.json` for trusted
 operations clients. The generation-bound operator API exposes configured worker
 slot occupancy at `GET /v1/operator/workers` and accepts
 `POST /v1/operator/jobs/EXECUTION_ID/cancel` with `{}` or `/retry` with

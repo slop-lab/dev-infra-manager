@@ -1,11 +1,11 @@
 import { defaultReviewChangeMatchers } from "./change-matchers.js";
 import { codeReviewPolicy } from "./policy.js";
-import type { CodeReviewRuntime, ReviewAttachment } from "./extensions.js";
+import type { CodeReviewRuntime, ReviewAttachment } from "./plugin-api.js";
 import { assertReviewInputsCurrent } from "./review-inputs.js";
 import { z } from "zod";
 import {
   resolveAuthoritativeNativeRepositoryTarget,
-} from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+} from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import {
   assertAuthoritativeNativeReviewRefs,
   readAuthoritativeNativeCandidateFile,
@@ -19,7 +19,7 @@ import {
   type AuthoritativeNativeReviewIdentity
 } from "./authoritative-native-review-schema.js";
 import { saveAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
-import type { NativeImportedRootPolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import type { NativeImportedRootPolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { repositorySnapshotsSchema as executionInputsSchema } from "@slop-lab/dim-contracts-git";
 
 const workspaceId = z.string().regex(/^[A-Za-z0-9_-]{43}$/).refine((value) =>

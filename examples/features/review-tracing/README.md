@@ -79,9 +79,9 @@ DIM_TEST_REVIEW_TRACE_DOCKER=1 DIM_TEST_REVIEW_TRACE_SCHEDULED=1 \
   pnpm --dir tests exec vitest run scenarios/harness/trackedReviewIntegration.test.ts
 ```
 
-That deployment additionally needs the scheduler's `ci` control-plane plugin,
+That deployment additionally needs the scheduler's `execution-scheduler` control-plane plugin,
 the repository owner's `review-tracing-scheduled` control-plane plugin, and the
-execution host's `ci-worker` and `review-tracing-node` plugins. See the
+execution host's `execution-worker` and `review-tracing-node` plugins. See the
 [scheduled execution recipe](../scheduled-review/README.md) for their roles.
 The acceptance starts an actual HTTP scheduler and host worker alongside the
 Git/HTTP review services, then executes TypeScript in Docker. These harness

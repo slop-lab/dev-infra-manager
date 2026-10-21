@@ -49,7 +49,7 @@ describe("unified control-plane installation", () => {
     expect((await readFile(join(input.stateRoot, "install.json"))).equals(installBytes)).toBe(true);
     expect((await readFile(join(input.stateRoot, "compose.yml"))).equals(composeBytes)).toBe(true);
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(false);
-    expect(readiness.events).toEqual(["ready:ordinary", "ready:native"]);
+    expect(readiness.events).toEqual(["ready:execution", "ready:native"]);
     expect(runner.calls.filter(({ args }) => args[1] === "exec" && args[6] === "ready").map(({ args }) => args[4]))
       .toEqual(["2".repeat(64), "1".repeat(64)]);
   });
@@ -80,7 +80,7 @@ describe("unified control-plane installation", () => {
     expect((await readFile(join(input.stateRoot, "install.json"))).equals(installBytes)).toBe(true);
     expect((await readFile(join(input.stateRoot, "compose.yml"))).equals(composeBytes)).toBe(true);
     expect(runner.nativeVolume).toBe(false);
-    expect(runner.ordinaryVolume).toBe(true);
+    expect(runner.executionVolume).toBe(true);
   });
 
   it.each(isolationRuntimeFaults)("rejects prohibited %s before no-op readiness or mutation", async (fault) => {
@@ -104,7 +104,7 @@ describe("unified control-plane installation", () => {
     expect(runner.calls.some(({ args }) => args.includes("up") || args[1] === "create" || args[1] === "rm")).toBe(false);
   });
 
-  it("probes candidate and prior state before replacing ordinary then native and publishes a new generation", async () => {
+  it("probes candidate and prior state before replacing execution then native and publishes a new generation", async () => {
     // Given: a healthy prior generation and changed digest-pinned service images.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
@@ -122,7 +122,7 @@ describe("unified control-plane installation", () => {
       configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom()
     });
 
-    // Then: compatibility probes precede ordinary-first replacement and publication succeeds.
+    // Then: compatibility probes precede execution-first replacement and publication succeeds.
     const probes = runner.calls.filter(({ args }) => args[0] === "run"
       && (args.includes("compatibility") || args.includes("check-state")));
     const firstReplacement = runner.calls.findIndex(({ args }) => args.includes("--force-recreate"));
@@ -130,10 +130,10 @@ describe("unified control-plane installation", () => {
     expect(runner.calls.slice(0, firstReplacement).filter(({ args }) => args[0] === "run")).toEqual(
       expect.arrayContaining(probes));
     expect(runner.calls.filter(({ args }) => args.includes("--force-recreate")).map(({ args }) => args.at(-1)))
-      .toEqual(["ordinary-ci", "native-git"]);
+      .toEqual(["execution", "native-git"]);
     expect(updated.record.generationId).not.toBe(prior.record.generationId);
     expect(await readdir(join(input.stateRoot, "generations"))).toHaveLength(2);
-    expect(readiness.events).toEqual(["ready:ordinary", "ready:native"]);
+    expect(readiness.events).toEqual(["ready:execution", "ready:native"]);
     expect(runner.calls.filter(({ args }) => args[1] === "exec" && args[6] === "activate").map(({ args }) => args[4]))
       .toEqual(["2".repeat(64), "1".repeat(64)]);
   });
@@ -162,13 +162,13 @@ describe("unified control-plane installation", () => {
     expect(runner.calls.filter(({ args }) => args[0] === "run"
       && (args.includes("compatibility") || args.includes("check-state")))).toHaveLength(8);
     expect(runner.calls.filter(({ args }) => args.includes("--force-recreate")).map(({ args }) => args.at(-1)))
-      .toEqual(["ordinary-ci", "native-git"]);
+      .toEqual(["execution", "native-git"]);
     expect(updated.record.generationId).not.toBe(prior.record.generationId);
     expect(updated.record.composeSha256).not.toBe(prior.record.composeSha256);
     expect((await readFile(join(input.stateRoot, "compose.yml"))).equals(priorCompose)).toBe(false);
     expect(updated.record.nativeGitPublish).toEqual({ host: "127.0.0.1", port: 7543 });
-    expect(updated.record.ordinaryCiPublish).toEqual({ host: "127.0.0.1", port: 7510 });
-    expect(readiness.events).toEqual(["ready:ordinary", "ready:native"]);
+    expect(updated.record.executionPublish).toEqual({ host: "127.0.0.1", port: 7510 });
+    expect(readiness.events).toEqual(["ready:execution", "ready:native"]);
   });
 
   it("uses restored prior container IDs and generation for rollback readiness after ports change", async () => {
@@ -197,12 +197,12 @@ describe("unified control-plane installation", () => {
     expect((await readFile(join(input.stateRoot, "install.json"))).equals(priorInstall)).toBe(true);
     expect((await readFile(join(input.stateRoot, "compose.yml"))).equals(priorCompose)).toBe(true);
     expect(runner.nativeRuntime?.image).toBe(prior.record.nativeGitImage);
-    expect(runner.ordinaryRuntime?.image).toBe(prior.record.ordinaryCiImage);
+    expect(runner.executionRuntime?.image).toBe(prior.record.executionImage);
     expect(runner.nativeRuntime?.publishPort).toBe(7443);
-    expect(runner.ordinaryRuntime?.publishPort).toBe(7410);
-    expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
+    expect(runner.executionRuntime?.publishPort).toBe(7410);
+    expect(runner.nativeVolume && runner.executionVolume).toBe(true);
     expect(await readdir(join(input.stateRoot, "generations"))).toHaveLength(2);
-    expect(readiness.events).toEqual(["ready:ordinary", "ready:native", "ready:ordinary", "ready:native"]);
+    expect(readiness.events).toEqual(["ready:execution", "ready:native", "ready:execution", "ready:native"]);
     const rollbackExec = runner.calls.filter(({ args }) => args[1] === "exec").map(({ args }) => args.at(-1));
     expect(rollbackExec.slice(-2)).toEqual([prior.record.generationId, prior.record.generationId]);
   });
@@ -235,16 +235,16 @@ describe("unified control-plane installation", () => {
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(false);
     expect(await readdir(join(input.stateRoot, "generations"))).toHaveLength(2);
     expect(runner.nativeRuntime?.image).toBe(prior.record.nativeGitImage);
-    expect(runner.ordinaryRuntime?.image).toBe(prior.record.ordinaryCiImage);
-    expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
+    expect(runner.executionRuntime?.image).toBe(prior.record.executionImage);
+    expect(runner.nativeVolume && runner.executionVolume).toBe(true);
     expect(runner.calls.some(({ args }) => args[0] === "volume" && args[1] === "rm")).toBe(false);
-    expect(readiness.events).toEqual(["ready:ordinary", "ready:native", "ready:ordinary", "ready:native"]);
+    expect(readiness.events).toEqual(["ready:execution", "ready:native", "ready:execution", "ready:native"]);
     const execGenerations = runner.calls.filter(({ args }) => args[1] === "exec").map(({ args }) => args.at(-1));
     expect(execGenerations.slice(-2)).toEqual([prior.record.generationId, prior.record.generationId]);
   });
 
   it("halts fail-closed with both generations and journal when rollback replacement fails", async () => {
-    // Given: a candidate native-readiness failure followed by a rollback ordinary replacement failure.
+    // Given: a candidate native-readiness failure followed by a rollback execution replacement failure.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
     await installControlPlane({
@@ -265,7 +265,7 @@ describe("unified control-plane installation", () => {
     await expect(action).rejects.toThrow(/update and rollback failed/);
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(true);
     expect(await readdir(join(input.stateRoot, "generations"))).toHaveLength(2);
-    expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
+    expect(runner.nativeVolume && runner.executionVolume).toBe(true);
     expect(runner.calls.some(({ args }) => args[0] === "volume" && args[1] === "rm")).toBe(false);
   });
 

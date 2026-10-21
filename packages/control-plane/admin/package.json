@@ -43,6 +43,15 @@
       "types": "./dist/service-pair.d.ts",
       "import": "./dist/service-pair.js",
       "default": "./dist/service-pair.js"
+    },
+    "./execution": {
+      "dim-source": {
+        "types": "./src/execution/operations.ts",
+        "default": "./src/execution/operations.ts"
+      },
+      "types": "./dist/execution/operations.d.ts",
+      "import": "./dist/execution/operations.js",
+      "default": "./dist/execution/operations.js"
     }
   },
   "repository": {
@@ -70,7 +79,10 @@
     "@slop-lab/dim-control-plane-plugin-code-review": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-merge-policy": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-git-ci": "workspace:0.10.0",
-    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-git": "workspace:0.10.0",
+    "@slop-lab/dim-contracts-execution": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-execution-scheduler": "workspace:0.10.0",
+    "@slop-lab/dim-host-plugin-execution-worker": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

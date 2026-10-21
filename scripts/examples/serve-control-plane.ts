@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { readFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ControlPlanePlugin } from "../../packages/control-plane/core/src/plugin.js";
+import type { ControlPlanePlugin } from "../../packages/control-plane/core/src/plugin-api.js";
 import type { startControlPlanePlugins } from "../../packages/control-plane/core/src/index.js";
 import { loadExampleRecipe, resolveExamplePath } from "./recipe.ts";
 import { loopbackServiceConfiguration } from "./separated-service-config.ts";
@@ -15,7 +15,7 @@ catch (error) { if (!(error instanceof Error && "code" in error && error.code ==
 async function load<T>(name: string): Promise<T> { return import(pathToFileURL(resolver.resolve(name)).href) as Promise<T>; }
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid private service configuration"); return Object.fromEntries(Object.entries(value)); }
 const read = async (file: string) => object(JSON.parse(await readFile(join(setup, file), "utf8")));
-const native = await read("native-git.json"), ordinary = await read("ordinary-ci.json"), runtime = await read("acceptance-runtime.json");
+const native = await read("native-git.json"), ordinary = await read("execution.json"), runtime = await read("acceptance-runtime.json");
 const { humanReviewers, hostPromoters, ci, ...repository } = native;
 const placed = loopbackServiceConfiguration(ci, ordinary);
 repository.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().replace(/^git version /, "");

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { executionCredentialSchema, executionSourceCredentialsSchema } from "@slop-lab/dim-contracts-ci/execution";
+import { executionCredentialSchema } from "@slop-lab/dim-contracts-execution/config";
+import { executionSourceCredentialsSchema } from "@slop-lab/dim-contracts-ci/execution";
 export const gitCiConfigSchema = executionSourceCredentialsSchema.extend({
   webhook: executionCredentialSchema.unwrap().extend({ endpoint: z.string().url().refine((input) => {
     const url = new URL(input); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;

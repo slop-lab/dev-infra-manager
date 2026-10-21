@@ -123,7 +123,7 @@ dim ci --help
 dim control-plane --help
 ```
 
-The installer profile selects Native Git and CI worker host plugins together
+The installer profile selects Native Git and execution worker host plugins together
 with control-plane operator tools. Base workspace commands run without these
 integrations. Plugins own feature commands and the host core owns the generic
 controller. `dim installer install control-plane` installs shared services

@@ -1,10 +1,10 @@
 export type ControlPlanePreflightStage =
   | "native-git image pull"
-  | "ordinary-ci image pull"
+  | "execution image pull"
   | "native-git image verification"
-  | "ordinary-ci image verification"
+  | "execution image verification"
   | "native-git configuration"
-  | "ordinary-ci configuration"
+  | "execution configuration"
   | "bundle configuration";
 
 export type ControlPlaneFailureCode =
@@ -103,7 +103,7 @@ export function controlPlaneRollbackFailure(input: {
         rollbackCode,
         priorGeneration: input.priorGeneration,
         candidateGeneration: input.candidateGeneration,
-        volumes: ["dim-control-plane-native-git-data", "dim-control-plane-ordinary-ci-data"]
+        volumes: ["dim-control-plane-native-git-data", "dim-control-plane-execution-data"]
       }
     }
   );

@@ -126,7 +126,7 @@ dim installer install control-plane plugin PACKAGE@EXACT_VERSION
 dim installer install control-plane --config /absolute/operator/install.json
 ```
 
-Host plugins own `dim project` and `dim ci worker`; control-plane operator tools
+Host plugins own `dim project` and `dim execution worker`; control-plane operator tools
 own `dim control-plane`. The generic controller is available through
 `dim controller`. Ordinary Git workspaces need no service role credentials.
 

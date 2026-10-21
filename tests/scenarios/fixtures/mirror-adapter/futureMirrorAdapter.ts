@@ -1,4 +1,4 @@
-import { cacheEndpoint, mirrorAdapterExtension, type MirrorAdapter } from "@slop-lab/dim-host-plugin-mirrors/adapter";
+import { cacheEndpoint, mirrorAdapterExtension, type MirrorAdapter } from "@slop-lab/dim-host-plugin-mirrors/protocol-plugin-api";
 import { clientConfiguration } from "./futureMirrorGuestClient.js";
 
 /** A third-party artifact imports the public SDK rather than source-private modules. */

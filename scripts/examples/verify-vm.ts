@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ControlPlaneExtension, ControlPlanePlugin } from "../../packages/control-plane/core/src/plugin.js";
+import type { ControlPlaneExtension, ControlPlanePlugin } from "../../packages/control-plane/core/src/plugin-api.js";
 import { loadExampleRecipe, resolveExamplePath } from "./recipe.ts";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -35,7 +35,7 @@ try {
   if (remoteEndpoint !== undefined) {
     const setup = process.env.DIM_EXAMPLE_REMOTE_SETUP;
     if (!setup || !process.env.DIM_EXAMPLE_REMOTE_CI_ENDPOINT) throw new Error("separate control-plane operator directory and CI endpoint required");
-    const connected = await connectControlPlane(setup, { endpoint: remoteEndpoint, ciEndpoint: process.env.DIM_EXAMPLE_REMOTE_CI_ENDPOINT });
+    const connected = await connectControlPlane(setup, { endpoint: remoteEndpoint, executionEndpoint: process.env.DIM_EXAMPLE_REMOTE_CI_ENDPOINT });
     process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE = join(connected.directory, "host.json");
     process.env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE = join(connected.directory, "importer.json");
     console.log("Host-only installed runtime connected to the separate control-plane VM");
@@ -47,7 +47,7 @@ try {
     .flatMap((recipe) => recipe.plugins.controlPlane.map((specifier) => specifier.slice(0, specifier.lastIndexOf("@")))));
   const setup = join(scratch, "operator");
   await prepareControlPlane({ directory: setup, nativeGitImage: `example/native@sha256:${"a".repeat(64)}`,
-    ordinaryCiImage: `example/ci@sha256:${"b".repeat(64)}` });
+    executionImage: `example/ci@sha256:${"b".repeat(64)}` });
   const parsed = parseManagedGitServiceConfig(JSON.parse(await readFile(join(setup, "native-git.json"), "utf8")));
   const config = { ...parsed, gitVersion: execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().replace(/^git version /, "") };
   await writeFile(join(setup, "native-git.json"), JSON.stringify(config), { mode: 0o600 });
@@ -59,7 +59,7 @@ try {
   };
   const extensions: ControlPlaneExtension[] = [];
   for (const name of selected) {
-    if (name === "@slop-lab/dim-control-plane-plugin-git-repositories" || name === "@slop-lab/dim-control-plane-plugin-ci") continue;
+    if (name === "@slop-lab/dim-control-plane-plugin-git-repositories" || name === "@slop-lab/dim-control-plane-plugin-execution-scheduler") continue;
     if (!(name in configurations)) throw new Error(`VM service setup has no configuration for declared plugin ${name}`);
     const { controlPlanePlugin } = await load<{ controlPlanePlugin: ControlPlanePlugin }>(controlPlane!, name);
     const prepared = await controlPlanePlugin.configure(configurations[name]);

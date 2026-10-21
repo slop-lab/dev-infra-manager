@@ -82,7 +82,7 @@ Managed Git, review and shared CI are also optional:
 dim installer install core --with-managed
 ```
 
-This selects the exact-version Native Git and CI worker host plugins together
+This selects the exact-version Native Git and execution worker host plugins together
 with control-plane operator tools. It does not deploy a control plane. Later
 core installations retain selected operator tools and enabled plugins.
 Local package bundles declare the exact
@@ -98,7 +98,7 @@ bash scripts/install-source-build.bash
 bash scripts/install-source-build.bash --with-managed
 ```
 
-The latter selects the Native Git and CI worker host plugins with operator
+The latter selects the Native Git and execution worker host plugins with operator
 tools. Other plugins and service deployments remain explicit operator choices.
 Host plugins use their matched host-core peer.
 
@@ -121,13 +121,13 @@ dim installer install control-plane --config /absolute/operator/install.json
 ```
 
 The configuration must be an absolute, owner-only strict file. Installation
-publishes a digest-pinned native Git and ordinary-CI service generation, proves
+publishes a digest-pinned native Git and execution scheduler service generation, proves
 its topology and readiness, then activates ordinary CI before native Git. The
 services start empty and idle.
 
 This command does not create Projects or repositories, advertise execution
 capacity, run jobs, approve reviews, promote refs, install a reviewer UI, or
-install native QEMU. CI worker capacity is provided explicitly by the host CI worker plugin, with
+install native QEMU. CI worker capacity is provided explicitly by the host execution worker plugin, with
 configured Sysbox or QEMU/KVM slots.
 
 If candidate activation is uncertain, the installer retains the exact

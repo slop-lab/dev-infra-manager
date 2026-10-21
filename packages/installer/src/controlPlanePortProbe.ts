@@ -8,11 +8,11 @@ const exitCommand = "process.exit(0)";
 
 type PriorPublications = {
   readonly nativeGit: ControlPlanePublish;
-  readonly ordinaryCi: ControlPlanePublish;
+  readonly execution: ControlPlanePublish;
 };
 
 type PublicationProbe = {
-  readonly service: "native-git" | "ordinary-ci";
+  readonly service: "native-git" | "execution";
   readonly image: string;
   readonly user: "10001:10001" | "10002:10002";
   readonly publish: ControlPlanePublish;
@@ -33,11 +33,11 @@ export async function probeControlPlanePublishedAddresses(
       prior: prior?.nativeGit
     },
     {
-      service: "ordinary-ci",
-      image: config.ordinaryCi.image,
+      service: "execution",
+      image: config.execution.image,
       user: "10002:10002",
-      publish: config.ordinaryCi.publish,
-      prior: prior?.ordinaryCi
+      publish: config.execution.publish,
+      prior: prior?.execution
     }
   ] as const satisfies readonly PublicationProbe[];
 

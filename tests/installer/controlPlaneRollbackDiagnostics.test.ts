@@ -61,7 +61,7 @@ describe("control-plane rollback diagnostics", () => {
       originalCode: "readiness-failed",
       rollbackCode: "service-replacement-failed",
       priorGeneration: prior.record.generationId,
-      volumes: ["dim-control-plane-native-git-data", "dim-control-plane-ordinary-ci-data"]
+      volumes: ["dim-control-plane-native-git-data", "dim-control-plane-execution-data"]
     });
     expect(error.cause).toBeInstanceOf(AggregateError);
     if (!(error.cause instanceof AggregateError)) throw new TypeError("expected aggregate update and rollback cause");
@@ -72,14 +72,14 @@ describe("control-plane rollback diagnostics", () => {
     expect(diagnostics).toContain(`retained prior generation: ${prior.record.generationId}`);
     expect(diagnostics).toContain(`retained candidate generation: ${error.details.candidateGeneration}`);
     expect(diagnostics).toContain("retained data volume: dim-control-plane-native-git-data");
-    expect(diagnostics).toContain("retained data volume: dim-control-plane-ordinary-ci-data");
+    expect(diagnostics).toContain("retained data volume: dim-control-plane-execution-data");
     expect(diagnostics).not.toContain("readiness refused");
     expect(diagnostics).not.toContain("replacement failed");
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(true);
     expect(await readdir(join(input.stateRoot, "generations"))).toEqual(
       expect.arrayContaining([prior.record.generationId, error.details.candidateGeneration])
     );
-    expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
+    expect(runner.nativeVolume && runner.executionVolume).toBe(true);
     expect(runner.calls.some(({ args }) => args[0] === "volume" && args[1] === "rm")).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import type { ControlPlanePlugin, PreparedControlPlanePlugin, RunningControlPlanePlugin } from "./plugin.js";
+import type { ControlPlanePlugin, PreparedControlPlanePlugin, RunningControlPlanePlugin } from "./plugin-api.js";
 
 export type ControlPlanePluginEntry = { readonly plugin: ControlPlanePlugin; readonly config: unknown };
 /** Configure the whole composition before opening any services. Plugin code is operator-trusted. */

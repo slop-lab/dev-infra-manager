@@ -97,5 +97,5 @@ termination or startup failure, continuing cleanup after errors. A plugin must
 clean its partially started resources if `start` rejects. Startup failure never
 deletes persistent databases or repository storage.
 
-The `./plugin` SDK contains structural runtime types. `./lock` provides a private
+The `./plugin-api` SDK contains structural runtime types. `./lock` provides a private
 inode Linux kernel guard and requires the system `flock` tool.

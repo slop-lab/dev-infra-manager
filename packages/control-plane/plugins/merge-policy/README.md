@@ -29,7 +29,7 @@ generation before submitting a promotion.
 Promotion checks the exact current proposal, protected head, imported policy
 and human approvals. The complete canonical policy digest binds the review, so
 changing quality policy requires a fresh review. Optional quality providers
-contribute `dim.merge-policy.quality-guard` extensions through `/extensions`.
+contribute `dim.merge-policy.quality-guard` extensions through `/plugin-api`.
 Every review attachment and every trusted policy namespace other than
 `code-review` and `merge-policy` requires its matching guard. A required CI
 policy therefore fails closed if the CI plugin or its preparation is missing.
@@ -49,5 +49,5 @@ and retry state. Installing merge policy does not install or contact webhook
 receivers.
 
 The package's `/config` export parses configuration without loading the SQLite
-or Git service implementation. `/extensions` exposes the quality-check port;
+or Git service implementation. `/plugin-api` exposes the quality-check port;
 the repository serialization gate is already held while a guard executes.

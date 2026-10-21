@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { assertGitExecutableIdentity, type GitExecutableIdentity } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import { assertGitExecutableIdentity, type GitExecutableIdentity } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
 
 const execute = promisify(execFile);

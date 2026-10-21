@@ -7,8 +7,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { it } from "vitest";
-import type { ExecutionTaskHandler } from "../../../packages/task-scheduling/src/worker-handler.js";
-import { runScheduledTask } from "../../../packages/task-scheduling/src/client.js";
+import type { ExecutionTaskHandler } from "@slop-lab/dim-contracts-execution/plugin-api";
+import { runScheduledTask } from "../../../packages/execution-scheduler/src/client.js";
 import { createScheduledReviewTraceRuntime } from "../../../packages/control-plane/plugins/review-tracing-scheduled/src/index.js";
 import { loadExampleRecipe, resolveExamplePath } from "../../../scripts/examples/recipe.js";
 
@@ -17,8 +17,8 @@ import { schedulerFixture, startWorker, generationId, credential, secret } from 
 async function scheduledRecipe() {
   const recipe = await loadExampleRecipe(fileURLToPath(new URL("../../../examples/features/scheduled-review", import.meta.url)));
   assert.deepEqual(recipe.plugins, {
-    host: ["@slop-lab/dim-host-plugin-ci-worker@0.10.0", "@slop-lab/dim-host-plugin-review-tracing-node@0.10.0"],
-    controlPlane: ["@slop-lab/dim-control-plane-plugin-ci@0.10.0", "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled@0.10.0"]
+    host: ["@slop-lab/dim-host-plugin-execution-worker@0.10.0", "@slop-lab/dim-host-plugin-review-tracing-node@0.10.0"],
+    controlPlane: ["@slop-lab/dim-control-plane-plugin-execution-scheduler@0.10.0", "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled@0.10.0"]
   });
   assert.deepEqual(recipe.repositories, [{ id: "root", path: "repository" }]);
   return recipe;

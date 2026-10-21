@@ -1,0 +1,8 @@
+{
+  "name": "@this-project/control-plane-execution-scheduler-image",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "zod": "4.1.11"
+  }
+}

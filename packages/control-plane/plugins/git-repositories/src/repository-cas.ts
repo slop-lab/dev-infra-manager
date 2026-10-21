@@ -8,7 +8,7 @@ import { atomicPromote, candidateDescendsFrom } from "./promotion-git.js";
 import { resolveAuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
 import { assertGitExecutableIdentity } from "./repository.js";
 import { saveRepositoryRefIntent, finalizeRepositoryRef, readRepositoryRefTransitions, assertRepositoryRefTransitions, cancelRepositoryRefIntent, type RepositoryRefTransition } from "./repository-ref-state.js";
-import type { RepositoryExtensionContext, RepositoryRuntime } from "./extensions.js";
+import type { RepositoryExtensionContext, RepositoryRuntime } from "./plugin-api.js";
 const execute = promisify(execFile);
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);

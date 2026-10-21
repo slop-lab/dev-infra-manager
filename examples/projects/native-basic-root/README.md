@@ -29,7 +29,7 @@ See the [recipe runner](../../README.md) for shared options and the heavy VM gat
 Install the native Git host integration and operator tools on the selected
 workspace host with `dim installer install core --with-managed`. This profile
 installs `@slop-lab/dim-host-plugin-native-git`,
-`@slop-lab/dim-host-plugin-ci-worker` and `@slop-lab/dim-control-plane-admin`;
+`@slop-lab/dim-host-plugin-execution-worker` and `@slop-lab/dim-control-plane-admin`;
 it does not deploy control-plane services. Prepare/install/connect those services
 as described in [administration](../../../packages/host/plugins/native-git/docs/cli.md).
 
@@ -42,13 +42,13 @@ dim installer install control-plane plugin \
   '@slop-lab/dim-control-plane-plugin-git-ci@0.10.0' \
   '@slop-lab/dim-control-plane-plugin-merge-policy@0.10.0' \
   '@slop-lab/dim-control-plane-plugin-ci-workflows@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-ci@0.10.0'
+  '@slop-lab/dim-control-plane-plugin-execution-scheduler@0.10.0'
 ```
 
 `git-repositories` owns Git storage and scoped transport; `code-review` owns human
 approval; `git-ci` plans jobs and binds execution evidence; `merge-policy` gates
 protected-ref updates. `ci-workflows` only interprets `.dim/ci/runner.yml`; the
-separate `ci` coordinator and host `ci-worker` execute its jobs. These services
+separate `execution-scheduler` coordinator and host `execution-worker` execute its jobs. These services
 use the standalone control-plane runtime without workspace core. Installing
 packages alone does not configure their private connections or start listeners;
 see [plugin locations](../../../docs/guides/plugin-scopes.md).

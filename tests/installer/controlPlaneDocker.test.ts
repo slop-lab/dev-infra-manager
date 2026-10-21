@@ -19,7 +19,7 @@ import {
   bundleProbeArgs,
   config,
   nativeImage,
-  ordinaryImage,
+  executionImage,
   serviceProbeArgs,
   snapshots
 } from "./controlPlaneDockerFixture.js";
@@ -73,11 +73,11 @@ describe("control-plane Docker preflight", () => {
     expect(runner.calls.slice(0, mutationIndex).every(({ args }) => !["pull", "run"].includes(args[0] ?? ""))).toBe(true);
     expect(runner.calls.filter(({ args }) => args[0] === "pull").map(({ args }) => args)).toEqual([
       ["pull", nativeImage],
-      ["pull", ordinaryImage]
+      ["pull", executionImage]
     ]);
     expect(runner.calls.filter(({ args }) => args[0] === "run").map(({ args }) => args)).toEqual([
       serviceProbeArgs({ user: "10001:10001", image: nativeImage, source: "/staged/native.json" }),
-      serviceProbeArgs({ user: "10002:10002", image: ordinaryImage, source: "/staged/ordinary.json" }),
+      serviceProbeArgs({ user: "10002:10002", image: executionImage, source: "/staged/execution.json" }),
       bundleProbeArgs()
     ]);
     expect(runner.calls.every((call) => call.timeoutMilliseconds > 0 && call.maximumOutputBytes <= 65_536)).toBe(true);
@@ -94,7 +94,7 @@ describe("control-plane Docker preflight", () => {
     expect(state).toEqual({
       kind: "owned",
       nativeGitContainerId: "1".repeat(64),
-      ordinaryCiContainerId: "2".repeat(64)
+      executionContainerId: "2".repeat(64)
     });
   });
 
@@ -127,7 +127,7 @@ describe("control-plane Docker preflight", () => {
     await expect(action).rejects.toSatisfy((error: unknown) =>
       error instanceof ControlPlaneDockerError
       && !error.message.includes("native-main")
-      && !error.message.includes("ordinary-main"));
+      && !error.message.includes("execution-main"));
   });
 
   it("rejects mutable operator paths before Docker inspection", async () => {
@@ -137,7 +137,7 @@ describe("control-plane Docker preflight", () => {
     // When
     const action = preflightControlPlaneDocker(runner, {
       config,
-      snapshots: { nativeGit: config.nativeGit.configFile, ordinaryCi: snapshots.ordinaryCi }
+      snapshots: { nativeGit: config.nativeGit.configFile, execution: snapshots.execution }
     });
 
     // Then

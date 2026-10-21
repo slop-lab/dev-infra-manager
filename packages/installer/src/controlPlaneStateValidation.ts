@@ -12,10 +12,10 @@ const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const imagePattern = /^(?:[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/;
 const deploymentPattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const recordKeys = [
-  "schemaVersion", "deploymentId", "generationId", "composeSha256", "nativeGitImage", "ordinaryCiImage",
-  "nativeGitPublish", "ordinaryCiPublish",
-  "nativeGitConfigSha256", "nativeGitReadinessTokenSha256", "ordinaryCiConfigSha256",
-  "ordinaryCiReadinessTokenSha256", "nativeGitActivationTokenSha256", "ordinaryCiActivationTokenSha256",
+  "schemaVersion", "deploymentId", "generationId", "composeSha256", "nativeGitImage", "executionImage",
+  "nativeGitPublish", "executionPublish",
+  "nativeGitConfigSha256", "nativeGitReadinessTokenSha256", "executionConfigSha256",
+  "executionReadinessTokenSha256", "nativeGitActivationTokenSha256", "executionActivationTokenSha256",
   "volumesEstablished"
 ] as const;
 
@@ -25,21 +25,21 @@ export type ControlPlaneInstalledRecord = {
   readonly generationId: string;
   readonly composeSha256: string;
   readonly nativeGitImage: string;
-  readonly ordinaryCiImage: string;
+  readonly executionImage: string;
   readonly nativeGitPublish: ControlPlanePublish;
-  readonly ordinaryCiPublish: ControlPlanePublish;
+  readonly executionPublish: ControlPlanePublish;
   readonly nativeGitConfigSha256: string;
   readonly nativeGitReadinessTokenSha256: string;
-  readonly ordinaryCiConfigSha256: string;
-  readonly ordinaryCiReadinessTokenSha256: string;
+  readonly executionConfigSha256: string;
+  readonly executionReadinessTokenSha256: string;
   readonly nativeGitActivationTokenSha256: string;
-  readonly ordinaryCiActivationTokenSha256: string;
+  readonly executionActivationTokenSha256: string;
   readonly volumesEstablished: true;
 };
 
 export type ControlPlaneSnapshotBytes = {
   readonly nativeGit: { readonly config: Buffer; readonly readinessToken: Buffer; readonly activationToken: Buffer };
-  readonly ordinaryCi: { readonly config: Buffer; readonly readinessToken: Buffer; readonly activationToken: Buffer };
+  readonly execution: { readonly config: Buffer; readonly readinessToken: Buffer; readonly activationToken: Buffer };
 };
 
 export async function generationDirectories(root: string, present: boolean): Promise<readonly string[]> {
@@ -59,7 +59,7 @@ export async function generationDirectories(root: string, present: boolean): Pro
 
 export async function readGeneration(path: string): Promise<ControlPlaneSnapshotBytes> {
   const names = controlPlaneSnapshotNames();
-  const expected = [...Object.values(names.nativeGit), ...Object.values(names.ordinaryCi)].sort();
+  const expected = [...Object.values(names.nativeGit), ...Object.values(names.execution)].sort();
   const actual = (await readdir(path)).sort();
   if (actual.length !== expected.length || expected.some((name, index) => actual[index] !== name)) {
     throw new ControlPlaneStateError("control-plane generation snapshot set is invalid");
@@ -70,10 +70,10 @@ export async function readGeneration(path: string): Promise<ControlPlaneSnapshot
       readinessToken: await readStateFile(join(path, names.nativeGit.readinessToken), 0o444, 4096),
       activationToken: await readStateFile(join(path, names.nativeGit.activationToken), 0o444, 4096)
     },
-    ordinaryCi: {
-      config: await readStateFile(join(path, names.ordinaryCi.config), 0o444, 1024 * 1024),
-      readinessToken: await readStateFile(join(path, names.ordinaryCi.readinessToken), 0o444, 4096),
-      activationToken: await readStateFile(join(path, names.ordinaryCi.activationToken), 0o444, 4096)
+    execution: {
+      config: await readStateFile(join(path, names.execution.config), 0o444, 1024 * 1024),
+      readinessToken: await readStateFile(join(path, names.execution.readinessToken), 0o444, 4096),
+      activationToken: await readStateFile(join(path, names.execution.activationToken), 0o444, 4096)
     }
   };
 }
@@ -93,13 +93,13 @@ export function parseInstalledRecord(
     || value.schemaVersion !== 1 || typeof value.deploymentId !== "string" || !deploymentPattern.test(value.deploymentId)
     || typeof value.generationId !== "string" || !generationPattern.test(value.generationId)
     || typeof value.nativeGitImage !== "string" || !imagePattern.test(value.nativeGitImage)
-    || typeof value.ordinaryCiImage !== "string" || !imagePattern.test(value.ordinaryCiImage)
+    || typeof value.executionImage !== "string" || !imagePattern.test(value.executionImage)
     || value.volumesEstablished !== true) {
     throw new ControlPlaneStateError("control-plane installed record schema is invalid");
   }
   const nativeGitPublish = publishField(value, "nativeGitPublish", localAddresses);
-  const ordinaryCiPublish = publishField(value, "ordinaryCiPublish", localAddresses);
-  if (nativeGitPublish.port === ordinaryCiPublish.port) {
+  const executionPublish = publishField(value, "executionPublish", localAddresses);
+  if (nativeGitPublish.port === executionPublish.port) {
     throw new ControlPlaneStateError("control-plane installed record published ports must be distinct");
   }
   return {
@@ -108,15 +108,15 @@ export function parseInstalledRecord(
     generationId: value.generationId,
     composeSha256: digestField(value, "composeSha256"),
     nativeGitImage: value.nativeGitImage,
-    ordinaryCiImage: value.ordinaryCiImage,
+    executionImage: value.executionImage,
     nativeGitPublish,
-    ordinaryCiPublish,
+    executionPublish,
     nativeGitConfigSha256: digestField(value, "nativeGitConfigSha256"),
     nativeGitReadinessTokenSha256: digestField(value, "nativeGitReadinessTokenSha256"),
-    ordinaryCiConfigSha256: digestField(value, "ordinaryCiConfigSha256"),
-    ordinaryCiReadinessTokenSha256: digestField(value, "ordinaryCiReadinessTokenSha256"),
+    executionConfigSha256: digestField(value, "executionConfigSha256"),
+    executionReadinessTokenSha256: digestField(value, "executionReadinessTokenSha256"),
     nativeGitActivationTokenSha256: digestField(value, "nativeGitActivationTokenSha256"),
-    ordinaryCiActivationTokenSha256: digestField(value, "ordinaryCiActivationTokenSha256"),
+    executionActivationTokenSha256: digestField(value, "executionActivationTokenSha256"),
     volumesEstablished: true
   };
 }
@@ -124,13 +124,13 @@ export function parseInstalledRecord(
 export function assertSnapshotDigests(record: ControlPlaneInstalledRecord, snapshots: ControlPlaneSnapshotBytes): void {
   const actual = [
     digest(snapshots.nativeGit.config), digest(snapshots.nativeGit.readinessToken),
-    digest(snapshots.ordinaryCi.config), digest(snapshots.ordinaryCi.readinessToken),
-    digest(snapshots.nativeGit.activationToken), digest(snapshots.ordinaryCi.activationToken)
+    digest(snapshots.execution.config), digest(snapshots.execution.readinessToken),
+    digest(snapshots.nativeGit.activationToken), digest(snapshots.execution.activationToken)
   ];
   const expected = [
     record.nativeGitConfigSha256, record.nativeGitReadinessTokenSha256,
-    record.ordinaryCiConfigSha256, record.ordinaryCiReadinessTokenSha256,
-    record.nativeGitActivationTokenSha256, record.ordinaryCiActivationTokenSha256
+    record.executionConfigSha256, record.executionReadinessTokenSha256,
+    record.nativeGitActivationTokenSha256, record.executionActivationTokenSha256
   ];
   if (actual.some((value, index) => value !== expected[index])) throw new ControlPlaneStateError("control-plane snapshot digest is inconsistent");
 }
@@ -146,7 +146,7 @@ export function assertComposeMatches(input: {
     config: {
       deploymentId: input.record.deploymentId,
       nativeGit: { image: input.record.nativeGitImage, publish: input.record.nativeGitPublish },
-      ordinaryCi: { image: input.record.ordinaryCiImage, publish: input.record.ordinaryCiPublish }
+      execution: { image: input.record.executionImage, publish: input.record.executionPublish }
     },
     snapshots: input.snapshotPaths,
     operatorSourcePaths: [],
@@ -155,7 +155,7 @@ export function assertComposeMatches(input: {
   if (!input.compose.equals(expected)) throw new ControlPlaneStateError("control-plane Compose bytes are inconsistent with installed state");
   const secretBytes = [
     input.snapshots.nativeGit.config, input.snapshots.nativeGit.readinessToken, input.snapshots.nativeGit.activationToken,
-    input.snapshots.ordinaryCi.config, input.snapshots.ordinaryCi.readinessToken, input.snapshots.ordinaryCi.activationToken
+    input.snapshots.execution.config, input.snapshots.execution.readinessToken, input.snapshots.execution.activationToken
   ];
   if (secretBytes.some((bytes) => bytes.length > 0 && input.compose.includes(bytes))) {
     throw new ControlPlaneStateError("control-plane Compose contains snapshot secret bytes");
@@ -164,7 +164,7 @@ export function assertComposeMatches(input: {
 
 function publishField(
   record: Readonly<Record<string, unknown>>,
-  key: "nativeGitPublish" | "ordinaryCiPublish",
+  key: "nativeGitPublish" | "executionPublish",
   localAddresses: readonly string[]
 ): ControlPlanePublish {
   const value = record[key];

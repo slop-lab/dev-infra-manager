@@ -17,11 +17,11 @@ import {
   readAuthoritativeNativeReviewEnvelope,
   readAuthoritativeNativeReviewEnvelopes
 } from "./authoritative-native-review-store.js";
-import type { CodeReviewRuntime as AuthoritativeNativeCandidateRuntime } from "./extensions.js";
-import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { exactActivationIsBound } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { NativeGitBundleHttpError, readBoundedJson, sendJson, sendNotFound } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { readNativeProjectRegistrations } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
+import type { CodeReviewRuntime as AuthoritativeNativeCandidateRuntime } from "./plugin-api.js";
+import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { exactActivationIsBound } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { NativeGitBundleHttpError, readBoundedJson, sendJson, sendNotFound } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { readNativeProjectRegistrations } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 type Credential = { readonly username: string; readonly password: string };
 type HumanReviewer = CodeReviewConfig["humanReviewers"][number];

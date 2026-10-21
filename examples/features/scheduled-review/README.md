@@ -2,7 +2,7 @@
 
 This recipe demonstrates dispatching a repository detector through DIM's shared
 execution scheduler. The repository owner uses `review-tracing-scheduled`, the
-scheduler service uses `ci`, and the execution host installs `ci-worker` plus
+scheduler service uses `execution-scheduler`, and the execution host installs `execution-worker` plus
 `review-tracing-node`. These exact plugins are declared in `recipe.json`.
 The scheduler may run separately from the repository-owning control plane and
 the execution host. Configuration, worker registration, handler revision pins

@@ -1,6 +1,6 @@
-import { readAuthoritativeNativeDecisions, readAuthoritativeNativeReviewEnvelope, nativeHumanReviewStaleReasons, reviewChangeMatchers } from "@slop-lab/dim-control-plane-plugin-code-review/extensions";
-import { refUpdatePolicies, compareAndSwapProtectedRef, resolveAuthoritativeNativeRepositoryTarget, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/extensions";
-import { assertRequiredMergeQualityGuards, type MergeQualityGuard } from "./extensions.js";
+import { readAuthoritativeNativeDecisions, readAuthoritativeNativeReviewEnvelope, nativeHumanReviewStaleReasons, reviewChangeMatchers } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import { refUpdatePolicies, compareAndSwapProtectedRef, resolveAuthoritativeNativeRepositoryTarget, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { assertRequiredMergeQualityGuards, type MergeQualityGuard } from "./plugin-api.js";
 import { MergeAuthorizationStore, type MergeAuthorization } from "./state.js";
 export type NativeInstalledPromotionHooks = { readonly afterIntent?: () => void | Promise<void>; readonly afterCompareAndSwap?: () => void | Promise<void> };
 export type NativeInstalledPromotionContext = { readonly repository: RepositoryExtensionContext; readonly store: MergeAuthorizationStore; readonly guards: readonly MergeQualityGuard[]; readonly hooks?: NativeInstalledPromotionHooks };

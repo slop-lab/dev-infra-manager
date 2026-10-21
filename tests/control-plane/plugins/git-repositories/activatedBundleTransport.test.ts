@@ -48,7 +48,7 @@ describe("activated native Git bundle transport", () => {
     const service = await start(root, {
       async request(input) {
         expect([input.endpoint, input.method, input.path]).toEqual([
-          "http://ordinary-ci:8080", "GET", "/v1/native-root-admission/identity"
+          "http://execution:8080", "GET", "/v1/native-root-admission/identity"
         ]);
         return {
           statusCode: 200,

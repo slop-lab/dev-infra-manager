@@ -11,7 +11,7 @@ import { controlPlaneGenerationId } from "../../packages/installer/src/controlPl
 import {
   controlPlaneSecrets,
   nativeServiceConfig,
-  ordinaryServiceConfig,
+  executionServiceConfig,
   writeControlPlaneFixture,
   writePrivate
 } from "./controlPlaneFixture.js";
@@ -49,17 +49,17 @@ describe("control-plane private source staging", () => {
     expect(sources.roleValues).toContain("host-a");
     expect(() => completeControlPlaneSourcePreflight(sources, {
       nativeGit: Buffer.from(`${controlPlaneSecrets.host}\n`),
-      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
     })).toThrow(/distinct/);
-    const ordinary = ordinaryServiceConfig();
-    const workers = ordinary.workers as Array<Record<string, unknown>>;
-    await writePrivate(input.paths.ordinaryConfig, `${JSON.stringify({ ...ordinary, workers: [
+    const execution = executionServiceConfig();
+    const workers = execution.workers as Array<Record<string, unknown>>;
+    await writePrivate(input.paths.executionConfig, `${JSON.stringify({ ...execution, workers: [
       { ...workers[0], id: "native-query" }
     ] })}\n`);
     await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/distinct/);
   });
 
-  it.each(["ordinaryCi", "qemuCi"])("rejects the obsolete separate %s service role shape", async (role) => {
+  it.each(["execution", "qemuCi"])("rejects the obsolete separate %s service role shape", async (role) => {
     const input = await fixture();
     await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), [role]: {} })}\n`);
     await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/fields/);
@@ -71,14 +71,14 @@ describe("control-plane private source staging", () => {
 
     expect(sources.nativeGit.config.sha256).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(sources.nativeGit.readinessToken.value).toBe(controlPlaneSecrets.nativeReadiness);
-    expect(sources.ordinaryCi.readinessToken.value).toBe(controlPlaneSecrets.ordinaryReadiness);
+    expect(sources.execution.readinessToken.value).toBe(controlPlaneSecrets.executionReadiness);
     expect(sources.serviceConfigPreflight.kind).toBe("requires-image-validation");
     expect(sources.credentialValues).toContain(controlPlaneSecrets.candidateReader);
-    expect(sources.roleValues).toContain("ordinary-candidate-reader");
+    expect(sources.roleValues).toContain("execution-candidate-reader");
 
     const complete = completeControlPlaneSourcePreflight(sources, {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
-      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
     });
     expect(complete.allSecretValues).toHaveLength(11);
     expect(complete.allSecretValues).toContain(controlPlaneSecrets.operator);
@@ -111,16 +111,16 @@ describe("control-plane private source staging", () => {
     const sources = await readControlPlaneSources(restored.parsed);
     expect(() => completeControlPlaneSourcePreflight(sources, {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeReadiness}\n`),
-      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
     })).toThrow(/distinct/);
   });
 
   it("rejects a credential reused for a different service role", async () => {
     // Given
     const input = await fixture();
-    const ordinary = ordinaryServiceConfig();
-    const credentials = Reflect.get(ordinary, "credentials") as Readonly<Record<string, unknown>>;
-    await writePrivate(input.paths.ordinaryConfig, `${JSON.stringify({ ...ordinary, credentials: {
+    const execution = executionServiceConfig();
+    const credentials = Reflect.get(execution, "credentials") as Readonly<Record<string, unknown>>;
+    await writePrivate(input.paths.executionConfig, `${JSON.stringify({ ...execution, credentials: {
       ...credentials, query: { username: "native-query", password: controlPlaneSecrets.host }
     } })}\n`);
 
@@ -131,15 +131,15 @@ describe("control-plane private source staging", () => {
     await expect(action).rejects.toThrow(/paired|distinct/);
   });
 
-  it("rejects the obsolete ordinary config schema without changing operator input", async () => {
+  it("rejects the obsolete execution config schema without changing operator input", async () => {
     const input = await fixture();
-    await writePrivate(input.paths.ordinaryConfig, `${JSON.stringify({
-      ...ordinaryServiceConfig(), schemaVersion: 3
+    await writePrivate(input.paths.executionConfig, `${JSON.stringify({
+      ...executionServiceConfig(), schemaVersion: 3
     })}\n`);
-    const before = await readFile(input.paths.ordinaryConfig);
+    const before = await readFile(input.paths.executionConfig);
 
     await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/schema-1/);
-    expect(await readFile(input.paths.ordinaryConfig)).toEqual(before);
+    expect(await readFile(input.paths.executionConfig)).toEqual(before);
   });
 
   it("rejects obsolete, missing, and unknown native role fields without changing operator input", async () => {
@@ -189,7 +189,7 @@ describe("control-plane private source staging", () => {
     ["passwords", { hostId: "controller-b", username: "project-registrar-b", password: controlPlaneSecrets.projectRegistrar }],
     ["service identifiers", { hostId: "native-query", username: "project-registrar-b", password: controlPlaneSecrets.nativeActivation }],
     ["service secrets", { hostId: "controller-b", username: "project-registrar-b", password: controlPlaneSecrets.query }],
-    ["ordinary host identifiers", { hostId: "controller-b", username: "host-a", password: controlPlaneSecrets.nativeActivation }],
+    ["execution host identifiers", { hostId: "controller-b", username: "host-a", password: controlPlaneSecrets.nativeActivation }],
     ["host secrets", { hostId: "controller-b", username: "project-registrar-b", password: controlPlaneSecrets.host }]
   ])("rejects duplicate project registrar %s", async (_label, secondRegistrar) => {
     const input = await fixture();
@@ -215,11 +215,11 @@ describe("control-plane private source staging", () => {
 
     expect(() => completeControlPlaneSourcePreflight(sources, {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
-      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
     })).toThrow(/distinct/);
   });
 
-  it("allows a Project registrar to bind the same trusted host as ordinary CI with distinct credentials", async () => {
+  it("allows a Project registrar to bind the same trusted host as execution CI with distinct credentials", async () => {
     const input = await fixture();
     await writePrivate(input.paths.nativeConfig, `${JSON.stringify({
       ...nativeServiceConfig(), projectRegistrars: [{
@@ -248,7 +248,7 @@ describe("control-plane private source staging", () => {
     const second = await readControlPlaneSources(input.parsed);
     const activationBytes = {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
-      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
     };
 
     expect(first.nativeGit.config.bytes).not.toEqual(second.nativeGit.config.bytes);
@@ -260,9 +260,9 @@ describe("control-plane private source staging", () => {
   it.each([
     ["native service secret", controlPlaneSecrets.query],
     ["native registrar secret", controlPlaneSecrets.projectRegistrar],
-    ["ordinary host token", controlPlaneSecrets.host],
+    ["execution host token", controlPlaneSecrets.host],
     ["native readiness token", controlPlaneSecrets.nativeReadiness],
-    ["ordinary readiness token", controlPlaneSecrets.ordinaryReadiness]
+    ["execution readiness token", controlPlaneSecrets.executionReadiness]
   ])("rejects a root importer reused as a %s", async (_label, password) => {
     // Given
     const input = await fixture();
@@ -306,7 +306,7 @@ describe("control-plane private source staging", () => {
 
   it.each([
     ["native activation token", controlPlaneSecrets.nativeActivation],
-    ["ordinary activation token", controlPlaneSecrets.ordinaryActivation]
+    ["execution activation token", controlPlaneSecrets.executionActivation]
   ])("rejects a root importer reused as the generated %s", async (_label, password) => {
     // Given
     const input = await fixture();
@@ -319,7 +319,7 @@ describe("control-plane private source staging", () => {
     // When
     const action = () => completeControlPlaneSourcePreflight(sources, {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
-      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
     });
 
     // Then
@@ -342,7 +342,7 @@ describe("control-plane private source staging", () => {
     const second = await readControlPlaneSources(input.parsed);
     const activationBytes = {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
-      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
     };
 
     // When
@@ -359,9 +359,9 @@ describe("control-plane private source staging", () => {
     ["native service secret", controlPlaneSecrets.query],
     ["native registrar secret", controlPlaneSecrets.projectRegistrar],
     ["root importer secret", controlPlaneSecrets.projectRootImporter],
-    ["ordinary host token", controlPlaneSecrets.host],
+    ["execution host token", controlPlaneSecrets.host],
     ["native readiness token", controlPlaneSecrets.nativeReadiness],
-    ["ordinary readiness token", controlPlaneSecrets.ordinaryReadiness]
+    ["execution readiness token", controlPlaneSecrets.executionReadiness]
   ])("rejects a root read issuer reused as a %s", async (_label, password) => {
     // Given
     const input = await fixture();
@@ -410,7 +410,7 @@ describe("control-plane private source staging", () => {
 
   it.each([
     ["native activation token", controlPlaneSecrets.nativeActivation],
-    ["ordinary activation token", controlPlaneSecrets.ordinaryActivation]
+    ["execution activation token", controlPlaneSecrets.executionActivation]
   ])("rejects a root read issuer reused as the generated %s", async (_label, password) => {
     // Given
     const input = await fixture();
@@ -423,7 +423,7 @@ describe("control-plane private source staging", () => {
     // When
     const action = () => completeControlPlaneSourcePreflight(sources, {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
-      ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
     });
 
     // Then
@@ -435,7 +435,7 @@ describe("control-plane private source staging", () => {
     ["native registrar secret", controlPlaneSecrets.projectRegistrar],
     ["root importer secret", controlPlaneSecrets.projectRootImporter],
     ["root read issuer secret", controlPlaneSecrets.projectRootReadIssuer],
-    ["ordinary host token", controlPlaneSecrets.host]
+    ["execution host token", controlPlaneSecrets.host]
   ])("rejects a workspace write issuer reused as a %s", async (_label, password) => {
     const input = await fixture();
     await writePrivate(input.paths.nativeConfig, `${JSON.stringify({

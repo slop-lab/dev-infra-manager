@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { ExternalWebhookStore, createExternalWebhookDispatcher, externalWebhookSubscriberSchema, externalWebhookEventSchema,
   startWebhookService, webhookConfigurationSchema, controlPlanePlugin } from "../../../../packages/control-plane/plugins/webhooks/src/index.js";
-import { webhookEventSourceExtension, type DurableWebhookEventSource } from "../../../../packages/control-plane/plugins/webhooks/src/extensions.js";
+import { webhookEventSourceExtension, type DurableWebhookEventSource } from "../../../../packages/control-plane/plugins/webhooks/src/plugin-api.js";
 import { startControlPlanePlugins } from "@slop-lab/dim-control-plane-core";
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });

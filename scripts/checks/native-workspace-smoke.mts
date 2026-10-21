@@ -43,7 +43,7 @@ const oldEnvironment = { DIM_MANAGED_STATE_ROOT: process.env.DIM_MANAGED_STATE_R
 try {
   const operator = path.join(root, "operator");
   await prepareControlPlane({ directory: operator, nativeGitImage: `registry.example/native@sha256:${"a".repeat(64)}`,
-    ordinaryCiImage: `registry.example/ordinary@sha256:${"b".repeat(64)}` });
+    executionImage: `registry.example/ordinary@sha256:${"b".repeat(64)}` });
   const native = { ...parseManagedGitServiceConfig(JSON.parse(await readFile(path.join(operator, "native-git.json"), "utf8"))),
     gitVersion: execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().replace(/^git version /, "") };
   await writeFile(path.join(operator, "native-git.json"), JSON.stringify(native), { mode: 0o600 });

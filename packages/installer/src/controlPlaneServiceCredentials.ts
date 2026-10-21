@@ -12,7 +12,7 @@ export type ServiceConfigurationValues = {
 
 export function serviceCredentialValues(
   nativeValue: unknown,
-  ordinaryValue: unknown
+  executionValue: unknown
 ): ServiceConfigurationValues {
   const native = exactRecord(nativeValue, [
     "schemaVersion", "serviceId", "host", "port", "storageRoot", "gitExecutable", "gitVersion",
@@ -39,36 +39,36 @@ export function serviceCredentialValues(
   const sourceRoles = ["grantIssuer", "candidateReader", "resultReporter"] as const;
   const nativeCi = exactRecord(native.ci, [...sourceRoles, "webhook"], "native Git CI config");
   const webhook = exactRecord(nativeCi.webhook, ["endpoint", "username", "password"], "native Git CI webhook");
-  if (webhook.endpoint !== "http://ordinary-ci:8080/v1/jobs") {
-    throw new ControlPlaneSourceError("native Git CI webhook endpoint must be http://ordinary-ci:8080/v1/jobs");
+  if (webhook.endpoint !== "http://execution:8080/v1/jobs") {
+    throw new ControlPlaneSourceError("native Git CI webhook endpoint must be http://execution:8080/v1/jobs");
   }
-  const ordinary = exactRecord(ordinaryValue,
-    ["schemaVersion", "claimLeaseMilliseconds", "nativeGit", "credentials", "workers"], "CI service config");
-  if (ordinary.schemaVersion !== 1) {
-    throw new ControlPlaneSourceError("CI service config is not a bundle schema-1 config");
+  const execution = exactRecord(executionValue,
+    ["schemaVersion", "claimLeaseMilliseconds", "nativeGit", "credentials", "workers"], "Execution service config");
+  if (execution.schemaVersion !== 1) {
+    throw new ControlPlaneSourceError("Execution service config is not a bundle schema-1 config");
   }
-  const ordinaryNative = exactRecord(ordinary.nativeGit,
+  const executionNative = exactRecord(execution.nativeGit,
     ["endpoint", ...sourceRoles], "CI native Git config");
-  if (ordinaryNative.endpoint !== "http://native-git:8080") {
+  if (executionNative.endpoint !== "http://native-git:8080") {
     throw new ControlPlaneSourceError("CI native Git endpoint must be http://native-git:8080");
   }
-  const roles = exactRecord(ordinary.credentials, ["webhook", "query", "operator"], "CI credentials");
+  const roles = exactRecord(execution.credentials, ["webhook", "query", "operator"], "CI credentials");
   const nativeCredentials = sourceRoles.map((role) => {
     const selected = credential(nativeCi[role], `native Git CI ${role}`);
-    assertPaired(selected, credential(ordinaryNative[role], `CI ${role}`));
+    assertPaired(selected, credential(executionNative[role], `CI ${role}`));
     return selected;
   });
   const nativeWebhook = credential({ username: webhook.username, password: webhook.password }, "native Git CI webhook");
   assertPaired(nativeWebhook, credential(roles.webhook, "CI webhook"));
-  const serviceCredentials = [...nativeCredentials, nativeWebhook, credential(roles.query, "CI query"), credential(roles.operator, "CI operator")];
-  if (!Array.isArray(ordinary.workers)) {
-    throw new ControlPlaneSourceError("CI service worker credentials must be an array");
+  const serviceCredentials = [...nativeCredentials, nativeWebhook, credential(roles.query, "CI query"), credential(roles.operator, "Execution operator")];
+  if (!Array.isArray(execution.workers)) {
+    throw new ControlPlaneSourceError("Execution service worker credentials must be an array");
   }
-  const workers = ordinary.workers.map((worker, index) => {
-    const value = exactRecord(worker, ["id", "token", "slots"], `CI worker ${index}`);
+  const workers = execution.workers.map((worker, index) => {
+    const value = exactRecord(worker, ["id", "token", "slots"], `Execution worker ${index}`);
     if (typeof value.id !== "string" || !identifierPattern.test(value.id) || !isToken(value.token)
       || !Array.isArray(value.slots)) {
-      throw new ControlPlaneSourceError(`CI worker ${index} identity, token or slots are invalid`);
+      throw new ControlPlaneSourceError(`Execution worker ${index} identity, token or slots are invalid`);
     }
     return { id: value.id, token: value.token };
   });
