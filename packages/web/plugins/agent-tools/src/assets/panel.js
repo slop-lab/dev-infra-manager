@@ -2,7 +2,7 @@
 /** @typedef {{name:string,id:string,phase:string}} Workspace */
 /** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'>}} Controller */
 /** @typedef {{operations:Array<{name:string}>,invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean,workspace:{hostId:string,name:string,id:string,phase:string}}} Context */
-/** @typedef {{state:'running'|'stopped',port:number,url:string,username:string,credentialsFile:string,logFile:string,externalUrls?:Array<{url:string,permalink?:string,ingress:string,approval:string}>,externalUrlsAvailable?:boolean}} Server */
+/** @typedef {{state:'running'|'stopped',port:number,url:string,directory:string,username:string,credentialsFile:string,logFile:string,externalUrls?:Array<{url:string,permalink?:string,ingress:string,approval:string}>,externalUrlsAvailable?:boolean}} Server */
 /** @param {string} tag @param {string} [text] */
 function element(tag, text = '') { const node = document.createElement(tag); node.textContent = text; return node; }
 /** @param {HTMLElement} container @param {Context} context */
@@ -50,6 +50,15 @@ export function mount(container, context) {
       if (!scoped()) return;
       const value = /** @type {Server} */ (result);
       server.replaceChildren(element('h4', 'OpenCode server'), element('p', `Server ${value.state}. Port ${value.port} is inside the workspace.`));
+      server.append(element('p', `Project directory: ${value.directory}`));
+      button(server, 'Copy project directory', async () => {
+        try { await navigator.clipboard.writeText(value.directory); }
+        catch {
+          if (!scoped()) return;
+          const label = document.createElement('label'); label.textContent = 'Select and copy project directory';
+          const path = document.createElement('input'); path.readOnly = true; path.value = value.directory; label.append(path); server.append(label); path.focus(); path.select();
+        }
+      });
       const publicRoutes = (value.externalUrls || []).filter((route) => ['approved', 'not-required'].includes(route.approval));
       if (publicRoutes.length) {
         server.append(element('p', value.state === 'running' ? 'External server URLs:' : 'Configured external URLs (server stopped):'));
@@ -93,7 +102,7 @@ export function mount(container, context) {
       server.append(element('pre', `dim --host ${controller.id} forward ${selectedWorkspace.name} ${value.port}:${value.port}`));
       server.append(element('p', `After forwarding, the server address is ${value.url}. This is the workspace-local address until forwarding is active.`));
       const link = document.createElement('a'); link.href = 'https://slop-lab.github.io/dev-infra-manager/opencode-web/'; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open OpenCode Web'; server.append(link);
-      server.append(element('p', 'Add your forwarded or approved HTTPS server in OpenCode Web. An operator can copy or change the server password here.'));
+      server.append(element('p', `Select this workspace's forwarded or approved HTTPS server in OpenCode Web. Use Add project to open ${value.directory}; Copy project directory provides the exact path. An operator can copy or change the server password here.`));
       server.append(element('p', 'If the browser blocks a local HTTP connection from the HTTPS client, use your configured HTTPS workspace endpoint.'));
     }
     const toolbar = element('div'); toolbar.className = 'feature-actions'; content.prepend(toolbar);

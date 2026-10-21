@@ -37,7 +37,7 @@ it("executes fixed server commands with exact identity and suppresses private gu
     options?.stdout?.write(JSON.stringify({ state: "running", port: 4096, url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/opencode-web/credentials", logFile: "/home/agent/.local/state/opencode-web/server.log" }));
     return 0;
   });
-  expect(await invokeToolsConsole("server.start", { workspace: workspace.name, workspaceId: workspace.id }, context)).toMatchObject({ state: "running", workspaceId: workspace.id });
+  expect(await invokeToolsConsole("server.start", { workspace: workspace.name, workspaceId: workspace.id }, context)).toMatchObject({ state: "running", workspaceId: workspace.id, directory: "/workspace" });
   vi.mocked(context.service.exec).mockImplementation(async (_name, command, options) => {
     if (command[0] === "node") return 0;
     options?.stderr?.write("PRIVATE PASSWORD"); return 1;
@@ -66,7 +66,7 @@ it("transports password updates only through guest stdin and returns credentials
     return 0;
   });
   const identity = { workspace: workspace.name, workspaceId: workspace.id };
-  expect(await invokeToolsConsole("server.password", { ...identity, password }, context)).toEqual({ ...identity, state: "stopped" });
+  expect(await invokeToolsConsole("server.password", { ...identity, password }, context)).toEqual({ ...identity, directory: "/workspace", state: "stopped" });
   expect(await invokeToolsConsole("server.credentials", identity, context)).toEqual({ ...identity, username: "opencode", password });
   await expect(invokeToolsConsole("server.password", { ...identity, password: "too short" }, context)).rejects.toThrow("12–128");
 }));

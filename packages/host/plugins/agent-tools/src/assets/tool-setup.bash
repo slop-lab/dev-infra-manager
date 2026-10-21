@@ -206,6 +206,9 @@ export NPM_CONFIG_CACHE="$npm_cache"
 export npm_config_cache="$npm_cache"
 
 if [[ "$selected_tool" = opencode ]]; then
+  runtime_helper="$HOME/.local/share/dim-agent-tools/opencode-runtime.bash"
+  [[ -f "$runtime_helper" ]] || runtime_helper="$(dirname -- "${BASH_SOURCE[0]}")/opencode-runtime.bash"
+  bash "$runtime_helper" >/dev/null
   CI=1 \
   NPM_CONFIG_AUDIT=false \
   NPM_CONFIG_FUND=false \

@@ -29,6 +29,7 @@ it("prepares helpers without repository configuration or npm installation and di
     await hostPlugin.workspaceReady!(workspace, context);
     const helper = join(home, ".local/bin/dim-agent"), setup = join(home, ".local/bin/dim-tools-setup");
     expect((await stat(helper)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(home, ".local/share/dim-agent-tools/opencode-runtime.bash"))).mode & 0o777).toBe(0o700);
     expect(await readFile(setup, "utf8")).toContain("tool-setup.bash");
     expect(await hostPlugin.guest!.inspect!(workspace, context)).toMatchObject({ state: "unconfigured", message: expect.stringContaining("no npm tools were installed automatically") });
     const inode = (await stat(helper)).ino;

@@ -11,7 +11,7 @@ const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
 let installed = false, running = false, holdStatus = true;
 let pending: ServerResponse | undefined, pendingCredential: ServerResponse | undefined, holdCredential = false;
 let password = "private-server-password";
-function status() { return { workspace: "development", workspaceId, state: running ? "running" : "stopped", port: 4096, url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log", externalUrlsAvailable: true, externalUrls: [{ url: "https://opencode.example.test:8443", permalink: "https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967", ingress: "shared", approval: "approved" }, { url: "https://pending.example.test", ingress: "shared", approval: "pending" }] }; }
+function status() { return { workspace: "development", workspaceId, state: running ? "running" : "stopped", port: 4096, directory: "/workspace/main", url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log", externalUrlsAvailable: true, externalUrls: [{ url: "https://opencode.example.test:8443", permalink: "https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967", ingress: "shared", approval: "approved" }, { url: "https://pending.example.test", ingress: "shared", approval: "pending" }] }; }
 const server = createServer((request, response) => {
   if (request.url === "/panel.js") { response.setHeader("Content-Type", "text/javascript"); response.end(panel); return; }
   if (request.url === "/") { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><div id="panel"></div>'); return; }
@@ -65,6 +65,10 @@ try {
   await page.getByText("Refresh status completed.", { exact: true }).waitFor();
   assert.match(await page.locator("#panel").innerText(), /dim --host local forward development 4096:4096/);
   assert.equal(await page.getByRole("link", { name: "Open OpenCode Web", exact: true }).getAttribute("href"), "https://slop-lab.github.io/dev-infra-manager/opencode-web/");
+  await page.getByText('Use Add project to open /workspace/main;', { exact: false }).waitFor();
+  await page.getByText('Project directory: /workspace/main', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Copy project directory', exact: true }).click();
+  assert.equal(await page.getByLabel('Select and copy project directory', { exact: true }).inputValue(), '/workspace/main');
   assert.equal(await page.locator('a[href^="http://127.0.0.1"]').count(), 0);
   assert.equal(await page.getByRole('link', { name: 'https://opencode.example.test:8443', exact: true }).getAttribute('href'), 'https://opencode.example.test:8443');
   assert.equal(await page.locator('a[href="https://pending.example.test"]').count(), 0);
@@ -96,6 +100,7 @@ try {
   assert.equal(await page.getByRole("button", { name: "Start OpenCode server", exact: true }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "Copy server password", exact: true }).count(), 0);
   assert.equal(await page.getByLabel("New server password", { exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Copy project directory', exact: true }).waitFor();
   await mount(true); await page.getByRole('button', { name: 'Copy server password', exact: true }).waitFor(); holdCredential = true;
   const credentialRequest = page.waitForRequest((request) => request.method() === 'POST' && request.postDataJSON().name === 'server.credentials');
   await page.getByRole('button', { name: 'Copy server password', exact: true }).click();

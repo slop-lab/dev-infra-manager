@@ -311,6 +311,10 @@ process.stdin.on("end", () => {
 fi
 require_command nohup
 require_command opencode
+runtime_helper="$HOME/.local/share/dim-agent-tools/opencode-runtime.bash"
+[[ -f "$runtime_helper" ]] || runtime_helper="$(dirname -- "${BASH_SOURCE[0]}")/opencode-runtime.bash"
+runtime_environment="$(bash "$runtime_helper")" || fail 'could not prepare OpenCode terminal runtime'
+runtime_preload="$(jq -r '.LD_PRELOAD // env.LD_PRELOAD // ""' <<<"$runtime_environment")"
 cors_origins_json="$(node - "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <<'NODE' 2>/dev/null
 const mandatoryOrigin = "https://slop-lab.github.io"
 const input = JSON.parse(process.argv[2])
@@ -370,10 +374,11 @@ if [[ -e "$hook_file" || -L "$hook_file" ]]; then
     export OMO_PROFILE="$(jq -r '.OMO_PROFILE' <<<"$launch_environment")"
   fi
 fi
-configuration_fingerprint="$(node --input-type=commonjs <<'NODE'
+configuration_fingerprint="$(DIM_OPENCODE_WEB_RUNTIME_ENVIRONMENT="$runtime_environment" node --input-type=commonjs <<'NODE'
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto")
 const home = process.env.HOME
 const hash = crypto.createHash("sha256")
+hash.update(JSON.stringify([process.cwd(), process.env.DIM_OPENCODE_WEB_RUNTIME_ENVIRONMENT]))
 for (const key of ["DIM_LLM_ROUTER_OPENCODE_MODE", "DIM_LLM_ROUTER_CONNECTION_FILE", "OPENCODE_CONFIG_CONTENT", "OMO_PROFILE", "OCX_PROFILE", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "NPM_CONFIG_CACHE", "npm_config_cache"]) {
   hash.update(JSON.stringify([key, process.env[key] ?? null]))
 }
@@ -435,6 +440,7 @@ if [[ -z "${server_pid:-}" ]]; then
   : >"$log_file"
   chmod 0600 "$log_file"
   instance_id="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+  LD_PRELOAD="$runtime_preload" \
   OPENCODE_SERVER_USERNAME="$SERVER_USERNAME" \
   OPENCODE_SERVER_PASSWORD="$password" \
   DIM_OPENCODE_WEB_INSTANCE_ID="$instance_id" \

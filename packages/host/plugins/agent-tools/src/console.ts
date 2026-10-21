@@ -54,7 +54,7 @@ export async function invokeToolsConsole(operation: string, input: unknown, cont
   }
   if (response.state !== "running" && response.state !== "stopped") throw new UserError("Invalid server status");
   // Guest output is untrusted: never forward extra fields from status or mutations.
-  return { ...identity, state: response.state, ...Object.fromEntries(["port", "url", "username", "credentialsFile", "logFile"].filter(key => typeof response[key] === "string" || (key === "port" && typeof response[key] === "number")).map(key => [key, response[key]])) };
+  return { ...identity, directory: `/workspace${workspace.source.workingDirectory ? `/${workspace.source.workingDirectory}` : ""}`, state: response.state, ...Object.fromEntries(["port", "url", "username", "credentialsFile", "logFile"].filter(key => typeof response[key] === "string" || (key === "port" && typeof response[key] === "number")).map(key => [key, response[key]])) };
 }
 
 export async function runToolsConsole(args: string[], context: WorkspaceHostPluginContext): Promise<void> {

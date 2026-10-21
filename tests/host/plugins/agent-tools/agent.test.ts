@@ -14,6 +14,9 @@ it("tool launch forwards exact arguments and registers tool-owned noninteractive
   const root = await mkdtemp(path.join(tmpdir(), "dim-agent-tools-")), home = path.join(root, "home"), bin = path.join(home, ".local/bin");
   try {
     await mkdir(bin, { recursive: true }); await mkdir(path.join(home, ".local/state/dim-tools"), { recursive: true });
+    const helpers = path.join(home, ".local/share/dim-agent-tools");
+    await mkdir(helpers, { recursive: true });
+    await copyFile(new URL("../../../../packages/host/plugins/agent-tools/src/assets/opencode-runtime.bash", import.meta.url), path.join(helpers, "opencode-runtime.bash"));
     for (const [tool, version] of [["codex", "0.156.1"], ["opencode", "1.18.31"]]) {
       if (!tool) throw new Error("missing tool");
       const executable = path.join(bin, tool);

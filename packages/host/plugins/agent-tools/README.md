@@ -31,6 +31,14 @@ configured controllers. Open a running workspace's tools to inspect or explicitl
 install OpenCode/Codex and start, inspect or stop its OpenCode server. Mutations
 require an operator Web session; every request binds the workspace's current ID.
 No repository configuration or extra control-plane connection is required.
+The Web view shows and copies the actual checkout directory for OpenCode Web;
+a multi-repository workspace may use `/workspace/main` rather than `/workspace`.
+
+On Alpine/musl workspaces, explicit OpenCode setup or launch installs `gcompat`
+through the workspace package manager when needed, and applies it only to the
+OpenCode process environment. The pinned OpenCode embeds a glibc PTY library
+that otherwise fails to load even when its HTTP health endpoint is healthy.
+Helper discovery and status inspection do not install system packages.
 
 ## Continue after restart
 

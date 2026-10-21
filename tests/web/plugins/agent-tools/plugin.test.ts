@@ -5,7 +5,7 @@ const workspaceId = "17094660-a627-4a17-acd2-6418c0b79967";
 const selection = { controllerId: "local", workspace: "development", workspaceId };
 const description = { schemaVersion: 1, workspaces: [{ name: "development", id: workspaceId, phase: "running" }], tools: ["opencode", "codex"] };
 const toolStatus = { workspace: "development", workspaceId, tools: [{ name: "opencode", installed: true, version: "1.18.31" }, { name: "codex", installed: false, version: "" }] };
-const serverStatus = { workspace: "development", workspaceId, state: "running", port: 4096, url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log" };
+const serverStatus = { workspace: "development", workspaceId, state: "running", port: 4096, directory: "/workspace/main", url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log" };
 
 it("discovers optional host tools and delegates exact workspace identities with bounded deadlines", async () => {
   const calls: Array<{args: readonly string[]; timeout?: number}> = [];
@@ -49,6 +49,7 @@ it("declares operator-only mutations and rejects private or arbitrary server out
   expect(() => status.parseOutput({ ...serverStatus, password: "private" })).toThrow();
   expect(() => status.parseOutput({ ...serverStatus, url: "https://foreign.test" })).toThrow();
   expect(() => status.parseOutput({ ...serverStatus, url: "http://username:secret@127.0.0.1:4096" })).toThrow();
+  for (const directory of ["/private/host", "/workspace/../private", "/workspace/main\n"]) expect(() => status.parseOutput({ ...serverStatus, directory })).toThrow();
   expect(() => status.parseInput({ ...selection, connection: "/private/operator.json" })).toThrow();
 });
 

@@ -7,11 +7,13 @@ export async function deployToolHelpers(workspace: WorkspaceRecord, context: Wor
   if (!workspace.initialized || workspace.phase !== "running") return;
   const setup = await readFile(new URL("./assets/tool-setup.bash", import.meta.url));
   const agent = await readFile(new URL("./assets/agent.mjs", import.meta.url));
+  const runtime = await readFile(new URL("./assets/opencode-runtime.bash", import.meta.url));
   const server = await readFile(new URL("./assets/opencode-server.bash", import.meta.url));
   await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
     name: "agent-tools", files: [
       { path: ".local/share/dim-agent-tools/tool-setup.bash", contents: setup, mode: 0o700 },
       { path: ".local/share/dim-agent-tools/agent.mjs", contents: agent, mode: 0o700 },
+      { path: ".local/share/dim-agent-tools/opencode-runtime.bash", contents: runtime, mode: 0o700 },
       { path: ".local/share/dim-agent-tools/opencode-server.bash", contents: server, mode: 0o700 },
       { path: ".local/bin/dim-agent", contents: agent, mode: 0o700 },
       { path: ".local/bin/dim-opencode-server", contents: server, mode: 0o700 },

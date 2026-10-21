@@ -21,7 +21,7 @@ async function fixture() {
   const port = address.port;
   await new Promise<void>((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
   const env = { ...process.env, HOME: home, XDG_STATE_HOME: path.join(home, ".local/state"), PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`, OPENCODE_WEB_PORT: String(port), NPM_CONFIG_CACHE: undefined, npm_config_cache: undefined };
-  const run = async (operation: string) => JSON.parse((await execute("bash", [launcher, operation, "--json"], { env, timeout: 30_000 })).stdout) as { state: string; port: number; credentialsFile: string; logFile: string; username: string; url: string };
+  const run = async (operation: string, cwd?: string) => JSON.parse((await execute("bash", [launcher, operation, "--json"], { env, timeout: 30_000, ...(cwd ? { cwd } : {}) })).stdout) as { state: string; port: number; credentialsFile: string; logFile: string; username: string; url: string };
   const setPassword = async (password: string) => new Promise<{ state: string }>((resolve, reject) => {
     const child = spawn("bash", [launcher, "password", "--json"], { env, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "", stderr = "";
@@ -63,6 +63,11 @@ http.createServer((req, res) => { res.statusCode = req.headers.authorization ===
     const credential = await readFile(started.credentialsFile, "utf8");
     expect(JSON.stringify(started)).not.toContain(credential.trim().split("\n")[1]);
     expect(await f.run("status")).toEqual(started);
+    const pidFile = path.join(path.dirname(started.credentialsFile), "server.pid");
+    const firstPid = (await readFile(pidFile, "utf8")).split(" ")[0];
+    expect((await f.run("start", f.home)).state).toBe("running");
+    expect((await readFile(pidFile, "utf8")).split(" ")[0]).not.toBe(firstPid);
+    expect(await readFile(started.credentialsFile, "utf8")).toBe(credential);
     const password = 'quotes" backslash\\ spaces : secure  ';
     expect((await f.setPassword(password)).state).toBe("running");
     const credentials = await f.run("credentials") as unknown as { username: string; password: string };

@@ -38,6 +38,10 @@ async function main() {
     execFileSync("dim-workspace", ["session", "register", "--", process.execPath, fileURLToPath(import.meta.url), tool, "--resume"], { stdio: ["ignore", "ignore", "inherit"] });
   }
   if (tool === "opencode") {
+    const runtime = path.join(home, ".local/share/dim-agent-tools/opencode-runtime.bash");
+    const environment = JSON.parse(execFileSync("bash", [runtime], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }));
+    if (!environment || typeof environment !== "object" || Array.isArray(environment) || Object.entries(environment).some(([key, value]) => key !== "LD_PRELOAD" || typeof value !== "string")) throw new Error("invalid OpenCode runtime environment");
+    Object.assign(process.env, environment);
     const root = process.env.DIM_WORKSPACE_TMPDIR ?? path.join(home, ".local/tmp");
     if (!path.isAbsolute(root)) throw new Error("DIM_WORKSPACE_TMPDIR must be absolute");
     const temporary = path.join(root, "opencode");

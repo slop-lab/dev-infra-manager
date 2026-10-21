@@ -22,6 +22,7 @@ const routes = selection.extend({
 });
 const toolsStatus = selection.extend({ tools: z.array(z.object({ name: tool, version: z.string().max(1024), installed: z.boolean() }).strict()).max(2) });
 const serverStatus = selection.extend({ state: z.enum(["running", "stopped"]), port: z.number().int().min(1).max(65535),
+  directory: z.string().max(4096).refine((value) => value === "/workspace" || (value.startsWith("/workspace/") && !value.split("/").some((part) => part === "." || part === "..") && !/[\x00-\x1f\x7f]/.test(value))),
   url: z.string().max(256).refine((value) => /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(value)),
   username: z.string().max(128), credentialsFile: z.string().max(4096), logFile: z.string().max(4096),
   externalUrls: z.array(externalUrl).max(1000).optional(), externalUrlsAvailable: z.boolean().optional() });

@@ -19,6 +19,11 @@ as an additional stable address; it never replaces the service address. Host rel
 addresses are never substituted. Stopped servers show
 configured URLs without presenting them as running endpoints. Starting a server
 does not publish a host port or create a public endpoint.
+The status also shows the checkout's actual project directory, with a copy action.
+For a managed multi-repository workspace this can be `/workspace/main`, rather than
+the `/workspace` directory containing the checkouts. **Open OpenCode Web** opens
+the Pages client. Select this workspace's server there, then use **Add project**
+with the displayed path. Server selection and authentication remain with that client.
 With the optional External routes Web/host plugins, create its port-4096 route
 from the same workspace row and approve it explicitly if the ingress requires it.
 
