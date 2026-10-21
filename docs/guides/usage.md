@@ -116,9 +116,10 @@ skips confirmation and selects the default cache retention; use
 execution needs `-y`. Without it, uninstall previews only and reinstall refuses
 to proceed. Use `--dry-run` for an explicit noninteractive preview.
 
-Removal destroys the selected current user's local DIM workspaces, service
-data, authentication data and installation. The scope follows the current
-environment's DIM paths on this machine; the selected SSH host is not
+Removal destroys the selected current user's local DIM workspaces and runtime
+installation. LLM router accounts, authentication, history and captures, and
+Tailscale gateway configuration and authentication state are always retained.
+The scope follows the current environment's DIM paths on this machine; the selected SSH host is not
 contacted. Keep any data you need before executing it. Role-specific private
 control-plane configuration stored outside DIM's own directories is not
 automatically deleted.
@@ -133,16 +134,19 @@ just reinstall-local --with-managed
 # For automation, add -y after reviewing the plan.
 ```
 
-Cache retention keeps only cache-server data volumes (including Docker, npm,
+The cache retention choice covers cache-server data volumes (including Docker, npm,
 PyPI and apt) and their ownership ledgers. Cache containers, networks, endpoint
 catalogs and runtime configuration are replaced. Reinstall records the
 previously installed cache-server and mirrors plugins and selected cache kinds,
 installs their matching prepared packages, ensures those cache services, then
 restores mirror connections with fresh endpoints. Other workspace, plugin
-and control-plane configuration is not restored.
+and control-plane configuration is not restored automatically. The separately
+retained LLM router and Tailscale service data is preserved regardless of this
+cache choice. Runtime processes, gateway containers and networks are removed;
+retention does not leave those services running.
 
 `--keep-cache-data` explicitly selects retention; `--no-keep-cache-data`
-selects a complete purge. For example:
+deletes cache payloads while retaining LLM router and Tailscale data. For example:
 
 ```bash
 just reinstall-local --with-managed -y                        # Keep cache data.
@@ -150,6 +154,8 @@ just reinstall-local --with-managed -y --no-keep-cache-data   # Delete cache dat
 ```
 
 Retries after interrupted removal must use the same cache retention choice.
+See [Tailscale gateway setup](tailscale.md) to reconnect the retained gateway
+identity after installing its matching plugin.
 
 `reinstall-local` confirms the removal plan, then invokes removal and the
 existing source installer. It does not prepare a new candidate: rerun `just prepare-local` after

@@ -617,6 +617,25 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/host/plugins/tailscale:
+    dependencies:
+      '@slop-lab/dim-contracts-external-url':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/external-url
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@slop-lab/dim-host-plugin-external-urls':
+        specifier: workspace:0.10.0
+        version: link:../external-urls
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/host/plugins/tunnels:
     devDependencies:
       '@slop-lab/dim-host-core':

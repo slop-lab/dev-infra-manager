@@ -98,9 +98,18 @@ configuration and are absent from workspace controller responses. Existing host
 network and DNS configuration determines which clients can reach the listener.
 
 Raw TCP drivers expose one scoped target per listener. They preserve raw
-protocol bytes and reject HTTP-only path or subdomain inputs. The packaged
-Tailscale driver resolves the running host's own address; it does not configure
-a tailnet or grant host administration to a workspace.
+protocol bytes and reject HTTP-only path or subdomain inputs. The optional
+`@slop-lab/dim-host-plugin-tailscale` supplies the Tailscale ingress driver. Install
+it alongside External URLs before selecting a `tailscale` ingress:
+
+```sh
+dim installer install plugin '@slop-lab/dim-host-plugin-tailscale@0.10.0'
+```
+
+This ingress driver resolves the running host's own address. It requires an
+already connected host Tailscale node and does not alter its authentication or
+network settings. Workspace outbound connectivity is configured separately by
+the Tailscale plugin; ingress selection does not enable it.
 
 ## Verification
 

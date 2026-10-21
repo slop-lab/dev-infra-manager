@@ -105,6 +105,19 @@ pnpm --dir tests exec tsx ../scripts/checks/base-workspace-runtime-smoke.mts IMA
 just verify workspace-agent IMAGE
 ```
 
+The optional [Tailscale gateway](../guides/tailscale.md) has a separate live check:
+
+```bash
+DIM_TAILNET_WORKSPACE_IMAGE=REVIEWED_LOCAL_WORKSPACE_IMAGE just verify tailscale-gateway
+# Direct equivalent after checking local Docker, Sysbox, TUN and the selected image:
+DIM_TAILNET_WORKSPACE_IMAGE=REVIEWED_LOCAL_WORKSPACE_IMAGE pnpm --dir tests exec tsx --conditions=dim-source scenarios/live/tailscaleGateway.e2e.ts
+```
+
+It creates a disposable Headscale tailnet and exercises the actual gateway,
+workspace DNS/routing and nested-agent connectivity. It does not use host
+Tailscale credentials, sockets or node state. Runtime prerequisites are checked
+before the Just recipe starts the fixture.
+
 The [public/private Project example](../../examples/projects/native-multiple-repositories/README.md)
 is also exercised directly from its checked-in files:
 

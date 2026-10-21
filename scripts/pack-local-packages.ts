@@ -31,6 +31,7 @@ export const packageDirectories = [
   "packages/contracts/external-url/dist",
   "packages/host/plugins/dns-cloudflare/dist",
   "packages/host/plugins/external-urls/dist",
+  "packages/host/plugins/tailscale/dist",
   "packages/host/plugins/mirrors/dist",
   "packages/host/plugins/cache-server/dist",
   "packages/host/plugins/llm-router/dist",

@@ -13,7 +13,7 @@ const output = minifyPackageJson(source, {
 });
 output.version = publishPackageVersion(source.version);
 output.types = "./index.d.ts";
-output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
+output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" }, "./plugin-api": { types: "./plugin-api.d.ts", import: "./plugin-api.js", default: "./plugin-api.js" } };
 output.dependencies = { ...source.dependencies, "@slop-lab/dim-contracts-external-url": output.version };
 output.peerDependencies = { ...source.peerDependencies, "@slop-lab/dim-host-core": output.version };
 delete output.private;

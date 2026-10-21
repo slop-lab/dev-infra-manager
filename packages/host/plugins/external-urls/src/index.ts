@@ -9,8 +9,8 @@ import {
 import { caddyIngressDriver } from "./caddyRuntime.js";
 import { httpIngressDriver } from "./httpAdapter.js";
 import { dnsDriver, normalizeDnsProviderArgument } from "./dnsProvider.js";
-import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, ingressDriver, type ExternalUrlIngressRuntime } from "./ingressDriver.js";
-export { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, type ExternalUrlIngressDriver, type ExternalUrlIngressRuntime } from "./ingressDriver.js";
+import { ingressDriver } from "./ingressDriver.js";
+import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, type ExternalUrlIngressRuntime } from "./plugin-api.js";
 import { ingressPolicyRevision } from "./approvalPolicy.js";
 import {
   WorkspaceIngressListener,
@@ -33,10 +33,8 @@ import {
   type StoredUrl
 } from "./routeStore.js";
 import { TcpIngressListener } from "./tcpIngress.js";
-import { tailscaleIngressDriver } from "./tailscale.js";
 
 export { TcpIngressListener } from "./tcpIngress.js";
-export { tailscaleIngressDriver } from "./tailscale.js";
 
 export interface ExternalUrlIngressOptions {
   description: string;
@@ -97,7 +95,6 @@ export function createExternalUrlsPlugin(configuration: ExternalUrlsPluginOption
     async register(host) {
       host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "http", httpIngressDriver);
       host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "caddy", caddyIngressDriver);
-      host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale", tailscaleIngressDriver);
       let options: ExternalUrlsPluginOptions = typeof configuration === "function" ? { ingresses: {} } : configuration;
       let prepared = false;
       const registry = new WorkspaceRouteRegistry();
@@ -249,7 +246,7 @@ export async function externalUrlsPluginFromConfig(env: NodeJS.ProcessEnv = proc
       prepared.set(name, runtime);
     }
     return { ingresses, async initialize(runtime) {
-      for (const driver of host.extensionsOfKind<import("./ingressDriver.js").ExternalUrlIngressDriver>(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION)) {
+      for (const driver of host.extensionsOfKind<import("./plugin-api.js").ExternalUrlIngressDriver>(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION)) {
         const names = new Set(Object.entries(config.ingresses).filter(([, ingress]) => ingressDriver(host, ingress.driver) === driver).map(([name]) => name));
         await driver.prune?.(runtime, names);
       }

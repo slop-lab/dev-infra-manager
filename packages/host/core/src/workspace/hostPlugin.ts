@@ -65,6 +65,12 @@ export interface WorkspaceHostPlugin {
   executionRouting?(context: WorkspaceRuntimeFactoryContext & { readonly signal: AbortSignal }): Promise<HostExecutionRouting | undefined>;
   readonly commands?: readonly { readonly name: string; readonly description: string }[];
   run?(args: string[], context: WorkspaceHostPluginContext): Promise<void>;
+  /** Host-owned integrations reconcile after start/access and release resources before removal.
+   * Hooks must be idempotent; concurrent workspace accesses may invoke them again. */
+  readonly workspaceLifecycle?: {
+    started?(workspace: WorkspaceRecord, context: WorkspaceRuntimeFactoryContext): Promise<void>;
+    removing?(workspace: WorkspaceRecord, options: { readonly keepData: boolean }, context: WorkspaceRuntimeFactoryContext): Promise<void>;
+  };
   workspaceReady?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void>;
   /** Guest clients belong to this plugin; transport supplies the immutable caller. */
   guest?: {

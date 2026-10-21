@@ -1,6 +1,7 @@
+import type { ExternalUrlIngressDriver } from "./plugin-api.js";
 import { UserError } from "@slop-lab/dim-host-core";
 import { parseRoutePolicy, type ExternalUrlRoutePolicyConfig } from "./routePolicy.js";
-import { availableTcpPort, parseIngressCliArguments, type ExternalUrlIngressDriver } from "./ingressDriver.js";
+import { availableTcpPort, parseIngressCliArguments } from "./ingressDriver.js";
 
 export const httpIngressDriver: ExternalUrlIngressDriver = {
   async configure(scheme, args) {

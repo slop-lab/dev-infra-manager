@@ -60,6 +60,15 @@ plugin-install:
 headscale-tailnet-tcp:
     cd .. && bash scripts/checks/headscale-tailnet-tcp-smoke.bash
 
+# Prove workspace and nested-agent routing/DNS through an isolated Headscale gateway.
+tailscale-gateway:
+    @docker info >/dev/null 2>&1 || { echo "tailscale-gateway requires a reachable local Docker daemon" >&2; exit 2; }
+    @docker info 2>/dev/null | grep -Eq '^ Runtimes:.*sysbox-runc' || { echo "tailscale-gateway requires sysbox-runc" >&2; exit 2; }
+    @[[ -c /dev/net/tun && -r /dev/net/tun && -w /dev/net/tun ]] || { echo "tailscale-gateway requires accessible /dev/net/tun" >&2; exit 2; }
+    @[[ -n "${DIM_TAILNET_WORKSPACE_IMAGE:-}" ]] || { echo "tailscale-gateway requires DIM_TAILNET_WORKSPACE_IMAGE selecting a reviewed local workspace image" >&2; exit 2; }
+    @docker image inspect "$DIM_TAILNET_WORKSPACE_IMAGE" >/dev/null 2>&1 || { echo "tailscale-gateway requires the selected workspace image locally" >&2; exit 2; }
+    cd .. && pnpm --dir tests exec tsx --conditions=dim-source scenarios/live/tailscaleGateway.e2e.ts
+
 # Verify pinned user tools and authenticated loopback development services.
 workspace-user-setup:
     cd .. && bash scripts/checks/workspace-user-setup-smoke.bash

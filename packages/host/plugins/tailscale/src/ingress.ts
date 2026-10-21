@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { UserError } from "@slop-lab/dim-host-core";
 
 const run = promisify(execFile);
-import type { ExternalUrlIngressDriver } from "./ingressDriver.js";
+import type { ExternalUrlIngressDriver } from "@slop-lab/dim-host-plugin-external-urls/plugin-api";
 
 type TailscaleStatus = {
   readonly BackendState?: unknown;

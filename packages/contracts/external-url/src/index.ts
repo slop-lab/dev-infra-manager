@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 export type ExternalUrlScheme = "http" | "https" | "tcp";
+export const EXTERNAL_URL_INGRESS_DRIVER_EXTENSION = "external-url.ingress-driver";
 export const EXTERNAL_URL_DNS_PROVIDER_EXTENSION = "external-url.dns-provider";
 
 export function workspaceServiceSubdomain(workspaceName: string, serviceName: string): string {

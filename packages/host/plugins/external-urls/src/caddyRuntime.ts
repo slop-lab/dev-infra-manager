@@ -1,3 +1,4 @@
+import type { ExternalUrlIngressDriver, IngressDriverContext } from "./plugin-api.js";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-host-core";
@@ -5,7 +6,7 @@ import type { AdminRouteContext, ControllerRuntimeContext, DimPluginHost } from 
 import type { ExternalUrlDnsProviderConfig } from "@slop-lab/dim-contracts-external-url";
 import { parseCaddyIngressArgument, renderCaddyDeployment, verifyCaddyIngress, CADDY_INGRESS_DOCUMENTATION_URL } from "./caddy.js";
 import { dnsDriver, normalizeDnsRecordArgument } from "./dnsProvider.js";
-import { availableTcpPort, parseIngressCliArguments, type ExternalUrlIngressDriver, type IngressDriverContext } from "./ingressDriver.js";
+import { availableTcpPort, parseIngressCliArguments } from "./ingressDriver.js";
 
 interface ManagedCaddyIngress {
   argument: ReturnType<typeof parseCaddyIngressArgument> & { listenPort: number };

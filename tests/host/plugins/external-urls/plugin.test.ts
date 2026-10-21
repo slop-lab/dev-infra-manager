@@ -14,7 +14,7 @@ import {
   type ExternalUrlDnsProviderDriver
 } from "@slop-lab/dim-contracts-external-url";
 import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../../../packages/host/plugins/external-urls/src/index.js";
-import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, type ExternalUrlIngressDriver } from "../../../../packages/host/plugins/external-urls/src/ingressDriver.js";
+import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, type ExternalUrlIngressDriver } from "../../../../packages/host/plugins/external-urls/src/plugin-api.js";
 
 describe("external URLs plugin", () => {
   const close: Array<() => Promise<void>> = [];
@@ -31,7 +31,7 @@ describe("external URLs plugin", () => {
     expect(registered.controllerRoutes).toHaveLength(4);
     expect(registered.controllerRoutes.map((route) => `${route.method} ${route.path}`))
       .toEqual(["GET /urls", "POST /urls", "DELETE /urls", "DELETE /urls/:id"]);
-    expect(registered.host.extension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale")).toBeDefined();
+    expect(registered.host.extension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale")).toBeUndefined();
   });
 
   it("closes already opened listeners when another ingress cannot bind", async () => {

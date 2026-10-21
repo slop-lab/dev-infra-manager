@@ -71,4 +71,28 @@ describe("plugin loader configuration", () => {
     expect(loaded.registered.hostInputProviders.has("builtin.git-author")).toBe(true);
     await loaded.registered.dispose();
   });
+  it("bridges installed host contributions into the controller without a controller plugin", async () => {
+    const packageRoot = join(root, "node_modules", "@example", "host-ingress");
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
+    await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "@example/host-ingress", type: "module", exports: "./index.js" }));
+    await writeFile(join(packageRoot, "index.js"), `export const hostPlugin = { name: "host-ingress", extensions: [{ kind: "external-url.ingress-driver", name: "custom", value: { ready: true } }] };`);
+    await writeFile(join(root, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: ["@example/host-ingress"] }));
+    const loaded = await loadInstalledPlugins(root);
+    try {
+      expect(loaded.registered.host.extension("external-url.ingress-driver", "custom")).toEqual({ ready: true });
+      expect(loaded.registered.plugins).toContain("@example/host-ingress:host-extensions");
+      expect(loaded.registered.controllerRoutes).toEqual([]);
+    } finally { await loaded.registered.dispose(); }
+  });
+  it("rejects malformed host extension contributions before starting the controller", async () => {
+    const packageRoot = join(root, "node_modules", "@example", "invalid-host");
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
+    await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: "@example/invalid-host", type: "module", exports: "./index.js" }));
+    await writeFile(join(packageRoot, "index.js"), 'export const hostPlugin = { name: "invalid", extensions: [{ kind: "ingress", name: "invalid", value: "not an extension object" }] };');
+    await writeFile(join(root, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: ["@example/invalid-host"] }));
+    await expect(loadInstalledPlugins(root)).rejects.toThrow("invalid host plugin extension");
+  });
+
 });

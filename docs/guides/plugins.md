@@ -13,6 +13,10 @@ administration transport and neutral host-input provider registration. Feature
 plugins own their concrete drivers and provider semantics. It does not own workspace lifecycle or inject a controller
 socket, host runtime socket or raw host credential into a workspace.
 
+For workspace and nested-agent VPN access, the optional
+[Tailscale host plugin](tailscale.md) owns gateway authentication, routing and
+DNS. Its separate External URLs ingress driver uses an existing host node.
+
 ## Installation and registration
 
 Host plugins may prepare their own in-workspace clients automatically without

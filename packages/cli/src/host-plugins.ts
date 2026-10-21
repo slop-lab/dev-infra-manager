@@ -71,6 +71,12 @@ function parseHostPlugin(value: unknown): WorkspaceHostPlugin {
   if (value.workspaceMetadata !== undefined && typeof value.workspaceMetadata !== "function") throw new UserError(`invalid workspace metadata provider in '${value.name}'`);
   if (value.executionRouting !== undefined && typeof value.executionRouting !== "function") throw new UserError(`invalid execution routing provider in '${value.name}'`);
   if (value.run !== undefined && typeof value.run !== "function") throw new UserError(`invalid command handler in '${value.name}'`);
+  if (value.workspaceLifecycle !== undefined && (!isObject(value.workspaceLifecycle)
+    || Object.keys(value.workspaceLifecycle).some((key) => !["started", "removing"].includes(key))
+    || value.workspaceLifecycle.started !== undefined && typeof value.workspaceLifecycle.started !== "function"
+    || value.workspaceLifecycle.removing !== undefined && typeof value.workspaceLifecycle.removing !== "function")) {
+    throw new UserError(`invalid workspace lifecycle in '${value.name}'`);
+  }
   if (value.workspaceReady !== undefined && typeof value.workspaceReady !== "function") throw new UserError(`invalid workspace integration in '${value.name}'`);
   if (Array.isArray(value.commands) && value.commands.length && value.run === undefined) throw new UserError(`missing command handler in '${value.name}'`);
   if (value.guest !== undefined) {
@@ -113,6 +119,14 @@ export function composeWorkspaceRuntime(context: WorkspaceRuntimeFactoryContext)
     }
     return runtime;
   };
+  const started = async (record: Parameters<WorkspaceRuntime["start"]>[0]) => {
+    const enabled = await installed();
+    const lifecycleContext = { ...context, extensions: hostPluginExtensions(enabled) };
+    for (const plugin of enabled) await plugin.workspaceLifecycle?.started?.(record, lifecycleContext);
+  };
+  const beforeAccess = async (record: Parameters<WorkspaceRuntime["start"]>[0], runtime: WorkspaceRuntime) => {
+    if ((await runtime.inspect(record))?.running) await started(record);
+  };
   return {
     async defaultImage(name) {
       if (name === "container") return undefined;
@@ -123,13 +137,33 @@ export function composeWorkspaceRuntime(context: WorkspaceRuntimeFactoryContext)
     runtime: {
       inspect: async (record) => (await get(record.runtime)).inspect(record),
       create: async (record) => (await get(record.runtime)).create(record),
-      start: async (record) => (await get(record.runtime)).start(record),
+      start: async (record) => {
+        await (await get(record.runtime)).start(record);
+        await started(record);
+      },
       stop: async (record) => (await get(record.runtime)).stop(record),
-      remove: async (record, options) => (await get(record.runtime)).remove(record, options),
-      updateResources: async (record, resources) => (await get(record.runtime)).updateResources(record, resources),
+      remove: async (record, options) => {
+        const runtime = await get(record.runtime), enabled = await installed();
+        const lifecycleContext = { ...context, extensions: hostPluginExtensions(enabled) };
+        for (const plugin of [...enabled].reverse()) await plugin.workspaceLifecycle?.removing?.(record, options, lifecycleContext);
+        await runtime.remove(record, options);
+      },
+      updateResources: async (record, resources) => {
+        const runtime = await get(record.runtime), result = await runtime.updateResources(record, resources);
+        if (result.recreated) await beforeAccess({ ...record, resources }, runtime);
+        return result;
+      },
       seed: async (record, directory) => (await get(record.runtime)).seed(record, directory),
-      exec: async (record, command, options) => (await get(record.runtime)).exec(record, command, options),
-      connect: async (record, port, options) => (await get(record.runtime)).connect(record, port, options),
+      exec: async (record, command, options) => {
+        const runtime = await get(record.runtime);
+        await beforeAccess(record, runtime);
+        return runtime.exec(record, command, options);
+      },
+      connect: async (record, port, options) => {
+        const runtime = await get(record.runtime);
+        await beforeAccess(record, runtime);
+        return runtime.connect(record, port, options);
+      },
       hostGateway: async (record) => {
         const runtime = await get(record.runtime);
         if (!runtime.hostGateway) throw new UserError(`workspace runtime '${record.runtime}' has no host service gateway`);

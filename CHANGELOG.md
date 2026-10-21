@@ -117,6 +117,15 @@ is implied by these source changes.
   Reviewed VM image downloads share a resumable checksum-verified host cache.
   Publish the versioned OpenCode static UI
   automatically from `main` and `development` through GitHub Pages.
+- Add a separate Tailscale host plugin with a host-owned authenticated gateway
+  for workspace and nested-agent IPv4 tailnet routing and DNS. Keep VPN state,
+  credentials and control sockets outside guests; preserve private workspace
+  bridges and reconcile networking through shared host lifecycle hooks. The
+  optional External URLs ingress driver uses the host's existing Tailscale node
+  independently. Local uninstall/reinstall retains LLM router accounts,
+  authentication, history and captures, plus Tailscale gateway identity and
+  state, regardless of package cache retention; owned runtime processes and
+  gateway containers/networks are replaced.
 - Align documentation and disposable verification with the current architecture;
   remove tests and gates that enforce retired internal contracts. Preserve the
   exported issue backup and map its 32 open issues into the architecture plan.

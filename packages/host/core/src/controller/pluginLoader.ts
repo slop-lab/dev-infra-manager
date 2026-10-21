@@ -4,7 +4,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { UserError } from "@slop-lab/dim-host-core";
 import { resolveHostPluginModule } from "../pluginModule.js";
-import { registerPlugins, type DimPlugin, type RegisteredDimPlugins } from "./plugin.js";
+import { DIM_PLUGIN_API_VERSION, registerPlugins, type DimPlugin, type RegisteredDimPlugins } from "./plugin.js";
+import type { HostPluginExtension } from "../plugin-api.js";
 import { builtInHostInputPlugin } from "./hostInputs.js";
 
 export interface PluginManifest {
@@ -73,6 +74,11 @@ export async function loadInstalledPlugins(home = pluginHome()): Promise<{
       plugin?: DimPlugin;
       hostPlugin?: unknown;
     };
+    const contributions = hostExtensions(module.hostPlugin, specifier);
+    if (contributions.length) plugins.push({
+      name: `${specifier}:host-extensions`, apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) { for (const extension of contributions) host.registerExtension(extension.kind, extension.name, extension.value); }
+    });
     const plugin = module.default ?? module.plugin;
     // Host-only integrations are consumed by the selected host CLI. Their
     // installation must not make an optional controller load another runtime.
@@ -84,4 +90,18 @@ export async function loadInstalledPlugins(home = pluginHome()): Promise<{
   }
 
   return { manifest, registered: await registerPlugins([builtInHostInputPlugin, ...plugins]) };
+}
+
+function hostExtensions(raw: unknown, specifier: string): readonly HostPluginExtension[] {
+  if (raw === undefined) return [];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new UserError(`invalid host plugin export: ${specifier}`);
+  const extensions: unknown = Reflect.get(raw, "extensions");
+  if (extensions === undefined) return [];
+  if (!Array.isArray(extensions)) throw new UserError(`invalid host plugin extensions: ${specifier}`);
+  return extensions.map((raw: unknown): HostPluginExtension => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new UserError(`invalid host plugin extension: ${specifier}`);
+    const kind: unknown = Reflect.get(raw, "kind"), name: unknown = Reflect.get(raw, "name"), value: unknown = Reflect.get(raw, "value");
+    if (typeof kind !== "string" || !kind || typeof name !== "string" || !name || !value || typeof value !== "object" || Array.isArray(value)) throw new UserError(`invalid host plugin extension: ${specifier}`);
+    return { kind, name, value };
+  });
 }

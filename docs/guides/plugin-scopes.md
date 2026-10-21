@@ -75,6 +75,7 @@ credentials or the workspace lifecycle token as a shortcut.
 | `@slop-lab/dim-control-plane-plugin-execution-scheduler` | Durable execution coordination and worker admission |
 | `@slop-lab/dim-control-plane-plugin-ci-workflows` | Repository workflow language compiler consumed by Git-CI |
 | `@slop-lab/dim-control-plane-plugin-llm-router` | Upstream accounts and secrets, routing, admission, usage and exchange capture |
+| `@slop-lab/dim-host-plugin-tailscale` | Host tailnet ingress driver and isolated workspace tailnet networking; VPN credentials remain outside guests |
 | `@slop-lab/dim-host-plugin-llm-router` | Workspace identity checks, scoped router enrollment, local gateway and guest/OpenCode configuration |
 
 Repository hosting does not require review, merge policy, a compiler or CI.

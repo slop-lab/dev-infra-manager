@@ -63,6 +63,7 @@ writeFileSync(join(output,"packer-marker"),"selected-packer\\n");
     "packages/contracts/external-url",
     "packages/host/plugins/dns-cloudflare",
     "packages/host/plugins/external-urls",
+    "packages/host/plugins/tailscale",
     "packages/host/plugins/mirrors",
     "packages/host/plugins/cache-server",
     "packages/control-plane/plugins/ci-workflows",

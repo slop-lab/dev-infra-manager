@@ -37,8 +37,9 @@ artifact provenance and prerequisites.
 
 Repository maintenance commands `just uninstall-local --dry-run` (preview) and
 `just reinstall-local [--with-managed]` support a clean local source reinstall.
-Reinstall removes the current user's local DIM workspaces and service/auth data
-after confirmation, retaining package cache data by default;
+Reinstall removes the current user's local DIM workspaces and runtime installation
+after confirmation. LLM router accounts, authentication, history and captures,
+and Tailscale gateway identity/state are retained; package cache data is retained by default;
 inspect the [removal scope](docs/guides/usage.md#remove-or-reinstall-a-local-source-installation)
 before executing it.
 
@@ -174,6 +175,7 @@ the base CLI.
 | [host-llm-router](packages/host/plugins/llm-router/README.md) | Workspace identity fencing, private gateway and OpenCode connection to a control-plane router |
 | [vm](packages/host/plugins/vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped browser consoles |
 | [kvm](packages/host/plugins/kvm/README.md) | Explicit KVM access inside a Sysbox workspace through the `container-kvm` runtime |
+| [tailscale](docs/guides/tailscale.md) | Host-managed IPv4 tailnet routing and DNS for workspaces and agents; optional host-node TCP ingress |
 | [tunnels](packages/host/plugins/tunnels/README.md) | Persistent TCP/UDP routes, workspace grants and operator web UI |
 | [workspace-check](packages/host/plugins/workspace-check/README.md) | Disposable lifecycle/data-preservation checks for ordinary repositories |
 

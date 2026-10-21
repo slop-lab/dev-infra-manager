@@ -82,8 +82,10 @@ randomize_client_port: false
 YAML
 
 cat >"$fixture_root/fixture.mjs" <<'JS'
+// @ts-check
 import http from "node:http";
-import { TcpIngressListener, tailscaleIngressDriver } from "@slop-lab/dim-host-plugin-external-urls";
+import { TcpIngressListener } from "@slop-lab/dim-host-plugin-external-urls";
+import { tailscaleIngressDriver } from "@slop-lab/dim-host-plugin-tailscale";
 
 const runtime = await tailscaleIngressDriver.runtime('{"listenPort":49152}');
 const listener = new TcpIngressListener({ name: "tailnet", ...runtime });
@@ -140,6 +142,7 @@ WORKDIR /app
 COPY packages /tmp/packages
 RUN npm init -y >/dev/null \
  && npm install --omit=dev /tmp/packages/*.tgz >/dev/null \
+ && node --input-type=module -e 'import {tailscaleIngressDriver} from "@slop-lab/dim-host-plugin-tailscale"; if(typeof tailscaleIngressDriver.runtime !== "function") throw Error("Tailscale ingress artifact is unavailable");' \
  && rm -rf /tmp/packages
 COPY fixture.mjs /app/fixture.mjs
 COPY entrypoint.sh /usr/local/bin/dim-tailnet-fixture
