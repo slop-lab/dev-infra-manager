@@ -6,6 +6,7 @@ import { checked, command, type Command } from "./local-uninstall/command.ts";
 import { metadata, object, readJson, text } from "./local-uninstall/files.ts";
 import { removalPaths } from "./local-uninstall/paths.ts";
 import { ownedWebUnit, webUnitPath } from "./local-uninstall/web-unit.ts";
+import { defaultWebPluginPackages } from "./local-web-profile.ts";
 
 async function privateDirectory(directory: string): Promise<void> {
   const stat = await metadata(directory);
@@ -37,6 +38,25 @@ export async function configureLocalWeb(env: NodeJS.ProcessEnv = process.env, ru
     await writeFile(login, output, { flag: "wx", mode: 0o600 });
   }
   const saved = object(JSON.parse(await readFile(config, "utf8")));
+  if (saved.plugins !== undefined && !Array.isArray(saved.plugins)) throw new Error("Web UI plugins must be an array");
+  const plugins: unknown[] = [...(saved.plugins as unknown[] | undefined ?? [])];
+  let changed = false;
+  for (const packageName of defaultWebPluginPackages) {
+    // Existing entries, including deliberately unconfigured entries, are operator owned.
+    if (plugins.some((entry) => object(entry).package === packageName)) continue;
+    const selection: { package: string; config?: { connectionFile: string } } = { package: packageName };
+    if (packageName === "@slop-lab/dim-web-plugin-llm-router") {
+      const connectionFile = join(paths.configuration, "llm/operator.json");
+      if (await privateFile(connectionFile)) selection.config = { connectionFile };
+    }
+    plugins.push(selection); changed = true;
+  }
+  if (changed) {
+    saved.plugins = plugins;
+    const stage = `${config}.tmp-${process.pid}`;
+    await writeFile(stage, JSON.stringify(saved, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    await rename(stage, config);
+  }
   console.log(`[host] Web UI: ${text(saved.publicOrigin)} (login details: ${join(directory, "login.txt")})`);
   let systemd = false;
   try { systemd = (await run("systemctl", ["--user", "show-environment"])).status === 0; } catch { /* optional on hosts without systemd */ }

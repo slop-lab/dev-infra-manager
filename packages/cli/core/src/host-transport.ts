@@ -16,6 +16,8 @@ export interface HostTransportOptions {
   readonly stdin?: Readable;
   readonly stdout?: Writable;
   readonly stderr?: NodeJS.WritableStream;
+  /** Optional combined stdout/stderr bound for record operations. */
+  readonly maxOutputBytes?: number;
 }
 
 export class HostTransportError extends Error {
@@ -84,6 +86,7 @@ export async function callHost<T = unknown>(
   request: HostRequest,
   options: HostTransportOptions = {}
 ): Promise<T> {
+  if (options.maxOutputBytes !== undefined && (!Number.isSafeInteger(options.maxOutputBytes) || options.maxOutputBytes < 1)) throw new HostTransportError("invalid host response size limit");
   const invocation = hostInvocation(target, request, { ...options, terminal: false });
   const child = spawn(invocation.file, invocation.args, {
     stdio: ["ignore", "pipe", "pipe"],
@@ -91,12 +94,27 @@ export async function callHost<T = unknown>(
   });
   let stdout = "";
   let stderr = "";
-  child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
+  let bytes = 0;
+  let outputError: HostTransportError | undefined;
+  const accept = (chunk: string) => {
+    if (outputError) return false;
+    bytes += Buffer.byteLength(chunk, "utf8");
+    if (options.maxOutputBytes !== undefined && bytes > options.maxOutputBytes) {
+      outputError = new HostTransportError(`host '${target.name}' response exceeded its size limit`);
+      child.kill("SIGKILL"); return false;
+    }
+    return true;
+  };
+  child.stdout.setEncoding("utf8").on("data", (chunk: string) => { if (accept(chunk)) stdout += chunk; });
   child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+    if (!accept(chunk)) return;
     stderr += chunk;
     (options.stderr ?? process.stderr).write(chunk);
   });
-  const exitCode = await processExit(child, target);
+  let exitCode: number;
+  try { exitCode = await processExit(child, target); }
+  catch (error) { throw outputError ?? error; }
+  if (outputError) throw outputError;
   if (exitCode !== 0) {
     throw new HostTransportError(stderr.trim() || `host '${target.name}' command failed (${exitCode})`, exitCode, {
       reported: stderr.trim().length > 0

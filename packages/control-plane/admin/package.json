@@ -82,7 +82,8 @@
     "@slop-lab/dim-contracts-git": "workspace:0.10.0",
     "@slop-lab/dim-contracts-execution": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-execution-scheduler": "workspace:0.10.0",
-    "@slop-lab/dim-host-plugin-execution-worker": "workspace:0.10.0"
+    "@slop-lab/dim-host-plugin-execution-worker": "workspace:0.10.0",
+    "@slop-lab/dim-execution-client": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

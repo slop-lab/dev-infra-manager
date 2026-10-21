@@ -8,8 +8,6 @@ const repositoryId = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const file = z.string().refine(isAbsolute);
 export const operationsConfigSchema = z.object({
   hosts: z.array(z.object({ id: identifier, selector: identifier, executable: file }).strict()).max(64).default([]),
-  ci: z.object({ queryConnection: file }).strict().optional(),
-  execution: z.object({ operatorConnection: file }).strict().optional(),
   consoles: z.array(z.object({ name: z.string().min(1).max(128), url: z.string().url().refine((value) => {
     const url = new URL(value); return !url.username && !url.password && !url.search && !url.hash && (url.protocol === "https:" || url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname));
   }) }).strict()).max(64).default([])
@@ -48,11 +46,7 @@ export interface WebOperations {
   workspaces(host: string): Promise<unknown>;
   workspaceAction(host: string, input: WorkspaceAction): Promise<void>;
   workspaceCreate(host: string, input: WorkspaceCreate): Promise<void>;
-  jobs(): Promise<unknown>;
-  detail(id: string): Promise<unknown>;
-  workers(): Promise<unknown>;
-  cancel(id: string): Promise<unknown>;
-  retry(id: string, requestId: string): Promise<unknown>;
+
 }
 const execute = promisify(execFile);
 export function configuredWebOperations(config: OperationsConfig): WebOperations {
@@ -69,16 +63,6 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
       });
       return JSON.parse(result.stdout);
     } catch { throw new HttpResponseError(409, "host operation failed; refresh the workspace before retrying"); }
-  }
-  async function ci() {
-    if (!config.ci) throw new HttpResponseError(404, "CI is not configured");
-    const module = await import("@slop-lab/dim-control-plane-admin/ci");
-    return module.createCiQueryClient(config.ci.queryConnection);
-  }
-  async function operator() {
-    if (!config.execution?.operatorConnection) throw new HttpResponseError(403, "execution operator connection is not configured");
-    const module = await import("@slop-lab/dim-control-plane-admin/execution");
-    return module.createExecutionOperatorClient(config.execution.operatorConnection);
   }
   return {
     async hosts() { return config.hosts.map(({ id }) => ({ id })); },
@@ -101,9 +85,6 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
         const value = input.resources?.[key]; if (value !== undefined) args.push(flag, value);
       }
       await command(id, args);
-    },
-    async jobs() { return (await ci()).jobs(); }, async detail(id) { return (await ci()).detail(id); },
-    async workers() { return (await operator()).workers(); }, async cancel(id) { return (await operator()).cancel(id); },
-    async retry(id, requestId) { return (await operator()).retry(id, requestId); }
+    }
   };
 }

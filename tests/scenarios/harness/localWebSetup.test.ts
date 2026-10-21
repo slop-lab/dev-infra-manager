@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { configureLocalWeb } from "../../../scripts/configure-local-web.ts";
+import { defaultWebPluginPackages } from "../../../scripts/local-web-profile.ts";
 import { ownedWebUnit, webUnitPath } from "../../../scripts/local-uninstall/web-unit.ts";
 import { removalPaths } from "../../../scripts/local-uninstall/paths.ts";
 import { createRemovalPlan, executeRemoval } from "../../../scripts/local-uninstall/plan.ts";
@@ -35,6 +36,8 @@ it("sets up a persistent local UI without printing credentials or resetting acco
   expect(f.calls.filter((args) => args.includes("init-operations"))).toHaveLength(1);
   expect(await readFile(join(f.paths.configuration, "web/login.txt"), "utf8")).toContain("private-password");
   expect(f.calls).toContainEqual(["systemctl", "--user", "restart", "dim-web.service"]);
+  const saved = JSON.parse(before);
+  expect(saved.plugins).toEqual(defaultWebPluginPackages.map((packageName) => ({ package: packageName })));
   const operations = JSON.parse(await readFile(join(f.paths.configuration, "web/operations.json"), "utf8"));
   expect(operations.hosts[0].selector).toBe("local");
 });
@@ -61,5 +64,39 @@ it("initializes private access without requiring user systemd", async () => {
   await configureLocalWeb(f.env, run);
   expect(await readFile(join(f.paths.configuration, "web/login.txt"), "utf8")).toContain("Browser username: operator");
   expect(await ownedWebUnit(f.paths)).toBe(false);
+  expect(f.calls.some((args) => args.includes("restart"))).toBe(false);
+});
+
+it("discovers the private conventional router connection while preserving operator plugin selections and accounts", async () => {
+  const f = await fixture();
+  const llm = join(f.paths.configuration, "llm");
+  await mkdir(llm, { mode: 0o700 });
+  const connectionFile = join(llm, "operator.json");
+  await writeFile(connectionFile, "{}", { mode: 0o600 });
+  await configureLocalWeb(f.env, f.run);
+  const file = join(f.paths.configuration, "web/config.json");
+  const saved = JSON.parse(await readFile(file, "utf8"));
+  expect(saved.plugins[0]).toEqual({ package: defaultWebPluginPackages[0], config: { connectionFile } });
+  saved.plugins = [
+    { package: defaultWebPluginPackages[0], config: { connectionFile: "/operator/other-router.json" } },
+    { package: "@operator/custom-plugin", config: { privateValue: "preserve" } }
+  ];
+  await writeFile(file, JSON.stringify(saved));
+  await configureLocalWeb(f.env, f.run);
+  const updated = JSON.parse(await readFile(file, "utf8"));
+  expect(updated.accounts).toEqual(saved.accounts);
+  expect(updated.plugins.slice(0, 2)).toEqual(saved.plugins);
+  expect(updated.plugins.slice(2)).toEqual(defaultWebPluginPackages.slice(1).map((packageName) => ({ package: packageName })));
+  const before = await readFile(file, "utf8");
+  await configureLocalWeb(f.env, f.run);
+  expect(await readFile(file, "utf8")).toBe(before);
+});
+
+it("refuses an insecure discovered router connection instead of silently configuring it", async () => {
+  const f = await fixture();
+  const llm = join(f.paths.configuration, "llm");
+  await mkdir(llm, { mode: 0o700 });
+  await writeFile(join(llm, "operator.json"), "{}", { mode: 0o644 });
+  await expect(configureLocalWeb(f.env, f.run)).rejects.toThrow("mode 0600");
   expect(f.calls.some((args) => args.includes("restart"))).toBe(false);
 });

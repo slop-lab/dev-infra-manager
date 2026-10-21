@@ -49,6 +49,8 @@ export async function backupRouter(config: RouterConfig, destination: string, op
   if (config.accounts.some((account) => account.credentialDirectory) && options.backendStateQuiesced !== true) throw new Error("stop configured backend credential writers and explicitly confirm backendStateQuiesced before backup");
   const guard = await tryAcquireKernelGuard(join(config.stateDirectory, "service.guard"));
   if (!guard) throw new Error("stop the LLM router before taking a consistent backup");
+  const operatorGuard = await tryAcquireKernelGuard(join(config.stateDirectory, "operator-service.guard"));
+  if (!operatorGuard) { await guard.release(); throw new Error("stop the router operator service before taking a consistent backup"); }
   const ledger = new RouterLedger(config.stateDirectory);
   try {
     await mkdir(destination, { mode: 0o700 }); await mkdir(join(destination, "state"), { mode: 0o700 });
@@ -65,6 +67,11 @@ export async function backupRouter(config: RouterConfig, destination: string, op
       if (account.credentialDirectory) { await privateTree(account.credentialDirectory, join(directory, "backend-auth"), files, `accounts/${account.id}/backend-auth`); backendCredentials[account.id] = "included"; }
       else backendCredentials[account.id] = "external-not-included";
     }
+    await mkdir(join(destination, "operators"), { mode: 0o700 });
+    for (const actor of config.operators ?? []) {
+      const path = `operators/${actor.id}.key`, bytes = await safeBytes(actor.keyFile, 16 * 1024);
+      await writeFile(join(destination, path), bytes, { mode: 0o600, flag: "wx" }); files[path] = hash(bytes);
+    }
     await mkdir(join(destination, "host-issuers"), { mode: 0o700 });
     for (const issuer of config.hostIssuers) {
       const path = `host-issuers/${issuer.id}.key`, bytes = await safeBytes(issuer.keyFile, 16 * 1024);
@@ -72,7 +79,7 @@ export async function backupRouter(config: RouterConfig, destination: string, op
     }
     const manifest: BackupManifest = { schemaVersion: 1, config, files, createdAt: new Date().toISOString(), backendCredentials };
     await writeFile(join(destination, "manifest.json"), JSON.stringify(manifest, null, 2), { mode: 0o600, flag: "wx" });
-  } finally { ledger.close(); await guard.release(); }
+  } finally { ledger.close(); await operatorGuard.release(); await guard.release(); }
 }
 export async function restoreRouter(source: string, destination: string): Promise<string> {
   const raw = object(JSON.parse(await privateFile(join(source, "manifest.json"), 4 * 1024 * 1024)));
@@ -87,9 +94,11 @@ export async function restoreRouter(source: string, destination: string): Promis
     await mkdir(join(destination, file, ".."), { recursive: true, mode: 0o700 }); await writeFile(join(destination, file), bytes, { mode: 0o600, flag: "wx" });
   }
   const restored = parseConfig({ ...config, stateDirectory: join(destination, "state"),
+    ...(config.operators === undefined ? {} : { operators: config.operators.map((actor) => ({ ...actor, keyFile: join(destination, "operators", `${actor.id}.key`) })) }),
     hostIssuers: config.hostIssuers.map((issuer) => ({ ...issuer, keyFile: join(destination, "host-issuers", `${issuer.id}.key`) })),
     accounts: config.accounts.map((account) => ({ ...account, keyFile: join(destination, "accounts", account.id, "access.key"),
       ...(account.credentialDirectory === undefined ? {} : { credentialDirectory: join(destination, "accounts", account.id, "backend-auth") }) })) });
+  for (const actor of restored.operators ?? []) await safeBytes(actor.keyFile, 16 * 1024);
   for (const issuer of restored.hostIssuers) await safeBytes(issuer.keyFile, 16 * 1024);
   for (const account of restored.accounts) {
     await safeBytes(account.keyFile, 16 * 1024);

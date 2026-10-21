@@ -21,8 +21,8 @@ try {
   await page.getByLabel("Password").fill(fixture.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.locator("#operations-panel").waitFor({ state: "visible" });
-  await page.getByText("Services refreshed.", { exact: true }).waitFor();
-  assert.equal(await page.locator("#workspace").isHidden(), true);
+  await page.getByText("Workspaces refreshed.", { exact: true }).waitFor();
+  assert.equal(await page.locator("#feature-navigation").isHidden(), true);
   const newWorkspace = page.getByRole("form", { name: "New workspace on devbox", exact: true });
   assert.equal(await newWorkspace.isVisible(), false);
   await page.getByRole("button", { name: "New workspace on devbox", exact: true }).click();
@@ -43,7 +43,7 @@ try {
   assert.equal(await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).evaluate((field) => field === document.activeElement), true);
   assert.equal(await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).inputValue(), "browser-created");
   await page.getByRole("button", { name: "Refresh services", exact: true }).click();
-  await page.getByText("Services refreshed.", { exact: true }).waitFor();
+  await page.getByText("Workspaces refreshed.", { exact: true }).waitFor();
   assert.equal(await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).inputValue(), "browser-created");
   assert.equal(await development.getByLabel("CPUs for development", { exact: true }).inputValue(), "0.75");
   await development.getByRole("button", { name: "stop development", exact: true }).click();
@@ -81,25 +81,13 @@ try {
   await retryWorkspaces.waitFor({ state: "hidden" });
   await createdRow.waitFor();
   assert.equal(await development.getByRole("button", { name: "start development", exact: true }).isVisible(), true);
-  const queued = page.locator("#operations-jobs .operations-row").filter({ hasText: "queued · queued" });
-  await queued.getByRole("button", { name: "Cancel execution" }).click();
-  const cancelled = page.locator("#operations-jobs .operations-row").filter({ hasText: "queued · finished" });
-  await cancelled.waitFor();
-  assert.equal(fixture.execution().phase, "finished");
-  await cancelled.getByRole("button", { name: "Retry execution" }).click();
-  await page.locator("#operations-jobs .operations-row").filter({ hasText: "queued · queued" }).waitFor();
-  const completed = page.locator("#operations-jobs .operations-row").filter({ hasText: "completed · finished" });
-  await completed.getByRole("button", { name: "Read diagnostics" }).click();
-  await page.getByText(/browser-safe-diagnostic/).waitFor();
-  assert.match(await page.locator("#operations-workers").innerText(), /configured capacity/);
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.locator("#login-view").waitFor({ state: "visible" });
   assert.equal(await page.locator("#operations-panel").isHidden(), true);
-  assert.equal(await page.locator("#operations-details").textContent(), "");
   await page.getByLabel("Username").fill("readonly");
   await page.getByLabel("Password").fill(fixture.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByText("Services refreshed.", { exact: true }).waitFor();
+  await page.getByText("Workspaces refreshed.", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Create workspace on devbox", exact: true }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "stop development", exact: true }).count(), 0);
   await fixture.clearWorkspaces();
@@ -107,17 +95,6 @@ try {
   await page.getByText("No workspaces yet", { exact: true }).waitFor();
   assert.equal(await page.locator(".workspace-row").count(), 0);
   assert.equal(await page.getByRole("button", { name: "New workspace on devbox", exact: true }).count(), 0);
-  const executionOnly = await createOperationsBrowserFixture({ ci: false });
-  try {
-    await page.goto(executionOnly.origin);
-    await page.getByLabel("Username").fill(executionOnly.username);
-    await page.getByLabel("Password").fill(executionOnly.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByText("Services refreshed.", { exact: true }).waitFor();
-    assert.equal(await page.locator("#operations-ci-section").isHidden(), true);
-    assert.equal(await page.locator("#operations-execution-section").isVisible(), true);
-    assert.match(await page.locator("#operations-workers").innerText(), /configured capacity/);
-  } finally { await executionOnly.close(); }
   assert.deepEqual(errors, []);
-  console.log("operations-browser: workspace draft preservation, create failure/retry, safe discard cancellation, host recovery, live execution and logout PASS");
+  console.log("operations-browser: workspace draft preservation, create failure/retry, safe discard cancellation, host recovery and logout PASS");
 } finally { await browser.close(); await fixture.close(); }

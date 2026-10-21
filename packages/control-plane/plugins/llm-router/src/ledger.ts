@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { chmodSync, existsSync, lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { routerSchemaSql, validateSharedRouterSchema } from "./schema.js";
 import { object, text, identifier, parsePolicy, parseLimits, type ProjectPolicy, type RouterLimits } from "./config.js";
 
 export interface WorkspaceGrant { workspaceId: string; workspaceName: string; routeId: string; projectId: string; principalId: string; credentialHash: string }
@@ -11,29 +12,30 @@ export class AdmissionError extends Error { constructor(message: string, readonl
 export interface Project { id: string; enabled: boolean; paused: boolean; revision: string; policy: ProjectPolicy }
 export class RouterLedger {
   readonly database: DatabaseSync;
-  constructor(readonly directory: string, private readonly now: () => number = Date.now) {
-    mkdirSync(directory, { recursive: true, mode: 0o700 }); const root = lstatSync(directory);
+  static openShared(directory: string, now: () => number = Date.now): RouterLedger {
+    return new RouterLedger(directory, now, { schemaOwnership: "shared-existing" });
+  }
+  constructor(readonly directory: string, private readonly now: () => number = Date.now, options: { schemaOwnership?: "shared-existing" } = {}) {
+    if (options.schemaOwnership !== "shared-existing") mkdirSync(directory, { recursive: true, mode: 0o700 }); const root = lstatSync(directory);
     if (!root.isDirectory() || root.isSymbolicLink() || root.uid !== process.geteuid?.() || (root.mode & 0o077) !== 0) throw new Error("router state directory must be owned and private");
     const file = join(directory, "router.sqlite3");
     for (const suffix of ["", "-wal", "-shm"]) { if (!existsSync(file + suffix)) continue; const stat = lstatSync(file + suffix);
       if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.uid !== process.geteuid?.()) throw new Error("router state file is unsafe"); }
-    this.database = new DatabaseSync(file); chmodSync(file, 0o600);
+    if (options.schemaOwnership === "shared-existing" && !existsSync(file)) throw new Error("shared router attachment requires an existing ledger");
+    this.database = new DatabaseSync(file);
+    if (options.schemaOwnership === "shared-existing") {
+      try {
+        validateSharedRouterSchema(this.database);
+        if (this.database.prepare("PRAGMA journal_mode").get()?.journal_mode !== "wal") throw new Error("shared router ledger requires existing WAL journal mode");
+        this.database.exec("PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000");
+      } catch (error) { this.database.close(); throw error; }
+      return;
+    }
+    chmodSync(file, 0o600);
     this.database.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000");
     const version = Number(this.database.prepare("PRAGMA user_version").get()?.user_version);
     if (version !== 3 && (version !== 0 || this.database.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get())) { this.database.close(); throw new Error("unsupported router state; choose a fresh directory"); }
-    if (version === 0) this.database.exec(`BEGIN IMMEDIATE;
-      CREATE TABLE projects(id TEXT PRIMARY KEY,enabled INTEGER NOT NULL,paused INTEGER NOT NULL,revision TEXT NOT NULL,policy TEXT NOT NULL);
-      CREATE TABLE principals(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,workspace_id TEXT NOT NULL,workspace_name TEXT NOT NULL,route_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,enabled INTEGER NOT NULL);
-      CREATE TABLE requests(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,principal_id TEXT NOT NULL,workspace_id TEXT NOT NULL,route_id TEXT NOT NULL,account_id TEXT NOT NULL,
-        attempt_id TEXT NOT NULL,requested_model TEXT NOT NULL,observed_model TEXT,policy_revision TEXT NOT NULL,policy_snapshot TEXT NOT NULL,route_snapshot TEXT NOT NULL,
-        day TEXT NOT NULL,started_at INTEGER NOT NULL,finished_at INTEGER,outcome TEXT NOT NULL,execution TEXT NOT NULL,delivery TEXT NOT NULL,accounting TEXT NOT NULL,
-        occupied INTEGER NOT NULL,token_reservation INTEGER NOT NULL,dispatched INTEGER NOT NULL DEFAULT 0,cancel_requested INTEGER NOT NULL DEFAULT 0,
-        capture_state TEXT NOT NULL,capture_bytes INTEGER NOT NULL,capture_complete INTEGER NOT NULL DEFAULT 0,request_sha256 TEXT,response_sha256 TEXT,
-        input_tokens INTEGER,output_tokens INTEGER,raw_usage TEXT,error_code TEXT,response_status INTEGER,response_content_type TEXT);
-      CREATE INDEX project_requests ON requests(project_id,day,started_at);
-      CREATE INDEX active_requests ON requests(project_id) WHERE occupied=1;
-      CREATE TABLE audit(sequence INTEGER PRIMARY KEY AUTOINCREMENT,at INTEGER NOT NULL,actor TEXT NOT NULL,operation TEXT NOT NULL,target TEXT NOT NULL,detail TEXT NOT NULL);
-      PRAGMA user_version=3; COMMIT;`);
+    if (version === 0) this.database.exec(`BEGIN IMMEDIATE; ${routerSchemaSql} PRAGMA user_version=3; COMMIT;`);
   }
   close(): void { this.database.close(); }
   audit(actor: string, operation: string, target: string, detail: unknown = {}): void {
@@ -48,9 +50,9 @@ export class RouterLedger {
     const policy: unknown = JSON.parse(text(row.policy)); return { id: text(row.id), enabled: row.enabled === 1, paused: row.paused === 1, revision: text(row.revision), policy: parsePolicy(policy) };
   }
   projects(): Project[] { return this.database.prepare("SELECT id FROM projects ORDER BY id").all().map((row) => this.project(text(row.id))); }
-  updatePolicy(id: string, policy: ProjectPolicy): void {
+  updatePolicy(id: string, policy: ProjectPolicy, expectedRevision?: string): void {
     const parsed = parsePolicy(policy), revision = hash(JSON.stringify(parsed)); this.project(id);
-    this.transaction(() => { this.database.prepare("UPDATE projects SET revision=?,policy=? WHERE id=?").run(revision, JSON.stringify(parsed), id); this.audit("operator", "project.policy", id, { revision }); });
+    this.transaction(() => { const result = this.database.prepare(`UPDATE projects SET revision=?,policy=? WHERE id=?${expectedRevision === undefined ? "" : " AND revision=?"}`).run(revision, JSON.stringify(parsed), id, ...(expectedRevision === undefined ? [] : [expectedRevision])); if (result.changes !== 1) throw new Error("project policy changed; reload before saving"); this.audit("operator", "project.policy", id, { revision }); });
   }
   setProject(id: string, action: "pause" | "resume" | "disable" | "enable"): void {
     this.project(id); this.transaction(() => {

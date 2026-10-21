@@ -6,7 +6,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
-    "directory": "packages/cli"
+    "directory": "packages/cli/core"
   },
   "homepage": "https://github.com/slop-lab/dev-infra-manager#readme",
   "bugs": "https://github.com/slop-lab/dev-infra-manager/issues",
@@ -23,8 +23,8 @@
     "dim": "./dist/cli.js"
   },
   "scripts": {
-    "build": "node ../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
-    "pack:dry-run": "pnpm run build && bash ../../scripts/packages/pnpm-pack-dry-run.bash ./dist",
+    "build": "node ../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
+    "pack:dry-run": "pnpm run build && bash ../../../scripts/packages/pnpm-pack-dry-run.bash ./dist",
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {

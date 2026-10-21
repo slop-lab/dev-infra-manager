@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
-import { createWorkspaceOnHost, ensureWorkspaceIntegration, resolveWorkspaceMetadata } from "../../../packages/cli/src/workspace-composition.js";
-import { composeWorkspaceRuntime, hostPluginExtensions, loadHostPlugins, resolveHostExecutionRouting } from "../../../packages/cli/src/host-plugins.js";
+import { createWorkspaceOnHost, ensureWorkspaceIntegration, resolveWorkspaceMetadata } from "../../../packages/cli/core/src/workspace-composition.js";
+import { composeWorkspaceRuntime, hostPluginExtensions, loadHostPlugins, resolveHostExecutionRouting } from "../../../packages/cli/core/src/host-plugins.js";
 import { workspaceRecord } from "../../support/workspaceFixture.js";
 
 const roots: string[] = [];

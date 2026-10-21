@@ -1,0 +1,15 @@
+# LLM router operator client
+
+This package owns the shared LLM routing operation definitions and a bounded HTTP client. It has no router database or provider dependency. CLI and Web plugins call the same definitions, and the service validates both directions with them.
+
+Create a private, owned mode-0600 connection file with absolute paths:
+
+```json
+{"schemaVersion":1,"endpoint":"http://127.0.0.1:8318","actorId":"operator","keyFile":"/absolute/operator.key"}
+```
+
+The key file must also be mode 0600 and contain a separately generated 32-byte base64url secret. Endpoints are exact HTTPS origins or explicit HTTP IP origins; requests never follow redirects. `createLlmRouterClient(path).invoke(name,input)` validates input/output, bounds response bytes and applies a deadline. Errors never include server response bodies or credentials.
+
+`capabilities`, `overview`, `health`, `projects`, `project.policy`, `usage`, `principals`, and `requests` require read access. Mutation operations require operator access. Prompt/response captures, credential paths, raw keys and token hashes are intentionally absent.
+
+`client.capabilities()` queries the service for operations allowed to the authenticated actor. Presenters intersect this result with their own session roles, so a read-only router connection never advertises mutation controls. The service still rechecks permission on every invocation.

@@ -1,5 +1,5 @@
 // @ts-check
-import { record, text } from "./review-data.js";
+import { record, text } from "./session-data.js";
 
 /** @typedef {(path:string, body?:unknown, timeout?:number)=>Promise<unknown>} Request */
 /** @param {string} tag @param {string} [className] @param {string} [content] */

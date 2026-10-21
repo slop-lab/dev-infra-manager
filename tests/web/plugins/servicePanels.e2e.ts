@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import { chromium } from "playwright-core";
+import { createServicePanelsFixture } from "./servicePanelsFixture.js";
+const executablePath = process.env.DIM_CHROMIUM;
+if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
+const fixture = await createServicePanelsFixture();
+const browser = await chromium.launch({ executablePath, headless: true });
+const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
+async function failNextRead(feature: string, operation: string) {
+  await page.route(`**/v1/extensions/${feature}/operations/${operation}`, (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"injected read failure"}' }), { times: 1 });
+}
+async function login(username: string) {
+  await page.goto(fixture.origin);
+  await page.getByLabel("Username", { exact: true }).fill(username);
+  await page.getByLabel("Password", { exact: true }).fill(fixture.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Execution", exact: true }).waitFor();
+}
+try {
+  await login(fixture.username);
+  await page.getByRole("button", { name: "Execution", exact: true }).click();
+  const execution = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Execution", exact: true, level: 1 }) });
+  const queued = execution.locator("tr").filter({ has: page.getByRole("cell", { name: "queued", exact: true }) }).first();
+  await queued.getByRole("button", { name: "View job", exact: true }).click();
+  await execution.getByRole("button", { name: "Cancel execution", exact: true }).waitFor();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await execution.getByRole("button", { name: "Cancel execution", exact: true }).click();
+  await execution.getByText("Cancellation dismissed.", { exact: true }).waitFor();
+  assert.equal(fixture.execution()?.phase, "queued");
+  page.once("dialog", (dialog) => dialog.accept());
+  await execution.getByRole("button", { name: "Cancel execution", exact: true }).click();
+  await execution.getByRole("button", { name: "Retry execution", exact: true }).waitFor();
+  assert.equal(fixture.execution()?.phase, "finished");
+  const retryKeys: string[] = [];
+  page.on("request", (request) => { if (request.url().endsWith("/execution/operations/jobs.retry")) retryKeys.push((request.postDataJSON() as { requestId: string }).requestId); });
+  await page.route("**/v1/extensions/execution/operations/jobs.retry", async (route) => {
+    const accepted = await route.fetch(); assert.equal(accepted.status(), 200);
+    await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"response lost after acceptance"}' });
+  }, { times: 1 });
+  await execution.getByRole("button", { name: "Retry execution", exact: true }).click();
+  await execution.getByText(/^Retry execution failed:/).waitFor();
+  await failNextRead("execution", "jobs.list");
+  await execution.getByRole("button", { name: "Retry execution", exact: true }).click();
+  await execution.getByText("Retry execution accepted. Latest job list could not refresh. Refresh this view to inspect current state; the action was accepted.", { exact: true }).waitFor();
+  assert.equal(retryKeys.length, 2); assert.equal(retryKeys[0], retryKeys[1]);
+  assert.equal(await execution.getByRole("button", { name: "Retry execution", exact: true }).isDisabled(), true);
+  await execution.getByRole("button", { name: "Refresh jobs", exact: true }).click();
+  await execution.getByText("Refresh jobs completed.", { exact: true }).waitFor();
+  const completed = execution.locator("tr").filter({ has: page.getByRole("cell", { name: "completed", exact: true }) });
+  await completed.getByRole("button", { name: "View job", exact: true }).click();
+  await execution.getByText("browser-safe-diagnostic", { exact: false }).waitFor();
+  await execution.getByRole("button", { name: "Refresh worker capacity", exact: true }).click();
+  await execution.getByRole("heading", { name: "Worker capacity", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  const git = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Git review", exact: true, level: 1 }) });
+  await git.getByLabel("Repository", { exact: true }).selectOption("root");
+  await git.getByRole("button", { name: "Open review", exact: true }).click();
+  await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
+  await git.getByText("Candidate commit", { exact: true }).waitFor();
+  await git.getByLabel("Proposal ref", { exact: true }).fill(fixture.proposalRef);
+  await failNextRead("native-git", "reviews.list");
+  await git.getByRole("button", { name: "Resolve proposal review", exact: true }).click();
+  await git.getByText("Proposal review resolved. Latest review list could not refresh. Refresh this view to inspect current state; the action was accepted.", { exact: true }).waitFor();
+  assert.equal(await git.getByRole("button", { name: "Resolve proposal review", exact: true }).isDisabled(), true);
+  await failNextRead("native-git", "reviews.list");
+  page.once("dialog", (dialog) => dialog.accept());
+  await git.getByRole("button", { name: "Approve exact candidate", exact: true }).click();
+  await git.getByRole("button", { name: "Revoke owner approval", exact: true }).waitFor();
+  await git.getByText("Approval recorded. Latest review list could not refresh. Refresh this view to inspect current state; the action was accepted.", { exact: true }).waitFor();
+  page.once("dialog", (dialog) => dialog.accept());
+  await git.getByRole("button", { name: "Revoke owner approval", exact: true }).click();
+  await git.getByRole("button", { name: "Approve exact candidate", exact: true }).waitFor();
+  assert.equal(await git.getByRole("button", { name: "Promote protected ref", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await login("readonly");
+  await page.getByRole("button", { name: "Execution", exact: true }).click();
+  await execution.getByRole("button", { name: "View job", exact: true }).first().click();
+  assert.equal(await execution.getByRole("button", { name: "Retry execution", exact: true }).count(), 0);
+  assert.equal(await execution.getByRole("button", { name: "Refresh worker capacity", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await git.getByRole("button", { name: "Open review", exact: true }).click();
+  await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
+  assert.equal(await git.getByRole("button", { name: "Approve exact candidate", exact: true }).count(), 0);
+  assert.equal(await git.getByLabel("Proposal ref", { exact: true }).count(), 0);
+  const session = await page.request.get(fixture.origin + "/v1/session");
+  const body: unknown = await session.json();
+  assert(typeof body === "object" && body !== null && "csrfToken" in body && typeof body.csrfToken === "string");
+  const denied = await page.request.post(fixture.origin + "/v1/extensions/native-git/operations/reviews.approve", { headers: { Origin: fixture.origin, "x-dim-csrf": body.csrfToken }, data: { repositoryId: "root", reviewId: fixture.reviewId } });
+  assert.equal(denied.status(), 403);
+  assert.deepEqual(errors, []);
+  process.stdout.write("Execution and Native Git plugin browser workflows passed.\n");
+} catch (error) {
+  if (errors.length) process.stderr.write(`Browser errors: ${errors.join("; ")}\n`);
+  throw error;
+} finally { await browser.close(); await fixture.close(); }

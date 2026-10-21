@@ -201,3 +201,24 @@ label.field { color: var(--color-text-secondary); font-size: var(--font-control)
   .workspace-fields input { font-size: 1rem; }
   .workspace-confirmation .button { inline-size: 100%; }
 }
+
+.console-navigation { inline-size: min(calc(100% - 2rem), 65rem); margin: var(--space-5) auto 0; display: flex; flex-wrap: wrap; gap: var(--space-2); border-block-end: 1px solid var(--color-border-subtle); padding-block-end: var(--space-3); }
+#feature-tabs { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.console-navigation [aria-pressed="true"] { color: var(--color-action-text); background: var(--color-action); border-color: transparent; }
+.feature-page { inline-size: min(100%, 68rem); margin-inline: auto; padding: var(--space-8) var(--space-6); }
+.feature-page > .operations-intro { margin-block: var(--space-3) var(--space-6); }
+.feature-content { display: grid; gap: var(--space-5); min-inline-size: 0; }
+.feature-content .panel { padding: var(--space-5); min-inline-size: 0; }
+.feature-content form, .feature-form { display: grid; gap: var(--space-4); }
+.feature-content table { inline-size: 100%; border-collapse: collapse; text-align: start; }
+.feature-content td, .feature-content th { padding: var(--space-3); border-block-end: 1px solid var(--color-border-subtle); overflow-wrap: anywhere; }
+.feature-content th { color: var(--color-text-secondary); font-size: var(--font-meta); }
+.feature-content pre { white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 30rem; overflow: auto; background: var(--color-recessed); padding: var(--space-4); }
+.feature-content .feature-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.feature-content h2, .feature-content h3 { margin-block-end: var(--space-3); }
+.feature-content [role="alert"] { color: var(--color-error-text); }
+.feature-empty { padding: var(--space-6); }
+@media (max-width: 40rem) { .feature-page { padding: var(--space-6) var(--space-4); } .feature-content .panel { padding: var(--space-4); } .feature-content table { display: block; overflow-x: auto; } }
+.feature-connection { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-block-end: var(--space-5); }
+.feature-connection p { max-inline-size: 38rem; color: var(--color-text-secondary); font-size: var(--font-meta); }
+.feature-connection [role="alert"] { color: var(--color-error-text); }

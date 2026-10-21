@@ -28,15 +28,20 @@ installer commands use the same implementation. Without mise, add the printed
 facade directory to PATH.
 Preparation rejects dirty source by default; use a reviewed clean commit.
 
-`install-local` also installs the matched Web UI and its operator clients in a
-separate runtime under `DIM_DATA_HOME/web/runtime`. It configures the built-in
+`install-local` also installs the matched Web UI and the LLM router, execution
+and Native Git Web plugins in a separate runtime under `DIM_DATA_HOME/web/runtime`. It configures the built-in
 `local` host and creates a browser account on first installation. With user
 systemd available, `dim-web.service` starts at `http://127.0.0.1:9081`; otherwise
 installation prints the command to serve it manually. Read the initial username
 and password from `~/.config/dim/web/login.txt` (mode `0600`). Configuration lives
 in `~/.config/dim/web/config.json`; these paths follow `XDG_CONFIG_HOME`.
-Repeated installs preserve the configuration and account and restart the service
-with the selected runtime. Local uninstall removes the Web UI service and its
+Repeated installs preserve the account and existing plugin settings, add missing
+plugins from the development profile, and restart the service with the selected
+runtime. An existing private `~/.config/dim/llm/operator.json` supplies the initial
+LLM router connection. Other features appear as unconfigured until an operator
+adds their explicit scoped connections; installation does not invent a project
+or grant service authority. Existing unconfigured selections are preserved.
+See [Web plugins](web-plugins.md) for connection settings. Local uninstall removes the Web UI service and its
 configuration; a clean reinstall creates a new account.
 
 For a browser on another machine, forward the loopback port with
@@ -44,7 +49,7 @@ For a browser on another machine, forward the loopback port with
 Use `systemctl --user status dim-web.service` and
 `journalctl --user -u dim-web.service` for service diagnostics. Add other trusted
 hosts or optional review/execution connections using the
-[Web UI configuration guide](../../packages/web/README.md).
+[Web UI configuration guide](../../packages/web/core/README.md).
 
 A source host bootstrap is available for a disposable Ubuntu VM in
 [bootstrap-ubuntu-vm.md](../development/bootstrap-ubuntu-vm.md). Do not use

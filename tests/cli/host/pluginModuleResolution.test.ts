@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { resolveHostPluginModule } from "@slop-lab/dim-host-core/workspace";
 import { loadInstalledPlugins } from "../../../packages/host/core/src/controller/pluginLoader.js";
-import { loadHostPlugins } from "../../../packages/cli/src/host-plugins.js";
+import { loadHostPlugins } from "../../../packages/cli/core/src/host-plugins.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

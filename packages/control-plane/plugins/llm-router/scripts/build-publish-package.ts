@@ -7,7 +7,7 @@ const version = publishPackageVersion(value.version);
 await writeFile(new URL("../dist/package.json", import.meta.url), JSON.stringify({
   name: value.name, version, type: "module", license: "MIT", main: "./index.js", types: "./index.d.ts",
   exports: { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" },  },
-  dependencies: { "@slop-lab/dim-control-plane-core": version }, bin: { "dim-control-plane-llm-router": "./main.js" }, engines: { node: "^24.0.0 || ^26.0.0" }
+  dependencies: { "@slop-lab/dim-control-plane-core": version, "@slop-lab/dim-llm-router-client": version, "@slop-lab/dim-contracts-operations": version }, bin: { "dim-control-plane-llm-router": "./main.js" }, engines: { node: "^24.0.0 || ^26.0.0" }
 }, null, 2) + "\n");
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));

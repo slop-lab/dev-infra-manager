@@ -3,13 +3,15 @@ import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import { backendProfile, defaultLimits, integer, loadConfig, parseConfig, parsePolicy, privateFile, text } from "./config.js";
+import { invokeRouterOperation } from "./operations.js";
 import { RouterLedger, type Usage } from "./ledger.js";
 import { createRouter } from "./server.js";
+import { createRouterOperatorServer } from "./operator-server.js";
 import { exportCapture, removeCapture } from "./archive.js";
-import { accountHealth, backupRouter, effectivePolicy, restoreRouter } from "./operator.js";
+import { backupRouter, effectivePolicy, restoreRouter } from "./operator.js";
 
 const usage = `dim-control-plane-llm-router prepare DIRECTORY --backend ORIGIN --backend-key-file FILE --exclusive-account-reference NAME --model ID --context-tokens N --output-tokens N
-  dim-control-plane-llm-router serve|health|projects|principals|active CONFIG
+  dim-control-plane-llm-router serve|operator-serve|health|projects|principals|active CONFIG
   dim-control-plane-llm-router project-add|project-policy|policy|pause|resume|disable|enable|usage PROJECT --config CONFIG [--route ID] [--policy-file FILE]
   dim-control-plane-llm-router principal-revoke PRINCIPAL --config CONFIG
   dim-control-plane-llm-router cancel|resolve|capture|capture-delete REQUEST --config CONFIG [--output DIRECTORY] [--usage-file FILE]
@@ -39,22 +41,22 @@ export async function runRouterCommand(args: string[], context: { signal: AbortS
     console.log(`Prepared ${join(directory, "router.json")}. Review the exclusive backend/account contract, create a project, then serve.`); return;
   }
   if (action === "restore") { console.log(await restoreRouter(resolve(positional), resolve(required("--output")))); return; }
-  const configActions = new Set(["serve", "health", "projects", "principals", "active", "backup"]);
+  const configActions = new Set(["serve", "operator-serve", "health", "projects", "principals", "active", "backup"]);
   const config = await loadConfig(resolve(configActions.has(action) ? positional : required("--config")));
-  if (action === "serve") {
-    const router = await createRouter(config);
+  if (action === "serve" || action === "operator-serve") {
+    const router = await (action === "operator-serve" ? createRouterOperatorServer(config) : createRouter(config));
     try { context.signal.throwIfAborted(); router.server.listen(config.listen); await once(router.server, "listening", { signal: context.signal });
-      console.log("DIM project LLM router listening; upstream login/refresh remains CLIProxyAPI-owned");
+      console.log(action === "operator-serve" ? "DIM LLM router operator listener ready; inference and recovery remain independently owned" : "DIM project LLM router listening; upstream login/refresh remains CLIProxyAPI-owned");
       await new Promise<void>((resolve) => { if (context.signal.aborted) resolve(); else context.signal.addEventListener("abort", () => resolve(), { once: true }); });
     } finally { await router.close(); } return;
   }
   const ledger = new RouterLedger(config.stateDirectory), guard = await tryAcquireKernelGuard(join(config.stateDirectory, "operator.guard"));
   if (!guard) { ledger.close(); throw new Error("another router operator command is running; retry after it finishes"); }
   try {
-    if (action === "health") { const health = await accountHealth(config); ledger.audit("operator", "account.health", "accounts", health); console.log(JSON.stringify(health, null, 2)); return; }
+    if (action === "health") { console.log(JSON.stringify(await invokeRouterOperation(config, ledger, "health", {}), null, 2)); return; }
     if (action === "backup") { await backupRouter(config, resolve(required("--output")), { backendStateQuiesced: flags.get("--backend-state-quiesced") === "yes" }); console.log("Private consistent backup written; inspect its backendCredentials coverage before relying on it"); return; }
-    if (action === "projects") { console.log(JSON.stringify(ledger.projects(), null, 2)); return; }
-    if (action === "principals") { console.log(JSON.stringify(ledger.database.prepare("SELECT id,project_id,workspace_id,workspace_name,route_id,enabled FROM principals ORDER BY id").all(), null, 2)); return; }
+    if (action === "projects") { console.log(JSON.stringify(await invokeRouterOperation(config, ledger, "projects", {}), null, 2)); return; }
+    if (action === "principals") { console.log(JSON.stringify(await invokeRouterOperation(config, ledger, "principals", {}), null, 2)); return; }
     if (action === "active") { console.log(JSON.stringify(ledger.database.prepare("SELECT id,project_id,principal_id,account_id,started_at,execution,delivery,accounting,occupied,cancel_requested FROM requests WHERE occupied=1 OR outcome='running' ORDER BY started_at LIMIT 1000").all(), null, 2)); return; }
     if (action === "project-add" || action === "project-policy") {
       const policy = flags.has("--policy-file") ? parsePolicy(JSON.parse(await privateFile(resolve(required("--policy-file")))))
@@ -65,8 +67,8 @@ export async function runRouterCommand(args: string[], context: { signal: AbortS
     }
     if (["pause", "resume", "disable", "enable"].includes(action)) { ledger.setProject(positional, action === "pause" ? "pause" : action === "resume" ? "resume" : action === "disable" ? "disable" : "enable"); return; }
     if (action === "policy") { console.log(JSON.stringify(effectivePolicy(config, ledger, positional), null, 2)); return; }
-    if (action === "usage") { console.log(JSON.stringify(ledger.usage(positional, config.limits), null, 2)); return; }
-    if (action === "principal-revoke") { ledger.revoke(positional); return; }
+    if (action === "usage") { console.log(JSON.stringify(await invokeRouterOperation(config, ledger, "usage", { projectId: positional }), null, 2)); return; }
+    if (action === "principal-revoke") { await invokeRouterOperation(config, ledger, "principal.revoke", { principalId: positional }); return; }
     if (action === "cancel") { ledger.cancel(positional); console.log(JSON.stringify({ cancellationRequested: true, upstreamTerminationConfirmed: false })); return; }
     if (action === "resolve") {
       let usage: Usage | undefined;

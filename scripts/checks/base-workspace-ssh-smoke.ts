@@ -88,7 +88,7 @@ async function setup() {
     await docker(["cp", path.join(directory, "key.pub"), `${state.container}:/root/.ssh/authorized_keys`]);
     await docker(["exec", state.container, "chown", "root:root", "/root/.ssh/authorized_keys"]);
     await docker(["exec", state.container, "chmod", "600", "/root/.ssh/authorized_keys"]);
-    const wrapper = '#!/bin/sh\nexport DIM_STATE_ROOT=/var/lib/dim-test/state\nexport XDG_RUNTIME_DIR=/var/lib/dim-test/run\nexec node /opt/dim/packages/cli/dist/cli.js "$@"\n';
+    const wrapper = '#!/bin/sh\nexport DIM_STATE_ROOT=/var/lib/dim-test/state\nexport XDG_RUNTIME_DIR=/var/lib/dim-test/run\nexec node /opt/dim/packages/cli/core/dist/cli.js "$@"\n';
     await writeFile(path.join(directory, "dim"), wrapper, { mode: 0o755 });
     await docker(["cp", path.join(directory, "dim"), `${state.container}:/usr/local/bin/dim`]);
     const config = `Port ${port}\nListenAddress 127.0.0.1\nHostKey /etc/ssh/ssh_host_ed25519_key\nPermitRootLogin prohibit-password\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\nAuthorizedKeysFile /root/.ssh/authorized_keys\nPrintMotd no\nLogLevel VERBOSE\n`;
@@ -132,7 +132,7 @@ async function verify(state: State) {
     XDG_DATA_HOME: path.join(client, "data"), DIM_STATE_ROOT: path.join(client, "state"),
     PATH: `${directory}/bin:${process.env.PATH}` };
 
-  const cli: Cli = (args, options = {}) => run(process.execPath, [path.join(repository, "packages/cli/dist/cli.js"), ...args], { env, ...options });
+  const cli: Cli = (args, options = {}) => run(process.execPath, [path.join(repository, "packages/cli/core/dist/cli.js"), ...args], { env, ...options });
   try {
     await assert.rejects(access(state.source));
     await cli(["host", "add", "smoke", "--ssh", "dim-smoke-host"]);
@@ -197,7 +197,7 @@ async function prepareGuestSsh(state: State, env: NodeJS.ProcessEnv, cli: Cli) {
   assert.match(key, /^ssh-ed25519 [A-Za-z0-9+/]+={0,3}(?: .*)?$/);
   const alias = `dim-guest-${state.workspaceId}`;
   await writeFile(knownHosts, `${alias} ${key}\n`, { mode: 0o600 });
-  const proxy = [process.execPath, path.join(repository, "packages/cli/dist/cli.js"), "--host", "smoke", "connect", state.name, "2222"].map(shellArgument).join(" ");
+  const proxy = [process.execPath, path.join(repository, "packages/cli/core/dist/cli.js"), "--host", "smoke", "connect", state.name, "2222"].map(shellArgument).join(" ");
   await writeFile(config, `Host dim-smoke-guest\n  HostName ${state.name}\n  Port 2222\n  User dim\n  IdentityFile ${identity}\n  IdentitiesOnly yes\n  HostKeyAlias ${alias}\n  StrictHostKeyChecking yes\n  UserKnownHostsFile ${knownHosts}\n  ProxyCommand ${proxy}\n  BatchMode yes\n  ConnectTimeout 5\n  LogLevel ERROR\n`, { mode: 0o600 });
   return config;
 }
@@ -227,7 +227,7 @@ async function verifyConnections(state: State, env: NodeJS.ProcessEnv, cli: Cli,
   assert.ok(direct);
   assert.equal(direct.code, 0, direct.stderr);
   assert.deepEqual(direct.stdout, payload, "SSH stdio connection altered binary data or lost half-close output");
-  const child = spawn(process.execPath, [path.join(repository, "packages/cli/dist/cli.js"),
+  const child = spawn(process.execPath, [path.join(repository, "packages/cli/core/dist/cli.js"),
     "forward", state.name, "0:3000"], { env, stdio: ["ignore", "pipe", "pipe"] });
   let diagnostic = "";
   const closed = new Promise((resolve, reject) => {

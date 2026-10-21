@@ -20,6 +20,11 @@ For workspace and nested-agent VPN access, the optional
 [Tailscale host plugin](tailscale.md) owns gateway authentication, routing and
 DNS. Its separate External URLs ingress driver uses an existing host node.
 
+Optional client interfaces also have their own owners. [Web feature plugins](web-plugins.md)
+provide console panels and server-side connections; feature CLI plugins reuse
+client operations while authoritative services stay on the host or control
+plane. See the [repository layout](repository-layout.md) for package families.
+
 ## Installation and registration
 
 Host plugins may prepare their own in-workspace clients automatically without

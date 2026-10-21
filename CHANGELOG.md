@@ -102,12 +102,20 @@ is implied by these source changes.
 - Separate workflow compilation, Git authority and execution responsibilities.
   Candidate scripts never gain host, review or protected-ref authority. Inspect
   CI jobs and bounded diagnostics through a separate read-only query role.
-- Provide the separate `dim-web` operations application for workspace creation,
-  lifecycle, resources, CI diagnostics and authoritative Git review. Separate
+- Provide the separate `dim-web` console for workspace creation,
+  lifecycle and resources, with explicit Web plugins for LLM router governance,
+  execution diagnostics and authoritative Git review. Shared validated operation
+  clients connect CLI and Web to the same service authority without requiring
+  host or control-plane implementations in the console. Discover installed CLI
+  plugin commands through root help. Separate
   read, operator and reviewer roles. Organize workspaces by host, disclose
   creation and advanced settings on demand, preserve drafts across refresh and
   failed operations, and provide scoped recovery and explicit discard cancellation.
   Login origin failures identify the configured console URL.
+  Keep unrelated features usable when a service is unavailable; reconnect a
+  configured feature without losing drafts. Distinguish accepted changes from
+  failed follow-up reads. Local source installation includes the feature panels
+  while preserving accounts and explicit connection choices.
   Deliver external Git events through signed,
   durable webhook subscriptions with bounded retry and restart recovery.
 - Keep LLM routing/account governance, Incus VM workspaces and SPICE consoles,
@@ -499,7 +507,7 @@ is implied by these source changes.
 ### Fixed
 
 - Every documented walkthrough (root README, `specification/docs/repo-workspaces.md`,
-  `specification/docs/project-workspaces.md`, `specification/docs/usage.md`, `core/packages/cli/README.md`,
+  `specification/docs/project-workspaces.md`, `specification/docs/usage.md`, `core/packages/cli/core/README.md`,
   the multi-repository example) showed `dim repo create ... --root` without
   `--protect`, then a bare `dim repo protect`. `--protect` only exists on
   `repo create`/`repo import`; omitting it there left `repo protect` with

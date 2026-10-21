@@ -8,8 +8,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const cli = fileURLToPath(new URL("../../packages/cli/dist/cli.js", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../packages/cli", import.meta.url));
+const cli = fileURLToPath(new URL("../../packages/cli/core/dist/cli.js", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../packages/cli/core", import.meta.url));
 
 test("controller serve preserves the active owner and cleans up its runtime files", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-test-"));

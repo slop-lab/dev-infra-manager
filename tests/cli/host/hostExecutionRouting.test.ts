@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { ProcessRunner } from "@slop-lab/dim-host-core/workspace";
 import { type HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
 import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
-import { resolveHostExecutionRouting } from "../../../packages/cli/src/host-plugins.js";
+import { resolveHostExecutionRouting } from "../../../packages/cli/core/src/host-plugins.js";
 
 const runner = new ProcessRunner();
 const context = { runner, cleanupRunner: runner, stateRoot: "/tmp/dim-routing-test", signal: new AbortController().signal };

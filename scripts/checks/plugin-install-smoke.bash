@@ -143,7 +143,7 @@ DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/nod
   "$root/$plugin_tarball" \
   >/dev/null
 
-result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node packages/cli/dist/cli.js plugin list --json)"
+result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node packages/cli/core/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
 # The installer owns a durable copy; replacing the CLI must not depend on the
@@ -151,7 +151,7 @@ test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smo
 rm "$root/$plugin_tarball"
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   installer install core --with-managed --local-packages "$package_bundle" --no-local-bin >/dev/null
-result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node packages/cli/dist/cli.js plugin list --json)"
+result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node packages/cli/core/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
 incompatible_source="$root/incompatible-source"

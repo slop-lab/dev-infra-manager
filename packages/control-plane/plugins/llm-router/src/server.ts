@@ -8,7 +8,9 @@ import { AdmissionError, hash, RouterLedger } from "./ledger.js";
 import { ArchiveError, ExchangeArchive, captureBody, captureManifest } from "./archive.js";
 import { UsageObserver } from "./usage.js";
 
-class RequestError extends Error { constructor(readonly status: number, message: string, readonly category = "invalid_request") { super(message); } }
+import { handleRouterOperator } from "./operator-http.js";
+import { RequestError, body, send } from "./http.js";
+
 export async function createRouter(config: RouterConfig) {
   const ledger = new RouterLedger(config.stateDirectory);
   const guard = await tryAcquireKernelGuard(join(config.stateDirectory, "service.guard"), { timeoutMilliseconds: 2000 });
@@ -40,6 +42,7 @@ export async function createRouter(config: RouterConfig) {
   })(); } };
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? "/", "http://dim-llm-router");
+    if (url.pathname.startsWith("/v1/operator/operations/")) return handleRouterOperator(config, ledger, request, response);
     if (url.pathname === "/v1/host-principals" || url.pathname === "/v1/host-principals/revoke") {
       if (request.method !== "POST" || url.search !== "") throw new RequestError(404, "unsupported endpoint");
       const credential = /^Basic ([A-Za-z0-9+/=]+)$/.exec(request.headers.authorization ?? "")?.[1];
@@ -167,9 +170,4 @@ export async function createRouter(config: RouterConfig) {
       throw error;
     } finally { clearInterval(revoked); request.removeListener("aborted", cancel); response.removeListener("close", cancel); await archive.close(); }
   }
-}
-function send(response: ServerResponse, status: number, value: unknown): void { response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); response.end(JSON.stringify(value)); }
-async function body(request: IncomingMessage, maximum: number): Promise<Buffer> {
-  const chunks: Buffer[] = []; let size = 0;
-  for await (const chunk of request) { const bytes = Buffer.from(chunk); size += bytes.length; if (size > maximum) throw new RequestError(413, "request body exceeds configured bound"); chunks.push(bytes); } return Buffer.concat(chunks);
 }

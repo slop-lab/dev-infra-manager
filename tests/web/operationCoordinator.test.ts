@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-const coordinatorUrl = new URL("../../packages/web/src/assets/operation-coordinator.js", import.meta.url).href;
+const coordinatorUrl = new URL("../../packages/web/core/src/assets/operation-coordinator.js", import.meta.url).href;
 
-describe("reviewer operation coordination", () => {
+describe("console operation coordination", () => {
   it("allows only the newest operation to commit", async () => {
     // Given
     const { createOperationCoordinator } = await import(coordinatorUrl);
@@ -18,7 +18,7 @@ describe("reviewer operation coordination", () => {
     expect(coordinator.isCurrent(second)).toBe(true);
   });
 
-  it("makes logout supersede a pending review operation", async () => {
+  it("makes logout supersede a pending console operation", async () => {
     // Given
     const { createOperationCoordinator } = await import(coordinatorUrl);
     const coordinator = createOperationCoordinator();

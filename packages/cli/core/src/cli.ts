@@ -1,9 +1,10 @@
 #!/usr/bin/env node
+import { Writable } from "node:stream";
 import { Command, CommanderError } from "commander";
 import { UserError } from "@slop-lab/dim-host-core/workspace";
 import { HostContextError, HostContextStore } from "./host-context.js";
 import { packageVersion } from "./package-version.js";
-import { HostTransportError, streamHost } from "./host-transport.js";
+import { HostTransportError, callHost, streamHost } from "./host-transport.js";
 import { registerDevelopmentCommands } from "./development-commands.js";
 
 await main();
@@ -81,6 +82,10 @@ async function main(): Promise<void> {
       }
       return;
     }
+    if (commandArgs.length === 0 || commandArgs.length === 1 && ["--help", "-h"].includes(commandArgs[0]!)) {
+      const optionalHelp = await installedCommandHelp(program, selectedHost);
+      if (optionalHelp) program.addHelpText("after", optionalHelp);
+    }
     program.addHelpText("after", `
 Start developing:
   dim create https://example.com/team/app.git dev
@@ -125,4 +130,36 @@ function hostArguments(args: string[]): { args: string[]; host?: string } {
     } else remaining.push(argument);
   }
   return { args: remaining, ...(host === undefined ? {} : { host }) };
+}
+
+/** Query descriptions on the selected host; feature code stays in host composition. */
+async function installedCommandHelp(program: Command, selectedHost: string | undefined): Promise<string> {
+  try {
+    const host = await new HostContextStore().resolve(selectedHost);
+    const quiet = new Writable({ write(_chunk, _encoding, done) { done(); } });
+    const metadata: unknown = await callHost(host, { operation: "plugins" }, { signal: AbortSignal.timeout(1_000), stderr: quiet, maxOutputBytes: 128 * 1024 });
+    if (!Array.isArray(metadata) || metadata.length > 128) return "";
+    const reserved = new Set(program.commands.flatMap((command) => [command.name(), ...command.aliases()]));
+    const entries: Array<{ name: string; description: string }> = [];
+    const names = new Set<string>();
+    const identifier = /^[a-z][a-z0-9-]{0,63}$/;
+    const printable = (value: unknown, maximum: number): value is string => typeof value === "string" && value.length > 0 && value.length <= maximum
+      && !/[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/u.test(value);
+    const plugins: unknown[] = metadata;
+    for (const plugin of plugins) {
+      if (!plugin || typeof plugin !== "object" || !("name" in plugin) || typeof plugin.name !== "string" || !identifier.test(plugin.name)
+        || !("commands" in plugin) || !Array.isArray(plugin.commands) || plugin.commands.length > 64) return "";
+      const commands: unknown[] = plugin.commands;
+      for (const command of commands) {
+        if (!command || typeof command !== "object" || !("name" in command) || typeof command.name !== "string" || !identifier.test(command.name)
+          || !("description" in command) || !printable(command.description, 256) || names.has(command.name)) return "";
+        names.add(command.name);
+        if (!reserved.has(command.name)) entries.push({ name: command.name, description: command.description });
+      }
+    }
+    if (!entries.length) return "";
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    const width = Math.max(...entries.map((entry) => entry.name.length));
+    return `\nOptional commands on host '${host.name}':\n${entries.map((entry) => `  ${entry.name.padEnd(width)}  ${entry.description}`).join("\n")}\n\nUse 'dim COMMAND --help' for an optional command's options.\n`;
+  } catch { return ""; } // Base help remains available when optional host discovery fails.
 }

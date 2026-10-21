@@ -6,8 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const cli = fileURLToPath(new URL("../../packages/cli/dist/cli.js", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../packages/cli", import.meta.url));
+const cli = fileURLToPath(new URL("../../packages/cli/core/dist/cli.js", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../packages/cli/core", import.meta.url));
 
 type ImageFixture = {
   readonly root: string;

@@ -10,8 +10,9 @@ export interface RouterLimits { concurrent: number; requestsPerUtcDay: number; r
 export interface ProjectPolicy { allowedRoutes: string[]; limits: RouterLimits; captureMode: "required" | "best-effort" | "metadata";
   tokenMode: "observe" | "estimate"; tokensPerUtcDay?: number; estimatedTokensPerRequest?: number }
 export interface RouterHostIssuer { id: string; keyFile: string; projects: { id: string; routeIds: string[] }[] }
+export interface RouterOperator { id: string; keyFile: string; role: "read" | "operator" }
 export interface RouterConfig {
-  schemaVersion: 3; stateDirectory: string; hostIssuers: RouterHostIssuer[]; listen: { host: string; port: number };
+  schemaVersion: 3; stateDirectory: string; operators?: RouterOperator[]; hostIssuers: RouterHostIssuer[]; listen: { host: string; port: number };
   backend: { name: "CLIProxyAPI"; version: "8.0.33"; accountSelection: "exclusive-worker"; attemptVisibility: "request-only"; cancellation: "best-effort" };
   accounts: RouterAccount[]; routes: RouterRoute[]; limits: RouterLimits;
 }
@@ -50,7 +51,17 @@ export function parsePolicy(value: unknown): ProjectPolicy {
     ...(row.estimatedTokensPerRequest === undefined ? {} : { estimatedTokensPerRequest: integer(row.estimatedTokensPerRequest) }) };
 }
 export function parseConfig(value: unknown): RouterConfig {
-  const row = object(value); exact(row, ["schemaVersion", "stateDirectory", "hostIssuers", "listen", "backend", "accounts", "routes", "limits"]);
+  const row = object(value); exact(row, ["schemaVersion", "stateDirectory", "hostIssuers", "listen", "backend", "accounts", "routes", "limits"], ["operators"]);
+  const operators = row.operators === undefined ? undefined : (() => {
+    if (!Array.isArray(row.operators)) throw new Error("operators must be an explicit array");
+    const actors = row.operators.map((raw: unknown): RouterOperator => {
+      const actor = object(raw); exact(actor, ["id", "keyFile", "role"]);
+      if (actor.role !== "read" && actor.role !== "operator") throw new Error("invalid operator role");
+      return { id: identifier(actor.id), keyFile: absolute(actor.keyFile), role: actor.role };
+    });
+    if (new Set(actors.map(({ id }) => id)).size !== actors.length || new Set(actors.map(({ keyFile }) => keyFile)).size !== actors.length) throw new Error("duplicate operator actor");
+    return actors;
+  })();
   const listen = object(row.listen), backend = object(row.backend); exact(listen, ["host", "port"]); exact(backend, Object.keys(backendProfile));
   if (Object.entries(backendProfile).some(([key, value]) => backend[key] !== value)) throw new Error("unsupported backend capabilities; only pinned exclusive-worker/request-level CLIProxyAPI profile is enabled");
   if (row.schemaVersion !== 3 || !Array.isArray(row.routes) || !row.routes.length || !Array.isArray(row.accounts) || !row.accounts.length) throw new Error("unsupported router configuration");
@@ -89,7 +100,8 @@ export function parseConfig(value: unknown): RouterConfig {
   });
   if (new Set(routes.map((route) => route.id)).size !== routes.length || typeof listen.host !== "string" || !isIP(listen.host)) throw new Error("invalid routes or listen address");
   if (hostIssuers.some((issuer) => issuer.projects.some((project) => project.routeIds.some((id) => !routes.some((route) => route.id === id))))) throw new Error("issuer refers to unknown route");
-  return { schemaVersion: 3, stateDirectory: absolute(row.stateDirectory), hostIssuers, listen: { host: listen.host, port: integer(listen.port, 65535) }, backend: { ...backendProfile }, accounts, routes, limits: parseLimits(row.limits) };
+  if (operators?.some((actor) => [...hostIssuers, ...accounts].some((other) => other.keyFile === actor.keyFile))) throw new Error("operators require dedicated credential files");
+  return { ...(operators === undefined ? {} : { operators }), schemaVersion: 3, stateDirectory: absolute(row.stateDirectory), hostIssuers, listen: { host: listen.host, port: integer(listen.port, 65535) }, backend: { ...backendProfile }, accounts, routes, limits: parseLimits(row.limits) };
 }
 export async function privateFile(path: string, maximum = 1024 * 1024): Promise<string> {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

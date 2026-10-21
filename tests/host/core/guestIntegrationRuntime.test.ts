@@ -12,8 +12,8 @@ import { WorkspaceService } from "../../../packages/host/core/src/workspace/serv
 import { WorkspaceStore } from "../../../packages/host/core/src/workspace/store.js";
 import { deployGuestIntegration } from "../../../packages/host/core/src/workspace/guestIntegration.js";
 import { workspaceGuestAssets } from "../../../packages/host/core/src/workspace/guestAssets.js";
-import { createWorkspaceAgentServer } from "../../../packages/cli/src/workspace-agent.js";
-import { loadHostPlugins } from "../../../packages/cli/src/host-plugins.js";
+import { createWorkspaceAgentServer } from "../../../packages/cli/core/src/workspace-agent.js";
+import { loadHostPlugins } from "../../../packages/cli/core/src/host-plugins.js";
 
 const image = process.env.DIM_GUEST_INTEGRATION_IMAGE;
 

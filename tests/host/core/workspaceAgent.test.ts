@@ -8,8 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceService, WorkspaceStore, type WorkspaceRuntime } from "@slop-lab/dim-host-core/workspace";
-import { loadHostPlugins } from "../../../packages/cli/src/host-plugins.js";
-import { createWorkspaceAgentServer, ensureWorkspaceAgent, runWorkspaceAgent, workspaceAgentGeneration } from "../../../packages/cli/src/workspace-agent.js";
+import { loadHostPlugins } from "../../../packages/cli/core/src/host-plugins.js";
+import { createWorkspaceAgentServer, ensureWorkspaceAgent, runWorkspaceAgent, workspaceAgentGeneration } from "../../../packages/cli/core/src/workspace-agent.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(cleanup.splice(0).map((action) => action())); });

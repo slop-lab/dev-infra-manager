@@ -4,19 +4,35 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { installLocalWeb, webArtifacts } from "../../../scripts/install-local-web.ts";
+import { defaultWebPluginPackages } from "../../../scripts/local-web-profile.ts";
 
 const roots: string[] = [];
 const version = "0.10.0-local-test";
 const manifest = { schemaVersion: 1, packages: [
   { name: "@slop-lab/dim-cli", version, file: "cli.tgz" },
-  { name: "@slop-lab/dim-web", version, file: "web.tgz", requires: {} },
+  { name: "@slop-lab/dim-web", version, file: "web.tgz", requires: { "@slop-lab/dim-contracts-operations": version } },
+  { name: "@slop-lab/dim-contracts-operations", version, file: "operations.tgz" },
+  { name: "@slop-lab/dim-contracts-ci", version, file: "ci.tgz" },
+  { name: "@slop-lab/dim-contracts-execution", version, file: "execution.tgz" },
+  { name: "@slop-lab/dim-contracts-git", version, file: "git.tgz" },
+  { name: "@slop-lab/dim-execution-client", version, file: "execution-client.tgz", requires: { "@slop-lab/dim-contracts-ci": version, "@slop-lab/dim-contracts-execution": version } },
+  { name: "@slop-lab/dim-llm-router-client", version, file: "llm-client.tgz", requires: { "@slop-lab/dim-contracts-operations": version } },
+  ...defaultWebPluginPackages.map((name) => ({ name, version, file: `${name.split("/")[1]}.tgz`, requires: {
+    "@slop-lab/dim-contracts-operations": version,
+    [name.endsWith("llm-router") ? "@slop-lab/dim-llm-router-client" : name.endsWith("execution") ? "@slop-lab/dim-execution-client" : "@slop-lab/dim-contracts-git"]: version
+  } })),
   { name: "@slop-lab/dim-control-plane-admin", version, file: "admin.tgz", requires: { "@slop-lab/dim-host-core": version } },
   { name: "@slop-lab/dim-host-core", version, file: "core.tgz" },
 ] };
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 it("includes exact operator-client dependencies and rejects mismatches or escaped artifacts", () => {
-  expect(webArtifacts(manifest).map(({ file }) => file)).toEqual(["admin.tgz", "core.tgz", "web.tgz"]);
-  expect(() => webArtifacts({ ...manifest, packages: manifest.packages.map((entry) => entry.file === "core.tgz" ? { ...entry, version: "0.9.0" } : entry) })).toThrow(/matching/);
+  const artifacts = webArtifacts(manifest);
+  expect(artifacts.map(({ name }) => name).sort()).toEqual([
+    "@slop-lab/dim-contracts-operations", "@slop-lab/dim-contracts-ci", "@slop-lab/dim-contracts-execution", "@slop-lab/dim-contracts-git",
+    "@slop-lab/dim-execution-client", "@slop-lab/dim-llm-router-client", "@slop-lab/dim-web", ...defaultWebPluginPackages
+  ].sort());
+  expect(artifacts.some(({ name }) => name === "@slop-lab/dim-cli" || name.startsWith("@slop-lab/dim-control-plane-plugin-"))).toBe(false);
+  expect(() => webArtifacts({ ...manifest, packages: manifest.packages.map((entry) => entry.file === "operations.tgz" ? { ...entry, version: "0.9.0" } : entry) })).toThrow(/matching/);
   expect(() => webArtifacts({ ...manifest, packages: [...manifest.packages, manifest.packages[0]] })).toThrow(/duplicate/);
   expect(() => webArtifacts({ ...manifest, packages: manifest.packages.map((entry) => ({ ...entry, file: "../outside.tgz" })) })).toThrow(/unsafe/);
 });
@@ -32,6 +48,8 @@ it("selects the isolated runtime idempotently and preserves it when installation
   const install = (args: readonly string[]) => {
     calls += 1;
     expect(args).toContain("--ignore-scripts");
+    for (const plugin of defaultWebPluginPackages) expect(args).toContain(join(bundle, `${plugin.split("/")[1]}.tgz`));
+    expect(args).not.toContain(join(bundle, "cli.tgz"));
     const stage = args[args.indexOf("--prefix") + 1]!;
     // The production installer is synchronous; use its same filesystem visibility.
     mkdirSync(join(stage, "node_modules/.bin"), { recursive: true });

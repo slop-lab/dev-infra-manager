@@ -3,8 +3,8 @@ import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { createReviewerWebServerFromConfigFile } from "../../packages/web/src/server.js";
-import { configuredWebOperations, workspaceCreateSchema, type WebOperations } from "../../packages/web/src/operations.js";
+import { createWebServerFromConfigFile } from "../../packages/web/core/src/server.js";
+import { configuredWebOperations, workspaceCreateSchema, type WebOperations } from "../../packages/web/core/src/operations.js";
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 const uuid = randomUUID();
@@ -17,15 +17,13 @@ export async function operationsFixture() {
     workspaces: async () => [{ id: uuid, name: "development", phase: "running", runtimeStatus: "running", runtime: "container", resources: { cpuCount: "1", memory: "2g", pidsLimit: "512" } }],
     workspaceCreate: async (host, input) => { calls.push({ create: host, ...input }); },
     workspaceAction: async (host, input) => { calls.push({ host, ...input }); },
-    jobs: async () => [], detail: async () => ({ job: { id: uuid }, result: { logs: { stdout: { base64: Buffer.from("diagnostic").toString("base64"), truncated: false }, stderr: { base64: "", truncated: false } } } }),
-    workers: async () => [{ id: "worker", slots: [] }], cancel: async (id) => { calls.push({ cancel: id }); return { id, phase: "recovering" }; },
-    retry: async (id, requestId) => { calls.push({ retry: id, requestId }); return { id, phase: "queued" }; }
+
   };
   const file = join(root, "web.json"), origin = "http://127.0.0.1:9081";
   await writeFile(file, JSON.stringify({ schemaVersion: 1, host: "127.0.0.1", port: 0, publicOrigin: origin,
     accounts: [ { username: "reader", passwordHash, roles: ["read"] }, { username: "operator", passwordHash, roles: ["read", "operator"] } ],
     session: { idleSeconds: 900, absoluteSeconds: 3600 }, operations: { hosts: [{ id: "devbox", selector: "host-only", executable: "/trusted/dim" }] } }), { mode: 0o600 });
-  const web = await createReviewerWebServerFromConfigFile(file, { operations }); cleanups.push(() => web.close());
+  const web = await createWebServerFromConfigFile(file, { operations }); cleanups.push(() => web.close());
   const base = await web.listen();
   async function login(username: string) {
     const response = await fetch(base + "/v1/session", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username, password: "browser-password" }) });
@@ -49,7 +47,7 @@ it("supports ordinary Git host operations without loading a control plane and en
   expect((await fetch(f.base + path, { method: "POST", headers: operator, body })).status).toBe(200);
   expect(f.calls).toEqual([{ host: "devbox", name: "development", expectedId: uuid, action: "restart" }]);
   const status = await fetch(f.base + "/v1/operations/status", { headers: reader });
-  expect(await status.json()).toMatchObject({ hosts: [{ id: "devbox" }], ci: false, review: false });
+  expect(await status.json()).toMatchObject({ hosts: [{ id: "devbox" }], consoles: [] });
   expect((await fetch(f.base + "/v1/projects/project-a/repositories/root/reviews/" + "a".repeat(64), { headers: reader })).status).toBe(404);
 });
 it("creates Git workspaces only with operator, origin and CSRF authority and rejects executable or option inputs", async () => {
@@ -70,17 +68,6 @@ it("creates Git workspaces only with operator, origin and CSRF authority and rej
   expect(f.calls).toEqual([]);
   expect((await fetch(path, { method: "POST", headers: operator, body })).status).toBe(200);
   expect(f.calls).toEqual([{ create: "devbox", ...input }]);
-});
-it("gates execution mutation separately from diagnostics and forwards an explicit retry idempotency key", async () => {
-  const f = await operationsFixture(), reader = await f.login("reader"), operator = await f.login("operator");
-  expect((await fetch(`${f.base}/v1/operations/ci/jobs/${uuid}`, { headers: reader })).status).toBe(200);
-  const path = `${f.base}/v1/operations/execution/jobs/${uuid}`;
-  expect((await fetch(path + "/cancel", { method: "POST", headers: reader, body: "{}" })).status).toBe(403);
-  expect((await fetch(path + "/cancel", { method: "POST", headers: operator, body: "{}" })).status).toBe(200);
-  expect((await fetch(path + "/retry", { method: "POST", headers: operator, body: "{}" })).status).toBe(400);
-  const requestId = randomUUID();
-  expect((await fetch(path + "/retry", { method: "POST", headers: operator, body: JSON.stringify({ requestId }) })).status).toBe(200);
-  expect(f.calls).toEqual([{ cancel: uuid }, { retry: uuid, requestId }]);
 });
 it("executes only configured public DIM host ports, projects safe summaries and passes expected identity as separate argv", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-web-cli-")); cleanups.push(() => rm(root, { recursive: true, force: true }));
@@ -103,41 +90,4 @@ it("executes only configured public DIM host ports, projects safe summaries and 
   expect(() => workspaceCreateSchema.parse({ name: "bad", source: "https://example.test/repo.git", repositories: ["private"] })).toThrow();
   await expect(operations.workspaceCreate("attacker-host", { name: "new-dev", source: "git://example.test/repo.git", runtime: "container" })).rejects.toThrow("host not found");
   await expect(operations.workspaces("attacker-host")).rejects.toThrow("host not found");
-});
-
-it("connects the default optional adapter to real generated role files and live execution operator and CI query endpoints", async () => {
-  const { createOperationsBrowserFixture } = await import("./operationsBrowserFixture.js");
-  const f = await createOperationsBrowserFixture();
-  try {
-    const login = await fetch(f.origin + "/v1/session", { method: "POST", headers: { origin: f.origin, "content-type": "application/json" }, body: JSON.stringify({ username: f.username, password: f.password }) });
-    expect(login.status).toBe(201);
-    const body = await login.json() as { csrfToken: string };
-    const headers = { cookie: login.headers.get("set-cookie")!.split(";")[0]!, origin: f.origin, "x-dim-csrf": body.csrfToken, "content-type": "application/json" };
-    const jobs = await fetch(f.origin + "/v1/operations/ci/jobs", { headers });
-    expect(jobs.status).toBe(200); expect(JSON.stringify(await jobs.json())).toContain("completed");
-    expect((await fetch(f.origin + "/v1/operations/execution/workers", { headers })).status).toBe(200);
-    expect((await fetch(`${f.origin}/v1/operations/execution/jobs/${f.queuedId}/cancel`, { method: "POST", headers, body: "{}" })).status).toBe(200);
-    expect(f.execution()).toMatchObject({ phase: "finished", publication: "stale" });
-    const requestId = randomUUID();
-    const retry = () => fetch(`${f.origin}/v1/operations/execution/jobs/${f.queuedId}/retry`, { method: "POST", headers, body: JSON.stringify({ requestId }) });
-    const first = await retry(), second = await retry(); expect(first.status).toBe(200); expect(second.status).toBe(200);
-    expect(await first.json()).toEqual(await second.json());
-  } finally { await f.close(); }
-});
-
-it("exposes execution workers without a CI query connection and rejects the obsolete mixed settings", async () => {
-  const { operationsConfigSchema } = await import("../../packages/web/src/operations.js");
-  expect(operationsConfigSchema.safeParse({ ci: { queryConnection: "/query", operatorConnection: "/operator" } }).success).toBe(false);
-  const { createOperationsBrowserFixture } = await import("./operationsBrowserFixture.js");
-  const f = await createOperationsBrowserFixture({ ci: false });
-  try {
-    const login = await fetch(f.origin + "/v1/session", { method: "POST", headers: { origin: f.origin, "content-type": "application/json" }, body: JSON.stringify({ username: f.username, password: f.password }) });
-    expect(login.status).toBe(201);
-    const headers = { cookie: login.headers.get("set-cookie")!.split(";")[0]! };
-    const status = await fetch(f.origin + "/v1/operations/status", { headers });
-    expect(await status.json()).toMatchObject({ ci: false, executionOperator: true });
-    expect((await fetch(f.origin + "/v1/operations/execution/workers", { headers })).status).toBe(200);
-    expect((await fetch(f.origin + "/v1/operations/ci/jobs", { headers })).status).toBe(404);
-    expect((await fetch(f.origin + "/v1/operations/ci/workers", { headers })).status).toBe(404);
-  } finally { await f.close(); }
 });

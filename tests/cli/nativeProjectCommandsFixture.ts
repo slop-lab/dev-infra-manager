@@ -19,8 +19,8 @@ import type { NativeFixture, NativeFixtureOptions } from "./nativeProjectCommand
 export type { NativeFixture } from "./nativeProjectCommandsFixtureTypes.js";
 
 const runFile = promisify(execFile);
-const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../packages/cli", import.meta.url));
+const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../packages/cli/core", import.meta.url));
 const tsxImport = createRequire(import.meta.url).resolve("tsx");
 const roots: string[] = [];
 const services: ManagedGitFixture[] = [];

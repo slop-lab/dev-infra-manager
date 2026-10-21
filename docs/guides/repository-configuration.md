@@ -38,7 +38,7 @@ This declares host prerequisites. Control-plane installation, authentication,
 mount/device grants and credentials remain operator decisions. Missing packages
 stop creation; an interactive operator may approve installation on the selected
 host. Noninteractive creation never approves installation. DIM rechecks the
-source commit after approval. See [the CLI contract](../../packages/cli/README.md#required-workspace-plugins).
+source commit after approval. See [the CLI contract](../../packages/cli/core/README.md#required-workspace-plugins).
 
 For a multi-repository Native Git Project, this declaration comes from the
 Project's selected configuration repository, including when that repository is

@@ -5,60 +5,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
 import {
-  createReviewerWebServerFromConfigFile,
-  type ReviewerWebServer,
-  type ReviewerWebServerOptions
-} from "../../packages/web/src/index.js";
+  createWebServerFromConfigFile,
+  type WebServer,
+  type WebServerOptions
+} from "../../packages/web/core/src/index.js";
 import {
   readJsonObject,
   stringField,
   type JsonObject
 } from "./httpFixture.js";
 
-import { nativeBundleReviewFixture, createBundleReview, reviewProposalRef } from "../control-plane/plugins/git-ci/nativeBundleReviewFixture.js";
-import { humanReviewer, foreignHumanReviewer, generationId, generationB, activationTokenB, startFinalizeServiceForGeneration, activateFinalizeServiceForGeneration, runGit } from "../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
-import { randomUUID } from "node:crypto";
-
-export async function installedReviewerFixture() {
-  const fixture = await nativeBundleReviewFixture("web");
-  const envelope = await createBundleReview(fixture.service);
-  let service = fixture.service;
-  return {
-    ...fixture, get service() { return service; }, reviewId: envelope.review.reviewId, proposalRef: reviewProposalRef,
-    baseUrl: () => fixture.service.origin,
-    git: (directory: string, args: string[]) => runGit("/usr/bin/git", ["-C", directory, ...args]),
-    request: (username: string, method: string, path: string, body?: object) => {
-      const credential = username === "docs-reviewer-user" ? foreignHumanReviewer : humanReviewer;
-      return fetch(fixture.service.origin + path, { method, headers: {
-        authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`,
-        "Content-Type": "application/json", "X-Dim-Generation-Id": generationId
-      }, ...(body === undefined ? {} : { body: JSON.stringify(path.endsWith("/approvals") ? { requestId: randomUUID() } : body) }) });
-    },
-    async restart() {
-      const origin = fixture.service.origin;
-      await service.close();
-      service = await startFinalizeServiceForGeneration(fixture.root, generationB, activationTokenB);
-      await activateFinalizeServiceForGeneration(service.origin, generationB, activationTokenB);
-      await new Promise<void>((resolve) => service.server.close(() => resolve()));
-      await new Promise<void>((resolve, reject) => {
-        service.server.once("error", reject);
-        service.server.listen(Number(new URL(origin).port), "127.0.0.1", () => { service.server.off("error", reject); resolve(); });
-      });
-    },
-    async close() { await service.close(); await Promise.all([fixture.root, fixture.clone].map((root) => rm(root, { recursive:true, force:true }))); }
-  };
-}
-export type ReviewFixture = Awaited<ReturnType<typeof installedReviewerFixture>>;
-
-export const WEB_USERNAME = "local-reviewer";
-export const WEB_PASSWORD = "local-reviewer-password";
+export const WEB_USERNAME = "local-operator";
+export const WEB_PASSWORD = "local-operator-password";
 
 export type WebFixtureOptions = {
   readonly accounts?: readonly string[];
-  readonly reviewerAccountId?: string;
+  readonly operatorAccountId?: string;
   readonly defaultClock?: boolean;
   readonly secureOrigin?: boolean;
-  readonly server?: ReviewerWebServerOptions;
+  readonly server?: WebServerOptions;
 };
 
 export type LoginInput = {
@@ -68,30 +33,25 @@ export type LoginInput = {
 };
 
 export type WebFixture = {
-  readonly native: ReviewFixture;
   readonly baseUrl: string;
   readonly origin: string;
   readonly configPath: string;
-  readonly reviewId: string;
   readonly now: { value: number };
-  readonly service: ReviewerWebServer;
+  readonly service: WebServer;
   login(input?: LoginInput): Promise<Response>;
   close(): Promise<void>;
 };
 
-export async function reviewerWebFixture(options: WebFixtureOptions = {}): Promise<WebFixture> {
-  const native = await installedReviewerFixture();
-  const reviewId = native.reviewId;
+export async function webFixture(options: WebFixtureOptions = {}): Promise<WebFixture> {
   const root = await mkdtemp(join(tmpdir(), "dim-web-"));
   const port = await availablePort();
-  const origin = options.secureOrigin === true ? "https://reviewer.example" : `http://127.0.0.1:${port}`;
-  const configPath = join(root, "reviewer-web.json");
+  const origin = options.secureOrigin === true ? "https://console.example" : `http://127.0.0.1:${port}`;
+  const configPath = join(root, "web.json");
   const config = webConfig({
     accounts: options.accounts ?? [WEB_USERNAME],
-    nativeBaseUrl: native.baseUrl(),
     publicOrigin: origin,
     port,
-    reviewerAccountId: options.reviewerAccountId ?? options.accounts?.[0] ?? WEB_USERNAME
+    operatorAccountId: options.operatorAccountId ?? options.accounts?.[0] ?? WEB_USERNAME
   });
   await writeFile(configPath, `${JSON.stringify(config)}\n`, { mode: 0o600 });
   await chmod(configPath, 0o600);
@@ -99,14 +59,12 @@ export async function reviewerWebFixture(options: WebFixtureOptions = {}): Promi
   const serviceOptions = options.defaultClock === true
     ? options.server ?? {}
     : { ...options.server, now: () => now.value };
-  const service = await createReviewerWebServerFromConfigFile(configPath, serviceOptions);
+  const service = await createWebServerFromConfigFile(configPath, serviceOptions);
   const baseUrl = await service.listen();
   return {
-    native,
     baseUrl,
     origin,
     configPath,
-    reviewId,
     now,
     service,
     login: (input = {}) => fetch(`${baseUrl}/v1/session`, {
@@ -124,7 +82,6 @@ export async function reviewerWebFixture(options: WebFixtureOptions = {}): Promi
     }),
     async close() {
       await service.close();
-      await native.close();
       await rm(root, { recursive: true, force: true });
     }
   };
@@ -132,10 +89,9 @@ export async function reviewerWebFixture(options: WebFixtureOptions = {}): Promi
 
 export function webConfig(input: {
   readonly accounts?: readonly string[];
-  readonly nativeBaseUrl: string;
   readonly publicOrigin: string;
   readonly port: number;
-  readonly reviewerAccountId?: string;
+  readonly operatorAccountId?: string;
 }): JsonObject {
   const salt = Buffer.from("0123456789abcdef", "utf8");
   const hash = scryptSync(WEB_PASSWORD, salt, 32, { N: 16_384, r: 8, p: 1 });
@@ -144,18 +100,10 @@ export function webConfig(input: {
     host: "127.0.0.1",
     port: input.port,
     publicOrigin: input.publicOrigin,
-    nativeGit: {
-      baseUrl: input.nativeBaseUrl,
-      username: humanReviewer.username,
-      password: humanReviewer.password,
-      projectId: "project-a",
-      repositoryIds: ["root"],
-      generationId,
-      reviewerId: humanReviewer.reviewerId
-    },
+    operations: { hosts: [], consoles: [] },
     accounts: (input.accounts ?? [WEB_USERNAME]).map((username) => ({
       username,
-      roles: username === (input.reviewerAccountId ?? WEB_USERNAME) ? ["read", "reviewer"] : ["read"],
+      roles: username === (input.operatorAccountId ?? WEB_USERNAME) ? ["read", "operator"] : ["read"],
       passwordHash: `scrypt$16384$8$1$${salt.toString("base64")}$${hash.toString("base64")}`
     })),
     session: { idleSeconds: 10, absoluteSeconds: 30 }

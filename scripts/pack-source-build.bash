@@ -111,9 +111,12 @@ packages:
   - packages/review-tracing
   - packages/review-tracing-node
   - packages/execution-scheduler
-  - packages/cli
+  - packages/cli/core
+  - packages/cli/plugins/*
   - packages/installer
-  - packages/web
+  - packages/web/core
+  - packages/web/plugins/*
+  - packages/clients/*
 linkWorkspacePackages: true
 EOF
 

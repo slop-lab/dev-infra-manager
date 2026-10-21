@@ -1,3 +1,4 @@
+import { llmOperatorUnitPath } from "./llm-operator-unit.ts";
 import { webUnitPath } from "./web-unit.ts";
 import { removalDirectories } from "./paths.ts";
 import type { RemovalPlan } from "./plan.ts";
@@ -13,6 +14,7 @@ export function showRemovalPlan(plan: RemovalPlan): void {
   for (const process of plan.processes) console.log(`  Process: ${process.pid} (${process.command})`);
   if (plan.unit) console.log(`  Controller unit: ${plan.paths.unit}`);
   if (plan.webUnit) console.log(`  Web UI unit: ${webUnitPath(plan.paths)}`);
+  if (plan.llmOperatorUnit) console.log(`  LLM router operator unit: ${llmOperatorUnitPath(plan.paths)}`);
   if (plan.bin) console.log(`  Managed executable: ${plan.paths.bin}`);
   for (const version of plan.mise) console.log(`  mise: ${version}`);
   for (const root of removalDirectories(plan.paths)) console.log(`  Directory (except retained data): ${root}`);

@@ -48,7 +48,7 @@ grouping is helpful.
 
 ### Required workspace plugins
 
-The [repository configuration guide](../../docs/guides/repository-configuration.md)
+The [repository configuration guide](../../../docs/guides/repository-configuration.md)
 lists all `.dim` readers. The CLI's generic declaration is `workspace.json`;
 repository-policy and workflow YAML belong to optional plugins.
 
@@ -131,5 +131,5 @@ The installer profile selects Native Git and execution worker host plugins toget
 with control-plane operator tools. Base workspace commands run without these
 integrations. Plugins own feature commands and the host core owns the generic
 controller. `dim installer install control-plane` installs shared services
-separately. See the [Native Git guide](../host/plugins/native-git/docs/cli.md)
+separately. See the [Native Git guide](../../host/plugins/native-git/docs/cli.md)
 for Project bootstrap and service connections.

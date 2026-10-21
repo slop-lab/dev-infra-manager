@@ -1,16 +1,14 @@
 #!/usr/bin/env node
-import { initializeOperationsWeb, initializeReviewerWeb } from "./initialize.js";
+import { initializeOperationsWeb, initializeFeaturesWeb } from "./initialize.js";
 import { parseArgs } from "node:util";
-import { createReviewerWebServerFromConfigFile } from "./index.js";
+import { createWebServerFromConfigFile } from "./index.js";
 
 async function main(): Promise<void> {
   const [operation, configPath, ...flags] = process.argv.slice(2);
-  if (operation === "init" && configPath !== undefined) {
-    const { values } = parseArgs({ args: flags, options: { project: { type: "string" }, repository: { type: "string", multiple: true }, output: { type: "string" }, port: { type: "string" }, operations: { type: "string" }, promoter: { type: "string" } } });
-    if (!values.project || !values.output || !values.repository?.length) throw new Error("init requires --project PROJECT --repository REPO [--repository REPO] --output CONFIG");
-    const result = await initializeReviewerWeb({ connection: configPath, project: values.project, repositories: values.repository, output: values.output,
-      ...(values.operations === undefined ? {} : { operations: values.operations }),
-      ...(values.promoter === undefined ? {} : { promoter: values.promoter }),
+  if (operation === "init-features" && configPath !== undefined) {
+    const { values } = parseArgs({ args: flags, options: { output: { type: "string" }, port: { type: "string" }, roles: { type: "string" } } });
+    if (!values.output || !values.roles) throw new Error("init-features requires --output CONFIG --roles read,operator,reviewer (choose explicit roles)");
+    const result = await initializeFeaturesWeb({ specification: configPath, roles: values.roles.split(","), output: values.output,
       ...(values.port === undefined ? {} : { port: /^\d+$/.test(values.port) ? Number(values.port) : NaN }) });
     process.stdout.write(`Configuration: ${result.configPath}\nBrowser username: ${result.username}\nBrowser password: ${result.password}\n`);
     return;
@@ -24,11 +22,11 @@ async function main(): Promise<void> {
     return;
   }
   if (operation !== "serve" || configPath === undefined || process.argv.length !== 4) {
-    process.stderr.write("usage: dim-web init CONNECTION --project PROJECT --repository REPO [--repository REPO] --output CONFIG [--port PORT] [--operations FILE] [--promoter CONNECTION]\n       dim-web init-operations OPERATIONS --output CONFIG [--port PORT]\n       dim-web serve /absolute/path/to/config.json\n");
+    process.stderr.write("usage: dim-web init-features SPEC --output CONFIG --roles read,operator,reviewer [--port PORT]\n       dim-web init-operations OPERATIONS --output CONFIG [--port PORT]\n       dim-web serve /absolute/path/to/config.json\n");
     process.exitCode = 2;
     return;
   }
-  const service = await createReviewerWebServerFromConfigFile(configPath);
+  const service = await createWebServerFromConfigFile(configPath);
   process.stdout.write(`${await service.listen()}\n`);
   const close = async (): Promise<void> => service.close();
   process.once("SIGINT", () => void close());
@@ -36,6 +34,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.message : "reviewer web startup failed"}\n`);
+  process.stderr.write(`${error instanceof Error ? error.message : "web startup failed"}\n`);
   process.exitCode = 1;
 });

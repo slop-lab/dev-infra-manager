@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProcessRunner } from "@slop-lab/dim-host-core/workspace";
-import { composeWorkspaceRuntime, loadHostPlugins } from "../../../packages/cli/src/host-plugins.js";
+import { composeWorkspaceRuntime, loadHostPlugins } from "../../../packages/cli/core/src/host-plugins.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

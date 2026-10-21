@@ -1,0 +1,50 @@
+{
+  "name": "@slop-lab/dim-cli-plugin-llm-router",
+  "version": "0.10.0",
+  "private": true,
+  "description": "DIM remote LLM router operations",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@slop-lab/dim-llm-router-client": "workspace:0.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3",
+    "@slop-lab/dim-host-core": "workspace:0.10.0"
+  },
+  "peerDependencies": {
+    "@slop-lab/dim-host-core": "0.10.0"
+  },
+  "peerDependenciesMeta": {
+    "@slop-lab/dim-host-core": {
+      "optional": true
+    }
+  },
+  "bin": {
+    "dim-llm-router": "./dist/main.js"
+  }
+}

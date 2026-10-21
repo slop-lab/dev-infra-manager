@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const image = process.argv[2];
 if (!image) throw new Error("usage: tsx base-workspace-agent-smoke.mts IMAGE");
 const root = await mkdtemp(path.join(tmpdir(), "dim-agent-live-"));
-const cli = fileURLToPath(new URL("../../packages/cli/dist/cli.js", import.meta.url));
+const cli = fileURLToPath(new URL("../../packages/cli/core/dist/cli.js", import.meta.url));
 const source = path.join(root, "source"), name = `agent-smoke-${path.basename(root).slice(-6).toLowerCase()}`;
 const env = { ...process.env, DIM_STATE_ROOT: path.join(root, "state"), DIM_PLUGIN_HOME: path.join(root, "plugins"), XDG_CONFIG_HOME: path.join(root, "config") };
 async function run(command: string, args: string[]): Promise<string> {

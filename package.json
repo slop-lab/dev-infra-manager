@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "cli": "pnpm --filter @slop-lab/dim-host-core run build && pnpm --filter @slop-lab/dim-cli run build && node packages/cli/dist/cli.js",
+    "cli": "pnpm --filter @slop-lab/dim-host-core run build && pnpm --filter @slop-lab/dim-cli run build && node packages/cli/core/dist/cli.js",
     "workspace:check": "pnpm run check:tools && pnpm --recursive run check",
     "workspace:test": "pnpm --dir tests run test",
     "workspace:build": "pnpm --recursive run build",

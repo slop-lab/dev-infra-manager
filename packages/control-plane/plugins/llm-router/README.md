@@ -190,3 +190,21 @@ implementation does not claim encrypted storage or a hidden decryption key.
 
 See [attachment acceptance](docs/attachment-acceptance.md) for tested guarantees
 and the remaining authenticated-backend integration boundaries.
+
+## Remote operator clients
+
+The service optionally accepts independently provisioned operator actors:
+
+```json
+{"operators":[{"id":"operator","keyFile":"/absolute/operator.key","role":"operator"},{"id":"observer","keyFile":"/absolute/observer.key","role":"read"}]}
+```
+
+Add this field to the router configuration; omitting it disables operator HTTP access. Generate each key separately (`node -e 'console.log(require("node:crypto").randomBytes(32).toString("base64url"))'`) into an owned mode-0600 file. Operators must not reuse provider, host issuer or workspace credentials. Both key files and supplied keys are checked; host-issuer/workspace credentials cannot authorize operator operations. Consistent backups include configured operator keys, and restore rebinds their private paths.
+
+The CLI plugin `@slop-lab/dim-cli-plugin-llm-router` and corresponding Web plugin use `@slop-lab/dim-llm-router-client` shared operation definitions. They need a separate mode-0600 connection file `{ "schemaVersion":1, "endpoint":"http://127.0.0.1:8318", "actorId":"operator", "keyFile":"/absolute/operator.key" }`. They require no local database access. The authenticated `POST /v1/operator/operations/NAME` interface enforces read/operator roles on the service, validates input/output and records the operator actor in its audit log. Only bounded metadata is exposed; provider secrets, token hashes, local paths and prompt/response capture contents remain private. Local backup, restore and capture export remain local operator commands.
+
+### Independent operator listener
+
+`dim-control-plane-llm-router operator-serve /absolute/operator-service.json` starts an operator-only listener. Give it a separate loopback listen port and the same private state directory, accounts, routes and service limits as the inference service, plus dedicated `operators`. It attaches to an existing SQLite WAL only after checking the complete table/index/trigger schema against the canonical operation schema, and holds its own `operator-service.guard`. The inference service retains ownership of its database format marker: attachment never initializes a database, migrates it, or changes `user_version`. Extra triggers, columns, indexes or missing objects are rejected even when the format marker is recognized. It never performs inference recovery, takes the inference service lock, issues workspace principals, or accepts inference requests. This allows operator API deployment to run separately from inference lifecycle and workspace admission checks. Stop both listeners before a consistent backup; backup checks both ownership locks.
+
+Operator key separation checks every stored workspace credential hash, including revoked principals and disabled projects. Missing or unreadable unrelated backend/issuer keys do not block operator diagnostics; health reports those credentials as unknown. The selected actor always requires its own valid private key.

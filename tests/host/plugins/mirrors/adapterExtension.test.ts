@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { atomicWrite } from "@slop-lab/dim-host-core";
-import { loadHostPlugins, resolveHostExecutionRouting } from "../../../../packages/cli/src/host-plugins.js";
+import { loadHostPlugins, resolveHostExecutionRouting } from "../../../../packages/cli/core/src/host-plugins.js";
 import { hostPlugin } from "../../../../packages/host/plugins/mirrors/src/index.js";
 import { WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";

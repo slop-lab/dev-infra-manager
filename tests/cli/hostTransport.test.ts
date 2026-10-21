@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import {
   callHost, decodeHostRequest, encodeHostRequest, hostInvocation, HostTransportError, streamHost
-} from "../../packages/cli/src/host-transport.js";
+} from "../../packages/cli/core/src/host-transport.js";
 
 const peer = fileURLToPath(new URL("./fixtures/host-peer.ts", import.meta.url));
 const localCommand = { file: process.execPath, args: [peer] };
@@ -63,7 +63,7 @@ test("SSH shell execution cannot interpret command input, source URLs or names a
 });
 
 test("exec transport streams stdin, stdout and stderr without JSON conversion and keeps exit status", async () => {
-  const transport = new URL("../../packages/cli/src/host-transport.ts", import.meta.url).href;
+  const transport = new URL("../../packages/cli/core/src/host-transport.ts", import.meta.url).href;
   const script = `import { streamHost } from ${JSON.stringify(transport)};
     process.exitCode = await streamHost({name:'local'}, {operation:'exec', input:{exitCode:17}},
       {localCommand: ${JSON.stringify(localCommand)}});`;

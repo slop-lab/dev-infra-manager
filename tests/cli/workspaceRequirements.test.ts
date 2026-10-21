@@ -6,10 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { ProcessRunner, WorkspaceService, WorkspaceStore, acquireWorkspaceSource, type WorkspaceRuntime, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
-import { exactPluginSpec, installRequiredPlugins, missingPlugins, workspaceRequirements } from "../../packages/cli/src/workspace-requirements.js";
-import { createWorkspaceWithPlugins } from "../../packages/cli/src/workspace-create-client.js";
-import { encodeHostRequest, type HostRequest } from "../../packages/cli/src/host-transport.js";
-import { HostContextStore } from "../../packages/cli/src/host-context.js";
+import { exactPluginSpec, installRequiredPlugins, missingPlugins, workspaceRequirements } from "../../packages/cli/core/src/workspace-requirements.js";
+import { createWorkspaceWithPlugins } from "../../packages/cli/core/src/workspace-create-client.js";
+import { encodeHostRequest, type HostRequest } from "../../packages/cli/core/src/host-transport.js";
+import { HostContextStore } from "../../packages/cli/core/src/host-context.js";
 
 const spec = "@slop-lab/dim-host-plugin-mirrors@0.10.0";
 const commit = "a".repeat(40), target = { name: "remote", ssh: "dev@example.invalid" };
@@ -46,7 +46,7 @@ test("actual Git checkout requirements fail before records/runtime; source movem
       assert.equal(check.missing?.source.commit, await git("rev-parse", "HEAD"));
       assert.deepEqual(check.missing?.plugins, [spec]); assert.equal(runtimeCalls, 0); assert.deepEqual(await store.list(), []);
       assert.deepEqual(await readdir(path.join(store.root, "staging")), []);
-      const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.url));
+      const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
       const tsx = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
       const response = await runner.run(process.execPath, ["--conditions=dim-source", tsx, cli, "__host", encodeHostRequest({ operation: "create", input: { name: "dev", source: { url: source } } })], {
         env: { ...process.env, DIM_PLUGIN_HOME: home, DIM_STATE_ROOT: store.root }
@@ -150,7 +150,7 @@ const encoded=/__host ([A-Za-z0-9_-]+)/.exec(process.argv.at(-1)||'')?.[1];if(!e
 const request=JSON.parse(Buffer.from(encoded,'base64url').toString());fs.appendFileSync(root+'/requests',JSON.stringify(request)+'\\n');
 if(request.operation==='plugins.installRequired'){fs.writeFileSync(root+'/installed','yes');console.log(JSON.stringify({installed:true}));}
 else console.log(JSON.stringify(fs.existsSync(root+'/installed')?${JSON.stringify(record)}:${JSON.stringify(required)}));`, { mode: 0o700 });
-    const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.url));
+    const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
     const tsx = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
     const command = [process.execPath, "--conditions=dim-source", tsx, cli, "--host", "remote", "create", "/srv/repo", "dev", "--json"].map(shellQuote).join(" ");
     const output = await new Promise<string>((resolve, reject) => {

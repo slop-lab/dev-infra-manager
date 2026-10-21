@@ -1,12 +1,12 @@
 {
   "name": "@slop-lab/dim-web",
   "version": "0.10.0",
-  "description": "Optional authenticated workspace, CI and managed Git operations UI",
+  "description": "Authenticated workspace console and Web feature plugin runtime",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
-    "directory": "packages/web"
+    "directory": "packages/web/core"
   },
   "private": true,
   "type": "module",
@@ -21,15 +21,24 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./plugin-api": {
+      "dim-source": {
+        "types": "./src/plugin-api.ts",
+        "default": "./src/plugin-api.ts"
+      },
+      "types": "./dist/plugin-api.d.ts",
+      "import": "./dist/plugin-api.js",
+      "default": "./dist/plugin-api.js"
     }
   },
   "bin": {
     "dim-web": "./dist/cli.js"
   },
   "scripts": {
-    "build": "node ../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
+    "build": "node ../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
     "check": "tsc -p tsconfig.json --noEmit",
-    "pack:dry-run": "pnpm run build && bash ../../scripts/packages/pnpm-pack-dry-run.bash ./dist"
+    "pack:dry-run": "pnpm run build && bash ../../../scripts/packages/pnpm-pack-dry-run.bash ./dist"
   },
   "engines": {
     "node": "^24.0.0 || ^26.0.0"
@@ -38,20 +47,12 @@
     "access": "public"
   },
   "dependencies": {
-    "zod": "4.1.11"
+    "zod": "4.1.11",
+    "@slop-lab/dim-contracts-operations": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
-    "typescript": "5.8.3",
-    "@slop-lab/dim-control-plane-admin": "workspace:*"
-  },
-  "peerDependencies": {
-    "@slop-lab/dim-control-plane-admin": "0.10.0"
-  },
-  "peerDependenciesMeta": {
-    "@slop-lab/dim-control-plane-admin": {
-      "optional": true
-    }
+    "typescript": "5.8.3"
   }
 }

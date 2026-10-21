@@ -158,6 +158,7 @@ fi
 validate_preparation
 echo "[host] install Web UI package bundle"
 node "$repo_root/scripts/install-local-web.ts" "$package_root"
+node "$repo_root/scripts/install-local-llm-operator.ts" "$package_root"
 node "$repo_root/scripts/configure-local-web.ts"
 echo "[host] local package bundle and matching installer installed"
 "${dim_command[@]}" --version

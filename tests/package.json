@@ -51,6 +51,13 @@
     "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled": "workspace:*",
     "@slop-lab/dim-contracts-execution": "workspace:*",
     "@slop-lab/dim-control-plane-plugin-execution-scheduler": "workspace:*",
-    "@slop-lab/dim-host-plugin-execution-worker": "workspace:*"
+    "@slop-lab/dim-host-plugin-execution-worker": "workspace:*",
+    "@slop-lab/dim-contracts-operations": "workspace:*",
+    "@slop-lab/dim-llm-router-client": "workspace:*",
+    "@slop-lab/dim-execution-client": "workspace:*",
+    "@slop-lab/dim-cli-plugin-llm-router": "workspace:*",
+    "@slop-lab/dim-web-plugin-llm-router": "workspace:*",
+    "@slop-lab/dim-web-plugin-execution": "workspace:*",
+    "@slop-lab/dim-web-plugin-native-git": "workspace:*"
   }
 }

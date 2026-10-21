@@ -1,0 +1,60 @@
+import assert from "node:assert/strict";
+import { chromium } from "playwright-core";
+import { llmWebFixture } from "./fixture.js";
+const executablePath = process.env.DIM_CHROMIUM; if (!executablePath) throw new Error("DIM_CHROMIUM is required");
+const fixture = await llmWebFixture(), browser = await chromium.launch({ executablePath, headless: true });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }), errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const writes = new Map<string, number>();
+  page.on("request", (request) => { for (const name of ["project.create", "project.policy.update"]) if (request.url().endsWith(`/operations/${name}`)) writes.set(name, (writes.get(name) ?? 0) + 1); });
+  async function failNextOperation(operation: string) {
+    await page.route(`**/v1/extensions/llm-router/operations/${operation}`, async (route) => {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "simulated operation unavailable" }) });
+    }, { times: 1 });
+  }
+  await page.goto(fixture.origin); await page.getByLabel("Username", { exact: true }).fill(fixture.username); await page.getByLabel("Password", { exact: true }).fill(fixture.password); await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "LLM router", exact: true }).click();
+  await page.getByRole("heading", { name: "Accounts & routes", exact: true }).waitFor();
+  await page.getByText("Dedicated test account", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Check backend authentication", exact: true }).click();
+  await page.getByRole("cell", { name: "accepted", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Open example", exact: true }).waitFor();
+  await page.getByText("New routing project", { exact: true }).click();
+  await page.getByLabel("Project ID", { exact: true }).fill("browser-project"); await failNextOperation("projects"); await page.getByRole("button", { name: "Create routing project", exact: true }).click();
+  await page.getByRole("heading", { name: "Project browser-project", exact: true }).waitFor();
+  await page.getByText("browser-project created. Latest project list could not refresh. Use Refresh router to read the current state; the change was accepted.", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Project ID", { exact: true }).inputValue(), "");
+  assert.equal(await page.getByRole("button", { name: "Create routing project", exact: true }).isDisabled(), true);
+  assert.equal(writes.get("project.create"), 1);
+  await failNextOperation("projects");
+  await page.getByLabel("Requests per UTC day", { exact: true }).fill("77"); await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
+  await page.getByText("Policy saved for browser-project. Latest project list could not refresh. Use Refresh router to read the current state; the change was accepted.", { exact: true }).waitFor(); assert.equal(fixture.router.ledger.project("browser-project").policy.limits.requestsPerUtcDay, 77);
+  assert.equal(await page.getByRole("button", { name: "Save routing policy", exact: true }).isDisabled(), true);
+  assert.equal(writes.get("project.policy.update"), 1);
+  await page.getByLabel("Requests per UTC day", { exact: true }).fill("78"); await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
+  await page.getByText("Policy saved for browser-project.", { exact: true }).waitFor(); assert.equal(fixture.router.ledger.project("browser-project").policy.limits.requestsPerUtcDay, 78);
+  await page.getByRole("button", { name: "Pause browser-project", exact: true }).click(); await page.getByRole("button", { name: "Resume browser-project", exact: true }).waitFor(); assert.equal(fixture.router.ledger.project("browser-project").paused, true);
+  await page.getByLabel("Requests per UTC day", { exact: true }).fill("79");
+  await failNextOperation("project.policy.update"); await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "The connected service could not complete this operation." }).waitFor();
+  assert.equal(await page.getByLabel("Requests per UTC day", { exact: true }).inputValue(), "79");
+  assert.equal(await page.getByRole("button", { name: "Save routing policy", exact: true }).isEnabled(), true);
+  assert.equal(fixture.router.ledger.project("browser-project").policy.limits.requestsPerUtcDay, 78);
+  await page.getByRole("button", { name: "Reconnect feature", exact: true }).click();
+  await page.getByText("Connection refreshed. Refresh this feature to load current data; your form input is kept.", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Requests per UTC day", { exact: true }).inputValue(), "79");
+  await failNextOperation("principals"); await page.getByRole("button", { name: "Refresh router", exact: true }).click();
+  await page.getByText("Workspace access could not refresh. Previously loaded rows are kept; use Refresh router to retry this read.", { exact: true }).waitFor();
+  await page.getByText("No requests recorded yet.", { exact: true }).waitFor();
+  await failNextOperation("requests"); await page.getByRole("button", { name: "Refresh router", exact: true }).click();
+  await page.getByText("Recent requests could not refresh. Previously loaded rows are kept; use Refresh router to retry this read.", { exact: true }).waitFor();
+  await page.getByText("No workspace principals issued yet.", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Git review", exact: true }).click(); await page.getByRole("heading", { name: "Connection required", exact: true }).waitFor();
+  await page.getByRole("button", { name: "LLM router", exact: true }).click(); assert.equal(await page.getByLabel("Requests per UTC day", { exact: true }).inputValue(), "79");
+  await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click(); await page.getByLabel("Username", { exact: true }).fill("observer"); await page.getByLabel("Password", { exact: true }).fill(fixture.password); await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "LLM router", exact: true }).click(); await page.getByRole("button", { name: "Open example", exact: true }).waitFor(); assert.equal(await page.getByRole("button", { name: "Create routing project", exact: true }).count(), 0);
+  assert.equal(fixture.inferenceRequests(), 0); assert.deepEqual(errors, []);
+  console.log("LLM Web plugin: real operator API, auth health, accepted write/read-failure receipts, independent traffic availability, project policy CAS/state, reconnect/navigation drafts, read-only and mobile PASS");
+} finally { await browser.close(); await fixture.close(); }

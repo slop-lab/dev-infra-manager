@@ -153,7 +153,7 @@ services. The `0.10.0` target is internal and pre-stable, not a public release.
 
 [docs/architecture.md](docs/guides/architecture.md) covers workspace boundaries and
 dependency direction. In short: `packages/host/core` has no CLI dependency,
-`packages/cli` is a thin executable adapter over it, and
+`packages/cli/core` is a thin executable adapter over it, and
 `packages/installer` is the separate installer facade — see
 [docs/README.md](docs/guides/README.md) for the full documentation index and
 [specs/README.md](docs/specs/README.md) for the normative, implementation-facing

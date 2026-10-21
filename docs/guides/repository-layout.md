@@ -14,9 +14,12 @@ Production packages are grouped by where they run and what they own:
 | `packages/review-tracing-node` | `@slop-lab/dim-review-tracing-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
 | `packages/review-tracing` | `@slop-lab/dim-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
-| `packages/cli` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
+| `packages/cli/core` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
+| `packages/cli/plugins/<name>` | `@slop-lab/dim-cli-plugin-<name>` | Feature commands using client-side operation APIs |
+| `packages/clients/<name>` | Feature-specific client packages | Shared service calls and validated operations without running their authoritative service |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
-| `packages/web` | `@slop-lab/dim-web` | Browser review client |
+| `packages/web/core` | `@slop-lab/dim-web` | Authenticated console shell, host workspaces, plugin loading and session enforcement |
+| `packages/web/plugins/<name>` | `@slop-lab/dim-web-plugin-<name>` | Feature-specific server connection and browser panel |
 
 A **host** is the DIM controller host that manages workspaces and may run CI
 workers. A control plane owns shared services. These roles can run on the same
@@ -41,6 +44,8 @@ Plugin implementation entrypoints are named explicitly:
 | --- | --- |
 | `@slop-lab/dim-host-core/plugin-api` | Host plugins and their contributions |
 | `@slop-lab/dim-control-plane-core/plugin-api` | Control-plane plugins |
+| `@slop-lab/dim-web/plugin-api` | Web feature panels and validated operation handlers |
+| `@slop-lab/dim-contracts-operations` | Shared client operation declarations and access descriptions |
 | `@slop-lab/dim-contracts-execution/plugin-api` | Worker task handlers |
 | `@slop-lab/dim-review-tracing/plugin-api` | Review detector runtime adapters |
 | `@slop-lab/dim-contracts-ci/workflow-plugin-api` | CI workflow compilers |

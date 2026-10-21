@@ -19,3 +19,5 @@ export const controlPlanePlugin: ControlPlanePlugin = {
 export { createRouter } from "./server.js";
 export { parseConfig, loadConfig, defaultLimits } from "./config.js";
 export { RouterLedger } from "./ledger.js";
+
+export { createRouterOperatorServer } from "./operator-server.js";

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { promisify } from "node:util";
 const execute = promisify(execFile);
-const cli = fileURLToPath(new URL("../../packages/cli/src/cli.ts", import.meta.url));
+const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
 const plugin = fileURLToPath(new URL("./fixtures/terminal-plugin.ts", import.meta.url));
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 

@@ -57,7 +57,7 @@ restart-controller:
 # Build the base core, then run the local CLI from source without installation.
 run-cli *args:
     pnpm --filter @slop-lab/dim-host-core run build
-    pnpm --dir tests exec tsx ../packages/cli/src/cli.ts {{ args }}
+    pnpm --dir tests exec tsx ../packages/cli/core/src/cli.ts {{ args }}
 
 # Check that the local CLI source can be executed without installing it.
 check-run-cli:

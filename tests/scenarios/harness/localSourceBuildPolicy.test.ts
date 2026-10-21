@@ -360,7 +360,7 @@ describe("local source build policy", () => {
     expect(packaging).toContain("  LICENSE \\");
     expect(packaging).toContain('cat >"$source_root/pnpm-workspace.yaml"');
     expect(packaging).toContain("  - packages/control-plane/plugins/*");
-    expect(packaging).toContain("  - packages/web");
+    expect(packaging).toContain("  - packages/web/core");
     expect(packaging).toContain('pnpm --dir "$source_root" install --frozen-lockfile');
     expect(packaging).toContain("aggregate-lock-sha256=%s");
     expect(installation).not.toMatch(/(?:systemctl|dim)\s+(?:restart|controller restart)/);

@@ -1,8 +1,7 @@
 # `@slop-lab/dim-web`
 
-Optional authenticated operations UI for local or SSH development hosts, shared
-CI, and managed Git review. Ordinary Git hosts need no control plane. CI clients
-load the optional `@slop-lab/dim-control-plane-admin` package only when CI is configured. Browser accounts
+Authenticated operations console for local or SSH development hosts and explicit
+feature plugins. Ordinary Git hosts need no control plane. Browser accounts
 have explicit `read`, `operator`, and `reviewer` roles. Host selectors, executable
 paths, service credentials and worker leases remain on the server.
 
@@ -11,7 +10,7 @@ paths, service credentials and worker leases remain on the server.
 For repository development, `just install-local` installs and configures this
 package automatically, with a local host connection and a loopback user service.
 Read the initial login from `~/.config/dim/web/login.txt`. Repeated installs keep
-the existing account. See the [local source workflow](../../docs/guides/usage.md#install-development-sources)
+the existing account. See the [local source workflow](../../../docs/guides/usage.md#install-development-sources)
 for remote browser access and service management.
 
 Install the optional package and create a mode-0600 operations settings file:
@@ -71,7 +70,7 @@ another origin identifies the configured URL without weakening the origin check.
 
 The disposable browser regression covers workspace creation/recovery, retained
 drafts, resource updates, discard cancellation, host retry, read-only access and
-existing execution operations. From the repository root after dependencies are
+logout. From the repository root after dependencies are
 installed:
 
 ```sh
@@ -80,153 +79,73 @@ DIM_CHROMIUM=/absolute/path/to/chromium node \
   tests/web/operations.e2e.ts
 ```
 
-The host CLI in that fixture is synthetic; HTTP authentication and execution
-services are real. It does not replace Docker/Sysbox runtime verification.
+The host CLI in that fixture is synthetic; HTTP authentication is real. It does not replace Docker/Sysbox runtime verification.
 
-## Shared execution, CI and managed Git
+## Feature plugins
 
-After installing the optional control-plane administration package and connecting the control plane,
-add these settings to the operations file:
+LLM routing, execution and Native Git review belong to optional Web plugins.
+The console shell provides authentication, sessions, origin and CSRF checks,
+workspace lifecycle controls, feature discovery and trusted packaged assets.
+It has no required control-plane package or built-in service API proxy.
+
+[Web feature plugins](../../../docs/guides/web-plugins.md) describes package
+installation, configuration and the server/browser extension contract. The
+repository development installer installs the matching LLM router, execution
+and Native Git Web packages in a separate runtime. Connections remain explicit;
+installing a feature does not grant service authority. An unavailable backend
+leaves its feature unavailable while workspaces and other features keep working.
+Reconnect retries the same private configuration and verifies its identity again.
+
+To initialize a feature-only console, write a private specification file:
 
 ```json
 {
-  "hosts": [],
-  "ci": {
-    "queryConnection": "/absolute/SETUP/connections/ci-query.json"
-  },
-  "execution": {
-    "operatorConnection": "/absolute/SETUP/connections/execution-operator.json"
-  }
+  "pluginHome": "/absolute/web-plugin-runtime",
+  "plugins": [
+    { "package": "@slop-lab/dim-web-plugin-llm-router",
+      "config": { "connectionFile": "/absolute/operator/llm.json" } }
+  ]
 }
 ```
 
-The administration package is an optional peer; install the same exact
-`@slop-lab/dim-control-plane-admin` version alongside web when selecting execution or CI. The two connection files
-are separate owner-only credentials bound to the connected generation. CI can
-be offline while browser configuration is initialized. The UI shows at most 100
-recent execution summaries, one execution's bounded stdout/stderr diagnostics,
-and configured execution worker slot occupancy. The execution operator connection
-works independently of the CI query connection. Occupancy does not assert worker liveness.
-Cancellation fences running capacity until owned cleanup; explicit retries use
-a stable request UUID and preserve intake uniqueness. Query accounts cannot
-mutate executions. There is no browser worker-token or arbitrary HTTP proxy.
-
-Initialize combined operations and review from generated private role files:
+The specification can also include the `operations` settings shown above.
+Choose browser roles explicitly; service credentials still retain their own
+independent authority. Initialization loads configured plugins and validates
+connections before creating the configuration or exposing a listener.
 
 ```sh
-dim-web init SETUP/connections/reviewer.json --project my-project --repository public --repository private \
-  --operations /absolute/operations.json \
-  --promoter SETUP/connections/promoter.json \
-  --output /absolute/web.json --port 9081
+dim-web init-features /absolute/features.json --output /absolute/web.json --roles read,operator
+dim-web serve /absolute/web.json
 ```
 
-Both extra flags are optional. The reviewer and optional promoter identities
-are attested against the live native Git service and exact generation before
-writing configuration. The promoter must have the same endpoint and generation
-as the reviewer. Protected promotion retains native Git's human approvals,
-current job evidence, freshness and atomic protected-ref comparison.
+The `pluginHome` package runtime defaults to `DIM_DATA_HOME/web/runtime/current`
+when omitted. Install only reviewed matching versions there. An unconfigured
+`{ "package": "..." }` selection appears with connection guidance and performs
+no service calls. A new Native Git connection must explicitly select its
+Project and repositories; no repository is inferred from a browser request.
+See [Native Git](../plugins/native-git/README.md) for reviewer/promoter/sync
+connections and [execution](../plugins/execution/README.md) for query/operator
+connections.
 
-The browser discovers the latest 100 authoritative review envelopes, resolves
-an existing proposal, opens exact immutable evidence, displays literal patches,
-approves and self-revokes with the configured human identity. It does not invent
-reviews or CI evidence. Promotion is a distinct operator action using a distinct
-private promoter credential. A reviewer role alone cannot promote; an operator
-role alone cannot approve. Native Git checks Project ownership and required
-reviewer membership independently.
+## Browser and server boundary
 
-## Accounts and deployment
+The listener binds loopback only. Use an SSH tunnel or a trusted HTTPS proxy
+and set `publicOrigin` to its exact public origin. Account roles are explicit:
+`read` for queries, `operator` for mutation and `reviewer` for human decisions.
+Roles do not imply one another. Each plugin operation advertises its required
+role, validates input and bounds its public result. Session roles and CSRF are
+checked before dispatch; authoritative services retain their own scope,
+generation, review and concurrency checks.
 
-The generated account has the roles needed for the selected features. Add more
-accounts by explicitly assigning roles in the private web configuration:
+Configuration and connection files are owned mode-0600 regular files; symbolic
+links and hard links are rejected. Browser passwords use scrypt. Sessions use
+opaque HttpOnly SameSite=Strict cookies, Secure for HTTPS, rotating login,
+monotonic idle/absolute expiry, bounded concurrency and bounded guessing.
+Credentials, host executable paths, server connection files and raw service
+capabilities never reach the browser. Console assets use a same-origin CSP,
+no-store caching and text-safe rendering.
 
-```json
-"accounts": [
-  { "username": "observer", "passwordHash": "scrypt$16384$8$1$BASE64_SALT$BASE64_32_BYTE_HASH", "roles": ["read"] },
-  { "username": "operator", "passwordHash": "scrypt$16384$8$1$BASE64_SALT$BASE64_32_BYTE_HASH", "roles": ["read", "operator"] },
-  { "username": "reviewer", "passwordHash": "scrypt$16384$8$1$BASE64_SALT$BASE64_32_BYTE_HASH", "roles": ["read", "reviewer"] }
-]
-```
-
-Use independently generated salts (at least 16 bytes), scrypt `N=16384, r=8,
-p=1`, and a 32-byte derived key. Accounts with reviewer authority deliberately
-share the configured native reviewer identity; separate native reviewer
-identities require separately scoped service configurations.
-
-The listener binds only to loopback. Forward port 9081 over SSH or publish it
-through a trusted HTTPS reverse proxy and set `publicOrigin` to that exact
-origin in the private configuration. Service configuration, selected DIM host
-configuration, SSH keys and CI connections must belong to the service account.
-Never bind privileged host credentials into development containers.
-
-For a system service installed by an administrator, use resource bounds and a
-lower OOM victim priority than development containers, for example:
-
-```ini
-[Service]
-Type=simple
-User=dim-web
-ExecStart=/absolute/node /absolute/dim-web/cli.js serve /absolute/web.json
-Restart=on-failure
-MemoryMax=512M
-CPUQuota=100%
-TasksMax=128
-OOMScoreAdjust=-500
-```
-
-Negative OOM adjustment requires appropriate host privileges; an unprivileged
-user service cannot be assumed to lower its score. DIM workspace and CI
-containers use positive victim priority. Configure actual paths and account
-access before installing the unit; this package does not deploy it implicitly.
-
-## Authentication boundary
-
-Startup requires an absolute owner-only mode-0600 regular configuration file,
-without symlinks or multiple hard links, at most 64 KiB. Native credential failure
-fails startup; optional host/CI failures are reported per operation.
-
-Password verification has a process-global five-token burst, one-token/second
-refill, and at most two simultaneous scrypt derivations. It does not allocate
-per-attacker account queues. Unknown users perform the same derivation work.
-Sessions are random in-memory HttpOnly SameSite=Strict cookies, Secure under
-HTTPS, bounded to 256 active sessions with independent idle/absolute expiry.
-Signing in invalidates prior sessions for that account; restart invalidates all.
-
-Every mutation checks exact Origin, synchronizer CSRF token, current session,
-and account role before upstream dispatch. Reads require an authenticated role.
-Request bodies, subprocess output/time, upstream responses and diagnostics are
-bounded. Secrets and backend errors are not reflected to the browser. Logout
-clears rendered operations and diagnostics; requests from an earlier session
-cannot populate a later session's view.
-
-The operations API lives under `/v1/operations`: `status`,
-`hosts/:configuredId/workspaces` (GET and POST allowlisted action),
-`hosts/:configuredId/workspaces/create` (operator-only POST with origin and CSRF checks), `ci/jobs`,
-`ci/jobs/:uuid`, `ci/jobs/:uuid/cancel`, `ci/jobs/:uuid/retry`, and `ci/workers`.
-Review APIs are scoped to `/v1/projects/:project/repositories/:repository/reviews`:
-collection GET, proposal `/resolve`, exact review GET, `/approvals`,
-`/revocations`, and operator-only `/promotions`. Query strings, unknown methods,
-arbitrary proxies, foreign Projects and repositories are rejected.
-
-Reviewer configuration explicitly lists `nativeGit.repositoryIds`. The browser
-selector and proposal list use that scope; every resolve, decision and promotion
-request includes the selected repository. Add each repository with a repeated
-`--repository` when initializing the web configuration.
-
-## Development showcase
-
-The [primitive showcase](showcase/index.html) is a static development artifact
-owned by this package. It demonstrates visual states and local interactions,
-without service credentials, network requests or review authority. It is not
-the authenticated product UI and is not included in the published package.
-
-From the repository root, serve only its asset directory:
-
-```sh
-python3 -m http.server 9082 --bind 127.0.0.1 --directory packages/web/showcase
-```
-
-Open `http://127.0.0.1:9082/`. The browser script remains plain JavaScript with
-`// @ts-check`; the repository tools type check includes it. Fonts and their
-license are kept with the showcase. Runtime UI assets stay under `src/assets`,
-and executable tests stay under [`tests/web`](../../tests/web). See
-[DESIGN.md](DESIGN.md) for the design contract.
+Tests live under [`tests/web`](../../../tests/web); feature tests live under
+[`tests/web/plugins`](../../../tests/web/plugins). The core workspace browser
+fixture uses a synthetic CLI and real HTTP authentication; optional feature
+fixtures exercise real service protocols independently.

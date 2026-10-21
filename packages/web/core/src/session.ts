@@ -1,8 +1,8 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
-import type { ReviewerWebConfig } from "./config.js";
+import type { WebConfig } from "./config.js";
 
-type Account = ReviewerWebConfig["accounts"][number];
-type SessionConfig = ReviewerWebConfig["session"];
+type Account = WebConfig["accounts"][number];
+type SessionConfig = WebConfig["session"];
 type ScryptOptions = { readonly N: number; readonly r: number; readonly p: number; readonly maxmem: number };
 type ScryptInput = { readonly password: string; readonly salt: Buffer; readonly length: number; readonly options: ScryptOptions };
 const DUMMY_PASSWORD_HASH = "scrypt$16384$8$1$MDEyMzQ1Njc4OWFiY2RlZg==$U9Hy6q7JRrW6L5R4Sxp4Qz7LJ9hYZ6dBVNUoAX5T6eQ=";
@@ -20,7 +20,7 @@ export type AuthenticationState = {
   readonly peakInFlight: number;
 };
 
-export type ReviewerSession = {
+export type WebSession = {
   readonly id: string;
   readonly accountId: string;
   readonly csrfToken: string;
@@ -29,14 +29,14 @@ export type ReviewerSession = {
 };
 
 export class SessionStore {
-  readonly #sessions = new Map<string, ReviewerSession>();
+  readonly #sessions = new Map<string, WebSession>();
   constructor(
     private readonly config: SessionConfig,
     private readonly now: () => number,
     private readonly maximumSize: number
   ) {}
 
-  create(accountId: string): ReviewerSession | undefined {
+  create(accountId: string): WebSession | undefined {
     this.pruneExpired();
     for (const session of this.#sessions.values()) {
       if (session.accountId === accountId) this.#sessions.delete(session.id);
@@ -54,7 +54,7 @@ export class SessionStore {
     return session;
   }
 
-  get(id: string): ReviewerSession | undefined {
+  get(id: string): WebSession | undefined {
     const session = this.#sessions.get(id);
     if (session === undefined) return undefined;
     const timestamp = this.now();
@@ -82,7 +82,7 @@ export class SessionStore {
     return this.#sessions.size;
   }
 
-  private expired(session: ReviewerSession, timestamp: number): boolean {
+  private expired(session: WebSession, timestamp: number): boolean {
     return timestamp - session.lastSeenAt >= this.config.idleSeconds * 1_000
       || timestamp - session.createdAt >= this.config.absoluteSeconds * 1_000;
   }

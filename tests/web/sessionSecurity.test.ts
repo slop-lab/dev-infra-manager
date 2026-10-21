@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { readJsonObject, stringField } from "./httpFixture.js";
 import {
   authenticatedSession,
-  reviewerWebFixture,
+  webFixture,
   type WebFixture,
   type WebFixtureOptions
 } from "./webHarness.js";
@@ -14,7 +14,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-describe("DIM reviewer web session bounds", () => {
+describe("DIM Web session bounds", () => {
   it("rejects excess password derivations without queuing and preserves valid login", async () => {
     // Given
     const fixture = await startFixture({ server: { limits: { authenticationDerivations: 2 } } });
@@ -187,7 +187,7 @@ describe("DIM reviewer web session bounds", () => {
 });
 
 async function startFixture(options: WebFixtureOptions = {}): Promise<WebFixture> {
-  const fixture = await reviewerWebFixture(options);
+  const fixture = await webFixture(options);
   fixtures.push(fixture);
   return fixture;
 }
