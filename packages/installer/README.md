@@ -102,6 +102,13 @@ The latter selects the Native Git and execution worker host plugins with operato
 tools. Other plugins and service deployments remain explicit operator choices.
 Host plugins use their matched host-core peer.
 
+These repository-only source commands also install a separate matched Web UI
+runtime and configure local host access. With user systemd they enable
+`dim-web.service` on `http://127.0.0.1:9081`. The initial browser login is stored
+privately in `~/.config/dim/web/login.txt`; later installs preserve it. This setup
+is not part of the published `installer install core` command. See the
+[source usage guide](../../docs/guides/usage.md#install-development-sources).
+
 `--no-local-bin` keeps `dim` behind the mise/facade path. `--local-bin` manages
 one symlink below the selected prefix. The installer refuses to overwrite any
 file or symlink it does not own. Registry installs must use the installer's

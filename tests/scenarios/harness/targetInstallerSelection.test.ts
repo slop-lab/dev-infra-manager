@@ -40,9 +40,10 @@ async function createFixture(): Promise<Fixture> {
   const dataHome = resolve(root, "installed/data");
   await Promise.all([scripts, tools, bundle, temporaryRoot, stateRoot, resolve(configPath, "..")]
     .map((directory) => mkdir(directory, { recursive: true })));
-  await Promise.all(["install-source-build.bash", "local-package-version.bash"].map((script) =>
+  await Promise.all(["install-source-build.bash", "local-package-version.bash", "install-local-web.ts"].map((script) =>
     copyFile(resolve(workspaceRoot, "scripts", script), resolve(scripts, script))
   ));
+  await writeFile(resolve(scripts, "configure-local-web.ts"), "// Service configuration is covered separately.\n");
   await writeFile(resolve(scripts, "local-preparation-state.bash"), `#!/usr/bin/bash
 printf 'state\n' >>"$DIM_INVOCATIONS"
 printf 'state=fresh\n'

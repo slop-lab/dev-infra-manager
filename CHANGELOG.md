@@ -80,6 +80,10 @@ is implied by these source changes.
   and connect generation-bound worker configuration without hand-writing
   credentials. Source installs retain the
   matching installer and select it through mise for subsequent operations.
+  Local source installation also configures the authenticated Web UI in a
+  separate runtime, starts a loopback user service when available, and retains
+  its browser account across repeat installs. Local removal stops and removes
+  the owned Web UI service.
   Install `dim-host-plugin-*` capabilities on workspace/CI hosts and
   `dim-control-plane-plugin-*` services in an independent runtime without
   host core through `installer install control-plane plugin`. Native Project

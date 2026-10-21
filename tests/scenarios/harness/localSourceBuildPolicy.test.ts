@@ -67,6 +67,8 @@ touch "$1/cli.tgz"
 touch "$1/slop-lab-dim-installer-local.tgz"
 `
   );
+  for (const helper of ["install-local-web.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
+    'import { appendFileSync } from "node:fs"; appendFileSync(process.env.DIM_INVOCATIONS!, `web-helper ${process.argv[1]} ${process.argv.slice(2).join(" ")}\\n`);\n');
   await writeFile(
     resolve(scripts, "local-preparation-state.bash"),
     "#!/usr/bin/env bash\ncount_file=\"$DIM_STATE_COUNT\"\ncount=$(( $(cat \"$count_file\" 2>/dev/null || printf 0) + 1 ))\nprintf '%s' \"$count\" >\"$count_file\"\nprintf 'state %s %s\\n' \"$DIM_LOCAL_IMAGE_INSPECT_REF\" \"$DIM_LOCAL_IMAGE_RECORD_REF\" >>\"$DIM_INVOCATIONS\"\nif [[ \"$count\" -eq 1 ]]; then printf '%s\\n' \"${DIM_STATE_FIRST:-state=fresh}\"; else printf '%s\\n' \"${DIM_STATE_SECOND:-state=fresh}\"; fi\n"

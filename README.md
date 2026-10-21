@@ -29,8 +29,12 @@ just install-local
 ```
 
 The preparation builds the package bundle and base workspace image. The install
-selects the base CLI and its dependencies; optional managed packages in the same
-bundle are not automatically installed. It retains the matching source installer and selects it through mise when
+selects the base CLI and its dependencies, and installs the Web UI in a separate
+runtime. On hosts with user systemd, it starts `dim-web.service` at
+`http://127.0.0.1:9081`; private login details are in `~/.config/dim/web/login.txt`.
+Repeated installs keep the existing Web UI configuration and account. Optional
+managed host packages in the bundle are not automatically installed.
+It retains the matching source installer and selects it through mise when
 available. Without mise, it prints the persistent facade path to add to PATH.
 See the [source installation workflow](docs/guides/usage.md#install-development-sources) for
 artifact provenance and prerequisites.

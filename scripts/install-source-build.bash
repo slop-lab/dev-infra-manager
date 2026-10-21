@@ -120,8 +120,6 @@ if [[ "$with_managed" -eq 1 ]]; then
   core_options+=(--with-managed)
 fi
 "${dim_command[@]}" installer install core "${core_options[@]}"
-
-
 validate_preparation
 
 # Keep the matching installer after this transaction. An older mise facade can
@@ -158,5 +156,8 @@ else
   echo "Add $facade_root/node_modules/.bin to PATH to use this matching facade."
 fi
 validate_preparation
+echo "[host] install Web UI package bundle"
+node "$repo_root/scripts/install-local-web.ts" "$package_root"
+node "$repo_root/scripts/configure-local-web.ts"
 echo "[host] local package bundle and matching installer installed"
 "${dim_command[@]}" --version

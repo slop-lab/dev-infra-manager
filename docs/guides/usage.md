@@ -20,13 +20,31 @@ just install-local
 The first command installs the preserved facade. Preparation builds packages
 and the base workspace image from one source identity and lockfile. Installation
 uses those artifacts without rebuilding them, validates base workspace state,
-and selects only the base CLI dependency graph. It does not activate a fresh
+and selects the base CLI dependency graph. It does not activate a fresh
 managed controller. Existing explicitly installed integrations are retained.
 The matching installer is retained under the DIM data directory. With mise,
 installation links and selects that exact source facade globally, so later
 installer commands use the same implementation. Without mise, add the printed
 facade directory to PATH.
 Preparation rejects dirty source by default; use a reviewed clean commit.
+
+`install-local` also installs the matched Web UI and its operator clients in a
+separate runtime under `DIM_DATA_HOME/web/runtime`. It configures the built-in
+`local` host and creates a browser account on first installation. With user
+systemd available, `dim-web.service` starts at `http://127.0.0.1:9081`; otherwise
+installation prints the command to serve it manually. Read the initial username
+and password from `~/.config/dim/web/login.txt` (mode `0600`). Configuration lives
+in `~/.config/dim/web/config.json`; these paths follow `XDG_CONFIG_HOME`.
+Repeated installs preserve the configuration and account and restart the service
+with the selected runtime. Local uninstall removes the Web UI service and its
+configuration; a clean reinstall creates a new account.
+
+For a browser on another machine, forward the loopback port with
+`ssh -L 9081:127.0.0.1:9081 USER@HOST`, then open `http://127.0.0.1:9081`.
+Use `systemctl --user status dim-web.service` and
+`journalctl --user -u dim-web.service` for service diagnostics. Add other trusted
+hosts or optional review/execution connections using the
+[Web UI configuration guide](../../packages/web/README.md).
 
 A source host bootstrap is available for a disposable Ubuntu VM in
 [bootstrap-ubuntu-vm.md](../development/bootstrap-ubuntu-vm.md). Do not use

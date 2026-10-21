@@ -8,6 +8,12 @@ paths, service credentials and worker leases remain on the server.
 
 ## Ordinary Git hosts
 
+For repository development, `just install-local` installs and configures this
+package automatically, with a local host connection and a loopback user service.
+Read the initial login from `~/.config/dim/web/login.txt`. Repeated installs keep
+the existing account. See the [local source workflow](../../docs/guides/usage.md#install-development-sources)
+for remote browser access and service management.
+
 Install the optional package and create a mode-0600 operations settings file:
 
 ```json
