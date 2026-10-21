@@ -1,0 +1,49 @@
+{
+  "name": "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled",
+  "version": "0.10.0",
+  "description": "Review detectors dispatched through the shared task scheduler",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
+    "directory": "packages/control-plane/plugins/review-tracing-scheduled"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "pack:dry-run": "pnpm run build && bash ../../../../scripts/packages/pnpm-pack-dry-run.bash ./dist"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@slop-lab/dim-review-tracing": "workspace:0.10.0",
+    "@slop-lab/dim-task-scheduling": "workspace:0.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3",
+    "@slop-lab/dim-control-plane-core": "workspace:0.10.0"
+  },
+  "peerDependencies": {
+    "@slop-lab/dim-control-plane-core": "0.10.0"
+  }
+}

@@ -9,15 +9,17 @@ import { z } from "zod";
 import { tryAcquireKernelGuard, type StreamingCommandRunner } from "@slop-lab/dim-host-core";
 import { withNativeGitExecutionReadAuthority } from "./nativeGitCandidateReadAuthority.js";
 import { NativeHostPrivateRoot, type NativeHostPrivateRootIdentity } from "./private-root.js";
-import { executionResultSchema, type ExecutionAssignment, type ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
-import { ExecutionServiceUnavailableError, parseAssignment, type ExecutionWorkerClient } from "./client.js";
+import { executionResultSchema } from "@slop-lab/dim-contracts-ci/aggregate";
+import { taskResultSchema, type ExecutionTaskHandler, type TaskAssignment, type TaskResult } from "@slop-lab/dim-task-scheduling";
+import { ExecutionServiceUnavailableError, isTaskAssignment, parseAssignment, type ExecutionWorkerClient, type WorkerAssignment, type WorkerResult } from "./client.js";
 import type { ExecutionBackend } from "./backend.js";
 
-type Journal = { requestId: string; assignment?: ExecutionAssignment;
-  root?: NativeHostPrivateRootIdentity; result?: ExecutionResult };
+type Journal = { requestId: string; assignment?: WorkerAssignment;
+  root?: NativeHostPrivateRootIdentity; result?: WorkerResult };
 export type ExecutionWorkerOptions = { readonly directory: string; readonly client: ExecutionWorkerClient;
-  readonly backend: ExecutionBackend; readonly runner: StreamingCommandRunner;
-  readonly gitEndpoint: string; readonly gitExecutable: string; readonly signal: AbortSignal };
+  readonly backend?: ExecutionBackend; readonly runner?: StreamingCommandRunner;
+  readonly taskHandlers?: readonly ExecutionTaskHandler[];
+  readonly gitEndpoint?: string; readonly gitExecutable?: string; readonly signal: AbortSignal };
 /** One host-selected slot, one durable request and owned resource at a time. */
 export async function runExecutionWorker(options: ExecutionWorkerOptions): Promise<void> {
   await privateDirectory(options.directory);
@@ -50,15 +52,57 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
 
   async function execute(journal: Journal): Promise<void> {
     const assignment = journal.assignment!;
-    const grant = assignment.grant!;
     assertBackend(assignment);
+    if (isTaskAssignment(assignment)) { await executeTask(journal, assignment); return; }
+    const grant = assignment.grant!;
+    const backend = options.backend!;
+    const runner = options.runner;
+    if (options.gitEndpoint === undefined || options.gitExecutable === undefined || runner === undefined) throw new Error("CI worker requires Native Git and runner configuration");
     journal.root = { schemaVersion: 1, state: "planned", rootId: randomUUID() };
     await writeJournal(journalPath, journal);
     const root = new NativeHostPrivateRoot(options.directory, journal.root);
     await root.create(assignment.id);
     journal.root = root.identity; await writeJournal(journalPath, journal);
-    const leaseLost = new AbortController();
-    const stopRenewing = new AbortController();
+    const result = await withLease(assignment, async (signal) => {
+      const credentialProvider = executionCandidateCredential((signal) => options.client.candidate(assignment, signal));
+      const credential = await credentialProvider(signal);
+      return backend.run({ grant, root: root.path, runner, signal,
+        acquireCandidate: async (paths) => withNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable!,
+          serviceEndpoint: options.gitEndpoint!, temporaryRoot: root.path,
+          credential: { username: credential.username, password: credential.password }, credentialProvider, descriptor: grant.descriptor },
+        paths.signal, (authority) => verifyAndMaterializeCandidate({ ...paths, authority,
+          descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })) });
+    });
+    if (!await root.cleanup(assignment.id)) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
+    journal.result = result;
+    await writeJournal(journalPath, journal);
+    await retry(() => options.client.report(assignment, result, options.signal));
+    await clear();
+  }
+  async function executeTask(journal: Journal, assignment: TaskAssignment): Promise<void> {
+    const handler = taskHandler(assignment);
+    const result = await withLease(assignment, async (signal): Promise<TaskResult> => {
+      let outcome: { result: TaskResult["result"]; value?: unknown; error?: string };
+      try {
+        const value = await handler.run({ assignment, payload: assignment.event.payload,
+          exchange: (operation, input, requestedSignal) => options.client.exchange(assignment, operation, input,
+            requestedSignal === undefined ? signal : AbortSignal.any([signal, requestedSignal])), signal });
+        signal.throwIfAborted();
+        outcome = { result: "success", ...(value === undefined ? {} : { value }) };
+      } catch (error) {
+        outcome = { result: signal.aborted ? "cancelled" : "failure", error: (error instanceof Error ? error.message : String(error)).slice(0, 2048) };
+      }
+      if (!await handler.cleanup({ assignment })) throw new Error("task cleanup is uncertain; slot remains fenced");
+      return taskResultSchema.parse({ executionId: assignment.id, descriptorDigest: assignment.grant!.descriptorDigest,
+        cleanupComplete: true, ...outcome });
+    });
+    journal.result = result;
+    await writeJournal(journalPath, journal);
+    await retry(() => options.client.report(assignment, result, options.signal));
+    await clear();
+  }
+  async function withLease<T>(assignment: WorkerAssignment, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const leaseLost = new AbortController(), stopRenewing = new AbortController();
     const signal = AbortSignal.any([options.signal, leaseLost.signal]);
     const leaseMilliseconds = await options.client.renew(assignment, signal);
     const renewals = (async () => {
@@ -69,22 +113,8 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
         } catch { if (!stopRenewing.signal.aborted) leaseLost.abort(); return; }
       }
     })();
-    let result: ExecutionResult;
-    try {
-      const credentialProvider = executionCandidateCredential((signal) => options.client.candidate(assignment, signal));
-      const credential = await credentialProvider(signal);
-      result = await options.backend.run({ grant, root: root.path, runner: options.runner, signal,
-        acquireCandidate: async (paths) => withNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable,
-          serviceEndpoint: options.gitEndpoint, temporaryRoot: root.path,
-          credential: { username: credential.username, password: credential.password }, credentialProvider, descriptor: grant.descriptor },
-        paths.signal, (authority) => verifyAndMaterializeCandidate({ ...paths, authority,
-          descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })) });
-    } finally { stopRenewing.abort(); await renewals; }
-    if (!await root.cleanup(assignment.id)) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
-    journal.result = result;
-    await writeJournal(journalPath, journal);
-    await retry(() => options.client.report(assignment, result, options.signal));
-    await clear();
+    try { return await operation(signal); }
+    finally { stopRenewing.abort(); await renewals; }
   }
   async function recover(journal: Journal): Promise<void> {
     const assignment = journal.assignment!;
@@ -92,7 +122,9 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     if (journal.result !== undefined) {
       await retry(() => options.client.report(assignment, journal.result!, options.signal));
     } else {
-      if (assignment.grant !== undefined && !await options.backend.cleanup(options.runner, assignment.grant,
+      if (isTaskAssignment(assignment)) {
+        if (!await taskHandler(assignment).cleanup({ assignment })) throw new Error("task cleanup is uncertain; slot remains fenced");
+      } else if (assignment.grant !== undefined && !await options.backend!.cleanup(options.runner!, assignment.grant,
         journal.root === undefined ? options.directory : new NativeHostPrivateRoot(options.directory, journal.root).path)) {
         throw new Error("CI resource cleanup is uncertain; slot remains fenced");
       }
@@ -103,9 +135,19 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     }
     await clear();
   }
-  function assertBackend(assignment: ExecutionAssignment): void {
+  function taskHandler(assignment: TaskAssignment): ExecutionTaskHandler {
+    const handler = options.taskHandlers?.find((handler) => handler.taskType === assignment.event.taskType && handler.revision === assignment.event.handlerRevision);
+    if (handler === undefined) throw new Error("task assignment requires an installed handler with the exact reviewed revision");
+    return handler;
+  }
+  function assertBackend(assignment: WorkerAssignment): void {
     const grant = assignment.grant;
-    if (grant !== undefined && (grant.event.executionKind !== options.backend.kind || grant.executionId !== assignment.id
+    if (isTaskAssignment(assignment)) {
+      taskHandler(assignment);
+      if (grant !== undefined && (grant.executionId !== assignment.id || grant.workerId !== assignment.workerId || grant.slotId !== assignment.slotId)) throw new Error("task assignment ownership conflicts");
+      return;
+    }
+    if (grant !== undefined && (grant.event.executionKind !== options.backend?.kind || grant.executionId !== assignment.id
       || grant.workerId !== assignment.workerId || grant.slotId !== assignment.slotId)) {
       throw new Error("CI assignment does not match this worker backend");
     }
@@ -143,7 +185,7 @@ async function readJournal(path: string): Promise<Journal | undefined> {
     }
     const raw: unknown = JSON.parse(await handle.readFile("utf8"));
     const row = z.object({ requestId: z.string().uuid(), assignment: z.unknown().optional(),
-      root: z.unknown().optional(), result: executionResultSchema.optional() }).strict().parse(raw);
+      root: z.unknown().optional(), result: z.union([executionResultSchema, taskResultSchema]).optional() }).strict().parse(raw);
     return { requestId: row.requestId, ...(row.assignment === undefined ? {} : { assignment: parseAssignment(row.assignment) }),
       ...(row.root === undefined ? {} : { root: row.root as NativeHostPrivateRootIdentity }),
       ...(row.result === undefined ? {} : { result: row.result }) };

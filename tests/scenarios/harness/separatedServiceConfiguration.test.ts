@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -20,10 +21,15 @@ it("connects with canonical operator documents while placing both services on th
     const placed = loopbackServiceConfiguration(prepared.native.ci, ordinary);
     const integration = gitCiConfigSchema.parse(placed.gitCi);
     const coordinator = executionServiceConfigSchema.parse(placed.coordinator);
+    assert(coordinator.nativeGit && prepared.ordinary.nativeGit, "prepared CI service requires native Git authority");
     expect(integration.webhook.endpoint).toBe("http://127.0.0.1:8081/v1/jobs");
     expect(coordinator.nativeGit.endpoint).toBe("http://127.0.0.1:8080");
     expect(coordinator.nativeGit.grantIssuer).toEqual(prepared.ordinary.nativeGit.grantIssuer);
     expect(integration.webhook.password).toBe(prepared.native.ci.webhook.password);
     expect(parseControlPlaneServicePair(native, ordinary)).toEqual(prepared);
+    const repositoryRole = prepared.native.workspaceWriteIssuers[0]!;
+    expect(() => parseControlPlaneServicePair(native, { ...prepared.ordinary, credentials: {
+      ...prepared.ordinary.credentials, tasks: { username: repositoryRole.username, password: repositoryRole.password }
+    } })).toThrow("credentials must be distinct");
   } finally { await rm(root, { recursive: true, force: true }); }
 });

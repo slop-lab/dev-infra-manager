@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import assert from "node:assert/strict";
+import { isTaskAssignment } from "../../../packages/host/plugins/ci-worker/src/client.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { StaleExecutionSourceError } from "../../../packages/control-plane/plugins/ci/src/source.js";
 import { runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
@@ -16,6 +18,7 @@ it("replays claims and cleaned results while keeping raw diagnostics out of job 
   const [claim, replay] = await Promise.all([f.worker.claim(request), f.worker.claim(request)]);
   expect(replay).toEqual(claim); expect(await f.worker.claim(request)).toEqual(claim);
   if (!claim?.grant) throw new Error("candidate event did not produce a granted claim");
+  assert(!isTaskAssignment(claim), "CI fixture received a generic task");
   expect(claim.grant.event.jobName).toBe("source");
   const credential = await f.worker.candidate(claim);
   const remote = new URL("/v1/projects/project-a/repositories/root.git", f.native.service.origin);
@@ -28,7 +31,9 @@ it("replays claims and cleaned results while keeping raw diagnostics out of job 
     logs: { stdout: { base64: encoded, truncated: true }, stderr: { base64: encoded, truncated: true } } };
   await f.worker.report(claim, evidence); await f.worker.report(claim, evidence);
   expect(f.ci.store.get(claim.id).phase).toBe("finished");
-  expect((await f.worker.claim(request))?.result?.logs.stdout.base64).toBe(encoded);
+  const completed = await f.worker.claim(request);
+  assert(completed && !isTaskAssignment(completed), "CI replay did not return its execution");
+  expect(completed.result?.logs.stdout.base64).toBe(encoded);
   const jobs = await f.query("/v1/jobs"), detail = await f.query(`/v1/jobs/${claim.id}`);
   expect(jobs.status).toBe(200); expect(detail.status).toBe(200);
   expect(JSON.stringify(await jobs.json())).not.toContain(encoded);

@@ -7,6 +7,9 @@ import { z } from "zod";
 import { executionEventSchema } from "@slop-lab/dim-contracts-ci/execution";
 import type { ExecutionServiceConfig } from "@slop-lab/dim-contracts-ci/config";
 import { ExecutionStore } from "./store.js";
+import { createTaskBroker } from "./task-broker.js";
+import { isTaskExecution, taskDescriptorDigest, taskGrantSchema, taskProfileSchema, type TaskProfile, type ScheduledSlot } from "@slop-lab/dim-task-scheduling";
+import { parseExecution, type ExecutionAssignment, type ExecutionProfile } from "@slop-lab/dim-contracts-ci/aggregate";
 import { ExecutionConflictError, type WorkerIdentity } from "@slop-lab/dim-contracts-ci/aggregate";
 import { nativeGitExecutionSource, StaleExecutionSourceError, type ExecutionSource } from "./source.js";
 
@@ -21,12 +24,14 @@ export function configuredExecutionServer(input: {
   const config = input.config;
   const generation = input.expectedGenerationId;
   const activation = createHash("sha256").update(input.activationToken).digest("hex");
-  const workers: WorkerIdentity[] = config.workers.map((worker) => ({ id: worker.id, token: worker.token,
-    slots: worker.slots.map((slot) => ({ id: slot.id, kind: slot.runtime === "container" ? "ordinary-sysbox" : "qemu",
-      profile: slot.profile })) }));
+  const workers = config.workers.map((worker) => ({ id: worker.id, token: worker.token,
+    slots: worker.slots.map((slot): ScheduledSlot<ExecutionProfile | TaskProfile> => "taskType" in slot
+      ? { id: slot.id, kind: `task/${slot.taskType}`, profile: { taskType: slot.taskType, handlerRevision: slot.handlerRevision } }
+      : { id: slot.id, kind: slot.runtime === "container" ? "ordinary-sysbox" : "qemu", profile: slot.profile }) }));
   const store = new ExecutionStore(join(input.stateDirectory, "executions.sqlite3"), generation,
     config.claimLeaseMilliseconds, input.now);
-  const source = input.source ?? nativeGitExecutionSource(config.nativeGit, generation);
+  const source = input.source ?? (config.nativeGit === undefined ? undefined : nativeGitExecutionSource(config.nativeGit, generation));
+  const tasks = createTaskBroker(store);
   const shutdown = new AbortController();
   const publisher = publishResults();
   const server = createServer((request, response) => {
@@ -40,7 +45,7 @@ export function configuredExecutionServer(input: {
   server.headersTimeout = 15_000;
   server.keepAliveTimeout = 1_000;
   let closed = false;
-  async function closeStore() { shutdown.abort(); await publisher; if (!closed) { closed = true; store.close(); } }
+  async function closeStore() { shutdown.abort(); tasks.close(); await publisher; if (!closed) { closed = true; store.close(); } }
   server.once("close", () => { void closeStore(); });
   return { server, store, async close() {
     shutdown.abort(); server.closeAllConnections();
@@ -61,6 +66,27 @@ export function configuredExecutionServer(input: {
       store.activate(activation); return send(response, 200, { ...body, activated: true });
     }
     if (!store.activated(activation)) return send(response, 503, { error: "CI requires generation activation" });
+    const taskRoute = /^\/v1\/tasks(?:\/([0-9a-f-]{36})\/(exchange|cancel|complete))?$/.exec(url.pathname);
+    if (taskRoute !== null) {
+      const credential = config.credentials.tasks;
+      if (credential === undefined || !basic(request, credential.username, credential.password)) return unauthorized(response);
+      if (request.headers["x-dim-generation-id"] !== generation) return send(response, 409, { error: "task issuer generation is stale" });
+      const id = taskRoute[1], action = taskRoute[2];
+      if (id === undefined && request.method === "POST") {
+        const job = tasks.submit(await read(request));
+        return send(response, 200, { executionId: job.id, generationId: generation });
+      }
+      if (id !== undefined && action === "exchange" && request.method === "GET") return send(response, 200, tasks.poll(id));
+      if (id !== undefined && request.method === "POST") {
+        const body = await read(request);
+        if (action === "exchange") tasks.reply(id, body);
+        else if (action === "cancel") { z.object({}).strict().parse(body); tasks.cancel(id); }
+        else if (action === "complete") { z.object({}).strict().parse(body); tasks.release(id); }
+        else return send(response, 404, {});
+        return send(response, 200, { accepted: true });
+      }
+      return send(response, 404, {});
+    }
     if (request.method === "POST" && url.pathname === "/v1/jobs") {
       if (!basic(request, config.credentials.webhook.username, config.credentials.webhook.password)) return unauthorized(response);
       const body = z.object({ generationId: z.literal(generation), event: executionEventSchema }).strict().parse(await read(request));
@@ -76,17 +102,19 @@ export function configuredExecutionServer(input: {
         return send(response, 200, workers.map((worker) => ({ id: worker.id, slots: worker.slots.map((slot) => {
           const job = occupied.find((job) => job.workerId === worker.id && job.slotId === slot.id);
           return { id: slot.id, executionKind: slot.kind, state: job === undefined ? "idle" : job.phase === "recovering" ? "cleanup-required" : "busy",
-            ...(job === undefined ? {} : { job: executionSummary(job), leaseExpiresAt: job.leaseExpiresAt }) };
+            ...(job === undefined ? {} : { job: isTaskExecution(job) ? taskSummary(job) : executionSummary(job), leaseExpiresAt: job.leaseExpiresAt }) };
         }) })));
       }
       const id = operatorRoute[2], action = operatorRoute[3];
       if (request.method !== "POST" || id === undefined || action === undefined) return send(response, 404, {});
       if (action === "cancel") {
         z.object({}).strict().parse(await read(request));
-        return send(response, 200, executionSummary(store.cancel(id)));
+        const job = store.get(id);
+        return send(response, 200, summary(isTaskExecution(job) ? tasks.cancel(id) : store.cancel(id)));
       }
       const body = z.object({ requestId: z.string().uuid() }).strict().parse(await read(request));
-      return send(response, 200, executionSummary(store.retry(id, body.requestId)));
+      if (isTaskExecution(store.get(id))) throw new ExecutionConflictError("interactive tasks require a fresh issuer session");
+      return send(response, 200, summary(store.retry(id, body.requestId)));
     }
     const query = /^\/v1\/jobs(?:\/([0-9a-f-]{36}))?$/.exec(url.pathname);
     if (request.method === "GET" && query) {
@@ -94,8 +122,8 @@ export function configuredExecutionServer(input: {
       if (request.headers["x-dim-generation-id"] !== generation) return send(response, 409, { error: "CI query generation is stale" });
       if (query[1] === undefined) return send(response, 200, store.recentSummaries());
       const job = store.find(query[1]);
-      if (!job) return send(response, 404, { error: "CI execution was not found" });
-      return send(response, 200, { job: executionSummary(job), ...(job.result === undefined ? {} : { result: job.result }) });
+      if (!job || isTaskExecution(job)) return send(response, 404, { error: "CI execution was not found" });
+      return send(response, 200, { job: summary(job), ...(job.result === undefined ? {} : { result: job.result }) });
     }
     const worker = workers.find((worker) => basic(request, worker.id, worker.token));
     if (worker === undefined) return unauthorized(response);
@@ -110,14 +138,25 @@ export function configuredExecutionServer(input: {
       let assignment = store.reserve(worker.id, slot, body.requestId);
       if (assignment === undefined) return send(response, 204);
       if (assignment.phase !== "assigned" || assignment.grant !== undefined) return send(response, 200, assignment);
-      try { assignment = store.attachGrant(assignment.id, await source.authorize(assignment)); }
+      try {
+        if (isTaskExecution(assignment)) {
+          tasks.assertCurrent(assignment.id);
+          const profile = taskProfileSchema.parse(assignment.profile);
+          assignment = store.attachGrant(assignment.id, taskGrantSchema.parse({ executionId: assignment.id, generationId: generation,
+            workerId: assignment.workerId, slotId: assignment.slotId, event: assignment.event, profile,
+            descriptorDigest: taskDescriptorDigest(assignment.event, profile) }));
+        } else {
+          if (source === undefined) throw new StaleExecutionSourceError();
+          assignment = store.attachGrant(assignment.id, await source.authorize(assignment as ExecutionAssignment));
+        }
+      }
       catch (error) {
         if (error instanceof StaleExecutionSourceError) { store.reject(assignment.id); return send(response, 204); }
         throw error;
       }
       return send(response, 200, assignment);
     }
-    const match = /^\/v1\/executions\/([0-9a-f-]{36})\/(renew|candidate|result|recover)$/.exec(url.pathname);
+    const match = /^\/v1\/executions\/([0-9a-f-]{36})\/(renew|candidate|result|recover|exchange)$/.exec(url.pathname);
     if (request.method !== "POST" || match === null) return send(response, 404, {});
     const id = match[1]!, action = match[2]!;
     const raw = await read(request);
@@ -128,11 +167,18 @@ export function configuredExecutionServer(input: {
       const renewed = store.renew(id, worker.id, body.slotId, body.leaseToken);
       return send(response, 200, { expiresAt: renewed.leaseExpiresAt, leaseMilliseconds: config.claimLeaseMilliseconds });
     }
+    if (action === "exchange") {
+      if (!isTaskExecution(assignment)) return send(response, 404, {});
+      const exchange = ownership.extend({ operation: z.string(), input: z.unknown() }).strict().parse(raw);
+      const value = await tasks.exchange(id, worker.id, body.slotId, body.leaseToken, { operation: exchange.operation, input: exchange.input });
+      return send(response, 200, { value });
+    }
     if (action === "candidate") {
+      if (isTaskExecution(assignment) || source === undefined) return send(response, 404, {});
       ownership.strict().parse(raw);
       store.renew(id, worker.id, body.slotId, body.leaseToken);
       if (assignment.grant === undefined) throw new ExecutionConflictError("execution has no grant");
-      return send(response, 200, await source.candidate(assignment.grant));
+      return send(response, 200, await source.candidate((parseExecution(assignment)).grant!));
     }
     if (action === "recover") {
       ownership.extend({ cleanupComplete: z.literal(true) }).strict().parse(raw);
@@ -140,7 +186,13 @@ export function configuredExecutionServer(input: {
       return send(response, 200, { accepted: true });
     }
     const resultBody = ownership.extend({ result: z.unknown() }).strict().parse(raw);
-    store.finish(id, worker.id, body.slotId, body.leaseToken, resultBody.result as never);
+    const finished = store.finish(id, worker.id, body.slotId, body.leaseToken, resultBody.result as never);
+    if (isTaskExecution(finished)) {
+      const current = tasks.hasSession(id) && assignment.generationId === generation && assignment.cancelRequestedAt === undefined
+        && ["assigned", "running"].includes(assignment.phase) && (assignment.leaseExpiresAt ?? 0) > store.now();
+      tasks.finish(id);
+      if (assignment.result === undefined) store.published(id, current ? "accepted" : "stale");
+    }
     send(response, 200, { accepted: true });
   }
   async function publishResults(): Promise<void> {
@@ -148,7 +200,8 @@ export function configuredExecutionServer(input: {
       for (const job of store.pendingResults()) {
         if (shutdown.signal.aborted) return;
         try {
-          if (job.grant === undefined || job.result === undefined) throw new Error("finished execution lacks evidence");
+          if (isTaskExecution(job)) { store.published(job.id, "stale"); continue; }
+          if (source === undefined || job.grant === undefined || job.result === undefined) throw new Error("finished execution lacks evidence");
           await source.publish(job.grant, job.result);
           if (!shutdown.signal.aborted) store.published(job.id, "accepted");
         } catch (error) {
@@ -169,11 +222,16 @@ function send(response: ServerResponse, status: number, body?: unknown): void {
   response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
   response.end(body === undefined ? undefined : JSON.stringify(body));
 }
+function taskSummary(job: import("@slop-lab/dim-task-scheduling").TaskExecution) {
+  return { id: job.id, taskType: job.event.taskType, executionKind: job.event.executionKind, phase: job.phase,
+    generationId: job.generationId, createdAt: job.createdAt, publication: job.publication };
+}
+function summary(job: import("./store.js").ScheduledExecution) { return isTaskExecution(job) ? taskSummary(job) : executionSummary(job); }
 async function read(request: IncomingMessage): Promise<unknown> {
   let size = 0; const chunks: Buffer[] = [];
   for await (const chunk of request) {
     const bytes = Buffer.from(chunk); size += bytes.length;
-    if (size > 1024 * 1024) throw new Error("CI request exceeds bound"); chunks.push(bytes);
+    if (size > 1_500_000) throw new Error("CI request exceeds bound"); chunks.push(bytes);
   }
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
   catch { throw new ExecutionConflictError("CI request is not JSON"); }

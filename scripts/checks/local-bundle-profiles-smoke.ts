@@ -52,7 +52,8 @@ try {
     "@slop-lab/dim-control-plane-plugin-code-review", "@slop-lab/dim-control-plane-plugin-merge-policy",
     "@slop-lab/dim-control-plane-plugin-git-ci", "@slop-lab/dim-control-plane-plugin-webhooks",
     "@slop-lab/dim-control-plane-plugin-ci-workflows", "@slop-lab/dim-control-plane-plugin-llm-router", "@slop-lab/dim-control-plane-plugin-ci",
-    "@slop-lab/dim-control-plane-plugin-review-tracing", "@slop-lab/dim-control-plane-plugin-review-tracing-node"];
+    "@slop-lab/dim-control-plane-plugin-review-tracing", "@slop-lab/dim-control-plane-plugin-review-tracing-node",
+    "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled"];
   run(facade, ["installer", "install", "control-plane", "plugin", "--local-packages", bundle,
     ...controlPlanePlugins.map((name) => `${name}@${packages.find((entry) => entry.name === name)?.version}`)]);
   assert.equal(existsSync(runtime), false, "control-plane plugins must not install a host runtime");
@@ -105,10 +106,16 @@ try {
   }
   console.log("host profile: explicit native Git and CI worker plugins with operator tools");
 
-  const selectedHostPlugins = ["@slop-lab/dim-host-plugin-mirrors", "@slop-lab/dim-host-plugin-cache-server", "@slop-lab/dim-host-plugin-external-urls"];
+  const selectedHostPlugins = ["@slop-lab/dim-host-plugin-mirrors", "@slop-lab/dim-host-plugin-cache-server", "@slop-lab/dim-host-plugin-external-urls", "@slop-lab/dim-host-plugin-review-tracing-node"];
   run(facade, ["installer", "install", "plugin", "--local-packages", bundle,
     ...selectedHostPlugins.map((name) => `${name}@${packages.find((entry) => entry.name === name)?.version}`)]);
   assert.ok(existsSync(path.join(runtime, "node_modules/@slop-lab/dim-contracts-external-url")), "host plugin bundle must install its contracts dependency");
+  run(process.execPath, ["--input-type=module", "--eval", `
+    import {createRequire} from 'node:module'; import {pathToFileURL} from 'node:url';
+    const require = createRequire(${JSON.stringify(path.join(runtime, "package.json"))});
+    const {reviewTracingTaskHandler,hostPlugin} = await import(pathToFileURL(require.resolve('@slop-lab/dim-host-plugin-review-tracing-node')).href);
+    if (!/^[a-f0-9]{64}$/.test(reviewTracingTaskHandler.revision) || hostPlugin.extensions[0]?.value !== reviewTracingTaskHandler) throw new Error('installed detector task handler is unavailable');
+  `]);
   run(facade, install);
   assert.deepEqual(plugins().sort(), [...profilePlugins, ...selectedHostPlugins].sort());
   assert.equal(path.resolve(runtime, string(dependencies()["@slop-lab/dim-host-plugin-mirrors"]).slice(5)),

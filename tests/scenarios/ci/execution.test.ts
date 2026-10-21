@@ -74,6 +74,7 @@ it("replays a durable result after restart without launching candidate code twic
   const client: ExecutionWorkerClient = {
     async claim(requestId) { return { ...authorized, requestId }; }, async renew() { return 60_000; },
     async candidate() { return { username: "candidate", password: "a".repeat(43), expiresAt: Date.now() + 30_000 }; },
+    async exchange() { throw new Error("CI execution does not exchange task messages"); },
     async recover() { throw new Error("completed work must be reported"); },
     async report() { reports++; if (reports === 1) throw new Error("lost result response"); stop.abort(); }
   };

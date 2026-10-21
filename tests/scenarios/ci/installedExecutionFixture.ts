@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configuredExecutionServer } from "../../../packages/control-plane/plugins/ci/src/service.js";
-import { executionWorkerClient } from "../../../packages/host/plugins/ci-worker/src/client.js";
+import { executionWorkerClient, isTaskAssignment } from "../../../packages/host/plugins/ci-worker/src/client.js";
 import { nativeGitExecutionSource } from "../../../packages/control-plane/plugins/ci/src/source.js";
 import { createNodeNativeGitAdmissionHttpClient } from "../../../packages/contracts/git/src/http.js";
 import { executionServiceConfigSchema } from "../../../packages/contracts/ci/src/config.js";
@@ -38,6 +38,7 @@ export async function installedExecutionFixture() {
       } }, undefined, undefined, {}, undefined, "jobs:\n  source:\n    script: .dim/ci/jobs/source.bash\n");
     directory = await mkdtemp(join(tmpdir(), "dim-installed-execution-"));
     const config = executionServiceConfigSchema.parse(idleOrdinaryConfig());
+    assert(config.nativeGit, "native execution fixture requires Git authority");
     const source = nativeGitExecutionSource(config.nativeGit, generationId,
       { request: (input) => node.request({ ...input, endpoint: native.service.origin }) });
     const service = configuredExecutionServer({ config, stateDirectory: directory, readinessToken: "ready", activationToken: "activate",
@@ -71,6 +72,7 @@ export async function installedExecutionFixture() {
       async claim() {
         const assignment = await worker.claim(randomUUID());
         assert(assignment?.grant, "worker claim did not receive a native execution grant");
+        assert(!isTaskAssignment(assignment), "CI fixture received a generic task");
         return { ...assignment, grant: assignment.grant };
       },
       accepted(id: string) { return waitFor(`Git publication of execution ${id}`, () => service.store.get(id).publication === "accepted"); },

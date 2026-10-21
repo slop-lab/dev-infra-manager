@@ -8,7 +8,7 @@ export type ExecutionAssignment = Execution & { readonly workerId: string; reado
   readonly profile: ExecutionProfile };
 export type WorkerSlot = { readonly id: string; readonly kind: ExecutionEvent["executionKind"]; readonly profile: ExecutionProfile };
 export type WorkerIdentity = { readonly id: string; readonly token: string; readonly slots: readonly WorkerSlot[] };
-export class ExecutionConflictError extends Error {}
+export { ExecutionConflictError } from "@slop-lab/dim-task-scheduling/types";
 
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";

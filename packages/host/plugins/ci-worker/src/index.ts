@@ -1,6 +1,7 @@
 import { UserError, type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/workspace";
 import { runCiWorker } from "./host.js";
 import { buildNativeQemuRunnerImage } from "./nativeQemuRunnerImage.js";
+import { executionTaskHandlers } from "@slop-lab/dim-task-scheduling";
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "ci-worker",
@@ -15,7 +16,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
         reportProgress: (stage) => process.stderr.write(`${stage}\n`) });
       console.log(value); return;
     }
-    await runCiWorker(value, context.signal, { runner: context.runner,
+    await runCiWorker(value, context.signal, { runner: context.runner, taskHandlers: executionTaskHandlers(context.extensions ?? []),
       ...(context.executionRouting === undefined ? {} : { routingProvider: () => context.executionRouting!() }) });
   }
 };

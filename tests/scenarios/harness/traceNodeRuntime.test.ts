@@ -1,13 +1,34 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "vitest";
-import { createNodeReviewTraceRuntime } from "../../../packages/control-plane/plugins/review-tracing-node/src/runtime.js";
+import { cleanupNodeReviewTraceExecution, createNodeReviewTraceRuntime } from "../../../packages/review-tracing-node/src/runtime.js";
 
 const enabled = process.env.DIM_TEST_REVIEW_TRACE_DOCKER === "1";
 describe.skipIf(!enabled)("brokered Node review tracing in Docker", () => {
+  it("recovers only the exact journaled execution container", async () => {
+    const owner = randomUUID(), foreignOwner = randomUUID();
+    const name = `dim-review-trace-${owner}`;
+    const image = "docker.io/library/node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df";
+    const ids: string[] = [];
+    try {
+      const id = execFileSync("docker", ["create", "--name", name, "--label", `dev.dim.review-tracing.owner=${owner}`, "--pull=never", image], { encoding: "utf8" }).trim();
+      ids.push(id);
+      assert.equal(await cleanupNodeReviewTraceExecution(owner), true);
+      assert.throws(() => execFileSync("docker", ["container", "inspect", id], { stdio: "pipe" }), /No such (object|container)/i);
+      const foreign = execFileSync("docker", ["create", "--name", name, "--label", `dev.dim.review-tracing.owner=${foreignOwner}`, "--pull=never", image], { encoding: "utf8" }).trim();
+      ids.push(foreign);
+      assert.equal(await cleanupNodeReviewTraceExecution(owner), true);
+      assert.equal(execFileSync("docker", ["container", "inspect", "--format", "{{.Id}}", foreign], { encoding: "utf8" }).trim(), foreign);
+    } finally {
+      for (const id of ids) { try { execFileSync("docker", ["rm", "--force", id], { stdio: "pipe" }); } catch { /* exact owned test container already removed */ } }
+    }
+  });
+
   it("tracks module imports and configuration while keeping before/after detector input distinct", async () => {
     const runtime = await createNodeReviewTraceRuntime();
     const files: Readonly<Record<string, string>> = {
@@ -37,6 +58,31 @@ describe.skipIf(!enabled)("brokered Node review tracing in Docker", () => {
     assert.equal(result.matches, true);
     assert(result.manifest.some(({ path, role }) => path === "guard.mjs" && role === "dependency"));
     assert(result.manifest.some(({ path, role, digest }) => path === "missing.json" && role === "target" && digest === null));
+  });
+
+  it("runs erasable TypeScript entrypoints and imports while tracking original source bytes", async () => {
+    const runtime = await createNodeReviewTraceRuntime();
+    const files: Readonly<Record<string, string>> = {
+      "guard/main.ts": `import {readTarget, type ReviewChange} from 'dim:review';import type {Settings} from './types.ts';import {changed} from './helper.mts';export async function matches(changes: readonly ReviewChange[]): Promise<boolean>{const settings: Settings={path:'app.json'};const before=await readTarget(settings.path,'before');const after=await readTarget(settings.path);return changed(before,after)&&changes.length===1;}`,
+      "guard/helper.mts": "export function changed(before: string | undefined, after: string | undefined): boolean { return before !== after; }"
+    };
+    const result = await runtime.evaluate({
+      entrypoint: "guard/main.ts", changes: [{ status: "M", oldPath: "app.json", newPath: "app.json", oldPathBytes: "", newPathBytes: "" }],
+      async readFile(path) { assert(path in files, `type-only import must not be read: ${path}`); return Buffer.from(files[path]!); },
+      async readTargetFile(_path, view) { return Buffer.from(view === "before" ? "old" : "new"); }
+    });
+    assert.equal(result.matches, true);
+    assert.deepEqual(result.manifest.filter(({ role }) => role === "dependency").map(({ path, digest }) => [path, digest]), Object.entries(files).sort(([left], [right]) => left.localeCompare(right)).map(([path, source]) => [path, createHash("sha256").update(source).digest("hex")]));
+  });
+
+  it("rejects TypeScript syntax requiring transformation and malformed TypeScript", async () => {
+    const runtime = await createNodeReviewTraceRuntime();
+    for (const source of [
+      "enum Decision { No, Yes };export function matches(): boolean { return Decision.Yes === 1; }",
+      "export function matches(: boolean { return false; }"
+    ]) {
+      await assert.rejects(runtime.evaluate({ entrypoint: "guard.ts", changes: [], async readFile() { return Buffer.from(source); }, async readTargetFile() { return undefined; } }));
+    }
   });
 
   it("denies built-in imports, repository traversal and non-boolean results", async () => {

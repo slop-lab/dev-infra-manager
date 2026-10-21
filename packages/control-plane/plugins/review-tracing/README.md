@@ -2,7 +2,8 @@
 
 `@slop-lab/dim-control-plane-plugin-review-tracing` connects the shared review
 tracing engine to code review. Install it with `git-repositories`, `code-review`
-and a language runtime plugin such as `review-tracing-node`. No host core is
+and a runtime plugin such as `review-tracing-node` (local containers) or
+[`review-tracing-scheduled`](../review-tracing-scheduled/README.md) (leased host execution). No host core is
 required on the control plane.
 
 The plugin has an empty configuration. It contributes the `tracked-project`

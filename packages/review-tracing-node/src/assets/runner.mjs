@@ -1,6 +1,7 @@
 // @ts-check
 import { createInterface } from "node:readline";
 import { posix } from "node:path";
+import { stripTypeScriptTypes } from "node:module";
 import { createContext, runInContext, SourceTextModule, SyntheticModule } from "node:vm";
 
 /** @type {Map<number, { resolve: (value: string | undefined) => void, reject: (reason: Error) => void }>} */
@@ -80,7 +81,12 @@ try {
         const value = runInContext(`JSON.parse(${JSON.stringify(source)})`, context);
         return new SyntheticModule(["default"], function () { this.setExport("default", value); }, { context, identifier: path });
       }
-      return new SourceTextModule(source, {
+      // Keep broker reads and digests on the original repository bytes. Only
+      // the guest's module evaluation sees stripped, erasable TypeScript.
+      const executable = path.endsWith(".ts") || path.endsWith(".mts")
+        ? stripTypeScriptTypes(source, { mode: "strip", sourceUrl: `dim-repository:/${path}` })
+        : source;
+      return new SourceTextModule(executable, {
         context, identifier: path,
         initializeImportMeta(meta) { meta.url = `dim-repository:/${path}`; },
         async importModuleDynamically(specifier, reference) {

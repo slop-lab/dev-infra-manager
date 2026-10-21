@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -58,8 +59,10 @@ it("connects a prepared private worker to its activated CI generation and reject
     const registration = await fetch(`${worker.endpoint}/v1/worker`, { headers });
     expect(registration.status).toBe(200);
     expect(await registration.json()).toEqual({ generationId, workerId: worker.workerId,
-      slots: config.workers[0]!.slots.map(({ id, runtime, profile }) => ({ id,
-        kind: runtime === "container" ? "ordinary-sysbox" : "qemu", profile })) });
+      slots: config.workers[0]!.slots.map((slot) => {
+        assert("runtime" in slot, "CI setup created a generic task slot");
+        return { id: slot.id, kind: slot.runtime === "container" ? "ordinary-sysbox" : "qemu", profile: slot.profile };
+      }) });
     for (const slot of worker.slots) {
       const client = executionWorkerClient({ ...worker, slotId: slot.id });
       expect(await client.claim(randomUUID())).toBeUndefined();

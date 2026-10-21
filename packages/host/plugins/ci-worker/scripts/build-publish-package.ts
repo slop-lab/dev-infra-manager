@@ -1,15 +1,5 @@
-import { chmod, cp, copyFile, readFile, writeFile } from "node:fs/promises";
-import { publishPackageVersion } from "../../../../../scripts/packages/publish-package-version.ts";
-const metadata: unknown = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-if (!metadata || typeof metadata !== "object" || !("name" in metadata) || typeof metadata.name !== "string"
-  || !("version" in metadata) || typeof metadata.version !== "string") throw new Error("invalid CI plugin metadata");
-const version = publishPackageVersion(metadata.version);
-await writeFile(new URL("../dist/package.json", import.meta.url), JSON.stringify({
-  name: metadata.name, version, type: "module", license: "MIT", main: "./index.js", types: "./index.d.ts",
-  exports: { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } },
-  dependencies: { "@slop-lab/dim-contracts-ci": version, "@slop-lab/dim-contracts-git": version, zod: "4.1.11" },
-  peerDependencies: { "@slop-lab/dim-host-core": version }, engines: { node: "^24.0.0 || ^26.0.0" },
-}, null, 2) + "\n");
-await copyFile(new URL("../../../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
+import { cp } from "node:fs/promises";
+import source from "../package.json" with { type: "json" };
+import { publishLibrary } from "../../../../../scripts/packages/publish-library.ts";
 await cp(new URL("../src/native-qemu-runner-assets", import.meta.url), new URL("../dist/native-qemu-runner-assets", import.meta.url), { recursive: true });
-await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
+await publishLibrary(new URL("../", import.meta.url), source);

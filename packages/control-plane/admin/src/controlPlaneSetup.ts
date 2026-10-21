@@ -161,7 +161,8 @@ export async function connectControlPlane(directoryInput: string, options: {
     workerId: worker.id, token: worker.token, generationId, gitExecutable: "/usr/bin/git",
     endpoint: ciQueryConnection.endpoint, nativeGitEndpoint: endpoint,
     stateDirectory: options.ciWorkerStateDirectory ?? path.join(directory, "worker-state"),
-    slots: worker.slots.map(({ id, runtime }) => ({ id, runtime })) });
+    slots: worker.slots.map((slot) => "runtime" in slot ? { id: slot.id, runtime: slot.runtime }
+      : { id: slot.id, taskType: slot.taskType, handlerRevision: slot.handlerRevision }) });
   await privateDirectory(output, async () => {
     await json(path.join(output, "registrar.json"), registrarConnection);
     await json(path.join(output, "importer.json"), importerConnection);

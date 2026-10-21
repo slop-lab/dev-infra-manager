@@ -32,6 +32,9 @@ importers:
 
   packages/contracts/ci:
     dependencies:
+      '@slop-lab/dim-task-scheduling':
+        specifier: workspace:0.10.0
+        version: link:../../task-scheduling
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -162,6 +165,9 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      '@slop-lab/dim-task-scheduling':
+        specifier: workspace:0.10.0
+        version: link:../../../task-scheduling
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -335,6 +341,28 @@ importers:
       '@slop-lab/dim-review-tracing':
         specifier: workspace:0.10.0
         version: link:../../../review-tracing
+      '@slop-lab/dim-review-tracing-node':
+        specifier: workspace:0.10.0
+        version: link:../../../review-tracing-node
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/review-tracing-scheduled:
+    dependencies:
+      '@slop-lab/dim-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../../../review-tracing
+      '@slop-lab/dim-task-scheduling':
+        specifier: workspace:0.10.0
+        version: link:../../../task-scheduling
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -410,6 +438,9 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      '@slop-lab/dim-task-scheduling':
+        specifier: workspace:0.10.0
+        version: link:../../../task-scheduling
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -523,6 +554,28 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/host/plugins/review-tracing-node:
+    dependencies:
+      '@slop-lab/dim-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../../../review-tracing
+      '@slop-lab/dim-review-tracing-node':
+        specifier: workspace:0.10.0
+        version: link:../../../review-tracing-node
+      '@slop-lab/dim-task-scheduling':
+        specifier: workspace:0.10.0
+        version: link:../../../task-scheduling
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/host/plugins/tunnels:
     devDependencies:
       '@slop-lab/dim-host-core':
@@ -579,6 +632,32 @@ importers:
         version: 5.8.3
 
   packages/review-tracing:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/review-tracing-node:
+    dependencies:
+      '@slop-lab/dim-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../review-tracing
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/task-scheduling:
+    dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -644,6 +723,9 @@ importers:
       '@slop-lab/dim-control-plane-plugin-review-tracing-node':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/review-tracing-node
+      '@slop-lab/dim-control-plane-plugin-review-tracing-scheduled':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/review-tracing-scheduled
       '@slop-lab/dim-control-plane-plugin-webhooks':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/webhooks
@@ -656,9 +738,18 @@ importers:
       '@slop-lab/dim-host-plugin-native-git':
         specifier: workspace:*
         version: link:../packages/host/plugins/native-git
+      '@slop-lab/dim-host-plugin-review-tracing-node':
+        specifier: workspace:*
+        version: link:../packages/host/plugins/review-tracing-node
       '@slop-lab/dim-review-tracing':
         specifier: workspace:*
         version: link:../packages/review-tracing
+      '@slop-lab/dim-review-tracing-node':
+        specifier: workspace:*
+        version: link:../packages/review-tracing-node
+      '@slop-lab/dim-task-scheduling':
+        specifier: workspace:*
+        version: link:../packages/task-scheduling
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3

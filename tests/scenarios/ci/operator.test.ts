@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import assert from "node:assert/strict";
+import { isTaskExecution } from "@slop-lab/dim-task-scheduling";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -53,6 +55,7 @@ it("fences cancellation until owned cleanup and suppresses a racing success from
   const claim = await f.request("/v1/claims", f.credential, { requestId: randomUUID(), slotId });
   expect(claim.status).toBe(200);
   const assigned = f.ci.store.list()[0]!; if (!assigned.grant || !assigned.leaseToken) throw new Error("missing grant");
+  assert(!isTaskExecution(assigned), "CI operator fixture received a generic task");
   const ownership = { slotId, leaseToken: assigned.leaseToken };
   expect((await f.request(`/v1/executions/${assigned.id}/renew`, f.credential, ownership)).status).toBe(200);
   expect(await f.operator.cancel(assigned.id)).toMatchObject({ phase: "recovering" });
@@ -66,6 +69,7 @@ it("fences cancellation until owned cleanup and suppresses a racing success from
   expect((await f.operator.workers())[0]?.slots[0]?.state).toBe("idle");
   expect(f.published).toEqual([]);
   const retried = await f.operator.retry(assigned.id, randomUUID());
+  assert("retryOf" in retried);
   expect(retried.retryOf).toBe(assigned.id);
   expect((await f.request("/v1/claims", f.credential, { requestId: randomUUID(), slotId })).status).toBe(200);
 });

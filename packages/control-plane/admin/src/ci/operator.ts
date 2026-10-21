@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { z } from "zod";
 import { ciOperatorConnectionSchema } from "@slop-lab/dim-contracts-ci/connections";
-import { executionSummarySchema, ciWorkersSchema } from "@slop-lab/dim-contracts-ci/query";
+import { scheduledSummarySchema, ciWorkersSchema } from "@slop-lab/dim-contracts-ci/query";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 
 export async function createCiOperatorClient(file: string) {
@@ -25,7 +25,7 @@ export async function createCiOperatorClient(file: string) {
   const id = (value: string) => z.string().uuid().parse(value);
   return {
     async workers() { return ciWorkersSchema.parse(await request("/v1/operator/workers")); },
-    async cancel(executionId: string) { return executionSummarySchema.parse(await request(`/v1/operator/jobs/${id(executionId)}/cancel`, {})); },
-    async retry(executionId: string, requestId: string) { return executionSummarySchema.parse(await request(`/v1/operator/jobs/${id(executionId)}/retry`, { requestId: id(requestId) })); }
+    async cancel(executionId: string) { return scheduledSummarySchema.parse(await request(`/v1/operator/jobs/${id(executionId)}/cancel`, {})); },
+    async retry(executionId: string, requestId: string) { return scheduledSummarySchema.parse(await request(`/v1/operator/jobs/${id(executionId)}/retry`, { requestId: id(requestId) })); }
   };
 }

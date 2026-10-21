@@ -109,6 +109,8 @@ packages:
   - packages/control-plane/plugins/*
   - packages/contracts/*
   - packages/review-tracing
+  - packages/review-tracing-node
+  - packages/task-scheduling
   - packages/cli
   - packages/installer
   - packages/web

@@ -34,7 +34,7 @@ async function removeOwnedContainer(config: string, name: string, owner: string,
   let id = knownId;
   if (id === undefined) {
     // A failed CLI may have submitted create successfully without returning its
-    // identity. Find only this invocation's exact name AND unpredictable label.
+    // identity. Find only this execution's exact name AND ownership label.
     const found = (await docker(config, ["container", "ls", "--all", "--no-trunc", "--filter", `name=^/${name}$`, "--filter", `label=${ownershipLabel}=${owner}`, "--format", "{{.ID}}"])).trim();
     if (found === "") return;
     if (!/^[0-9a-f]{64}$/.test(found)) throw new Error("review tracing cleanup lookup returned an invalid container identity");
@@ -112,7 +112,8 @@ function execute(config: string, id: string, input: Evaluation, tracker: Tracker
 }
 
 /** Run candidate code only in an unprivileged, networkless, read-only container. */
-export async function createNodeReviewTraceRuntime(): Promise<ReviewTraceRuntime> {
+export async function createNodeReviewTraceRuntime(options: { readonly ownerId?: string } = {}): Promise<ReviewTraceRuntime> {
+  if (options.ownerId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(options.ownerId)) throw new Error("review tracing execution owner must be a UUID");
   const runner = await readFile(new URL("./assets/runner.mjs", import.meta.url), "utf8");
   const revision = createHash("sha256").update(await readFile(new URL(import.meta.url))).update("\0").update(runner).update("\0").update(image).digest("hex");
   return {
@@ -124,7 +125,7 @@ export async function createNodeReviewTraceRuntime(): Promise<ReviewTraceRuntime
       // alternate guest protocol. The tracker also makes dependency win over target.
       await tracker.read(input.entrypoint, "dependency", "after");
       const config = await mkdtemp(join(tmpdir(), "dim-review-trace-docker-"));
-      const owner = randomUUID();
+      const owner = options.ownerId ?? randomUUID();
       const name = `dim-review-trace-${owner}`;
       let id: string | undefined;
       try {
@@ -139,4 +140,12 @@ export async function createNodeReviewTraceRuntime(): Promise<ReviewTraceRuntime
       }
     }
   };
+}
+
+/** Reap only the exact journaled execution after worker restart or lease loss. */
+export async function cleanupNodeReviewTraceExecution(ownerId: string): Promise<boolean> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(ownerId)) throw new Error("review tracing execution owner must be a UUID");
+  const config = await mkdtemp(join(tmpdir(), "dim-review-trace-cleanup-"));
+  try { await removeOwnedContainer(config, `dim-review-trace-${ownerId}`, ownerId); return true; }
+  finally { await rm(config, { recursive: true, force: true }); }
 }
