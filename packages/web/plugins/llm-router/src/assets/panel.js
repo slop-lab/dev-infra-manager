@@ -99,7 +99,10 @@ export function mount(container, context) {
     const fields = node("div", "", "workspace-fields"); form.append(fields);
     /** @type {Map<string,HTMLInputElement>} */ const bounds = new Map();
     for (const [key, label] of [["concurrent", "Concurrent requests"], ["requestsPerUtcDay", "Requests per UTC day"], ["requestBytes", "Maximum request bytes"], ["responseBytes", "Maximum response bytes"], ["captureBytesPerProject", "Capture bytes per project"], ["deadlineMilliseconds", "Request deadline (ms)"]]) {
-      if (!key || !label) continue; const field = input(fields, label, text(limits[key])); field.type = "number"; field.min = "1"; field.step = "1"; field.required = true; bounds.set(key, field);
+      if (!key || !label) continue; const unlimited = key === "concurrent";
+      const field = input(fields, label, unlimited && limits[key] === null ? "" : text(limits[key])); field.type = "number"; field.min = "1"; field.step = "1"; field.required = !unlimited;
+      if (unlimited) { field.placeholder = "No limit"; field.parentElement?.append(node("span", "Leave blank for no concurrency limit. Explicit project and service limits both apply.", "field-hint")); }
+      bounds.set(key, field);
     }
     /** @param {string} label @param {string[]} options @param {unknown} initial */
     function select(label, options, initial) { const field = node("label", label, "field"), control = document.createElement("select"); control.setAttribute("aria-label", label); for (const value of options) { const option = document.createElement("option"); option.value = value; option.textContent = value; control.append(option); } control.value = text(initial); field.append(control); fields.append(field); return control; }
@@ -112,7 +115,7 @@ export function mount(container, context) {
       let revision = projectRevision;
       const submit = action(form, "Save routing policy", async (button) => {
         if (!form.reportValidity()) { feedback.textContent = "Complete the routing policy fields."; return; }
-        const next = { allowedRoutes: routes.value.split(",").map((route) => route.trim()), limits: Object.fromEntries([...bounds].map(([key, field]) => [key, Number(field.value)])), captureMode: captureMode.value, tokenMode: tokenMode.value,
+        const next = { allowedRoutes: routes.value.split(",").map((route) => route.trim()), limits: Object.fromEntries([...bounds].map(([key, field]) => [key, key === "concurrent" && field.value === "" ? null : Number(field.value)])), captureMode: captureMode.value, tokenMode: tokenMode.value,
           ...(tokenLimit.value ? { tokensPerUtcDay: Number(tokenLimit.value) } : {}), ...(estimate.value ? { estimatedTokensPerRequest: Number(estimate.value) } : {}) };
         const saved = await context.invoke("project.policy.update", { projectId: id, expectedRevision: revision, policy: next }); if (!current()) return; revision = text(object(saved).revision); await accepted(button, feedback, `Policy saved for ${id}.`, [["project list", refreshProjects]]);
       }, feedback); submit.className = "button button-primary"; unlockOnEdit(form, submit);

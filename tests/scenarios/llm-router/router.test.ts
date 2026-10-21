@@ -72,6 +72,50 @@ it("forwards streaming tool data byte-for-byte and observes the terminal usage e
   const response = await fx.request({ stream: true }); expect(await response.text()).toBe(stream);
   expect(fx.router.ledger.usage(fx.workspace.id)).toMatchObject({ knownInputTokens: 11, knownOutputTokens: 5 });
 });
+it("allows parallel requests by default without a request-slot or transport connection cap", async () => {
+  const pending: ServerResponse[] = [];
+  const fx = await fixture((_request, response) => { pending.push(response); });
+  expect(fx.config.limits.concurrent).toBeNull();
+  expect(fx.router.server.maxConnections).toBeUndefined();
+  const requests = Array.from({ length: 16 }, () => fx.request());
+  await waitFor(() => pending.length === requests.length);
+  expect(fx.router.ledger.usage(fx.workspace.id)).toMatchObject({ occupied: 16 });
+  for (const response of pending) completed(response);
+  const responses = await Promise.all(requests);
+  expect(responses.map(({ status }) => status)).toEqual(Array(16).fill(200));
+  await Promise.all(responses.map((response) => response.text()));
+  const snapshots = fx.router.ledger.database.prepare("SELECT policy_snapshot FROM requests").all();
+  expect(snapshots.every((row) => JSON.parse(String(row.policy_snapshot)).limits.concurrent === null)).toBe(true);
+});
+it.each([
+  { service: null, project: 1, scope: "project" },
+  { service: 1, project: null, scope: "service" },
+])("keeps an explicit $scope concurrency bound when the other scope is unlimited", async ({ service, project, scope }) => {
+  const pending: ServerResponse[] = [];
+  const fx = await fixture((_request, response) => { pending.push(response); }, { concurrent: service });
+  const policy = fx.router.ledger.project(fx.workspace.id).policy;
+  fx.router.ledger.updatePolicy(fx.workspace.id, { ...policy, limits: { ...policy.limits, concurrent: project } });
+  const first = fx.request();
+  await waitFor(() => pending.length === 1);
+  const blocked = await fx.request();
+  expect(blocked.status).toBe(429);
+  expect(await blocked.json()).toMatchObject({ error: { category: "local_capacity_exhausted", message: `${scope} concurrency is occupied (including unresolved dispatches)` } });
+  completed(pending[0]!);
+  expect(await (await first).text()).toContain('"status":"completed"');
+  await waitFor(() => Number(fx.router.ledger.database.prepare("SELECT COUNT(*) AS n FROM requests WHERE occupied=1").get()?.n) === 0);
+  const next = fx.request();
+  await waitFor(() => pending.length === 2);
+  completed(pending[1]!);
+  expect((await next).status).toBe(200);
+});
+it("requires explicit null for unlimited concurrency and rejects invalid finite bounds", () => {
+  const policy = { allowedRoutes: ["default"], captureMode: "required", tokenMode: "observe", limits: defaultLimits };
+  for (const concurrent of [0, -1, Number.MAX_SAFE_INTEGER + 1, 1.5, undefined, "unlimited"]) {
+    expect(() => parsePolicy({ ...policy, limits: { ...defaultLimits, concurrent } })).toThrow();
+  }
+  expect(parsePolicy(policy).limits.concurrent).toBeNull();
+  expect(parsePolicy({ ...policy, limits: { ...defaultLimits, concurrent: 256 } }).limits.concurrent).toBe(256);
+});
 it("enforces concurrent and daily request allowances atomically and never retries a dispatched request", async () => {
   let calls = 0; let pending: ServerResponse | undefined;
   const fx = await fixture((_request, response) => { calls++; pending = response; }, { concurrent: 1, requestsPerUtcDay: 1 });

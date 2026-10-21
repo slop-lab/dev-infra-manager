@@ -110,7 +110,7 @@ export async function createHostGateway(config: HostRouterConfig, store: Workspa
       incoming.pipe(remote);
     })().catch(() => { if (!response.headersSent) deny(response, 503); else response.destroy(); });
   });
-  server.maxConnections = 128; server.headersTimeout = 10_000; server.requestTimeout = 15_000; server.keepAliveTimeout = 1000;
+  server.headersTimeout = 10_000; server.requestTimeout = 15_000; server.keepAliveTimeout = 1000;
   return { server, close() { return closing ??= (async () => { for (const stop of active) stop(); server.closeAllConnections();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve())); await guard.release(); })(); } };
 }

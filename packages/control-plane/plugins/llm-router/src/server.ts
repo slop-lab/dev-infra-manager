@@ -37,7 +37,6 @@ export async function createRouter(baseConfig: RouterConfig) {
     });
     active.add(operation); void operation.finally(() => active.delete(operation));
   });
-  server.maxConnections = Math.min(256, Math.max(8, config.limits.concurrent * 2));
   server.requestTimeout = 15_000; server.headersTimeout = 10_000; server.keepAliveTimeout = 1_000;
   return { server, ledger, close() { return closing ??= (async () => {
     cancellation.abort(); server.closeAllConnections();

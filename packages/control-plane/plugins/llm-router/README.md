@@ -66,7 +66,11 @@ dim-control-plane-llm-router project-policy application --config CONFIG --policy
 Its shape is `{allowedRoutes:["default"],limits:{...},captureMode:"required",
 tokenMode:"observe"}`. `limits` has the same complete fields as the configuration:
 `concurrent`, `requestsPerUtcDay`, `requestBytes`, `responseBytes`,
-`captureBytesPerProject`, `deadlineMilliseconds`. `captureMode` may also be
+`captureBytesPerProject`, `deadlineMilliseconds`. `concurrent: null` means no
+concurrent-request cap and is the default. A positive integer enables a cap;
+service and project policies both apply, so either finite cap still bounds
+admission. Unlimited mode also leaves the router's HTTP connection count uncapped.
+`captureMode` may also be
 `best-effort` or `metadata`. `tokenMode:"estimate"` requires positive
 `tokensPerUtcDay` and `estimatedTokensPerRequest`. Estimated reservations are
 atomic with other admission checks; overshoot remains possible. Unknown usage

@@ -5,7 +5,7 @@ const positive = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const nonnegative = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const empty = z.strictObject({});
 const projectInput = z.strictObject({ projectId: id });
-export const limitsSchema = z.strictObject({ concurrent: positive.max(128), requestsPerUtcDay: positive, requestBytes: positive.max(16 * 1024 * 1024), responseBytes: positive.max(128 * 1024 * 1024), captureBytesPerProject: positive, deadlineMilliseconds: positive.max(3_600_000) });
+export const limitsSchema = z.strictObject({ concurrent: positive.nullable(), requestsPerUtcDay: positive, requestBytes: positive.max(16 * 1024 * 1024), responseBytes: positive.max(128 * 1024 * 1024), captureBytesPerProject: positive, deadlineMilliseconds: positive.max(3_600_000) });
 export const policySchema = z.strictObject({ allowedRoutes: z.array(id).min(1).max(1000), limits: limitsSchema, captureMode: z.enum(["required", "best-effort", "metadata"]), tokenMode: z.enum(["observe", "estimate"]), tokensPerUtcDay: positive.optional(), estimatedTokensPerRequest: positive.optional() }).refine((p) => new Set(p.allowedRoutes).size === p.allowedRoutes.length && (p.tokenMode !== "estimate" || (p.tokensPerUtcDay !== undefined && p.estimatedTokensPerRequest !== undefined)), "invalid route or token admission policy");
 export const projectSchema = z.strictObject({ id, enabled: z.boolean(), paused: z.boolean(), revision: z.string(), policy: policySchema });
 export const routerModelSchema = z.strictObject({ id: z.string().max(200), name: z.string(), api: z.enum(["responses", "chat"]), context: positive.optional(), output: positive.optional() });

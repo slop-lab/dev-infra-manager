@@ -93,16 +93,22 @@ export class RouterLedger {
   reserve(grant: WorkspaceGrant, model: string, policyRevision: string, requestBytes: number, global: RouterLimits, route: { accountId: string; [key: string]: unknown }) {
     return this.transaction(() => {
       const project = this.project(grant.projectId);
-      const policy: ProjectPolicy = { ...project.policy, limits: parseLimits(Object.fromEntries(Object.entries(project.policy.limits).map(([key, value]) => [key, Math.min(value, global[key as keyof RouterLimits])]))) };
+      const limits = Object.fromEntries(Object.entries(project.policy.limits).map(([key, projectLimit]) => {
+        const serviceLimit = global[key as keyof RouterLimits];
+        return [key, projectLimit === null ? serviceLimit : serviceLimit === null ? projectLimit : Math.min(projectLimit, serviceLimit)];
+      }));
+      const policy: ProjectPolicy = { ...project.policy, limits: parseLimits(limits) };
       const day = new Date(this.now()).toISOString().slice(0, 10);
       if (!project.enabled || project.paused) throw new AdmissionError("project admissions are paused or disabled", "admissions_paused");
       if (!policy.allowedRoutes.includes(grant.routeId) || !this.database.prepare("SELECT 1 FROM principals WHERE id=? AND token_hash=? AND project_id=? AND workspace_id=? AND route_id=? AND enabled=1").get(grant.principalId, grant.credentialHash, grant.projectId, grant.workspaceId, grant.routeId)) throw new AdmissionError("principal or route is revoked", "authorization_failed");
       for (const [scope, limits] of [["service", global], ["project", policy.limits]] as const) {
         const where = scope === "project" ? "project_id=? AND " : "", parameters = scope === "project" ? [project.id] : [];
         const count = Number(this.database.prepare(`SELECT COUNT(*) AS n FROM requests WHERE ${where}day=?`).get(...parameters, day)?.n);
-        const active = Number(this.database.prepare(`SELECT COUNT(*) AS n FROM requests WHERE ${where}occupied=1`).get(...parameters)?.n);
         if (count >= limits.requestsPerUtcDay) throw new AdmissionError(`${scope} UTC-day request allowance is exhausted`);
-        if (active >= limits.concurrent) throw new AdmissionError(`${scope} concurrency is occupied (including unresolved dispatches)`, "local_capacity_exhausted");
+        if (limits.concurrent !== null) {
+          const active = Number(this.database.prepare(`SELECT COUNT(*) AS n FROM requests WHERE ${where}occupied=1`).get(...parameters)?.n);
+          if (active >= limits.concurrent) throw new AdmissionError(`${scope} concurrency is occupied (including unresolved dispatches)`, "local_capacity_exhausted");
+        }
       }
       const reservation = policy.tokenMode === "estimate" ? policy.estimatedTokensPerRequest ?? 0 : 0;
       if (policy.tokenMode === "estimate") {
