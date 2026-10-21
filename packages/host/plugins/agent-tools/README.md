@@ -20,7 +20,9 @@ dim tools run development codex
 
 Setup pins OpenCode 1.18.31, oh-my-openagent 4.19.4 and Codex 0.156.1. OMO team
 mode is configured in the user's home; reviewed repository-specific tool
-settings remain in the repository. Provider authentication is an explicit
+settings remain in the repository. OpenCode/OMO setup adds `.omo/` to the
+workspace user's global Git ignore file, preserving existing entries and a
+configured `core.excludesFile` path. Provider authentication is an explicit
 user action. Setup neither logs in nor copies credentials from the DIM host.
 `dim tools setup` works on the selected local or SSH host and streams its
 progress through the normal workspace transport.

@@ -24,6 +24,7 @@ require_command npm
 selected_tool="${1:-opencode}"
 case "$selected_tool" in
   opencode)
+    require_command git
     selected_version="$OPENCODE_VERSION"
     selected_executable_name=opencode
     ;;
@@ -369,6 +370,26 @@ try {
   throw error
 }
 NODE
+
+  node - "$config_dir" <<'GITIGNORE'
+const fs = require("node:fs")
+const path = require("node:path")
+const { spawnSync, execFileSync } = require("node:child_process")
+const configured = spawnSync("git", ["config", "--global", "--path", "--get", "core.excludesFile"], { encoding: "utf8" })
+if (configured.error) throw configured.error
+if (configured.status !== 0 && configured.status !== 1) throw new Error("cannot read Git global ignore configuration")
+const existing = configured.status === 0 ? configured.stdout.replace(/\n$/, "") : undefined
+if (existing === "") throw new Error("Git core.excludesFile is empty; select a global ignore file")
+const ignore = existing ?? path.join(path.dirname(process.argv[2]), "git", "ignore")
+fs.mkdirSync(path.dirname(ignore), { recursive: true })
+let source = ""
+try { source = fs.readFileSync(ignore, "utf8") }
+catch (error) { if (error.code !== "ENOENT") throw error }
+if (!source.split(/\r?\n/).some((line) => line === ".omo/" || line === ".omo")) {
+  fs.appendFileSync(ignore, `${source && !source.endsWith("\n") ? "\n" : ""}.omo/\n`, { mode: 0o600 })
+}
+if (existing === undefined) execFileSync("git", ["config", "--global", "core.excludesFile", ignore])
+GITIGNORE
 
 fi
 
