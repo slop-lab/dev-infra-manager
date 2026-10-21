@@ -6,11 +6,13 @@ export { loadPrivateJson } from "./config.js";
 /** Trusted controller selections come only from private server configuration. */
 export interface WebPluginController {
   readonly id: string;
-  run(args: readonly string[]): Promise<unknown>;
+  run(args: readonly string[], options?: { readonly timeoutMilliseconds: number }): Promise<unknown>;
 }
 export interface WebPluginContext {
   readonly controllers: readonly WebPluginController[];
 }
+/** Optional browser invoke deadline; the generic transport caps this at 185 seconds. */
+export interface WebPluginInvokeOptions { readonly timeoutMilliseconds: number }
 export interface WebPluginRuntime {
   /** A configured connection may expose a subset, e.g. without a promoter. */
   readonly operations?: readonly Operation[];

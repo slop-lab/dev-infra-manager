@@ -39,6 +39,8 @@ it("attests configured reviewer, exposes scoped repositories and omits unconfigu
   expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "direct", reviewerId: "owner", projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }] }] });
   expect(await runtime.invoke("reviews.list", { controllerId: "direct", projectId: "project-a", repositoryId: "public" })).toEqual([]);
   expect(runtime.operations?.map((operation) => operation.name)).not.toContain("reviews.promote");
+  expect(runtime.operations?.map((operation) => operation.name)).not.toContain("projects.create");
+  expect(runtime.operations?.map((operation) => operation.name)).not.toContain("repositories.import");
   expect(runtime.operations?.some((operation) => operation.name.startsWith("sync."))).toBe(false);
   await expect(runtime.invoke("reviews.list", { controllerId: "direct", projectId: "project-a", repositoryId: "foreign" })).rejects.toThrow(/scope|catalog/);
   expect(selected.calls).toEqual(["GET /v1/human-reviewer-identity", "GET /v1/projects/project-a/repositories/public/reviews"]);
@@ -132,4 +134,33 @@ it("keeps an empty registered-project catalog available but reports wholly unava
   expect(await offline.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "offline", status: "unavailable", projects: [] }] });
   const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "empty", async run() { return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [], operations: [] }; } }] });
   expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "empty", status: "ready", projects: [] }] });
+});
+
+it("delegates controller-only project creation and public imports with exact scope and import deadline", async () => {
+  let projects: Array<{ projectId: string; name: string; repositoryIds: string[] }> = [];
+  const calls: Array<{ args: readonly string[]; timeout?: number }> = [];
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "devbox", async run(args, options) {
+    if (args[2] === "describe") return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects,
+      operations: operations.map(({ name, description, access }) => ({ name, description, access })) };
+    calls.push({ args, ...(options ? { timeout: options.timeoutMilliseconds } : {}) });
+    const input = JSON.parse(args[args.indexOf("--input") + 1]!) as { projectId: string; repositoryId?: string };
+    if (args[3] === "projects.create") { const project = { projectId: input.projectId, name: input.projectId, repositoryIds: [] }; projects.push(project); return project; }
+    const project = projects.find(({ projectId }) => projectId === input.projectId)!; project.repositoryIds.push(input.repositoryId!);
+    return { projectId: input.projectId, repositoryId: input.repositoryId!, protectedRef: "refs/heads/main", commit: "b".repeat(40), tree: "c".repeat(40), projectReady: true };
+  } }] });
+  expect(await runtime.invoke("projects.create", { controllerId: "devbox", projectId: "new-project" })).toMatchObject({ projectId: "new-project" });
+  await runtime.invoke("projects.list", {});
+  const imported = await runtime.invoke("repositories.import", { controllerId: "devbox", projectId: "new-project", repositoryId: "public", url: "https://github.com/example/public.git" });
+  expect(imported).toMatchObject({ repositoryId: "public", projectReady: true }); expect(calls.at(-1)?.timeout).toBe(180_000);
+  await runtime.invoke("projects.list", {});
+  const count = calls.length;
+  await expect(runtime.invoke("projects.create", { controllerId: "devbox", projectId: "new-project" })).rejects.toThrow("already exists");
+  await expect(runtime.invoke("repositories.import", { controllerId: "devbox", projectId: "foreign", repositoryId: "public", url: "https://github.com/example/public.git" })).rejects.toThrow("scope");
+  await expect(runtime.invoke("repositories.import", { controllerId: "devbox", projectId: "new-project", repositoryId: "public", url: "https://github.com/example/public.git" })).rejects.toThrow("already exists");
+  expect(calls).toHaveLength(count);
+  const create = operations.find(({ name }) => name === "projects.create")!, importing = operations.find(({ name }) => name === "repositories.import")!;
+  expect(create.access).toBe("operator"); expect(importing.access).toBe("operator");
+  expect(() => create.parseInput({ controllerId: "devbox", projectId: "injected", path: "/host/project" })).toThrow();
+  expect(() => importing.parseInput({ controllerId: "devbox", projectId: "new-project", repositoryId: "extra", url: "https://github.com/example/public.git", policy: { allow: "all" } })).toThrow();
+  for (const url of ["http://github.com/example/a.git", "https://user:secret@github.com/example/a.git", "file:///host/secret"]) expect(() => importing.parseInput({ controllerId: "devbox", projectId: "new-project", repositoryId: "private", url })).toThrow();
 });

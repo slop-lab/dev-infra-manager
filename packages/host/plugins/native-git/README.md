@@ -51,3 +51,17 @@ on Native Git.
 `dim project console describe --json` discovers the selected control-plane generation, reviewer identity, local project catalog and available review/sync operations. Only repositories with ready import receipts for that generation are advertised. The host uses private `reviewer.json`, optional `promoter.json` and optional `git-sync.json` beside the selected host connection; each role must match its selected endpoint and generation, with host-bound roles also matching the selected host identity. No operator credentials or connection paths are returned.
 
 Clients pin the discovery result: subsequent discovery may pass `--expected-generation HASH`, and every `dim project console invoke OPERATION --expected-generation HASH --input JSON --json` must pass it. A changed selection fails before role attestation or mutation and requires reconnecting explicitly. Every invocation reloads the local project catalog and validates the requested project and repository; adding an imported repository needs no Web configuration. The shared `@slop-lab/dim-native-git-client` owns HTTP/evidence decoding and operation semantics; this plugin owns controller selection and namespace scope.
+
+### Public repository imports
+
+With distinct selected registrar/importer roles available, the console also advertises `projects.create` and `repositories.import`. Projects use their ID as their initial local name. Import a public repository through the same host-owned path from the CLI:
+
+```bash
+dim project create examples
+dim project repository import examples hello --source https://github.com/octocat/Hello-World.git
+dim project repository import examples spoon --source https://github.com/octocat/Spoon-Knife.git --branch main
+```
+
+The first imported repository becomes the configuration and default working repository; subsequent imports preserve those defaults. Local source imports still require `--ref`. For URL imports, optional `--ref refs/heads/BRANCH` selects a branch instead of `--branch`. Public acquisition never checks out files, runs hooks or submodules, reads ambient Git credentials, or interprets the remote `.dim/repos.yml`. Default controller policy allows ordinary changes without review and requires the selected reviewer's approval for `.dim/` changes, with the merge-policy integration enabled. A CLI operator may explicitly choose a trusted host `--policy` file; `--repository-policy` is forbidden for URL sources.
+
+URL imports retain private source intent under `native-project-url-imports/`, alongside immutable draft bundles under `native-project-drafts/`. Retry uses the original artifact and proves its existing protected root even when upstream has moved or the prior response was lost. Changing URL, requested branch or an explicit policy is rejected instead of replacing that initial import. Updating an existing repository is a separate reviewed sync operation.

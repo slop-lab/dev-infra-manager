@@ -1,6 +1,7 @@
 // @ts-check
+import { mountManagement } from "./management.js";
 /** @typedef {{name:string,description:string,access:string}} Descriptor */
-/** @typedef {{operations:Descriptor[],invoke(name:string,input?:unknown):Promise<unknown>,isCurrent():boolean}} Context */
+/** @typedef {{operations:Descriptor[],invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean}} Context */
 /** @typedef {import('@slop-lab/dim-native-git-client').ReviewDto} Review */
 /** @typedef {{controllerId:string,projectId:string,repositoryId:string}} Scope */
 /** @typedef {{id:string,title:string,status:'ready'|'unavailable',reviewerId?:string,projects:Array<{projectId:string,name:string,repositoryIds:string[]}>,operations:Descriptor[]}} Controller */
@@ -14,6 +15,7 @@ export function mount(container, context) {
   const current = () => !disposed && context.isCurrent();
   const permitted = new Set(context.operations.map(({ name }) => name));
   const status = element("p"); status.setAttribute("role", "status");
+  const managementRegion = element("div");
   const availability = element("div"), selectors = element("div"), toolbar = element("div"), actions = element("div"), list = element("section"), detail = element("section"), syncStatus = element("section");
   toolbar.className = actions.className = "feature-actions";
   /** @param {string} label */
@@ -22,7 +24,7 @@ export function mount(container, context) {
   const form = document.createElement("form"), proposal = document.createElement("input"), submit = document.createElement("button"), proposalLabel = element("label");
   proposalLabel.className = "field"; proposal.setAttribute("aria-label", "Proposal ref"); proposal.required = true; proposal.maxLength = 1024; proposal.placeholder = "refs/dim/proposals/…";
   proposalLabel.append(element("span", "Proposal ref"), proposal); submit.type = "submit"; submit.className = "button"; submit.textContent = "Resolve proposal review"; form.append(proposalLabel, submit);
-  container.append(element("p", "Select a controller, project and repository to inspect exact review evidence."), toolbar, availability, selectors, actions, status, form, syncStatus, list, detail);
+  container.append(element("p", "Select a controller, project and repository to inspect exact review evidence."), toolbar, availability, selectors, managementRegion, actions, status, form, syncStatus, list, detail);
   /** @returns {Scope} */ const scope = () => ({ controllerId: host.control.value, projectId: project.control.value, repositoryId: repository.control.value });
   /** @param {Scope} value */ const key = (value) => JSON.stringify([value.controllerId, value.projectId, value.repositoryId]);
   /** @param {Scope} value */ const selected = (value) => current() && key(value) === key(scope());
@@ -30,6 +32,7 @@ export function mount(container, context) {
   /** @param {string} name */ const has = (name) => permitted.has(name) && Boolean(controller()?.operations.some((operation) => operation.name === name));
   /** @param {Scope} target @param {string} name @param {Record<string,unknown>} [input] */
   const invoke = (target, name, input = {}) => context.invoke(name, { ...target, ...input });
+  const management = mountManagement(managementRegion, context, { scope, has, refresh: (preferred) => refreshCatalog(preferred) });
   let draftKey = "";
   function saveDraft() { if (draftKey) drafts.set(draftKey, proposal.value); }
   function restoreDraft() { draftKey = key(scope()); proposal.value = drafts.get(draftKey) ?? ""; delete submit.dataset.accepted; submit.disabled = false; }
@@ -96,6 +99,7 @@ export function mount(container, context) {
     for (const review of reviews) { const row = element("tr"), actions = element("td"); row.append(element("td", review.proposalRef), element("td", review.protectedRef), element("td", review.status), element("td", new Date(review.createdAt).toLocaleString()), actions); button(actions, "Open review", () => open(target, review.reviewId)); table.append(row); } list.append(table);
   }
   function renderActions() {
+    management.update();
     actions.replaceChildren(); form.hidden = !has("reviews.resolve") || !scope().repositoryId;
     if (!scope().repositoryId) return;
     button(actions, "Refresh reviews", (_button, target) => refreshList(target));
@@ -120,15 +124,16 @@ export function mount(container, context) {
   function options(control, values, preferred) { control.replaceChildren(); for (const value of values) { const option = document.createElement("option"); option.value = value.id; option.textContent = value.title; control.append(option); } if (values.some(({ id }) => id === preferred)) control.value = preferred; control.disabled = values.length === 0; }
   function fillRepositories(preferred = "") { const selectedProject = controller()?.projects.find(({ projectId }) => projectId === project.control.value); options(repository.control, (selectedProject?.repositoryIds ?? []).map((id) => ({ id, title: id })), preferred); }
   function fillProjects(preferred = "", preferredRepository = "") { options(project.control, (controller()?.projects ?? []).map(({ projectId, name }) => ({ id: projectId, title: name === projectId ? name : `${name} (${projectId})` })), preferred); fillRepositories(preferredRepository); }
-  async function refreshCatalog() {
-    const version = ++catalogVersion, previous = scope(); saveDraft();
+  /** @param {{controllerId:string,projectId:string,repositoryId?:string}} [preferred] */
+  async function refreshCatalog(preferred) {
+    const version = ++catalogVersion, before = scope(), previous = preferred ? { ...preferred, repositoryId: preferred.repositoryId ?? "" } : before; saveDraft();
     const value = /** @type {{controllers:Controller[]}} */ (await context.invoke("projects.list", {})); if (!current() || version !== catalogVersion) return;
     controllers = value.controllers; availability.replaceChildren();
     for (const entry of controllers.filter(({ status }) => status === "unavailable")) availability.append(element("p", `${entry.title}: project discovery is unavailable. Install the Native Git host plugin and select its control plane on this controller, then reconnect this feature. Other controllers remain usable; refresh projects to retry temporary outages.`));
     options(host.control, controllers.map(({ id, title }) => ({ id, title })), previous.controllerId); host.field.hidden = controllers.length < 2;
     if (!controllers.some(({ id, status }) => id === host.control.value && status === "ready")) { const ready = controllers.find(({ status }) => status === "ready"); if (ready) host.control.value = ready.id; }
     fillProjects(previous.projectId, previous.repositoryId);
-    if (key(previous) !== key(scope())) switchScope(); else { renderActions(); await refreshList(); }
+    if (key(before) !== key(scope())) switchScope(); else { renderActions(); await refreshList(); }
     if (!controllers.some(({ projects }) => projects.length)) list.replaceChildren(element("p", "No registered projects or ready repositories discovered. Import a project on a controller, then refresh projects."));
   }
   host.control.addEventListener("change", () => { saveDraft(); fillProjects(); switchScope(); });
@@ -144,5 +149,5 @@ export function mount(container, context) {
   button(toolbar, "Refresh projects", () => refreshCatalog());
   form.hidden = true;
   void refreshCatalog().catch((error) => { if (current()) status.textContent = `Could not discover projects: ${error instanceof Error ? error.message : "service unavailable"}. Use Refresh projects to retry.`; });
-  return () => { disposed = true; ++catalogVersion; ++detailVersion; ++listVersion; container.replaceChildren(); };
+  return () => { management.dispose(); disposed = true; ++catalogVersion; ++detailVersion; ++listVersion; container.replaceChildren(); };
 }

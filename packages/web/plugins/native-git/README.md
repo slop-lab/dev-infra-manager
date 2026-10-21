@@ -12,6 +12,19 @@ bridge. No private connection paths, service credentials or executables reach th
 browser. Adding projects or repositories appears on **Refresh projects**; one
 unavailable controller does not disable other controllers.
 
+Controllers with dedicated registrar and importer connections also expose **New
+project** and **Import repository**. Create a project, then import a public HTTPS
+Git URL; an optional branch overrides the remote default branch. Import additional
+repositories through the same form. The first repository becomes the default
+checkout. Source acquisition is bounded, rejects credentials/private addresses,
+and does not execute or automatically trust repository `.dim` code or policy.
+These operations require Web `operator` authority and remain unavailable for a
+direct reviewer-service connection.
+
+Creation/import receipts are retained if the following catalog read fails;
+accepted operations cannot accidentally be resubmitted by the same unchanged
+form. Refresh projects to inspect current state after a read failure.
+
 The UI selects controller, project and repository independently. Proposal drafts
 are retained separately for each scope; switching scope clears evidence and fences
 late responses. Read-only accounts can inspect reviews; `reviewer` authority is

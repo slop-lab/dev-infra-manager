@@ -78,11 +78,14 @@ async function selectFeature(id) {
     const dispose = await plugin.mount(content, {
       operations: view.feature.operations,
       isCurrent: () => selected === generation,
-      /** @param {string} name @param {unknown} [input] */
-      async invoke(name, input = {}) {
+      /** @param {string} name @param {unknown} [input] @param {import("../plugin-api.js").WebPluginInvokeOptions} [options] */
+      async invoke(name, input = {}, options) {
+        const timeout = options === undefined ? 35_000 : options?.timeoutMilliseconds;
+        if (options !== undefined && (typeof options !== "object" || options === null || Object.keys(options).some((key) => key !== "timeoutMilliseconds"))
+          || !Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 185_000) throw new Error("Invalid feature request timeout.");
         if (selected !== generation || !view.feature.operations.some((operation) => operation.name === name)) throw new Error("This operation is not available to this account.");
         const response = await fetch(`/v1/extensions/${view.feature.id}/operations/${encodeURIComponent(name)}`, { method: "POST", credentials: "same-origin",
-          headers: { "content-type": "application/json", "x-dim-csrf": active.csrfToken }, body: JSON.stringify(input), signal: AbortSignal.timeout(35_000) });
+          headers: { "content-type": "application/json", "x-dim-csrf": active.csrfToken }, body: JSON.stringify(input), signal: AbortSignal.timeout(timeout) });
         if (selected !== generation) throw new Error("Your session ended.");
         if (response.status === 401) window.dispatchEvent(new Event("dim-session-expired"));
         if (!response.ok) throw new Error(response.status === 401 ? "Your session ended. Sign in again." : response.status === 403 ? "This account does not have permission for that action." : "The connected service could not complete this operation. Refresh its state before retrying; your input is kept.");

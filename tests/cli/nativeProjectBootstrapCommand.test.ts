@@ -17,16 +17,19 @@ const tsxImport = import.meta.resolve("tsx");
 const runFile = promisify(execFile);
 afterEach(cleanupNativeProjectFixtures);
 
-test("native root bootstrap help requires explicit local source and separate operator connections", () => {
+test("native repository import help distinguishes local refs and public HTTPS branches with separate operator connections", () => {
   const help = spawnSync(process.execPath, ["--conditions=dim-source", "--import", tsxImport, "--input-type=module", "-e", "import { runNativeGitCli } from '@slop-lab/dim-host-plugin-native-git/cli'; await runNativeGitCli(['project','repository','import','--help']);"], { cwd: packageDirectory, encoding: "utf8" });
 
   assert.equal(help.status, 0, help.stderr);
-  for (const option of ["--source <absolute-path>",
+  for (const option of ["--source <path-or-https-url>", "--branch <name>",
     "--ref <full-branch-ref>", "--registrar-connection <absolute-path>",
     "--importer-connection <absolute-path>", "--git-executable <absolute-path>",
     "--policy <absolute-file>", "--repository-policy"]) {
     assert.match(help.stdout, new RegExp(option.replace(/[<>]/g, "\\$&")));
   }
+  assert.match(help.stdout, /reviewed local Git repository or public HTTPS repository URL/);
+  assert.match(help.stdout, /required for local sources/);
+  assert.match(help.stdout, /defaults to the remote default branch/);
   assert.doesNotMatch(help.stdout, /bootstrap-git-url|password|token/);
 });
 

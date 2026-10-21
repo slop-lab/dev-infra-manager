@@ -120,6 +120,12 @@ is implied by these source changes.
   copying credentials to the Web server. Discover projects and their independent
   repositories through the Native Git plugin, with explicit controller, Project
   and repository selection and generation fencing for every action.
+  Create projects and import public HTTPS Git repositories from the console or
+  host CLI. Select the remote default branch or an explicit branch; the first
+  repository becomes the default checkout. Imports preserve immutable receipts
+  across retries, ignore remote policy declarations and require review for later
+  `.dim/` changes. Public acquisition uses credential-free, bounded Git transport
+  without executing repository code.
   Deliver external Git events through signed,
   durable webhook subscriptions with bounded retry and restart recovery.
 - Keep LLM routing/account governance, Incus VM workspaces and SPICE consoles,

@@ -114,7 +114,7 @@ controllers from the console's private `operations.hosts` settings:
 interface WebPluginContext {
   readonly controllers: readonly {
     readonly id: string;
-    run(args: readonly string[]): Promise<unknown>;
+    run(args: readonly string[], options?: { timeoutMilliseconds: number }): Promise<unknown>;
   }[];
 }
 ```
@@ -122,7 +122,7 @@ interface WebPluginContext {
 The core fixes each executable and host selector. Commands run without a shell
 as `dim --host SELECTOR ...ARGS --json`, with at most 128 arguments, 4,096
 characters per argument, 32 KiB total UTF-8 argument data, 2 MiB output and a
-30-second deadline. NUL arguments and transport overrides `--host`/`--json` are
+30-second default deadline (explicit trusted options may raise it to 180 seconds). NUL arguments and transport overrides `--host`/`--json` are
 rejected. Only reviewed server-side plugin code receives this capability;
 browser inputs cannot select an executable, selector or generic command.
 
@@ -133,3 +133,10 @@ configured and reports ready or unavailable; reconnect repeats discovery through
 the same fixed controllers. Explicit `config` uses manual creation instead and never
 falls back to discovery after a credential or scope failure. Runtime operation
 registration and browser role/CSRF checks are identical for either path.
+
+A browser panel may pass a third `invoke(name, input, { timeoutMilliseconds })`
+argument for a longer-running operation. The generic transport defaults to 35
+seconds and accepts positive integral deadlines up to 185 seconds. Controller
+and browser deadlines reject unknown options and out-of-range values before
+issuing work. Plugins choose the budget; no business-operation names are encoded
+in the core transport.

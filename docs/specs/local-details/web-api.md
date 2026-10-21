@@ -55,7 +55,10 @@ Only the reviewed server-side plugin receives it. Executable and host selector
 are fixed; the invocation is `[--host, SELECTOR, ...ARGS, --json]` without a shell.
 Arguments are bounded to 128 entries, 4,096 characters each and 32 KiB UTF-8 total;
 NUL and `--host`/`--json` overrides are rejected. Output is bounded to 2 MiB and
-execution to 30 seconds. Errors do not include subprocess output or credentials.
+execution to 30 seconds by default. A trusted plugin may request a positive
+integral deadline up to 180 seconds; the browser operation transport separately
+permits an explicit deadline up to 185 seconds (35 seconds by default). Invalid
+or unknown timeout options reject before dispatch. Errors do not include subprocess output or credentials.
 
 Plugins own optional `autoConnect(context)`, their discovery commands and all
 feature-specific schemas, connection validation and scope. The core supplies no
@@ -144,6 +147,16 @@ Every invocation supplies the attested generation and the controller rejects
 selection changes before dispatch. Catalog refresh cannot adopt a replacement
 generation; explicit reconnect is required. Each request rechecks current catalog
 membership, including import-receipt generation, before service access.
+Controller-owned project creation and public repository import require the
+browser operator role and distinct attested registrar/importer credentials.
+These operations are absent from a direct reviewer-only connection. Import
+accepts a public HTTPS URL and optional branch, never local paths, credential
+paths, executable names or arbitrary policy declarations. The host fetches bare
+Git objects through its bounded public transport without executing candidate
+code or trusting the remote `.dim` policy. Its own default policy requires review
+of subsequent `.dim/` changes. The first imported repository supplies project
+defaults; later imports preserve those choices. Retried imports must match their
+original URL/branch intent and reuse the pinned draft and receipt.
 
 Manual configuration instead provides an explicit project/repository allowlist,
 private reviewer connection and optional separate promoter/sync connections.
