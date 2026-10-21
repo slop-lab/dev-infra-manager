@@ -59,8 +59,12 @@ closure in the separate `DIM_DATA_HOME/web/runtime` runtime. It adds missing
 selections while preserving accounts and all existing plugin configuration.
 Explicit feature configuration always takes precedence over controller discovery.
 Only a newly added LLM router selection discovers the conventional private
-`XDG_CONFIG_HOME/dim/llm/operator.json` connection automatically. Other
-connections require explicit project and authority choices. The LLM router CLI
+`XDG_CONFIG_HOME/dim/llm/operator.json` connection automatically. Native Git and
+Execution discover their own connections through configured controllers. Execution
+requires the controller's execution-worker plugin and uses its selected control
+plane's generated query and optional operator roles; the panel selects a controller
+explicitly. Direct connections remain available through private configuration.
+The LLM router CLI
 plugin remains an explicit installation; installing the Web console does not
 enable it on a host.
 When a private `llm/operator-service.json` has been retained, source installation

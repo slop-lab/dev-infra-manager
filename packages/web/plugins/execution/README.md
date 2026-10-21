@@ -4,8 +4,16 @@
 bounded stdout/stderr, worker capacity and cancel/retry operations. The execution
 scheduler still owns state transitions and worker authority.
 
-Install alongside the exact matching `@slop-lab/dim-web` version and register the
-plugin with private server-side configuration:
+Install alongside the exact matching `@slop-lab/dim-web` version. When selected
+without configuration, the plugin discovers execution connections through the
+Web server's configured controllers. The controller needs
+`@slop-lab/dim-host-plugin-execution-worker` and a selected control plane with
+generated query credentials. Its optional operator connection enables capacity,
+cancel and retry. Credentials stay on the controller; the browser selects an
+explicit controller and every action pins the discovered service generation.
+An unavailable controller does not disable other controllers or features.
+
+For a direct server connection, register private server-side configuration:
 
 ```json
 {"queryConnection":"/absolute/ci-query.json","operatorConnection":"/absolute/execution-operator.json"}

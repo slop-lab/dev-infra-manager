@@ -32,7 +32,7 @@ it("reads jobs with private query credentials and omits unconfigured execution a
   const selected = await fixture(false), runtime = await webPlugin.create(selected.config);
   expect(await runtime.invoke("jobs.list", {})).toEqual([]);
   expect(runtime.operations?.map((operation) => operation.name)).toEqual(["jobs.list", "jobs.detail"]);
-  await expect(runtime.invoke("jobs.cancel", { id: crypto.randomUUID() })).rejects.toThrow("not configured");
+  await expect(runtime.invoke("jobs.cancel", { id: crypto.randomUUID() })).rejects.toThrow("unavailable");
   expect(selected.calls).toEqual(["GET /v1/jobs"]);
 });
 it("exposes worker capacity only with a private operator connection", async () => {
@@ -58,4 +58,37 @@ it("forwards generic execution cancellation and retry with the exact deduplicati
   expect(await runtime.invoke("jobs.retry", { id, requestId })).toMatchObject({ taskType: "review-predicate" });
   expect(selected.calls).toEqual([`POST /v1/operator/jobs/${id}/cancel`, `POST /v1/operator/jobs/${id}/retry`]);
   expect(selected.mutations).toEqual([{}, { requestId }]);
+});
+
+it("discovers controllers without Web connection files and pins every execution operation", async () => {
+  const calls: string[][] = [];
+  const generationId = "a".repeat(64);
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "local", async run(args) {
+    calls.push([...args]);
+    if (args[2] === "describe") return { schemaVersion: 1, generationId, operations: operations.map(({ name, description, access }) => ({ name, description, access })) };
+    return [];
+  } }] });
+  expect(await runtime.invoke("controllers.list", {})).toMatchObject({ controllers: [{ id: "local", status: "ready" }] });
+  expect(await runtime.invoke("jobs.list", { controllerId: "local" })).toEqual([]);
+  expect(calls.at(-1)).toEqual(["execution", "console", "invoke", "jobs.list", "--expected-generation", generationId, "--input", "{}"]);
+  expect(calls[1]).toEqual(["execution", "console", "describe", "--expected-generation", generationId]);
+  await expect(runtime.invoke("jobs.list", { controllerId: "foreign" })).rejects.toThrow("unavailable");
+  await expect(runtime.invoke("jobs.list", { controllerId: "local", executable: "/bin/sh" })).rejects.toThrow();
+});
+
+it("isolates unavailable controllers and rejects changed generations and undeclared authority", async () => {
+  let generationId = "a".repeat(64);
+  const runtime = await webPlugin.autoConnect!({ controllers: [
+    { id: "ready", async run() { return { schemaVersion: 1, generationId, operations: [{ name: "jobs.list", description: "Jobs", access: "read" }] }; } },
+    { id: "broken", async run() { throw new Error("private path/password must not escape"); } }
+  ] });
+  const catalog = await runtime.invoke("controllers.list", {});
+  expect(catalog).toMatchObject({ controllers: [{ id: "ready", status: "ready" }, { id: "broken", status: "unavailable", operations: [] }] });
+  expect(JSON.stringify(catalog)).not.toContain("password");
+  await expect(runtime.invoke("jobs.cancel", { controllerId: "ready", id: crypto.randomUUID() })).rejects.toThrow("unavailable");
+  generationId = "b".repeat(64);
+  expect(await runtime.invoke("controllers.list", {})).toMatchObject({ controllers: [{ id: "ready", status: "unavailable" }, { id: "broken", status: "unavailable" }] });
+  await expect(runtime.invoke("jobs.list", { controllerId: "ready" })).rejects.toThrow("unavailable");
+  const invalid = await webPlugin.autoConnect!({ controllers: [{ id: "invalid", async run() { return { schemaVersion: 1, generationId, operations: [{ name: "jobs.cancel", description: "Cancel", access: "read" }] }; } }] });
+  expect(await invalid.invoke("controllers.list", {})).toMatchObject({ controllers: [{ status: "unavailable" }] });
 });

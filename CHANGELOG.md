@@ -120,6 +120,10 @@ is implied by these source changes.
   copying credentials to the Web server. Discover projects and their independent
   repositories through the Native Git plugin, with explicit controller, Project
   and repository selection and generation fencing for every action.
+  Execution also discovers the selected controllers' private query/operator
+  connections automatically. Select a controller to inspect jobs, logs and
+  worker capacity or cancel/retry executions without copying service credentials
+  into Web configuration; pin every action to its discovered generation.
   Create projects and import public HTTPS Git repositories from the console or
   host CLI. Select the remote default branch or an explicit branch; the first
   repository becomes the default checkout. Imports preserve immutable receipts

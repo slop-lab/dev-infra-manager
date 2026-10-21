@@ -6,11 +6,15 @@ import { executionTaskHandlers } from "@slop-lab/dim-contracts-execution/plugin-
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "execution-worker",
-  commands: [{ name: "execution", description: "Run configured task and CI slots or build their VM supervisor image" }],
+  commands: [{ name: "execution", description: "Inspect execution services, run task/CI slots or build their VM supervisor image" }],
   async run(args, context) {
     const [command, action, value, ...extra] = args;
+    if (command === "execution" && action === "console") {
+      const { runExecutionConsole } = await import("./console.js");
+      await runExecutionConsole(args.slice(2)); return;
+    }
     if (command !== "execution" || !value || extra.length || !["worker", "qemu-image"].includes(action ?? "")) {
-      throw new UserError("usage: dim execution worker CONFIG | dim execution qemu-image IMAGE");
+      throw new UserError("usage: dim execution console describe --json | dim execution console invoke OPERATION --expected-generation HASH --input JSON --json | dim execution worker CONFIG | dim execution qemu-image IMAGE");
     }
     if (action === "qemu-image") {
       await buildNativeQemuRunnerImage(context.runner, value, { signal: context.signal,

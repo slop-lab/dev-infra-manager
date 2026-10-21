@@ -1,6 +1,7 @@
 // @ts-check
 /** @typedef {{name:string,description:string,access:string}} Descriptor */
 /** @typedef {{operations:Descriptor[],invoke(name:string,input?:unknown):Promise<unknown>,isCurrent():boolean}} Context */
+/** @typedef {{id:string,title:string,status:"ready"|"unavailable",operations:Descriptor[]}} Controller */
 /** @typedef {import('@slop-lab/dim-contracts-ci/query').ExecutionSummary} Job */
 /** @param {string} tag @param {string} [text] */
 function element(tag, text = "") { const node = document.createElement(tag); node.textContent = text; return node; }
@@ -9,84 +10,151 @@ export function mount(container, context) {
   let disposed = false;
   /** @type {Map<string,string>} */ const retryRequests = new Map();
   const current = () => !disposed && context.isCurrent();
-  const allowed = new Set(context.operations.map((operation) => operation.name));
-  const status = element("p"); status.setAttribute("role", "status");
-  const jobs = element("div"), detail = element("section"), capacity = element("section");
-  const toolbar = element("div"); toolbar.className = "feature-actions";
-  container.append(element("p", "Inspect recent CI jobs, read captured logs and manage worker capacity."), toolbar, status, jobs, detail, capacity);
-  /** @param {HTMLElement} parent @param {string} label @param {(button:HTMLButtonElement)=>Promise<boolean|void>} action */
-  function button(parent, label, action) {
-    const node = document.createElement("button"); node.type = "button"; node.className = "button button-secondary"; node.textContent = label;
-    node.addEventListener("click", async () => {
-      node.disabled = true; status.textContent = `${label}…`;
-      try { const result = await action(node); if (current() && result !== false) status.textContent = `${label} completed.`; }
-      catch (error) { if (current()) { status.textContent = `${label} failed: ${error instanceof Error ? error.message : "service unavailable"}. Retry when the service is available.`; } }
-      finally { if (current()) node.disabled = node.dataset.accepted === "true"; }
-    }); parent.append(node); return node;
-  }
-  /** @param {HTMLButtonElement} button @param {string} receipt @param {Array<[string,()=>Promise<unknown>]>} reads */
-  async function accepted(button, receipt, reads) {
-    button.dataset.accepted = "true"; status.textContent = receipt;
-    const results = await Promise.allSettled(reads.map(([, read]) => read()));
-    if (current()) {
-      const failed = reads.filter((_, index) => results[index]?.status === "rejected").map(([name]) => name);
-      status.textContent = failed.length ? `${receipt} Latest ${failed.join(" and ")} could not refresh. Refresh this view to inspect current state; the action was accepted.` : receipt;
+  const advertised = new Set(context.operations.map((operation) => operation.name));
+  const automatic = advertised.has("controllers.list");
+  let scopeVersion = 0, discoveryVersion = 0;
+  /** @type {string|undefined} */ let selectedController;
+  const discovery = element("div"), content = element("div");
+  container.append(discovery, content);
+  /** @param {string|undefined} controllerId @param {Descriptor[]} operations */
+  function render(controllerId, operations) {
+    const version = ++scopeVersion;
+    let detailVersion = 0, jobsVersion = 0;
+    const scoped = () => current() && version === scopeVersion;
+    /** @param {string} name @param {Record<string,unknown>} input */
+    const invoke = (name, input) => {
+      if (!scoped()) return Promise.reject(new Error("Controller selection changed"));
+      return context.invoke(name, controllerId === undefined ? input : { ...input, controllerId });
+    };
+    const allowed = new Set(operations.map((operation) => operation.name));
+    content.replaceChildren();
+    const status = element("p"); status.setAttribute("role", "status");
+    const jobs = element("div"), detail = element("section"), capacity = element("section");
+    const toolbar = element("div"); toolbar.className = "feature-actions";
+    content.append(element("p", "Inspect recent jobs, read captured logs and manage worker capacity."), toolbar, status, jobs, detail, capacity);
+    /** @param {HTMLElement} parent @param {string} label @param {(button:HTMLButtonElement)=>Promise<boolean|void>} action */
+    function button(parent, label, action) {
+      const node = document.createElement("button"); node.type = "button"; node.className = "button button-secondary"; node.textContent = label;
+      node.addEventListener("click", async () => {
+        if (!scoped()) return;
+        node.disabled = true; status.textContent = `${label}…`;
+        try { const result = await action(node); if (scoped() && result !== false) status.textContent = `${label} completed.`; }
+        catch (error) { if (scoped()) { status.textContent = `${label} failed: ${error instanceof Error ? error.message : "service unavailable"}. Retry when the service is available.`; } }
+        finally { if (scoped()) node.disabled = node.dataset.accepted === "true"; }
+      }); parent.append(node); return node;
     }
-    return false;
-  }
-  /** @param {Job} job */
-  async function open(job) {
-    const value = /** @type {import('zod').infer<typeof import('@slop-lab/dim-contracts-ci/query').executionDetailSchema>} */ (await context.invoke("jobs.detail", { id: job.id }));
-    if (!current()) return;
-    detail.replaceChildren(element("h3", `${value.job.jobName} — ${value.job.phase}`));
-    const metadata = element("dl");
-    for (const [label, text] of [["Job ID", value.job.id], ["Project / repository", `${value.job.projectId} / ${value.job.repositoryId}`], ["Worker / slot", `${value.job.workerId ?? "unassigned"} / ${value.job.slotId ?? "unassigned"}`], ["Outcome", value.job.outcome ?? "pending"], ["Publication", value.job.publication]]) metadata.append(element("dt", label), element("dd", text));
-    detail.append(metadata);
-    if (value.result) {
-      for (const stream of ["stdout", "stderr"]) {
-        const log = stream === "stdout" ? value.result.logs.stdout : value.result.logs.stderr;
-        let text;
-        try { const bytes = Uint8Array.from(atob(log.base64), (char) => char.charCodeAt(0)); text = new TextDecoder().decode(bytes); }
-        catch { text = "Captured log could not be decoded."; }
-        const pre = element("pre", text || "No captured output."); pre.className = "log-output";
-        detail.append(element("h4", `${stream}${log.truncated ? " (truncated by execution service)" : ""}`), pre);
+    /** @param {HTMLButtonElement} button @param {string} receipt @param {Array<[string,()=>Promise<unknown>]>} reads */
+    async function accepted(button, receipt, reads) {
+      if (!scoped()) return false;
+      button.dataset.accepted = "true"; status.textContent = receipt;
+      const results = await Promise.allSettled(reads.map(([, read]) => read()));
+      if (scoped()) {
+        const failed = reads.filter((_, index) => results[index]?.status === "rejected").map(([name]) => name);
+        status.textContent = failed.length ? `${receipt} Latest ${failed.join(" and ")} could not refresh. Refresh this view to inspect current state; the action was accepted.` : receipt;
       }
-    } else detail.append(element("p", "Logs become available after this job completes."));
-    if (allowed.has("jobs.cancel") && ["queued", "assigned", "running", "recovering"].includes(value.job.phase)) button(detail, "Cancel execution", async (button) => {
-      if (!window.confirm(`Cancel ${value.job.jobName} (${value.job.id})?`)) { status.textContent = "Cancellation dismissed."; return false; }
-      await context.invoke("jobs.cancel", { id: value.job.id }); return accepted(button, "Cancellation accepted.", [["job list", refresh], ["job details", () => open(job)]]);
-    });
-    if (allowed.has("jobs.retry") && value.job.phase === "finished") button(detail, "Retry execution", async (button) => {
-      let requestId = retryRequests.get(value.job.id); if (!requestId) { requestId = crypto.randomUUID(); retryRequests.set(value.job.id, requestId); }
-      await context.invoke("jobs.retry", { id: value.job.id, requestId }); return accepted(button, "Retry execution accepted.", [["job list", refresh]]);
-    });
-  }
-  async function refresh() {
-    const values = /** @type {Job[]} */ (await context.invoke("jobs.list", {}));
-    if (!current()) return;
-    jobs.replaceChildren();
-    if (!values.length) { jobs.append(element("p", "No recent CI jobs.")); return; }
-    const table = element("table"), head = element("tr");
-    for (const label of ["Job", "Repository", "State", "Created", "Details"]) head.append(element("th", label));
-    const body = element("tbody"); table.append(head, body);
-    for (const job of values) {
-      const row = element("tr"), actions = element("td");
-      row.append(element("td", job.jobName), element("td", `${job.projectId}/${job.repositoryId}`), element("td", `${job.phase}${job.outcome ? ` / ${job.outcome}` : ""}`), element("td", new Date(job.createdAt).toLocaleString()), actions);
-      button(actions, "View job", () => open(job)); body.append(row);
+      return false;
     }
-    jobs.append(table);
-  }
-  button(toolbar, "Refresh jobs", refresh);
-  if (allowed.has("workers.list")) button(toolbar, "Refresh worker capacity", async () => {
-    const workers = /** @type {Array<{id:string,slots:Array<{id:string,state:string,executionKind:string}>}>} */ (await context.invoke("workers.list", {}));
-    if (!current()) return;
-    capacity.replaceChildren(element("h3", "Worker capacity"));
-    if (!workers.length) capacity.append(element("p", "No execution workers registered."));
-    for (const worker of workers) {
-      capacity.append(element("h4", worker.id)); const slots = element("ul");
-      for (const slot of worker.slots) slots.append(element("li", `${slot.id}: ${slot.state} (${slot.executionKind})`)); capacity.append(slots);
+    /** @param {Job} job */
+    async function open(job) {
+      const request = ++detailVersion;
+      const value = /** @type {import('zod').infer<typeof import('@slop-lab/dim-contracts-ci/query').executionDetailSchema>} */ (await invoke("jobs.detail", { id: job.id }));
+      if (!scoped() || request !== detailVersion) return;
+      detail.replaceChildren(element("h3", `${value.job.jobName} — ${value.job.phase}`));
+      const metadata = element("dl");
+      for (const [label, text] of [["Job ID", value.job.id], ["Project / repository", `${value.job.projectId} / ${value.job.repositoryId}`], ["Worker / slot", `${value.job.workerId ?? "unassigned"} / ${value.job.slotId ?? "unassigned"}`], ["Outcome", value.job.outcome ?? "pending"], ["Publication", value.job.publication]]) metadata.append(element("dt", label), element("dd", text));
+      detail.append(metadata);
+      if (value.result) {
+        for (const stream of ["stdout", "stderr"]) {
+          const log = stream === "stdout" ? value.result.logs.stdout : value.result.logs.stderr;
+          let text;
+          try { const bytes = Uint8Array.from(atob(log.base64), (char) => char.charCodeAt(0)); text = new TextDecoder().decode(bytes); }
+          catch { text = "Captured log could not be decoded."; }
+          const pre = element("pre", text || "No captured output."); pre.className = "log-output";
+          detail.append(element("h4", `${stream}${log.truncated ? " (truncated by execution service)" : ""}`), pre);
+        }
+      } else detail.append(element("p", "Logs become available after this job completes."));
+      if (allowed.has("jobs.cancel") && ["queued", "assigned", "running", "recovering"].includes(value.job.phase)) button(detail, "Cancel execution", async (button) => {
+        if (!window.confirm(`Cancel ${value.job.jobName} (${value.job.id})?`)) { status.textContent = "Cancellation dismissed."; return false; }
+        if (!scoped()) return false;
+        await invoke("jobs.cancel", { id: value.job.id }); return accepted(button, "Cancellation accepted.", [["job list", refresh], ["job details", () => open(job)]]);
+      });
+      if (allowed.has("jobs.retry") && value.job.phase === "finished") button(detail, "Retry execution", async (button) => {
+        let requestId = retryRequests.get(`${controllerId ?? "direct"}/${value.job.id}`); if (!requestId) { requestId = crypto.randomUUID(); retryRequests.set(`${controllerId ?? "direct"}/${value.job.id}`, requestId); }
+        await invoke("jobs.retry", { id: value.job.id, requestId }); return accepted(button, "Retry execution accepted.", [["job list", refresh]]);
+      });
     }
-  });
-  void refresh().catch((error) => { if (current()) status.textContent = `Could not load jobs: ${error instanceof Error ? error.message : "service unavailable"}. Use Refresh jobs to retry.`; });
-  return () => { disposed = true; container.replaceChildren(); };
+    async function refresh() {
+      const request = ++jobsVersion;
+      const values = /** @type {Job[]} */ (await invoke("jobs.list", {}));
+      if (!scoped() || request !== jobsVersion) return;
+      jobs.replaceChildren();
+      if (!values.length) { jobs.append(element("p", "No recent jobs.")); return; }
+      const table = element("table"), head = element("tr");
+      for (const label of ["Job", "Repository", "State", "Created", "Details"]) head.append(element("th", label));
+      const body = element("tbody"); table.append(head, body);
+      for (const job of values) {
+        const row = element("tr"), actions = element("td");
+        row.append(element("td", job.jobName), element("td", `${job.projectId}/${job.repositoryId}`), element("td", `${job.phase}${job.outcome ? ` / ${job.outcome}` : ""}`), element("td", new Date(job.createdAt).toLocaleString()), actions);
+        button(actions, "View job", () => open(job)); body.append(row);
+      }
+      jobs.append(table);
+    }
+    if (allowed.has("jobs.list")) button(toolbar, "Refresh jobs", refresh);
+    if (allowed.has("workers.list")) button(toolbar, "Refresh worker capacity", async () => {
+      const workers = /** @type {Array<{id:string,slots:Array<{id:string,state:string,executionKind:string}>}>} */ (await invoke("workers.list", {}));
+      if (!scoped()) return;
+      capacity.replaceChildren(element("h3", "Worker capacity"));
+      if (!workers.length) capacity.append(element("p", "No execution workers registered."));
+      for (const worker of workers) {
+        capacity.append(element("h4", worker.id)); const slots = element("ul");
+        for (const slot of worker.slots) slots.append(element("li", `${slot.id}: ${slot.state} (${slot.executionKind})`)); capacity.append(slots);
+      }
+    });
+    if (allowed.has("jobs.list")) void refresh().catch((error) => { if (scoped()) status.textContent = `Could not load jobs: ${error instanceof Error ? error.message : "service unavailable"}. Use Refresh jobs to retry.`; });
+  }
+  async function discover() {
+    const request = ++discoveryVersion;
+    ++scopeVersion;
+    for (const select of discovery.querySelectorAll("select")) select.disabled = true;
+    content.replaceChildren(element("p", "Discovering execution services…"));
+    try {
+      const value = /** @type {{controllers:Controller[]}} */ (await context.invoke("controllers.list", {}));
+      if (!current() || request !== discoveryVersion) return;
+      discovery.replaceChildren();
+      const label = element("label", "Controller");
+      const select = document.createElement("select"); select.id = `execution-controller-${crypto.randomUUID()}`;
+      label.setAttribute("for", select.id); discovery.append(label, select);
+      for (const controller of value.controllers) {
+        const option = document.createElement("option"); option.value = controller.id;
+        option.textContent = `${controller.title}${controller.status === "unavailable" ? " (unavailable)" : ""}`;
+        select.append(option);
+      }
+      const refresh = document.createElement("button"); refresh.type = "button"; refresh.className = "button button-secondary";
+      refresh.textContent = "Refresh controllers"; refresh.addEventListener("click", () => { void discover(); }); discovery.append(refresh);
+      const selected = value.controllers.find((controller) => controller.id === selectedController)
+        ?? value.controllers.find((controller) => controller.status === "ready") ?? value.controllers[0];
+      /** @param {Controller|undefined} controller */
+      const choose = (controller) => {
+        selectedController = controller?.id;
+        ++scopeVersion;
+        if (!controller || controller.status !== "ready") {
+          content.replaceChildren(element("p", controller ? "Execution is unavailable on this controller. Refresh controllers after connecting its execution service." : "No controllers are configured."));
+          return;
+        }
+        render(controller.id, controller.operations.filter((operation) => advertised.has(operation.name)));
+      };
+      if (selected) select.value = selected.id;
+      select.addEventListener("change", () => choose(value.controllers.find((controller) => controller.id === select.value)));
+      choose(selected);
+    } catch (error) {
+      if (!current() || request !== discoveryVersion) return;
+      content.replaceChildren(element("p", `Could not discover execution services: ${error instanceof Error ? error.message : "service unavailable"}.`));
+      if (!discovery.querySelector("button")) {
+        const retry = document.createElement("button"); retry.type = "button"; retry.textContent = "Refresh controllers";
+        retry.addEventListener("click", () => { void discover(); }); discovery.append(retry);
+      }
+    }
+  }
+  if (automatic) void discover(); else render(undefined, context.operations);
+  return () => { disposed = true; ++scopeVersion; ++discoveryVersion; container.replaceChildren(); };
 }

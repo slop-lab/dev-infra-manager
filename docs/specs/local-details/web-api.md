@@ -176,6 +176,14 @@ cancel or retry jobs. Browser mutation requires operator role as well as service
 credentials. Retry retains its explicit UUID idempotency key. Worker occupancy
 describes configured capacity, not heartbeat liveness. Diagnostics retain bounded
 prefixes and truncation markers and never expose grants or worker leases.
+Without explicit Web configuration, the execution-worker host plugin discovers
+these roles beside the selected control-plane connection. It validates private
+files and matching generation/endpoint, then attests the query and any operator
+role before advertising operations. The Web plugin selects a fixed configured
+controller and pins every invocation to its discovered generation. Controller
+switches fence pending reads, job actions and retry keys; browser roles continue
+to bound authority independently. Connection paths, credentials and arbitrary
+host commands are never browser inputs or results.
 
 The LLM router Web feature and its CLI plugin use the same operation/client
 contracts. Service-side actor credentials and browser roles independently bound
