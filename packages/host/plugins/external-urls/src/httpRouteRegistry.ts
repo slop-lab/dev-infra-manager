@@ -2,6 +2,8 @@ import { UserError } from "@slop-lab/dim-host-core";
 import { type ResolvedWorkspaceTarget } from "@slop-lab/dim-host-core/controller";
 import { HttpFlowTracker } from "./httpFlows.js";
 
+export class ExternalRouteConflictError extends UserError {}
+
 interface RegisteredRoute {
   upstream: ResolvedWorkspaceTarget | undefined;
   authorize: (() => Promise<void>) | undefined;
@@ -30,7 +32,7 @@ export class WorkspaceRouteRegistry {
       const existing = this.#routes.get(authority);
       if (existing === undefined) continue;
       if (existing.claims.size !== 1 || !existing.claims.has(input.claim)) {
-        throw new UserError(`external route '${authority}' already belongs to another route`);
+        throw new ExternalRouteConflictError(`external route '${authority}' already belongs to another route`);
       }
     }
     const requiresRebind = authorities.some((authority) => {

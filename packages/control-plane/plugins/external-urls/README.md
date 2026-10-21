@@ -67,9 +67,11 @@ relay to a reachable private IP and port, and use that same IP in `relayOrigin`.
 The management connection can also use an IP address. Only the final public
 ingress needs the wildcard DNS record and, for HTTPS, its certificate.
 No per-host public DNS records are required. The requested
-service label gains a stable host/workspace identity suffix inside one DNS
-label. Identical workspace names on different hosts therefore coexist under
-the same wildcard. Permalinks remain unique route identities. Returned URLs
+service label is used directly when available, for example
+`dim-1--opencode.dev.example.com`. If another host or workspace already owns
+that label, a stable host/workspace identity suffix provides an alternate
+inside the same wildcard. A saved alternate keeps its name on reconciliation,
+even if the shorter name later becomes available. Permalinks remain unique route identities. Returned URLs
 are the addresses to use; do not construct them from workspace names.
 
 Keep the management listener and host relay endpoints on a trusted private

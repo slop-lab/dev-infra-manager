@@ -14,6 +14,10 @@ implicitly approves it: when approval is required, an operator must select
 Read-only accounts can inspect available routes but cannot create, approve, or
 revoke them.
 
+Approved routes show their **Service URL** first and, when available, a separate
+**Permanent URL**. The service address is never replaced by the permanent address.
+Read-only accounts see the same approved addresses.
+
 The Web feature delegates only fixed `external-url console invoke` operations to
 a trusted configured controller. Every request carries the workspace's exact UUID;
 the host verifies ownership and route authority. Operator credentials remain on

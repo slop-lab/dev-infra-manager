@@ -6,7 +6,7 @@ const executablePath=process.env.DIM_CHROMIUM;if(!executablePath)throw new Error
 const panel=await readFile(new URL("../../../../packages/web/plugins/external-urls/src/assets/panel.js",import.meta.url));
 const workspaceId="17094660-a627-4a17-acd2-6418c0b79967", calls:Array<{name:string;input:Record<string,unknown>}>=[];
 let approval="pending", exists=false;
-const snapshot=()=>({workspace:"development",workspaceId,ingresses:[{name:"public",description:"Existing DNS",scheme:"https",driver:"relay"}],routes:exists?[{id:"37094660-a627-4a17-acd2-6418c0b79967",ingress:"public",url:"https://opencode.example.test",port:4096,containers:[],protocol:"http",approval}]:[]});
+const snapshot=()=>({workspace:"development",workspaceId,ingresses:[{name:"public",description:"Existing DNS",scheme:"https",driver:"relay"}],routes:exists?[{id:"37094660-a627-4a17-acd2-6418c0b79967",ingress:"public",url:"https://opencode.example.test",permalink:"https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967",port:4096,containers:[],protocol:"http",approval}]:[]});
 const server=createServer((request,response)=>{
   if(request.url==="/"){response.setHeader("Content-Type","text/html");response.end('<!doctype html><main></main>');return;}
   if(request.url==="/panel.js"){response.setHeader("Content-Type","text/javascript");response.end(panel);return;}
@@ -33,10 +33,13 @@ try{
   assert.equal(await page.getByRole("button",{name:"Approve route",exact:true}).count(),0);
   await mount(true);
   await page.getByRole("button",{name:"Approve route",exact:true}).click();await page.getByRole("link",{name:"https://opencode.example.test",exact:true}).waitFor();
-  assert.equal(await page.getByRole("link").getAttribute("rel"),"noopener noreferrer");
+  assert.equal(await page.getByRole("link",{name:"https://opencode.example.test",exact:true}).getAttribute("rel"),"noopener noreferrer");
+  assert.equal(await page.getByRole("link",{name:"https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967",exact:true}).count(),1);
+  assert.equal(await page.getByText("Service URL:",{exact:false}).count(),1);assert.equal(await page.getByText("Permanent URL:",{exact:false}).count(),1);
+  assert.deepEqual(await page.getByRole("link").allTextContents(),["https://opencode.example.test","https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967"]);
   await page.getByRole("button",{name:"Revoke route",exact:true}).click();await page.getByText("This route has been revoked.",{exact:true}).waitFor();assert.equal(await page.getByRole("link").count(),0);
   await mount(false);await page.getByText("This route has been revoked.",{exact:true}).waitFor();assert.equal(await page.getByRole("link").count(),0);
-  approval="approved";await mount(false);await page.getByRole("link").waitFor();assert.equal(await page.getByRole("button",{name:"Create route",exact:true}).count(),0);assert.equal(await page.getByRole("button",{name:"Revoke route",exact:true}).count(),0);
+  approval="approved";await mount(false);await page.getByRole("link",{name:"https://opencode.example.test",exact:true}).waitFor();assert.equal(await page.getByRole("button",{name:"Create route",exact:true}).count(),0);assert.equal(await page.getByRole("button",{name:"Revoke route",exact:true}).count(),0);
   for(const {input} of calls)assert.deepEqual({workspace:input.workspace,workspaceId:input.workspaceId,controllerId:input.controllerId},{workspace:"development",workspaceId,controllerId:"local"});
   assert.deepEqual(errors,[]);process.stdout.write("Workspace route form, explicit approval, revocation and read-only rendering passed.\n");
 }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}

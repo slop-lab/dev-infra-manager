@@ -13,8 +13,10 @@ inspect tools and server status; setup and server changes require operator acces
 
 The server status shows whether OpenCode is running and the approved external
 URLs for its workspace port, when the External routes host plugin is installed.
-These are the ingress's persisted public URLs, including shared control-plane
-ingress URLs; host relay addresses are never substituted. Stopped servers show
+**Service URL** is the ingress's public service address, including shared
+control-plane ingress URLs. A **Permanent URL**, when available, is shown separately
+as an additional stable address; it never replaces the service address. Host relay
+addresses are never substituted. Stopped servers show
 configured URLs without presenting them as running endpoints. Starting a server
 does not publish a host port or create a public endpoint.
 With the optional External routes Web/host plugins, create its port-4096 route

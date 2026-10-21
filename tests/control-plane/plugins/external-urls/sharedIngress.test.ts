@@ -41,6 +41,8 @@ it("routes two IP-only host relays through one public wildcard, scopes identical
     expect(new URL(claim.url!).hostname).toMatch(/^[^.]+\.dev\.example\.test$/);
     expect(claim.url).not.toContain("127.0.0.1");
   }
+  expect(claims[0]!.authority).toBe("same-name--opencode.dev.example.test");
+  expect(claims[1]!.authority).toMatch(/^same-name--opencode-[a-f0-9]{16}\.dev\.example\.test$/);
   expect(claims[0]!.authority).not.toBe(claims[1]!.authority);
   expect(await get(service.publicOrigin, claims[0]!.authority)).toEqual({ status: 200, body: "first" });
   expect(await get(service.publicOrigin, claims[1]!.authority)).toEqual({ status: 200, body: "second" });
@@ -54,6 +56,12 @@ it("routes two IP-only host relays through one public wildcard, scopes identical
   await Promise.all([streamClosed, socketClosed]);
   expect((await get(service.publicOrigin, claims[0]!.authority)).status).toBe(404);
   expect(await get(service.publicOrigin, claims[1]!.authority)).toEqual({ status: 200, body: "second" });
+  const repeated = await listeners[1]!.provision({ id: "workspace-1", name: "same-name" },
+    { ingress: "shared", subdomain: "same-name--opencode", target: { containers: [], port: second.port, protocol: "http" } },
+    { host: "127.0.0.1", port: second.port, protocol: "http", fingerprint: "owned-1" }, claims[1]!.ingressId!, "approved",
+    /-permalink-([a-f0-9-]{36})\./.exec(claims[1]!.permalinkAuthority!)![1]!, undefined, claims[1]!.authority);
+  expect(repeated.route.authority).toBe(claims[1]!.authority);
+  expect((await get(service.publicOrigin, claims[0]!.authority)).status).toBe(404);
   const managementPort = Number(new URL(service.managementOrigin).port);
   await service.close();
   service = await startExternalUrlIngress({ ...config, managementListen: { host: "127.0.0.1", port: managementPort } }, new AbortController().signal);

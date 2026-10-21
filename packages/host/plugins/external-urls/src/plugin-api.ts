@@ -16,7 +16,8 @@ export interface ExternalUrlIngressRuntime {
   /** A shared ingress relays only already-authorized local route identities. */
   readonly publishRoute?: (route: ExternalRoute) => Promise<void>;
   readonly revokeRoute?: (route: ExternalRoute) => Promise<void>;
-  readonly scopeSubdomain?: (subdomain: string, workspaceId: string) => string;
+  /** Deterministic alternate label used only when the requested name is already owned. */
+  readonly fallbackSubdomain?: (subdomain: string, workspaceId: string) => string;
   close?(): Promise<void>;
   initialize?(runtime: ControllerRuntimeContext, name: string): Promise<void>;
 }

@@ -2,7 +2,7 @@
 /** @typedef {{name:string,id:string,phase:string}} Workspace */
 /** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'>}} Controller */
 /** @typedef {{operations:Array<{name:string}>,invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean,workspace:{hostId:string,name:string,id:string,phase:string}}} Context */
-/** @typedef {{state:'running'|'stopped',port:number,url:string,username:string,credentialsFile:string,logFile:string,externalUrls?:Array<{url:string,ingress:string,approval:string}>,externalUrlsAvailable?:boolean}} Server */
+/** @typedef {{state:'running'|'stopped',port:number,url:string,username:string,credentialsFile:string,logFile:string,externalUrls?:Array<{url:string,permalink?:string,ingress:string,approval:string}>,externalUrlsAvailable?:boolean}} Server */
 /** @param {string} tag @param {string} [text] */
 function element(tag, text = '') { const node = document.createElement(tag); node.textContent = text; return node; }
 /** @param {HTMLElement} container @param {Context} context */
@@ -54,9 +54,15 @@ export function mount(container, context) {
       if (publicRoutes.length) {
         server.append(element('p', value.state === 'running' ? 'External server URLs:' : 'Configured external URLs (server stopped):'));
         for (const route of publicRoutes) {
-          if (value.state === 'running') {
-            const routeLink = document.createElement('a'); routeLink.href = route.url; routeLink.target = '_blank'; routeLink.rel = 'noopener noreferrer'; routeLink.textContent = route.url; server.append(routeLink);
-          } else server.append(element('p', route.url));
+          /** @type {Array<[string,string]>} */ const addresses = [['Service URL', route.url]];
+          if (route.permalink) addresses.push(['Permanent URL', route.permalink]);
+          for (const [label, address] of addresses) {
+            const row = element('p', `${label}: `);
+            if (value.state === 'running') {
+              const routeLink = document.createElement('a'); routeLink.href = address; routeLink.target = '_blank'; routeLink.rel = 'noopener noreferrer'; routeLink.textContent = address; row.append(routeLink);
+            } else row.append(document.createTextNode(address));
+            server.append(row);
+          }
         }
       } else server.append(element('p', value.externalUrlsAvailable === false ? 'External route status unavailable. Refresh status or inspect External routes for this workspace.' : 'No approved external URL. Create a route for this server port in External routes, then refresh status.'));
       server.append(element('p', `Username: ${value.username}.`));

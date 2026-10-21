@@ -11,6 +11,8 @@ export function workspaceServiceSubdomain(workspaceName: string, serviceName: st
   if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(serviceName)) {
     throw new RangeError("service name must be a lowercase DNS label");
   }
+  const readable = `${workspaceName}--${serviceName}`;
+  if (/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(workspaceName) && !workspaceName.includes("--") && readable.length <= 63) return readable;
   const identity = createHash("sha256").update(workspaceName).digest("hex").slice(0, 16);
   const suffix = `-${identity}--${serviceName}`;
   const maximumWorkspaceLength = 63 - suffix.length;
@@ -23,11 +25,9 @@ export function workspaceServiceSubdomain(workspaceName: string, serviceName: st
 /** Check the canonical label without assuming a particular service or delimiter-free name. */
 export function isWorkspaceServiceSubdomain(workspaceName: string, label: string): boolean {
   if (label.length > 63) return false;
-  const identity = createHash("sha256").update(workspaceName).digest("hex").slice(0, 16);
-  const delimiter = `-${identity}--`;
-  for (let index = label.indexOf(delimiter); index >= 0; index = label.indexOf(delimiter, index + 1)) {
+  for (let index = label.indexOf("--"); index >= 0; index = label.indexOf("--", index + 1)) {
     try {
-      if (workspaceServiceSubdomain(workspaceName, label.slice(index + delimiter.length)) === label) return true;
+      if (workspaceServiceSubdomain(workspaceName, label.slice(index + 2)) === label) return true;
     } catch { /* Invalid labels do not select a service. */ }
   }
   return false;

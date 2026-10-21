@@ -18,7 +18,10 @@ it("keeps identity, response shape and route URLs within the host-owned contract
   const runtime = await webPlugin.autoConnect!({controllers:[{id:"local",async run(){return {...result,workspaceId:"27094660-a627-4a17-acd2-6418c0b79967"};}}]});
   await expect(runtime.invoke("routes.list",selection)).rejects.toThrow("identity");
   const operation = operations.find(({name})=>name==="routes.list")!;
+  const withPermanent = { ...result, routes: [{ ...result.routes[0], permalink: "https://permanent.example.test/routes/37094660-a627-4a17-acd2-6418c0b79967" }] };
+  expect(operation.parseOutput(withPermanent)).toEqual(withPermanent);
   for (const url of ["javascript:alert(1)","https://secret:password@example.test/","file:///etc/passwd"]) expect(()=>operation.parseOutput({...result,routes:[{...result.routes[0],url}]})).toThrow();
+  expect(()=>operation.parseOutput({...result,routes:[{...result.routes[0],permalink:"https://secret:password@example.test/"}]})).toThrow();
   expect(()=>operation.parseOutput({...result,credentials:"private"})).toThrow();
   expect(operations.filter(({access})=>access==="operator").map(({name})=>name)).toEqual(["routes.create","routes.approve","routes.revoke"]);
 });

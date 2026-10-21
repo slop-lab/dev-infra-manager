@@ -43,8 +43,13 @@ export function mount(container, context) {
     for (const route of snapshot.routes) {
       const item = node('section'); item.className = 'panel feature-form'; item.append(node('p',`${route.ingress}: port ${route.port} · ${route.approval}`));
       if (route.approval === 'approved' || route.approval === 'not-required') {
-        const address = route.permalink ?? route.url;
-        try { const url = new URL(address); if (['http:','https:'].includes(url.protocol) && !url.username && !url.password) { const link = document.createElement('a'); link.href = address; link.textContent = address; link.target = '_blank'; link.rel = 'noopener noreferrer'; item.append(link); } else item.append(node('code',address)); } catch { item.append(node('p','Route address unavailable.')); }
+        /** @type {Array<[string,string]>} */ const addresses = [['Service URL',route.url]];
+        if (route.permalink) addresses.push(['Permanent URL',route.permalink]);
+        for (const [label,address] of addresses) {
+          const row = node('p',`${label}: `);
+          try { const url = new URL(address); if (['http:','https:'].includes(url.protocol) && !url.username && !url.password) { const link = document.createElement('a'); link.href = address; link.textContent = address; link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link); } else row.append(node('code',address)); } catch { row.append(node('span','Route address unavailable.')); }
+          item.append(row);
+        }
       } else item.append(node('p',route.approval === 'pending' ? 'Awaiting operator approval. This route is not available yet.' : 'This route has been revoked.'));
       if (route.approval === 'pending' && allowed.has('routes.approve')) action(item,'Approve route',()=>run('routes.approve',{id:route.id}));
       if (route.approval !== 'revoked' && allowed.has('routes.revoke')) action(item,'Revoke route',()=>run('routes.revoke',{id:route.id}));

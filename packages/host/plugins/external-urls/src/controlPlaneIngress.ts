@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ExternalRouteConflictError } from "./httpRouteRegistry.js";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
@@ -49,7 +50,7 @@ export const controlPlaneIngressDriver: ExternalUrlIngressDriver = {
     return {
       scheme, domain: connection.domain, listenHost: parsed.listenHost, listenPort: parsed.listenPort,
       ...(parsed.publicPort === undefined ? {} : { port: parsed.publicPort }),
-      scopeSubdomain(subdomain, workspaceId) {
+      fallbackSubdomain(subdomain, workspaceId) {
         if (subdomain.includes(".")) throw new UserError("control-plane ingress requires a single DNS label under its shared wildcard domain");
         const suffix = `-${createHash("sha256").update(`${connection.hostId}\0${workspaceId}\0${subdomain}`).digest("hex").slice(0, 16)}`;
         return `${subdomain.slice(0, 63 - suffix.length).replace(/-+$/g, "")}${suffix}`;
@@ -108,7 +109,7 @@ async function request(connection: Connection, method: string, path: string, bod
       authorization: `Bearer ${connection.token}`, "x-dim-host-id": connection.hostId, ...(body === undefined ? {} : { "content-type": "application/json" })
     }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   } catch { throw new UserError("control-plane ingress is unreachable; check the private host connection"); }
-  if (!response.ok) { await response.body?.cancel(); throw new UserError(response.status === 409 ? "external URL is already claimed by another host or workspace" : "control-plane ingress rejected the host request"); }
+  if (!response.ok) { await response.body?.cancel(); if (response.status === 409) throw new ExternalRouteConflictError("external URL is already claimed by another host or workspace"); throw new UserError("control-plane ingress rejected the host request"); }
   // This endpoint returns only fixed bounded protocol data, never an upstream response.
   const chunks: Uint8Array[] = []; let size = 0;
   if (response.body) for await (const chunk of response.body) { size += chunk.byteLength; if (size > 4096) throw new UserError("invalid control-plane ingress response"); chunks.push(chunk); }

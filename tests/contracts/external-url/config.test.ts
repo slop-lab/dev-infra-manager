@@ -76,16 +76,19 @@ describe("external URL config", () => {
     }
   });
 
-  it("bounds a maximum-length workspace service label", () => {
+  it("keeps DNS-safe workspace service labels readable", () => {
     // Given: the longest valid lifecycle workspace name.
     const workspaceName = `work-${"x".repeat(43)}`;
 
     // When: its service label is generated.
     const label = workspaceServiceSubdomain(workspaceName, "opencode");
 
-    // Then: the identity hash is retained inside one DNS label.
-    expect(label).toHaveLength(63);
-    expect(label).toMatch(/-[0-9a-f]{16}--opencode$/);
+    // Then: no identity suffix is needed when the readable label fits.
+    expect(label).toBe(`${workspaceName}--opencode`);
+    expect(workspaceServiceSubdomain("dim-1", "opencode")).toBe("dim-1--opencode");
+    const longLabel = workspaceServiceSubdomain(workspaceName, "preview-with-a-long-service-name");
+    expect(longLabel).toHaveLength(63);
+    expect(longLabel).toMatch(/-[0-9a-f]{16}--preview-with-a-long-service-name$/);
   });
 
   it("rejects a service name with a trailing hyphen", () => {

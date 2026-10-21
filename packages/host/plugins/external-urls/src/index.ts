@@ -40,7 +40,7 @@ export { TcpIngressListener } from "./tcpIngress.js";
 export interface ExternalUrlIngressOptions {
   publishRoute?: (route: ExternalRoute) => Promise<void>;
   revokeRoute?: (route: ExternalRoute) => Promise<void>;
-  scopeSubdomain?: (subdomain: string, workspaceId: string) => string;
+  fallbackSubdomain?: (subdomain: string, workspaceId: string) => string;
   description: string;
   scheme: "http" | "https" | "tcp";
   domain: string;
@@ -72,7 +72,8 @@ interface IngressListener {
     routeId?: string,
     approval?: ExternalUrlApproval,
     publicRouteId?: string,
-    resolve?: () => Promise<ResolvedWorkspaceTarget>
+    resolve?: () => Promise<ResolvedWorkspaceTarget>,
+    preferredAuthority?: string
   ): Promise<{ readonly route: ExternalRoute; readonly acquired: boolean }>;
   revoke(route: ExternalRoute): Promise<void>;
   setApproval(route: ExternalRoute, enabled: boolean): void;
@@ -144,7 +145,7 @@ export function createExternalUrlsPlugin(configuration: ExternalUrlsPluginOption
                     domain: ingress.domain,
                     ...(ingress.publishRoute === undefined ? {} : { publishRoute: ingress.publishRoute }),
                     ...(ingress.revokeRoute === undefined ? {} : { revokeRoute: ingress.revokeRoute }),
-                    ...(ingress.scopeSubdomain === undefined ? {} : { scopeSubdomain: ingress.scopeSubdomain }),
+                    ...(ingress.fallbackSubdomain === undefined ? {} : { fallbackSubdomain: ingress.fallbackSubdomain }),
                     ...(ingress.routePolicy === undefined ? {} : { routePolicy: ingress.routePolicy }),
                     ...(ingress.port === undefined ? {} : { port: ingress.port })
                   }, host.logger)
@@ -473,7 +474,8 @@ async function reconcileStoredRoute(
     current.route.ingressId ?? current.id,
     current.approval,
     current.subdomain === undefined ? undefined : current.id,
-    () => context.resolveTarget(current.target)
+    () => context.resolveTarget(current.target),
+    policyChanged ? undefined : current.route.authority
   );
   if (!policyChanged && !missingPermalink) {
     if (reconciled.route.authority === current.route.authority

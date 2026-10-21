@@ -6,7 +6,7 @@ import tls from "node:tls";
 import { UserError } from "@slop-lab/dim-host-core";
 import { type ControllerWorkspace, type DimPluginLogger, type ResolvedWorkspaceTarget, type WorkspaceTarget } from "@slop-lab/dim-host-core/controller";
 import { HttpFlowTracker, type HttpFlow } from "./httpFlows.js";
-import { WorkspaceRouteRegistry } from "./httpRouteRegistry.js";
+import { ExternalRouteConflictError, WorkspaceRouteRegistry } from "./httpRouteRegistry.js";
 import {
   applyRoutePolicy,
   workspacePermalinkSubdomain,
@@ -32,7 +32,7 @@ export interface HttpIngressOptions {
   readonly authorizeWorkspace?: (workspace: ControllerWorkspace) => Promise<void>;
   readonly publishRoute?: (route: ExternalRoute) => Promise<void>;
   readonly revokeRoute?: (route: ExternalRoute) => Promise<void>;
-  readonly scopeSubdomain?: (subdomain: string, workspaceId: string) => string;
+  readonly fallbackSubdomain?: (subdomain: string, workspaceId: string) => string;
 }
 
 export class WorkspaceIngressListener {
@@ -81,10 +81,11 @@ export class WorkspaceIngressListener {
     workspace: ControllerWorkspace,
     request: HttpIngressRequest,
     upstream: ResolvedWorkspaceTarget | undefined,
-    routeId = randomUUID(),
+    routeId: string = randomUUID(),
     approval: ExternalUrlApproval = "not-required",
     publicRouteId?: string,
-    resolve?: () => Promise<ResolvedWorkspaceTarget>
+    resolve?: () => Promise<ResolvedWorkspaceTarget>,
+    preferredAuthority?: string
   ) {
     await this.#ready;
     if (!upstream && !resolve) throw new UserError("external route requires an authoritative target resolver");
@@ -95,7 +96,24 @@ export class WorkspaceIngressListener {
       requestedSubdomain: request.subdomain,
       domain: normalizeDomain(this.#domain)
     });
-    const subdomain = this.#options.scopeSubdomain?.(approvedSubdomain, workspace.id) ?? approvedSubdomain;
+    const fallback = this.#options.fallbackSubdomain?.(approvedSubdomain, workspace.id);
+    const candidates = [...new Set([approvedSubdomain, ...(fallback ? [fallback] : [])])];
+    // Reconcile the exact saved name: an alternate must not silently become the short name later.
+    const preferred = candidates.find((candidate) => `${candidate}.${normalizeDomain(this.#domain)}` === preferredAuthority);
+    const subdomains = preferred ? [preferred] : candidates;
+    for (const [index, subdomain] of subdomains.entries()) {
+      try {
+        return await this.#provision(workspace, request, upstream, routeId, approval, publicRouteId, resolve, subdomain);
+      } catch (error) {
+        if (!(error instanceof ExternalRouteConflictError) || index === subdomains.length - 1) throw error;
+      }
+    }
+    throw new Error("external route has no candidate subdomain");
+  }
+
+  async #provision(workspace: ControllerWorkspace, request: HttpIngressRequest, upstream: ResolvedWorkspaceTarget | undefined,
+    routeId: string, approval: ExternalUrlApproval, publicRouteId: string | undefined,
+    resolve: (() => Promise<ResolvedWorkspaceTarget>) | undefined, subdomain: string) {
     validateSubdomain(subdomain);
     const authority = `${subdomain}.${normalizeDomain(this.#domain)}`;
     const permalinkAuthority = publicRouteId === undefined

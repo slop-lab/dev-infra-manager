@@ -161,7 +161,9 @@ is implied by these source changes.
   appear inside each workspace management row, discover selected controllers,
   install pinned OpenCode/Codex explicitly and
   start, inspect or stop owned OpenCode servers without repository setup.
-  Show running state and approved public URLs, and let operators explicitly copy
+  Show running state, readable service URLs and separate permanent URLs. Use
+  host/workspace suffixes only for shared-name collisions, preserving assigned
+  names on reconciliation. Let operators explicitly copy
   or change the private server password without putting secrets in command arguments. Create, explicitly approve and revoke External URLs routes
   in the same workspace row. Share one control-plane wildcard ingress across
   multiple workspace hosts with authenticated host claims, expiring leases and

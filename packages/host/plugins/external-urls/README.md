@@ -59,6 +59,12 @@ dim external-url request \
 dim external-url list --workspace feature-123
 ```
 
+Named services use readable labels such as `dim-1--opencode` when the workspace
+name is DNS-safe and the full label fits. Normalized or shortened workspace
+names retain an identity suffix to avoid spelling collisions. Shared ingress
+adds a host/workspace suffix only when another route already owns the name;
+assigned alternate names remain stable on reconciliation.
+
 HTTP and HTTPS requests return both a policy-selected `url` and a stable
 `permalink`. The permalink authority has the form
 `WORKSPACE-permalink-ROUTE_ID.DOMAIN`; it keeps the same route ID when a
@@ -196,5 +202,6 @@ and approval checks. Failed initialization closes newly opened URL listeners.
 
 The default route policy accepts the authenticated workspace prefix or an exact
 `workspaceServiceSubdomain(workspaceName, serviceName)` label for any valid service.
-The latter includes the workspace identity hash and does not reserve a particular
-coding-agent name.
+This shared naming function is used by Web and workspace helpers alike; it
+adds an identity hash only when normalization or shortening needs it, and does
+not reserve a particular coding-agent name.

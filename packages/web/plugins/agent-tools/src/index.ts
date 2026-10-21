@@ -13,7 +13,7 @@ const publicUrl = z.string().max(4096).refine((value) => {
   try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !!url.hostname && !url.username && !url.password; } catch { return false; }
 });
 const approval = z.enum(["not-required", "pending", "approved", "revoked"]);
-const externalUrl = z.object({ url: publicUrl, ingress: controllerId, approval }).strict();
+const externalUrl = z.object({ url: publicUrl, permalink: publicUrl.optional(), ingress: controllerId, approval }).strict();
 const credentials = selection.extend({ username: z.string().min(1).max(128), password });
 const routes = selection.extend({
   ingresses: z.array(z.object({ name: controllerId, description: z.string().max(2000), scheme: z.enum(["http", "https", "tcp"]), driver: z.string().max(128) }).strict()).max(128),
@@ -79,7 +79,7 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
       const snapshot = routes.parse(await controller.run(["external-url", "console", "invoke", "routes.list", "--input", JSON.stringify(identity)], { timeoutMilliseconds: 30_000 }));
       if (snapshot.workspace !== identity.workspace || snapshot.workspaceId !== identity.workspaceId) throw new Error("External routes returned another workspace identity");
       const externalUrls = snapshot.routes.filter((route) => route.port === status.port && route.containers.length === 0 && route.protocol !== "tcp")
-        .map((route) => externalUrl.parse({ url: route.permalink ?? route.url, ingress: route.ingress, approval: route.approval }));
+        .map((route) => externalUrl.parse({ url: route.url, ...(route.permalink ? { permalink: route.permalink } : {}), ingress: route.ingress, approval: route.approval }));
       return serverStatus.parse({ ...status, externalUrls, externalUrlsAvailable: true });
     } catch { return serverStatus.parse({ ...status, externalUrls: [], externalUrlsAvailable: false }); }
   } };

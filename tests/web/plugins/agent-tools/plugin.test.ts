@@ -61,7 +61,7 @@ it("sends passwords on stdin only and resolves public URLs from matching workspa
     if (args[2] === "describe") return description;
     if (args[0] === "external-url") return { workspace: "development", workspaceId: returnedId,
       ingresses: [{ name: "shared", description: "Control-plane ingress", scheme: "https", driver: "control-plane" }], routes: [
-      { id: "11111111-1111-4111-8111-111111111111", ingress: "shared", url: "https://public.example.test:8443/opencode", approval: "approved", port: 4096, containers: [], protocol: "http" },
+      { id: "11111111-1111-4111-8111-111111111111", ingress: "shared", url: "https://public.example.test:8443/opencode", permalink: "https://permanent.example.test/route/11111111-1111-4111-8111-111111111111", approval: "approved", port: 4096, containers: [], protocol: "http" },
       { id: "22222222-2222-4222-8222-222222222222", ingress: "shared", url: "https://public.example.test/other", approval: "approved", port: 8080, containers: [], protocol: "http" },
       { id: "33333333-3333-4333-8333-333333333333", ingress: "shared", url: "https://public.example.test/agent", approval: "approved", port: 4096, containers: ["agent"], protocol: "http" },
     ] };
@@ -73,7 +73,7 @@ it("sends passwords on stdin only and resolves public URLs from matching workspa
   expect(write.args).toEqual(["tools", "console", "invoke", "server.password", "--input-stdin"]);
   expect(JSON.parse(write.input!)).toEqual({ workspace: "development", workspaceId, password: secret });
   expect(calls.every(({ args }) => !args.join(" ").includes(secret))).toBe(true);
-  expect(status).toMatchObject({ externalUrls: [{ ingress: "shared", url: "https://public.example.test:8443/opencode", approval: "approved" }], externalUrlsAvailable: true });
+  expect(status).toMatchObject({ externalUrls: [{ ingress: "shared", url: "https://public.example.test:8443/opencode", permalink: "https://permanent.example.test/route/11111111-1111-4111-8111-111111111111", approval: "approved" }], externalUrlsAvailable: true });
   expect(await runtime.invoke("server.credentials", selection)).toMatchObject({ password: secret });
   returnedId = "27094660-a627-4a17-acd2-6418c0b79967";
   expect(await runtime.invoke("server.status", selection)).toMatchObject({ state: "running", externalUrls: [], externalUrlsAvailable: false });

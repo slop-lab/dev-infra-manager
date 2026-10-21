@@ -32,7 +32,7 @@ it("creates a named workspace route with an exact grant and returns its accepted
   const request = vi.fn(async () => ({ urls: [route] })), approve = vi.fn();
   const result = await invokeExternalUrlConsole("routes.create", { workspace: workspace.name, workspaceId: workspace.id, ingress: "local", name: "opencode", port: 4096 }, context, { request, approve });
   expect(request).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: workspace.id }), "/api/urls", { method: "POST", body: {
-    ingress: "local", subdomain: expect.stringMatching(/^work-a-[a-f0-9]{16}--opencode$/), target: { containers: [], port: 4096, protocol: "http" }
+    ingress: "local", subdomain: "work-a--opencode", target: { containers: [], port: 4096, protocol: "http" }
   } }, context.signal);
   expect(result.routes).toEqual([{ id: route.id, ingress: "local", url: route.url, approval: "pending", port: 4096, containers: [], protocol: "http" }]);
   expect(approve).not.toHaveBeenCalled(); expect(JSON.stringify(result)).not.toContain("PRIVATE");
