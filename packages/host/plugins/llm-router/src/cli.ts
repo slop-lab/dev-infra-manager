@@ -11,11 +11,11 @@ import { createAttachment, createHostGateway, lockWorkspaceAttachment } from "./
 
 const usage = `dim llm prepare DIRECTORY --control-plane ORIGIN --issuer ID --issuer-key-file FILE --endpoint GUEST_REACHABLE_ORIGIN [--listen-host IP] [--port PORT]
   dim llm serve|status CONFIG
-  dim llm attach WORKSPACE --config CONFIG --project PROJECT [--route ID] [--model ID]`;
+  dim llm attach WORKSPACE --config CONFIG --project PROJECT [--route ID]`;
 export async function runLlmCommand(args: string[], context: WorkspaceHostPluginContext): Promise<void> {
   const [command, action, positional, ...tail] = args;
   if (command !== "llm" || !action || !positional || positional.startsWith("-")) throw new Error(usage);
-  const flags = new Map<string, string>(), allowed = new Set(["--control-plane", "--issuer", "--issuer-key-file", "--endpoint", "--listen-host", "--port", "--config", "--project", "--route", "--model"]);
+  const flags = new Map<string, string>(), allowed = new Set(["--control-plane", "--issuer", "--issuer-key-file", "--endpoint", "--listen-host", "--port", "--config", "--project", "--route"]);
   for (let index = 0; index < tail.length; index += 2) {
     const name = tail[index], value = tail[index + 1];
     if (!name || !allowed.has(name) || !value || flags.has(name)) throw new Error(usage); flags.set(name, value);
@@ -46,13 +46,11 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
   if (!guard) throw new Error("another LLM attachment is running for this workspace; retry after it finishes");
   try {
   const issued = await issuePrincipal(config.connection, scope, context.signal);
-  const selectedModel = issued.models.find(({ id }) => id === (flags.get("--model") ?? issued.models[0]?.id));
-  if (!selectedModel) { await revokePrincipal(config.connection, scope, context.signal); throw new Error("attachment default model must belong to the selected route"); }
   let attachment: Awaited<ReturnType<typeof createAttachment>> | undefined;
   try {
     attachment = await createAttachment(config, scope, issued);
     const connection = { schemaVersion: 1, workspaceId: workspace.id, projectId: scope.projectId, principalId: issued.principalId,
-      endpoint: config.publicEndpoint, token: attachment.token, models: issued.models, defaultModel: selectedModel.id };
+      endpoint: config.publicEndpoint, token: attachment.token };
     await deployRouterHelpers(workspace, context);
     // Credentials are committed only after every public helper asset succeeds.
     await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
@@ -66,7 +64,6 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     await attachment?.remove();
     await revokePrincipal(config.connection, scope, AbortSignal.timeout(5000)); throw error;
   }
-  const provider = selectedModel.api === "responses" ? "openai" : "dim-chat";
-  console.log(`Attached project '${scope.projectId}' route '${scope.routeId}' to ${workspace.name}; unset OpenCode models default to ${provider}/${selectedModel.id}. OMO role choices are preserved. Rerun dim tools server to refresh an existing server.`);
+  console.log(`Attached project '${scope.projectId}' route '${scope.routeId}' to ${workspace.name}; OpenCode and OMO keep their own model choices. Rerun dim tools server to refresh an existing server.`);
   } finally { await guard.release(); }
 }

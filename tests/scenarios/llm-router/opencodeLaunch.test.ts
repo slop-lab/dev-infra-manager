@@ -12,7 +12,7 @@ async function fixture() {
   vi.stubEnv("HOME", home); vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "router");
   vi.stubEnv("OPENCODE_CONFIG_CONTENT", '{"permission":{"bash":"ask"},"model":"explicit/original"}');
   const connection = join(home, "connection.json"); vi.stubEnv("DIM_LLM_ROUTER_CONNECTION_FILE", connection);
-  await writeFile(connection, JSON.stringify({ schemaVersion: 1, defaultModel: "reviewed", models: [{ id: "reviewed", api: "responses" }] }), { mode: 0o600 });
+  await writeFile(connection, JSON.stringify({ schemaVersion: 1 }), { mode: 0o600 });
   await mkdir(join(home, ".omo")); await mkdir(join(home, ".local/lib/node_modules"), { recursive: true });
   const require = createRequire(import.meta.url);
   await symlink(dirname(require.resolve("jsonc-parser/package.json")), join(home, ".local/lib/node_modules/jsonc-parser"));

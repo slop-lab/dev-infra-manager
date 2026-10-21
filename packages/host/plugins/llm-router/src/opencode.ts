@@ -58,14 +58,10 @@ async function DimLlmRouter() {
   if (url.origin !== connection.endpoint || !["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("invalid DIM LLM endpoint");
   const mode = process.env.DIM_LLM_ROUTER_OPENCODE_MODE ?? "router";
   if (mode !== "router" && mode !== "providers") throw new Error("DIM_LLM_ROUTER_OPENCODE_MODE must be router or providers");
-  // The attachment stores the default selection, while the authenticated route
-  // owns its current catalogue. Restarting OpenCode picks up newly allowed models
-  // without rotating the workspace credential or attaching the workspace again.
+  // The route owns the current catalogue; OpenCode and OMO own model choices.
+  // Restarting OpenCode picks up newly allowed models without reattachment.
   const models = await routeModels(connection.endpoint, connection.token);
   const modelsById = new Map(models.map((model) => [model.id, model]));
-  const selected = models.find((model) => model.id === connection.defaultModel) ?? models[0];
-  if (!selected || connection.defaultModel !== undefined && selected.id !== connection.defaultModel) throw new Error("DIM default model is not in the attached route");
-  const selection = `dim-${selected.api}/${selected.id}`;
   return { async "chat.params"(input: unknown, output?: unknown): Promise<void> {
     if (mode === "providers") return;
     const model = record(record(input).model);
@@ -126,9 +122,6 @@ async function DimLlmRouter() {
           return [id, { ...existing, ...(id === model.id ? {} : { id: model.id }), name: id === model.id ? model.name : `${id} (via ${model.id})`, options: { ...modelOptions, store: false },
             limit: existing.limit ?? { context: model.context, output: model.output } }];
         })) };
-      const defaultSelection = selected.api === "responses" ? `openai/${selected.id}` : selection;
-      config.model ??= defaultSelection;
-      config.small_model ??= defaultSelection;
     }
   } };
 }

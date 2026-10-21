@@ -17,11 +17,10 @@ async function fixture() {
   vi.stubEnv("DIM_LLM_ROUTER_CONNECTION_FILE", connection);
   vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "router");
   const token = "x".repeat(43);
-  await writeFile(connection, JSON.stringify({ schemaVersion: 1, endpoint: "http://127.0.0.1:8319", token,
-    defaultModel: reviewed.id, models: [reviewed] }));
+  await writeFile(connection, JSON.stringify({ schemaVersion: 1, endpoint: "http://127.0.0.1:8319", token }));
   return { token };
 }
-it("uses the authenticated current route catalogue instead of the attachment snapshot, retaining the selected default", async () => {
+it("uses the authenticated current route catalogue without selecting main or background models", async () => {
   const { token } = await fixture();
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ models: [added, reviewed] }));
   vi.stubGlobal("fetch", fetcher);
@@ -31,17 +30,20 @@ it("uses the authenticated current route catalogue instead of the attachment sna
   });
   const config: Record<string, unknown> = {};
   await hooks.config(config);
-  expect(config).toMatchObject({ model: "openai/reviewed", small_model: "openai/reviewed", provider: {
+  expect(config).toMatchObject({ provider: {
     "dim-chat": { models: { added: { name: "Added", limit: { context: 64000, output: 8000 } } } },
     "dim-responses": { models: { reviewed: { name: "Reviewed" } } }
   } });
+  expect(config).not.toHaveProperty("model");
+  expect(config).not.toHaveProperty("small_model");
   await expect(hooks["chat.params"]({ model: { providerID: "dim-chat", id: "added" } })).resolves.toBeUndefined();
   await expect(hooks["chat.params"]({ model: { providerID: "dim-responses", id: "unlisted" } })).rejects.toThrow(/unavailable/);
   // A subsequent OpenCode initialization observes route changes without writing
   // the connection file or rotating the scoped workspace credential.
-  fetcher.mockResolvedValueOnce(Response.json({ models: [reviewed] }));
+  fetcher.mockResolvedValueOnce(Response.json({ models: [added] }));
   const refreshed = await DimLlmRouter();
-  await expect(refreshed["chat.params"]({ model: { providerID: "dim-chat", id: "added" } })).rejects.toThrow(/unavailable/);
+  await expect(refreshed["chat.params"]({ model: { providerID: "dim-chat", id: "added" } })).resolves.toBeUndefined();
+  await expect(refreshed["chat.params"]({ model: { providerID: "dim-responses", id: "reviewed" } })).rejects.toThrow(/unavailable/);
 });
 it("fails clearly when discovery is unavailable rather than allowing the stale snapshot", async () => {
   await fixture();
@@ -54,8 +56,8 @@ it("fails clearly when discovery is unavailable rather than allowing the stale s
   await expect(DimLlmRouter()).rejects.toThrow(/size limit/);
 });
 it.each([
-  [], [added], [reviewed, reviewed], [{ ...reviewed, api: "image" }], [{ ...reviewed, output: 0 }]
-])("rejects invalid catalogues and removal of the configured default (%j)", async (...models) => {
+  [], [reviewed, reviewed], [{ ...reviewed, api: "image" }], [{ ...reviewed, output: 0 }]
+])("rejects invalid catalogues (%j)", async (...models) => {
   await fixture();
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json({ models })));
   await expect(DimLlmRouter()).rejects.toThrow(/DIM/);

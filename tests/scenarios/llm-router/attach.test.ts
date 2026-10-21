@@ -83,6 +83,8 @@ it("attaches a local-only guest credential and forwards through independently co
   expect(f.cp.ledger.authenticate(f.token)).toBeUndefined();
   expect(JSON.stringify(f.connection)).not.toContain(f.backendKey); expect(JSON.stringify(f.connection)).not.toContain(f.issuerKey);
   expect((await fetch(f.cpOrigin + "/v1/models", { headers: { authorization: `Bearer ${f.token}` } })).status).toBe(401);
+  expect(f.connection).not.toHaveProperty("defaultModel");
+  expect(f.connection).not.toHaveProperty("models");
   const connectionPath = f.connectionPath, adapterPath = join(f.home, ".config/opencode/plugins/dim-llm-router.js");
   const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `
     const {default: plugin} = await import(process.env.DIM_TEST_ADAPTER);
@@ -91,7 +93,7 @@ it("attaches a local-only guest credential and forwards through independently co
     await hooks.config(config);
     if (config.theme !== "preserved" || config.provider.existing.name !== "keep") throw Error("unrelated configuration changed");
     if (config.provider["dim-responses"].npm !== "@ai-sdk/openai") throw Error("wrong wire protocol");
-    if (config.model !== "openai/reviewed-model" || config.small_model !== config.model) throw Error("router was not selected by default");
+    if (config.model !== undefined || config.small_model !== undefined) throw Error("routing must not select models");
     const generated={provider:{},agent:{Sisyphus:{model:"anthropic/paid",variant:"max"},custom:{prompt:"keep"}}};
     await hooks.config(generated);
     if(generated.agent.Sisyphus.model!=="anthropic/paid"||generated.agent.Sisyphus.variant!=="max"||generated.agent.custom.model!==undefined)throw Error("role model or variant changed");
@@ -209,7 +211,7 @@ it("honors an in-HOME XDG config root and rejects an outside-HOME replacement be
   const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `
     const {default: factory}=await import(process.env.DIM_TEST_ADAPTER);
     const hook=await factory(),config={};await hook.config(config);
-    if(config.model!=="openai/reviewed-model")throw Error("custom XDG router not selected");
+    if(config.model!==undefined||!config.provider.openai)throw Error("custom XDG router must preserve model choice");
     console.log("custom-xdg-router-ready");
   `], { encoding: "utf8", env: { ...f.guestEnvironment, DIM_TEST_ADAPTER: pathToFileURL(adapter).href } });
   expect(result.stdout.trim()).toBe("custom-xdg-router-ready");

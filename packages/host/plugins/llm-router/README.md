@@ -36,9 +36,9 @@ fast-tier execution. Other unavailable models fail rather than switching to a
 direct OpenAI connection. The OpenAI SDK's transport also uses the gateway when
 an existing OpenCode authentication plugin is installed.
 
-An unset main or small/background model defaults to the attachment's selected
-model (`--model ID`, otherwise the route's first model). Explicit OpenCode model
-choices and agent overrides remain unchanged. Responses requests use
+Main, small/background and role-specific model choices belong to OpenCode and
+OMO. Attachment installs only routing credentials and helpers; it neither selects
+a default model nor changes user model choices. Responses requests use
 `store:false` and full message history, not provider-side continuation identifiers.
 The adapter also registers `dim-responses/*` and `dim-chat/*` for explicit route
 selection. Existing DIM-owned provider ID conflicts are rejected.
@@ -49,7 +49,7 @@ exact saved ownership metadata matches; user edits and other profiles survive.
 No upstream key or host plugin is installed in the guest. To retain direct OpenAI
 provider connections too, set `DIM_LLM_ROUTER_OPENCODE_MODE=providers` when
 launching OpenCode/helpers. This registers the DIM providers without redirecting
-`openai` or supplying model defaults.
+`openai`.
 
 If attachment/model/token/configuration changes after the owned OpenCode server
 was launched, rerun `dim tools server WORKSPACE`: its private configuration
