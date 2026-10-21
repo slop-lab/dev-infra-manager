@@ -66,6 +66,7 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     await attachment?.remove();
     await revokePrincipal(config.connection, scope, AbortSignal.timeout(5000)); throw error;
   }
-  console.log(`Attached project '${scope.projectId}' route '${scope.routeId}' to ${workspace.name}; OpenCode defaults to dim-${selectedModel.api}/${selectedModel.id}. Rerun dim tools server to refresh an existing server.`);
+  const provider = selectedModel.api === "responses" ? "openai" : "dim-chat";
+  console.log(`Attached project '${scope.projectId}' route '${scope.routeId}' to ${workspace.name}; unset OpenCode models default to ${provider}/${selectedModel.id}. OMO role choices are preserved. Rerun dim tools server to refresh an existing server.`);
   } finally { await guard.release(); }
 }

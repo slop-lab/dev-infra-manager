@@ -91,15 +91,16 @@ it("attaches a local-only guest credential and forwards through independently co
     await hooks.config(config);
     if (config.theme !== "preserved" || config.provider.existing.name !== "keep") throw Error("unrelated configuration changed");
     if (config.provider["dim-responses"].npm !== "@ai-sdk/openai") throw Error("wrong wire protocol");
-    if (config.model !== "dim-responses/reviewed-model" || config.small_model !== config.model) throw Error("router was not selected by default");
+    if (config.model !== "openai/reviewed-model" || config.small_model !== config.model) throw Error("router was not selected by default");
     const generated={provider:{},agent:{Sisyphus:{model:"anthropic/paid",variant:"max"},custom:{prompt:"keep"}}};
     await hooks.config(generated);
-    if(Object.values(generated.agent).some(agent=>agent.model!==config.model))throw Error("generated agent escaped router");
-    if(generated.agent.custom.prompt!=="keep"||generated.agent.Sisyphus.variant!==undefined)throw Error("agent configuration damaged");
+    if(generated.agent.Sisyphus.model!=="anthropic/paid"||generated.agent.Sisyphus.variant!=="max"||generated.agent.custom.model!==undefined)throw Error("role model or variant changed");
+    if(generated.agent.custom.prompt!=="keep")throw Error("agent configuration damaged");
     const params={options:{store:true}};
     await hooks["chat.params"]({model:{providerID:"dim-responses",id:"reviewed-model"}},params);
     if(params.options.store!==false)throw Error("stateful Responses enabled");
-    await hooks["chat.params"]({model:{providerID:"anthropic",id:"paid"}}).then(()=>{throw Error("paid fallback accepted")},()=>{});
+    await hooks["chat.params"]({model:{providerID:"anthropic",id:"paid"}});
+    if(config.provider.openai.options.baseURL!==config.provider["dim-responses"].options.baseURL)throw Error("native OpenAI provider escaped router");
     process.env.DIM_LLM_ROUTER_OPENCODE_MODE="providers";
     const independent=await plugin(),explicit={model:"user/model",small_model:"user/small",provider:{},agent:{custom:{model:"user/agent"}}};
     await independent.config(explicit);
@@ -208,7 +209,7 @@ it("honors an in-HOME XDG config root and rejects an outside-HOME replacement be
   const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `
     const {default: factory}=await import(process.env.DIM_TEST_ADAPTER);
     const hook=await factory(),config={};await hook.config(config);
-    if(config.model!=="dim-responses/reviewed-model")throw Error("custom XDG router not selected");
+    if(config.model!=="openai/reviewed-model")throw Error("custom XDG router not selected");
     console.log("custom-xdg-router-ready");
   `], { encoding: "utf8", env: { ...f.guestEnvironment, DIM_TEST_ADAPTER: pathToFileURL(adapter).href } });
   expect(result.stdout.trim()).toBe("custom-xdg-router-ready");

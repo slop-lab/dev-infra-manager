@@ -24,19 +24,28 @@ Attach installs a
 private connection at `~/.config/dim/llm-router.json` and a self-contained
 OpenCode adapter at `~/.config/opencode/plugins/dim-llm-router.js`, preserving
 unrelated configuration files. `dim tools run WORKSPACE opencode`, its saved
-continuation, and `dim tools server WORKSPACE` automatically select the attached
-route's first available model (or attachment `--model ID`). Main, small/background,
-OMO agents and categories use that model; paid-provider fallback is rejected
-before inference. Responses requests use `store:false` and full message history,
-not provider-side continuation identifiers. Conflicting provider IDs are rejected.
+continuation, and `dim tools server WORKSPACE` route the native `openai/*`
+provider through the scoped workspace gateway. OMO's role-specific model names,
+variants, category choices, selected profile and fallback chains stay unchanged.
+Other providers keep their own connections. Only OpenAI models offered by the
+attached route are exposed; unavailable models fail rather than switching to a
+direct OpenAI connection. The OpenAI SDK's transport also uses the gateway when
+an existing OpenCode authentication plugin is installed.
 
-The optional guest launch hook prepares only the DIM-owned `profiles.dim-router`
-namespace in `~/.omo/omo.jsonc`, preserving user comments/base settings and other
-profiles. Existing edits to that reserved profile fail visibly. Helpers select
-that profile at process launch; no upstream key or host plugin is installed in
-the guest. To deliberately retain independent provider/model choices, set
-`DIM_LLM_ROUTER_OPENCODE_MODE=providers` when launching OpenCode/helpers. This
-keeps the provider registrations but does not override models or OMO profiles.
+An unset main or small/background model defaults to the attachment's selected
+model (`--model ID`, otherwise the route's first model). Explicit OpenCode model
+choices and agent overrides remain unchanged. Responses requests use
+`store:false` and full message history, not provider-side continuation identifiers.
+The adapter also registers `dim-responses/*` and `dim-chat/*` for explicit route
+selection. Existing DIM-owned provider ID conflicts are rejected.
+
+The guest launch hook preserves `~/.omo/omo.jsonc`, including comments and model
+chains. It removes only the previously generated `profiles.dim-router` when its
+exact saved ownership metadata matches; user edits and other profiles survive.
+No upstream key or host plugin is installed in the guest. To retain direct OpenAI
+provider connections too, set `DIM_LLM_ROUTER_OPENCODE_MODE=providers` when
+launching OpenCode/helpers. This registers the DIM providers without redirecting
+`openai` or supplying model defaults.
 
 If attachment/model/token/configuration changes after the owned OpenCode server
 was launched, rerun `dim tools server WORKSPACE`: its private configuration

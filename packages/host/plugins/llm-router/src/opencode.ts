@@ -68,10 +68,11 @@ async function DimLlmRouter() {
   return { async "chat.params"(input: unknown, output?: unknown): Promise<void> {
     if (mode === "providers") return;
     const model = record(record(input).model);
-    const allowed = models.find((candidate) => model.providerID === `dim-${candidate.api}` && model.id === candidate.id);
-    if (!allowed) {
-      throw new Error("DIM router mode rejects an unattached model/provider; use DIM_LLM_ROUTER_OPENCODE_MODE=providers to opt out");
-    }
+    const routed = model.providerID === "openai" || model.providerID === "dim-responses" || model.providerID === "dim-chat";
+    if (!routed) return;
+    const allowed = models.find((candidate) => model.id === candidate.id
+      && (model.providerID === `dim-${candidate.api}` || model.providerID === "openai" && candidate.api === "responses"));
+    if (!allowed) throw new Error("DIM router rejects a model unavailable in the attached route");
     if (allowed.api === "responses" && output !== undefined) {
       const parameters = record(output);
       const options = parameters.options === undefined ? {} : record(parameters.options);
@@ -92,15 +93,33 @@ async function DimLlmRouter() {
     }
     config.provider = providers;
     if (mode === "router") {
-      config.model = selection;
-      config.small_model = selection;
-      if (config.agent !== undefined) {
-        for (const value of Object.values(record(config.agent))) {
-          const agent = record(value);
-          agent.model = selection;
-          delete agent.variant;
-        }
-      }
+      // Keep native OpenAI IDs so OMO's role models, variants and fallback chains
+      // continue to work, including choices made after the config hook runs.
+      const openai = providers.openai === undefined ? {} : record(providers.openai);
+      const options = openai.options === undefined ? {} : record(openai.options);
+      const configured = openai.models === undefined ? {} : record(openai.models);
+      const responses = models.filter((model) => model.api === "responses");
+      const endpoint = connection.endpoint;
+      const token = connection.token;
+      const transport: typeof fetch = async (input, init) => {
+        const requestUrl = new URL(input instanceof Request ? input.url : String(input));
+        if (requestUrl.origin !== endpoint || requestUrl.pathname !== "/v1/responses") throw new Error("DIM OpenAI transport requires the attached Responses endpoint");
+        const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+        headers.set("authorization", `Bearer ${token}`);
+        return fetch(input, { ...init, headers, redirect: "error" });
+      };
+      providers.openai = { ...openai, npm: "@ai-sdk/openai", name: "OpenAI via DIM workspace router",
+        whitelist: responses.map(({ id }) => id),
+        options: { ...options, baseURL: `${endpoint}/v1`, apiKey: token, fetch: transport },
+        models: Object.fromEntries(responses.map((model) => {
+          const existing = configured[model.id] === undefined ? {} : record(configured[model.id]);
+          const modelOptions = existing.options === undefined ? {} : record(existing.options);
+          return [model.id, { ...existing, name: model.name, options: { ...modelOptions, store: false },
+            limit: existing.limit ?? { context: model.context, output: model.output } }];
+        })) };
+      const defaultSelection = selected.api === "responses" ? `openai/${selected.id}` : selection;
+      config.model ??= defaultSelection;
+      config.small_model ??= defaultSelection;
     }
   } };
 }

@@ -158,8 +158,9 @@ is implied by these source changes.
   changes apply to new requests without restarting the router. Preserve authentication, request history and account
   attribution across local reinstall. Usage-based account selection remains a
   separate routing feature.
-  Configured workspace OpenCode/OMO
-  helpers use that router by default. Optional workspace Web contributions
+  Configured workspace OpenCode/OMO helpers route `openai/*` through that router
+  while preserving role-specific models, variants, fallback chains and other
+  provider connections; only unset main/background models receive defaults. Optional workspace Web contributions
   appear inside each workspace management row, discover selected controllers,
   install pinned OpenCode/Codex explicitly and
   start, inspect or stop owned OpenCode servers without repository setup.
