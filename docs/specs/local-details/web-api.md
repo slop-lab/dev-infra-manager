@@ -28,20 +28,41 @@ are exact HTTPS or loopback HTTP origins without credentials or paths.
 Configuration contains hashed local accounts with explicit read, operator and
 reviewer roles; optional ordinary host operations; a plugin runtime path; and
 explicit plugin selections `{package,config?}`. No role implies another. A
-selection without config is discoverable as unconfigured and makes no service
-calls. Configured plugins validate private connections during startup, before
+selection without config may use the selected plugin's optional controller
+adapter. Without that adapter or configured controllers it is unconfigured and
+makes no service calls. Configured plugins validate private connections during
+startup, before
 binding. An unavailable backend leaves that feature unavailable while unrelated
 features and workspaces remain usable. Invalid installed module declarations
 still reject startup. A failed feature cannot perform actions or silently connect
 to another service. Configuration changes require restart. An authenticated,
 CSRF-protected reconnect retries only the original private configuration and
-must attest it again before exposing operations.
+must attest it again before exposing operations. Automatic connections rediscover
+through the same fixed controllers; explicit configuration never falls back to
+discovery after a failure.
 
 `dim-web init-operations SETTINGS --output CONFIG` initializes ordinary hosts
 without contacting a control plane. `dim-web init-features SPEC --output CONFIG
 --roles ROLES` requires an explicit comma-separated role selection and validates
 configured plugins before writing. Both initialize a fresh browser password,
 store only its scrypt hash, write mode-0600 files and refuse overwrite.
+
+## Trusted controller capability
+
+The core builds a readonly `WebPluginContext.controllers` list from private
+host settings. Each entry exposes an ID and a JSON-returning `run(args)` method.
+Only the reviewed server-side plugin receives it. Executable and host selector
+are fixed; the invocation is `[--host, SELECTOR, ...ARGS, --json]` without a shell.
+Arguments are bounded to 128 entries, 4,096 characters each and 32 KiB UTF-8 total;
+NUL and `--host`/`--json` overrides are rejected. Output is bounded to 2 MiB and
+execution to 30 seconds. Errors do not include subprocess output or credentials.
+
+Plugins own optional `autoConnect(context)`, their discovery commands and all
+feature-specific schemas, connection validation and scope. The core supplies no
+Native Git, Project or repository interpretation. Automatic selections count as
+configured, remain unavailable when discovery fails and rediscover on reconnect.
+Manual `create(config)` always takes precedence. Neither path widens browser
+roles or exposes generic controller execution through a browser endpoint.
 
 ## Browser authentication and request integrity
 
@@ -115,11 +136,21 @@ output are bounded. Unsafe inputs fail before dispatch.
 
 ## Feature authority
 
-The Native Git Web plugin owns a Project and repository allowlist, private
-reviewer connection and optional separate promoter/sync connections. Before
-startup it attests exact reviewer role/identity and generation, plus promoter
+The Native Git Web plugin owns controller, Project and repository selection.
+Automatic connections use the controller's Native Git plugin to discover its
+current local project catalog and ready repositories. Role credentials stay on
+the controller; the Web server receives public metadata and validated results.
+Every invocation supplies the attested generation and the controller rejects
+selection changes before dispatch. Catalog refresh cannot adopt a replacement
+generation; explicit reconnect is required. Each request rechecks current catalog
+membership, including import-receipt generation, before service access.
+
+Manual configuration instead provides an explicit project/repository allowlist,
+private reviewer connection and optional separate promoter/sync connections.
+It attests exact reviewer role/identity and generation, plus promoter
 endpoint/generation when selected. Business requests pin that generation.
-Review IDs are always scoped by configured repository, never inferred alone.
+Review IDs always include controller, Project and repository scope, never inferred
+alone. The browser fences delayed responses and keeps drafts per complete scope.
 The service independently checks required-reviewer authority, approval ownership,
 stale evidence and protected promotion compare-and-swap. Browser reviewer role
 and operator promotion role remain distinct. Read-only accounts have no decision

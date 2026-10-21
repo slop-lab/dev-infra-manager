@@ -45,3 +45,9 @@ promoter credentials are never mounted into workspaces. Workspace identity check
 fence name reuse and discard. Optional Project metadata is supplied to generic
 host controllers through an injected resolver, rather than a host-core dependency
 on Native Git.
+
+## Controller console operations
+
+`dim project console describe --json` discovers the selected control-plane generation, reviewer identity, local project catalog and available review/sync operations. Only repositories with ready import receipts for that generation are advertised. The host uses private `reviewer.json`, optional `promoter.json` and optional `git-sync.json` beside the selected host connection; each role must match its selected endpoint and generation, with host-bound roles also matching the selected host identity. No operator credentials or connection paths are returned.
+
+Clients pin the discovery result: subsequent discovery may pass `--expected-generation HASH`, and every `dim project console invoke OPERATION --expected-generation HASH --input JSON --json` must pass it. A changed selection fails before role attestation or mutation and requires reconnecting explicitly. Every invocation reloads the local project catalog and validates the requested project and repository; adding an imported repository needs no Web configuration. The shared `@slop-lab/dim-native-git-client` owns HTTP/evidence decoding and operation semantics; this plugin owns controller selection and namespace scope.

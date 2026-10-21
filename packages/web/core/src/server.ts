@@ -1,3 +1,4 @@
+import { webPluginContext } from "./controllers.js";
 import { timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -46,7 +47,7 @@ export async function createWebServerFromConfigFile(
   options: WebServerOptions = {}
 ): Promise<WebServer> {
   const config = await loadWebConfig(path);
-  return createWebServer(config, options, await loadWebPlugins(config.plugins, config.pluginHome));
+  return createWebServer(config, options, await loadWebPlugins(config.plugins, config.pluginHome, webPluginContext(config.operations?.hosts)));
 }
 
 function createWebServer(config: WebConfig, options: WebServerOptions, plugins: readonly LoadedWebPlugin[]): WebServer {

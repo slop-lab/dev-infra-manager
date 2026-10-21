@@ -49,7 +49,9 @@
   "dependencies": {
     "commander": "14.0.0",
     "yaml": "2.8.3",
-    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-git": "workspace:0.10.0",
+    "@slop-lab/dim-native-git-client": "workspace:0.10.0",
+    "@slop-lab/dim-contracts-operations": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-host-core": "0.10.0"

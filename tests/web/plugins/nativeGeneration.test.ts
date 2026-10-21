@@ -10,9 +10,9 @@ it("pins the attested service generation for subsequent review reads and approva
   const reviewerConnection = join(root, "reviewer.json");
   try {
     await writeFile(reviewerConnection, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", baseUrl: native.baseUrl(), generationId, ...humanReviewer }), { mode: 0o600 });
-    const runtime = await webPlugin.create({ reviewerConnection, projectId: "project-a", repositoryIds: ["root"] });
-    expect(await runtime.invoke("reviews.detail", { repositoryId: "root", reviewId: native.reviewId })).toMatchObject({ reviewId: native.reviewId });
+    const runtime = await webPlugin.create({ reviewerConnection, projects: [{ projectId: "project-a", repositoryIds: ["root"] }] });
+    expect(await runtime.invoke("reviews.detail", { controllerId: "direct", projectId: "project-a", repositoryId: "root", reviewId: native.reviewId })).toMatchObject({ reviewId: native.reviewId });
     await native.restart();
-    for (const name of ["reviews.detail", "reviews.approve"]) await expect(runtime.invoke(name, { repositoryId: "root", reviewId: native.reviewId })).rejects.toMatchObject({ status: 409 });
+    for (const name of ["reviews.detail", "reviews.approve"]) await expect(runtime.invoke(name, { controllerId: "direct", projectId: "project-a", repositoryId: "root", reviewId: native.reviewId })).rejects.toMatchObject({ status: 409 });
   } finally { await native.close(); await rm(root, { recursive: true, force: true }); }
 });

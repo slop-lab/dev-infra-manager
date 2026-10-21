@@ -1,34 +1,40 @@
 # Native Git Web plugin
 
-`@slop-lab/dim-web-plugin-native-git` owns repository review browsing, exact
-candidate evidence and patches, proposal resolution, approval/revocation and
-protected promotion. The server owns review policy and promotion authority.
+`@slop-lab/dim-web-plugin-native-git` owns controller/project/repository navigation,
+review evidence and patches, proposal resolution, approval/revocation, protected
+promotion and upstream synchronization. Shared typed operations and private role
+connections belong to `@slop-lab/dim-native-git-client`.
 
-Configure the plugin with caller-owned mode-0600 connection files:
+With this plugin installed, ordinary Web controller configuration is sufficient.
+The plugin asks each configured controller for its current managed projects,
+ready repositories and available operations through the fixed `dim project console`
+bridge. No private connection paths, service credentials or executables reach the
+browser. Adding projects or repositories appears on **Refresh projects**; one
+unavailable controller does not disable other controllers.
+
+The UI selects controller, project and repository independently. Proposal drafts
+are retained separately for each scope; switching scope clears evidence and fences
+late responses. Read-only accounts can inspect reviews; `reviewer` authority is
+required for resolve/approve/revoke, and `operator` for promotion/synchronization.
+The controller and underlying service still enforce catalog scope and protection
+policies for every invocation.
+
+An explicit manual connection overrides automatic controller discovery:
 
 ```json
 {
   "reviewerConnection":"/absolute/reviewer.json",
   "promoterConnection":"/absolute/promoter.json",
   "syncConnection":"/absolute/git-sync.json",
-  "projectId":"my-project",
-  "repositoryIds":["public","private"]
+  "projects":[
+    {"projectId":"project-a","name":"Project A","repositoryIds":["public","private"]},
+    {"projectId":"project-b","repositoryIds":["public"]}
+  ]
 }
 ```
 
-The reviewer connection uses the generated Web reviewer connection format
-(`schemaVersion`, `serviceId`, `baseUrl`, `generationId`, `reviewerId`, `username`,
-`password`). The optional generated host-promoter connection uses `endpoint`, `role`, `hostId`,
-`generationId` and nested `credential` fields and must match the reviewer endpoint
-and generation. Both serving identities are attested
-before loading the plugin. No connection paths or credentials reach the browser.
-
-Every request is confined to the configured project and repositories. Read-only
-users can inspect evidence; `reviewer` users can resolve/approve/revoke reviews;
-`operator` users can promote only when a promoter connection is configured.
-Protection policies remain authoritative when the button is available.
-
-An optional generated `git-sync-operator` connection enables upstream fetch,
-merge proposals and explicit non-force publication. Its endpoint, generation and
-serving identity must match Native Git (and the promoter host when configured).
-Upstream merging produces a proposal; it does not bypass protected review.
+Connection files must be caller-owned mode-0600 regular files. Promoter and sync
+connections are optional; the SDK attests each serving identity and verifies the
+same endpoint/generation before exposing their operations. Manual mode exposes a
+single **Direct connection** controller with the explicit project scope above.
+Upstream merging creates a proposal and does not bypass protected review.

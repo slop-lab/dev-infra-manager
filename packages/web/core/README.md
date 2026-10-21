@@ -119,10 +119,13 @@ dim-web serve /absolute/web.json
 ```
 
 The `pluginHome` package runtime defaults to `DIM_DATA_HOME/web/runtime/current`
-when omitted. Install only reviewed matching versions there. An unconfigured
-`{ "package": "..." }` selection appears with connection guidance and performs
-no service calls. A new Native Git connection must explicitly select its
-Project and repositories; no repository is inferred from a browser request.
+when omitted. Install only reviewed matching versions there.
+A `{ "package": "..." }` selection can use that plugin's optional automatic
+connection adapter through configured trusted host controllers. Without an
+adapter or controllers it appears with connection guidance and makes no service
+calls. Manual `config` takes precedence and never falls back after failure.
+Each plugin validates its discovered scope; browser requests cannot invent or
+widen that scope.
 See [Native Git](../plugins/native-git/README.md) for reviewer/promoter/sync
 connections and [execution](../plugins/execution/README.md) for query/operator
 connections.

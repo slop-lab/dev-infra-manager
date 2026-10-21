@@ -1,0 +1,7 @@
+# Native Git operation client
+
+`@slop-lab/dim-native-git-client` owns review evidence decoding, role attestation, bounded Git HTTP calls, sync results and shared CLI/Web operations. It depends on the operation and Git contracts, without a host, Web runtime or control-plane implementation.
+
+`createNativeGitOperator({ reviewerConnection, promoterConnection?, syncConnection?, projects, selectedService? })` loads private role files, attests the reviewer and optional promoter/sync roles and returns `{ operations, invoke }`. Each invocation validates its input and output and reads the dynamic project catalog before accessing a repository. `projects.list` returns `{ reviewerId, projects: [{ projectId, name, repositoryIds }] }`; all review/sync operations require explicit `projectId` and `repositoryId`. Optional roles remove unavailable mutation operations from the catalog.
+
+The host bridge passes its selected service endpoint, generation and host ID through `selectedService`; sibling role files must match those identities. Connection files must be absolute, owned mode-0600 regular files. Credentials remain on the trusted caller, never in operation descriptions, project lists or browser state. Review approval still names immutable review evidence; promotion remains separate host authority.

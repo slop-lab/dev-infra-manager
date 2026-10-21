@@ -55,6 +55,7 @@
     "@slop-lab/dim-contracts-operations": "workspace:*",
     "@slop-lab/dim-llm-router-client": "workspace:*",
     "@slop-lab/dim-execution-client": "workspace:*",
+    "@slop-lab/dim-native-git-client": "workspace:*",
     "@slop-lab/dim-cli-plugin-llm-router": "workspace:*",
     "@slop-lab/dim-web-plugin-llm-router": "workspace:*",
     "@slop-lab/dim-web-plugin-execution": "workspace:*",

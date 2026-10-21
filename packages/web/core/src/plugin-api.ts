@@ -3,6 +3,14 @@ import type { Operation } from "@slop-lab/dim-contracts-operations";
 export type { Operation, OperationAccess, OperationDescriptor } from "@slop-lab/dim-contracts-operations";
 export { loadPrivateJson } from "./config.js";
 
+/** Trusted controller selections come only from private server configuration. */
+export interface WebPluginController {
+  readonly id: string;
+  run(args: readonly string[]): Promise<unknown>;
+}
+export interface WebPluginContext {
+  readonly controllers: readonly WebPluginController[];
+}
 export interface WebPluginRuntime {
   /** A configured connection may expose a subset, e.g. without a promoter. */
   readonly operations?: readonly Operation[];
@@ -16,4 +24,6 @@ export interface WebPlugin {
   readonly assets: Readonly<Record<string, URL>>;
   readonly browserEntry: string;
   create(config: unknown): Promise<WebPluginRuntime>;
+  /** Discover feature-owned connections through the selected trusted controllers. */
+  autoConnect?(context: WebPluginContext): Promise<WebPluginRuntime>;
 }

@@ -84,6 +84,25 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/clients/native-git:
+    dependencies:
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/git
+      '@slop-lab/dim-contracts-operations':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/operations
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/contracts/ci:
     dependencies:
       '@slop-lab/dim-contracts-execution':
@@ -669,6 +688,12 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      '@slop-lab/dim-contracts-operations':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/operations
+      '@slop-lab/dim-native-git-client':
+        specifier: workspace:0.10.0
+        version: link:../../../clients/native-git
       commander:
         specifier: 14.0.0
         version: 14.0.0
@@ -872,12 +897,12 @@ importers:
 
   packages/web/plugins/native-git:
     dependencies:
-      '@slop-lab/dim-contracts-git':
-        specifier: workspace:0.10.0
-        version: link:../../../contracts/git
       '@slop-lab/dim-contracts-operations':
         specifier: workspace:0.10.0
         version: link:../../../contracts/operations
+      '@slop-lab/dim-native-git-client':
+        specifier: workspace:0.10.0
+        version: link:../../../clients/native-git
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -975,6 +1000,9 @@ importers:
       '@slop-lab/dim-llm-router-client':
         specifier: workspace:*
         version: link:../packages/clients/llm-router
+      '@slop-lab/dim-native-git-client':
+        specifier: workspace:*
+        version: link:../packages/clients/native-git
       '@slop-lab/dim-review-tracing':
         specifier: workspace:*
         version: link:../packages/review-tracing

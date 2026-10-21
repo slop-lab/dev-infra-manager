@@ -28,7 +28,7 @@
   "dependencies": {
     "zod": "4.1.11",
     "@slop-lab/dim-contracts-operations": "workspace:0.10.0",
-    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
+    "@slop-lab/dim-native-git-client": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-web": "0.10.0"

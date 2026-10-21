@@ -13,6 +13,7 @@ export const packageDirectories = [
   "packages/contracts/operations/dist",
   "packages/clients/llm-router/dist",
   "packages/clients/execution/dist",
+  "packages/clients/native-git/dist",
   "packages/cli/plugins/llm-router/dist",
   "packages/review-tracing/dist",
   "packages/review-tracing-node/dist",

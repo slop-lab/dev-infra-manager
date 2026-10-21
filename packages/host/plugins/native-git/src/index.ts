@@ -18,3 +18,5 @@ export * from "./controlPlaneSelection.js";
 export * from "./nativeWorkspaceMetadata.js";
 export { hostPlugin } from "./plugin.js";
 export * from "./nativeProjectState.js";
+
+export { createNativeProjectConsole, describeNativeProjectConsole, invokeNativeProjectConsole } from "./projectConsole.js";

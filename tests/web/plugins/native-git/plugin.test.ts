@@ -32,32 +32,32 @@ async function fixture(options: { promoter?: boolean; sync?: boolean; stale?: bo
   await writeFile(reviewerConnection, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", baseUrl, generationId: options.stale ? "c".repeat(64) : generationId, reviewerId: "owner", username: "reviewer", password: "p".repeat(43) }), { mode: 0o600 });
   await writeFile(promoterConnection, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", endpoint: baseUrl, generationId, role: "host-promoter", hostId: "devbox", credential: { username: "promoter", password: "p".repeat(43) } }), { mode: 0o600 });
   await writeFile(syncConnection, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", endpoint: baseUrl, generationId, role: "git-sync-operator", hostId: "devbox", credential: { username: "sync", password: "s".repeat(43) } }), { mode: 0o600 });
-  return { calls, reviewerConnection, config: { reviewerConnection, projectId: "project-a", repositoryIds: ["public", "private"], ...(options.promoter ? { promoterConnection } : {}), ...(options.sync ? { syncConnection } : {}) } };
+  return { calls, reviewerConnection, config: { reviewerConnection, projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }], ...(options.promoter ? { promoterConnection } : {}), ...(options.sync ? { syncConnection } : {}) } };
 }
 it("attests configured reviewer, exposes scoped repositories and omits unconfigured authority", async () => {
   const selected = await fixture(); const runtime = await webPlugin.create(selected.config);
-  expect(await runtime.invoke("repositories.list", {})).toEqual({ projectId: "project-a", repositoryIds: ["public", "private"], reviewerId: "owner" });
-  expect(await runtime.invoke("reviews.list", { repositoryId: "public" })).toEqual([]);
+  expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "direct", reviewerId: "owner", projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }] }] });
+  expect(await runtime.invoke("reviews.list", { controllerId: "direct", projectId: "project-a", repositoryId: "public" })).toEqual([]);
   expect(runtime.operations?.map((operation) => operation.name)).not.toContain("reviews.promote");
   expect(runtime.operations?.some((operation) => operation.name.startsWith("sync."))).toBe(false);
-  await expect(runtime.invoke("reviews.list", { repositoryId: "foreign" })).rejects.toThrow("scope");
+  await expect(runtime.invoke("reviews.list", { controllerId: "direct", projectId: "project-a", repositoryId: "foreign" })).rejects.toThrow(/scope|catalog/);
   expect(selected.calls).toEqual(["GET /v1/human-reviewer-identity", "GET /v1/projects/project-a/repositories/public/reviews"]);
 });
 it("rejects a stale serving identity and public connection files before enabling review", async () => {
   const stale = await fixture({ stale: true }); await expect(webPlugin.create(stale.config)).rejects.toThrow("identity");
   const publicFile = await fixture(); await chmod(publicFile.reviewerConnection, 0o644);
-  await expect(webPlugin.create(publicFile.config)).rejects.toThrow("mode-0600");
+  await expect(webPlugin.create(publicFile.config)).rejects.toThrow("private connection");
 });
 it("attests optional authorities and publishes only through scoped exact operator endpoint", async () => {
   const selected = await fixture({ promoter: true, sync: true }), runtime = await webPlugin.create(selected.config);
   expect(runtime.operations?.map((operation) => operation.name)).toContain("reviews.promote");
-  expect(await runtime.invoke("sync.publish", { repositoryId: "private" })).toMatchObject({ outcome: "published", targetRef: "refs/heads/development" });
+  expect(await runtime.invoke("sync.publish", { controllerId: "direct", projectId: "project-a", repositoryId: "private" })).toMatchObject({ outcome: "published", targetRef: "refs/heads/development" });
   expect(selected.calls).toContain("POST /v1/projects/project-a/repositories/private/sync/publish");
-  await expect(runtime.invoke("sync.publish", { repositoryId: "foreign" })).rejects.toThrow("scope");
+  await expect(runtime.invoke("sync.publish", { controllerId: "direct", projectId: "project-a", repositoryId: "foreign" })).rejects.toThrow(/scope|catalog/);
 });
 it("rejects browser-supplied service paths and strips non-public review evidence", () => {
   const listing = operations.find((operation) => operation.name === "reviews.list")!;
-  expect(() => listing.parseInput({ repositoryId: "public", projectId: "foreign" })).toThrow();
+  expect(() => listing.parseInput({ controllerId: "direct", repositoryId: "public", projectId: "project-a", endpoint: "https://foreign.test" })).toThrow();
   expect(() => listing.parseInput({ repositoryId: "../private" })).toThrow();
   expect(() => listing.parseOutput([{ reviewId: "a".repeat(64), proposalRef: "refs/proposal/a", protectedRef: "refs/heads/main", candidateCommit: "b".repeat(40), createdAt: new Date().toISOString(), status: "approved", password: "secret" }])).toThrow();
 });
@@ -68,4 +68,68 @@ it("rejects wrong serving role and reviewer identities before loading browser re
     await expect(webPlugin.create(selected.config)).rejects.toThrow();
     expect(selected.calls).toEqual(["GET /v1/human-reviewer-identity"]);
   }
+});
+
+it("discovers controller projects independently and refreshes their live repository catalog", async () => {
+  const calls: Array<{ controller: string; args: readonly string[] }> = [];
+  let repositories = ["public", "private"];
+  const descriptors = operations.filter(({ name }) => name === "projects.list" || name === "reviews.list").map(({ name, description, access }) => ({ name, description, access }));
+  const runtime = await webPlugin.autoConnect!({ controllers: [
+    { id: "offline", async run() { throw new Error("unavailable"); } },
+    { id: "devbox", async run(args) {
+      calls.push({ controller: "devbox", args });
+      if (args.slice(0, 3).join(" ") === "project console describe") return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner",
+        projects: [{ projectId: "project-a", name: "Project A", repositoryIds: repositories }, { projectId: "project-b", name: "Project B", repositoryIds: ["public"] }], operations: descriptors };
+      return [];
+    } }
+  ] });
+  expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [
+    { id: "offline", status: "unavailable", projects: [] },
+    { id: "devbox", status: "ready", projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }, { projectId: "project-b" }] }
+  ] });
+  expect(await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-b", repositoryId: "public" })).toEqual([]);
+  expect(calls.at(-1)?.args).toEqual(["project", "console", "invoke", "reviews.list", "--expected-generation", "a".repeat(64), "--input", JSON.stringify({ projectId: "project-b", repositoryId: "public" })]);
+  const before = calls.length;
+  await expect(runtime.invoke("reviews.list", { controllerId: "offline", projectId: "project-a", repositoryId: "public" })).rejects.toThrow("unavailable");
+  await expect(runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-b", repositoryId: "private" })).rejects.toThrow("scope");
+  await expect(runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "foreign", repositoryId: "public" })).rejects.toThrow("scope");
+  expect(calls).toHaveLength(before);
+  repositories = ["public", "private", "docs"];
+  await runtime.invoke("projects.list", {});
+  expect(await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "docs" })).toEqual([]);
+});
+it("rejects the old single-project contract and browser connection or controller injection", async () => {
+  const selected = await fixture();
+  await expect(webPlugin.create({ reviewerConnection: selected.reviewerConnection, projectId: "project-a", repositoryIds: ["public"] })).rejects.toThrow();
+  const runtime = await webPlugin.create(selected.config);
+  await expect(runtime.invoke("reviews.list", { controllerId: "foreign", projectId: "project-a", repositoryId: "public" })).rejects.toThrow("scope");
+  const listing = operations.find(({ name }) => name === "reviews.list")!;
+  expect(() => listing.parseInput({ controllerId: "direct", projectId: "project-a", repositoryId: "public", executable: "/host/shell" })).toThrow();
+  expect(listing.parseInput({ controllerId: "direct", projectId: "project-a", repositoryId: "public" })).toEqual({ controllerId: "direct", projectId: "project-a", repositoryId: "public" });
+});
+
+it("pins controller discovery generation across refresh and sends it before delegated actions", async () => {
+  let generationId = "a".repeat(64); const writes: string[][] = [];
+  const context = { controllers: [{ id: "devbox", async run(args: readonly string[]) {
+    if (args[2] === "describe") return { schemaVersion: 1, generationId, reviewerId: "owner", projects: [{ projectId: "project-a", name: "Project A", repositoryIds: ["public"] }],
+      operations: operations.filter(({ name }) => name === "projects.list" || name === "reviews.list").map(({ name, description, access }) => ({ name, description, access })) };
+    writes.push([...args]); return [];
+  } }] };
+  const runtime = await webPlugin.autoConnect!(context);
+  await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "public" });
+  expect(writes[0]).toContain("--expected-generation"); expect(writes[0]).toContain(generationId);
+  generationId = "b".repeat(64);
+  expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "devbox", status: "unavailable" }] });
+  await expect(runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "public" })).rejects.toThrow("unavailable");
+  expect(writes).toHaveLength(1);
+  const reconnected = await webPlugin.autoConnect!(context);
+  await reconnected.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "public" });
+  expect(writes[1]).toContain(generationId);
+});
+
+it("keeps an empty registered-project catalog available but reports wholly unavailable controllers", async () => {
+  const offline = await webPlugin.autoConnect!({ controllers: [{ id: "offline", async run() { throw new Error("host plugin missing"); } }] });
+  expect(await offline.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "offline", status: "unavailable", projects: [] }] });
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "empty", async run() { return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [], operations: [] }; } }] });
+  expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "empty", status: "ready", projects: [] }] });
 });

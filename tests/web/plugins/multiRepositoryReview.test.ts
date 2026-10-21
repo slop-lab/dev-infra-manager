@@ -23,14 +23,14 @@ it("selects independent repositories in one web Project and fences review IDs by
   const root = await mkdtemp(join(tmpdir(), "dim-web-multi-"));
   const file = join(root, "reviewer.json");
   await writeFile(file, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", baseUrl: native.service.origin, generationId, ...humanReviewer }), { mode: 0o600 });
-  const runtime = await webPlugin.create({ reviewerConnection: file, projectId: "project-a", repositoryIds: ["public", "private"] });
+  const runtime = await webPlugin.create({ reviewerConnection: file, projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }] });
   try {
-    expect(await runtime.invoke("repositories.list", {})).toMatchObject({ projectId: "project-a", repositoryIds: ["public", "private"] });
-    expect(Array.isArray(await runtime.invoke("reviews.list", { repositoryId: "public" }))).toBe(true);
-    expect(await runtime.invoke("reviews.list", { repositoryId: "private" })).toEqual([]);
-    expect(await runtime.invoke("reviews.detail", { repositoryId: "public", reviewId: envelope.review.reviewId }))
+    expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "direct", projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }] }] });
+    expect(Array.isArray(await runtime.invoke("reviews.list", { controllerId: "direct", projectId: "project-a", repositoryId: "public" }))).toBe(true);
+    expect(await runtime.invoke("reviews.list", { controllerId: "direct", projectId: "project-a", repositoryId: "private" })).toEqual([]);
+    expect(await runtime.invoke("reviews.detail", { controllerId: "direct", projectId: "project-a", repositoryId: "public", reviewId: envelope.review.reviewId }))
       .toMatchObject({ repositoryId: "public", inputs: envelope.review.inputs });
-    await expect(runtime.invoke("reviews.detail", { repositoryId: "private", reviewId: envelope.review.reviewId })).rejects.toMatchObject({ status: 404 });
-    await expect(runtime.invoke("reviews.list", { repositoryId: "unconfigured" })).rejects.toThrow("configured scope");
+    await expect(runtime.invoke("reviews.detail", { controllerId: "direct", projectId: "project-a", repositoryId: "private", reviewId: envelope.review.reviewId })).rejects.toMatchObject({ status: 404 });
+    await expect(runtime.invoke("reviews.list", { controllerId: "direct", projectId: "project-a", repositoryId: "unconfigured" })).rejects.toThrow(/scope|catalog/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

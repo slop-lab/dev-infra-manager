@@ -1,3 +1,4 @@
+import { webPluginContext } from "./controllers.js";
 import { randomBytes, scryptSync } from "node:crypto";
 import { mkdir, open } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
@@ -33,7 +34,7 @@ export async function initializeFeaturesWeb(input: { specification: string; role
   const config = parseWebConfig({ ...listener(input.port), ...specification, accounts: [browser.account] });
   // Resolve and attest every configured feature before writing credentials or binding.
   const { loadWebPlugins } = await import("./plugins.js");
-  const plugins = await loadWebPlugins(config.plugins, config.pluginHome);
+  const plugins = await loadWebPlugins(config.plugins, config.pluginHome, webPluginContext(config.operations?.hosts));
   if (plugins.some((plugin) => plugin.status === "unavailable")) throw new Error("A configured Web feature could not attest its connection; check the private specification before retrying");
   return { configPath: await writeConfig(input.output, config), username: browser.account.username, password: browser.password };
 }

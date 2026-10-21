@@ -33,7 +33,12 @@ Browser roles are explicit and independent. Read access does not grant mutation;
 operator access does not grant human review authority. Present only operations
 available to the account and connection, with a useful explanation when access is
 missing. Hidden controls are presentation only; server and authoritative service
-checks remain mandatory. Installing a panel never grants a service credential.
+checks remain mandatory. Installing a panel never grants a service credential. A feature may discover
+its connection through trusted host controllers selected by the private Web
+configuration; discovery schemas and domain interpretation stay in that plugin.
+The core supplies only fixed controller execution with bounded JSON responses.
+Explicit manual configuration takes precedence and never silently falls back to
+another source of authority.
 
 ## Workspaces and forms
 
@@ -76,7 +81,8 @@ loaded rows with a scoped stale/read-failure explanation. Do not describe an
 unavailable query as an empty result. Keep loading, empty, unavailable, denied,
 conflict, stale and accepted states distinct in text.
 
-Reconnect reattests the fixed private server connection. It cannot select a new
+Reconnect reattests the fixed private server connection or rediscovers it through
+the same trusted controllers. It cannot select a new
 credential path or widen the browser account's roles. A successful reconnect
 keeps a mounted feature's drafts and offers its own refresh controls. Failure
 remains local to that feature. Sign-out and session expiry dispose session-owned

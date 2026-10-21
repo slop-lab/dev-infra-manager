@@ -16,7 +16,7 @@ Production packages are grouped by where they run and what they own:
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
 | `packages/cli/core` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
 | `packages/cli/plugins/<name>` | `@slop-lab/dim-cli-plugin-<name>` | Feature commands using client-side operation APIs |
-| `packages/clients/<name>` | Feature-specific client packages | Shared service calls and validated operations without running their authoritative service |
+| `packages/clients/<name>` | Feature-specific client packages | Shared service calls and validated operations without running their authoritative service; LLM router, execution and Native Git clients |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
 | `packages/web/core` | `@slop-lab/dim-web` | Authenticated console shell, host workspaces, plugin loading and session enforcement |
 | `packages/web/plugins/<name>` | `@slop-lab/dim-web-plugin-<name>` | Feature-specific server connection and browser panel |

@@ -6,23 +6,24 @@ import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
 import { operationDescriptors, type OperationAccess } from "@slop-lab/dim-contracts-operations";
-import type { WebPlugin, WebPluginRuntime } from "./plugin-api.js";
+import type { WebPlugin, WebPluginRuntime, WebPluginContext } from "./plugin-api.js";
 import { HttpResponseError } from "./http-response.js";
 
 export interface WebPluginSelection { readonly package: string; readonly config?: unknown }
 export interface LoadedWebPlugin {
   readonly definition: WebPlugin;
+  readonly context: WebPluginContext;
   readonly config?: unknown;
   runtime?: WebPluginRuntime;
   status: "ready" | "unconfigured" | "unavailable";
   reconnecting?: Promise<void>;
 }
 export async function reconnectWebPlugin(plugin: LoadedWebPlugin): Promise<void> {
-  if (plugin.config === undefined) return;
+  if (plugin.config === undefined && (!plugin.definition.autoConnect || plugin.context.controllers.length === 0)) return;
   if (plugin.reconnecting) return plugin.reconnecting;
   plugin.reconnecting = (async () => {
     try {
-      const runtime = await plugin.definition.create(plugin.config);
+      const runtime = plugin.config !== undefined ? await plugin.definition.create(plugin.config) : await plugin.definition.autoConnect!(plugin.context);
       const available = runtime.operations ?? plugin.definition.operations;
       operationDescriptors(available);
       if (typeof runtime.invoke !== "function" || available.some((operation) => !plugin.definition.operations.some((known) => known.name === operation.name && known.access === operation.access))) throw new Error("Web plugin runtime advertised an undeclared operation");
@@ -31,7 +32,7 @@ export async function reconnectWebPlugin(plugin: LoadedWebPlugin): Promise<void>
   })();
   try { await plugin.reconnecting; } finally { delete plugin.reconnecting; }
 }
-export async function loadWebPlugins(selections: readonly WebPluginSelection[], home?: string): Promise<readonly LoadedWebPlugin[]> {
+export async function loadWebPlugins(selections: readonly WebPluginSelection[], home?: string, context: WebPluginContext = { controllers: [] }): Promise<readonly LoadedWebPlugin[]> {
   const root = home ?? join(process.env.DIM_DATA_HOME ?? join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), "dim"), "web/runtime/current");
   const require = createRequire(join(root, "package.json"));
   const result: LoadedWebPlugin[] = [], packages = new Set<string>(), ids = new Set<string>();
@@ -48,17 +49,17 @@ export async function loadWebPlugins(selections: readonly WebPluginSelection[], 
     const definition = typeof module === "object" && module !== null && "webPlugin" in module ? module.webPlugin as WebPlugin : undefined;
     if (!definition || !/^[a-z][a-z0-9-]{0,63}$/.test(definition.id) || ids.has(definition.id)
       || typeof definition.title !== "string" || definition.title.length > 128 || typeof definition.description !== "string" || definition.description.length > 2000
-      || typeof definition.create !== "function" || !definition.assets || !Object.hasOwn(definition.assets, definition.browserEntry)) throw new Error("invalid or duplicate Web plugin definition");
+      || typeof definition.create !== "function" || (definition.autoConnect !== undefined && typeof definition.autoConnect !== "function") || !definition.assets || !Object.hasOwn(definition.assets, definition.browserEntry)) throw new Error("invalid or duplicate Web plugin definition");
     ids.add(definition.id); operationDescriptors(definition.operations);
     for (const [name, url] of Object.entries(definition.assets)) if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.(?:js|css|svg)$/.test(name) || !(url instanceof URL) || url.protocol !== "file:") throw new Error("invalid Web plugin asset declaration");
-    const loaded: LoadedWebPlugin = { definition, ...(selection.config === undefined ? {} : { config: selection.config }), status: selection.config === undefined ? "unconfigured" : "unavailable" };
+    const loaded: LoadedWebPlugin = { definition, context, ...(selection.config === undefined ? {} : { config: selection.config }), status: selection.config !== undefined || definition.autoConnect !== undefined && context.controllers.length > 0 ? "unavailable" : "unconfigured" };
     await reconnectWebPlugin(loaded); result.push(loaded);
   }
   return result;
 }
 export function webPluginCatalog(plugins: readonly LoadedWebPlugin[], roles: readonly string[]) {
-  return plugins.map(({ definition, runtime, config, status }) => ({ id: definition.id, title: definition.title, description: definition.description, status,
-    configured: config !== undefined, browserEntry: `/v1/extensions/${definition.id}/assets/${definition.browserEntry}`,
+  return plugins.map(({ definition, runtime, config, context, status }) => ({ id: definition.id, title: definition.title, description: definition.description, status,
+    configured: config !== undefined || definition.autoConnect !== undefined && context.controllers.length > 0, browserEntry: `/v1/extensions/${definition.id}/assets/${definition.browserEntry}`,
     operations: operationDescriptors(runtime?.operations ?? []).filter(({ access }) => roles.includes(access)) }));
 }
 export async function invokeWebPlugin(plugin: LoadedWebPlugin, name: string, input: unknown, roles: readonly OperationAccess[]): Promise<unknown> {

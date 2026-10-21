@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
-import { loadPrivateJson } from "@slop-lab/dim-web/plugin-api";
+import { loadPrivateJson } from "./private-file.js";
 
 const objectId = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 const upstream = { upstreamRef: z.string().startsWith("refs/remotes/upstream/").max(1024), upstreamCommit: objectId, expectedProtectedHead: objectId };
