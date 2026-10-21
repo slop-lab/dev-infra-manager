@@ -160,12 +160,15 @@ is implied by these source changes.
   helpers use that router by default. Optional workspace Web contributions
   appear inside each workspace management row, discover selected controllers,
   install pinned OpenCode/Codex explicitly and
-  starts, inspects or stops owned OpenCode servers without repository setup.
-  Keep credentials in the workspace and provide connection guidance separately
-  from server launch. Create, explicitly approve and revoke External URLs routes
+  start, inspect or stop owned OpenCode servers without repository setup.
+  Show running state and approved public URLs, and let operators explicitly copy
+  or change the private server password without putting secrets in command arguments. Create, explicitly approve and revoke External URLs routes
   in the same workspace row. Share one control-plane wildcard ingress across
   multiple workspace hosts with authenticated host claims, expiring leases and
-  host-owned workspace resolution. Existing DNS needs no provider integration;
+  host-owned workspace resolution. Intermediate hosts need only reachable private
+  IPs and ports; public URLs always use the final shared ingress. Repository-only
+  reinstall restores configured shared ingress services, connections and TLS data.
+  Existing DNS needs no provider integration;
   Caddy can use operator-managed wildcard certificates without DNS credentials.
   Separate Docker/npm/PyPI/APT cache clients
   from optional host cache servers; external cache URLs use the same client path.

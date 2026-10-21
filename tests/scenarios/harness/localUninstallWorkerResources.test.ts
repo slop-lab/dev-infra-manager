@@ -35,3 +35,22 @@ it("supports only known task ownership and rejects symlink traversal", async () 
     await expect(collectWorkerClaims([root])).rejects.toThrow(/symlink/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+it("keeps control-plane generation snapshots outside worker journal discovery while inspecting real worker slots", async () => {
+  const home = await mkdtemp(join(tmpdir(), "dim-uninstall-worker-cp-"));
+  try {
+    const { removalPaths } = await import("../../../scripts/local-uninstall/paths.ts");
+    const { createRemovalPlan } = await import("../../../scripts/local-uninstall/plan.ts");
+    const paths = removalPaths({ HOME: home, XDG_RUNTIME_DIR: join(home, "run") });
+    const generation = join(paths.controlPlane, "generations", "a".repeat(64));
+    const slot = join(paths.state, "worker/slot");
+    await mkdir(generation, { recursive: true, mode: 0o700 }); await mkdir(slot, { recursive: true, mode: 0o700 });
+    // CP deployment snapshots are immutable service configuration, not private worker journals.
+    await writeFile(join(generation, "execution.json"), JSON.stringify({ schemaVersion: 1, service: "execution" }), { mode: 0o444 });
+    await writeFile(join(slot, "execution.json"), JSON.stringify(journal("qemu")), { mode: 0o600 });
+    const calls: string[][] = [];
+    const plan = await createRemovalPlan(paths, async (file, args) => { calls.push([file, ...args]); return { status: 0, stdout: file === "mise" ? "[]" : "", stderr: "" }; }, { HOME: home });
+    expect(plan.docker).toEqual([]);
+    // Both qemu slot claims were still checked against Docker; this is not a broad worker-discovery skip.
+    expect(calls.filter(([file, kind, operation]) => file === "docker" && kind === "container" && operation === "ls")).toHaveLength(2);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});

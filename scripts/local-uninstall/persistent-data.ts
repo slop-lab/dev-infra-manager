@@ -2,12 +2,14 @@ import { readdir } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { metadata, object, readJson, text } from "./files.ts";
 import { inside, removalDirectories } from "./paths.ts";
+import { selectedSharedIngressEdge } from "./shared-ingress-edge.ts";
 import type { DockerResource } from "./docker.ts";
 import type { RemovalPaths } from "./types.ts";
 
 export interface PersistentData { readonly files: readonly string[]; readonly volumes: readonly string[] }
-/** User accounts, authentication and router history survive a local runtime replacement. */
+/** Authentication, service configuration and TLS state survive a local runtime replacement. */
 export async function retainedPersistentData(paths: RemovalPaths, registeredConfigs: readonly string[] = [], resources: readonly DockerResource[] = []): Promise<PersistentData> {
+  const edge = await selectedSharedIngressEdge(paths);
   const files = new Set<string>(), visited = new Set<string>(), removalRoots = removalDirectories(paths);
   let count = 0;
   async function retain(input: unknown): Promise<void> {
@@ -77,10 +79,21 @@ export async function retainedPersistentData(paths: RemovalPaths, registeredConf
     for (const name of ["llm", "llm-host", "llm-router", "llm-backend", "tailscale"]) await retain(join(root, name));
     for (const name of ["llm-router", "tailscale"]) await retain(join(root, "plugins", name));
   }
+  for (const root of new Set([paths.configuration, paths.state])) await retain(join(root, "shared-ingress"));
+  await retain(join(paths.configuration, "external-urls.json"));
+  if (edge) await retain(edge.directory);
   // Only private service configuration, never workspace checkouts or arbitrary source trees.
   await scan(paths.configuration, 0);
   for (const file of registeredConfigs) await config(file);
-  return { files: [...files].filter((file) => ![...files].some((parent) => parent !== file && inside(file, parent))).sort(), volumes: resources.filter(({ claim }) => claim.kind === "volume" && claim.labels["dim.managed"] === "true"
-    && claim.labels["dim.owner"] === "dim" && claim.labels["dim.resource"] === "auth"
-    && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(claim.labels["dim.tailscale-id"] ?? "")).map(({ claim }) => claim.name) };
+  const volumes = resources.filter(({ claim }) => {
+    if (claim.kind !== "volume") return false;
+    const edgeTls = edge && edge.volumes.includes(claim.name) && claim.requiresContainer === edge.container
+      && claim.labels["com.docker.compose.project"] === edge.name
+      && ["caddy-data", "caddy-config"].includes(claim.labels["com.docker.compose.volume"] ?? "");
+    const tailscaleAuth = claim.labels["dim.managed"] === "true" && claim.labels["dim.owner"] === "dim"
+      && claim.labels["dim.resource"] === "auth"
+      && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(claim.labels["dim.tailscale-id"] ?? "");
+    return edgeTls || tailscaleAuth;
+  }).map(({ claim }) => claim.name);
+  return { files: [...files].filter((file) => ![...files].some((parent) => parent !== file && inside(file, parent))).sort(), volumes };
 }

@@ -44,7 +44,7 @@ async function ownedDirectory(directory: string): Promise<void> {
 }
 export type InstallCommand = (arguments_: readonly string[]) => void;
 export async function installLocalRuntime(bundle: string, dataHome: string, options: {
-  readonly component: "web" | "llm-operator";
+  readonly component: "web" | "llm-operator" | "shared-ingress";
   readonly packages: readonly string[];
   readonly executable: string;
   readonly install?: InstallCommand;

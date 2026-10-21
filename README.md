@@ -43,7 +43,8 @@ Repository maintenance commands `just uninstall-local --dry-run` (preview) and
 `just reinstall-local [--with-managed]` support a clean local source reinstall.
 Reinstall removes the current user's local DIM workspaces and runtime installation
 after confirmation. LLM router accounts, authentication, history and captures,
-and Tailscale gateway identity/state are retained; package cache data is retained by default;
+Tailscale gateway identity/state, and configured shared ingress connections and
+TLS data are retained; package cache data is retained by default;
 inspect the [removal scope](docs/guides/usage.md#remove-or-reinstall-a-local-source-installation)
 before executing it.
 

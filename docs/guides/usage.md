@@ -143,6 +143,8 @@ to proceed. Use `--dry-run` for an explicit noninteractive preview.
 Removal destroys the selected current user's local DIM workspaces and runtime
 installation. LLM router accounts, authentication, history and captures, and
 Tailscale gateway configuration and authentication state are always retained.
+Configured shared ingress connections, private service configuration and the selected
+Caddy deployment and TLS volumes also survive, even with `--no-keep-cache-data`.
 The scope follows the current environment's DIM paths on this machine; the selected SSH host is not
 contacted. Keep any data you need before executing it. Role-specific private
 control-plane configuration stored outside DIM's own directories is not
@@ -180,6 +182,18 @@ just reinstall-local --with-managed -y --no-keep-cache-data   # Delete cache dat
 Retries after interrupted removal must use the same cache retention choice.
 See [Tailscale gateway setup](tailscale.md) to reconnect the retained gateway
 identity after installing its matching plugin.
+
+A repository source installation restores optional shared ingress from private
+`~/.config/dim/shared-ingress/services.json`, containing only the external-urls
+control-plane plugin. It rebuilds that isolated runtime and starts
+`dim-shared-ingress.service`, then restores the host external-urls plugin.
+A mode-`0600` `shared-ingress/edge.json` containing
+`{"schemaVersion":1,"ingressName":"shared"}` selects the existing source-owned
+Caddy compose deployment under
+`~/.local/state/dim/plugins/external-urls/caddy/shared/`. Its private configuration,
+`.env` and matching TLS volumes are retained and the deployment is restarted.
+Only the selected edge's verified resources are retained. These helpers belong
+to repository development installation, not the published installer.
 
 `reinstall-local` confirms the removal plan, then invokes removal and the
 existing source installer. It does not prepare a new candidate: rerun `just prepare-local` after
