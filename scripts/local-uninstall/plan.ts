@@ -8,6 +8,7 @@ import { metadata, object, readJson, text } from "./files.ts";
 import { command, checked, type Command } from "./command.ts";
 import { ownedControllerUnit, stopControllerUnit } from "./controller-unit.ts";
 import { ownedWebUnit, webUnitPath } from "./web-unit.ts";
+import { ownedLlmGatewayUnit, llmGatewayUnitPath } from "./llm-gateway-unit.ts";
 import { ownedLlmOperatorUnit, llmOperatorUnitPath } from "./llm-operator-unit.ts";
 import { planProcesses, stopProcesses, type OwnedProcess } from "./processes.ts";
 import { inside, removalDirectories, validatePaths } from "./paths.ts";
@@ -29,6 +30,7 @@ export interface RemovalPlan {
   readonly unit: boolean;
   readonly webUnit: boolean;
   readonly llmOperatorUnit: boolean;
+  readonly llmGatewayUnit: boolean;
   readonly bin: boolean;
 }
 const journal = (paths: RemovalPaths) => join(paths.data, "local-uninstall.json");
@@ -70,7 +72,7 @@ export async function createRemovalPlan(paths: RemovalPaths, run: Command = comm
   await validatePaths(paths);
   const file = journal(paths), prior = await readJson(file);
   if (prior !== undefined && ((await metadata(file))!.mode & 0o777) !== 0o600) throw new Error("unsafe local uninstall journal permissions");
-  const active = await planProcesses(paths), unit = await ownedControllerUnit(paths), webUnit = await ownedWebUnit(paths), llmOperatorUnit = await ownedLlmOperatorUnit(paths), bin = await managedBin(paths);
+  const active = await planProcesses(paths), unit = await ownedControllerUnit(paths), webUnit = await ownedWebUnit(paths), llmOperatorUnit = await ownedLlmOperatorUnit(paths), llmGatewayUnit = await ownedLlmGatewayUnit(paths), bin = await managedBin(paths);
   if (prior !== undefined) {
     const previous = restoredPlan(prior, paths);
     if (previous.keepCacheData !== (options.keepCacheData === true)) throw new Error("retry uninstall with the same --keep-cache-data selection");
@@ -78,7 +80,7 @@ export async function createRemovalPlan(paths: RemovalPaths, run: Command = comm
     // IDs, labels and creation times are rechecked before any further deletion.
     for (const resource of previous.docker) await inspectDocker(run, resource.claim);
     for (const vm of previous.vms) await inspectVm(run, vm);
-    return { ...previous, processes: active.processes, unit, webUnit, llmOperatorUnit, bin, mise: await planMise(run, env) };
+    return { ...previous, processes: active.processes, unit, webUnit, llmOperatorUnit, llmGatewayUnit, bin, mise: await planMise(run, env) };
   }
   const serviceConfigs = active.processes.flatMap((process) => process.configFile === undefined ? [] : [process.configFile]);
   const preliminaryPersistence = await retainedPersistentData(paths, serviceConfigs);
@@ -89,18 +91,19 @@ export async function createRemovalPlan(paths: RemovalPaths, run: Command = comm
   const docker = await planDocker(run, claims), keepCacheData = options.keepCacheData === true;
   const persistent = await retainedPersistentData(paths, serviceConfigs, docker);
   const retainedCache = keepCacheData ? await retainedCacheData(paths, docker) : { volumes: [], files: [] };
-  return { schemaVersion: 1, paths, keepCacheData, retainedCache, persistent, docker, vms, mise: await planMise(run, env), processes: active.processes, unit, webUnit, llmOperatorUnit, bin };
+  return { schemaVersion: 1, paths, keepCacheData, retainedCache, persistent, docker, vms, mise: await planMise(run, env), processes: active.processes, unit, webUnit, llmOperatorUnit, llmGatewayUnit, bin };
 }
 export async function executeRemoval(plan: RemovalPlan, run: Command = command): Promise<void> {
   const paths = plan.paths;
   await validatePaths(paths);
-  if (plan.unit !== await ownedControllerUnit(paths) || plan.webUnit !== await ownedWebUnit(paths) || plan.llmOperatorUnit !== await ownedLlmOperatorUnit(paths) || plan.bin !== await managedBin(paths)) throw new Error("installation changed after planning");
+  if (plan.unit !== await ownedControllerUnit(paths) || plan.webUnit !== await ownedWebUnit(paths) || plan.llmOperatorUnit !== await ownedLlmOperatorUnit(paths) || plan.llmGatewayUnit !== await ownedLlmGatewayUnit(paths) || plan.bin !== await managedBin(paths)) throw new Error("installation changed after planning");
   await mkdir(paths.data, { recursive: true, mode: 0o700 });
   const file = journal(paths), stage = `${file}.tmp-${process.pid}`;
   await writeFile(stage, JSON.stringify(plan), { mode: 0o600, flag: "wx" });
   await rename(stage, file);
   await stopControllerUnit(run, plan.unit);
   if (plan.webUnit) await checked(run, "systemctl", ["--user", "disable", "--now", "dim-web.service"]);
+  if (plan.llmGatewayUnit) await checked(run, "systemctl", ["--user", "disable", "--now", "dim-llm-router-gateway.service"]);
   if (plan.llmOperatorUnit) await checked(run, "systemctl", ["--user", "disable", "--now", "dim-llm-router-operator.service"]);
   await stopProcesses(plan.processes);
   // Check that no newly launched producer/worker can recreate resources during removal.
@@ -111,8 +114,9 @@ export async function executeRemoval(plan: RemovalPlan, run: Command = command):
   await removeMise(run, plan.mise);
   if (plan.unit) await rm(paths.unit);
   if (plan.webUnit) await rm(webUnitPath(paths));
+  if (plan.llmGatewayUnit) await rm(llmGatewayUnitPath(paths));
   if (plan.llmOperatorUnit) await rm(llmOperatorUnitPath(paths));
-  if (plan.unit || plan.webUnit || plan.llmOperatorUnit) await checked(run, "systemctl", ["--user", "daemon-reload"]);
+  if (plan.unit || plan.webUnit || plan.llmOperatorUnit || plan.llmGatewayUnit) await checked(run, "systemctl", ["--user", "daemon-reload"]);
   if (plan.bin) await rm(paths.bin);
   const retainedFiles = [...plan.retainedCache.files, ...plan.persistent.files];
   await removeExcept(paths.config, retainedFiles);

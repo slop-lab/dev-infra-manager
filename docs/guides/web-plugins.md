@@ -71,6 +71,13 @@ When a private `llm/operator-service.json` has been retained, source installatio
 also restores its isolated operator runtime and owned user service before
 starting the console. It preserves router credentials and ledger data. A fresh
 installation without that optional configuration does not create a router.
+When `llm/router.json` contains the current control-plane router configuration,
+source installation restores its full inference/API listener instead, so managed
+account changes reach inference. A retained `llm-host/gateway.json` also restores
+the host routing plugin and its gateway service. Reinstall retains private managed
+account state, Codex authorization and request captures with the router ledger.
+It also retains the exact explicitly configured third-party account backend
+executable; unrelated backend artifacts and DIM package runtimes are replaced.
 
 The execution plugin config accepts an absolute `queryConnection` path and an
 optional `operatorConnection`. Query-only connections expose job lists and

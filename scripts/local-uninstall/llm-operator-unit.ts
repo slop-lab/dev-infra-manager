@@ -5,7 +5,7 @@ import { inside } from "./paths.ts";
 import type { RemovalPaths } from "./types.ts";
 
 export const llmOperatorUnitPath = (paths: RemovalPaths) => join(dirname(paths.unit), "dim-llm-router-operator.service");
-/** Recognize only the independently owned operator listener, never an inference service. */
+/** Recognize the exact repository-owned API runtime and its selected service mode. */
 export async function ownedLlmOperatorUnit(paths: RemovalPaths): Promise<boolean> {
   const file = llmOperatorUnitPath(paths), stat = await metadata(file);
   if (!stat) return false;
@@ -18,9 +18,9 @@ export async function ownedLlmOperatorUnit(paths: RemovalPaths): Promise<boolean
   });
   const executable = join(paths.data, "llm-operator/runtime/current/node_modules/.bin/dim-control-plane-llm-router");
   const target = await realpath(executable).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return executable; });
-  const configuration = join(paths.configuration, "llm/operator-service.json");
+  const configuration = tokens[2] === "serve" ? join(paths.configuration, "llm/router.json") : join(paths.configuration, "llm/operator-service.json");
   if (starts.length !== 1 || !unit.includes("Description=DIM LLM router operator API\n") || tokens.length !== 4
-    || !tokens[0]?.startsWith("/") || tokens[1] !== executable || tokens[2] !== "operator-serve"
+    || !tokens[0]?.startsWith("/") || tokens[1] !== executable || !["serve", "operator-serve"].includes(tokens[2] ?? "")
     || tokens[3] !== configuration || !inside(target, join(paths.data, "llm-operator/runtime"))) {
     throw new Error("DIM LLM router operator unit does not belong to the selected installation");
   }

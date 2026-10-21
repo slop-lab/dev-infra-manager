@@ -84,3 +84,13 @@ it("installs a manual listener without writing a unit when user systemd is unava
   expect(f.calls).toEqual([["systemctl", "--user", "show-environment"]]);
   await expect(readFile(llmOperatorUnitPath(f.paths))).rejects.toMatchObject({ code: "ENOENT" });
 });
+
+it("restores the full retained inference service so managed accounts reach live requests", async () => {
+  const f = await fixture(), router = join(f.paths.configuration, "llm/router.json");
+  await writeFile(router, JSON.stringify({ schemaVersion: 3, stateDirectory: join(f.paths.configuration, "llm/state") }), { mode: 0o600 });
+  await restoreLocalLlmOperator(f.bundle, f.env, f.run, f.install);
+  const unit = await readFile(llmOperatorUnitPath(f.paths), "utf8");
+  expect(unit).toContain(`"serve" "${router}"`);
+  expect(await ownedLlmOperatorUnit(f.paths)).toBe(true);
+  expect(await readFile(f.retainedData, "utf8")).toBe("retained-ledger");
+});

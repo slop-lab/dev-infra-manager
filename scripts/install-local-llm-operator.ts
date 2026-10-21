@@ -16,7 +16,15 @@ async function privateDirectory(directory: string): Promise<void> {
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o022) !== 0) throw new Error(`unsafe local LLM operator unit directory: ${directory}`);
 }
 export async function restoreLocalLlmOperator(bundle: string, env: NodeJS.ProcessEnv = process.env, run: Command = command, install?: InstallCommand): Promise<string | undefined> {
-  const paths = removalPaths(env), configuration = join(paths.configuration, "llm/operator-service.json");
+  const paths = removalPaths(env), routerConfiguration = join(paths.configuration, "llm/router.json");
+  const routerStat = await metadata(routerConfiguration);
+  let inference = false;
+  if (routerStat) {
+    if (!routerStat.isFile() || routerStat.isSymbolicLink() || routerStat.nlink !== 1 || routerStat.uid !== process.getuid?.() || (routerStat.mode & 0o777) !== 0o600 || routerStat.size > 1024 * 1024) throw new Error("retained LLM router configuration must be an owned mode-0600 regular file");
+    inference = object(JSON.parse(await readFile(routerConfiguration, "utf8"))).schemaVersion === 3;
+  }
+  const configuration = inference ? routerConfiguration : join(paths.configuration, "llm/operator-service.json");
+  const mode = inference ? "serve" : "operator-serve";
   const configStat = await metadata(configuration);
   if (!configStat) return;
   if (!configStat.isFile() || configStat.isSymbolicLink() || configStat.nlink !== 1 || configStat.uid !== process.getuid?.() || (configStat.mode & 0o777) !== 0o600 || configStat.size > 1024 * 1024) throw new Error("retained LLM operator configuration must be an owned mode-0600 regular file");
@@ -26,14 +34,14 @@ export async function restoreLocalLlmOperator(bundle: string, env: NodeJS.Proces
   let systemd = false;
   try { systemd = (await run("systemctl", ["--user", "show-environment"])).status === 0; } catch { /* A manual listener remains possible without systemd. */ }
   if (!systemd) {
-    console.log(`[host] no user systemd; start retained LLM operator API with: ${process.execPath} ${executable} operator-serve ${configuration}`);
+    console.log(`[host] no user systemd; start retained LLM router API with: ${process.execPath} ${executable} ${mode} ${configuration}`);
     return executable;
   }
   const unit = llmOperatorUnitPath(paths);
   await privateDirectory(dirname(unit));
   const environment = Object.entries({ HOME: env.HOME, PATH: [dirname(process.execPath), env.PATH].filter(Boolean).join(":") })
     .filter((entry): entry is [string, string] => entry[1] !== undefined).map(([name, value]) => `Environment=${quote(`${name}=${value}`)}`).join("\n");
-  const contents = `[Unit]\nDescription=DIM LLM router operator API\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=:${[process.execPath, executable, "operator-serve", configuration].map(quote).join(" ")}\n${environment}\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=default.target\n`;
+  const contents = `[Unit]\nDescription=DIM LLM router operator API\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=:${[process.execPath, executable, mode, configuration].map(quote).join(" ")}\n${environment}\nRestart=on-failure\nRestartSec=3\nUMask=0077\n\n[Install]\nWantedBy=default.target\n`;
   const stage = `${unit}.tmp-${process.pid}`;
   await writeFile(stage, contents, { flag: "wx", mode: 0o600 }); await rename(stage, unit);
   await checked(run, "systemctl", ["--user", "daemon-reload"]);

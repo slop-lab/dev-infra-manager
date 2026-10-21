@@ -42,6 +42,24 @@ it("preserves account authentication, usage SQLite and capture bytes while delet
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
+it("retains only the selected private account backend needed after reinstall", async () => {
+  const home = await mkdtemp(join(tmpdir(), "dim-retain-account-backend-")), paths = removalPaths({ HOME: home });
+  const directory = join(paths.configuration, "llm"), backends = join(paths.data, "backends"), executable = join(backends, "selected");
+  const run: Command = async (file) => ({ status: 0, stdout: file === "mise" ? "[]" : "", stderr: "" });
+  try {
+    await mkdir(directory, { recursive: true, mode: 0o700 }); await mkdir(backends, { recursive: true, mode: 0o700 });
+    await writeFile(executable, "reviewed private backend", { mode: 0o700 }); await writeFile(join(backends, "unselected"), "discard");
+    const operatorKey = join(paths.data, "custom-operator.key"); await writeFile(operatorKey, "retained operator authority", { mode: 0o600 });
+    await writeFile(join(directory, "router.json"), JSON.stringify({ schemaVersion: 3, stateDirectory: join(directory, "state"), accounts: [], hostIssuers: [], operators: [{ keyFile: operatorKey }], backend: {}, accountManagement: { backendExecutable: executable } }), { mode: 0o600 });
+    await executeRemoval(await createRemovalPlan(paths, run, { HOME: home }), run);
+    expect(await readFile(executable, "utf8")).toBe("reviewed private backend");
+    expect(await readFile(operatorKey, "utf8")).toBe("retained operator authority");
+    await expect(stat(join(backends, "unselected"))).rejects.toMatchObject({ code: "ENOENT" });
+    await chmod(executable, 0o777);
+    await expect(retainedPersistentData(paths)).rejects.toThrow("unsafe configured LLM account backend");
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
 it("discovers a custom router config from an owned live process before stopping it", async () => {
   const home = await mkdtemp(join(tmpdir(), "dim-retain-service-"));
   const paths = removalPaths({ HOME: home, XDG_RUNTIME_DIR: join(home, "run") });

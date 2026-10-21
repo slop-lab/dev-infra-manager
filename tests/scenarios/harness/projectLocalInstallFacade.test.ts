@@ -30,7 +30,7 @@ async function createFixture(): Promise<Fixture> {
       copyFile(resolve(workspaceRoot, "scripts", script), resolve(scripts, script))
     )
   );
-  for (const helper of ["install-local-web.ts", "install-local-llm-operator.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
+  for (const helper of ["install-local-web.ts", "install-local-llm-operator.ts", "install-local-llm-gateway.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
     'import { appendFileSync } from "node:fs"; appendFileSync(process.env.DIM_INVOCATIONS!, `web-helper ${process.argv[1]} ${process.argv.slice(2).join(" ")}\\n`);\n');
   await writeFile(resolve(root, ".local/prepared-local.state"), "state=fresh\n");
   await writeFile(

@@ -29,12 +29,19 @@ export async function retainedPersistentData(paths: RemovalPaths, registeredConf
     const row = object(input);
     if (row.schemaVersion === 3 && Array.isArray(row.accounts) && Array.isArray(row.hostIssuers) && row.backend !== undefined) {
       await retain(absolute); await retain(row.stateDirectory);
+      if (row.accountManagement !== undefined) {
+        const executable = text(object(row.accountManagement).backendExecutable);
+        const binary = await metadata(executable);
+        if (binary && (!binary.isFile() || binary.isSymbolicLink() || ![0, process.getuid?.()].includes(binary.uid) || (binary.mode & 0o022) !== 0 || (binary.mode & 0o111) === 0)) throw new Error("unsafe configured LLM account backend executable");
+        await retain(executable);
+      }
       for (const value of row.accounts) {
         const account = object(value);
         await retain(account.keyFile);
         if (account.credentialDirectory !== undefined) await retain(account.credentialDirectory);
       }
       for (const value of row.hostIssuers) await retain(object(value).keyFile);
+      if (Array.isArray(row.operators)) for (const value of row.operators) await retain(object(value).keyFile);
     } else if (row.schemaVersion === 1 && row.connection !== undefined && row.workspaceStateRoot !== undefined) {
       await retain(absolute); await retain(row.stateDirectory);
       await retain(object(row.connection).issuerKeyFile);
