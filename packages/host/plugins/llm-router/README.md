@@ -28,7 +28,11 @@ continuation, and `dim tools server WORKSPACE` route the native `openai/*`
 provider through the scoped workspace gateway. OMO's role-specific model names,
 variants, category choices, selected profile and fallback chains stay unchanged.
 Other providers keep their own connections. Only OpenAI models offered by the
-attached route are exposed; unavailable models fail rather than switching to a
+attached route are exposed. If an `openai/MODEL-fast` name is absent but `MODEL`
+is served through Responses, OpenCode exposes that name as an alias whose API
+model ID is `MODEL`. A real `MODEL-fast` entry always takes precedence. Role names,
+model selections and variants remain unchanged; the fallback does not promise
+fast-tier execution. Other unavailable models fail rather than switching to a
 direct OpenAI connection. The OpenAI SDK's transport also uses the gateway when
 an existing OpenCode authentication plugin is installed.
 

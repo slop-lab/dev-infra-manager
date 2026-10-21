@@ -80,7 +80,7 @@ it("redirects only OpenAI while preserving OMO role models, variants, fallbacks 
   await hooks.config(config);
   expect(config.agent).toEqual(originalAgents);
   expect(config).toMatchObject({ model: "openai/reviewed", small_model: "anthropic/fast", provider: {
-    anthropic, openai: { whitelist: ["reviewed"], options: { baseURL: "http://127.0.0.1:8319/v1", apiKey: token },
+    anthropic, openai: { whitelist: ["reviewed", "reviewed-fast"], options: { baseURL: "http://127.0.0.1:8319/v1", apiKey: token },
       models: { reviewed: { variants, options: { reasoningEffort: "high", store: false } } } }
   } });
   const parameters = { options: { reasoningEffort: "high", store: true } };
@@ -95,4 +95,34 @@ it("redirects only OpenAI while preserving OMO role models, variants, fallbacks 
   expect(new Headers(sent?.headers).get("authorization")).toBe(`Bearer ${token}`);
   expect(sent?.redirect).toBe("error");
   await expect(openai.options.fetch("https://api.openai.com/v1/responses")).rejects.toThrow("attached Responses endpoint");
+});
+
+it("uses a -fast alias only when the exact model is absent and the unsuffixed Responses model exists", async () => {
+  await fixture();
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ models: [reviewed, added] }));
+  vi.stubGlobal("fetch", fetcher);
+  const hooks = await DimLlmRouter();
+  const agent = { explore: { model: "openai/reviewed-fast", variant: "high" } };
+  const variants = { high: { reasoningEffort: "high" } };
+  const config: Record<string, unknown> = { agent, provider: { openai: { models: { "reviewed-fast": { variants } } } } };
+  await hooks.config(config);
+  expect(config.agent).toEqual(agent);
+  expect(config).toMatchObject({ provider: { openai: { whitelist: ["reviewed", "reviewed-fast"],
+    models: { "reviewed-fast": { id: "reviewed", variants } } } } });
+  await expect(hooks["chat.params"]({ model: { providerID: "openai", id: "reviewed-fast" } })).resolves.toBeUndefined();
+  for (const id of ["unknown-fast", "added-fast", "reviewed-fast-fast"]) {
+    await expect(hooks["chat.params"]({ model: { providerID: "openai", id } })).rejects.toThrow("unavailable");
+  }
+  const exactFast = { ...reviewed, id: "reviewed-fast", name: "Actual fast model" };
+  fetcher.mockResolvedValueOnce(Response.json({ models: [reviewed, exactFast] }));
+  const refreshed = await DimLlmRouter(), exactConfig: Record<string, unknown> = {};
+  await refreshed.config(exactConfig);
+  const provider = (exactConfig.provider as Record<string, { models: Record<string, { id?: string; name: string }> }>).openai!;
+  expect(provider.models["reviewed-fast"]?.id).toBeUndefined();
+  expect(provider.models["reviewed-fast"]?.name).toBe("Actual fast model");
+  fetcher.mockResolvedValueOnce(Response.json({ models: [reviewed, { ...added, id: "reviewed-fast" }] }));
+  const chatOnly = await DimLlmRouter(), chatConfig: Record<string, unknown> = {};
+  await chatOnly.config(chatConfig);
+  expect(chatConfig).toMatchObject({ provider: { openai: { whitelist: ["reviewed"] } } });
+  await expect(chatOnly["chat.params"]({ model: { providerID: "openai", id: "reviewed-fast" } })).rejects.toThrow("unavailable");
 });

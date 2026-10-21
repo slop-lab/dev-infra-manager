@@ -62,6 +62,7 @@ async function DimLlmRouter() {
   // owns its current catalogue. Restarting OpenCode picks up newly allowed models
   // without rotating the workspace credential or attaching the workspace again.
   const models = await routeModels(connection.endpoint, connection.token);
+  const modelsById = new Map(models.map((model) => [model.id, model]));
   const selected = models.find((model) => model.id === connection.defaultModel) ?? models[0];
   if (!selected || connection.defaultModel !== undefined && selected.id !== connection.defaultModel) throw new Error("DIM default model is not in the attached route");
   const selection = `dim-${selected.api}/${selected.id}`;
@@ -70,8 +71,11 @@ async function DimLlmRouter() {
     const model = record(record(input).model);
     const routed = model.providerID === "openai" || model.providerID === "dim-responses" || model.providerID === "dim-chat";
     if (!routed) return;
-    const allowed = models.find((candidate) => model.id === candidate.id
-      && (model.providerID === `dim-${candidate.api}` || model.providerID === "openai" && candidate.api === "responses"));
+    const requestedId = model.id;
+    const exact = typeof requestedId === "string" ? modelsById.get(requestedId) : undefined;
+    const target = exact ?? (model.providerID === "openai" && typeof requestedId === "string" && requestedId.endsWith("-fast")
+      ? modelsById.get(requestedId.slice(0, -5)) : undefined);
+    const allowed = target && (model.providerID === `dim-${target.api}` || model.providerID === "openai" && target.api === "responses") ? target : undefined;
     if (!allowed) throw new Error("DIM router rejects a model unavailable in the attached route");
     if (allowed.api === "responses" && output !== undefined) {
       const parameters = record(output);
@@ -99,6 +103,11 @@ async function DimLlmRouter() {
       const options = openai.options === undefined ? {} : record(openai.options);
       const configured = openai.models === undefined ? {} : record(openai.models);
       const responses = models.filter((model) => model.api === "responses");
+      // OMO may request a -fast name absent from this account. Expose an alias
+      // only when that exact name is absent and its unsuffixed model is served.
+      const openaiModels = responses.flatMap((model) => [{ id: model.id, target: model },
+        ...(model.id.length <= 195 && !modelsById.has(`${model.id}-fast`)
+          ? [{ id: `${model.id}-fast`, target: model }] : [])]);
       const endpoint = connection.endpoint;
       const token = connection.token;
       const transport: typeof fetch = async (input, init) => {
@@ -109,12 +118,12 @@ async function DimLlmRouter() {
         return fetch(input, { ...init, headers, redirect: "error" });
       };
       providers.openai = { ...openai, npm: "@ai-sdk/openai", name: "OpenAI via DIM workspace router",
-        whitelist: responses.map(({ id }) => id),
+        whitelist: openaiModels.map(({ id }) => id),
         options: { ...options, baseURL: `${endpoint}/v1`, apiKey: token, fetch: transport },
-        models: Object.fromEntries(responses.map((model) => {
-          const existing = configured[model.id] === undefined ? {} : record(configured[model.id]);
+        models: Object.fromEntries(openaiModels.map(({ id, target: model }) => {
+          const existing = configured[id] === undefined ? {} : record(configured[id]);
           const modelOptions = existing.options === undefined ? {} : record(existing.options);
-          return [model.id, { ...existing, name: model.name, options: { ...modelOptions, store: false },
+          return [id, { ...existing, ...(id === model.id ? {} : { id: model.id }), name: id === model.id ? model.name : `${id} (via ${model.id})`, options: { ...modelOptions, store: false },
             limit: existing.limit ?? { context: model.context, output: model.output } }];
         })) };
       const defaultSelection = selected.api === "responses" ? `openai/${selected.id}` : selection;

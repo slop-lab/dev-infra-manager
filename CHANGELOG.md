@@ -160,7 +160,9 @@ is implied by these source changes.
   separate routing feature.
   Configured workspace OpenCode/OMO helpers route `openai/*` through that router
   while preserving role-specific models, variants, fallback chains and other
-  provider connections; only unset main/background models receive defaults. Optional workspace Web contributions
+  provider connections; only unset main/background models receive defaults.
+  When an OpenAI `-fast` model is absent, route it to its available unsuffixed
+  model without changing OMO role selections or variants; exact matches win. Optional workspace Web contributions
   appear inside each workspace management row, discover selected controllers,
   install pinned OpenCode/Codex explicitly and
   start, inspect or stop owned OpenCode servers without repository setup.
