@@ -79,6 +79,8 @@ it("backfills independent review and promotion webhook transport from durable pr
     await until(() => received.length === 2);
     expect(received.map(({ type }) => type).sort()).toEqual(["dev.dim.git.ref.promoted", "dev.dim.git.review.created"]);
     const ids = received.map(({ id }) => id).sort();
+    // Receipt at the HTTP receiver precedes the dispatcher's durable acknowledgement.
+    await until(() => transport?.dispatcher.store.list("project").filter(({ status }) => status === "delivered").length === 2);
     await transport.close(); transport = await startWebhookService(config, sources, new AbortController().signal);
     await until(() => transport?.dispatcher.store.list("project").length === 2);
     expect(transport.dispatcher.store.list("project").map(({ eventId }) => eventId).sort()).toEqual(ids);
