@@ -1,17 +1,20 @@
 // @ts-check
 /** @typedef {import("./types.js").Session} Session */
 /** @typedef {{name:string,description:string,access:string}} Operation */
-/** @typedef {{id:string,title:string,description:string,configured:boolean,status:"ready"|"unconfigured"|"unavailable",browserEntry:string,operations:Operation[]}} Feature */
+/** @typedef {{id:string,title:string,description:string,configured:boolean,status:"ready"|"unconfigured"|"unavailable",browserEntry:string,surfaces?:Array<"navigation"|"workspace">,operations:Operation[]}} Feature */
 const navigation = document.getElementById("feature-navigation"), tabs = document.getElementById("feature-tabs"), panels = document.getElementById("feature-panels"), base = document.getElementById("feature-workspaces");
 if (!(navigation instanceof HTMLElement) || !(tabs instanceof HTMLElement) || !(panels instanceof HTMLElement) || !(base instanceof HTMLButtonElement)) throw new Error("Missing feature navigation");
 const nav = navigation, tabList = tabs, panelList = panels, baseButton = base;
 let generation = 0;
+/** @type {Feature[]} */ let catalog = [];
+/** @type {Set<()=>void>} */ const workspaceMounts = new Set();
 /** @type {Session | null} */ let session = null;
 /** @type {Array<()=>void>} */ const disposers = [];
 /** @type {boolean|null} */ let baseState = null;
 /** @type {Map<string,{button:HTMLButtonElement,section:HTMLElement,feature:Feature,mounted:boolean,message:HTMLElement,reconnect:HTMLButtonElement}>} */ const views = new Map();
 export function clearFeaturePlugins() {
-  generation++; session = null; baseState = null;
+  generation++; session = null; baseState = null; catalog = [];
+  for (const refresh of workspaceMounts) refresh();
   for (const dispose of disposers.splice(0)) dispose();
   views.clear(); tabList.replaceChildren(); panelList.replaceChildren(); nav.hidden = true; panelList.hidden = true;
 }
@@ -22,9 +25,11 @@ export async function showFeaturePlugins(active) {
     const response = await fetch("/v1/extensions", { credentials: "same-origin", signal: AbortSignal.timeout(10_000) });
     if (!response.ok) return;
     /** @type {Feature[]} */ const features = await response.json(); if (selected !== generation) return;
+    catalog = features; for (const refresh of workspaceMounts) refresh();
+    const navigationFeatures = features.filter((feature) => (feature.surfaces ?? ["navigation"]).includes("navigation"));
     baseButton.textContent = "Workspaces"; baseButton.hidden = !active.capabilities.operations;
     baseButton.setAttribute("aria-pressed", "true");
-    for (const feature of features) {
+    for (const feature of navigationFeatures) {
       const button = document.createElement("button"); button.className = "button button-secondary"; button.type = "button"; button.textContent = feature.title; button.setAttribute("aria-pressed", "false");
       const section = document.createElement("section"); section.className = "feature-page"; section.hidden = true;
       const heading = document.createElement("h1"); heading.textContent = feature.title; heading.tabIndex = -1;
@@ -37,8 +42,8 @@ export async function showFeaturePlugins(active) {
       reconnect.addEventListener("click", () => { void reconnectFeature(feature.id); });
       button.addEventListener("click", () => { void selectFeature(feature.id); });
     }
-    nav.hidden = features.length === 0;
-    if (!active.capabilities.operations && features[0]) await selectFeature(features[0].id);
+    nav.hidden = navigationFeatures.length === 0;
+    if (!active.capabilities.operations && navigationFeatures[0]) await selectFeature(navigationFeatures[0].id);
   } catch { /* A missing optional navigation must not prevent base workspace use. */ }
 }
 /** @param {string|null} id */
@@ -78,19 +83,7 @@ async function selectFeature(id) {
     const dispose = await plugin.mount(content, {
       operations: view.feature.operations,
       isCurrent: () => selected === generation,
-      /** @param {string} name @param {unknown} [input] @param {import("../plugin-api.js").WebPluginInvokeOptions} [options] */
-      async invoke(name, input = {}, options) {
-        const timeout = options === undefined ? 35_000 : options?.timeoutMilliseconds;
-        if (options !== undefined && (typeof options !== "object" || options === null || Object.keys(options).some((key) => key !== "timeoutMilliseconds"))
-          || !Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 185_000) throw new Error("Invalid feature request timeout.");
-        if (selected !== generation || !view.feature.operations.some((operation) => operation.name === name)) throw new Error("This operation is not available to this account.");
-        const response = await fetch(`/v1/extensions/${view.feature.id}/operations/${encodeURIComponent(name)}`, { method: "POST", credentials: "same-origin",
-          headers: { "content-type": "application/json", "x-dim-csrf": active.csrfToken }, body: JSON.stringify(input), signal: AbortSignal.timeout(timeout) });
-        if (selected !== generation) throw new Error("Your session ended.");
-        if (response.status === 401) window.dispatchEvent(new Event("dim-session-expired"));
-        if (!response.ok) throw new Error(response.status === 401 ? "Your session ended. Sign in again." : response.status === 403 ? "This account does not have permission for that action." : "The connected service could not complete this operation. Refresh its state before retrying; your input is kept.");
-        return response.json();
-      }
+      invoke: featureInvoker(view.feature, active, () => selected === generation)
     });
     content.dataset.pluginMounted = "true";
     if (typeof dispose === "function") { if (selected === generation) disposers.push(dispose); else dispose(); }
@@ -129,3 +122,56 @@ async function reconnectFeature(id) {
   } finally { view.reconnect.disabled = false; }
 }
 baseButton.addEventListener("click", () => { void selectFeature(null); });
+
+/** @param {Feature} feature @param {Session} active @param {()=>boolean} current */
+function featureInvoker(feature, active, current) {
+  /** @param {string} name @param {unknown} [input] @param {import("../plugin-api.js").WebPluginInvokeOptions} [options] */
+  return async (name, input = {}, options) => {
+    const timeout = options === undefined ? 35_000 : options?.timeoutMilliseconds;
+    if (options !== undefined && (typeof options !== "object" || options === null || Object.keys(options).some((key) => key !== "timeoutMilliseconds"))
+      || !Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 185_000) throw new Error("Invalid feature request timeout.");
+    if (!current() || !feature.operations.some((operation) => operation.name === name)) throw new Error("This operation is not available to this account.");
+    const response = await fetch(`/v1/extensions/${feature.id}/operations/${encodeURIComponent(name)}`, { method: "POST", credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-dim-csrf": active.csrfToken }, body: JSON.stringify(input), signal: AbortSignal.timeout(timeout) });
+    if (!current()) throw new Error("Your session ended or workspace changed.");
+    if (response.status === 401) window.dispatchEvent(new Event("dim-session-expired"));
+    if (!response.ok) throw new Error(response.status === 401 ? "Your session ended. Sign in again." : response.status === 403 ? "This account does not have permission for that action." : "The connected service could not complete this operation. Refresh its state before retrying; your input is kept.");
+    return response.json();
+  };
+}
+/** Mount optional feature-owned controls into one exact workspace row.
+ * @param {HTMLElement} container
+ * @param {{hostId:string,name:string,id:string,phase:string}} workspace
+ * @param {()=>boolean} active
+ * @param {()=>Promise<boolean>} refreshWorkspace
+ */
+export function mountWorkspaceFeatures(container, workspace, active, refreshWorkspace) {
+  let revision = 0, disposed = false;
+  /** @type {Array<()=>void>} */ let cleanup = [];
+  function refresh() {
+    const selected = ++revision, currentSession = session;
+    for (const dispose of cleanup) dispose(); cleanup = []; container.replaceChildren();
+    if (disposed || !active() || !currentSession) return;
+    for (const feature of catalog.filter((entry) => (entry.surfaces ?? ["navigation"]).includes("workspace"))) {
+      const details = document.createElement("details"), summary = document.createElement("summary"), content = document.createElement("div");
+      summary.textContent = feature.title; details.className = "workspace-feature"; content.className = "feature-form"; details.append(summary, content); container.append(details);
+      let mounted = false;
+      const current = () => !disposed && active() && selected === revision && session === currentSession;
+      details.addEventListener("toggle", () => {
+        if (!details.open || mounted || !current()) return; mounted = true;
+        if (feature.status !== "ready") { content.textContent = "This host feature is unavailable. Ask an operator to check the installed host plugin and reconnect the Web service."; return; }
+        if (!feature.operations.length) { content.textContent = "This account has no operations for this feature."; return; }
+        void (async () => {
+          try {
+            const plugin = await import(feature.browserEntry); if (!current()) return;
+            if (typeof plugin.mount !== "function") throw new Error("Missing workspace feature entrypoint");
+            const dispose = await plugin.mount(content, { workspace, refreshWorkspace, operations: feature.operations, isCurrent: current, invoke: featureInvoker(feature, currentSession, current) });
+            if (typeof dispose === "function") { if (current()) cleanup.push(dispose); else dispose(); }
+          } catch { if (current()) content.textContent = "This workspace feature could not load. Refresh workspaces and try again."; }
+        })();
+      });
+    }
+  }
+  workspaceMounts.add(refresh); refresh();
+  return () => { disposed = true; revision++; workspaceMounts.delete(refresh); for (const dispose of cleanup) dispose(); cleanup = []; container.replaceChildren(); };
+}

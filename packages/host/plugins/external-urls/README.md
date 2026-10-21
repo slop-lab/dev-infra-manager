@@ -19,9 +19,10 @@ npx '@slop-lab/dim-installer@0.10.0' installer install plugin \
 dim plugins
 ```
 
-Restart the DIM host controller after changing installed plugins. A Caddy
-HTTPS ingress also requires a separately installed DNS provider such as
+Restart the DIM host controller after changing installed plugins. Managed
+wildcard certificate issuance requires a separately installed DNS provider such as
 [`@slop-lab/dim-host-plugin-dns-cloudflare`](https://www.npmjs.com/package/@slop-lab/dim-host-plugin-dns-cloudflare).
+Existing DNS and operator-managed wildcard certificates require no DNS plugin.
 
 ## Direct HTTP ingress
 
@@ -95,6 +96,30 @@ The `caddy` ingress driver reconciles wildcard DNS, builds the required Caddy
 DNS module, writes runtime files, and owns the Caddy container. Project
 repositories do not deploy Caddy themselves. Configuration includes a named
 DNS provider and that provider's opaque record argument.
+
+If wildcard DNS already points to the ingress host, use the existing records and
+a matching wildcard certificate instead. Paths refer to files on the selected
+host, not inside the workspace:
+
+```bash
+dim external-url ingress add caddy \
+  --name public --description "Existing development DNS" --scheme https \
+  --domain dev.example.com --listen-host 0.0.0.0 --listen-port 443 \
+  --tls-cert /etc/dim/tls/wildcard-fullchain.pem \
+  --tls-key /etc/dim/tls/wildcard-key.pem
+```
+
+The certificate must cover `*.dev.example.com`; supply its PEM certificate chain
+and matching unencrypted PEM key. DIM checks readability, validity dates, key
+matching and wildcard coverage before starting Caddy. Only the trusted ingress
+container receives these host files as read-only mounts. Workspace and agent
+containers receive neither file nor private key. No DNS record is created,
+modified or deleted, even with `ingress remove --cleanup-dns`. Renew these
+certificates through your existing certificate management and restart the
+controller after replacing them. Public clients still need to trust the issuer.
+Do not combine `--tls-cert`/`--tls-key` with `--dns-provider`/`--dns-argument`.
+HTTP ingress also works with existing wildcard DNS when TLS terminates at an
+upstream ingress or when HTTP is suitable for the network.
 
 The argument may also contain `staticRoutes`, for example
 `[{"subdomain":"git","upstream":"http://127.0.0.1:3300"}]`. These exact

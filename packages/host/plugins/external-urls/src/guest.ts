@@ -11,7 +11,13 @@ import { readExternalUrlConfig } from "@slop-lab/dim-contracts-external-url";
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "external-urls",
   commands: [{ name: "external-url", description: "Configure ingress, DNS and workspace URLs" }],
-  async run(args) { const { runExternalUrlCli } = await import("./cli/index.js"); await runExternalUrlCli(args); },
+  async run(args, context) {
+    if (args[1] === "console") {
+      const { runExternalUrlConsole } = await import("./console.js");
+      await runExternalUrlConsole(args.slice(2), context); return;
+    }
+    const { runExternalUrlCli } = await import("./cli/index.js"); await runExternalUrlCli(args);
+  },
   async workspaceReady(workspace, context) {
     await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
       name: "external-urls",

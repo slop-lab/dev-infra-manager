@@ -7,7 +7,7 @@
 `@slop-lab/dim-web` supplies optional authenticated console infrastructure and
 ordinary local/SSH workspace operations. Feature packages own their service
 connections, operation declarations and browser panels. Native Git, execution,
-workspace tools and LLM routing are explicitly installed Web plugins. The console has no
+workspace tools, external routes and LLM routing are explicitly installed Web plugins. The console has no
 required control-plane service, Native Git credentials or CI implementation.
 
 The trusted Web server selects directly installed package names in its private

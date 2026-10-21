@@ -37,6 +37,8 @@ export const packageDirectories = [
   "packages/web/plugins/execution/dist",
   "packages/web/plugins/native-git/dist",
   "packages/web/plugins/agent-tools/dist",
+  "packages/web/plugins/external-urls/dist",
+  "packages/control-plane/plugins/external-urls/dist",
   "packages/control-plane/plugins/ci-workflows/dist",
   "packages/contracts/external-url/dist",
   "packages/host/plugins/dns-cloudflare/dist",

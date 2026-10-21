@@ -17,8 +17,10 @@ export interface CaddyIngressArgument {
   domain: string;
   listenHost: string;
   listenPort: number | "auto";
-  dnsProvider: string;
-  dnsArgument: string;
+  dnsProvider?: string;
+  dnsArgument?: string;
+  tlsCert?: string;
+  tlsKey?: string;
   acmeEmail?: string;
   routePolicy?: ExternalUrlRoutePolicyConfig;
   staticRoutes?: CaddyStaticRoute[];
@@ -50,11 +52,22 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
     && (!Number.isInteger(input.listenPort) || (input.listenPort as number) < 1 || (input.listenPort as number) > 65535)) {
     throw caddyArgumentError("field 'listenPort' must be 'auto' or a port");
   }
-  if (typeof input.dnsProvider !== "string" || input.dnsProvider.length === 0) {
-    throw caddyArgumentError("requires string field 'dnsProvider'");
-  }
-  if (typeof input.dnsArgument !== "string") {
-    throw caddyArgumentError("requires string field 'dnsArgument'");
+  const providedTls = input.tlsCert !== undefined || input.tlsKey !== undefined;
+  if (providedTls) {
+    for (const field of ["tlsCert", "tlsKey"] as const) {
+      if (typeof input[field] !== "string" || !(input[field] as string).startsWith("/")
+        || /[\r\n\0]/.test(input[field] as string)) {
+        throw caddyArgumentError(`field '${field}' must be an absolute host file path`);
+      }
+    }
+    if (input.dnsProvider !== undefined || input.dnsArgument !== undefined) {
+      throw caddyArgumentError("requires either 'tlsCert'/'tlsKey' for existing DNS or 'dnsProvider'/'dnsArgument', not both");
+    }
+  } else {
+    if (typeof input.dnsProvider !== "string" || input.dnsProvider.length === 0) {
+      throw caddyArgumentError("requires 'dnsProvider' with 'dnsArgument', or 'tlsCert' with 'tlsKey' for existing DNS");
+    }
+    if (typeof input.dnsArgument !== "string") throw caddyArgumentError("requires string field 'dnsArgument'");
   }
   if (input.internalPort !== undefined) {
     throw caddyArgumentError("field 'internalPort' is managed by DIM and must not be configured");
@@ -121,13 +134,14 @@ export function renderCaddyDeployment(
   name: string,
   ingress: CaddyIngressArgument & { listenPort: number },
   routerPort: number,
-  dns: ExternalUrlCaddyDnsModule
+  dns?: ExternalUrlCaddyDnsModule
 ): CaddyDeployment {
-  validateCaddyDnsModule(dns);
+  if (dns) validateCaddyDnsModule(dns);
+  else if (!ingress.tlsCert || !ingress.tlsKey) throw caddyArgumentError("requires TLS certificate and key when no DNS module is selected");
   const service = `dim-caddy-${name}`;
   const email = ingress.acmeEmail ? `\n\temail ${ingress.acmeEmail}` : "";
-  const modules = dns.modules.map((module) => ` --with ${module}`).join("");
-  const environment = Object.keys(dns.environment)
+  const modules = dns?.modules.map((module) => ` --with ${module}`).join("") ?? "";
+  const environment = Object.keys(dns?.environment ?? {})
     .map((name) => `      ${name}: \${${name}:?set ${name}}`)
     .join("\n");
   const staticRoutes = (ingress.staticRoutes ?? []).map((route, index) => `
@@ -136,22 +150,22 @@ export function renderCaddyDeployment(
 \t\treverse_proxy ${route.upstream}
 \t}`).join("\n");
   return {
-    dockerfile: `FROM caddy:${CADDY_VERSION}-builder-alpine AS builder
+    dockerfile: dns ? `FROM caddy:${CADDY_VERSION}-builder-alpine AS builder
 RUN xcaddy build v${CADDY_VERSION}${modules}
 
 FROM caddy:${CADDY_VERSION}-alpine
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
-`,
+` : `FROM caddy:${CADDY_VERSION}-alpine\n`,
     caddyfile: `{
 \tadmin off${email}
 }
 
 https://*.${ingress.domain}:${ingress.listenPort} {
 \tbind ${ingress.listenHost}
-\ttls {
+${dns ? `\ttls {
 \t\t${dns.directive}
 \t\tresolvers 1.1.1.1
-\t}
+\t}` : "\ttls /etc/caddy/tls/certificate.pem /etc/caddy/tls/private-key.pem"}
 ${staticRoutes}
 
 \thandle {
@@ -167,10 +181,10 @@ ${staticRoutes}
     container_name: ${service}
     restart: unless-stopped
     network_mode: host
-    environment:
-${environment}
+${environment ? `    environment:\n${environment}\n` : ""}\
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+${dns ? "" : `      - type: bind\n        source: ${JSON.stringify(ingress.tlsCert).replaceAll("$", () => "$$")}\n        target: /etc/caddy/tls/certificate.pem\n        read_only: true\n      - type: bind\n        source: ${JSON.stringify(ingress.tlsKey).replaceAll("$", () => "$$")}\n        target: /etc/caddy/tls/private-key.pem\n        read_only: true\n`}\
       - caddy-data:/data
       - caddy-config:/config
 
@@ -178,7 +192,7 @@ volumes:
   caddy-data:
   caddy-config:
 `,
-    environment: Object.entries(dns.environment)
+    environment: Object.entries(dns?.environment ?? {})
       .map(([name, value]) => `${name}=${JSON.stringify(value)}\n`)
       .join("")
   };

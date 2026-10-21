@@ -1,5 +1,7 @@
 import type { ExternalUrlIngressDriver, IngressDriverContext } from "./plugin-api.js";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile, open } from "node:fs/promises";
+import { constants } from "node:fs";
+import { X509Certificate, createPrivateKey } from "node:crypto";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-host-core";
 import type { AdminRouteContext, ControllerRuntimeContext, DimPluginHost } from "@slop-lab/dim-host-core/controller";
@@ -10,7 +12,7 @@ import { availableTcpPort, parseIngressCliArguments } from "./ingressDriver.js";
 
 interface ManagedCaddyIngress {
   argument: ReturnType<typeof parseCaddyIngressArgument> & { listenPort: number };
-  provider: ExternalUrlDnsProviderConfig;
+  provider: ExternalUrlDnsProviderConfig | undefined;
   routerPort: number;
 }
 function provider(context: IngressDriverContext, name: string): ExternalUrlDnsProviderConfig {
@@ -22,15 +24,18 @@ export const caddyIngressDriver: ExternalUrlIngressDriver = {
   async configure(scheme, args, context) {
     if (scheme !== "https") throw new UserError(`Caddy ingress requires '--scheme https'; use driver 'http' for '--scheme http'. See ${CADDY_INGRESS_DOCUMENTATION_URL}`);
     let parsed: ReturnType<typeof parseCaddyIngressArgument>;
-    try { parsed = parseCaddyIngressArgument(JSON.stringify(parseIngressCliArguments("caddy", args, new Set(["domain", "listen-host", "listen-port", "dns-provider", "dns-argument", "acme-email"])))); }
+    try { parsed = parseCaddyIngressArgument(JSON.stringify(parseIngressCliArguments("caddy", args, new Set(["domain", "listen-host", "listen-port", "dns-provider", "dns-argument", "acme-email", "tls-cert", "tls-key"])))); }
     catch (error) { throw new UserError(error instanceof Error ? error.message : String(error)); }
-    const selected = provider(context, parsed.dnsProvider);
-    parsed.dnsArgument = normalizeDnsRecordArgument(dnsDriver(context.host, selected.driver), parsed.dnsArgument);
+    if (parsed.dnsProvider) {
+      const selected = provider(context, parsed.dnsProvider);
+      parsed.dnsArgument = normalizeDnsRecordArgument(dnsDriver(context.host, selected.driver), parsed.dnsArgument!);
+    } else await validateProvidedCaddyTls(parsed);
     return JSON.stringify({ ...parsed, listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort });
   },
   async runtime(argument, context) {
-    const parsed = parseCaddyIngressArgument(argument), selected = provider(context, parsed.dnsProvider);
-    dnsDriver(context.host, selected.driver);
+    const parsed = parseCaddyIngressArgument(argument);
+    const selected = parsed.dnsProvider ? provider(context, parsed.dnsProvider) : undefined;
+    if (selected) dnsDriver(context.host, selected.driver);
     if (parsed.listenPort === "auto") throw new UserError("Caddy ingress has unresolved listenPort; re-add it with the DIM CLI");
     const ingress = { argument: { ...parsed, listenPort: parsed.listenPort }, provider: selected,
       routerPort: await availableTcpPort("127.0.0.1", new Set([parsed.listenPort])) };
@@ -40,14 +45,19 @@ export const caddyIngressDriver: ExternalUrlIngressDriver = {
       approvalExposure: { listenHost: parsed.listenHost, listenPort: parsed.listenPort },
       initialize: (runtime, name) => reconcileManagedCaddy(context.host, runtime, name, ingress) };
   },
-  dependencies(argument) { return [parseCaddyIngressArgument(argument).dnsProvider]; },
+  dependencies(argument) { const name = parseCaddyIngressArgument(argument).dnsProvider; return name ? [name] : []; },
   async verify(argument, context) {
-    const parsed = parseCaddyIngressArgument(argument), selected = provider(context, parsed.dnsProvider);
-    await dnsDriver(context.host, selected.driver).verify(dnsOperation(selected, parsed)); await verifyCaddyIngress(parsed);
+    const parsed = parseCaddyIngressArgument(argument);
+    if (parsed.dnsProvider) {
+      const selected = provider(context, parsed.dnsProvider);
+      await dnsDriver(context.host, selected.driver).verify(dnsOperation(selected, parsed));
+    } else await validateProvidedCaddyTls(parsed);
+    await verifyCaddyIngress(parsed);
   },
   async remove(name, argument, runtime, context, cleanupDns) {
-    if (cleanupDns) { const parsed = parseCaddyIngressArgument(argument), selected = provider(context, parsed.dnsProvider);
-      await dnsDriver(context.host, selected.driver).remove(dnsOperation(selected, parsed)); }
+    if (cleanupDns) { const parsed = parseCaddyIngressArgument(argument);
+      if (parsed.dnsProvider) { const selected = provider(context, parsed.dnsProvider);
+        await dnsDriver(context.host, selected.driver).remove(dnsOperation(selected, parsed)); } }
     await stopManagedCaddy(runtime, name);
   },
   prune: removeStaleManagedCaddy
@@ -59,13 +69,14 @@ async function reconcileManagedCaddy(
   name: string,
   ingress: ManagedCaddyIngress
 ): Promise<void> {
-  const providerDriver = dnsDriver(host, ingress.provider.driver);
-  await providerDriver.ensure(dnsOperation(ingress.provider, ingress.argument));
+  const providerDriver = ingress.provider ? dnsDriver(host, ingress.provider.driver) : undefined;
+  if (providerDriver && ingress.provider) await providerDriver.ensure(dnsOperation(ingress.provider, ingress.argument));
+  else await validateProvidedCaddyTls(ingress.argument);
   const deployment = renderCaddyDeployment(
     name,
     ingress.argument,
     ingress.routerPort,
-    providerDriver.caddyDns01(ingress.provider.argument)
+    providerDriver && ingress.provider ? providerDriver.caddyDns01(ingress.provider.argument) : undefined
   );
   const output = managedCaddyDirectory(runtime.stateRoot, name);
   await mkdir(output, { recursive: true, mode: 0o700 });
@@ -83,7 +94,10 @@ async function reconcileManagedCaddy(
     path.join(output, "compose.yml"),
     "up",
     "--detach",
-    "--build"
+    "--build",
+    // Reload operator certificates even when renewal atomically replaced the
+    // original file and the Compose configuration itself did not change.
+    ...(ingress.argument.tlsCert ? ["--force-recreate"] : [])
   ]);
   if (result.exitCode !== 0) {
     throw new Error(
@@ -157,9 +171,30 @@ function managedCaddyDirectory(stateRoot: string, name: string): string {
 function dnsOperation(provider: ExternalUrlDnsProviderConfig, ingress: ReturnType<typeof parseCaddyIngressArgument>) {
   return {
     providerArgument: provider.argument,
-    recordArgument: ingress.dnsArgument,
+    recordArgument: ingress.dnsArgument!,
     domain: ingress.domain,
     env: process.env
   };
+}
+
+/** Operator-selected host files stay outside workspace containers and project state. */
+export async function validateProvidedCaddyTls(ingress: ReturnType<typeof parseCaddyIngressArgument>): Promise<void> {
+  try {
+    const readTlsFile = async (filename: string): Promise<Buffer> => {
+      const handle = await open(filename, constants.O_RDONLY | constants.O_NONBLOCK);
+      try {
+        const info = await handle.stat();
+        if (!info.isFile() || info.size > 1024 * 1024) throw new Error("invalid TLS file");
+        return await handle.readFile();
+      } finally { await handle.close(); }
+    };
+    const [certificate, key] = await Promise.all([readTlsFile(ingress.tlsCert!), readTlsFile(ingress.tlsKey!)]);
+    const parsed = new X509Certificate(certificate);
+    if (!parsed.checkPrivateKey(createPrivateKey(key))) throw new Error("certificate/key mismatch");
+    if (parsed.checkHost(`health.${ingress.domain}`) !== `*.${ingress.domain}`) throw new Error("wildcard certificate required");
+    if (Date.parse(parsed.validFrom) > Date.now() || Date.parse(parsed.validTo) <= Date.now()) throw new Error("expired certificate");
+  } catch {
+    throw new UserError("Caddy existing-DNS mode requires readable PEM certificate/key files, a matching private key, and an unexpired wildcard certificate for the ingress domain; check --tls-cert and --tls-key on the selected host");
+  }
 }
 

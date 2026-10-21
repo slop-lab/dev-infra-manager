@@ -49,6 +49,7 @@ export async function loadWebPlugins(selections: readonly WebPluginSelection[], 
     const definition = typeof module === "object" && module !== null && "webPlugin" in module ? module.webPlugin as WebPlugin : undefined;
     if (!definition || !/^[a-z][a-z0-9-]{0,63}$/.test(definition.id) || ids.has(definition.id)
       || typeof definition.title !== "string" || definition.title.length > 128 || typeof definition.description !== "string" || definition.description.length > 2000
+      || (definition.surfaces !== undefined && (!Array.isArray(definition.surfaces) || !definition.surfaces.length || new Set(definition.surfaces).size !== definition.surfaces.length || definition.surfaces.some((surface) => surface !== "navigation" && surface !== "workspace")))
       || typeof definition.create !== "function" || (definition.autoConnect !== undefined && typeof definition.autoConnect !== "function") || !definition.assets || !Object.hasOwn(definition.assets, definition.browserEntry)) throw new Error("invalid or duplicate Web plugin definition");
     ids.add(definition.id); operationDescriptors(definition.operations);
     for (const [name, url] of Object.entries(definition.assets)) if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.(?:js|css|svg)$/.test(name) || !(url instanceof URL) || url.protocol !== "file:") throw new Error("invalid Web plugin asset declaration");
@@ -58,7 +59,7 @@ export async function loadWebPlugins(selections: readonly WebPluginSelection[], 
   return result;
 }
 export function webPluginCatalog(plugins: readonly LoadedWebPlugin[], roles: readonly string[]) {
-  return plugins.map(({ definition, runtime, config, context, status }) => ({ id: definition.id, title: definition.title, description: definition.description, status,
+  return plugins.map(({ definition, runtime, config, context, status }) => ({ id: definition.id, title: definition.title, description: definition.description, surfaces: definition.surfaces ?? ["navigation"], status,
     configured: config !== undefined || definition.autoConnect !== undefined && context.controllers.length > 0, browserEntry: `/v1/extensions/${definition.id}/assets/${definition.browserEntry}`,
     operations: operationDescriptors(runtime?.operations ?? []).filter(({ access }) => roles.includes(access)) }));
 }

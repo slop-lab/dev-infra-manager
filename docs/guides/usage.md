@@ -29,7 +29,7 @@ facade directory to PATH.
 Preparation rejects dirty source by default; use a reviewed clean commit.
 
 `install-local` also installs the matched Web UI and the LLM router, execution,
-Native Git and Workspace tools Web plugins in a separate runtime under
+Native Git, Workspace tools and External routes Web plugins in a separate runtime under
 `DIM_DATA_HOME/web/runtime`. It configures the built-in
 `local` host and creates a browser account on first installation. With user
 systemd available, `dim-web.service` starts at `http://127.0.0.1:9081`; otherwise

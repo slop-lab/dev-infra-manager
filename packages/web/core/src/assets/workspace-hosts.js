@@ -1,5 +1,6 @@
 // @ts-check
 import { record, text } from "./session-data.js";
+import { mountWorkspaceFeatures } from "./feature-panels.js";
 
 /** @typedef {(path:string, body?:unknown, timeout?:number)=>Promise<unknown>} Request */
 /** @param {string} tag @param {string} [className] @param {string} [content] */
@@ -53,11 +54,11 @@ export function createWorkspaceHosts(container, request) {
   /** @type {Map<string,ReturnType<typeof createHost>>} */
   const views = new Map();
   return {
-    clear() { generation++; views.clear(); container.replaceChildren(); },
+    clear() { generation++; for (const view of views.values()) view.dispose(); views.clear(); container.replaceChildren(); },
     /** @param {string[]} ids @param {boolean} canOperate */
     async refresh(ids, canOperate) {
       const selected = generation;
-      for (const [id, view] of views) if (!ids.includes(id)) { view.section.remove(); views.delete(id); }
+      for (const [id, view] of views) if (!ids.includes(id)) { view.dispose(); view.section.remove(); views.delete(id); }
       for (const id of ids) if (!views.has(id)) {
         const view = createHost(id, canOperate, request, () => selected === generation);
         views.set(id, view); container.append(view.section);
@@ -93,7 +94,7 @@ function createHost(id, canOperate, request, active) {
       if (!Array.isArray(value)) throw new Error("invalid workspace list");
       const rows = value.map(record).filter((row) => row !== null);
       const ids = new Set(rows.map((row) => text(row.id)));
-      for (const [key, view] of workspaces) if (!ids.has(key)) { view.row.remove(); workspaces.delete(key); }
+      for (const [key, view] of workspaces) if (!ids.has(key)) { view.dispose(); view.row.remove(); workspaces.delete(key); }
       list.querySelector(".workspace-empty")?.remove();
       for (const workspace of rows) {
         const key = text(workspace.id); if (!key) continue;
@@ -119,7 +120,7 @@ function createHost(id, canOperate, request, active) {
     heading.append(open); section.append(form.form);
   }
   retry.addEventListener("click", () => { void refresh(); }); section.append(message, retry, list);
-  return { section, refresh };
+  return { section, refresh, dispose() { for (const view of workspaces.values()) view.dispose(); workspaces.clear(); } };
 }
 
 /** @param {string} host @param {Request} request @param {()=>Promise<boolean>} refresh @param {()=>boolean} active @param {()=>void} close */
@@ -250,9 +251,17 @@ function createWorkspace(host, initial, canOperate, request, refresh, active) {
     confirm.addEventListener("click", () => { void mutate("discard"); });
   }
   row.append(result);
+  const features = node("div", "workspace-features"); row.append(features);
+  let featurePhase = "", disposed = false;
+  /** @type {(()=>void)|undefined} */ let disposeFeatures;
+  const current = () => !disposed && active();
   /** @param {Record<string,unknown>} next */
   function update(next) {
     workspace = next; const phase = text(next.phase) ?? "unknown", runtimeStatus = text(next.runtimeStatus) ?? "unknown", resources = record(next.resources);
+    if (featurePhase !== phase) {
+      featurePhase = phase; disposeFeatures?.();
+      if (expectedId) disposeFeatures = mountWorkspaceFeatures(features, { hostId: host, name, id: expectedId, phase }, current, refresh);
+    }
     badge.textContent = phase; badge.className = `badge ${phase === "running" ? "badge-approved" : phase === "error" ? "badge-error" : phase === "stopped" ? "badge-neutral" : "badge-pending"}`;
     meta.textContent = `${text(next.runtime) ?? "unknown runtime"}${runtimeStatus === phase ? "" : ` · runtime ${runtimeStatus}`}`;
     limits.textContent = `CPU ${text(resources?.cpuCount) ?? "—"} · Memory ${text(resources?.memory) ?? "—"} · PIDs ${text(resources?.pidsLimit) ?? "—"}`;
@@ -273,5 +282,5 @@ function createWorkspace(host, initial, canOperate, request, refresh, active) {
     }
     row.setAttribute("aria-busy", String(busy));
   }
-  return { row, update };
+  return { row, update, dispose() { disposed = true; disposeFeatures?.(); } };
 }

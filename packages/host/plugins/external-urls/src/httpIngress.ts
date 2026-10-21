@@ -30,9 +30,13 @@ export interface HttpIngressOptions {
   readonly port?: number;
   readonly routePolicy?: ExternalUrlRoutePolicyConfig;
   readonly authorizeWorkspace?: (workspace: ControllerWorkspace) => Promise<void>;
+  readonly publishRoute?: (route: ExternalRoute) => Promise<void>;
+  readonly revokeRoute?: (route: ExternalRoute) => Promise<void>;
+  readonly scopeSubdomain?: (subdomain: string, workspaceId: string) => string;
 }
 
 export class WorkspaceIngressListener {
+  readonly #logger: DimPluginLogger;
   readonly name: string;
   readonly #registry: WorkspaceRouteRegistry;
   readonly #server: http.Server;
@@ -44,9 +48,12 @@ export class WorkspaceIngressListener {
   readonly #flows: HttpFlowTracker;
   readonly #authorizeWorkspace: ((workspace: ControllerWorkspace) => Promise<void>) | undefined;
   readonly #flowOwner = Symbol("external-url-listener");
+  readonly #options: HttpIngressOptions;
 
   constructor(registry: WorkspaceRouteRegistry, options: HttpIngressOptions, logger: DimPluginLogger) {
+    this.#logger = logger;
     this.#registry = registry;
+    this.#options = options;
     this.#authorizeWorkspace = options.authorizeWorkspace;
     this.#flows = registry.flows;
     this.name = options.name;
@@ -82,12 +89,13 @@ export class WorkspaceIngressListener {
     await this.#ready;
     if (!upstream && !resolve) throw new UserError("external route requires an authoritative target resolver");
     if (request.subdomain === undefined) throw new UserError("HTTP ingress requests require a subdomain");
-    const subdomain = await applyRoutePolicy(this.#routePolicy, {
+    const approvedSubdomain = await applyRoutePolicy(this.#routePolicy, {
       workspace: { id: workspace.id, name: workspace.name },
       ingress: this.name,
       requestedSubdomain: request.subdomain,
       domain: normalizeDomain(this.#domain)
     });
+    const subdomain = this.#options.scopeSubdomain?.(approvedSubdomain, workspace.id) ?? approvedSubdomain;
     validateSubdomain(subdomain);
     const authority = `${subdomain}.${normalizeDomain(this.#domain)}`;
     const permalinkAuthority = publicRouteId === undefined
@@ -110,7 +118,7 @@ export class WorkspaceIngressListener {
       : validateExternalUrl(
           `${this.#scheme}://${permalinkAuthority}${this.#port === undefined ? "" : `:${this.#port}`}${request.path ?? "/"}`
         );
-    return {
+    const result = {
       acquired,
       route: {
         id: randomUUID(),
@@ -122,6 +130,9 @@ export class WorkspaceIngressListener {
         ...(permalink === undefined ? {} : { permalink })
       }
     };
+    try { await this.#options.publishRoute?.(result.route); }
+    catch (error) { if (acquired) { this.#registry.revoke(routeAuthorities(result.route), claim); this.#flows.destroyClaim(claim); } throw error; }
+    return result;
   }
 
   ready(): Promise<void> {
@@ -132,6 +143,7 @@ export class WorkspaceIngressListener {
     const claim = route.ingressId ?? route.authority;
     this.#registry.revoke(routeAuthorities(route), claim);
     this.#flows.destroyClaim(claim);
+    await this.#options.revokeRoute?.(route);
   }
 
   setApproval(route: ExternalRoute, enabled: boolean): void {
@@ -162,7 +174,10 @@ export class WorkspaceIngressListener {
     try {
       await selected?.authorize?.();
       target = selected?.resolve ? await selected.resolve() : selected?.upstream;
-    } catch { selected = undefined; }
+    } catch (error) {
+      this.#logger.error("DIM external URL target is unavailable", { ingress: this.name, error: error instanceof Error ? error.message : String(error) });
+      selected = undefined;
+    }
     const current = this.#target(request);
     if (selected && (current?.upstream !== selected.upstream || current?.resolve !== selected.resolve)) selected = undefined;
     if (!selected || !target) {

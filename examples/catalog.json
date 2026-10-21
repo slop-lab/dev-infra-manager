@@ -5,6 +5,7 @@
   "use-cases/codex",
   "features/external-urls",
   "features/external-url-route-policy",
+  "features/shared-ingress",
   "features/shared-execution",
   "features/security-review",
   "features/review-tracing",

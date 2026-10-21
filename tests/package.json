@@ -60,6 +60,8 @@
     "@slop-lab/dim-web-plugin-llm-router": "workspace:*",
     "@slop-lab/dim-web-plugin-execution": "workspace:*",
     "@slop-lab/dim-web-plugin-native-git": "workspace:*",
-    "@slop-lab/dim-web-plugin-agent-tools": "workspace:*"
+    "@slop-lab/dim-web-plugin-agent-tools": "workspace:*",
+    "@slop-lab/dim-web-plugin-external-urls": "workspace:*",
+    "@slop-lab/dim-control-plane-plugin-external-urls": "workspace:*"
   }
 }

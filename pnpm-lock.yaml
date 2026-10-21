@@ -345,6 +345,22 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/control-plane/plugins/external-urls:
+    dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/control-plane/plugins/git-ci:
     dependencies:
       '@slop-lab/dim-contracts-ci':
@@ -904,6 +920,25 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/web/plugins/external-urls:
+    dependencies:
+      '@slop-lab/dim-contracts-operations':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/operations
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-web':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/web/plugins/llm-router:
     dependencies:
       '@slop-lab/dim-contracts-operations':
@@ -983,6 +1018,9 @@ importers:
       '@slop-lab/dim-control-plane-plugin-execution-scheduler':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/execution-scheduler
+      '@slop-lab/dim-control-plane-plugin-external-urls':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/external-urls
       '@slop-lab/dim-control-plane-plugin-git-repositories':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/git-repositories
@@ -1046,6 +1084,9 @@ importers:
       '@slop-lab/dim-web-plugin-execution':
         specifier: workspace:*
         version: link:../packages/web/plugins/execution
+      '@slop-lab/dim-web-plugin-external-urls':
+        specifier: workspace:*
+        version: link:../packages/web/plugins/external-urls
       '@slop-lab/dim-web-plugin-llm-router':
         specifier: workspace:*
         version: link:../packages/web/plugins/llm-router

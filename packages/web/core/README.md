@@ -95,12 +95,14 @@ The host CLI in that fixture is synthetic; HTTP authentication is real. It does 
 LLM routing, execution, Native Git review and workspace tools belong to optional Web plugins.
 The console shell provides authentication, sessions, origin and CSRF checks,
 workspace lifecycle controls, feature discovery and trusted packaged assets.
+Plugins can contribute to navigation or directly to each workspace management
+row. Workspace tools and External routes use the row's exact host and UUID.
 It has no required control-plane package or built-in service API proxy.
 
 [Web feature plugins](../../../docs/guides/web-plugins.md) describes package
 installation, configuration and the server/browser extension contract. The
-repository development installer installs the matching LLM router, execution
-and Native Git Web packages in a separate runtime. Connections remain explicit;
+repository development installer installs the matching LLM router, execution,
+Native Git, workspace tools and External routes Web packages in a separate runtime. Connections remain explicit;
 installing a feature does not grant service authority. An unavailable backend
 leaves its feature unavailable while workspaces and other features keep working.
 Reconnect retries the same private configuration and verifies its identity again.

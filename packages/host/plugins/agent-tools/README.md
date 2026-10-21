@@ -26,8 +26,8 @@ user action. Setup neither logs in nor copies credentials from the DIM host.
 progress through the normal workspace transport.
 
 The optional `@slop-lab/dim-web-plugin-agent-tools` package adds a **Workspace
-tools** panel to DIM Web. It discovers this host plugin automatically through
-configured controllers. Select a running workspace to inspect or explicitly
+tools** section in each DIM Web workspace management row. It discovers this host plugin automatically through
+configured controllers. Open a running workspace's tools to inspect or explicitly
 install OpenCode/Codex and start, inspect or stop its OpenCode server. Mutations
 require an operator Web session; every request binds the workspace's current ID.
 No repository configuration or extra control-plane connection is required.

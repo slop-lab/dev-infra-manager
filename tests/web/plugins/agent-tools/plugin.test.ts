@@ -42,6 +42,7 @@ it("refreshes workspace identities without granting authority to an old browser 
 });
 
 it("declares operator-only mutations and rejects private or arbitrary server output", () => {
+  expect(webPlugin.surfaces).toEqual(["workspace"]);
   expect(operations.filter(({ access }) => access === "operator").map(({ name }) => name)).toEqual(["tools.setup", "server.start", "server.stop"]);
   const status = operations.find(({ name }) => name === "server.status")!;
   expect(() => status.parseOutput({ ...serverStatus, password: "private" })).toThrow();

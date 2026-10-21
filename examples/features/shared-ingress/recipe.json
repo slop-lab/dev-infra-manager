@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "shared-ingress",
+  "plugins": {
+    "host": ["@slop-lab/dim-host-plugin-external-urls@0.10.0"],
+    "controlPlane": ["@slop-lab/dim-control-plane-plugin-external-urls@0.10.0"]
+  },
+  "repositories": [],
+  "commands": {
+    "dev": {"argv": ["bash", "scripts/dev.bash"]},
+    "verify": {"argv": ["bash", "scripts/verify.bash"]}
+  }
+}

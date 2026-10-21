@@ -8,6 +8,7 @@ import {
 } from "@slop-lab/dim-contracts-external-url";
 import { caddyIngressDriver } from "./caddyRuntime.js";
 import { httpIngressDriver } from "./httpAdapter.js";
+import { controlPlaneIngressDriver } from "./controlPlaneIngress.js";
 import { dnsDriver, normalizeDnsProviderArgument } from "./dnsProvider.js";
 import { ingressDriver } from "./ingressDriver.js";
 import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, type ExternalUrlIngressRuntime } from "./plugin-api.js";
@@ -37,6 +38,9 @@ import { TcpIngressListener } from "./tcpIngress.js";
 export { TcpIngressListener } from "./tcpIngress.js";
 
 export interface ExternalUrlIngressOptions {
+  publishRoute?: (route: ExternalRoute) => Promise<void>;
+  revokeRoute?: (route: ExternalRoute) => Promise<void>;
+  scopeSubdomain?: (subdomain: string, workspaceId: string) => string;
   description: string;
   scheme: "http" | "https" | "tcp";
   domain: string;
@@ -54,6 +58,7 @@ export interface ExternalUrlIngressOptions {
 export interface ExternalUrlsPluginOptions {
   ingresses: Readonly<Record<string, ExternalUrlIngressOptions>>;
   initialize?(runtime: ControllerRuntimeContext): Promise<void>;
+  close?(): Promise<void>;
 }
 
 type NormalizedRequest = HttpIngressRequest;
@@ -95,6 +100,7 @@ export function createExternalUrlsPlugin(configuration: ExternalUrlsPluginOption
     async register(host) {
       host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "http", httpIngressDriver);
       host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "caddy", caddyIngressDriver);
+      host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "control-plane", controlPlaneIngressDriver);
       let options: ExternalUrlsPluginOptions = typeof configuration === "function" ? { ingresses: {} } : configuration;
       let prepared = false;
       const registry = new WorkspaceRouteRegistry();
@@ -136,6 +142,9 @@ export function createExternalUrlsPlugin(configuration: ExternalUrlsPluginOption
                     listenPort: ingress.listenPort,
                     scheme: ingress.scheme,
                     domain: ingress.domain,
+                    ...(ingress.publishRoute === undefined ? {} : { publishRoute: ingress.publishRoute }),
+                    ...(ingress.revokeRoute === undefined ? {} : { revokeRoute: ingress.revokeRoute }),
+                    ...(ingress.scopeSubdomain === undefined ? {} : { scopeSubdomain: ingress.scopeSubdomain }),
                     ...(ingress.routePolicy === undefined ? {} : { routePolicy: ingress.routePolicy }),
                     ...(ingress.port === undefined ? {} : { port: ingress.port })
                   }, host.logger)
@@ -145,6 +154,7 @@ export function createExternalUrlsPlugin(configuration: ExternalUrlsPluginOption
           prepared = true;
         } catch (error) {
           await Promise.allSettled([...ingresses.values()].map((ingress) => ingress.listener.close()));
+          await options.close?.();
           throw error;
         }
       };
@@ -222,7 +232,7 @@ export function createExternalUrlsPlugin(configuration: ExternalUrlsPluginOption
           handle: (context) => mutations.run(() => deleteUrl(context, ingresses))
         });
 
-        return async () => Promise.all([...ingresses.values()].map((ingress) => ingress.listener.close())).then(() => {});
+        return async () => { await Promise.all([...ingresses.values()].map((ingress) => ingress.listener.close())); await options.close?.(); };
       } catch (error) {
         await Promise.allSettled([...ingresses.values()].map((ingress) => ingress.listener.close()));
         throw error;
@@ -237,15 +247,20 @@ export async function externalUrlsPluginFromConfig(env: NodeJS.ProcessEnv = proc
     const ingresses: Record<string, ExternalUrlIngressOptions> = {};
     const prepared = new Map<string, ExternalUrlIngressRuntime>();
     // Resolution happens after all controller plugins have registered their drivers.
-    for (const [name, ingress] of Object.entries(config.ingresses)) {
-      const runtime = await ingressDriver(host, ingress.driver).runtime(ingress.argument, { host, config }, ingress.scheme);
-      if (runtime.scheme !== ingress.scheme) throw new UserError(`ingress '${name}' runtime scheme differs from its configured scheme`);
-      const { initialize: _initialize, ...endpoint } = runtime;
-      ingresses[name] = { ...endpoint, description: ingress.description,
-        ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired }) };
-      prepared.set(name, runtime);
+    try {
+      for (const [name, ingress] of Object.entries(config.ingresses)) {
+        const runtime = await ingressDriver(host, ingress.driver).runtime(ingress.argument, { host, config }, ingress.scheme);
+        prepared.set(name, runtime);
+        if (runtime.scheme !== ingress.scheme) throw new UserError(`ingress '${name}' runtime scheme differs from its configured scheme`);
+        const { initialize: _initialize, close: _close, ...endpoint } = runtime;
+        ingresses[name] = { ...endpoint, description: ingress.description,
+          ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired }) };
+      }
+    } catch (error) {
+      await Promise.allSettled([...prepared.values()].map((runtime) => runtime.close?.()));
+      throw error;
     }
-    return { ingresses, async initialize(runtime) {
+    return { ingresses, async close() { await Promise.all([...prepared.values()].map((runtime) => runtime.close?.())); }, async initialize(runtime) {
       for (const driver of host.extensionsOfKind<import("./plugin-api.js").ExternalUrlIngressDriver>(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION)) {
         const names = new Set(Object.entries(config.ingresses).filter(([, ingress]) => ingressDriver(host, ingress.driver) === driver).map(([name]) => name));
         await driver.prune?.(runtime, names);
@@ -334,6 +349,21 @@ async function externalUrlAdmin(
         approvalRequired: input.approvalRequired === true
       };
       config.ingresses[text("name")] = ingress;
+      // Reject conflicts before persistence: a failed restart must not leave the
+      // controller unable to boot because two listeners disagree on authority.
+      const prepared: ExternalUrlIngressRuntime[] = [];
+      try {
+        const candidates: Record<string, ExternalUrlIngressOptions> = {};
+        for (const [name, candidate] of Object.entries(config.ingresses)) {
+          const endpoint = await ingressDriver(host, candidate.driver).runtime(candidate.argument, { host, config }, candidate.scheme);
+          prepared.push(endpoint);
+          if (endpoint.scheme !== candidate.scheme) throw new UserError(`ingress '${name}' runtime scheme differs from its configured scheme`);
+          candidates[name] = { ...endpoint, description: candidate.description,
+            ...(candidate.approvalRequired === undefined ? {} : { approvalRequired: candidate.approvalRequired }) };
+        }
+        try { validateOptions({ ingresses: candidates }); }
+        catch (cause) { throw new UserError(cause instanceof Error ? cause.message : "Ingress conflicts with existing host configuration", { cause }); }
+      } finally { await Promise.allSettled(prepared.map((endpoint) => endpoint.close?.())); }
       await writeExternalUrlConfig(config);
       return {};
     }

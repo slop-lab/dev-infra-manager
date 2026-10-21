@@ -6,7 +6,7 @@ import { lifecycleOptions } from "./lifecycleOptions.js";
 export async function workspacePluginRequest(
   workspace: Pick<WorkspaceRecord, "name" | "id">,
   pathname: string,
-  init: { method: "GET" | "POST"; body?: unknown },
+  init: { method: "GET" | "POST" | "DELETE"; body?: unknown },
   signal: AbortSignal
 ): Promise<unknown> {
   if (!/^\/api\/[a-z0-9/-]+$/.test(pathname)) throw new UserError("invalid workspace plugin path");

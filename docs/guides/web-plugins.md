@@ -23,7 +23,8 @@ and explicitly select them in the private Web configuration:
     },
     { "package": "@slop-lab/dim-web-plugin-execution" },
     { "package": "@slop-lab/dim-web-plugin-native-git" },
-    { "package": "@slop-lab/dim-web-plugin-agent-tools" }
+    { "package": "@slop-lab/dim-web-plugin-agent-tools" },
+    { "package": "@slop-lab/dim-web-plugin-external-urls" }
   ]
 }
 ```
@@ -59,14 +60,19 @@ Mounted forms retain drafts; refresh the feature's data after reconnecting.
 closure in the separate `DIM_DATA_HOME/web/runtime` runtime. It adds missing
 selections while preserving accounts and all existing plugin configuration.
 Explicit feature configuration always takes precedence over controller discovery.
-The Workspace tools panel discovers the optional `agent-tools` host plugin and
-its workspaces. In a running workspace, explicitly install OpenCode or Codex,
+Workspace feature contributions appear inside each workspace's management row,
+without a separate tab or another workspace selector. **Workspace tools**
+discovers the optional `agent-tools` host plugin. In a running workspace, explicitly install OpenCode or Codex,
 then start, inspect or stop the OpenCode server. Server actions bind the selected
 workspace UUID so a stale page cannot stop a replacement workspace's process.
 Tool installation and server changes require the operator role. The server stays
 on workspace loopback; the panel explains approved ingress or local forwarding
 and the workspace-private credential location. No tool credential is returned
 to the browser, and starting a server does not grant public network exposure.
+With the optional External URLs host plugin, **External routes** in that same
+row lists configured ingresses and creates a route to OpenCode's port 4096 or
+another workspace/nested-container service. Approval and revocation are explicit
+operator actions. DNS and shared-ingress host credentials remain server-side.
 Only a newly added LLM router selection discovers the conventional private
 `XDG_CONFIG_HOME/dim/llm/operator.json` connection automatically. Native Git and
 Execution discover their own connections through configured controllers. Execution
@@ -107,6 +113,13 @@ operation declares read, operator or reviewer access plus input and result
 validation. The console checks session roles and CSRF before invoking an
 operation. A handler still authenticates to its authoritative service, which
 retains its own policy and concurrency checks.
+
+A plugin can declare `surfaces: ["workspace"]` to contribute directly to workspace
+management. Omitting `surfaces` selects navigation; a plugin can explicitly select
+both. Workspace mounts receive `context.workspace` with `hostId`, `name`, `id`
+and `phase`, plus `refreshWorkspace()`. Their lifecycle follows the exact row UUID,
+phase and browser session. `isCurrent()` and the shared transport reject calls
+after disposal. Host-side handlers still verify UUID ownership for every action.
 
 The browser entry exports `mount(container, context)`, optionally returning a
 cleanup function. `context.operations` lists the currently permitted operation

@@ -4,7 +4,7 @@ import { open, readFile, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { startControlPlanePlugins, type ControlPlanePluginEntry } from "./runtime.js";
 import type { ControlPlanePlugin, RunningControlPlanePlugin } from "./plugin-api.js";
 
@@ -82,6 +82,7 @@ export async function runControlPlaneCli(args: readonly string[]): Promise<void>
   }
 }
 const invoked = process.argv[1];
-if (invoked !== undefined && import.meta.url === pathToFileURL(invoked).href) {
+const invokedPath = invoked === undefined ? undefined : await realpath(invoked).catch(() => undefined);
+if (invokedPath !== undefined && invokedPath === await realpath(fileURLToPath(import.meta.url))) {
   runControlPlaneCli(process.argv.slice(2)).catch((error: unknown) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 2; });
 }

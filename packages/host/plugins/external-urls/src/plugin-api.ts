@@ -2,6 +2,7 @@ import type { HostPluginExtension } from "@slop-lab/dim-host-core/plugin-api";
 import type { AdminRouteContext, ControllerRuntimeContext, DimPluginHost } from "@slop-lab/dim-host-core/controller";
 import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, type ExternalUrlConfig, type ExternalUrlScheme } from "@slop-lab/dim-contracts-external-url";
 import type { ExternalUrlRoutePolicyConfig } from "./routePolicy.js";
+import type { ExternalRoute } from "./routeStore.js";
 
 export { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION } from "@slop-lab/dim-contracts-external-url";
 export interface ExternalUrlIngressRuntime {
@@ -12,6 +13,11 @@ export interface ExternalUrlIngressRuntime {
   readonly port?: number;
   readonly routePolicy?: ExternalUrlRoutePolicyConfig;
   readonly approvalExposure?: { readonly listenHost: string; readonly listenPort: number };
+  /** A shared ingress relays only already-authorized local route identities. */
+  readonly publishRoute?: (route: ExternalRoute) => Promise<void>;
+  readonly revokeRoute?: (route: ExternalRoute) => Promise<void>;
+  readonly scopeSubdomain?: (subdomain: string, workspaceId: string) => string;
+  close?(): Promise<void>;
   initialize?(runtime: ControllerRuntimeContext, name: string): Promise<void>;
 }
 export interface IngressDriverContext { readonly host: DimPluginHost; readonly config: ExternalUrlConfig }

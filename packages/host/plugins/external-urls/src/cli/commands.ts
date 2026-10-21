@@ -37,6 +37,14 @@ externalUrlIngress.command("add")
   .requiredOption("--description <text>")
   .requiredOption("--scheme <scheme>", "http, https, or tcp")
   .option("--require-approval", "require host-admin approval for each requested route")
+  .addHelpText("after", `
+Caddy HTTPS driver options:
+  --domain <domain> --listen-host <address> --listen-port <port|auto>
+  Existing DNS: --tls-cert <absolute-host-pem-path> --tls-key <absolute-host-pem-path>
+  Managed DNS/certificate: --dns-provider <name> --dns-argument <driver-argument>
+  Optional: --acme-email <email>
+Existing DNS mode uses your wildcard records and wildcard certificate; no DNS plugin is needed.
+`)
   .allowUnknownOption()
   .action(async (driver: string, driverArguments: string[], flags: IngressAddFlags) => {
     if (flags.scheme !== "http" && flags.scheme !== "https" && flags.scheme !== "tcp") {

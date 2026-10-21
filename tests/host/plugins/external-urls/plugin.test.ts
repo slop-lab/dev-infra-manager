@@ -149,6 +149,14 @@ describe("external URLs plugin", () => {
       "caddy"
     );
     expect(configuredCaddy.status).toBe(200);
+    const beforeConflict = await readFile(process.env.DIM_EXTERNAL_URL_CONFIG, "utf8");
+    const conflict = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      driver: "http", name: "conflicting", description: "Conflicting approval boundary", scheme: "https", approvalRequired: true,
+      arguments: ["--domain", "remote.example.com", "--listen-host", "127.0.0.1", "--listen-port", "9555"]
+    }) });
+    expect(conflict.status).toBe(400);
+    expect((await conflict.json() as { error: string }).error).toContain("same route policy and approval requirement");
+    expect(await readFile(process.env.DIM_EXTERNAL_URL_CONFIG, "utf8")).toBe(beforeConflict);
     const providers = await fetch(`${base}/dns-provider-list`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -743,6 +751,7 @@ describe("external URLs plugin", () => {
     }) });
     expect(added.status, await added.text()).toBe(200);
     expect(JSON.parse(await readFile(process.env.DIM_EXTERNAL_URL_CONFIG, "utf8")).ingresses.custom.driver).toBe("company");
+    expect(activated).not.toHaveBeenCalled();
     await initial.dispose();
     // The provider deliberately registers AFTER the config-backed URL plugin.
     const restarted = await registerPlugins([await externalUrlsPluginFromConfig(), provider]);
@@ -753,7 +762,7 @@ describe("external URLs plugin", () => {
     await initialize({ stateRoot, runner: { run: runner.run.bind(runner), runStreaming: async () => 0 },
       listWorkspaces: async () => [], runWorkspaceRequest: async (_workspace, operation) => operation(),
       resolveTarget: async () => { throw new Error("no workspace routes expected"); } });
-    expect(runtime).toHaveBeenCalledOnce();
+    expect(runtime).toHaveBeenCalledWith(JSON.stringify({ port }), expect.anything(), "tcp");
     expect(activated).toHaveBeenCalledOnce();
     expect(pruned).toHaveBeenCalledWith(expect.anything(), new Set(["custom"]));
     const socket = connect(port, "127.0.0.1"); await once(socket, "connect"); socket.destroy();

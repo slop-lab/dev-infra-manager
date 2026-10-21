@@ -1,20 +1,18 @@
 // @ts-check
 /** @typedef {{name:string,id:string,phase:string}} Workspace */
 /** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'>}} Controller */
-/** @typedef {{operations:Array<{name:string}>,invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean}} Context */
+/** @typedef {{operations:Array<{name:string}>,invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean,workspace:{hostId:string,name:string,id:string,phase:string}}} Context */
 /** @typedef {{state:'running'|'stopped',port:number,url:string,username:string,credentialsFile:string,logFile:string}} Server */
 /** @param {string} tag @param {string} [text] */
 function element(tag, text = '') { const node = document.createElement(tag); node.textContent = text; return node; }
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
-  let disposed = false, revision = 0, discoveryVersion = 0;
-  /** @type {string|undefined} */ let controllerId;
-  /** @type {string|undefined} */ let selectedWorkspaceId;
+  let disposed = false, revision = 0;
   const current = () => !disposed && context.isCurrent();
   const allowed = new Set(context.operations.map(({ name }) => name));
-  const selectors = element('div'), content = element('section'), notice = element('p'); notice.setAttribute('role', 'status');
-  selectors.className = content.className = 'feature-form';
-  container.append(element('p', 'Install tools in a running workspace and manage its OpenCode server. Installation can take a few minutes.'), selectors, notice, content);
+  const content = element('section'), notice = element('p'); notice.setAttribute('role', 'status');
+  content.className = 'feature-form';
+  container.append(element('p', 'Install tools in a running workspace and manage its OpenCode server. Installation can take a few minutes.'), notice, content);
   /** @param {Controller} controller @param {Workspace|undefined} workspace */
   function show(controller, workspace) {
     const version = ++revision;
@@ -22,7 +20,6 @@ export function mount(container, context) {
     content.replaceChildren(); notice.textContent = '';
     if (!workspace) { content.append(element('p', 'No workspaces on this controller. Create one from Workspaces, then refresh this view.')); return; }
     const selectedWorkspace = workspace;
-    selectedWorkspaceId = workspace.id;
     content.append(element('h3', workspace.name), element('p', `Workspace state: ${workspace.phase}`));
     if (workspace.phase !== 'running') { content.append(element('p', 'Start this workspace from Workspaces before inspecting or installing tools.')); return; }
     const tools = element('div'), server = element('div'); tools.className = server.className = 'panel feature-form'; content.append(tools, server);
@@ -72,38 +69,18 @@ export function mount(container, context) {
     if (allowed.has('server.status')) void invoke('server.status').then((value) => { if (stateVersion === 0) renderServer(value); }).catch(() => { if (scoped() && stateVersion === 0) server.textContent = 'Server status unavailable. Install OpenCode if needed, then refresh status.'; });
   }
   async function discover() {
-    const request = ++discoveryVersion; ++revision;
-    content.replaceChildren(); notice.textContent = 'Discovering workspace tools…';
-    for (const node of selectors.querySelectorAll('select,button')) if (node instanceof HTMLSelectElement || node instanceof HTMLButtonElement) node.disabled = true;
+    notice.textContent = 'Discovering workspace tools…';
     try {
       const { controllers } = /** @type {{controllers:Controller[]}} */ (await context.invoke('controllers.list', {}));
-      if (!current() || request !== discoveryVersion) return;
-      selectors.replaceChildren(); notice.textContent = '';
-      const select = document.createElement('select'), workspaceSelect = document.createElement('select');
-      const controllerLabel = element('label'), workspaceLabel = element('label');
-      controllerLabel.className = workspaceLabel.className = 'field';
-      select.id = `tools-controller-${crypto.randomUUID()}`; workspaceSelect.id = `tools-workspace-${crypto.randomUUID()}`;
-      select.setAttribute('aria-label', 'Controller'); workspaceSelect.setAttribute('aria-label', 'Workspace');
-      controllerLabel.setAttribute('for', select.id); workspaceLabel.setAttribute('for', workspaceSelect.id);
-      controllerLabel.append(element('span', 'Controller'), select); workspaceLabel.append(element('span', 'Workspace'), workspaceSelect);
-      selectors.append(controllerLabel, workspaceLabel);
-      for (const controller of controllers) { const option = document.createElement('option'); option.value = controller.id; option.textContent = `${controller.title}${controller.status === 'unavailable' ? ' (unavailable)' : ''}`; select.append(option); }
-      const refresh = document.createElement('button'); refresh.type = 'button'; refresh.textContent = 'Refresh workspaces'; refresh.className = 'button button-secondary'; refresh.addEventListener('click', () => { void discover(); }); selectors.append(refresh);
-      /** @param {Controller|undefined} controller */
-      function choose(controller) {
-        ++revision; workspaceSelect.replaceChildren(); content.replaceChildren();
-        controllerId = controller?.id;
-        if (!controller || controller.status !== 'ready') { content.append(element('p', 'The agent-tools host plugin is unavailable on this controller. Install it on the controller, then refresh.')); return; }
-        select.value = controller.id;
-        for (const workspace of controller.workspaces) { const option = document.createElement('option'); option.value = workspace.id; option.textContent = `${workspace.name} (${workspace.phase})`; workspaceSelect.append(option); }
-        const selected = controller.workspaces.find(({ id }) => id === selectedWorkspaceId) ?? controller.workspaces.find(({ phase }) => phase === 'running') ?? controller.workspaces[0];
-        workspaceSelect.value = selected?.id ?? ''; show(controller, selected);
+      if (!current()) return;
+      const controller = controllers.find(({ id }) => id === context.workspace.hostId);
+      const workspace = controller?.workspaces.find(({ id, name }) => id === context.workspace.id && name === context.workspace.name);
+      if (!controller || controller.status !== 'ready' || !workspace) {
+        notice.textContent = 'Workspace tools are unavailable for this workspace identity. Refresh workspaces or ask the operator to install the agent-tools host plugin.'; return;
       }
-      select.addEventListener('change', () => choose(controllers.find(({ id }) => id === select.value)));
-      workspaceSelect.addEventListener('change', () => { const controller = controllers.find(({ id }) => id === select.value); if (controller) show(controller, controller.workspaces.find(({ id }) => id === workspaceSelect.value)); });
-      choose(controllers.find(({ id }) => id === controllerId) ?? controllers.find(({ status }) => status === 'ready') ?? controllers[0]);
-    } catch { if (current() && request === discoveryVersion) { notice.textContent = 'Could not discover workspace tools. Reopen this feature to retry.'; selectors.replaceChildren(); } }
+      show(controller, { ...workspace, phase: context.workspace.phase });
+    } catch { if (current()) notice.textContent = 'Could not discover workspace tools. Refresh workspaces to retry.'; }
   }
   void discover();
-  return () => { disposed = true; ++revision; ++discoveryVersion; };
+  return () => { disposed = true; ++revision; };
 }

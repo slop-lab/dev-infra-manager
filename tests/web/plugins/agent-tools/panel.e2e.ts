@@ -33,12 +33,13 @@ await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const address = server.address(); if (!address || typeof address === "string") throw new Error("Missing browser fixture address");
 const origin = `http://127.0.0.1:${address.port}`, browser = await chromium.launch({ executablePath, headless: true }), page = await browser.newPage();
 const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
-async function mount(operator: boolean) {
+async function mount(operator: boolean, stopped = false) {
   await page.goto(origin);
   await page.addScriptTag({ type: "module", content: `import { mount } from '/panel.js';
     mount(document.querySelector('#panel'), {
       operations: ${JSON.stringify(["controllers.list", "tools.status", "server.status", ...(operator ? ["tools.setup", "server.start", "server.stop"] : [])].map((name) => ({ name })))},
       isCurrent: () => true,
+      workspace: ${JSON.stringify({hostId:"local",name:stopped ? "offline":"development",id:stopped ? stoppedId:workspaceId,phase:stopped ? "stopped":"running"})},
       async invoke(name, input) { const response = await fetch('/invoke', {method:'POST',body:JSON.stringify({name,input})}); return response.json(); }
     });` });
 }
@@ -62,7 +63,8 @@ try {
   assert.equal(await page.locator('a[href^="http://127.0.0.1"]').count(), 0);
   await page.getByRole("button", { name: "Stop OpenCode server", exact: true }).click();
   await page.getByText("Server stopped. Port 4096 is inside the workspace.", { exact: true }).waitFor();
-  await page.getByLabel("Workspace", { exact: true }).selectOption(stoppedId);
+  assert.equal(await page.locator("select").count(), 0);
+  await mount(true, true);
   await page.getByText("Start this workspace from Workspaces before inspecting or installing tools.", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Start OpenCode server", exact: true }).count(), 0);
   for (const call of calls.filter(({ name }) => name !== "controllers.list")) assert.deepEqual({ workspace: call.input.workspace, workspaceId: call.input.workspaceId, controllerId: call.input.controllerId }, { workspace: "development", workspaceId, controllerId: "local" });

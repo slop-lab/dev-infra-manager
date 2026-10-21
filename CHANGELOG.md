@@ -157,11 +157,17 @@ is implied by these source changes.
   attribution across local reinstall. Usage-based account selection remains a
   separate routing feature.
   Configured workspace OpenCode/OMO
-  helpers use that router by default. The optional Workspace tools Web panel
-  discovers selected controllers, installs pinned OpenCode/Codex explicitly and
+  helpers use that router by default. Optional workspace Web contributions
+  appear inside each workspace management row, discover selected controllers,
+  install pinned OpenCode/Codex explicitly and
   starts, inspects or stops owned OpenCode servers without repository setup.
   Keep credentials in the workspace and provide connection guidance separately
-  from server launch. Separate Docker/npm/PyPI/APT cache clients
+  from server launch. Create, explicitly approve and revoke External URLs routes
+  in the same workspace row. Share one control-plane wildcard ingress across
+  multiple workspace hosts with authenticated host claims, expiring leases and
+  host-owned workspace resolution. Existing DNS needs no provider integration;
+  Caddy can use operator-managed wildcard certificates without DNS credentials.
+  Separate Docker/npm/PyPI/APT cache clients
   from optional host cache servers; external cache URLs use the same client path.
   Select cache protocols independently and install additional protocol adapters.
   Refresh or retire cache defaults in running workspace and nested-container

@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { caddyIngressDriver, validateProvidedCaddyTls } from "../../../../packages/host/plugins/external-urls/src/caddyRuntime.js";
 import {
   CADDY_INGRESS_DOCUMENTATION_URL,
   CADDY_VERSION,
@@ -63,5 +68,40 @@ describe("Caddy ingress deployment", () => {
     expect(deployment.compose).not.toContain("80:80");
     expect(deployment.compose).not.toContain("replace-with-zone-scoped-token");
     expect(deployment.environment).toContain('CF_API_TOKEN="secret-token"');
+  });
+
+  it("uses existing DNS and read-only operator certificates without a DNS plugin or credentials", () => {
+    const ingress = parseCaddyIngressArgument(JSON.stringify({
+      domain: "dev.example.com", listenHost: "0.0.0.0", listenPort: 443,
+      tlsCert: "/private certificates/wildcard.pem", tlsKey: "/private certificates/key.pem"
+    }));
+    expect(caddyIngressDriver.dependencies!(JSON.stringify(ingress))).toEqual([]);
+    const deployment = renderCaddyDeployment("existing", { ...ingress, listenPort: 443 }, 39080);
+    expect(deployment.dockerfile).toBe(`FROM caddy:${CADDY_VERSION}-alpine\n`);
+    expect(deployment.caddyfile).toContain("tls /etc/caddy/tls/certificate.pem /etc/caddy/tls/private-key.pem");
+    expect(deployment.compose).toContain('source: "/private certificates/key.pem"');
+    expect(deployment.compose.match(/read_only: true/g)).toHaveLength(2);
+    expect(deployment.compose).not.toContain("environment:");
+    expect(deployment.environment).toBe("");
+    for (const invalid of [
+      { ...ingress, tlsKey: undefined }, { ...ingress, tlsCert: "relative.pem" },
+      { ...ingress, dnsProvider: "cloudflare", dnsArgument: "{}" }
+    ]) expect(() => parseCaddyIngressArgument(JSON.stringify(invalid))).toThrow();
+  });
+
+  it("validates the operator's wildcard certificate and private key before starting Caddy", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "dim-caddy-tls-"));
+    try {
+      const certificate = path.join(directory, "certificate.pem"), key = path.join(directory, "key.pem");
+      execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
+        "-subj", "/CN=*.dev.example.com", "-addext", "subjectAltName=DNS:*.dev.example.com",
+        "-out", certificate, "-keyout", key], { stdio: "ignore" });
+      const ingress = { domain: "dev.example.com", listenHost: "127.0.0.1", listenPort: 443,
+        tlsCert: certificate, tlsKey: key };
+      await expect(validateProvidedCaddyTls(ingress)).resolves.toBeUndefined();
+      await expect(validateProvidedCaddyTls({ ...ingress, domain: "other.example.com" })).rejects.toThrow("wildcard certificate");
+      await expect(validateProvidedCaddyTls({ ...ingress, tlsKey: certificate })).rejects.toThrow("matching private key");
+      await expect(validateProvidedCaddyTls({ ...ingress, tlsKey: directory })).rejects.toThrow("readable PEM");
+    } finally { await rm(directory, { recursive: true, force: true }); }
   });
 });

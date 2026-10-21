@@ -12,6 +12,7 @@ the documentation is not a second plugin inventory.
 | [Multiple repositories](projects/native-multiple-repositories/README.md) | Actual public/private trees and policies, exact CI inputs, isolation and incompatible combination | Both selected repositories and integration script |
 | [Codex](use-cases/codex/README.md) | Real helper installation and workspace identity fencing | Explicit tool/network/account prerequisites |
 | [External URLs](features/external-urls/README.md) | HTTP route approval boundary | Explicit ingress and approval prerequisites |
+| [Shared ingress](features/shared-ingress/README.md) | Two hosts, one wildcard, authenticated claims, SSE/WebSocket revocation and lease recovery | Explicit private relay network and edge TLS |
 | [Route policy](features/external-url-route-policy/README.md) | Actual Unix HTTP allow/rewrite/deny | Operator service; no implicit deployment |
 | [Security review](features/security-review/README.md) | Protected `.dim/` boundaries, separate agent/secret DinD services and conditional JSON/custom review | Separate explicit isolated Docker evaluator check |
 | [Review dependency tracing](features/review-tracing/README.md) | Git/HTTP approval for automatically observed dependencies and JSON target fields | Separate explicit brokered Node/Docker evaluator check |
