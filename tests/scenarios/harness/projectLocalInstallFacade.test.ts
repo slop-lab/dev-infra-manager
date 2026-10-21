@@ -30,7 +30,7 @@ async function createFixture(): Promise<Fixture> {
       copyFile(resolve(workspaceRoot, "scripts", script), resolve(scripts, script))
     )
   );
-  for (const helper of ["install-local-web.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
+  for (const helper of ["install-local-web.ts", "install-local-llm-operator.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
     'import { appendFileSync } from "node:fs"; appendFileSync(process.env.DIM_INVOCATIONS!, `web-helper ${process.argv[1]} ${process.argv.slice(2).join(" ")}\\n`);\n');
   await writeFile(resolve(root, ".local/prepared-local.state"), "state=fresh\n");
   await writeFile(
@@ -123,6 +123,8 @@ describe("Project local install facade", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin$/m);
     expect(invocations).toContain("/scripts/install-local-web.ts ");
+    expect(invocations).toContain("/scripts/install-local-llm-operator.ts ");
+    expect(invocations.indexOf("/scripts/install-local-llm-operator.ts ")).toBeLessThan(invocations.indexOf("/scripts/configure-local-web.ts "));
     expect(invocations).not.toContain("installer install plugin");
     expect(invocations).not.toContain("controller restart");
     expect(invocations).not.toContain("old-dim");

@@ -1,5 +1,5 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -40,9 +40,8 @@ async function createFixture(): Promise<Fixture> {
   const dataHome = resolve(root, "installed/data");
   await Promise.all([scripts, tools, bundle, temporaryRoot, stateRoot, resolve(configPath, "..")]
     .map((directory) => mkdir(directory, { recursive: true })));
-  await Promise.all(["install-source-build.bash", "local-package-version.bash", "install-local-web.ts"].map((script) =>
-    copyFile(resolve(workspaceRoot, "scripts", script), resolve(scripts, script))
-  ));
+  // Exercise real source installation and its stdlib-only helper dependencies.
+  await cp(resolve(workspaceRoot, "scripts"), scripts, { recursive: true });
   await writeFile(resolve(scripts, "configure-local-web.ts"), "// Service configuration is covered separately.\n");
   await writeFile(resolve(scripts, "local-preparation-state.bash"), `#!/usr/bin/bash
 printf 'state\n' >>"$DIM_INVOCATIONS"
@@ -66,6 +65,7 @@ exec "$@"
     PATH: `${tools}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     TMPDIR: temporaryRoot,
     HOME: resolve(root, "home"),
+    XDG_CONFIG_HOME: resolve(root, "config"),
     DIM_CONFIG_PATH: configPath,
     DIM_DATA_HOME: dataHome,
     DIM_STATE_ROOT: stateRoot,
@@ -159,6 +159,8 @@ exec "$DIM_TEST_REAL_MISE" "$@"
       const installed = install();
       expect(installed.status, installed.stderr).toBe(0);
     }
+    // Absent retained operator configuration must not activate an optional listener.
+    await expect(readdir(resolve(environment.DIM_DATA_HOME!, "llm-operator"))).rejects.toMatchObject({ code: "ENOENT" });
     expect((await readdir(environment.TMPDIR ?? ""))
       .some((entry) => entry.startsWith("dim-target-installer."))).toBe(false);
     const followup = spawnSync(located.stdout.trim(), ["exec", "--", "dim", "installer", "install", "core",

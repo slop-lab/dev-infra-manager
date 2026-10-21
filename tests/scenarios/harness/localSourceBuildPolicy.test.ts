@@ -67,7 +67,7 @@ touch "$1/cli.tgz"
 touch "$1/slop-lab-dim-installer-local.tgz"
 `
   );
-  for (const helper of ["install-local-web.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
+  for (const helper of ["install-local-web.ts", "install-local-llm-operator.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
     'import { appendFileSync } from "node:fs"; appendFileSync(process.env.DIM_INVOCATIONS!, `web-helper ${process.argv[1]} ${process.argv.slice(2).join(" ")}\\n`);\n');
   await writeFile(
     resolve(scripts, "local-preparation-state.bash"),
