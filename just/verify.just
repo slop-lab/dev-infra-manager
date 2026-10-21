@@ -141,3 +141,7 @@ isolation-json:
 # Install exact source artifacts into temporary prefixes and verify optional profiles.
 local-bundle-profiles bundle:
     cd .. && node scripts/checks/local-bundle-profiles-smoke.ts "{{bundle}}"
+
+# Real isolated mise/facade install, Docker cleanup and reinstall; preserves the host installation.
+local-reinstall bundle=".local/dim-packages":
+    cd .. && DIM_TEST_LOCAL_UNINSTALL=1 DIM_TEST_LOCAL_BUNDLE="$(realpath -- "{{bundle}}")" pnpm --dir tests exec vitest run scenarios/harness/localUninstallLive.test.ts --maxWorkers=1

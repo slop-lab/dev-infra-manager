@@ -60,8 +60,9 @@ just install-local --with-managed
 # dim installer install core --with-managed
 ```
 
-This does not install plugins or start a controller. Prepare service
-configuration with reviewed digest-pinned native Git and ordinary CI images:
+This profile installs the native-Git host and execution worker plugins and
+control-plane administration tools. It does not start a controller or worker.
+Prepare service configuration with reviewed digest-pinned native Git and ordinary CI images:
 
 ```bash
 dim control-plane prepare /absolute/private/operator \
@@ -110,3 +111,16 @@ Before treating a candidate as ready, inspect actual cleanup, protected-ref
 state, secret-bearing configuration permissions and the final command exit
 status. Do not declare success from an intermediate log line when the outer
 verification failed.
+
+The repository-only removal/reinstallation path has a disposable live check:
+
+```bash
+just verify local-reinstall /absolute/path/to/matched/package-bundle
+```
+
+It needs mise, npm, Docker and the digest-pinned Node image selected in
+`tests/scenarios/harness/localUninstallLive.test.ts` already available locally.
+The check uses an isolated HOME and mise configuration, installs the real
+facade/core, removes recorded Docker resources, verifies unrelated resources
+survive, and repeats installation/removal. It does not uninstall the operator's
+DIM installation or establish reboot or separate-host acceptance.

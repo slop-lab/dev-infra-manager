@@ -97,6 +97,40 @@ Workspaces, source paths, images and runtime operations belong to the selected
 host. The client invokes DIM through SSH; there is no required public host
 administration endpoint. `dim host use local` restores the default context.
 
+## Remove or reinstall a local source installation
+
+The repository provides local maintenance tools; these are not published DIM
+commands. Run them from this source checkout with the supported Node.js runtime.
+Inspect the removal plan first:
+
+```bash
+just uninstall-local
+# Equivalent: bash scripts/uninstall-source-build.bash
+```
+
+The default is a dry run. Execute the reviewed plan with `just uninstall-local
+--yes` (or `bash scripts/uninstall-source-build.bash --yes`). This destroys the selected
+current user's local DIM workspaces, service data, authentication data and
+installation. The scope follows the current environment's DIM paths on this
+machine; the selected SSH host is not contacted. Keep any data you need before
+executing it. Role-specific private control-plane configuration stored outside
+DIM's own directories is not automatically deleted.
+
+To remove that local installation and install the prepared source candidate:
+
+```bash
+just prepare-local
+just uninstall-local                  # Inspect the removal plan.
+just reinstall-local --with-managed   # Destructive removal, then installation.
+# Omit --with-managed for the base workspace profile.
+```
+
+`reinstall-local` invokes removal with `--yes`, then the existing source
+installer. It does not prepare a new candidate: rerun `just prepare-local` after
+source changes. The source checkout and its `.local` prepared artifact bundle
+remain available. Shared Docker, Sysbox, Incus and Tailscale installations, root
+AppArmor setup, and upstream or prepared build images are retained.
+
 ## Optional managed integration
 
 A prepared source bundle can also install managed services and integrations:

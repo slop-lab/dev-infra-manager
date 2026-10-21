@@ -2,10 +2,13 @@
 set -euo pipefail
 
 with_managed=0
-if [[ "$#" -eq 1 && "$1" == --with-managed ]]; then
+check_only=0
+if [[ "$#" -eq 1 && "$1" == --check ]]; then
+  check_only=1
+elif [[ "$#" -eq 1 && "$1" == --with-managed ]]; then
   with_managed=1
 elif [[ "$#" -ne 0 ]]; then
-  echo "Usage: bash scripts/install-source-build.bash [--with-managed]" >&2
+  echo "Usage: bash scripts/install-source-build.bash [--with-managed | --check]" >&2
   exit 2
 fi
 
@@ -54,6 +57,9 @@ validate_preparation() {
 }
 
 validate_preparation
+if [[ "$check_only" -eq 1 ]]; then
+  exit 0
+fi
 
 installer_tarballs=("$package_root"/slop-lab-dim-installer-*.tgz)
 test "${#installer_tarballs[@]}" -eq 1 && test -f "${installer_tarballs[0]}" && test ! -L "${installer_tarballs[0]}"

@@ -42,6 +42,14 @@ prepare-local:
 install-local *args:
     bash scripts/install-source-build.bash {{args}}
 
+# Preview current-user local DIM removal; --yes removes its workspaces, data and installation.
+uninstall-local *args:
+    bash scripts/uninstall-source-build.bash {{args}}
+
+# Remove current-user local DIM data, then install the prepared source candidate.
+reinstall-local *args:
+    bash scripts/reinstall-source-build.bash {{args}}
+
 # Restart the managed controller with the currently installed DIM package set.
 restart-controller:
     if command -v mise >/dev/null 2>&1; then mise exec -- dim controller restart; else "${DIM_INSTALL_PREFIX:-$HOME/.local}/bin/dim" controller restart; fi
