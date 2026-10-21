@@ -1,0 +1,10 @@
+{
+  "name": "@this-project/review-tracing-example",
+  "private": true,
+  "type": "module",
+  "scripts": { "check": "tsc --noEmit" },
+  "devDependencies": {
+    "@slop-lab/dim-review-tracing-node": "0.10.0",
+    "typescript": "5.8.3"
+  }
+}

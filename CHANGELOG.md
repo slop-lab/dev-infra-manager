@@ -22,7 +22,11 @@ is implied by these source changes.
   and separate control-plane/runtime plugins keep language execution outside
   the review service; the Node adapter runs without a repository mount or
   credentials in disposable Docker containers. Read evidence participates in
-  review identity and is rechecked before promotion. Compose named protected-ref
+  review identity and is rechecked before promotion. Support TypeScript detectors
+  with original-source dependency hashes and optional dispatch through the existing
+  scheduler to a host task handler. CI and detector tasks share durable scheduling,
+  lease fencing and worker recovery; execution hosts receive bounded file reads
+  instead of repository or approval credentials. Compose named protected-ref
   update constraints at the repository boundary,
   alongside non-rewritable history, current approvals and quality evidence.
   Restart recovery never replays an unapplied authorization. Use `--policy` with

@@ -104,6 +104,19 @@ of that decision. Missing/broken baseline code requires review; candidate failur
 denies evaluation. Read evidence and runtime identity bind the review ID and are
 recomputed for approval and promotion, including when reviewer sets are unchanged.
 
+The Node runtime accepts JavaScript ESM and erasable TypeScript (`.ts`/`.mts`).
+The broker hashes original bytes; the guest loader removes types before execution.
+Type checking remains a separate strict project check, not an evaluator feature.
+Local control-plane execution and scheduler-backed host execution share this
+runtime implementation. Scheduled work uses the existing CI coordinator's queue,
+lease authority and worker journal; typed handlers keep CI acquisition and detector
+execution separate. Opaque task I/O requests validate the active lease before
+serving bytes. The repository owner retains exact Git reads and their evidence.
+Execution hosts and installed handlers are trusted to evaluate faithfully;
+repository programs remain untrusted inside their isolated runtime.
+No source, review or promotion credential is passed to candidate code. Lost
+transient I/O sessions require a fresh evaluation, never recovery against new refs.
+
 These are observations of the two current executions, not a persistent dependency
 ledger or static analysis of all branches. A dependency reached in both executions
 is compared between the two snapshots. This does not retroactively protect edits

@@ -7,7 +7,7 @@
       "pathReviewerRules": [],
       "changeReviewerRules": [{
         "matcher": "tracked-project",
-        "options": {"entrypoint": ".dim/review/matcher.mjs", "runtime": "node"},
+        "options": {"entrypoint": ".dim/review/matcher.ts", "runtime": "node"},
         "reviewerIds": ["security"]
       }]
     },

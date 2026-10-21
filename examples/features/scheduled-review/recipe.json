@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "name": "scheduled-review",
+  "plugins": {
+    "host": [
+      "@slop-lab/dim-host-plugin-ci-worker@0.10.0",
+      "@slop-lab/dim-host-plugin-review-tracing-node@0.10.0"
+    ],
+    "controlPlane": [
+      "@slop-lab/dim-control-plane-plugin-ci@0.10.0",
+      "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled@0.10.0"
+    ]
+  },
+  "repositories": [{ "id": "root", "path": "repository" }],
+  "commands": {
+    "dev": { "argv": ["bash", "scripts/dev.bash"] },
+    "verify": { "argv": ["bash", "scripts/verify.bash"] }
+  }
+}

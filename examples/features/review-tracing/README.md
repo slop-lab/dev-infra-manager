@@ -15,6 +15,22 @@ returns false. Adding a dependency or deleting an established dependency also
 requires approval. A candidate cannot downgrade an established dependency by
 calling it target data.
 
+The entrypoint `.dim/review/matcher.ts` and its helper use erasable TypeScript.
+The Node adapter strips types during execution and tracks the original `.ts`
+source. Run strict static type checking separately in the project:
+
+```bash
+cd repository
+npm install
+npm run check
+```
+
+The template pins TypeScript and the neutral Node runtime's virtual API types as
+development dependencies. The runtime does not install these dependencies or
+read `tsconfig.json`; relative imports keep explicit `.ts` extensions. Use
+`import type` for declarations and avoid syntax requiring code generation,
+including enums and parameter properties.
+
 The Node adapter runs candidate code in a disposable Docker container. Its
 broker serves bounded files from the exact Git trees; candidate code cannot
 open the repository directly. Relative imports and `readText(path)` record
@@ -54,6 +70,22 @@ bash scripts/verify-runtime.bash
 
 The explicit `dev` stage runs this same Docker acceptance. It is separate from
 the lightweight recipe verification and makes no workspace-VM claim.
+
+To verify the complete approval and promotion flow using a scheduled detector,
+run this optional acceptance from the DIM repository root:
+
+```bash
+DIM_TEST_REVIEW_TRACE_DOCKER=1 DIM_TEST_REVIEW_TRACE_SCHEDULED=1 \
+  pnpm --dir tests exec vitest run scenarios/harness/trackedReviewIntegration.test.ts
+```
+
+That deployment additionally needs the scheduler's `ci` control-plane plugin,
+the repository owner's `review-tracing-scheduled` control-plane plugin, and the
+execution host's `ci-worker` and `review-tracing-node` plugins. See the
+[scheduled execution recipe](../scheduled-review/README.md) for their roles.
+The acceptance starts an actual HTTP scheduler and host worker alongside the
+Git/HTTP review services, then executes TypeScript in Docker. These harness
+services share one OS process; the test makes no separate-machine claim.
 
 Discovery compares the two executions for the current proposal; it is not a
 persisted history of dependencies. If a formerly dormant branch becomes reachable

@@ -10,6 +10,8 @@ Production packages are grouped by where they run and what they own:
 | `packages/control-plane/plugins/<name>` | `@slop-lab/dim-control-plane-plugin-<name>` | Independent authoritative services and workflow interpretation |
 | `packages/control-plane/deployment` | `@this-project/control-plane-deployment` (private) | Composition artifact for the installer’s fixed service-image profile |
 | `packages/control-plane/admin` | `@slop-lab/dim-control-plane-admin` | Explicit service deployment and operator connection tools |
+| `packages/task-scheduling` | `@slop-lab/dim-task-scheduling` | Shared durable task queue, lease state transitions and typed handler/client SDK |
+| `packages/review-tracing-node` | `@slop-lab/dim-review-tracing-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
 | `packages/review-tracing` | `@slop-lab/dim-review-tracing` | Runtime-neutral file-read records, dependency comparison and tracing adapter contracts |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
 | `packages/cli` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
@@ -28,7 +30,10 @@ container runner or language loader. The control-plane `review-tracing` plugin
 connects immutable Git snapshots to review requirements; runtime plugins such as
 `review-tracing-node` own isolated execution and import/file-read mediation.
 Additional runtimes implement the same tracing contract without changing review
-or ref-policy core.
+or ref-policy core. The Node implementation is a neutral package; control-plane
+and host plugins register it in their owning runtimes. The scheduled adapter
+uses the same task queue, leases and worker loop as CI; it retains immutable Git
+reads and dependency evidence in the repository-owning control plane.
 
 The mirrors consumer and cache-server deployment are separate host plugins.
 Mirrors owns its included and installed protocol adapters, scoped relay and guest
