@@ -35,9 +35,10 @@ available. Without mise, it prints the persistent facade path to add to PATH.
 See the [source installation workflow](docs/guides/usage.md#install-development-sources) for
 artifact provenance and prerequisites.
 
-Repository maintenance commands `just uninstall-local` (preview) and
+Repository maintenance commands `just uninstall-local --dry-run` (preview) and
 `just reinstall-local [--with-managed]` support a clean local source reinstall.
-Reinstall removes the current user's local DIM workspaces and service/auth data;
+Reinstall removes the current user's local DIM workspaces and service/auth data
+after confirmation, retaining package cache data by default;
 inspect the [removal scope](docs/guides/usage.md#remove-or-reinstall-a-local-source-installation)
 before executing it.
 

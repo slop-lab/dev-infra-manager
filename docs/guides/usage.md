@@ -104,44 +104,55 @@ commands. Run them from this source checkout with the supported Node.js runtime.
 Inspect the removal plan first:
 
 ```bash
-just uninstall-local
-# Equivalent: bash scripts/uninstall-source-build.bash
+just uninstall-local --dry-run
+# Equivalent: bash scripts/uninstall-source-build.bash --dry-run
 ```
 
-The default is a dry run. Execute the reviewed plan with `just uninstall-local
---yes` (or `bash scripts/uninstall-source-build.bash --yes`). This destroys the selected
-current user's local DIM workspaces, service data, authentication data and
-installation. The scope follows the current environment's DIM paths on this
-machine; the selected SSH host is not contacted. Keep any data you need before
-executing it. Role-specific private control-plane configuration stored outside
-DIM's own directories is not automatically deleted.
+In a terminal, uninstall and reinstall ask whether to keep local package cache
+data (`Y/n`), then ask for confirmation before destroying the installation
+(`y/N`). Pressing Enter keeps cache data and declines removal. `-y` (or `--yes`)
+skips confirmation and selects the default cache retention; use
+`--no-keep-cache-data` to explicitly delete cache payloads. Noninteractive
+execution needs `-y`. Without it, uninstall previews only and reinstall refuses
+to proceed. Use `--dry-run` for an explicit noninteractive preview.
+
+Removal destroys the selected current user's local DIM workspaces, service
+data, authentication data and installation. The scope follows the current
+environment's DIM paths on this machine; the selected SSH host is not
+contacted. Keep any data you need before executing it. Role-specific private
+control-plane configuration stored outside DIM's own directories is not
+automatically deleted.
 
 To remove that local installation and install the prepared source candidate:
 
 ```bash
 just prepare-local
-just uninstall-local                  # Inspect the removal plan.
-just reinstall-local --with-managed   # Destructive removal, then installation.
+just reinstall-local --with-managed --dry-run
+just reinstall-local --with-managed
 # Omit --with-managed for the base workspace profile.
+# For automation, add -y after reviewing the plan.
 ```
 
-To retain only local registry/package mirror payloads during reinstall:
+Cache retention keeps only cache-server data volumes (including Docker, npm,
+PyPI and apt) and their ownership ledgers. Cache containers, networks, endpoint
+catalogs and runtime configuration are replaced. Reinstall records the
+previously installed cache-server and mirrors plugins and selected cache kinds,
+installs their matching prepared packages, ensures those cache services, then
+restores mirror connections with fresh endpoints. Other workspace, plugin
+and control-plane configuration is not restored.
+
+`--keep-cache-data` explicitly selects retention; `--no-keep-cache-data`
+selects a complete purge. For example:
 
 ```bash
-just reinstall-local --with-managed --keep-cache-data
-# Preview the corresponding removal first:
-just uninstall-local --keep-cache-data
+just reinstall-local --with-managed -y                        # Keep cache data.
+just reinstall-local --with-managed -y --no-keep-cache-data   # Delete cache data.
 ```
 
-This keeps cache-server data volumes (including Docker, npm, PyPI and apt) and
-only their ownership ledgers. Cache containers, networks, endpoint catalogs and
-runtime configuration are removed. After reinstall, install the cache-server
-plugin again and run `dim cache-server ensure` to reuse the volumes and publish
-fresh endpoints. Without the option, removal also deletes the cache payloads.
-Retries after interrupted removal must use the same cache retention option.
+Retries after interrupted removal must use the same cache retention choice.
 
-`reinstall-local` invokes removal with `--yes`, then the existing source
-installer. It does not prepare a new candidate: rerun `just prepare-local` after
+`reinstall-local` confirms the removal plan, then invokes removal and the
+existing source installer. It does not prepare a new candidate: rerun `just prepare-local` after
 source changes. The source checkout and its `.local` prepared artifact bundle
 remain available. Shared Docker, Sysbox, Incus and Tailscale installations, root
 AppArmor setup, and upstream or prepared build images are retained.

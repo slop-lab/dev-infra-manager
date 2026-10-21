@@ -42,7 +42,7 @@ prepare-local:
 install-local *args:
     bash scripts/install-source-build.bash {{args}}
 
-# Preview current-user local DIM removal; --yes removes its workspaces, data and installation.
+# Remove current-user local DIM after confirmation; --dry-run previews, -y accepts defaults.
 uninstall-local *args:
     bash scripts/uninstall-source-build.bash {{args}}
 
