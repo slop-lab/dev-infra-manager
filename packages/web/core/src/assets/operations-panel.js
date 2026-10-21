@@ -13,15 +13,21 @@ let epoch = 0;
 /** @param {string} path @param {unknown} [body] @param {number} [timeout] */
 async function request(path, body, timeout = 35_000) {
   const active = session; if (!active) throw new Error("session required");
-  const response = await fetch(path, { method: body === undefined ? "GET" : "POST", credentials: "same-origin",
-    headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json", "x-dim-csrf": active.csrfToken }) },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeout) });
+  let response;
+  try {
+    response = await fetch(path, { method: body === undefined ? "GET" : "POST", credentials: "same-origin",
+      headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json", "x-dim-csrf": active.csrfToken }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeout) });
+  } catch (cause) {
+    throw Object.assign(new Error(body === undefined ? "read failed" : "mutation outcome unknown", { cause }), { outcome: body === undefined ? "read" : "unknown" });
+  }
   if (response.status === 401) window.dispatchEvent(new Event("dim-session-expired"));
   if (!response.ok) {
     const failure = record(await response.json().catch(() => null));
-    throw Object.assign(new Error(response.status === 401 ? "session expired" : "operation failed"), { code: text(failure?.code) });
+    throw Object.assign(new Error(response.status === 401 ? "session expired" : "operation failed"), { code: text(failure?.code), outcome: body !== undefined && response.status >= 500 ? "unknown" : "rejected" });
   }
-  /** @type {unknown} */ const value = await response.json(); return value;
+  try { /** @type {unknown} */ const value = await response.json(); return value; }
+  catch (cause) { throw Object.assign(new Error("operation response unreadable", { cause }), { outcome: body === undefined ? "read" : "unknown" }); }
 }
 const workspaceHosts = createWorkspaceHosts(hosts, request);
 export function clearOperations() { session = null; epoch++; panel.hidden = true; workspaceHosts.clear(); consoles.replaceChildren(); }

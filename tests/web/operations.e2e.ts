@@ -63,7 +63,7 @@ try {
   assert.equal(await development.getByLabel("Memory for development", { exact: true }).inputValue(), "3g");
   assert.equal(await development.locator(".workspace-settings").evaluate((details) => details instanceof HTMLDetailsElement && details.open), true);
   await development.getByRole("button", { name: "Apply resources for development", exact: true }).click();
-  await development.getByText("development: resources applied.", { exact: true }).waitFor();
+  await development.getByText("development: resource limits refreshed from the host.", { exact: true }).waitFor();
   assert.deepEqual((await fixture.workspace()).resources, { cpuCount: "0.75", memory: "3g", pidsLimit: "512" });
   await fixture.failNextCreate();
   await newWorkspace.getByRole("button", { name: "Create workspace on devbox", exact: true }).click();
@@ -74,7 +74,7 @@ try {
   await newWorkspace.getByRole("button", { name: "Create workspace on devbox", exact: true }).click();
   const createdRow = page.locator(".workspace-row").filter({ has: page.getByRole("heading", { name: "browser-created", exact: true }) });
   await createdRow.waitFor();
-  await newWorkspace.getByText(/browser-created created on devbox\./).waitFor();
+  await newWorkspace.getByText(/host accepted browser-created.*listed below/i).waitFor();
   await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).fill("dim://next-project");
   assert.equal(await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).inputValue(), "next-project");
   const created = await fixture.createdWorkspace(); assert(created);
