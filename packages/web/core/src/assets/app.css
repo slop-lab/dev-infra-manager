@@ -240,3 +240,17 @@ label.field { color: var(--color-text-secondary); font-size: var(--font-control)
 .feature-connection { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-block-end: var(--space-5); }
 .feature-connection p { max-inline-size: 38rem; color: var(--color-text-secondary); font-size: var(--font-meta); }
 .feature-connection [role="alert"] { color: var(--color-error-text); }
+
+.account-access-dialog {
+  width: min(46rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: var(--space-6, 1.5rem);
+  color: var(--color-text);
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, .75rem);
+}
+.account-access-dialog::backdrop { background: rgb(0 0 0 / .6); }
+.account-access-dialog .field { display: grid; gap: .5rem; margin-top: 1rem; }
+.account-access-dialog input { width: 100%; }

@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { operationsConfigSchema } from "./operations.js";
 
-const MAX_CONFIG_BYTES = 64 * 1024;
+export const MAX_CONFIG_BYTES = 64 * 1024;
 const exactOrigin = z.string().url().superRefine((input, context) => {
   const url = new URL(input);
   const loopback = url.hostname === "127.0.0.1" || url.hostname === "[::1]";

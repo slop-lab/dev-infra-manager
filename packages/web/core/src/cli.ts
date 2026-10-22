@@ -2,8 +2,13 @@
 import { initializeOperationsWeb, initializeFeaturesWeb } from "./initialize.js";
 import { parseArgs } from "node:util";
 import { createWebServerFromConfigFile } from "./index.js";
+import { runAccountCli, accountUsage } from "./account-cli.js";
 
 async function main(): Promise<void> {
+  if (process.argv[2] === "account") return runAccountCli(process.argv.slice(3));
+  if (process.argv[2] === "--help" || process.argv[2] === "help") {
+    process.stdout.write(`dim-web serve CONFIG\ndim-web init-operations OPERATIONS --output CONFIG [--port PORT]\ndim-web init-features SPEC --output CONFIG --roles read,operator,reviewer [--port PORT]\n${accountUsage}`); return;
+  }
   const [operation, configPath, ...flags] = process.argv.slice(2);
   if (operation === "init-features" && configPath !== undefined) {
     const { values } = parseArgs({ args: flags, options: { output: { type: "string" }, port: { type: "string" }, roles: { type: "string" } } });

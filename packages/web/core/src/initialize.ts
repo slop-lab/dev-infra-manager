@@ -5,7 +5,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { z } from "zod";
 import { loadPrivateJson, parseWebConfig, type WebConfig } from "./config.js";
 import { operationsConfigSchema } from "./operations.js";
-function browserAccount(username: string, roles: readonly ("read" | "reviewer" | "operator")[]) {
+export function browserAccount(username: string, roles: readonly ("read" | "reviewer" | "operator")[]) {
   const password = randomBytes(24).toString("base64url"), salt = randomBytes(16);
   const hash = scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 });
   return { password, account: { username, roles, passwordHash: `scrypt$16384$8$1$${salt.toString("base64")}$${hash.toString("base64")}` } };

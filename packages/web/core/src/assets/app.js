@@ -4,6 +4,7 @@ import { createOperationCoordinator } from "./operation-coordinator.js";
 import { clearOperations, showOperations } from "./operations-panel.js";
 import { showFeaturePlugins, clearFeaturePlugins } from "./feature-panels.js";
 import { endNavigationSession, startNavigationSession } from "./navigation-broker.js";
+import { showAccountAccess } from "./account-access.js";
 
 /** @template {typeof HTMLElement} T @param {string} id @param {T} type @returns {InstanceType<T>} */
 function element(id, type) {
@@ -15,6 +16,10 @@ const loginForm = element("login-form", HTMLFormElement), username = element("us
 const loginButton = element("login-button", HTMLButtonElement), logoutButton = element("logout-button", HTMLButtonElement);
 const loginError = element("login-error", HTMLElement), alerts = element("alert-announcer", HTMLElement), actions = element("session-actions", HTMLElement);
 const operations = createOperationCoordinator();
+const accessDialog = element("account-access-dialog", HTMLDialogElement);
+function openAccess() { if (session) { showAccountAccess(session, element("account-access-content", HTMLElement)); if (!accessDialog.open) accessDialog.showModal(); } }
+element("account-access-button", HTMLButtonElement).addEventListener("click", openAccess);
+window.addEventListener("dim-account-access", openAccess);
 /** @type {import("./types.js").Session | null} */ let session = null;
 /** @param {string} path @param {import("./types.js").Operation} operation @param {RequestInit} [options] */
 async function request(path, operation, options = {}) {
@@ -27,6 +32,7 @@ async function request(path, operation, options = {}) {
 /** @param {string} [message] */
 function signedOut(message = "") {
   operations.start(); session = null; endNavigationSession(); clearOperations(); clearFeaturePlugins();
+  if (accessDialog.open) accessDialog.close(); element("account-access-content", HTMLElement).replaceChildren();
   element("restore-state", HTMLElement).hidden = true; element("login-view", HTMLElement).hidden = false; actions.hidden = true;
   loginError.textContent = message; alerts.textContent = message;
   const invalid = message.startsWith("Sign-in failed.");
@@ -37,7 +43,7 @@ function signedIn(active) {
   session = active; password.value = ""; loginError.textContent = ""; alerts.textContent = "";
   startNavigationSession(active);
   element("restore-state", HTMLElement).hidden = true; element("login-view", HTMLElement).hidden = true; actions.hidden = false;
-  element("account-label", HTMLElement).textContent = active.roles.join(" · ");
+  element("account-label", HTMLElement).textContent = `${active.username} · ${active.roles.join(" · ")}`;
   showOperations(active); void showFeaturePlugins(active);
   if (active.capabilities.operations) element("operations-title", HTMLElement).focus();
 }

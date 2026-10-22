@@ -126,7 +126,13 @@ is implied by these source changes.
   Explain ordinary Git URLs and managed project sources, suggest workspace names
   and report actionable image, runtime and repository failures without exposing
   private host diagnostics. Distinguish incomplete setup from a stopped workspace.
-  Login origin failures identify the configured console URL.
+  Login origin failures identify the configured console URL. Explain account roles
+  and supply trusted local account-management commands, preserving passwords and
+  independent service reviewer authority. Accept SSH SCP workspace sources, show
+  tool lifecycle availability and copyable connection details. Guide worker setup
+  from empty execution state, reopen Codex sign-in and draft routes from account
+  model catalogs. Keep accepted Git operations successful when follow-up reads fail
+  and bind confirmations to the original repository and branch.
   Keep unrelated features usable when a service is unavailable; reconnect a
   configured feature without losing drafts. Distinguish accepted changes from
   failed follow-up reads. Local source installation includes the feature panels

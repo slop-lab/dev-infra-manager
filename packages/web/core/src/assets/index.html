@@ -22,10 +22,16 @@
         <div id="session-actions" class="session-actions" hidden>
 
           <span id="account-label" class="badge badge-neutral"></span>
+          <button id="account-access-button" class="button button-secondary" type="button">Account &amp; access</button>
           <button id="logout-button" class="button button-secondary" type="button">Sign out</button>
         </div>
       </div>
     </header>
+    <dialog id="account-access-dialog" class="account-access-dialog" aria-labelledby="account-access-title">
+      <h2 id="account-access-title">Account &amp; access</h2>
+      <div id="account-access-content"></div>
+      <form method="dialog"><button class="button button-secondary" type="submit">Close</button></form>
+    </dialog>
 
     <main id="main" tabindex="-1">
       <nav id="feature-navigation" class="console-navigation" aria-label="Console sections" hidden><button id="feature-workspaces" class="button button-secondary" type="button" aria-pressed="true">Workspaces</button><div id="feature-tabs"></div></nav>

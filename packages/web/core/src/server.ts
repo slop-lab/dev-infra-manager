@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
+import { fileURLToPath } from "node:url";
 import { loadWebConfig, type WebConfig } from "./config.js";
 import { BodyError, HttpResponseError, readJson, sendEmpty, sendJson } from "./http-response.js";
 import { AccountAuthenticator, SessionStore, type AuthenticationState, type WebSession } from "./session.js";
@@ -34,6 +35,7 @@ export type WebServer = {
   runtimeState(): WebRuntimeState;
 };
 type RequestContext = {
+  readonly accountConfigPath: string;
   readonly authenticator: AccountAuthenticator;
   readonly config: WebConfig;
   readonly operations: WebOperations | undefined;
@@ -47,10 +49,10 @@ export async function createWebServerFromConfigFile(
   options: WebServerOptions = {}
 ): Promise<WebServer> {
   const config = await loadWebConfig(path);
-  return createWebServer(config, options, await loadWebPlugins(config.plugins, config.pluginHome, webPluginContext(config.operations?.hosts)));
+  return createWebServer(config, options, await loadWebPlugins(config.plugins, config.pluginHome, webPluginContext(config.operations?.hosts)), path);
 }
 
-function createWebServer(config: WebConfig, options: WebServerOptions, plugins: readonly LoadedWebPlugin[]): WebServer {
+function createWebServer(config: WebConfig, options: WebServerOptions, plugins: readonly LoadedWebPlugin[], accountConfigPath: string): WebServer {
   const now = options.now ?? (() => performance.now());
   const authenticator = new AccountAuthenticator(
     config.accounts,
@@ -58,7 +60,7 @@ function createWebServer(config: WebConfig, options: WebServerOptions, plugins: 
     now
   );
   const sessions = new SessionStore(config.session, now, options.limits?.sessions ?? DEFAULT_SESSIONS);
-  const context = { plugins, authenticator, config, operations: options.operations ?? (config.operations === undefined ? undefined : configuredWebOperations(config.operations)), sessions, secureCookie: new URL(config.publicOrigin).protocol === "https:" };
+  const context = { accountConfigPath, plugins, authenticator, config, operations: options.operations ?? (config.operations === undefined ? undefined : configuredWebOperations(config.operations)), sessions, secureCookie: new URL(config.publicOrigin).protocol === "https:" };
   const server = createServer((request, response) => {
     void handleRequest(context, request, response).catch((error: unknown) => {
       if (error instanceof HttpResponseError) return sendJson(response, { status: error.status, body: { error: error.publicMessage, ...(error.code ? { code: error.code } : {}) } });
@@ -99,7 +101,7 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
   if (request.method === "GET" && url.pathname === "/healthz") return sendJson(response, { status: 200, body: { status: "ok" } });
   if (request.method === "POST" && url.pathname === "/v1/session") return login(context, request, response);
   const session = requireSession(context.sessions, request);
-  if (request.method === "GET" && url.pathname === "/v1/session") return sendJson(response, { status: 200, body: sessionBody(context.config, session) });
+  if (request.method === "GET" && url.pathname === "/v1/session") return sendJson(response, { status: 200, body: sessionBody(context, session) });
   if (request.method === "DELETE" && url.pathname === "/v1/session") {
     requireMutation(context.config, request, session);
     context.sessions.delete(session.id);
@@ -159,7 +161,7 @@ async function login(context: RequestContext, request: IncomingMessage, response
       if (session === undefined) return sendBusy(response);
       return sendJson(response, {
         status: 201,
-        body: sessionBody(context.config, session),
+        body: sessionBody(context, session),
         headers: { "Set-Cookie": sessionCookie(session.id, context.secureCookie) }
       });
     }
@@ -186,9 +188,14 @@ function requireOrigin(config: WebConfig, request: IncomingMessage): void {
   if (request.headers.origin !== config.publicOrigin) throw new HttpResponseError(403, "request rejected");
 }
 
-function sessionBody(config: WebConfig, session: WebSession) {
-  return { authenticated: true, csrfToken: session.csrfToken, roles: accountRoles(config, session),
-    capabilities: { operations: config.operations !== undefined } };
+function sessionBody(context: RequestContext, session: WebSession) {
+  const roles = accountRoles(context.config, session);
+  return { authenticated: true, username: session.accountId, csrfToken: session.csrfToken, roles,
+    capabilities: { operations: context.config.operations !== undefined },
+    ...(roles.includes("operator") ? { accountAdministration: {
+      command: [process.execPath, fileURLToPath(new URL(import.meta.url.endsWith(".ts") ? "../dist/cli.js" : "./cli.js", import.meta.url)), "account"],
+      configPath: context.accountConfigPath
+    } } : {}) };
 }
 
 function constantEqual(left: string, right: string): boolean {

@@ -41,7 +41,7 @@ dim-web serve /absolute/web.json
 
 Save the generated browser password. Initialization creates a new private
 configuration and stores only its scrypt hash. Existing files are never
-replaced. Operators can create workspaces from HTTP(S), SSH or Git repository URLs on an explicitly
+replaced. Operators can create workspaces from HTTP(S) or SSH repository URLs (including `git@host:path`) on an explicitly
 configured host, with an optional ref, runtime, image and CPU/memory/PID limits.
 Empty limits use the host defaults; `unlimited` removes a limit. A VM workspace
 requires its provider to be installed and an explicit reviewed image fingerprint.
@@ -167,8 +167,9 @@ Configuration and connection files are owned mode-0600 regular files; symbolic
 links and hard links are rejected. Browser passwords use scrypt. Sessions use
 opaque HttpOnly SameSite=Strict cookies, Secure for HTTPS, rotating login,
 monotonic idle/absolute expiry, bounded concurrency and bounded guessing.
-Host control credentials, executable paths, private connection files and raw
-service capabilities never reach the browser. Reviewed plugins can offer an
+Host control credentials, private service connection files and raw service
+capabilities never reach the browser. Operators can inspect the trusted local
+account-management command and console configuration path in Account & access. Reviewed plugins can offer an
 explicit operator-only read of workspace application credentials, such as an
 OpenCode server password; normal status responses exclude these secrets. Console assets use a same-origin CSP,
 no-store caching and text-safe rendering.
@@ -177,3 +178,27 @@ Tests live under [`tests/web`](../../../tests/web); feature tests live under
 [`tests/web/plugins`](../../../tests/web/plugins). The core workspace browser
 fixture uses a synthetic CLI and real HTTP authentication; optional feature
 fixtures exercise real service protocols independently.
+
+## Browser accounts and review access
+
+Open **Account & access** in the console header to inspect the current username
+and roles. Operators get exact, copyable commands for this installation;
+read-only users are directed to the console owner. Browser permissions and the
+Native Git service reviewer identity are independent and both must permit approval.
+
+Run `dim-web account --help` on the console server as its configuration owner.
+For example, create a separate reviewer or update an existing account:
+
+```sh
+dim-web account list
+dim-web account add reviewer --roles read,reviewer
+dim-web account set-roles local-operator --roles read,operator,reviewer
+```
+
+Use `--config /absolute/web.json` for a nondefault configuration. Account changes
+preserve other settings and existing passwords; `reset-password` generates a new
+password, and `remove` refuses to delete the last account. New passwords are shown
+once. Restart the console and sign in again to apply changes; with install-local,
+run `systemctl --user restart dim-web.service`. The console cannot grant browser
+roles through HTTP. Account administration commands serialize their own writes;
+avoid changing the same configuration with install-local or another editor concurrently.

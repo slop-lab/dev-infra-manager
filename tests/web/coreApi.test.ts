@@ -9,7 +9,7 @@ it("serves only shipped console assets with a same-origin CSP", async () => {
   const page = await fetch(f.baseUrl);
   expect(page.headers.get("content-security-policy")).toBe("default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   expect(await page.text()).toContain('<script src="/assets/app.js" type="module"></script>');
-  for (const path of ["app.js", "session-data.js", "operation-coordinator.js", "navigation-broker.js", "workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "feature-ui.js"]) {
+  for (const path of ["app.js", "account-access.js", "session-data.js", "operation-coordinator.js", "navigation-broker.js", "workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "feature-ui.js"]) {
     const asset = await fetch(`${f.baseUrl}/assets/${path}`);
     expect(asset.status).toBe(200); expect(asset.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
   }
@@ -20,7 +20,7 @@ it("returns a credential-free hardened session and uses Secure cookies for HTTPS
   const response = await f.login();
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(response.headers.get("set-cookie")).toMatch(/^dim_session=[A-Za-z0-9_-]+; Path=\/; HttpOnly; SameSite=Strict$/);
-  expect(await response.json()).toEqual({ authenticated: true, csrfToken: expect.stringMatching(/^[A-Za-z0-9_-]+$/), roles: ["read", "operator"], capabilities: { operations: true } });
+  expect(await response.json()).toEqual({ authenticated: true, username: "local-operator", accountAdministration: { command: [process.execPath, expect.stringMatching(/cli\.js$/), "account"], configPath: f.configPath }, csrfToken: expect.stringMatching(/^[A-Za-z0-9_-]+$/), roles: ["read", "operator"], capabilities: { operations: true } });
   expect(await readFile(f.configPath, "utf8")).not.toContain(WEB_PASSWORD);
   const https = await fixture({ secureOrigin: true });
   expect((await https.login()).headers.get("set-cookie")).toMatch(/; Secure$/);
