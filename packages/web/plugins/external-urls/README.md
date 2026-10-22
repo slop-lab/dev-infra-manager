@@ -17,6 +17,8 @@ revoke them.
 Approved routes show their **Service URL** first and, when available, a separate
 **Permanent URL**. The service address is never replaced by the permanent address.
 Read-only accounts see the same approved addresses.
+Each address has a copy action with a select-and-copy fallback when clipboard
+access is unavailable. Copying an address does not change or approve its route.
 
 The Web feature delegates only fixed `external-url console invoke` operations to
 a trusted configured controller. Every request carries the workspace's exact UUID;

@@ -36,6 +36,9 @@ try {
   assert.equal(await newWorkspace.isVisible(), false);
   await page.getByRole("button", { name: "New workspace on devbox", exact: true }).click();
   await newWorkspace.waitFor({ state: "visible" });
+  await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).fill("git@github.com:team/ssh-project.git");
+  assert.equal(await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).evaluate((field) => (field as HTMLInputElement).checkValidity()), true);
+  assert.equal(await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).inputValue(), "ssh-project");
   await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).fill("https://example.test/daily.git");
   assert.equal(await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).inputValue(), "daily");
   await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).fill("browser-created");

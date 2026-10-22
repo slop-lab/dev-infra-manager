@@ -23,9 +23,11 @@ export const workspaceCreateSchema = z.object({
   source: z.string().min(1).max(4096).refine((value) => {
     if (/^dim:\/\/[a-z0-9][a-z0-9-]*\/?$/.test(value)) return true;
     if (/[\s\x00-\x1f\x7f]/.test(value)) return false;
-    try { const url = new URL(value); return ["https:", "http:", "ssh:", "git:"].includes(url.protocol) && Boolean(url.hostname) && !url.hash; }
+    if (!value.includes("://") && /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*:[^:\s\x00-\x1f\x7f][^\s\x00-\x1f\x7f]*$/.test(value)) return true;
+    try { const url = new URL(value); return ["https:", "http:", "ssh:"].includes(url.protocol) && Boolean(url.hostname) && !url.hash && !url.search
+      && !url.password && (url.protocol === "ssh:" || !url.username); }
     catch { return false; }
-  }, "use an HTTP(S), SSH or Git repository URL, or dim://PROJECT"),
+  }, "use an HTTP(S) or SSH repository without embedded credentials, or dim://PROJECT"),
   ref: z.string().min(1).max(256).regex(/^[^\s\x00-\x1f\x7f-][^\s\x00-\x1f\x7f]*$/).optional(),
   runtime: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/).default("container"),
   image: z.string().min(1).max(512).regex(/^[a-zA-Z0-9][a-zA-Z0-9./:@_-]*$/).optional(),

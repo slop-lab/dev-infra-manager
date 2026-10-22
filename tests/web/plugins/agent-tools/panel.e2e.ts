@@ -62,6 +62,8 @@ try {
   await page.getByRole("button", { name: "Start OpenCode server", exact: true }).click();
   await page.getByText("Start OpenCode server completed.", { exact: true }).waitFor();
   await page.getByText("Server running. Port 4096 is inside the workspace.", { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Start OpenCode server', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Stop OpenCode server', exact: true }).isEnabled(), true);
   const initialStatusResponse = page.waitForResponse((response) => response.request().method() === "POST" && response.request().postDataJSON().name === "server.status");
   assert(pending); pending.end(JSON.stringify({ ...status(), state: "stopped" })); pending = undefined; holdStatus = false;
   await (await initialStatusResponse).finished();
@@ -81,6 +83,10 @@ try {
   await page.getByText('Service URL:', { exact: false }).waitFor();
   await page.getByText('Permanent URL:', { exact: false }).waitFor();
   assert.equal(await page.getByRole('link', { name: 'https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967', exact: true }).count(), 1);
+  await page.getByRole('button', { name: 'Copy service URL', exact: true }).click();
+  assert.equal(await page.getByLabel('Select and copy service URL', { exact: true }).inputValue(), 'https://opencode.example.test:8443');
+  await page.getByRole('button', { name: 'Copy forwarding command', exact: true }).click();
+  assert.equal(await page.getByLabel('Select and copy forwarding command', { exact: true }).inputValue(), 'dim --host local forward development 4096:4096');
   assert.equal(calls.filter(({ name }) => name === 'server.credentials').length, 0);
   await page.getByRole('button', { name: 'Copy server password', exact: true }).click();
   const fallback = page.getByLabel('Select and copy server password'); await fallback.waitFor();
@@ -95,6 +101,8 @@ try {
   assert.equal(await page.locator('input').evaluateAll((inputs) => inputs.some((input) => (input as HTMLInputElement).value === 'updated-secret-password')), false);
   await page.getByRole("button", { name: "Stop OpenCode server", exact: true }).click();
    await page.getByText("Server stopped. Port 4096 is inside the workspace.", { exact: true }).waitFor();
+   assert.equal(await page.getByRole('button', { name: 'Stop OpenCode server', exact: true }).isDisabled(), true);
+   assert.equal(await page.getByRole('button', { name: 'Start OpenCode server', exact: true }).isEnabled(), true);
    failTools = true;
    await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
    await page.getByText('Some status reads failed.', { exact: false }).waitFor();
@@ -108,7 +116,8 @@ try {
    await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
    await page.getByText('Refresh status completed.', { exact: true }).waitFor();
    assert.equal(calls.filter(({ name }) => name === 'server.start').length, starts);
-   assert.equal(await page.getByRole('button', { name: 'Start OpenCode server', exact: true }).isEnabled(), true);
+   assert.equal(await page.getByRole('button', { name: 'Start OpenCode server', exact: true }).isDisabled(), true);
+   assert.equal(await page.getByRole('button', { name: 'Stop OpenCode server', exact: true }).isEnabled(), true);
    assert.equal(await page.locator("select").count(), 0);
   await mount(true, true);
   await page.getByText("Start this workspace from Workspaces before inspecting or installing tools.", { exact: true }).waitFor();

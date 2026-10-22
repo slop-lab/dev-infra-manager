@@ -46,6 +46,16 @@ export function mount(container, context) {
           const row = node('p',`${label}: `);
           try { const url = new URL(address); if (['http:','https:'].includes(url.protocol) && !url.username && !url.password) { const link = document.createElement('a'); link.href = address; link.textContent = address; link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link); } else row.append(node('code',address)); } catch { row.append(node('span','Route address unavailable.')); }
           item.append(row);
+          const copy = context.ui.button(`Copy ${label.charAt(0).toLowerCase() + label.slice(1)}`);
+          copy.addEventListener('click', () => { void (async () => {
+            try { await navigator.clipboard.writeText(address); if (current()) context.ui.feedback(status, `${label} copied.`); }
+            catch {
+              if (!current()) return;
+              const caption = document.createElement('label'), fallback = document.createElement('input'); caption.textContent = `Select and copy ${label.charAt(0).toLowerCase() + label.slice(1)}`;
+              fallback.readOnly = true; fallback.value = address; caption.append(fallback); item.append(caption); fallback.focus(); fallback.select();
+              context.ui.feedback(status, 'Clipboard access is unavailable. Select and copy the address below.');
+            }
+          })(); }); item.append(copy);
         }
       } else item.append(node('p',route.approval === 'pending' ? 'Awaiting operator approval. This route is not available yet.' : 'This route has been revoked.'));
       if (route.approval === 'pending' && allowed.has('routes.approve')) action(item,'Approve route',()=>run('routes.approve',{id:route.id}));

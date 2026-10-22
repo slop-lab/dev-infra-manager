@@ -50,6 +50,14 @@ it("supports ordinary Git host operations without loading a control plane and en
   expect(await status.json()).toMatchObject({ hosts: [{ id: "devbox" }], consoles: [] });
   expect((await fetch(f.base + "/v1/projects/project-a/repositories/root/reviews/" + "a".repeat(64), { headers: reader })).status).toBe(404);
 });
+it("accepts host-supported Git clone addresses and rejects inline credentials or unsupported transports", () => {
+  for (const source of ["git@github.com:team/project.git", "git.example.test:team/project.git", "ssh://git@example.test/team/project.git", "https://example.test/project.git", "dim://my-project"]) {
+    expect(workspaceCreateSchema.parse({ name: "source-check", source }).source).toBe(source);
+  }
+  for (const source of ["https://user:token@example.test/project.git", "https://token@example.test/project.git", "ssh://git:token@example.test/project.git", "https://example.test/project.git?token=secret", "git://example.test/project.git"]) {
+    expect(() => workspaceCreateSchema.parse({ name: "source-check", source })).toThrow();
+  }
+});
 it("creates Git workspaces only with operator, origin and CSRF authority and rejects executable or option inputs", async () => {
   const f = await operationsFixture(), reader = await f.login("reader"), operator = await f.login("operator");
   const path = f.base + "/v1/operations/hosts/devbox/workspaces/create";
@@ -88,7 +96,7 @@ it("executes only configured public DIM host ports, projects safe summaries and 
   expect(JSON.parse(await readFile(argv, "utf8"))).toEqual(["--host", "ssh-development", "create", "dim://app", "joint", "--runtime", "container",
     "--repository", "public", "--repository", "private", "--workdir", "public", "--json"]);
   expect(() => workspaceCreateSchema.parse({ name: "bad", source: "https://example.test/repo.git", repositories: ["private"] })).toThrow();
-  await expect(operations.workspaceCreate("attacker-host", { name: "new-dev", source: "git://example.test/repo.git", runtime: "container" })).rejects.toThrow("host not found");
+  await expect(operations.workspaceCreate("attacker-host", { name: "new-dev", source: "https://example.test/repo.git", runtime: "container" })).rejects.toThrow("host not found");
   await expect(operations.workspaces("attacker-host")).rejects.toThrow("host not found");
 });
 it("returns fixed actionable host failure categories without raw stderr, credentials or host paths", async () => {

@@ -14,10 +14,12 @@ export function createWorkspaceForm(options) {
   const basic = node("div", "workspace-fields");
   form.append(basic);
   const source = input(basic, "source", "Git URL or dim://PROJECT", `on ${host}`);
-  source.type = "url";
+  source.type = "text";
+  source.autocapitalize = "none";
+  source.spellcheck = false;
   source.required = true;
   source.placeholder = "https://github.com/team/project.git";
-  const sourceHelp = node("p", "field-hint", "Examples: https://github.com/octocat/Hello-World.git or dim://my-project. Private Git URLs use credentials configured on the selected host.");
+  const sourceHelp = node("p", "field-hint", "Examples: https://github.com/octocat/Hello-World.git, git@github.com:team/project.git or dim://my-project. Private repositories use credentials configured on the selected host; keep passwords and tokens out of this field.");
   sourceHelp.id = `workspace-source-help-${host}`;
   source.setAttribute("aria-describedby", sourceHelp.id);
   basic.append(sourceHelp);
@@ -86,6 +88,11 @@ export function createWorkspaceForm(options) {
         .replace(/\.git$/, "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z0-9]+/, "").slice(0, 48);
       updateGate();
     } catch {}
+    if (!source.value.includes("://") && /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*:/.test(source.value.trim())) {
+      name.value = (source.value.trim().split(":").slice(1).join(":").split("/").filter(Boolean).at(-1) ?? "")
+        .replace(/\.git$/, "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z0-9]+/, "").slice(0, 48);
+      updateGate();
+    }
   });
   for (const field of [ref, runtime, image, repositories, workingDirectory, cpuCount, memory, pidsLimit]) field.addEventListener("input", () => { dirty = true; });
   replace.addEventListener("click", () => { if (pendingPrefill && !busy && blockedName === "") applyPrefill(pendingPrefill); });

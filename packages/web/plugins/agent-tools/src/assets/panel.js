@@ -25,8 +25,16 @@ export function mount(container, context) {
     const tools = element('div'), server = element('div'); tools.className = server.className = 'panel feature-form'; content.append(tools, server);
     /** @param {string} name @param {Record<string,unknown>} [input] */
     const invoke = (name, input = {}) => context.invoke(name, { ...input, controllerId: controller.id, workspace: workspace.name, workspaceId: workspace.id }, { timeoutMilliseconds: 185_000 });
-    /** @type {Array<{node:HTMLButtonElement,write:boolean}>} */ const actions = [];
+    /** @type {Array<{node:HTMLButtonElement,write:boolean}>} */ let actions = [];
+    /** @type {HTMLButtonElement|undefined} */ let startButton;
+    /** @type {HTMLButtonElement|undefined} */ let stopButton;
+    /** @type {'running'|'stopped'|undefined} */ let serverState;
     let busy = false, reconciliation = false, stateVersion = 0;
+    function updateActions() {
+      actions = actions.filter(({ node }) => node.isConnected);
+      for (const item of actions) item.node.disabled = busy || reconciliation && item.write
+        || item.node === startButton && serverState === 'running' || item.node === stopButton && serverState === 'stopped';
+    }
     /** @param {HTMLElement} parent @param {string} label @param {()=>Promise<boolean|void>} action @param {boolean} [write] */
     function button(parent, label, action, write = false) {
       const node = context.ui.button(label);
@@ -39,7 +47,7 @@ export function mount(container, context) {
           if (write && error instanceof Error && 'outcome' in error && error.outcome === 'unknown') reconciliation = true;
           context.ui.feedback(notice, reconciliation ? `${label}: outcome is unknown. Changes are locked until Refresh status succeeds. Do not repeat the action yet.` : `${label} could not complete. Refresh status before retrying; the workspace or controller may be unavailable.`, 'error');
         }
-        finally { busy = false; if (scoped()) for (const item of actions) item.node.disabled = reconciliation && item.write; }
+        finally { busy = false; if (scoped()) updateActions(); }
       }); actions.push({ node, write }); parent.append(node); return node;
     }
     /** @param {unknown} result */
@@ -53,6 +61,7 @@ export function mount(container, context) {
     function renderServer(result) {
       if (!scoped()) return;
       const value = /** @type {Server} */ (result);
+      serverState = value.state;
       server.replaceChildren(element('h4', 'OpenCode server'), element('p', `Server ${value.state}. Port ${value.port} is inside the workspace.`));
       server.append(element('p', `Project directory: ${value.directory}`));
       button(server, 'Copy project directory', async () => {
@@ -75,6 +84,7 @@ export function mount(container, context) {
               const routeLink = document.createElement('a'); routeLink.href = address; routeLink.target = '_blank'; routeLink.rel = 'noopener noreferrer'; routeLink.textContent = address; row.append(routeLink);
             } else row.append(document.createTextNode(address));
             server.append(row);
+            button(server, `Copy ${label.charAt(0).toLowerCase() + label.slice(1)}`, async () => { await copy(address, `Select and copy ${label.charAt(0).toLowerCase() + label.slice(1)}`, server); });
           }
         }
       } else {
@@ -106,13 +116,24 @@ export function mount(container, context) {
         }, true);
         form.addEventListener('submit', (event) => { event.preventDefault(); save.click(); }); server.append(form);
       }
-      if (value.state !== 'running') return;
+      if (value.state !== 'running') { updateActions(); return; }
       server.append(element('p', 'For local forwarding, run this command on your computer and keep it running:'));
       server.append(element('pre', `dim --host ${controller.id} forward ${selectedWorkspace.name} ${value.port}:${value.port}`));
+      button(server, 'Copy forwarding command', async () => { await copy(`dim --host ${controller.id} forward ${selectedWorkspace.name} ${value.port}:${value.port}`, 'Select and copy forwarding command', server); });
       server.append(element('p', `After forwarding, the server address is ${value.url}. This is the workspace-local address until forwarding is active.`));
       const link = document.createElement('a'); link.href = 'https://slop-lab.github.io/dev-infra-manager/opencode-web/'; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open OpenCode Web'; server.append(link);
       server.append(element('p', `Select this workspace's forwarded or approved HTTPS server in OpenCode Web. Use Add project to open ${value.directory}; Copy project directory provides the exact path. An operator can copy or change the server password here.`));
       server.append(element('p', 'If the browser blocks a local HTTP connection from the HTTPS client, use your configured HTTPS workspace endpoint.'));
+      updateActions();
+    }
+    /** @param {string} value @param {string} caption @param {HTMLElement} parent */
+    async function copy(value, caption, parent) {
+      try { await navigator.clipboard.writeText(value); }
+      catch {
+        if (!scoped()) return;
+        const label = document.createElement('label'), fallback = document.createElement('input'); label.textContent = caption;
+        fallback.readOnly = true; fallback.value = value; label.append(fallback); parent.append(label); fallback.focus(); fallback.select();
+      }
     }
     const toolbar = element('div'); toolbar.className = 'feature-actions'; content.prepend(toolbar);
     if (allowed.has('tools.status') && allowed.has('server.status')) button(toolbar, 'Refresh status', async () => {
@@ -126,8 +147,8 @@ export function mount(container, context) {
       reconciliation = false;
     });
     if (allowed.has('tools.setup')) for (const tool of controller.tools) button(toolbar, `Install ${tool}`, async () => { renderTools(await invoke('tools.setup', { tool })); }, true);
-    if (allowed.has('server.start')) button(toolbar, 'Start OpenCode server', async () => { renderServer(await invoke('server.start')); }, true);
-    if (allowed.has('server.stop')) button(toolbar, 'Stop OpenCode server', async () => { renderServer(await invoke('server.stop')); }, true);
+    if (allowed.has('server.start')) startButton = button(toolbar, 'Start OpenCode server', async () => { renderServer(await invoke('server.start')); }, true);
+    if (allowed.has('server.stop')) stopButton = button(toolbar, 'Stop OpenCode server', async () => { renderServer(await invoke('server.stop')); }, true);
     if (allowed.has('tools.status')) void invoke('tools.status').then((value) => { if (stateVersion === 0) renderTools(value); }).catch(() => { if (scoped() && stateVersion === 0) tools.textContent = 'Tool status unavailable. Use Refresh status to retry.'; });
     if (allowed.has('server.status')) void invoke('server.status').then((value) => { if (stateVersion === 0) renderServer(value); }).catch(() => { if (scoped() && stateVersion === 0) server.textContent = 'Server status unavailable. Install OpenCode if needed, then refresh status.'; });
   }
