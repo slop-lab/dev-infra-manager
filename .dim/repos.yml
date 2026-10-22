@@ -2,7 +2,11 @@ schemaVersion: 1
 repositories:
   main:
     ref: development
-    protect: [development]
+    defaultBranch: main
+    protect: [main, development]
+    branches:
+      main: {review: true}
+      development: {review: false}
     upstream:
       url: https://github.com/slop-lab/dev-infra-manager.git
       branch: development

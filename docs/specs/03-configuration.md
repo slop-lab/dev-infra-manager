@@ -44,7 +44,13 @@ symlink aliases, and bind credentials to their service and role. Importer,
 reviewer, promoter, workspace issuer and execution roles remain distinct.
 
 Git-repositories owns repository storage and the neutral policy envelope
-`{schemaVersion, protectedRef, policyRevision, extensions}`. Each selected
+`{schemaVersion, protectedRef, defaultRef, branches, policyRevision, extensions}`.
+The immutable `protectedRef` binds the initial import; `defaultRef` selects the
+default managed branch. Each configured branch has its own durable head and a
+human-review evaluation switch. New manifests default to `main`, with review
+rules enabled on `main` and disabled on `development`. Both require fast-forward
+proposal promotion. `.dim/repos.yml` can select `defaultBranch` and per-branch
+`branches.<name>.review`. Each selected
 feature owns its policy section and strict configuration. Unknown or disabled
 policy owners are rejected during import and startup. Code-review, merge-policy,
 Git-CI and webhooks are optional service plugins; repository-only configuration
@@ -56,8 +62,8 @@ select host paths, devices, credentials or privileged runtime arguments.
 An authenticated root importer MAY explicitly replace an existing repository's
 effective policy without reimporting its Git data. The update MUST bind the
 current policy digest, protected head and serving generation; ownership and all
-selected extension policies MUST be validated. It MUST NOT change the protected
-ref, rewrite historical import receipts or make old approvals apply to the new
+selected extension policies MUST be validated. It MAY add managed branches and select another default branch. It MUST NOT
+change the import-anchor protected ref, rewrite historical import receipts or make old approvals apply to the new
 policy. Host policy commands read only explicitly selected operator files;
 ordinary pushes and workspace startup MUST NOT apply candidate policy files.
 Reconciliation after a lost response MUST verify the effective server policy

@@ -15,7 +15,7 @@ Installing a package does not select additional feature implementations.
 
 A Project groups independent repositories under one owner. Every registration,
 import, lease and ref change binds `(projectId, repositoryId)`. Each repository
-has its own bare object database, protected ref, import receipt and policy.
+has its own bare object database, managed branches, import receipt and policy.
 Registering a repository does not import source, create a workspace or start a
 worker. Imports verify bounded Git bundles and can initialize an unborn
 protected ref; they cannot replace an existing protected head.
@@ -67,6 +67,11 @@ review, merge, CI or webhook implementation.
 {
   "schemaVersion": 1,
   "protectedRef": "refs/heads/main",
+  "defaultRef": "refs/heads/main",
+  "branches": {
+    "refs/heads/main": {"review": true},
+    "refs/heads/development": {"review": false}
+  },
   "policyRevision": "CANONICAL_SHA256",
   "extensions": {}
 }
@@ -75,11 +80,23 @@ review, merge, CI or webhook implementation.
 An empty `extensions` object is valid for repository-only use. Selected features
 own and strictly validate their named sections, such as `code-review` and
 `git-ci`; the repository engine does not interpret their policy language.
-`nativeRepositoryPolicyRevision` derives the revision from the protected ref and
-the complete canonical extensions object. Import and startup reject policy
+`nativeRepositoryPolicyRevision` derives the revision from the import anchor, default branch, branch declarations
+and complete canonical extensions object. Import and startup reject policy
 sections without an enabled owner. Disabling a feature therefore cannot silently
 remove a required check. The complete policy and exact repository inputs bind
 human review; policy changes require a fresh approval.
+
+`protectedRef` is the immutable initial import anchor. `defaultRef` selects the
+default working/configuration branch; every configured `branches` entry has its
+own durable head. New managed branches start at the current import-anchor head
+through a recorded creation intent. Existing unrecorded Git refs are never adopted.
+The bare repository HEAD follows `defaultRef`. Legacy stored policies without
+branch metadata retain their original anchor and digest until explicitly updated.
+All managed heads require proposal promotion and fast-forward ancestry. The
+`review` switch controls the selected code-review plugin's human rule evaluation,
+not transport or force-push checks. Declare `code-review` and `merge-policy` in
+the repository policy to use the proposal/review/promotion workflow; a
+repository-only deployment does not implicitly install those features.
 
 ## Protected refs and recovery
 
@@ -91,8 +108,8 @@ evidence digests before Git CAS, then finalizes one monotonic repository
 transition. Exact retries return the original receipt. It does not interpret
 human approval or CI evidence itself.
 
-Repository state format **11** contains activation, registration, immutable import,
-policy-update history and neutral ref-transition records. Feature state is separately owned: merge
+Repository state format **12** contains activation, registration, immutable import,
+policy-update history, managed-branch baselines and neutral ref-transition records. Feature state is separately owned: merge
 receipts use the private `.extensions/merge-policy` directory; review and Git-CI
 own their private records in repository storage. A pending accepted ref intent
 is reconciled against Git at startup, including a crash after Git CAS but before
@@ -100,9 +117,10 @@ receipt finalization. Invalid chains, candidate identity or foreign ownership
 fail closed. Recovery never manufactures a new merge authorization.
 
 Stopping preserves repositories and durable feature data. Unsupported storage
-formats are rejected. Format 10 has one additive upgrade that preserves all data;
-startup adds policy history and publishes the format-11 marker. Read-only inspection
-accepts either format without upgrading it. Export required user data
+formats are rejected. Formats 10 and 11 have an additive upgrade that preserves import receipts,
+policies and ref history; startup records existing branch baselines and publishes
+the format-12 marker. Read-only inspection accepts all three formats without
+upgrading them. Export required user data
 before replacing incompatible state. The separate installer Docker deployment
 and activation transaction retains its own facade contract.
 

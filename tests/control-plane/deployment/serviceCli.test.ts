@@ -342,7 +342,7 @@ describe("native Git image configuration preflight CLI", () => {
     // Then
     expect(result).toEqual({
       status: 0,
-      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 11, readableFormats: [10, 11] })}\n`,
+      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 12, readableFormats: [10, 11, 12] })}\n`,
       stderr: ""
     });
   });
@@ -360,7 +360,7 @@ describe("native Git image configuration preflight CLI", () => {
     const result = await run(process.execPath, [stateProbe, root]);
 
     // Then
-    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 11 })}\n`);
+    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 12 })}\n`);
     expect(result.stderr).toBe("");
     expect(await stateTree(root)).toEqual(before);
   });

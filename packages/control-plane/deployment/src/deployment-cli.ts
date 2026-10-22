@@ -44,7 +44,7 @@ export async function runNativeGitServiceCli(
     return;
   }
   if (command === "compatibility" && arguments_.length === 2 && arguments_[1] === "--json") {
-    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 11, readableFormats: [10, 11] })}\n`);
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 12, readableFormats: [10, 11, 12] })}\n`);
     return;
   }
   if (command === "check-state" && arguments_.length === 4 && arguments_[1] === "--read-only"

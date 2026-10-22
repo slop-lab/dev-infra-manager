@@ -110,7 +110,7 @@ assert.equal(response.status, 200); assert.deepEqual(await response.json(), []);
 JS
 for container in "$native_container" "$execution_container"; do docker stop --time 15 "$container" >/dev/null; done
 for kind in native execution; do
-  if [[ "$kind" == native ]]; then image="$native_image"; state="$native_state"; target=/var/lib/dim-native-git; format=10;
+  if [[ "$kind" == native ]]; then image="$native_image"; state="$native_state"; target=/var/lib/dim-native-git; format=12;
   else image="$execution_image"; state="$execution_state"; target=/var/lib/dim-execution; format=102; fi
   compatibility="$(docker run --rm --read-only --network none "$image" compatibility --json)"
   inspected="$(docker run --rm --read-only --network none --tmpfs /tmp:rw,noexec,nosuid,nodev,size=32m \
@@ -118,7 +118,8 @@ for kind in native execution; do
   node --input-type=module - "$compatibility" "$inspected" "$format" <<'JS'
 import assert from 'node:assert/strict';
 const expected = Number(process.argv[4]);
-assert.deepEqual(JSON.parse(process.argv[2]), { schemaVersion: 1, writeFormat: expected, readableFormats: [expected] });
+assert.deepEqual(JSON.parse(process.argv[2]), { schemaVersion: 1, writeFormat: expected,
+  readableFormats: expected === 12 ? [10, 11, 12] : [expected] });
 assert.deepEqual(JSON.parse(process.argv[3]), { schemaVersion: 1, stateFormat: expected });
 JS
 done

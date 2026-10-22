@@ -44,7 +44,8 @@ old authority. Advancement of a protected ref does not overwrite local work.
 ## Trusted policy and extension composition
 
 The neutral policy envelope contains `schemaVersion`, `protectedRef`,
-`policyRevision` and `extensions`. The revision hashes the protected ref and the
+`defaultRef`, `branches`, `policyRevision` and `extensions`. The revision hashes
+the import-anchor protected ref, default branch, all branch declarations and the
 complete canonical extensions object. An empty extensions object is valid.
 Selected feature owners strictly validate their sections:
 
@@ -74,8 +75,13 @@ candidate commit/tree and exact dependency snapshots. The version-3 review
 envelope contains the review, policy digest and generic immutable attachment
 references. It contains no workflow plan or execution events.
 
-Required reviewers are the union of baseline, matching path rules and matching
-content rules in the operator-imported policy. A rule may never remove another
+For a branch with `review: true`, required reviewers are the union of baseline,
+matching path rules and matching content rules in the operator-imported policy.
+A branch with `review: false` still uses a review envelope and mandatory
+fast-forward promotion, but has no human rule requirements. New manifests enable
+review on `main` and disable it on `development`; both forbid force updates.
+Review identity and freshness checks bind the selected target branch. A branch
+merge creates a service-owned proposal and follows this same review path. A rule may never remove another
 rule's requirement. An empty baseline permits conditional review; matched rules
 still require all selected human approvals. Content matchers read bounded blobs
 and candidate files by immutable Git identity, never from a mutable checkout.
