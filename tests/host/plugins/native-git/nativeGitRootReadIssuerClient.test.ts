@@ -94,7 +94,7 @@ describe("native Git root read issuer host client", () => {
     expect(pushFailure).not.toContain(lease.username);
     expect(pushFailure).not.toContain(lease.password);
     expect((await runGit("/usr/bin/git", ["--git-dir", rootRepository(root),
-      "for-each-ref", "--format=%(refname)"])).stdout).toBe("refs/heads/main\n");
+      "for-each-ref", "--format=%(refname)"])).stdout).toBe("refs/heads/development\nrefs/heads/main\n");
   });
 
   it.each([-86_400_000, 86_400_000])("uses issuer duration and conservative local RTT deadline with clock offset %s", async (offset) => {

@@ -169,7 +169,7 @@ it("delegates controller-only project creation and public imports with exact sco
 it("keeps manifest preview/import controller-scoped and gives imports their bounded deadline", async () => {
   const calls: Array<{ args: readonly string[]; timeout?: number }> = [];
   const policy = { "code-review": { requiredReviewerIds: ["owner"] } };
-  const preview = { projectId: "project-a", repositories: [{ repositoryId: "root", url: "https://github.com/example/root.git", branch: "main", protectedRef: "refs/heads/main", policy }], configurationRepositoryId: "root", defaultWorkingRepositoryId: "root" };
+  const preview = { projectId: "project-a", repositories: [{ repositoryId: "root", url: "https://github.com/example/root.git", branch: "main", protectedRef: "refs/heads/main", defaultRef: "refs/heads/main", branches: { "refs/heads/main": { review: true }, "refs/heads/development": { review: false } }, policy }], configurationRepositoryId: "root", defaultWorkingRepositoryId: "root" };
   const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "devbox", async run(args, options) {
     if (args[2] === "describe") return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [{ projectId: "project-a", name: "project-a", repositoryIds: [] }], operations: operations.map(({ name, description, access }) => ({ name, description, access })) };
     calls.push({ args, ...(options ? { timeout: options.timeoutMilliseconds } : {}) });

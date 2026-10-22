@@ -32,7 +32,7 @@ async function fixture() {
 it("creates a project and imports public/private repositories with host review policy, immutable retries and first-repository defaults", async () => {
   const f = await fixture(), runtime = await createNativeProjectConsole(f.env, generationId, f.deps);
   expect(runtime.operations.some((operation) => operation.name === "projects.create")).toBe(true);
-  expect(await runtime.invoke("projects.create", { projectId: "codyssey" })).toEqual({ projectId: "codyssey", name: "codyssey", repositoryIds: [] });
+  expect(await runtime.invoke("projects.create", { projectId: "codyssey" })).toEqual({ projectId: "codyssey", name: "codyssey", repositoryIds: [], repositories: [] });
   const publicInput = { projectId: "codyssey", repositoryId: "public", url: "https://github.com/mjy9088/codyssey-public.git" };
   const imported = await runtime.invoke("repositories.import", publicInput);
   expect(imported).toMatchObject({ projectId: "codyssey", repositoryId: "public", protectedRef: "refs/heads/main", projectReady: true });
@@ -97,7 +97,7 @@ policy:
   merge-policy: {}
 `;
   const input = { projectId: "manifest-project", manifest };
-  expect(await runtime.invoke("repositories.preview-manifest", input)).toMatchObject({ configurationRepositoryId: "public", defaultWorkingRepositoryId: "public", repositories: [{ repositoryId: "public", branch: "main", protectedRef: "refs/heads/protected", policy: { "git-sync": { publish: { protected: "main" } } } }, { repositoryId: "private" }] });
+  expect(await runtime.invoke("repositories.preview-manifest", input)).toMatchObject({ configurationRepositoryId: "public", defaultWorkingRepositoryId: "public", repositories: [{ repositoryId: "public", branch: "main", protectedRef: "refs/heads/protected", defaultRef: "refs/heads/main", branches: { "refs/heads/main": { review: true }, "refs/heads/development": { review: false }, "refs/heads/protected": { review: true } }, policy: { "git-sync": { publish: { protected: "main" } } } }, { repositoryId: "private" }] });
   expect(f.calls).toEqual([]);
   const result = await runtime.invoke("repositories.import-manifest", input);
   expect(result).toMatchObject({ projectId: "manifest-project", repositories: [{ repositoryId: "public", protectedRef: "refs/heads/protected" }, { repositoryId: "private", protectedRef: "refs/heads/main" }] });
