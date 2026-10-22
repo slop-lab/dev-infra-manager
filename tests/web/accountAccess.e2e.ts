@@ -26,7 +26,7 @@ try {
   const login = await initializeOperationsWeb({ operations, output: config, port: address.port });
   const saved = parseWebConfig(JSON.parse(await readFile(config, "utf8"))), operator = saved.accounts[0]; assert(operator);
   const username = "-operator's account";
-  await writeFile(config, JSON.stringify({ ...saved, accounts: [{ ...operator, username }, { ...operator, username: "readonly", roles: ["read"] }] }), { mode: 0o600 });
+  await writeFile(config, JSON.stringify({ ...saved, accounts: [{ ...operator, username, roles: ["read", "operator"] }, { ...operator, username: "readonly", roles: ["read"] }] }), { mode: 0o600 });
   web = await createWebServerFromConfigFile(config);
   const origin = await web.listen();
   browser = await chromium.launch({ executablePath, headless: true });

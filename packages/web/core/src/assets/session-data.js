@@ -8,7 +8,7 @@ export function parseSession(value) {
   const input = record(value), capabilities = record(input?.capabilities), csrfToken = text(input?.csrfToken);
   const username = text(input?.username), administration = record(input?.accountAdministration);
   if (input?.authenticated !== true || csrfToken === null || !username || typeof capabilities?.operations !== "boolean"
-    || !Array.isArray(input.roles) || !input.roles.every((role) => typeof role === "string" && ["read", "operator", "reviewer"].includes(role))) return null;
+    || !Array.isArray(input.roles) || !input.roles.every((role) => typeof role === "string" && ["read", "operator", "reviewer", "account-admin"].includes(role))) return null;
   if (input.accountAdministration !== undefined && (!administration || !Array.isArray(administration.command) || !administration.command.length
     || !administration.command.every((arg) => typeof arg === "string" && arg.length > 0) || typeof administration.configPath !== "string")) return null;
   return { username, csrfToken, roles: /** @type {string[]} */ (input.roles), capabilities: { operations: capabilities.operations },
