@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright-core";
+import type { WebNavigationResult } from "../../packages/web/core/src/plugin-api.js";
 import { createOperationsBrowserFixture } from "./operationsBrowserFixture.js";
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
+const evidence = process.env.DIM_WEB_EVIDENCE;
+if (evidence) await mkdir(evidence, { recursive: true });
 const fixture = await createOperationsBrowserFixture();
 const browser = await chromium.launch({ executablePath, headless: true });
 const page = await browser.newPage();
@@ -51,6 +55,36 @@ try {
   await page.getByRole("button", { name: "New workspace on devbox", exact: true }).click();
   assert.equal(await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).evaluate((field) => field === document.activeElement), true);
   assert.equal(await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).inputValue(), "browser-created");
+  const managedTarget = { hostId: "devbox", projectId: "managed-project", repositoryIds: ["root", "docs"], workingRepositoryId: "root" };
+  const blockedPrefill = await page.evaluate<WebNavigationResult>(`import("/assets/navigation-broker.js").then(({navigation}) => navigation.openWorkspaceCreate(${JSON.stringify(managedTarget)}))`);
+  assert.equal(blockedPrefill.status, "blocked");
+  assert.equal(await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).inputValue(), "https://example.test/daily.git");
+  if (evidence) {
+    for (const width of [1280, 768, 375]) {
+      await page.setViewportSize({ width, height: 2600 });
+      await page.screenshot({ path: `${evidence}/managed-workspace-dirty-${width}.png` });
+    }
+  }
+  await newWorkspace.getByRole("button", { name: "Replace draft with managed selection", exact: true }).click();
+  assert.equal(await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).inputValue(), "dim://managed-project");
+  assert.equal(await newWorkspace.getByLabel("Managed repositories (comma separated, optional) on devbox", { exact: true }).inputValue(), "root, docs");
+  assert.equal(await newWorkspace.getByLabel("Managed working repository (optional) on devbox", { exact: true }).inputValue(), "root");
+  assert.equal(await newWorkspace.getByLabel("Runtime on devbox", { exact: true }).inputValue(), "container");
+  assert.equal(await fixture.workspaceNamed("managed-project"), undefined);
+  if (evidence) {
+    for (const width of [1280, 768, 375]) {
+      await page.setViewportSize({ width, height: 2600 });
+      await page.screenshot({ path: `${evidence}/managed-workspace-prefill-${width}.png` });
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+  const invalidTarget = await page.evaluate<WebNavigationResult>(`import("/assets/navigation-broker.js").then(({navigation}) => navigation.openWorkspaceCreate({hostId:"devbox",projectId:"managed-project",repositoryIds:["root"],workingRepositoryId:"other"}))`);
+  assert.equal(invalidTarget.status, "unavailable");
+  assert.equal(invalidTarget.code, "invalid-target");
+  await newWorkspace.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).fill("https://example.test/daily.git");
+  await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).fill("browser-created");
+  await newWorkspace.getByLabel("Image (optional) on devbox", { exact: true }).fill("registry.example.test/dev:reviewed");
+  await newWorkspace.getByLabel("CPU limit (optional) on devbox", { exact: true }).fill("1.5");
   await page.getByRole("button", { name: "Refresh services", exact: true }).click();
   await page.getByText("Workspaces refreshed.", { exact: true }).waitFor();
   assert.equal(await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).inputValue(), "browser-created");
@@ -80,6 +114,19 @@ try {
   const created = await fixture.createdWorkspace(); assert(created);
   assert.equal(created.source, "https://example.test/daily.git"); assert.equal(created.runtime, "container");
   assert.equal(created.image, "registry.example.test/dev:reviewed"); assert.equal(created.resources.cpuCount, "1.5");
+  const pendingReplacement = await page.evaluate<WebNavigationResult>(`import("/assets/navigation-broker.js").then(({navigation}) => navigation.openWorkspaceCreate(${JSON.stringify(managedTarget)}))`);
+  assert.equal(pendingReplacement.status, "blocked");
+  const replaceDraft = newWorkspace.getByRole("button", { name: "Replace draft with managed selection", exact: true });
+  assert.equal(await replaceDraft.isVisible(), true);
+  await page.route("**/v1/operations/hosts/devbox/workspaces/create", (route) => route.abort(), { times: 1 });
+  await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).fill("unknown-create");
+  await newWorkspace.getByRole("button", { name: "Create workspace on devbox", exact: true }).click();
+  await newWorkspace.getByText(/outcome is unknown/i).waitFor();
+  const reconciliationPrefill = await page.evaluate<WebNavigationResult>(`import("/assets/navigation-broker.js").then(({navigation}) => navigation.openWorkspaceCreate(${JSON.stringify(managedTarget)}))`);
+  assert.equal(reconciliationPrefill.status, "blocked");
+  await newWorkspace.getByLabel("Workspace name on devbox", { exact: true }).fill("changed-after-unknown");
+  assert.equal(await replaceDraft.isVisible(), true);
+  assert.equal(await replaceDraft.isDisabled(), true);
   await createdRow.getByText("Settings for browser-created", { exact: true }).click();
   await createdRow.getByRole("button", { name: "discard browser-created", exact: true }).click();
   await createdRow.getByRole("button", { name: "Discard browser-created and its data", exact: true }).waitFor();
@@ -101,6 +148,9 @@ try {
   await page.getByLabel("Password").fill(fixture.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.getByText("Workspaces refreshed.", { exact: true }).waitFor();
+  const readonlyPrefill = await page.evaluate<WebNavigationResult>(`import("/assets/navigation-broker.js").then(({navigation}) => navigation.openWorkspaceCreate(${JSON.stringify(managedTarget)}))`);
+  assert.equal(readonlyPrefill.status, "unavailable");
+  assert.equal(readonlyPrefill.code, "not-authorized");
   assert.equal(await page.getByRole("button", { name: "Create workspace on devbox", exact: true }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "stop development", exact: true }).count(), 0);
   await fixture.clearWorkspaces();

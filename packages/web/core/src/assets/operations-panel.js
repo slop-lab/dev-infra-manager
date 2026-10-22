@@ -1,6 +1,8 @@
 // @ts-check
 import { record, text } from "./session-data.js";
 import { createWorkspaceHosts } from "./workspace-hosts.js";
+import { registerWorkspaceDestination } from "./navigation-broker.js";
+import { showWorkspaceView } from "./feature-panels.js";
 /** @param {string} id */
 function element(id) {
   const value = document.getElementById(id);
@@ -29,11 +31,13 @@ async function request(path, body, timeout = 35_000) {
   try { /** @type {unknown} */ const value = await response.json(); return value; }
   catch (cause) { throw Object.assign(new Error("operation response unreadable", { cause }), { outcome: body === undefined ? "read" : "unknown" }); }
 }
-const workspaceHosts = createWorkspaceHosts(hosts, request);
-export function clearOperations() { session = null; epoch++; panel.hidden = true; workspaceHosts.clear(); consoles.replaceChildren(); }
+const workspaceHosts = createWorkspaceHosts(hosts, request, showWorkspaceView);
+/** @type {(()=>void)|null} */ let disposeNavigation = null;
+export function clearOperations() { session = null; epoch++; disposeNavigation?.(); disposeNavigation = null; panel.hidden = true; workspaceHosts.clear(); consoles.replaceChildren(); }
 /** @param {import("./types.js").Session} active */
 export function showOperations(active) {
   clearOperations(); session = active; panel.hidden = !active.capabilities.operations;
+  if (active.capabilities.operations && active.roles.includes("operator")) disposeNavigation = registerWorkspaceDestination((target) => workspaceHosts.openCreate(target));
   if (active.capabilities.operations) void refresh().catch(() => { status.textContent = "Workspace status could not refresh. Your drafts are kept; retry below."; });
 }
 /** @param {unknown} value @returns {Record<string,unknown>[]} */
