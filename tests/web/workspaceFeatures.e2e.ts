@@ -1,22 +1,27 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { chromium } from "playwright-core";
+import type { WebNavigationResult } from "../../packages/web/core/src/plugin-api.js";
 
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
-const assets = new Map(await Promise.all(["workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "feature-panels.js", "feature-ui.js", "session-data.js"].map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
+const assets = new Map(await Promise.all(["workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "feature-panels.js", "feature-ui.js", "navigation-broker.js", "session-data.js", "tokens.css", "app.css"].map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
+const evidence = process.env.DIM_WEB_EVIDENCE;
+if (evidence) await mkdir(evidence, { recursive: true });
 const firstId = "17094660-a627-4a17-acd2-6418c0b79967", secondId = "27094660-a627-4a17-acd2-6418c0b79967";
 let id = firstId, phase = "running";
 const calls: Array<{ name: string; input: unknown; csrf: string | undefined }> = [];
 const feature = { id: "inline", title: "Inline tools", description: "Workspace contribution", surfaces: ["workspace"], configured: true, status: "ready", browserEntry: "/plugin.js", operations: [{ name: "start", description: "Start server", access: "operator" }] };
+const destination = { id: "destination", title: "Destination", description: "Navigation destination", configured: true, status: "ready", browserEntry: "/destination.js", operations: [{ name: "read", description: "Read target", access: "read" }] };
+const reconnect = { id: "reconnect", title: "Reconnect race", description: "Delayed browser entry", configured: true, status: "ready", browserEntry: "/reconnect.js", operations: [{ name: "read", description: "Read reconnect state", access: "read" }] };
 const server = createServer((request, response) => {
   response.setHeader("Content-Type", "application/json");
   if (request.url === "/") {
-    response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><div id="feature-navigation"><button id="feature-workspaces"></button><div id="feature-tabs"></div></div><div id="feature-panels"></div><div id="operations-panel"><div id="hosts"></div></div>'); return;
+    response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/app.css"><div id="feature-navigation" class="console-navigation"><button id="feature-workspaces" class="button button-secondary"></button><div id="feature-tabs"></div></div><div id="feature-panels"></div><div id="operations-panel"><div id="hosts"></div></div>'); return;
   }
   const asset = assets.get(request.url?.slice(1) ?? "");
-  if (asset) { response.setHeader("Content-Type", "text/javascript"); response.end(asset); return; }
+  if (asset) { response.setHeader("Content-Type", request.url?.endsWith(".css") ? "text/css" : "text/javascript"); response.end(asset); return; }
   if (request.url === "/plugin.js") {
     response.setHeader("Content-Type", "text/javascript"); response.end(`export function mount(container, context) {
       globalThis.contexts ??= []; globalThis.contexts.push(context);
@@ -26,7 +31,33 @@ const server = createServer((request, response) => {
       container.append(status,button); return ()=>{globalThis.disposals=(globalThis.disposals??0)+1;};
     }`); return;
   }
-  if (request.url === "/v1/extensions") { response.end(JSON.stringify([feature])); return; }
+  if (request.url === "/destination.js") {
+    response.setHeader("Content-Type", "text/javascript"); response.end(`export async function mount(container, context) {
+      globalThis.destinationMounts=(globalThis.destinationMounts??0)+1;
+      await new Promise(resolve=>setTimeout(resolve,40));
+      context.onNavigate(async (target,isCurrent)=>{
+        if(!target||typeof target!=="object"||Array.isArray(target)||Object.keys(target).length!==1||typeof target.id!=="string")return {status:"unavailable",code:"invalid-target",message:"Destination target is invalid."};
+        if(target.id==="slow"||target.id==="action-slow")await new Promise(resolve=>{globalThis.finishSlowNavigation=()=>{globalThis.finishSlowNavigation=undefined;resolve();};});
+        if(!isCurrent())return {status:"unavailable",code:"session-ended",message:"Navigation was superseded."};
+        globalThis.destinationTargets??=[];globalThis.destinationTargets.push(target.id);
+        return {status:"opened",message:"Opened "+target.id+"."};
+      });
+      const status=context.ui.element("p");
+      context.ui.navigationAction(container,{label:"Open current target",status,isCurrent:context.isCurrent,open:()=>context.navigation.openFeature("destination",{id:"action-slow"})});
+      container.append(status);
+      const shared=context.ui.element("p");
+      context.ui.navigationAction(container,{label:"Open slow shared target",status:shared,isCurrent:context.isCurrent,open:async()=>{await new Promise(resolve=>{globalThis.finishSharedSlow=()=>{globalThis.finishSharedSlow=undefined;resolve();};});return {status:"opened",message:"Opened slow shared target."};}});
+      context.ui.navigationAction(container,{label:"Open fast shared target",status:shared,isCurrent:context.isCurrent,open:async()=>({status:"opened",message:"Opened fast shared target."})});
+      container.append(shared);
+    }`); return;
+  }
+  if (request.url === "/reconnect.js") {
+    response.setHeader("Content-Type", "text/javascript"); response.end(`globalThis.reconnectImports=(globalThis.reconnectImports??0)+1;
+      await new Promise(resolve=>{globalThis.finishReconnectImport=resolve;});
+      export function mount(container){globalThis.reconnectMounts=(globalThis.reconnectMounts??0)+1;const button=document.createElement("button"),status=document.createElement("p");button.textContent="Use reconnected feature";button.onclick=()=>{status.textContent="Reconnect feature is usable.";};container.append(button,status);}`); return;
+  }
+  if (request.url === "/v1/extensions") { response.end(JSON.stringify([feature, destination, reconnect])); return; }
+  if (request.url === "/v1/extensions/reconnect/reconnect") { response.end(JSON.stringify(reconnect)); return; }
   if (request.url === "/v1/operations/hosts/local/workspaces") { response.end(JSON.stringify([{ name: "development", id, phase, runtime: "container", runtimeStatus: phase }])); return; }
   if (request.url === "/v1/extensions/inline/operations/start") {
     const chunks: Buffer[] = []; request.on("data", (chunk: Buffer) => chunks.push(chunk)); request.on("end", () => {
@@ -54,8 +85,60 @@ try {
    await page.locator('.workspace-feature').evaluate((details) => { if (details instanceof HTMLDetailsElement) details.open = false; });
    assert.equal(await page.evaluate("contexts[0].openFeature('inline')"), true);
    assert.equal(await page.locator('.workspace-feature').evaluate((details) => details instanceof HTMLDetailsElement && details.open), true);
-  assert.equal(await page.locator("#feature-tabs button").count(), 0);
-  assert.equal(await page.locator("#feature-navigation").isHidden(), true);
+    assert.equal(await page.locator("#feature-tabs button").count(), 2);
+   const concurrent = await page.evaluate<WebNavigationResult[]>(`import("/navigation-broker.js").then(({navigation}) => Promise.all([
+     navigation.openFeature("destination", {id:"first"}), navigation.openFeature("destination", {id:"second"})
+   ]))`);
+   assert.equal(await page.evaluate("destinationMounts"), 1);
+   assert.deepEqual(concurrent.map((result) => result.status), ["unavailable", "opened"]);
+    assert.deepEqual(await page.evaluate("destinationTargets"), ["second"]);
+    const superseded = page.evaluate<WebNavigationResult>(`import("/navigation-broker.js").then(({navigation}) => navigation.openFeature("destination", {id:"slow"}))`);
+    await page.waitForFunction("typeof finishSlowNavigation === 'function'");
+    await page.evaluate(`import("/navigation-broker.js").then(({navigation}) => navigation.openFeature("destination", {id:"newer"}))`);
+    await page.evaluate("finishSlowNavigation()");
+    assert.equal((await superseded).status, "unavailable");
+    assert.deepEqual(await page.evaluate("destinationTargets"), ["second", "newer"]);
+    const navigationAction = page.getByRole("button", { name: "Open current target", exact: true });
+    await navigationAction.click();
+    await page.getByText("Opening destination", { exact: true }).waitFor();
+    assert.equal(await navigationAction.isDisabled(), true);
+    if (evidence) {
+      for (const width of [1280, 768, 375]) {
+        await page.setViewportSize({ width, height: 812 });
+        await page.locator(".feature-page:visible").screenshot({ path: `${evidence}/navigation-action-pending-${width}.png` });
+      }
+    }
+    await page.evaluate("finishSlowNavigation()");
+    await page.getByText("Opened action-slow.", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Open slow shared target", exact: true }).click();
+    await page.waitForFunction("typeof finishSharedSlow === 'function'");
+    await page.getByRole("button", { name: "Open fast shared target", exact: true }).click();
+    await page.getByText("Opened fast shared target.", { exact: true }).waitFor();
+    await page.evaluate("finishSharedSlow()");
+    await page.waitForFunction("typeof finishSharedSlow === 'undefined'");
+    assert.equal(await page.getByText("Opened fast shared target.", { exact: true }).count(), 1);
+    if (evidence) {
+      for (const width of [1280, 768, 375]) {
+        await page.setViewportSize({ width, height: 812 });
+        await page.locator(".feature-page:visible").screenshot({ path: `${evidence}/navigation-action-${width}.png` });
+      }
+      await page.setViewportSize({ width: 1280, height: 812 });
+    }
+    await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+    await page.getByRole("button", { name: "Reconnect race", exact: true }).click();
+    await page.waitForFunction("typeof finishReconnectImport === 'function'");
+    const reconnectResponse = page.waitForResponse("**/v1/extensions/reconnect/reconnect");
+    await page.getByRole("button", { name: "Reconnect feature", exact: true }).click();
+    await reconnectResponse;
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    await page.evaluate("finishReconnectImport()");
+    await page.getByText(/Connection refreshed/).waitFor();
+    assert.equal(await page.evaluate("reconnectImports"), 1);
+    assert.equal(await page.evaluate("reconnectMounts"), 1);
+    assert.equal(await page.getByRole("button", { name: "Use reconnected feature", exact: true }).count(), 1);
+    await page.getByRole("button", { name: "Use reconnected feature", exact: true }).click();
+    await page.getByText("Reconnect feature is usable.", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Workspaces", exact: true }).click();
   await page.getByRole("button", { name: "Start scoped server" }).click();
   await page.getByText("started", { exact: true }).waitFor();
   assert.deepEqual(calls, [{ name: "start", input: { hostId: "local", name: "development", id: firstId, phase: "running" }, csrf: "fixture-csrf" }]);
@@ -69,6 +152,8 @@ try {
    assert.equal(await page.evaluate("contexts[0].isCurrent()"), false);
    assert.equal(await page.evaluate("contexts[0].openFeature('inline')"), false);
   assert.equal(await page.evaluate("contexts[0].invoke('start',{}).then(()=>false,()=>true)"), true);
+  assert.equal(await page.evaluate("contexts[0].navigation.hasFeature('destination')"), false);
+  assert.equal(await page.evaluate("contexts[0].navigation.openFeature('destination',{id:'stale-workspace'}).then(result=>result.code)"), "session-ended");
   assert.equal(calls.length, 1);
   await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
   await page.getByText(`${secondId} running`, { exact: true }).waitFor();
@@ -77,7 +162,11 @@ try {
   assert.equal(await page.evaluate("disposals"), 2);
   await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
   await page.getByText(`${secondId} stopped`, { exact: true }).waitFor();
+  const pending = page.evaluate<WebNavigationResult>(`import("/navigation-broker.js").then(({navigation}) => navigation.openFeature("destination", {id:"slow"}))`);
+  await page.waitForFunction("typeof finishSlowNavigation === 'function'");
   await page.evaluate("fixture.clearFeaturePlugins()");
+  await page.evaluate("finishSlowNavigation()");
+  assert.deepEqual(await pending, { status: "unavailable", code: "session-ended", message: "This navigation request ended with the browser session." });
   assert.equal(await page.evaluate("disposals"), 3);
   assert.equal(await page.evaluate("contexts[2].isCurrent()"), false);
   assert.equal(await page.getByRole("button", { name: "Start scoped server" }).count(), 0);
