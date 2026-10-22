@@ -1,5 +1,6 @@
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
+import { nativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import type { NativeProjectRecord } from "./nativeProjectPendingCodec.js";
 
@@ -57,12 +58,14 @@ export async function proveNativeProjectReadiness(
   record: NativeProjectRecord,
   repositoryId: string,
   signal: AbortSignal,
-  selectedRoot?: { readonly commit: string; readonly tree: string; readonly allowFastForward?: true },
+  selectedRoot?: { readonly commit: string; readonly tree: string; readonly allowFastForward?: true; readonly protectedRef?: string },
   httpClient: NativeGitAdmissionHttpClient = createNodeNativeGitAdmissionHttpClient()
 ): Promise<NativeProjectReadinessProof> {
   const repository = record.repositories[repositoryId];
   if (!repository) invalid();
   const selected = selectedRoot ?? { commit: repository.commit, tree: repository.tree };
+  const protectedRef = selectedRoot?.protectedRef ?? repository.protectedRef;
+  nativeRepositoryBranchPolicy(repository.repositoryPolicy, protectedRef);
   const generationId = (await attestNativeWorkspaceWriteIssuer(connection, signal, httpClient)).generationId;
   const response = await httpClient.request({
     endpoint: connection.nativeGit.endpoint,
@@ -73,7 +76,7 @@ export async function proveNativeProjectReadiness(
       schemaVersion: 1,
       generationId,
       repositoryId,
-      protectedRef: repository.protectedRef,
+      protectedRef,
       commit: selected.commit,
       tree: selected.tree,
       policyRevision: repository.repositoryPolicy.policyRevision
@@ -84,14 +87,14 @@ export async function proveNativeProjectReadiness(
   if (proof.schemaVersion !== 1 || proof.serviceId !== connection.nativeGit.serviceId
     || proof.ownerHostId !== connection.hostId || proof.projectId !== record.projectId
     || proof.repositoryId !== repositoryId || proof.generationId !== generationId
-    || proof.protectedRef !== repository.protectedRef || !objectId(proof.commit)
+    || proof.protectedRef !== protectedRef || !objectId(proof.commit)
     || !objectId(proof.tree) || proof.policyRevision !== repository.repositoryPolicy.policyRevision
     || (selected.allowFastForward !== true
       && (proof.commit !== selected.commit || proof.tree !== selected.tree))) invalid();
   return {
     schemaVersion: 1, serviceId: "native-main", ownerHostId: connection.hostId,
     projectId: record.projectId, repositoryId, generationId,
-    protectedRef: repository.protectedRef, commit: proof.commit, tree: proof.tree,
+    protectedRef, commit: proof.commit, tree: proof.tree,
     policyRevision: repository.repositoryPolicy.policyRevision
   };
 }

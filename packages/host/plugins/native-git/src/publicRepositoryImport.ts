@@ -12,11 +12,13 @@ import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
 import { loadNativeGitRootImporterConnection } from "./nativeGitRootImporterConnection.js";
 import { createNativeGitRootImporterClient } from "./nativeGitRootImporterClient.js";
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
+import type { NativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
 
 export interface PublicRepositoryImportInput {
   name: string; projectId: string; repositoryId: string; url: string; branch?: string;
   stateRoot: string; selected: NativeControlPlaneConnection; registrarConnectionFile: string; importerConnectionFile: string;
   reviewerId: string; extensions?: unknown; protectedRef?: string; gitExecutable?: string; signal: AbortSignal;
+  defaultRef?: string; branches?: Readonly<Record<string, NativeRepositoryBranchPolicy>>;
 }
 /** Trusted injection is for operator-controlled transports and disposable tests, never repository input. */
 export interface PublicRepositoryImportDependencies { prepareSource?: typeof preparePublicGitSource }
@@ -40,7 +42,8 @@ export async function importNativeProjectPublicRepository(input: PublicRepositor
       selectedControlPlane: { endpoint: input.selected.nativeGit.endpoint, hostId: input.selected.hostId, generationId: input.selected.nativeGit.generationId } };
     if (existing) {
       if (previous === undefined) throw new UserError("Existing repository draft has no matching public URL import intent");
-      if (input.extensions !== undefined && !isDeepStrictEqual(compileNativeRepositoryBootstrapPolicy({ repositoryId: input.repositoryId, protectedRef: existing.protectedRef, extensions: input.extensions }).repositoryPolicy, existing.repositoryPolicy)) throw new UserError("Repository URL import retry changes its immutable policy");
+      if ((input.extensions !== undefined || input.defaultRef !== undefined || input.branches !== undefined) && !isDeepStrictEqual(compileNativeRepositoryBootstrapPolicy({ repositoryId: input.repositoryId, protectedRef: existing.protectedRef, extensions: input.extensions,
+        ...(input.defaultRef === undefined ? {} : { defaultRef: input.defaultRef }), ...(input.branches === undefined ? {} : { branches: input.branches }) }).repositoryPolicy, existing.repositoryPolicy)) throw new UserError("Repository URL import retry changes its immutable policy");
       await resumeNativeProjectRepository(bootstrap);
     } else {
       if (project.repositories[input.repositoryId]) throw new UserError("Existing repository has no matching public URL import draft");
@@ -48,7 +51,8 @@ export async function importNativeProjectPublicRepository(input: PublicRepositor
       try {
         if (previous === undefined) await atomicWrite(intentPath, intent);
         await bootstrapNativeProjectRepository({ ...bootstrap, sourceRepository: source.directory, sourceRef: source.selectedRef, selectedRef: input.protectedRef ?? source.selectedRef, scratchRoot: input.stateRoot, gitExecutable: input.gitExecutable ?? "/usr/bin/git",
-          policySource: { kind: "manifest-free", extensions: input.extensions ?? { "code-review": { requiredReviewerIds: [], pathReviewerRules: [{ pathPrefix: ".dim/", reviewerIds: [input.reviewerId] }] }, "merge-policy": {} } } });
+          policySource: { kind: "manifest-free", extensions: input.extensions ?? { "code-review": { requiredReviewerIds: [], pathReviewerRules: [{ pathPrefix: ".dim/", reviewerIds: [input.reviewerId] }] }, "merge-policy": {} },
+            ...(input.defaultRef === undefined ? {} : { defaultRef: input.defaultRef }), ...(input.branches === undefined ? {} : { branches: input.branches }) } });
       } finally { await source.cleanup(); }
     }
     const connection = await loadNativeGitRootImporterConnection(input.importerConnectionFile);

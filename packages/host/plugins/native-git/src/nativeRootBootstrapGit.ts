@@ -6,6 +6,7 @@ import { UserError } from "@slop-lab/dim-host-core";
 import { compileNativeRepositoryBootstrapPolicy, parseNativeRootBootstrapManifestYaml,
   type NativeRepositoryBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
+import type { NativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
 
 const execute = promisify(execFile);
 const maximumBundleBytes = 256 * 1024 * 1024 - 64 * 1024 - 1;
@@ -19,7 +20,7 @@ export type NativeRootBootstrapGitInput = {
   readonly repositoryId: string;
   readonly scratchRoot: string;
   readonly policySource: { readonly kind: "reviewed-manifest" }
-    | { readonly kind: "manifest-free"; readonly extensions?: unknown };
+    | { readonly kind: "manifest-free"; readonly extensions?: unknown; readonly defaultRef?: string; readonly branches?: Readonly<Record<string, NativeRepositoryBranchPolicy>> };
   readonly signal: AbortSignal;
 };
 
@@ -88,7 +89,9 @@ export async function prepareNativeRootBootstrapGit(
     }
     case "manifest-free":
       policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: input.repositoryId,
-        protectedRef: input.selectedRef, extensions: input.policySource.extensions });
+        protectedRef: input.selectedRef, extensions: input.policySource.extensions,
+        ...(input.policySource.defaultRef === undefined ? {} : { defaultRef: input.policySource.defaultRef }),
+        ...(input.policySource.branches === undefined ? {} : { branches: input.policySource.branches }) });
       break;
     default: {
       const exhaustive: never = input.policySource;

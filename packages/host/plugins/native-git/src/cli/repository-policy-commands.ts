@@ -33,7 +33,7 @@ export function registerRepositoryPolicyCommands(repository: Command): void {
       if (flags.policy !== undefined) {
         const declared = await readNativeRepositoryPolicyFile(path.resolve(flags.policy));
         if (declared.repositoryId !== repositoryId) throw new UserError("Repository policy belongs to another repository");
-        next = compileNativeRepositoryBootstrapPolicy({ repositoryId, protectedRef: previous.protectedRef, extensions: declared.extensions }).repositoryPolicy;
+        next = compileNativeRepositoryBootstrapPolicy({ ...declared, protectedRef: previous.protectedRef }).repositoryPolicy;
       } else {
         const file = path.resolve(flags.file ?? ".dim/repos.yml");
         next = parseNativeRootBootstrapManifestYaml(await readNativeReviewedPolicyText(file), previous.protectedRef, repositoryId).repositoryPolicy;

@@ -41,6 +41,13 @@ it("refuses a cross-control-plane selection before network access and stale iden
   await expect(requestGitSync({ ...input, connection: { ...connection, hostId: "other" } }, http)).rejects.toThrow(/selected/); expect(calls).toBe(0);
   await expect(requestGitSync(input, http)).rejects.toThrow(/identity/); expect(calls).toBe(1);
 });
+it("includes an explicit managed target branch in synchronization requests", async () => {
+  const calls: NativeGitAdmissionHttpRequest[] = [];
+  await requestGitSync({ ...input, protectedRef: "refs/heads/development", operation: "publish" }, {
+    async request(request) { calls.push(request); return response(request.method === "GET" ? identity : { schemaVersion: 1, outcome: "published" }); }
+  });
+  expect(JSON.parse(calls[1]!.body!)).toEqual({ schemaVersion: 1, protectedRef: "refs/heads/development" });
+});
 
 it("preserves structured conflicts and reports rejected publication without credential disclosure", async () => {
   const conflict = { schemaVersion: 1, outcome: "conflict", expectedProtectedHead: "a".repeat(40) };

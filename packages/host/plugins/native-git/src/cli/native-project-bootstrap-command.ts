@@ -56,14 +56,14 @@ export function registerNativeProjectBootstrapCommand(repository: Command): void
         const branch = flags.branch ?? flags.ref?.slice("refs/heads/".length);
         print(await importNativeProjectPublicRepository({ name, projectId: project.projectId, repositoryId, url: flags.source, ...(branch === undefined ? {} : { branch }),
           stateRoot, selected: native.connection, registrarConnectionFile, importerConnectionFile, gitExecutable: flags.gitExecutable, reviewerId,
-          ...(flags.policy === undefined ? {} : { extensions: policy.extensions }), signal: AbortSignal.timeout(150_000) }), flags);
+          ...(flags.policy === undefined ? {} : policy), signal: AbortSignal.timeout(150_000) }), flags);
         return;
       }
       await bootstrapNativeProjectRepository({ name, projectId: project.projectId, repositoryId,
         stateRoot, scratchRoot: stateRoot, sourceRepository: flags.source, selectedRef: flags.ref!,
         registrarConnectionFile, importerConnectionFile, gitExecutable: flags.gitExecutable,
         selectedControlPlane: { endpoint: native.connection.nativeGit.endpoint, hostId: native.connection.hostId, generationId: native.connection.nativeGit.generationId },
-        policySource: flags.repositoryPolicy ? { kind: "reviewed-manifest" } : { kind: "manifest-free", extensions: policy.extensions }, signal: AbortSignal.timeout(120_000) });
+        policySource: flags.repositoryPolicy ? { kind: "reviewed-manifest" } : { kind: "manifest-free", ...policy }, signal: AbortSignal.timeout(120_000) });
       const record = await native.store.admitRepository(name, repositoryId, importer, native.connection, AbortSignal.timeout(30_000));
       print(record.repositories[repositoryId], flags);
     });

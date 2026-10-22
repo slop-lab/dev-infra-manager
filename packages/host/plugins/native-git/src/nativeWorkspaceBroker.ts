@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
 import { timingSafeEqual } from "node:crypto";
 import { createServer, request as httpRequest, type Server } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -48,10 +49,11 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       }
       const connection = await loadNativeControlPlaneConnection(current.connectionFile);
       const project = await new NativeProjectPendingStore(attachment.managedStateRoot).read(attachment.projectName, connection.hostId);
+      const configuredRepository = project?.repositories[repositoryId];
       if (project?.phase !== "ready" || project.projectId !== attachment.projectId
-        || project.repositories[repositoryId]?.protectedRef !== repository.protectedRef) { response.writeHead(409).end(); return; }
+        || !configuredRepository || !Object.hasOwn(nativeRepositoryBranches(configuredRepository.repositoryPolicy), repository.protectedRef)) { response.writeHead(409).end(); return; }
       const proof = await proveNativeProjectReadiness(connection, project, repositoryId, AbortSignal.timeout(5000), {
-        commit: repository.commit, tree: repository.tree, allowFastForward: true
+        commit: repository.commit, tree: repository.tree, protectedRef: repository.protectedRef, allowFastForward: true
       });
       // Readiness authenticates the catalog's effective policy on every request.
       // Existing grants keep their scope while the authority enforces the new policy.

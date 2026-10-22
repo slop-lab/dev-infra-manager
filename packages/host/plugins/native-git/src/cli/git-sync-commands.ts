@@ -5,6 +5,8 @@ import { print, type JsonFlags } from "@slop-lab/dim-host-core/controller/cli";
 import { selectedControlPlaneImporterFile } from "../controlPlaneSelection.js";
 import { loadGitSyncConnection, requestGitSync } from "../nativeGitSyncClient.js";
 import { selectNativeProject } from "./native-project-selector.js";
+import { normalizeRepositoryRef } from "../repositoryRef.js";
+import { nativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
 
 export function registerGitSyncCommands(repository: Command): void {
   for (const [command, operation, description] of [
@@ -14,13 +16,16 @@ export function registerGitSyncCommands(repository: Command): void {
   ] as const) {
     repository.command(command).description(description).argument("<project>").argument("<repository>")
       .option("--connection <absolute-file>", "private git-sync operator configuration on the selected host")
+      .option("--ref <branch>", "managed branch; defaults to the repository default branch")
       .option("--json", "print machine-readable JSON")
-      .action(async (name: string, repositoryId: string, flags: JsonFlags & { connection?: string }) => {
+      .action(async (name: string, repositoryId: string, flags: JsonFlags & { connection?: string; ref?: string }) => {
         const native = await selectNativeProject(), project = await native.store.read(name, native.connection.hostId);
         if (!project?.repositories[repositoryId]) throw new UserError(`Project '${name}' has no imported repository '${repositoryId}'`);
+        const protectedRef = flags.ref === undefined ? undefined : normalizeRepositoryRef(flags.ref);
+        if (protectedRef !== undefined) nativeRepositoryBranchPolicy(project.repositories[repositoryId]!.repositoryPolicy, protectedRef);
         const file = flags.connection ?? process.env.DIM_NATIVE_GIT_SYNC_CONNECTION_FILE ?? join(dirname(await selectedControlPlaneImporterFile()), "git-sync.json");
         const result = await requestGitSync({ connection: await loadGitSyncConnection(file), selected: native.connection,
-          projectId: project.projectId, repositoryId, operation, signal: AbortSignal.timeout(120_000) });
+          projectId: project.projectId, repositoryId, operation, ...(protectedRef === undefined ? {} : { protectedRef }), signal: AbortSignal.timeout(120_000) });
         print(result, flags);
         if (result.outcome === "conflict") process.exitCode = 2;
       });

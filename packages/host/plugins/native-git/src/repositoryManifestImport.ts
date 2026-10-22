@@ -27,7 +27,8 @@ export function previewNativeRepositoryManifest(projectId: string, manifest: str
     }
     const protectedRef = normalizeRepositoryRef(raw.ref);
     const policy = parseNativeRootBootstrapManifestYaml(manifest, protectedRef, repositoryId);
-    return { repositoryId, url: publicGitUrl(raw.upstream.url).toString(), branch: publicGitBranch(raw.upstream.branch), protectedRef, policy: policy.repositoryPolicy.extensions };
+    return { repositoryId, url: publicGitUrl(raw.upstream.url).toString(), branch: publicGitBranch(raw.upstream.branch), protectedRef, policy: policy.repositoryPolicy.extensions,
+      defaultRef: policy.repositoryPolicy.defaultRef!, branches: policy.repositoryPolicy.branches! };
   });
   const first = repositories[0]!;
   return { projectId, repositories, configurationRepositoryId: first.repositoryId, defaultWorkingRepositoryId: first.repositoryId };
@@ -46,7 +47,7 @@ export async function importNativeRepositoryManifest(input: Omit<PublicRepositor
     if (previous === undefined) await atomicWrite(path, intent);
     const repositories = [];
     for (const entry of plan.repositories) {
-      try { repositories.push(await importNativeProjectPublicRepository({ ...input, repositoryId: entry.repositoryId, url: entry.url, branch: entry.branch, protectedRef: entry.protectedRef, extensions: entry.policy }, dependencies)); }
+      try { repositories.push(await importNativeProjectPublicRepository({ ...input, repositoryId: entry.repositoryId, url: entry.url, branch: entry.branch, protectedRef: entry.protectedRef, extensions: entry.policy, defaultRef: entry.defaultRef, branches: entry.branches }, dependencies)); }
       catch (cause) { throw new UserError(`Repository '${entry.repositoryId}' import failed. Check its public upstream branch and enabled control-plane policy plugins, then retry the same manifest`, { cause }); }
     }
     return { projectId: input.projectId, repositories };

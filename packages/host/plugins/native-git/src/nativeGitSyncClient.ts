@@ -53,6 +53,7 @@ export async function requestGitSync(input: {
   readonly projectId: string;
   readonly repositoryId: string;
   readonly operation: "fetch" | "merge" | "publish";
+  readonly protectedRef?: string;
   readonly signal: AbortSignal;
 }, http: NativeGitAdmissionHttpClient = createNodeNativeGitAdmissionHttpClient()): Promise<Record<string, unknown>> {
   const { connection, selected } = input;
@@ -61,7 +62,7 @@ export async function requestGitSync(input: {
   const authorization = `Basic ${Buffer.from(`${connection.credential.username}:${connection.credential.password}`).toString("base64")}`;
   async function request(method: "GET" | "POST", path: string): Promise<Record<string, unknown>> {
     const result = await http.request({ endpoint: connection.endpoint, method, path, authorization, generationId: connection.generationId,
-      ...(method === "POST" ? { body: JSON.stringify({ schemaVersion: 1 }) } : {}), signal: input.signal });
+      ...(method === "POST" ? { body: JSON.stringify({ schemaVersion: 1, ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }) }) } : {}), signal: input.signal });
     if (result.contentType !== "application/json" || result.cacheControl !== "no-store" || result.body.length > 64 * 1024) throw new UserError("invalid Git sync HTTP response");
     const value = object(JSON.parse(result.body.toString("utf8")));
     if (![200, 201].includes(result.statusCode)) throw new UserError(`Git sync ${method === "GET" ? "identity check" : input.operation} rejected (HTTP ${result.statusCode})${typeof value.error === "string" ? `: ${value.error.slice(0, 1024)}` : ""}`);

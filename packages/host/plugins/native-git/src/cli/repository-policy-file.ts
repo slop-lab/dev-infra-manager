@@ -2,12 +2,15 @@ import { constants, type BigIntStats } from "node:fs";
 import { open, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-host-core";
+import { nativeRepositoryBranchPolicySchema, type NativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
 
 const maximumPolicyBytes = 64 * 1024;
 
 export type NativeRepositoryPolicyFile = {
   readonly repositoryId: string;
   readonly extensions: unknown;
+  readonly defaultRef?: string;
+  readonly branches?: Readonly<Record<string, NativeRepositoryBranchPolicy>>;
 };
 
 export async function readNativeRepositoryPolicyFile(policyPath: string): Promise<NativeRepositoryPolicyFile> {
@@ -65,10 +68,17 @@ function parseNativeRepositoryPolicyFile(serialized: string): NativeRepositoryPo
   }
   if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.repositoryId !== "string"
     || !Object.hasOwn(value, "extensions")
-    || Object.keys(value).some((key) => !["schemaVersion", "repositoryId", "extensions"].includes(key))) {
-    throw new UserError("repository policy must contain exactly schemaVersion 1, repositoryId, and extensions");
+    || Object.keys(value).some((key) => !["schemaVersion", "repositoryId", "extensions", "defaultRef", "branches"].includes(key))) {
+    throw new UserError("repository policy requires schemaVersion 1, repositoryId, extensions and optional defaultRef/branches");
   }
-  return { repositoryId: value.repositoryId, extensions: value.extensions };
+  if (value.defaultRef !== undefined && typeof value.defaultRef !== "string") throw new UserError("repository defaultRef must be a string");
+  let branches: Record<string, NativeRepositoryBranchPolicy> | undefined;
+  if (value.branches !== undefined) {
+    if (!isRecord(value.branches)) throw new UserError("repository branches must be an object");
+    branches = Object.fromEntries(Object.entries(value.branches).map(([ref, rule]) => [ref, nativeRepositoryBranchPolicySchema.parse(rule)]));
+  }
+  return { repositoryId: value.repositoryId, extensions: value.extensions,
+    ...(value.defaultRef === undefined ? {} : { defaultRef: value.defaultRef }), ...(branches === undefined ? {} : { branches }) };
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

@@ -73,3 +73,18 @@ it("rejects invalid repository selections before creating a runtime", async () =
   }
   expect(fixture.runtime.creates).toBe(0);
 });
+it("keeps default-branch configuration separate from a development working checkout", async () => {
+  const fixture = await workspaceFixture();
+  await fixture.store.configure("acme", { configurationRepositoryId: "public", defaultWorkingRepositoryId: "public" }, fixture.connection, AbortSignal.timeout(10_000));
+  let configurationPath = "", configurationRef = "";
+  const record = await createManagedWorkspace({ name: "development", source: { url: "dim://acme", ref: "development" } }, { ...fixture.context,
+    async validateCheckout(directory, source) { configurationPath = directory; configurationRef = source.ref ?? ""; }
+  });
+  expect(configurationRef).toBe("refs/heads/main");
+  expect(path.basename(configurationPath)).toBe("checkout");
+  expect(record.source.checkouts?.[0]?.source.ref).toBe("refs/heads/development");
+  const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(fixture.state, record.id));
+  expect(attachment.configuration.protectedRef).toBe("refs/heads/main");
+  expect(attachment.repositories.public?.protectedRef).toBe("refs/heads/development");
+  expect(fixture.runtime.commands.some(({ argv }) => argv.at(-1)?.endsWith("/development"))).toBe(true);
+});

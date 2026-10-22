@@ -1,4 +1,6 @@
 import { refreshNativeWorkspaceConnection } from "./nativeWorkspaceConnection.js";
+import { nativeRepositoryDefaultRef, nativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
+import { normalizeRepositoryRef } from "./repositoryRef.js";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -36,17 +38,23 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
   const workingDirectory = input.workingDirectory ?? (selected.includes(project.defaultWorkingRepositoryId) ? project.defaultWorkingRepositoryId : selected[0]!);
   if (!selected.includes(workingDirectory)) throw new UserError("working directory must name a selected repository");
   const working = project.repositories[workingDirectory]!;
-  if (input.source.ref !== undefined && input.source.ref !== working.protectedRef && input.source.ref !== working.protectedRef.slice("refs/heads/".length)) {
-    throw new UserError("managed workspaces start from each repository's protected ref");
-  }
+  const workingRef = input.source.ref === undefined ? nativeRepositoryDefaultRef(working.repositoryPolicy) : normalizeRepositoryRef(input.source.ref);
+  try { nativeRepositoryBranchPolicy(working.repositoryPolicy, workingRef); }
+  catch (cause) { throw new UserError("managed workspaces must select a configured repository branch", { cause }); }
   const signal = context.signal ?? AbortSignal.timeout(120_000);
   const proofs = new Map<string, NativeProjectReadinessProof>();
-  for (const repositoryId of new Set([project.configurationRepositoryId, ...selected])) {
+  for (const repositoryId of selected) {
     const repository = project.repositories[repositoryId]!;
     proofs.set(repositoryId, await proveNativeProjectReadiness(connection, project, repositoryId, signal,
-      { commit: repository.commit, tree: repository.tree, allowFastForward: true }));
+      { commit: repository.commit, tree: repository.tree, allowFastForward: true,
+        protectedRef: repositoryId === workingDirectory ? workingRef : nativeRepositoryDefaultRef(repository.repositoryPolicy) }));
   }
-  const configurationProof = proofs.get(project.configurationRepositoryId)!;
+  const configurationRepository = project.repositories[project.configurationRepositoryId]!;
+  const configurationRef = nativeRepositoryDefaultRef(configurationRepository.repositoryPolicy);
+  const selectedConfigurationProof = proofs.get(project.configurationRepositoryId);
+  const configurationProof = selectedConfigurationProof?.protectedRef === configurationRef ? selectedConfigurationProof
+    : await proveNativeProjectReadiness(connection, project, project.configurationRepositoryId, signal,
+      { commit: configurationRepository.commit, tree: configurationRepository.tree, protectedRef: configurationRef, allowFastForward: true });
   const baseRuntime = context.runtime ?? new ContainerWorkspaceRuntime(context.runner, context.cleanupRunner);
   const hostGateway = baseRuntime.hostGateway?.bind(baseRuntime);
   const runtime: WorkspaceRuntime = {
@@ -86,10 +94,11 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
     await mkdir(destination, { mode: 0o700 });
     const temporary = await mkdtemp(path.join(path.dirname(destination), "configuration-"));
     try {
-      const configurationDirectory = selected.includes(project.configurationRepositoryId)
+      const sharesConfigurationCheckout = selected.includes(project.configurationRepositoryId)
+        && proofs.get(project.configurationRepositoryId)?.protectedRef === configurationProof.protectedRef;
+      const configurationDirectory = sharesConfigurationCheckout
         ? path.join(destination, project.configurationRepositoryId) : path.join(temporary, "checkout");
-      const clone = async (repositoryId: string, directory: string) => {
-        const proof = proofs.get(repositoryId)!;
+      const clone = async (repositoryId: string, directory: string, proof: NativeProjectReadinessProof) => {
         const lease = await createNativeGitRootReadIssuerClient({ schemaVersion: 1, endpoint: connection.nativeGit.endpoint,
           serviceId: "native-main", role: "operator-root-read-issuer", hostId: connection.hostId,
           generationId: proof.generationId, credential: connection.nativeGit.rootReadIssuer }).issueRepositoryReadLease(project.projectId, repositoryId, signal);
@@ -107,11 +116,11 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
         if (await git(["-C", directory, "rev-parse", "HEAD^{tree}"]) !== proof.tree) throw new UserError(`repository '${repositoryId}' differs from its attested tree`);
         return { url: `dim://${projectName}/${repositoryId}`, ref: proof.protectedRef, commit: proof.commit };
       };
-      const configurationSource = await clone(project.configurationRepositoryId, configurationDirectory);
+      const configurationSource = await clone(project.configurationRepositoryId, configurationDirectory, configurationProof);
       await context.validateCheckout?.(configurationDirectory, configurationSource);
       const checkouts = [];
       for (const repositoryId of selected) checkouts.push({ directory: repositoryId,
-        source: repositoryId === project.configurationRepositoryId ? configurationSource : await clone(repositoryId, path.join(destination, repositoryId)) });
+        source: repositoryId === project.configurationRepositoryId && sharesConfigurationCheckout ? configurationSource : await clone(repositoryId, path.join(destination, repositoryId), proofs.get(repositoryId)!) });
       return { ...configurationSource, checkouts, workingDirectory };
     } finally { await rm(temporary, { recursive: true, force: true }); }
   });

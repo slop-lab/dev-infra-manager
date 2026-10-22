@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
 import { UserError } from "@slop-lab/dim-host-core";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
@@ -27,11 +28,11 @@ export async function refreshNativeWorkspaceConnection(attachment: NativeWorkspa
     for (const binding of bindings) {
       const repositoryId = binding.repositoryId;
       const repository = project.repositories[repositoryId];
-      if (!repository || repository.protectedRef !== binding.protectedRef) {
+      if (!repository || !Object.hasOwn(nativeRepositoryBranches(repository.repositoryPolicy), binding.protectedRef)) {
         throw new UserError(`repository '${repositoryId}' no longer matches the workspace's pinned ref`);
       }
       const proof = await proveNativeProjectReadiness(selected, project, repositoryId, signal, {
-        commit: binding.commit, tree: binding.tree, allowFastForward: true
+        commit: binding.commit, tree: binding.tree, protectedRef: binding.protectedRef, allowFastForward: true
       });
       binding.policyRevision = proof.policyRevision;
     }

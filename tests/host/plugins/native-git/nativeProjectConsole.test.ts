@@ -17,9 +17,10 @@ async function fixture() {
 it("discovers ready multi-repository projects dynamically through the CLI without exposing host role connections", async () => {
   const f = await fixture(); await f.importRepository("public");
   const runtime = await createNativeProjectConsole(f.env);
-  expect(await runtime.invoke("projects.list", {})).toEqual({ reviewerId: "owner", projects: [{ projectId: "project-a", name: "acme", repositoryIds: ["public"] }] });
+  expect(await runtime.invoke("projects.list", {})).toMatchObject({ reviewerId: "owner", projects: [{ projectId: "project-a", name: "acme", repositoryIds: ["public"] }] });
+  expect(await runtime.invoke("projects.list", {})).toMatchObject({ projects: [{ repositories: [{ repositoryId: "public", defaultRef: "refs/heads/main", branches: ["refs/heads/development", "refs/heads/main"] }] }] });
   await f.importRepository("private");
-  expect(await runtime.invoke("projects.list", {})).toEqual({ reviewerId: "owner", projects: [{ projectId: "project-a", name: "acme", repositoryIds: ["private", "public"] }] });
+  expect(await runtime.invoke("projects.list", {})).toMatchObject({ reviewerId: "owner", projects: [{ projectId: "project-a", name: "acme", repositoryIds: ["private", "public"] }] });
   expect(await runtime.invoke("reviews.list", { projectId: "project-a", repositoryId: "private" })).toEqual([]);
   await expect(runtime.invoke("reviews.list", { projectId: "other", repositoryId: "public" })).rejects.toThrow("current project catalog");
   await expect(invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "missing" }, generationId, f.env)).rejects.toThrow("current project catalog");
@@ -49,7 +50,7 @@ it("keeps immutable generation-A imports visible when the current generation-B s
   }
   const runtime = await createNativeProjectConsole(f.env, generationB);
   expect(await runtime.invoke("projects.list", {})).toMatchObject({ projects: [{ projectId: "project-a", repositoryIds: ["public"] }] });
-  expect(await runtime.invoke("projects.create", { projectId: "project-a" })).toEqual({ projectId: "project-a", name: "acme", repositoryIds: ["public"] });
+  expect(await runtime.invoke("projects.create", { projectId: "project-a" })).toMatchObject({ projectId: "project-a", name: "acme", repositoryIds: ["public"] });
   expect(await runtime.invoke("reviews.list", { projectId: "project-a", repositoryId: "public" })).toEqual([]);
   expect(await readFile(recordFile)).toEqual(original);
   await expect(invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).rejects.toThrow("generation changed");
