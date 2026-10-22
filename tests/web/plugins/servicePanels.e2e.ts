@@ -107,6 +107,32 @@ try {
   await git.getByRole("button", { name: "Open review", exact: true }).click();
   await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
 
+  const nativeOperations: Array<{ readonly name: string; readonly input: unknown }> = [];
+  page.on("request", (request) => {
+    const match = /\/v1\/extensions\/native-git\/operations\/([^/]+)$/.exec(request.url());
+    if (match?.[1]) nativeOperations.push({ name: match[1], input: request.postDataJSON() });
+  });
+  const mergeRefresh = page.waitForRequest("**/v1/extensions/native-git/operations/reviews.list");
+  await git.getByRole("button", { name: "Propose upstream merge", exact: true }).click();
+  await mergeRefresh;
+  const syncHeading = git.getByRole("heading", { name: "Upstream proposed", exact: true });
+  await syncHeading.waitFor();
+  const syncResult = syncHeading.locator("..");
+  await syncResult.getByText(fixture.proposalRef, { exact: true }).waitFor();
+  assert.deepEqual(nativeOperations.map(({ name }) => name), ["sync.merge", "reviews.list"]);
+  assert.equal(await git.getByRole("button", { name: "Review upstream proposal", exact: true }).isEnabled(), true);
+  await page.route("**/v1/extensions/native-git/operations/reviews.resolve", (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"injected proposal resolution failure"}' }), { times: 1 });
+  await git.getByRole("button", { name: "Review upstream proposal", exact: true }).click();
+  await git.getByText(/^Review upstream proposal failed:/).waitFor();
+  assert.equal(await git.getByRole("button", { name: "Review upstream proposal", exact: true }).isEnabled(), true);
+  await git.getByRole("button", { name: "Review upstream proposal", exact: true }).click();
+  await git.getByText("Proposal review resolved.", { exact: true }).waitFor();
+  assert.deepEqual(nativeOperations.filter(({ name }) => name === "reviews.resolve").map(({ input }) => input), [
+    { controllerId: "devbox", projectId: "project-a", repositoryId: "root", proposalRef: fixture.proposalRef },
+    { controllerId: "devbox", projectId: "project-a", repositoryId: "root", proposalRef: fixture.proposalRef }
+  ]);
+  assert.equal(await git.getByLabel("Proposal ref", { exact: true }).inputValue(), "refs/heads/project-a-root-draft");
+
   await git.getByLabel("Proposal ref", { exact: true }).fill(fixture.proposalRef);
   await failNextRead("native-git", "reviews.list");
   await git.getByRole("button", { name: "Resolve proposal review", exact: true }).click();

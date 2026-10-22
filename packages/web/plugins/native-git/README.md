@@ -32,6 +32,19 @@ required for resolve/approve/revoke, and `operator` for promotion/synchronizatio
 The controller and underlying service still enforce catalog scope and protection
 policies for every invocation.
 
+The selected controller and repository target remain visible beside capability
+guidance. The panel distinguishes review-only inspection, reviewer decisions,
+upstream operator actions and promoter-backed protected promotion without claiming
+that a visible control grants authority. Missing sync or promoter connections are
+explained instead of silently turning the workflow into an incomplete set of actions.
+Automatically discovered repositories retain their configured host provenance.
+They can prefill an exact managed workspace draft or open that repository's
+execution jobs. Incoming repository and review links must name the same controller,
+Project and repository currently present in the live catalog; invalid or stale
+targets are reported unavailable without selecting another controller. Direct
+review-service connections do not infer a host identity and therefore omit these
+cross-feature actions.
+
 Within the selected repository, review search matches the proposal ref,
 protected ref and review ID, while the state filter distinguishes pending,
 approved, revoked and stale reviews. Filtering the list does not discard the
@@ -58,6 +71,11 @@ connections are optional; the SDK attests each serving identity and verifies the
 same endpoint/generation before exposing their operations. Manual mode exposes a
 single **Direct connection** controller with the explicit project scope above.
 Upstream merging creates a proposal and does not bypass protected review.
+When a merge returns a proposal ref, **Review upstream proposal** resolves that
+exact ref through the existing reviewer operation and opens its evidence. The merge
+request itself performs no review decision or protected-ref update. Resolution
+failures keep the returned proposal and action available for retry, while changing
+controller, Project or repository removes the old action and fences late results.
 
 **Import .dim/repos.yml** accepts pasted YAML or a local file selected in the
 browser. Preview first: it shows every repository URL/branch, protected ref,

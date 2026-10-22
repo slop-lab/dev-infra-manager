@@ -49,13 +49,15 @@ export async function createServicePanelsFixture() {
     evidence.stdout = { bytes: String(output.length), sha256: `sha256:${hash(output.toString())}`, truncated: false };
     evidence.logs.stdout.base64 = output.toString("base64");
     ci.store.finish(authorized.id, "host-a", slot.id, authorized.leaseToken, evidence);
+    const workerJob = ci.store.enqueue(event("worker-current"));
+    ci.store.reserve("host-a", slot, randomUUID());
     const queued = ci.store.enqueue(event("queued"));
     for (const role of ["query", "operator"] as const) await writeFile(join(root, role === "query" ? "ci-query.json" : "execution-operator.json"), JSON.stringify({ schemaVersion: 1, role, endpoint, generationId: generation, credential: config.credentials[role] }), { mode: 0o600 });
     const reviewerConnection = join(root, "reviewer.json");
     await writeFile(reviewerConnection, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", baseUrl: native.service.origin, generationId, ...humanReviewer }), { mode: 0o600 });
     const settings = join(root, "operations.json"), file = join(root, "web.json");
     const controllerSettings = join(root, "controller-settings.json"), controller = join(root, "dim-fixture");
-    await writeFile(controllerSettings, JSON.stringify({ reviewerConnection, generationId, projects: [
+    await writeFile(controllerSettings, JSON.stringify({ reviewerConnection, queryConnection: join(root, "ci-query.json"), operatorConnection: join(root, "execution-operator.json"), generationId, mergeProposalRef: reviewProposalRef, projects: [
       { projectId: "project-a", name: "Project A", repositoryIds: ["root", "private"] },
       { projectId: "project-b", name: "Project B", repositoryIds: ["root", "private"] }
     ] }), { mode: 0o600 });
@@ -72,13 +74,13 @@ export async function createServicePanelsFixture() {
     const combined = { ...generated, pluginHome: fileURLToPath(new URL("../../", import.meta.url)),
       accounts: [{ ...operatorAccount, roles: ["read", "operator", "reviewer"] }, { ...operatorAccount, username: "readonly", roles: ["read"] }],
       plugins: [
-        { package: "@slop-lab/dim-web-plugin-execution", config: { queryConnection: join(root, "ci-query.json"), operatorConnection: join(root, "execution-operator.json") } },
+        { package: "@slop-lab/dim-web-plugin-execution" },
         { package: "@slop-lab/dim-web-plugin-native-git" }
       ] };
     await writeFile(file, JSON.stringify(combined), { mode: 0o600 });
     const web = await createWebServerFromConfigFile(file);
     return { origin: await web.listen(), username: browser.username, password: browser.password,
-      queuedId: queued.id, completedId: authorized.id, reviewId: envelope.review.reviewId, proposalRef: reviewProposalRef,
+      queuedId: queued.id, completedId: authorized.id, workerJobId: workerJob.id, reviewId: envelope.review.reviewId, proposalRef: reviewProposalRef,
       execution: () => ci.store.get(queued.id),
       async close() { await web.close(); await ci.close(); await native.service.close(); await Promise.all([root, native.root, native.clone].map((path) => rm(path, { recursive: true, force: true }))); }
     };
