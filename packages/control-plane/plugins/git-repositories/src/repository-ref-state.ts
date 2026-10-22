@@ -1,3 +1,4 @@
+import { assertRepositoryBranchBaselines } from "./repository-branch-state.js";
 import { assertRepositoryPolicyUpdates, type RepositoryPolicyUpdate } from "./repository-policy-state.js";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
@@ -22,36 +23,58 @@ export function readRepositoryRefTransitions(database: DatabaseSync): readonly {
 export function assertRepositoryRefTransitions(database: DatabaseSync, policyUpdates?: readonly RepositoryPolicyUpdate[]): void {
   const heads = new Map<string, NativeProjectRootCurrentHead>();
   const imports = assertNativeProjectRootImportRows(database);
+  const baselines = assertRepositoryBranchBaselines(database);
   const updates = policyUpdates ?? assertRepositoryPolicyUpdates(database);
+  const sequences = new Map<string, number>();
+  const pending = new Set<string>();
   for (const { transition, finalized } of readRepositoryRefTransitions(database)) {
     const imported = imports.find((entry) => entry.projectId === transition.projectId && entry.repositoryId === transition.repositoryId && entry.importNonce === transition.importNonce);
-    if (imported?.phase !== "repository-imported" || transition.protectedRef !== imported.protectedRef || database.prepare("SELECT 1 FROM bundle_activation WHERE generation_id=?").get(transition.generationId) === undefined) throw new RepositoryRefStateError("repository ref transition has no authoritative import or generation");
+    if (imported?.phase !== "repository-imported" || database.prepare("SELECT 1 FROM bundle_activation WHERE generation_id=?").get(transition.generationId) === undefined) throw new RepositoryRefStateError("repository ref transition has no authoritative import or generation");
     const key = `${transition.projectId}/${transition.repositoryId}`;
-    const previous = heads.get(key) ?? { projectId: imported.projectId, repositoryId: imported.repositoryId, sequence: 0, protectedRef: imported.protectedRef, commit: imported.expectedCommit, tree: imported.resolvedTree, policyDigest: imported.policyDigest };
+    const branchKey = `${key}/${transition.protectedRef}`;
+    const baseline = baselines.find((entry) => entry.project_id === transition.projectId && entry.repository_id === transition.repositoryId && entry.protected_ref === transition.protectedRef);
+    if (transition.protectedRef !== imported.protectedRef && baseline === undefined) throw new RepositoryRefStateError("repository ref transition has no authoritative branch baseline");
+    const previous = heads.get(branchKey) ?? { commit: baseline?.seed_commit ?? imported.expectedCommit, tree: baseline?.seed_tree ?? imported.resolvedTree };
     const effectiveDigest = updates.filter((update) => update.project_id === transition.projectId && update.repository_id === transition.repositoryId && update.head_sequence < transition.sequence).at(-1)?.policy_sha256 ?? imported.policyDigest;
-    if (transition.sequence !== previous.sequence + 1 || transition.expectedCommit !== previous.commit || transition.expectedTree !== previous.tree || transition.policyDigest !== effectiveDigest) throw new RepositoryRefStateError("repository ref transition chain is invalid");
-    if (!finalized) { if (heads.has(`${key}/pending`)) throw new RepositoryRefStateError("multiple pending repository ref transitions"); heads.set(`${key}/pending`, head(transition)); }
-    else { if (heads.has(`${key}/pending`)) throw new RepositoryRefStateError("finalized transition follows pending ref transition"); heads.set(key, head(transition)); }
+    if (pending.has(key) || transition.sequence !== (sequences.get(key) ?? 0) + 1 || (baseline !== undefined && baseline.seed_sequence >= transition.sequence) || transition.expectedCommit !== previous.commit || transition.expectedTree !== previous.tree || transition.policyDigest !== effectiveDigest) throw new RepositoryRefStateError("repository ref transition chain is invalid");
+    sequences.set(key, transition.sequence);
+    if (!finalized) pending.add(key);
+    else heads.set(branchKey, head(transition));
   }
 }
+
 function head(value: RepositoryRefTransition): NativeProjectRootCurrentHead { return { projectId: value.projectId, repositoryId: value.repositoryId, sequence: value.sequence, protectedRef: value.protectedRef, commit: value.candidateCommit, tree: value.candidateTree, policyDigest: value.policyDigest }; }
-export function readNativeProjectRootCurrentHeadFromDatabase(databasePath: string, projectId: string, repositoryId: string): NativeProjectRootCurrentHead {
+export function readNativeProjectRootCurrentHeadFromDatabase(databasePath: string, projectId: string, repositoryId: string, protectedRef?: string): NativeProjectRootCurrentHead {
   const imported = readNativeProjectRootImportsFromDatabase(databasePath).find((entry) => entry.projectId === projectId && entry.repositoryId === repositoryId);
   if (imported?.phase !== "repository-imported") throw new RepositoryRefStateError("repository has no authoritative import");
   const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
   try {
     assertRepositoryRefTransitions(database);
-    let current: NativeProjectRootCurrentHead = { projectId, repositoryId, sequence: 0, protectedRef: imported.protectedRef, commit: imported.expectedCommit, tree: imported.resolvedTree, policyDigest: imported.policyDigest };
+    const ref = protectedRef ?? imported.protectedRef;
+    const baseline = assertRepositoryBranchBaselines(database).find((entry) => entry.project_id === projectId && entry.repository_id === repositoryId && entry.protected_ref === ref);
+    if (ref !== imported.protectedRef && baseline === undefined) throw new RepositoryRefStateError("repository branch has no authoritative baseline");
+    let current: NativeProjectRootCurrentHead = { projectId, repositoryId, sequence: 0, protectedRef: ref, commit: baseline?.seed_commit ?? imported.expectedCommit, tree: baseline?.seed_tree ?? imported.resolvedTree, policyDigest: imported.policyDigest };
     for (const { transition, finalized } of readRepositoryRefTransitions(database)) {
       if (transition.projectId !== projectId || transition.repositoryId !== repositoryId) continue;
       if (!finalized) throw new RepositoryRefStateError("repository ref transition recovery is pending");
-      if (transition.importNonce !== imported.importNonce || transition.protectedRef !== current.protectedRef || transition.expectedCommit !== current.commit || transition.expectedTree !== current.tree) throw new RepositoryRefStateError("repository ref transition is not bound to the current import");
-      current = head(transition);
+      if (transition.protectedRef === ref) current = head(transition);
+      // Sequence is the repository-wide serialization cursor; predecessor objects are branch scoped.
+      current = { ...current, sequence: transition.sequence };
     }
     const update = assertRepositoryPolicyUpdates(database).filter((entry) => entry.project_id === projectId && entry.repository_id === repositoryId).at(-1);
     return { ...current, policyDigest: update?.policy_sha256 ?? imported.policyDigest };
   } finally { database.close(); }
 }
+export function readNativeRepositoryHeadsFromDatabase(databasePath: string, projectId: string, repositoryId: string): readonly NativeProjectRootCurrentHead[] {
+  const imported = readNativeProjectRootImportsFromDatabase(databasePath).find((entry) => entry.projectId === projectId && entry.repositoryId === repositoryId);
+  if (imported?.phase !== "repository-imported") throw new RepositoryRefStateError("repository has no authoritative import");
+  const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
+  let refs: readonly string[];
+  try { refs = [imported.protectedRef, ...assertRepositoryBranchBaselines(database).filter((entry) => entry.project_id === projectId && entry.repository_id === repositoryId).map((entry) => entry.protected_ref)]; }
+  finally { database.close(); }
+  return refs.map((ref) => readNativeProjectRootCurrentHeadFromDatabase(databasePath, projectId, repositoryId, ref));
+}
+
 export function saveRepositoryRefIntent(path: string, input: RepositoryRefTransition): void {
   const transition = transitionSchema.parse(input); const database = new DatabaseSync(path);
   try { database.prepare("INSERT INTO repository_ref_transition(project_id,repository_id,sequence,transition_id,record_json,finalized) VALUES(?,?,?,?,?,0)").run(transition.projectId, transition.repositoryId, transition.sequence, repositoryTransitionId(transition), JSON.stringify(transition)); }

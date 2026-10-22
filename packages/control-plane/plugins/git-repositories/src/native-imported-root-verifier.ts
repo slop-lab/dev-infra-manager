@@ -1,3 +1,4 @@
+import { nativeRepositoryBranchPolicy } from "./native-imported-root-policy.js";
 import { readEffectiveRepositoryPolicy } from "./repository-policy-state.js";
 import { join } from "node:path";
 import { exactActivationIsBound } from "./native-bundle-activation.js";
@@ -10,6 +11,7 @@ import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-
 import { readNativeProjectRegistrationsFromDatabase } from "./native-project-registry-state.js";
 import {
   readNativeProjectRootCurrentHeadFromDatabase,
+  readNativeRepositoryHeadsFromDatabase,
   type NativeProjectRootCurrentHead
 } from "./repository-ref-state.js";
 import { assertOwnedNativeProjectStorage } from "./native-project-storage.js";
@@ -30,6 +32,7 @@ type ImportedRootInput = {
   readonly ownerHostId: string;
   readonly projectId: string;
   readonly repositoryId: string;
+  readonly protectedRef?: string;
   readonly state: NativeGitBundleState;
   readonly stateDirectory: string;
 };
@@ -58,14 +61,17 @@ export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput)
     || registration.repositoryId !== imported.repositoryId) {
     throw new NativeProjectRootImportStateError("native Project imported root registration binding is invalid");
   }
-  const currentHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, imported.projectId, imported.repositoryId);
+  const effectiveAtStart = readEffectiveRepositoryPolicy(input.state.database, imported.projectId, imported.repositoryId);
+  nativeRepositoryBranchPolicy(effectiveAtStart.policy, input.protectedRef ?? imported.protectedRef);
+  const currentHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, imported.projectId, imported.repositoryId, input.protectedRef);
   const repository = join(input.stateDirectory, input.projectId, `${input.repositoryId}.git`);
   await assertStableStorage(input, registration, imported, repository);
   await inspectImportedNativeRootReadOnly({
     gitExecutable: input.gitExecutable,
     gitIdentity: input.gitIdentity,
     repository,
-    protectedRef: imported.protectedRef,
+    protectedRef: currentHead.protectedRef,
+    authoritativeHeads: readNativeRepositoryHeadsFromDatabase(input.state.database, imported.projectId, imported.repositoryId),
     importedCommit: imported.expectedCommit,
     importedTree: imported.resolvedTree,
     currentCommit: currentHead.commit,
@@ -76,7 +82,7 @@ export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput)
   const current = requireImportedRoot(input);
   const currentRegistration = readNativeProjectRegistrationsFromDatabase(input.state.database)
     .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
-  const rereadHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, current.projectId, current.repositoryId);
+  const rereadHead = readNativeProjectRootCurrentHeadFromDatabase(input.state.database, current.projectId, current.repositoryId, input.protectedRef);
   if (JSON.stringify(current) !== JSON.stringify(imported)
     || JSON.stringify(currentRegistration) !== JSON.stringify(registration)
     || JSON.stringify(rereadHead) !== JSON.stringify(currentHead)) {

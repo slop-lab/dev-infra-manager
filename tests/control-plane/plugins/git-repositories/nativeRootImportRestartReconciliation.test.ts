@@ -53,7 +53,7 @@ describe("native root import restart reconciliation", () => {
     const databaseBefore = await readFile(join(fixture.root, "native-idle.sqlite3"));
     const stagingBefore = await treeSnapshot(fixture.staging);
 
-    expect(await inspectNativeGitBundleState(fixture.root)).toEqual({ stateFormat: 11 });
+    expect(await inspectNativeGitBundleState(fixture.root)).toEqual({ stateFormat: 12 });
     expect(await treeSnapshot(fixture.staging)).toEqual(stagingBefore);
     const restarted = await initializeNativeGitBundleState(fixture.root);
 

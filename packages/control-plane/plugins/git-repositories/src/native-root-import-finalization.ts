@@ -1,3 +1,4 @@
+import { ensureConfiguredRepositoryBranches } from "./repository-branches.js";
 import { join } from "node:path";
 import type { GitExecutableIdentity } from "./repository.js";
 import {
@@ -87,6 +88,8 @@ export async function finalizeNativeProjectRootImport(
   }
   if (rootImport.phase === "repository-imported") {
     if (completedImport) {
+    await ensureConfiguredRepositoryBranches({ database: options.state.database, stateDirectory: options.stateDirectory, gitExecutable: options.gitExecutable, gitIdentity: options.gitIdentity }, options.projectId, options.repositoryId);
+
       await verifyImportedRepositoryReadOnly({
         state: options.state,
         stateDirectory: options.stateDirectory,
@@ -100,6 +103,7 @@ export async function finalizeNativeProjectRootImport(
         ...git, repository, protectedRef: rootImport.protectedRef,
         expectedCommit: rootImport.expectedCommit, resolvedTree: rootImport.resolvedTree
       });
+    await ensureConfiguredRepositoryBranches({ database: options.state.database, stateDirectory: options.stateDirectory, gitExecutable: options.gitExecutable, gitIdentity: options.gitIdentity }, options.projectId, options.repositoryId);
     }
   }
   return rootImport;

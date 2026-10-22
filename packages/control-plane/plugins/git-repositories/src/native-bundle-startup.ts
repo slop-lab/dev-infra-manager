@@ -1,3 +1,4 @@
+import { recoverConfiguredRepositoryBranches } from "./repository-branches.js";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { activationTokenSha256, exactActivationIsBound } from "./native-bundle-activation.js";
 import type { NativeGitBundleState } from "./native-bundle-state.js";
@@ -36,6 +37,7 @@ export async function initializeNativeBundleRuntime(
   const registrations = readNativeProjectRegistrationsFromDatabase(state.database);
   const gitIdentity = await assertGitVersion(runtimeConfig);
   await recoverRepositoryRefChanges({ gitExecutable: config.gitExecutable, gitIdentity, state }, options.stateDirectory);
+  await recoverConfiguredRepositoryBranches({ database: state.database, stateDirectory: options.stateDirectory, gitExecutable: config.gitExecutable, gitIdentity });
   await recoverNativeProjectProvisioning({
     state,
     config: runtimeConfig,

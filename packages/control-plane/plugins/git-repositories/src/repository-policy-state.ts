@@ -28,10 +28,12 @@ export function assertRepositoryPolicyUpdates(database: DatabaseSync): readonly 
     const imported = imports.find((entry) => entry.projectId === update.project_id && entry.repositoryId === update.repository_id);
     const key = `${update.project_id}/${update.repository_id}`;
     const prior = previous.get(key);
-    const head = update.head_sequence === 0 ? imported?.expectedCommit : transitions.find(({ transition, finalized }) => finalized && transition.projectId === update.project_id && transition.repositoryId === update.repository_id && transition.sequence === update.head_sequence)?.transition.candidateCommit;
+    const priorTransitions = transitions.filter(({ transition, finalized }) => finalized && transition.projectId === update.project_id && transition.repositoryId === update.repository_id && transition.sequence <= update.head_sequence);
+    const cursor = priorTransitions.at(-1)?.transition.sequence ?? 0;
+    const head = priorTransitions.filter(({ transition }) => transition.protectedRef === imported?.protectedRef).at(-1)?.transition.candidateCommit ?? imported?.expectedCommit;
     if (imported?.phase !== "repository-imported" || update.policy.protectedRef !== imported.protectedRef
       || update.revision !== (prior?.revision ?? 0) + 1 || update.previous_policy_sha256 !== (prior?.policy_sha256 ?? imported.policyDigest)
-      || update.head_sequence < (prior?.head_sequence ?? 0) || head !== update.head_commit
+      || cursor !== update.head_sequence || update.head_sequence < (prior?.head_sequence ?? 0) || head !== update.head_commit
       || database.prepare("SELECT 1 FROM bundle_activation WHERE generation_id=?").get(update.generation_id) === undefined) throw new RepositoryRefStateError("repository policy update chain is invalid");
     previous.set(key, update);
   }
@@ -61,7 +63,7 @@ export function updateRepositoryPolicy(path: string, input: { readonly projectId
       const transitions = readRepositoryRefTransitions(database).filter(({ transition }) => transition.projectId === input.projectId && transition.repositoryId === input.repositoryId);
       if (transitions.some(({ finalized }) => !finalized)) throw new RepositoryRefStateError("repository ref recovery is pending");
       const last = transitions.at(-1)?.transition;
-      const head: Pick<NativeProjectRootCurrentHead, "sequence" | "commit"> = last === undefined ? { sequence: 0, commit: imported.expectedCommit } : { sequence: last.sequence, commit: last.candidateCommit };
+      const head: Pick<NativeProjectRootCurrentHead, "sequence" | "commit"> = { sequence: last?.sequence ?? 0, commit: transitions.filter(({ transition }) => transition.protectedRef === imported.protectedRef).at(-1)?.transition.candidateCommit ?? imported.expectedCommit };
       const prior = assertRepositoryPolicyUpdates(database).filter((entry) => entry.project_id === input.projectId && entry.repository_id === input.repositoryId).at(-1);
       const currentDigest = prior?.policy_sha256 ?? imported.policyDigest;
       if (currentDigest !== input.expectedPolicyDigest || head.commit !== input.expectedProtectedHead || policy.protectedRef !== imported.protectedRef) throw new RepositoryRefStateError("repository policy compare-and-swap conflicts");

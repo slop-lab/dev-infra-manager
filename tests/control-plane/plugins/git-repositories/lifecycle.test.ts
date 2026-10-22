@@ -14,7 +14,7 @@ it("closes every extension in reverse order and releases the actual listener and
     expect(events).toEqual(["third", "second", "first"]);
     expect(f.service.server.listening).toBe(false);
     restarted = await configuredNativeGitBundleServer({ ...f.options, extensions: [] });
-    expect(restarted.context.runtime.state.stateFormat).toBe(11);
+    expect(restarted.context.runtime.state.stateFormat).toBe(12);
   } finally { await restarted?.close(); await f.service.close().catch(() => undefined); await rm(f.root, { recursive: true, force: true }); }
 }, 20_000);
 

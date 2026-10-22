@@ -1,3 +1,5 @@
+import { nativeRepositoryBranches, nativeRepositoryDefaultRef } from "./native-imported-root-policy.js";
+import { readEffectiveRepositoryPolicy } from "./repository-policy-state.js";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { assertNativeGitBundleStateActive, readNativeProjectRegistrations,
@@ -9,7 +11,8 @@ import type { GitExecutableIdentity } from "./repository.js";
 
 const selectorSchema = z.object({
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
-  repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)
+  repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
+  protectedRef: z.string().startsWith("refs/heads/").optional()
 }).strict().readonly();
 
 
@@ -46,6 +49,9 @@ export async function resolveAuthoritativeNativeRepositoryTarget(
     if (registration === undefined) {
       throw new AuthoritativeRepositoryError("authoritative native Project is not registered");
     }
+    const { policy } = readEffectiveRepositoryPolicy(runtime.state.database, selector.data.projectId, selector.data.repositoryId);
+    const protectedRef = selector.data.protectedRef ?? nativeRepositoryDefaultRef(policy);
+    if (!(protectedRef in nativeRepositoryBranches(policy))) throw new AuthoritativeRepositoryError("repository target branch is not managed by the effective policy");
     const { imported, currentHead, repository } = await verifyLiveImportedRepository({
       activated: runtime.activated(),
       activationTokenDigest: runtime.activationTokenDigest,
@@ -55,6 +61,7 @@ export async function resolveAuthoritativeNativeRepositoryTarget(
       ownerHostId: registration.ownerHostId,
       projectId: selector.data.projectId,
       repositoryId: selector.data.repositoryId,
+      protectedRef,
       state: runtime.state,
       stateDirectory: dirname(runtime.state.database)
     });

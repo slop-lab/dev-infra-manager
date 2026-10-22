@@ -1,3 +1,5 @@
+import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-import-transitions.js";
+import { ensureConfiguredRepositoryBranches } from "./repository-branches.js";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { exactActivationIsBound } from "./native-bundle-activation.js";
@@ -36,12 +38,16 @@ export async function handleNativeRepositoryPolicyHttp(context: RootImportHttpCo
     }
     await context.serialize(async () => {
       const verify = () => verifyLiveImportedRepository({ activated: context.activated, activationTokenDigest: context.activationTokenDigest, expectedGenerationId: context.expectedGenerationId, gitExecutable: context.gitExecutable, gitIdentity: context.gitIdentity, ownerHostId: importer.hostId, projectId, repositoryId, state: context.state, stateDirectory: context.stateDirectory });
+      // A retry may follow a committed policy whose branch publication was interrupted.
+      // Recover only baselines already authorized by the effective stored policy.
+      if (update !== undefined && readNativeProjectRootImportsFromDatabase(context.state.database).some((entry) => entry.projectId === projectId && entry.repositoryId === repositoryId && entry.ownerHostId === importer.hostId)) await ensureConfiguredRepositoryBranches({ database: context.state.database, stateDirectory: context.stateDirectory, gitExecutable: context.gitExecutable, gitIdentity: context.gitIdentity }, projectId, repositoryId);
       let live = await verify();
       if (update !== undefined && policy !== undefined) {
         if (live.currentHead.commit !== update.expectedProtectedHead || live.imported.policyDigest !== update.expectedPolicyDigest || policy.protectedRef !== live.currentHead.protectedRef) throw new RepositoryRefStateError("repository policy compare-and-swap conflicts");
         await context.validatePolicy(policy, { projectId, repositoryId });
         await verify();
         updateRepositoryPolicy(context.state.database, { projectId, repositoryId, ownerHostId: importer.hostId, generationId: context.expectedGenerationId, expectedPolicyDigest: update.expectedPolicyDigest, expectedProtectedHead: update.expectedProtectedHead, policy });
+        await ensureConfiguredRepositoryBranches({ database: context.state.database, stateDirectory: context.stateDirectory, gitExecutable: context.gitExecutable, gitIdentity: context.gitIdentity }, projectId, repositoryId);
         await context.reconcilePolicy(projectId, repositoryId);
         live = await verify();
       }

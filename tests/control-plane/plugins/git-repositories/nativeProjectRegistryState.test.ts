@@ -33,7 +33,7 @@ describe("native Project registry state", () => {
       expect(() => registerNativeProject(state, generationId, { ...projectA, repositoryId: "third", ownerHostId: "host-b" })).toThrow(/host does not match/);
       expect(await stateTree(root)).toEqual(before);
     } finally { await state.owner.release(); }
-    await expect(inspectNativeGitBundleState(root)).resolves.toEqual({ stateFormat: 11 });
+    await expect(inspectNativeGitBundleState(root)).resolves.toEqual({ stateFormat: 12 });
   });
   it("refuses registration before the installed generation is activated", async () => {
     const root = await temporaryRoot();
@@ -65,7 +65,7 @@ describe("native Project registry state", () => {
     await restarted.owner.release();
 
     // Then
-    expect(inspected).toEqual({ stateFormat: 11 });
+    expect(inspected).toEqual({ stateFormat: 12 });
     expect(registrations).toEqual([
       expect.objectContaining({ ...projectA, phase: "provisioning", provisioningNonce: expect.any(String) }),
       expect.objectContaining({ ...projectB, phase: "provisioning", provisioningNonce: expect.any(String) })

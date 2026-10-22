@@ -39,7 +39,7 @@ const activeStates = new WeakSet<NativeGitBundleState>();
 
 export type NativeGitBundleState = {
   readonly database: string;
-  readonly stateFormat: 11;
+  readonly stateFormat: 12;
   readonly owner: StorageOwner;
 };
 
@@ -71,7 +71,7 @@ export async function initializeNativeGitBundleState(
     }
     const state: NativeGitBundleState = {
       database,
-      stateFormat: 11,
+      stateFormat: 12,
       owner: {
         async release() {
           if (!activeStates.delete(state)) return;
@@ -89,7 +89,7 @@ export async function initializeNativeGitBundleState(
 
 export async function inspectNativeGitBundleState(
   stateDirectory: string
-): Promise<{ readonly stateFormat: 10 | 11 }> {
+): Promise<{ readonly stateFormat: 10 | 11 | 12 }> {
   await assertDirectory(stateDirectory);
   const entries = await readdir(stateDirectory);
   await inspectStorageOwner(stateDirectory);

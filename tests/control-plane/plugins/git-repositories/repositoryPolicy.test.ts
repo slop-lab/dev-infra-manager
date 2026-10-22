@@ -111,7 +111,7 @@ it.each(["normal", "unknown-entry", "database-symlink", "marker-publication-inte
     const database = new DatabaseSync(databasePath);
     let manifest: string;
     try {
-      database.exec("DROP TABLE repository_policy_update; PRAGMA user_version=10;");
+      database.exec("DROP TABLE repository_branch_baseline; DROP TABLE repository_policy_update; PRAGMA user_version=10;");
       const names = ["bundle_activation", "native_project_registration", "native_repository_registration", "native_project_root_import", "repository_ref_transition"];
       manifest = `sha256:${createHash("sha256").update(`10\n${names.map((name) => text(record(database.prepare("SELECT sql FROM sqlite_schema WHERE name=?").get(name)), "sql").replace(/\s+/g, " ").trim()).join("\n")}\n`).digest("hex")}`;
     } finally { database.close(); }
@@ -149,7 +149,7 @@ it.each(["normal", "unknown-entry", "database-symlink", "marker-publication-inte
     restarted = await configuredNativeGitBundleServer(f.options);
     const origin = await restarted.listen("127.0.0.1", 0);
     expect(await current(origin)).toEqual(before);
-    expect(record(JSON.parse(await readFile(markerPath, "utf8"))).stateFormat).toBe(11);
+    expect(record(JSON.parse(await readFile(markerPath, "utf8"))).stateFormat).toBe(12);
     expect((await update(origin, before, before.policy)).status).toBe(200);
   } finally { await restarted?.close(); await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 }, 30_000);

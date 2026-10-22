@@ -13,19 +13,19 @@ const execute = promisify(execFile);
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
-const protectedRefChangeSchema = z.object({ projectId: identifier, repositoryId: identifier,
+const protectedRefChangeSchema = z.object({ projectId: identifier, repositoryId: identifier, protectedRef: z.string().startsWith("refs/heads/").optional(),
   proposalRef: z.string().regex(/^refs\/heads\/proposals\/[A-Za-z0-9_-]{43}\/[A-Za-z0-9._/-]+$/).refine((value) => !value.includes("..") && !value.includes("//") && !value.includes("/.") && !value.endsWith("/") && !value.endsWith(".") && !value.endsWith(".lock")),
   expectedCommit: objectId, candidateCommit: objectId, candidateTree: objectId, authorizationId: digest, evidenceDigest: digest
 }).strict().readonly();
 export type ProtectedRefChange = z.infer<typeof protectedRefChangeSchema>;
 export async function compareAndSwapProtectedRef(context: RepositoryExtensionContext, input: ProtectedRefChange): Promise<{ readonly outcome: "promoted" | "already-current"; readonly sequence: number }> {
   input = protectedRefChangeSchema.parse(input);
-  const target = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: input.projectId, repositoryId: input.repositoryId });
+  const target = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: input.projectId, repositoryId: input.repositoryId, ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }) });
   const config = { gitExecutable: context.runtime.gitExecutable, storageRoot: context.stateDirectory };
   if (target.currentHead.commit !== input.expectedCommit) {
     const database = new DatabaseSync(context.runtime.state.database, { readOnly: true });
     try {
-      const previous = readRepositoryRefTransitions(database).find(({ transition, finalized }) => finalized && transition.projectId === input.projectId && transition.repositoryId === input.repositoryId && transition.authorizationId === input.authorizationId);
+      const previous = readRepositoryRefTransitions(database).find(({ transition, finalized }) => finalized && transition.projectId === input.projectId && transition.repositoryId === input.repositoryId && transition.authorizationId === input.authorizationId && transition.protectedRef === target.currentHead.protectedRef);
       if (previous !== undefined && previous.transition.candidateCommit === input.candidateCommit && previous.transition.candidateTree === input.candidateTree && previous.transition.evidenceDigest === input.evidenceDigest && target.currentHead.commit === input.candidateCommit) return { outcome: "already-current", sequence: previous.transition.sequence };
     } finally { database.close(); }
     throw new Error("protected ref compare-and-swap head conflicts");
@@ -35,7 +35,7 @@ export async function compareAndSwapProtectedRef(context: RepositoryExtensionCon
   const tree = await execute(context.runtime.gitExecutable, ["--no-replace-objects", "--git-dir", target.repository, "rev-parse", "--verify", `${input.candidateCommit}^{tree}`], { env: gitEnvironment(), maxBuffer: 1024, timeout: 30_000 });
   if (tree.stdout.trim() !== input.candidateTree) throw new Error("protected ref candidate tree conflicts");
   const refPolicyRevision = await checkRefUpdatePolicies(context, target, input);
-  const current = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: input.projectId, repositoryId: input.repositoryId });
+  const current = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: input.projectId, repositoryId: input.repositoryId, ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }) });
   if (JSON.stringify(current) !== JSON.stringify(target)) throw new Error("repository changed during ref update authorization");
   await assertGitExecutableIdentity(context.runtime.gitExecutable, context.runtime.gitIdentity);
   const transition: RepositoryRefTransition = { ...input, expectedTree: target.currentHead.tree, protectedRef: target.currentHead.protectedRef,

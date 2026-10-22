@@ -60,7 +60,7 @@ export async function handleNativeProjectReadinessHttp(
     const live = await verifyLiveImportedRepository({
       activated: input.activated(), activationTokenDigest: input.activationTokenDigest,
       expectedGenerationId: input.expectedGenerationId, gitExecutable: input.gitExecutable,
-      gitIdentity: input.gitIdentity, ownerHostId: issuer.hostId, projectId, repositoryId,
+      gitIdentity: input.gitIdentity, ownerHostId: issuer.hostId, projectId, repositoryId, protectedRef: body.protectedRef,
       state: input.state, stateDirectory: input.stateDirectory
     });
     const policy = live.imported.policy;

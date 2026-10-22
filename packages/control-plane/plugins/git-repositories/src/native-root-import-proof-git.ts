@@ -23,6 +23,7 @@ type NativeRootProofGitInput = {
   readonly gitIdentity: GitExecutableIdentity;
   readonly repository: string;
   readonly protectedRef: string;
+  readonly authoritativeHeads?: readonly { readonly protectedRef: string; readonly commit: string }[];
   readonly importedCommit: string;
   readonly importedTree: string;
   readonly currentCommit: string;
@@ -86,13 +87,14 @@ export async function assertNativeRootSelectionFastForward(
 async function inspectRefs(input: NativeRootProofGitInput): Promise<void> {
   const refs = (await runPinned(input, ["for-each-ref", "--format=%(refname)"]))
     .stdout.split("\n").filter((ref) => ref.length > 0);
-  if (!refs.includes(input.protectedRef) || refs.some((ref) =>
-    ref !== input.protectedRef && !isWorkspaceProposalRef(ref) && !isUpstreamTrackingRef(ref))) {
+  const heads = input.authoritativeHeads ?? [{ protectedRef: input.protectedRef, commit: input.currentCommit }];
+  if (!heads.some((head) => head.protectedRef === input.protectedRef && head.commit === input.currentCommit) || heads.some((head) => !refs.includes(head.protectedRef)) || refs.some((ref) =>
+    !heads.some((head) => head.protectedRef === ref) && !isWorkspaceProposalRef(ref) && !isUpstreamTrackingRef(ref))) {
     throw new NativeRootImportBundleError("native root repository contains a foreign ref");
   }
-  const commit = (await runPinned(input, ["show-ref", "--verify", "--hash", input.protectedRef])).stdout.trim();
-  if (commit !== input.currentCommit) {
-    throw new NativeRootImportBundleError("native root protected ref conflicts");
+  for (const head of heads) {
+    const commit = (await runPinned(input, ["show-ref", "--verify", "--hash", head.protectedRef])).stdout.trim();
+    if (commit !== head.commit) throw new NativeRootImportBundleError("native root protected ref conflicts");
   }
 }
 

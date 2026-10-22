@@ -1,3 +1,4 @@
+import { repositoryBranchBaselineSchema } from "./repository-branch-state.js";
 import { repositoryPolicyUpdateSchema } from "./repository-policy-state.js";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
@@ -45,7 +46,7 @@ export function createNativeGitBundleDatabase(path: string): DatabaseSync {
   const database = new DatabaseSync(path, { defensive: true });
   database.exec(`PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;
     ${activationSchema}; ${nativeProjectRegistrationSchema}; ${nativeRepositoryRegistrationSchema}; ${nativeProjectRootImportSchema};
-    ${repositoryRefTransitionSchema}; ${repositoryPolicyUpdateSchema}; PRAGMA user_version = 11;`);
+    ${repositoryRefTransitionSchema}; ${repositoryPolicyUpdateSchema}; ${repositoryBranchBaselineSchema}; PRAGMA user_version = 12;`);
   return database;
 }
 
@@ -54,7 +55,7 @@ export async function validateNativeGitBundleStateFiles(
   entries: readonly string[],
   recoveringPolicyUpgrade = false
 ): Promise<{
-  readonly stateFormat: 10 | 11;
+  readonly stateFormat: 10 | 11 | 12;
   readonly registrations: readonly NativeProjectRegistration[];
   readonly imports: readonly NativeProjectRootImport[];
   readonly reconcileRootImports: NativeRootImportReconciliation;
@@ -68,7 +69,7 @@ export async function validateNativeGitBundleStateFiles(
   const database = new DatabaseSync(databaseUrl, { readOnly: true, defensive: true });
   try {
     const actualVersion = numberField(database.prepare("PRAGMA user_version").get(), "user_version");
-    const stateFormat = recoveringPolicyUpgrade && marker.stateFormat === 10 && actualVersion === 11 ? 11 : marker.stateFormat;
+    const stateFormat = recoveringPolicyUpgrade && (actualVersion === 11 || actualVersion === 12) && actualVersion >= marker.stateFormat ? actualVersion : marker.stateFormat;
     const persisted = assertDatabaseSchema(database, stateFormat);
     await assertKnownEntries(stateDirectory, entries, nativeProjectStorageNames(persisted.registrations));
     await Promise.all(persisted.imports.filter((entry) => entry.phase !== "intent").map((entry) =>
@@ -87,10 +88,10 @@ export async function validateNativeGitBundleStateFiles(
 }
 
 export function expectedNativeGitBundleMarker(): NativeGitBundleMarker {
-  return { schemaVersion: 1, stateFormat: 11, database: databaseName, schemaManifestSha256: schemaManifestSha256() };
+  return { schemaVersion: 1, stateFormat: 12, database: databaseName, schemaManifestSha256: schemaManifestSha256() };
 }
 
-function assertDatabaseSchema(database: DatabaseSync, expectedVersion: 10 | 11 = 11): {
+function assertDatabaseSchema(database: DatabaseSync, expectedVersion: 10 | 11 | 12 = 12): {
   readonly registrations: readonly NativeProjectRegistration[];
   readonly imports: readonly NativeProjectRootImport[];
 } {
@@ -98,13 +99,14 @@ function assertDatabaseSchema(database: DatabaseSync, expectedVersion: 10 | 11 =
   const rows = database.prepare(
     "SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
   ).all();
-  if (version !== expectedVersion || rows.length !== (expectedVersion === 10 ? 5 : 6)
-    || !schemaRowEquals(rows[0], "bundle_activation", activationSchema)
-    || !schemaRowEquals(rows[1], "native_project_registration", nativeProjectRegistrationSchema)
-    || !schemaRowEquals(rows[2], "native_project_root_import", nativeProjectRootImportSchema)
-    || !schemaRowEquals(rows[3], "native_repository_registration", nativeRepositoryRegistrationSchema)
-    || !schemaRowEquals(rows[4], expectedVersion === 10 ? "repository_ref_transition" : "repository_policy_update", expectedVersion === 10 ? repositoryRefTransitionSchema : repositoryPolicyUpdateSchema)
-    || (expectedVersion === 11 && !schemaRowEquals(rows[5], "repository_ref_transition", repositoryRefTransitionSchema))) {
+  const expectedTables: readonly (readonly [string, string])[] = [
+    ["bundle_activation", activationSchema], ["native_project_registration", nativeProjectRegistrationSchema],
+    ["native_project_root_import", nativeProjectRootImportSchema], ["native_repository_registration", nativeRepositoryRegistrationSchema],
+    ...(expectedVersion >= 12 ? [["repository_branch_baseline", repositoryBranchBaselineSchema] as const] : []),
+    ...(expectedVersion >= 11 ? [["repository_policy_update", repositoryPolicyUpdateSchema] as const] : []),
+    ["repository_ref_transition", repositoryRefTransitionSchema]
+  ];
+  if (version !== expectedVersion || rows.length !== expectedTables.length || expectedTables.some(([name, sql], index) => !schemaRowEquals(rows[index], name, sql))) {
     throw new NativeGitBundleStateError("native Git idle database schema is unsupported");
   }
   const registrations = assertNativeProjectRegistrationRows(database);
@@ -113,18 +115,11 @@ function assertDatabaseSchema(database: DatabaseSync, expectedVersion: 10 | 11 =
 }
 
 async function readMarker(stateDirectory: string): Promise<NativeGitBundleMarker> {
-  try {
-    try { return await readNativeGitBundleMarker(join(stateDirectory, markerName), expectedNativeGitBundleMarker()); }
-    catch (error) {
-      if (!(error instanceof NativeGitBundleMarkerError)) throw error;
-      return await readNativeGitBundleMarker(join(stateDirectory, markerName), { schemaVersion: 1, stateFormat: 10, database: databaseName, schemaManifestSha256: schemaManifestSha256(10) });
-    }
-  } catch (error) {
-    if (error instanceof NativeGitBundleMarkerError) {
-      throw new NativeGitBundleStateError(error.message, { cause: error });
-    }
-    throw error;
+  for (const version of [12, 11, 10] as const) {
+    try { return await readNativeGitBundleMarker(join(stateDirectory, markerName), { schemaVersion: 1, stateFormat: version, database: databaseName, schemaManifestSha256: schemaManifestSha256(version) }); }
+    catch (error) { if (!(error instanceof NativeGitBundleMarkerError)) throw error; }
   }
+  throw new NativeGitBundleStateError("native Git bundle state marker is invalid");
 }
 
 async function assertKnownEntries(
@@ -148,11 +143,12 @@ async function assertKnownEntries(
   }
 }
 
-function schemaManifestSha256(version: 10 | 11 = 11): string {
+function schemaManifestSha256(version: 10 | 11 | 12 = 12): string {
   return `sha256:${createHash("sha256").update(
     `${version}\n${normalizeSql(activationSchema)}\n${normalizeSql(nativeProjectRegistrationSchema)}\n`
       + `${normalizeSql(nativeRepositoryRegistrationSchema)}\n${normalizeSql(nativeProjectRootImportSchema)}\n${normalizeSql(repositoryRefTransitionSchema)}\n`
-      + (version === 11 ? `${normalizeSql(repositoryPolicyUpdateSchema)}\n` : "")
+      + (version >= 11 ? `${normalizeSql(repositoryPolicyUpdateSchema)}\n` : "")
+      + (version >= 12 ? `${normalizeSql(repositoryBranchBaselineSchema)}\n` : "")
   ).digest("hex")}`;
 }
 
@@ -183,20 +179,22 @@ export class NativeGitBundleStateError extends Error {
  * A crash after the database commit is recovered by publishing the new marker on retry. */
 export async function upgradeNativeGitBundlePolicyState(stateDirectory: string): Promise<void> {
   const markerPath = join(stateDirectory, markerName);
-  let oldMarker = false;
-  try { await readNativeGitBundleMarker(markerPath, { schemaVersion: 1, stateFormat: 10, database: databaseName, schemaManifestSha256: schemaManifestSha256(10) }); oldMarker = true; }
-  catch (error) { if (!(error instanceof NativeGitBundleMarkerError)) throw error; }
-  if (!oldMarker) return;
+  const marker = await readMarker(stateDirectory);
+  if (marker.stateFormat === 12) return;
   await validateNativeGitBundleStateFiles(stateDirectory, await readdir(stateDirectory), true);
   const database = new DatabaseSync(join(stateDirectory, databaseName), { defensive: true });
   try {
     const version = numberField(database.prepare("PRAGMA user_version").get(), "user_version");
-    if (version === 10) {
-      assertDatabaseSchema(database, 10);
-      database.exec("PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE");
-      try { database.exec(`${repositoryPolicyUpdateSchema}; PRAGMA user_version=11;`); assertDatabaseSchema(database); database.exec("COMMIT"); }
-      catch (error) { database.exec("ROLLBACK"); throw error; }
-    } else { assertDatabaseSchema(database); }
+    if (version !== 10 && version !== 11 && version !== 12) throw new NativeGitBundleStateError("native Git idle database schema is unsupported");
+    assertDatabaseSchema(database, version);
+    database.exec("PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE");
+    try {
+      if (version === 10) database.exec(repositoryPolicyUpdateSchema);
+      if (version < 12) database.exec(repositoryBranchBaselineSchema);
+      database.exec("PRAGMA user_version=12");
+      assertDatabaseSchema(database);
+      database.exec("COMMIT");
+    } catch (error) { database.exec("ROLLBACK"); throw error; }
   } finally { database.close(); }
   await syncNativeGitBundlePath(join(stateDirectory, databaseName), false);
   await publishNativeGitBundleMarker(markerPath, expectedNativeGitBundleMarker());
