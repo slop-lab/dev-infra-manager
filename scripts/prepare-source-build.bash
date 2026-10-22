@@ -151,6 +151,7 @@ final_image_ref="dev-infra-project-workspace:$package_version"
 DIM_LOCAL_SOURCE_ROOT="$source_stage" \
 DIM_LOCAL_IMAGE_BUILD_REF="$temporary_image_ref" \
   bash "$repo_root/scripts/build-workspace-image.bash"
+node "$repo_root/scripts/prepare-local-control-plane.ts" "$source_stage" "$package_stage" "$package_version"
 DIM_LOCAL_PACKAGE_ROOT="$package_stage" \
 DIM_LOCAL_IMAGE_INSPECT_REF="$temporary_image_ref" \
 DIM_LOCAL_IMAGE_RECORD_REF="$final_image_ref" \

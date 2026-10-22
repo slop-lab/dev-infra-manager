@@ -15,6 +15,11 @@ export async function retainedCacheData(paths: RemovalPaths, resources: readonly
     if (volumes.some(({ claim }) => claim.labels["dim.service-id"] === ledger.serviceId)) files.push(file);
   }
   if (volumes.length && !files.length) throw new Error("cache data has no retained ownership ledger");
+  const registry = resources.filter(({ claim }) => claim.kind === "volume" && claim.labels["dim.local-images"] && claim.labels["dim.resource"] === "volume");
+  if (registry.length) {
+    files.push(join(paths.data, "local-install/registry.json"));
+    volumes.push(...registry);
+  }
   return { volumes: volumes.map(({ claim }) => claim.name), files };
 }
 export async function removeExcept(root: string, retained: readonly string[]): Promise<void> {

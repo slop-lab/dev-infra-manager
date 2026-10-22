@@ -7,6 +7,13 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
+- Make `install-local` install and update the complete development profile,
+  including prepared Native Git/execution images and every bundled host and
+  control-plane plugin. Preserve running workspaces, service credentials and Web
+  accounts; checkpoint service data before local updates and reconnect the new
+  generation automatically. Keep the writable development image registry separate
+  from package mirrors and honor cache-data retention during clean reinstall.
+
 - Split managed Git into independent repository, code-review, merge-policy,
   Git CI and webhook control-plane plugins. Repository hosting no longer
   requires review, CI or a workflow compiler. The managed deployment preset

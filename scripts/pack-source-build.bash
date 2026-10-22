@@ -106,6 +106,7 @@ packages:
   - packages/host/plugins/*
   - packages/control-plane/core
   - packages/control-plane/admin
+  - packages/control-plane/deployment
   - packages/control-plane/plugins/*
   - packages/contracts/*
   - packages/review-tracing

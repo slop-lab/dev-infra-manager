@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { jsonFiles, metadata, object, readJson, text, uuid } from "./files.ts";
 import type { DockerClaim, RemovalPaths } from "./types.ts";
+import { registryClaims } from "../local-control-plane/registry.ts";
 
 const identifier = /^[a-z0-9][a-z0-9-]{0,62}$/;
 function named(value: unknown): string {
@@ -43,6 +44,8 @@ async function records(root: string): Promise<Record<string, unknown>[]> {
 /** Claims originate from this user's selected state, never from global Docker label discovery. */
 export async function collectHostClaims(paths: RemovalPaths): Promise<DockerClaim[]> {
   const claims: DockerClaim[] = [];
+  const registry = await readJson(join(paths.data, "local-install/registry.json"));
+  if (registry !== undefined) claims.push(...registryClaims(registry));
   for (const root of roots(paths)) {
     if (!await directory(root)) continue;
     for (const record of await records(root)) {

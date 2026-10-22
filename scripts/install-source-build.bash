@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-with_managed=0
 check_only=0
 if [[ "$#" -eq 1 && "$1" == --check ]]; then
   check_only=1
 elif [[ "$#" -eq 1 && "$1" == --with-managed ]]; then
-  with_managed=1
+  : # The complete development profile is now the default.
 elif [[ "$#" -ne 0 ]]; then
   echo "Usage: bash scripts/install-source-build.bash [--with-managed | --check]" >&2
   exit 2
@@ -115,10 +114,7 @@ fi
 "${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
 echo "[host] install package bundle"
-core_options=(--local-packages "$package_root" --no-local-bin)
-if [[ "$with_managed" -eq 1 ]]; then
-  core_options+=(--with-managed)
-fi
+core_options=(--local-packages "$package_root" --no-local-bin --with-managed)
 "${dim_command[@]}" installer install core "${core_options[@]}"
 validate_preparation
 
@@ -156,11 +152,17 @@ else
   echo "Add $facade_root/node_modules/.bin to PATH to use this matching facade."
 fi
 validate_preparation
+node "$repo_root/scripts/install-local-profile.ts" "$package_root" "$facade"
+DIM_LOCAL_INSTALLER="$facade" node "$repo_root/scripts/install-local-control-plane.ts" "$package_root"
+# This invocation selected new local connections. Do not pin restarted services
+# to stale generation files inherited from an older operator env.sh.
+unset DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE DIM_NATIVE_GIT_SYNC_CONNECTION_FILE
 echo "[host] install Web UI package bundle"
 node "$repo_root/scripts/install-local-web.ts" "$package_root"
 node "$repo_root/scripts/install-local-llm-operator.ts" "$package_root"
 node "$repo_root/scripts/install-local-llm-gateway.ts" "$package_root"
 node "$repo_root/scripts/install-local-shared-ingress.ts" "$package_root"
+"${dim_command[@]}" controller restart
 node "$repo_root/scripts/configure-local-web.ts"
 echo "[host] local package bundle and matching installer installed"
 "${dim_command[@]}" --version

@@ -43,7 +43,8 @@ export async function buildServiceImage(inputs: ServiceImageInputs, tag: string)
     process.once("SIGTERM", abort);
     try {
       await new Promise<void>((resolve, reject) => {
-        const child = spawn("docker", ["build", "--tag", tag, directory], { stdio: "inherit", signal: cancellation.signal });
+        const quiet = process.env.DIM_SERVICE_IMAGE_QUIET === "1";
+        const child = spawn("docker", ["build", ...(quiet ? ["--quiet"] : []), "--tag", tag, directory], { stdio: quiet ? ["ignore", "ignore", "inherit"] : "inherit", signal: cancellation.signal });
         let failure: Error | undefined;
         child.once("error", (error) => { failure = error; });
         child.once("close", (status, signal) => failure ? reject(failure) : status === 0 ? resolve()

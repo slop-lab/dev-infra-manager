@@ -244,6 +244,11 @@ describe("real Git local source build safety", () => {
     const fixture = await createRealGitFixture();
     const stateScript = resolve(fixture.root, "scripts/local-preparation-state.bash");
     await copyFile(resolve(workspaceRoot, "scripts/local-preparation-state.bash"), stateScript);
+    for (const helper of ["local-control-plane/images.ts", "local-uninstall/command.ts", "local-uninstall/files.ts"]) {
+      const target = resolve(fixture.root, "scripts", helper);
+      await mkdir(resolve(target, ".."), { recursive: true });
+      await copyFile(resolve(workspaceRoot, "scripts", helper), target);
+    }
     const firstPackages = resolve(fixture.root, "first-packages");
     const secondPackages = resolve(fixture.root, "second-packages");
     await Promise.all([mkdir(firstPackages), mkdir(secondPackages)]);
@@ -251,6 +256,9 @@ describe("real Git local source build safety", () => {
       await writeFile(resolve(packageRoot, "packages.json"), "{}\n");
       await writeFile(resolve(packageRoot, "package.tgz"), "package bytes\n");
       await writeFile(resolve(packageRoot, ".dim-source-state"), `root=${fixture.selectedCommit}\n`);
+      await writeFile(resolve(packageRoot, "control-plane-images.json"), JSON.stringify({ schemaVersion: 1,
+        "native-git": { tag: "dim-local-native-git:test", id: `sha256:${"0".repeat(63)}1` },
+        execution: { tag: "dim-local-execution:test", id: `sha256:${"0".repeat(63)}1` } }));
     }
     const environment = {
       PATH: `${fixture.tools}:/usr/bin:/bin`,

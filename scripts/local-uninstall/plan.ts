@@ -51,7 +51,7 @@ function restoredPlan(raw: unknown, paths: RemovalPaths): RemovalPlan {
   if (typeof value.keepCacheData !== "boolean" || !Array.isArray(retained.files) || !Array.isArray(retained.volumes)) throw new Error("invalid retained cache journal");
   for (const file of retained.files) {
     const path = text(file);
-    if (![paths.state, paths.managed].some((root) => inside(path, join(root, "plugins/cache-server/services")))) throw new Error("invalid retained cache path");
+    if (path !== join(paths.data, "local-install/registry.json") && ![paths.state, paths.managed].some((root) => inside(path, join(root, "plugins/cache-server/services")))) throw new Error("invalid retained cache path");
   }
   for (const volume of retained.volumes) text(volume);
   if (!value.keepCacheData && (retained.files.length || retained.volumes.length)) throw new Error("unexpected retained cache data");

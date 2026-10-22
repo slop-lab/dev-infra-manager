@@ -50,3 +50,16 @@ image_id="$(docker image inspect --format '{{.Id}}' "$image_inspect_ref")"
 [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
 printf 'image.ref=%s\n' "$image_record_ref"
 printf 'image.id=%s\n' "$image_id"
+
+# Service metadata and immutable Docker identities belong to this same candidate.
+node --input-type=module - "$package_root" "$repo_root" <<'JS'
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+const [bundle, root] = process.argv.slice(2);
+const { preparedServiceImages } = await import(pathToFileURL(`${root}/scripts/local-control-plane/images.ts`).href);
+const { command } = await import(pathToFileURL(`${root}/scripts/local-uninstall/command.ts`).href);
+const images = await preparedServiceImages(bundle, command);
+console.log(`services.sha256=${createHash('sha256').update(readFileSync(`${bundle}/control-plane-images.json`)).digest('hex')}`);
+for (const [service, image] of Object.entries(images)) console.log(`${service}.id=${image.id}`);
+JS

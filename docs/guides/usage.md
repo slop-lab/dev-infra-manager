@@ -17,16 +17,39 @@ just prepare-local
 just install-local
 ```
 
-The first command installs the preserved facade. Preparation builds packages
-and the base workspace image from one source identity and lockfile. Installation
-uses those artifacts without rebuilding them, validates base workspace state,
-and selects the base CLI dependency graph. It does not activate a fresh
-managed controller. Existing explicitly installed integrations are retained.
+The first command installs the preserved facade. Preparation builds packages,
+the workspace image and Native Git/execution images from one source identity and
+lockfile. Installation uses those artifacts without rebuilding them and installs
+the complete local development profile, including all bundled host and
+control-plane plugins. It deploys the local service pair, renews generation-bound
+connections, and restarts the controller and Web UI. Published installation
+retains its explicit optional component selection.
 The matching installer is retained under the DIM data directory. With mise,
 installation links and selects that exact source facade globally, so later
 installer commands use the same implementation. Without mise, add the printed
 facade directory to PATH.
 Preparation rejects dirty source by default; use a reviewed clean commit.
+
+To update while preserving workspaces, run `just prepare-local` followed by
+`just install-local` again. Existing containers, checkout/home/nested-Docker data
+and guest processes remain in place. Existing containers keep their current image;
+apply a new guest image through a separate explicit recreation. Controller,
+service and Web connections can briefly interrupt during restart.
+
+Control-plane updates checkpoint both stopped service volumes under `.local/backups`
+and restore both together if activation fails. Repositories, proposals, credentials,
+ports and configured worker profiles are retained. Incomplete transactions stop
+installation for explicit recovery. On first use with an existing deployment,
+verified private snapshots are adopted into `~/.config/dim/local-control-plane`;
+subsequent installs reuse that setup. Edit its service configuration for later
+updates. `DIM_LOCAL_CONTROL_PLANE_SETUP` selects an existing absolute setup directory
+instead; default paths follow `XDG_CONFIG_HOME`.
+
+Prepared services use an owned, loopback-only writable development image registry,
+separate from pull-through caches. `DIM_LOCAL_IMAGE_REGISTRY=HOST:PORT` selects an
+operator-managed writable registry instead. Cache retention preserves the owned
+registry's data and ownership record across a clean reinstall. A fresh scheduler
+has no execution slots: reviewed worker runtime profiles remain explicit.
 
 `install-local` also installs the matched Web UI and the LLM router, execution,
 Native Git, Workspace tools and External routes Web plugins in a separate runtime under
@@ -39,9 +62,10 @@ in `~/.config/dim/web/config.json`; these paths follow `XDG_CONFIG_HOME`.
 Repeated installs preserve the account and existing plugin settings, add missing
 plugins from the development profile, and restart the service with the selected
 runtime. An existing private `~/.config/dim/llm/operator.json` supplies the initial
-LLM router connection. Other features appear as unconfigured until an operator
-adds their explicit scoped connections; installation does not invent a project
-or grant service authority. Existing unconfigured selections are preserved.
+LLM router connection. Native Git and execution discover the selected local
+control plane automatically. Other services require their account, network or
+runtime configuration before use. Installation does not invent a project; existing
+plugin settings are preserved.
 See [Web plugins](web-plugins.md) for connection settings. Local uninstall removes the Web UI service and its
 configuration; a clean reinstall creates a new account.
 
@@ -156,7 +180,7 @@ To remove that local installation and install the prepared source candidate:
 just prepare-local
 just reinstall-local --with-managed --dry-run
 just reinstall-local --with-managed
-# Omit --with-managed for the base workspace profile.
+# The complete local development profile is installed by default.
 # For automation, add -y after reviewing the plan.
 ```
 
@@ -203,17 +227,16 @@ AppArmor setup, and upstream or prepared build images are retained.
 
 ## Optional managed integration
 
-A prepared source bundle can also install managed services and integrations:
+A prepared source bundle installs the complete local development profile:
 
 ```bash
-just install-local --with-managed
+just install-local
 ```
 
-This explicit profile installs the native-Git host and execution worker plugins plus
-control-plane administration tools. It does not start a controller or worker,
-build another workspace image or deploy a control plane. Other plugins remain
-separate installer operations. For a
-registry package set, use `dim installer install core --with-managed`.
+The older `--with-managed` spelling is accepted but no longer changes this local
+profile. Published optional integration still uses
+`dim installer install core --with-managed`: it installs host integration and
+administration packages without deploying a control plane or starting workers.
 
 Prepare and connect the explicit Git/review/CI service profile through the control-plane operator CLI:
 

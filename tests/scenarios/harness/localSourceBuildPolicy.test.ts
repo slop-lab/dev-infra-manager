@@ -67,7 +67,7 @@ touch "$1/cli.tgz"
 touch "$1/slop-lab-dim-installer-local.tgz"
 `
   );
-  for (const helper of ["install-local-web.ts", "install-local-llm-operator.ts", "install-local-llm-gateway.ts", "install-local-shared-ingress.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
+  for (const helper of ["prepare-local-control-plane.ts", "install-local-profile.ts", "install-local-control-plane.ts", "install-local-web.ts", "install-local-llm-operator.ts", "install-local-llm-gateway.ts", "install-local-shared-ingress.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
     'import { appendFileSync } from "node:fs"; appendFileSync(process.env.DIM_INVOCATIONS!, `web-helper ${process.argv[1]} ${process.argv.slice(2).join(" ")}\\n`);\n');
   await writeFile(
     resolve(scripts, "local-preparation-state.bash"),
@@ -477,6 +477,14 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
       resolve(projectRoot, "scripts/local-preparation-state.bash"),
       resolve(scripts, "local-preparation-state.bash")
     );
+    await mkdir(resolve(scripts, "local-control-plane"));
+    await mkdir(resolve(scripts, "local-uninstall"));
+    await copyFile(resolve(projectRoot, "scripts/local-control-plane/images.ts"), resolve(scripts, "local-control-plane/images.ts"));
+    await copyFile(resolve(projectRoot, "scripts/local-uninstall/command.ts"), resolve(scripts, "local-uninstall/command.ts"));
+    await copyFile(resolve(projectRoot, "scripts/local-uninstall/files.ts"), resolve(scripts, "local-uninstall/files.ts"));
+    await writeFile(resolve(packages, "control-plane-images.json"), JSON.stringify({ schemaVersion: 1,
+      "native-git": { tag: "dim-local-native-git:test", id: `sha256:${"0".repeat(63)}8` },
+      execution: { tag: "dim-local-execution:test", id: `sha256:${"0".repeat(63)}8` } }));
     await writeFile(resolve(packages, "packages.json"), "{}\n");
     await writeFile(resolve(packages, "package.tgz"), "package bytes\n");
     await writeFile(
@@ -485,7 +493,8 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
     );
     await writeFile(resolve(tools, "git"), `#!/usr/bin/env bash\nprintf '%040d\\n' 7\n`);
     await writeFile(resolve(tools, "docker"), `#!/usr/bin/env bash\nprintf 'sha256:%064d\\n' 8\n`);
-    await Promise.all(["git", "docker"].map((tool) => chmod(resolve(tools, tool), 0o755)));
+    await writeFile(resolve(tools, "node"), `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`);
+    await Promise.all(["git", "docker", "node"].map((tool) => chmod(resolve(tools, tool), 0o755)));
     const imageTag = `dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)}`;
 
     // When
@@ -760,7 +769,7 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
     expect(invocations).not.toContain("docker build");
   });
 
-  it("installs a prepared base bundle without activating optional services", async () => {
+  it("installs the complete prepared development profile and restarts its controller", async () => {
     // Given
     const fixture = await createFixture();
     expect(runScript(fixture, "prepare-source-build.bash").status).toBe(0);
@@ -775,7 +784,10 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
     expect(result.status, result.stderr).toBe(0);
     expect(invocations).toContain("dim installer install core");
     expect(invocations).toContain("dim --version");
-    expect(invocations).not.toContain("dim controller restart");
+    expect(invocations).toContain("dim controller restart");
+    expect(invocations).toContain("--with-managed");
+    expect(invocations).toContain("install-local-profile.ts");
+    expect(invocations).toContain("install-local-control-plane.ts");
     expect(invocations).not.toContain("dim installer enable-plugin");
     expect(invocations).toContain(
       `state dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)} dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)}`

@@ -28,19 +28,23 @@ just prepare-local
 just install-local
 ```
 
-The preparation builds the package bundle and base workspace image. The install
-selects the base CLI and its dependencies, and installs the Web UI in a separate
-runtime. On hosts with user systemd, it starts `dim-web.service` at
-`http://127.0.0.1:9081`; private login details are in `~/.config/dim/web/login.txt`.
-Repeated installs keep the existing Web UI configuration and account. Optional
-managed host packages in the bundle are not automatically installed.
+Preparation builds packages, the workspace image and both Native Git/execution
+service images from one reviewed source commit. Installation updates the complete
+local development profile: installer, CLI, bundled host and control-plane plugins,
+Native Git/execution services and Web UI. Existing workspaces and running guest
+processes stay in place. Service updates checkpoint both data volumes and renew
+generation-bound connections before restarting the controller and Web UI.
+On hosts with user systemd, `dim-web.service` runs at `http://127.0.0.1:9081`;
+private login details are in `~/.config/dim/web/login.txt`. Repeated installs keep
+service credentials and Web accounts, and update configured LLM router/shared
+ingress services. External accounts and runtime profiles still need configuration.
 It retains the matching source installer and selects it through mise when
 available. Without mise, it prints the persistent facade path to add to PATH.
 See the [source installation workflow](docs/guides/usage.md#install-development-sources) for
 artifact provenance and prerequisites.
 
 Repository maintenance commands `just uninstall-local --dry-run` (preview) and
-`just reinstall-local [--with-managed]` support a clean local source reinstall.
+`just reinstall-local` support a clean local source reinstall.
 Reinstall removes the current user's local DIM workspaces and runtime installation
 after confirmation. LLM router accounts, authentication, history and captures,
 Tailscale gateway identity/state, and configured shared ingress connections and

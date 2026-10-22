@@ -109,6 +109,18 @@ origin rather than weakening the default Pages CORS policy.
 
 ## Local control-plane format upgrades
 
+`just prepare-local` prepares both service images with the package bundle and
+workspace image. `just install-local` installs all bundled development plugins,
+publishes the prepared services to its local writable image registry, deploys
+them, renews connections, and restarts controller/Web UI. Existing workspaces and
+service credentials remain in place. Configured LLM router and shared ingress
+runtimes are updated; external accounts, worker capacity and network grants still
+need configuration. Local removal includes the owned registry and honors its
+cache-data retention choice.
+
+The checkpoint path below is integrated into `install-local` for existing
+deployments. It can also be invoked directly to diagnose a format upgrade.
+
 The published installer requires old and new service images to read each other's
 state formats so ordinary updates can roll back safely. For a local development
 installation that intentionally changes state format, this source-only helper
