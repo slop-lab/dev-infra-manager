@@ -18,7 +18,7 @@ export const preparedBranchMergeSchema = z.object({ schemaVersion: z.literal(1),
   sourceCommit: z.string().regex(/^[a-f0-9]{40,64}$/), expectedProtectedHead: z.string().regex(/^[a-f0-9]{40,64}$/),
   proposalRef: z.string().startsWith("refs/heads/proposals/").optional(), candidateCommit: z.string().regex(/^[a-f0-9]{40,64}$/).optional(), reviewId: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 
-type NativeRequest = { readonly method: "GET" | "POST"; readonly path: string; readonly body?: unknown; readonly timeoutMilliseconds?: number };
+type NativeRequest = { readonly method: "GET" | "POST"; readonly path: string; readonly body?: unknown };
 
 export class NativeGitClient {
   private generationId: string | undefined;
@@ -42,7 +42,7 @@ export class NativeGitClient {
   }
   async prepareMerge(projectId: string, repositoryId: string, input: { sourceRef: string; targetRef: string }) {
     if (!this.config.promoter) throw new NativeGitHttpError(403);
-    return preparedBranchMergeSchema.parse(await this.request({ method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/merges`, body: { schemaVersion: 1, sourceRef: input.sourceRef, targetRef: input.targetRef }, timeoutMilliseconds: 60_000 }, this.config.promoter));
+    return preparedBranchMergeSchema.parse(await this.request({ method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/merges`, body: { schemaVersion: 1, sourceRef: input.sourceRef, targetRef: input.targetRef } }, this.config.promoter));
   }
   async promote(projectId: string, repositoryId: string, reviewId: string) {
     if (!this.config.promoter) throw new NativeGitHttpError(403);
@@ -101,7 +101,7 @@ export class NativeGitClient {
           ...(this.generationId === undefined ? {} : { "X-Dim-Generation-Id": this.generationId }),
           ...(body === undefined ? {} : { "Content-Type": "application/json", "Content-Length": String(body.length) })
         },
-        signal: AbortSignal.timeout(input.timeoutMilliseconds ?? 5_000)
+        signal: AbortSignal.timeout(input.path.endsWith("-identity") ? 5_000 : input.method === "POST" ? 60_000 : 30_000)
       }, (incoming) => {
         const chunks: Buffer[] = [];
         let size = 0;

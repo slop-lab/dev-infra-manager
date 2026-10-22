@@ -130,6 +130,19 @@ it("pins controller discovery generation across refresh and sends it before dele
   expect(writes[1]).toContain(generationId);
 });
 
+it("forwards a bounded controller deadline for repository review and merge work", async () => {
+  const deadlines: Array<number | undefined> = [];
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "devbox", async run(args, options) {
+    if (args[2] === "describe") return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [{ projectId: "project-a", name: "Project A", repositoryIds: ["main"] }], operations: operations.map(({ name, description, access }) => ({ name, description, access })) };
+    deadlines.push(options?.timeoutMilliseconds);
+    if (args[3] === "reviews.list") return [];
+    return { schemaVersion: 1, outcome: "unchanged", sourceRef: "refs/heads/development", targetRef: "refs/heads/main", sourceCommit: "b".repeat(40), expectedProtectedHead: "b".repeat(40) };
+  } }] });
+  await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "main" });
+  await runtime.invoke("merges.prepare", { controllerId: "devbox", projectId: "project-a", repositoryId: "main", sourceRef: "refs/heads/development", targetRef: "refs/heads/main" });
+  expect(deadlines).toEqual([120_000, 120_000]);
+});
+
 it("keeps an empty registered-project catalog available but reports wholly unavailable controllers", async () => {
   const offline = await webPlugin.autoConnect!({ controllers: [{ id: "offline", async run() { throw new Error("host plugin missing"); } }] });
   expect(await offline.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "offline", controllerKey: "offline", status: "unavailable", projects: [] }] });

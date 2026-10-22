@@ -74,7 +74,7 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
       const parsed = operation.parseInput(selected.value);
       const generation = generations.get(selected.controllerId);
       if (!generation) throw new Error("Controller serving generation has not been attested");
-      return operation.parseOutput(await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : undefined));
+      return operation.parseOutput(await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : /^(?:reviews|merges|sync)\./.test(name) ? { timeoutMilliseconds: 120_000 } : undefined));
     }
   };
 }

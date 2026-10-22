@@ -36,7 +36,7 @@ export function mount(container, context) {
   const controller = () => controllers.find(({ id }) => id === host.control.value);
   /** @param {string} name */ const has = (name) => context.operations.some((operation) => operation.name === name) && Boolean(controller()?.operations.some((operation) => operation.name === name));
   /** @param {Scope} target @param {string} name @param {Record<string,unknown>} [input] */
-  const invoke = (target, name, input = {}) => context.invoke(name, { ...target, ...input });
+  const invoke = (target, name, input = {}) => context.invoke(name, { ...target, ...input }, /^(?:reviews|merges|sync)\./.test(name) ? { timeoutMilliseconds: 125_000 } : undefined);
   const management = mountManagement(managementRegion, context, { scope, has, refresh: (preferred) => refreshCatalog(preferred) });
   let draftKey = "";
   function saveDraft() { if (draftKey) drafts.set(draftKey, proposal.value); }
