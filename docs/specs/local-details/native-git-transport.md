@@ -189,8 +189,11 @@ ancestry and proposal identity, then persists an accepted authorization/evidence
 digest before atomically updating Git. It finalizes one monotonic receipt.
 Promotion changes one repository; no cross-repository transaction is provided.
 
-Repository state format **11** owns activation, registration, immutable imports,
-head-bound policy-update history and neutral ref-transition intent/finalization. Startup validates the transition chain and
+Repository state format **12** owns activation, registration, immutable imports,
+head-bound policy-update history, managed-branch baselines and neutral
+ref-transition intent/finalization. Each branch replays its own predecessor chain;
+a repository-wide sequence serializes mutations without invalidating unrelated
+branch reviews or execution snapshots. Startup validates the transition chain and
 recovers accepted operations interrupted before or after Git CAS. Recovery
 cannot invent an authorization or accept a changed base/candidate. A pending
 operation fences source proofs until recovery completes.
@@ -202,9 +205,9 @@ merge without fresh checks. Code-review and Git-CI own their private records in
 repository storage. Webhooks owns its separate subscriber/delivery state and
 backfills durable authority events without owning source decisions.
 
-Format 10 is upgraded additively at startup without changing repositories, original
-import receipts, completed ref transitions or extension data. Read-only inspection
-accepts both formats without mutation. Other unsupported formats fail without data
+Formats 10 and 11 are upgraded additively at startup without changing repositories,
+original import receipts, completed ref transitions or extension data. Read-only
+inspection accepts formats 10, 11 and 12 without mutation. Other unsupported formats fail without data
 erasure. Export required
 user data before replacing incompatible storage. See [CI runners](../../guides/ci-runners.md)
 and the [installer facade](../14-installer-facade.md) for their own boundaries.

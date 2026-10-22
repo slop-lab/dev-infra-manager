@@ -40,16 +40,16 @@ it("does not follow replacement symlinks in recovery checkpoints", async () => {
 });
 it("permits a real forward-readable format upgrade without claiming reverse compatibility", async () => {
   const runner: ControlPlaneDockerRunner = { async run({ args }) {
-    const value = args.includes("compatibility") ? { schemaVersion: 1, writeFormat: 11, readableFormats: [10, 11] }
-      : { schemaVersion: 1, stateFormat: 10 };
+    const value = args.includes("compatibility") ? { schemaVersion: 1, writeFormat: 12, readableFormats: [10, 11, 12] }
+      : { schemaVersion: 1, stateFormat: 11 };
     return { exitCode: 0, stderr: "", stdout: `${JSON.stringify(value)}\n` };
   } };
   await expect(forwardReadable(runner, "new-image", "native-git")).resolves.toBeUndefined();
 });
 it("refuses a candidate that cannot read the stopped state format", async () => {
   const runner: ControlPlaneDockerRunner = { async run({ args }) {
-    const value = args.includes("compatibility") ? { schemaVersion: 1, writeFormat: 11, readableFormats: [11] }
-      : { schemaVersion: 1, stateFormat: 10 };
+    const value = args.includes("compatibility") ? { schemaVersion: 1, writeFormat: 12, readableFormats: [12] }
+      : { schemaVersion: 1, stateFormat: 11 };
     return { exitCode: 0, stderr: "", stdout: `${JSON.stringify(value)}\n` };
   } };
   await expect(forwardReadable(runner, "new-image", "native-git")).rejects.toThrow(/cannot read/);
