@@ -15,12 +15,13 @@ New passwords are generated and shown once; reset-password replaces the existing
 `;
 
 export async function runAccountCli(args: readonly string[]): Promise<void> {
-  if (args.length === 0 || args.includes("--help")) { process.stdout.write(accountUsage); return; }
+  if (args.length === 0 || args[0] === "--help") { process.stdout.write(accountUsage); return; }
   const [operation, ...rest] = args;
   if (!["list", "add", "set-roles", "reset-password", "remove"].includes(operation!)) throw new Error("Unknown account command; run dim-web account --help");
   const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: {
-    config: { type: "string" }, roles: { type: "string" }, json: { type: "boolean" }
+    config: { type: "string" }, roles: { type: "string" }, json: { type: "boolean" }, help: { type: "boolean" }
   } });
+  if (values.help) { process.stdout.write(accountUsage); return; }
   const file = values.config ?? defaultWebAccountConfig();
   if (operation === "list") {
     if (positionals.length || values.roles !== undefined) throw new Error("account list accepts only --config and --json");

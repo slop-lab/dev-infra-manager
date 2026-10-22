@@ -1,11 +1,12 @@
 import { chmod, link, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { changeWebAccount, listWebAccounts, parseAccountRoles } from "../../packages/web/core/src/accounts.js";
 import { loadWebConfig, MAX_CONFIG_BYTES } from "../../packages/web/core/src/config.js";
 import { AccountAuthenticator } from "../../packages/web/core/src/session.js";
 import { webConfig, WEB_PASSWORD, WEB_USERNAME } from "./webHarness.js";
+import { runAccountCli } from "../../packages/web/core/src/account-cli.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -68,4 +69,15 @@ it("rejects an oversized update before replacing an otherwise loadable configura
   await expect(changeWebAccount(file, { operation: "add", username: "reviewer", roles: ["read", "reviewer"] })).rejects.toThrow("64 KiB");
   expect(await readFile(file, "utf8")).toBe(original);
   expect(await listWebAccounts(file)).toHaveLength(1);
+});
+
+it("treats a username after the option delimiter literally even when it is --help", async () => {
+  const { file } = await fixture();
+  const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  try {
+    await runAccountCli(["add", "--config", file, "--roles", "read", "--", "--help"]);
+    expect((await listWebAccounts(file))[1]?.username).toBe("--help");
+    await runAccountCli(["set-roles", "--config", file, "--roles", "read,reviewer", "--", "--help"]);
+    expect((await listWebAccounts(file))[1]?.roles).toEqual(["read", "reviewer"]);
+  } finally { output.mockRestore(); }
 });
