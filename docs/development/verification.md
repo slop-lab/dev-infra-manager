@@ -94,6 +94,14 @@ GitHub uploads per-lane source-check logs even on failure, separately from the
 exact-source evidence. No installed DIM service or provider credential is needed
 for this source gate.
 
+The managed branch browser check starts disposable Native Git and Web services,
+then creates a `development` → `main` proposal, verifies the required reviewer,
+approves it and promotes it through the UI. With Chromium installed, run:
+
+```bash
+DIM_CHROMIUM=/absolute/path/to/chromium pnpm --dir tests exec tsx --conditions=dim-source web/plugins/nativeBranchMerge.e2e.ts
+```
+
 `pnpm --dir tests test:scenarios` runs cross-package checks on an ordinary developer
 host. It packages existing matched `dist` outputs when testing installation; it
 does not rebuild shared packages. Run `just build-packages` first.
