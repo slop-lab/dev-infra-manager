@@ -83,3 +83,15 @@ it("fences cached console generations before a review mutation or refreshed disc
   await expect(invokeNativeProjectConsole("reviews.approve", { projectId: "project-a", repositoryId: "public", reviewId: "a".repeat(64) }, generationId, f.env)).rejects.toThrow("generation changed; reconnect");
   await expect(describeNativeProjectConsole(f.env, generationId)).rejects.toThrow("generation changed; reconnect");
 });
+
+it("keeps review reads independent of unrelated repository-management credentials", async () => {
+  const f = await fixture(); await f.importRepository("public");
+  await chmod(f.importerConnectionFile, 0o644);
+  expect(await invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).toEqual([]);
+  await expect(invokeNativeProjectConsole("projects.create", { projectId: "new-project" }, generationId, f.env)).rejects.toThrow();
+  // Every new review invocation still checks authoritative workspace readiness.
+  const selected = JSON.parse(await readFile(f.hostFile, "utf8"));
+  selected.nativeGit.workspaceWriteIssuer.password = Buffer.alloc(32, 99).toString("base64url");
+  await writeFile(f.hostFile, JSON.stringify(selected));
+  await expect(invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).rejects.toThrow("current project catalog");
+});

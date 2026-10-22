@@ -70,7 +70,7 @@ grants are preserved. Old approvals do not authorize the replacement policy.
 Repeat the same command to reconcile a host refresh after a lost response. See
 [Git synchronization](../../../../docs/guides/git-sync.md) for setup and examples.
 
-Clients pin the discovery result: subsequent discovery may pass `--expected-generation HASH`, and every `dim project console invoke OPERATION --expected-generation HASH --input JSON --json` must pass it. A changed selection fails before role attestation or mutation and requires reconnecting explicitly. Every invocation reloads the local project catalog and validates the requested project and repository; adding an imported repository needs no Web configuration. The shared `@slop-lab/dim-native-git-client` owns HTTP/evidence decoding and operation semantics; this plugin owns controller selection and namespace scope.
+Clients pin the discovery result: subsequent discovery may pass `--expected-generation HASH`, and every `dim project console invoke OPERATION --expected-generation HASH --input JSON --json` must pass it. A changed selection fails before role attestation or mutation and requires reconnecting explicitly. Every invocation reloads the local project catalog and validates the requested project and repository; adding an imported repository needs no Web configuration. The shared `@slop-lab/dim-native-git-client` owns HTTP/evidence decoding and operation semantics; this plugin owns controller selection and namespace scope. Review and sync invocations validate current scope once per request, without preparing unrelated repository importer/registrar capabilities. No repository readiness or authorization result is cached across invocations.
 
 ### Public repository imports
 

@@ -134,7 +134,10 @@ is implied by these source changes.
   tool lifecycle availability and copyable connection details. Guide worker setup
   from empty execution state, reopen Codex sign-in and draft routes from account
   model catalogs. Keep accepted Git operations successful when follow-up reads fail
-  and bind confirmations to the original repository and branch.
+  and bind confirmations to the original repository and branch. Keep review list
+  and detail reads responsive as history grows without relaxing exact approval
+  checks; explain unavailable approval actions beside the review and link browser
+  account access settings.
   Keep unrelated features usable when a service is unavailable; reconnect a
   configured feature without losing drafts. Distinguish accepted changes from
   failed follow-up reads. Local source installation includes the feature panels
