@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -42,7 +42,7 @@ export async function fixture(groups = "operator docker kvm"): Promise<Fixture> 
   const trustedNode = resolve(root, "trusted-node/bin/node");
   const sourceTools = resolve(root, "source-tools");
   const trustedNodeLog = resolve(root, "trusted-node.log");
-  await Promise.all([mkdir(resolve(source, "scripts/lib"), { recursive: true }), mkdir(resolve(trustedNode, ".."), { recursive: true }), mkdir(resolve(sourceTools, "bin"), { recursive: true }), mkdir(tools), mkdir(helpers), mkdir(home)]);
+  await Promise.all([mkdir(resolve(source, "scripts/lib"), { recursive: true }), mkdir(resolve(source, "scripts/local-control-plane"), { recursive: true }), mkdir(resolve(source, "scripts/local-uninstall"), { recursive: true }), mkdir(resolve(trustedNode, ".."), { recursive: true }), mkdir(resolve(sourceTools, "bin"), { recursive: true }), mkdir(tools), mkdir(helpers), mkdir(home)]);
   await writeFile(log, "");
   await writeFile(resolve(source, "package.json"), '{"version":"0.10.0"}\n');
   await writeFile(resolve(root, "os-release"), 'ID=ubuntu\nVERSION_ID="24.04"\n');
@@ -116,6 +116,9 @@ fi
    cat >.local/dim-packages/packages.json <<'JSON'
 {"schemaVersion":1,"packages":[{"name":"@slop-lab/dim-cli","version":"${bundleVersion}","file":"slop-lab-dim-cli-${bundleVersion}.tgz"},{"name":"@slop-lab/dim-installer","version":"${bundleVersion}","file":"slop-lab-dim-installer-${bundleVersion}.tgz"}]}
 JSON
+   cat >.local/dim-packages/control-plane-images.json <<'JSON'
+{"schemaVersion":1,"native-git":{"tag":"dim-local-native-git:${bundleVersion}","id":"sha256:${"0".repeat(64)}"},"execution":{"tag":"dim-local-execution:${bundleVersion}","id":"sha256:${"0".repeat(64)}"}}
+JSON
    : >.local/dim-packages/slop-lab-dim-cli-${bundleVersion}.tgz
    : >.local/dim-packages/slop-lab-dim-installer-${bundleVersion}.tgz
    printf 'root=${reviewedSha}\\naggregate-lock-sha256=%064d\\n' 0 >.local/dim-packages/.dim-source-state
@@ -154,6 +157,8 @@ exec ${JSON.stringify(process.execPath)} "$@"
   await writeFile(state, await readFile(resolve(workspaceRoot, "scripts/lib/bootstrap-host-state.bash"), "utf8"));
   await writeFile(resolve(source, "scripts/local-package-version.bash"), await readFile(resolve(workspaceRoot, "scripts/local-package-version.bash"), "utf8"));
   await writeFile(resolve(source, "scripts/local-preparation-state.bash"), await readFile(resolve(workspaceRoot, "scripts/local-preparation-state.bash"), "utf8"));
+  await Promise.all(["local-control-plane/images.ts", "local-uninstall/command.ts", "local-uninstall/files.ts"].map((script) =>
+    copyFile(resolve(workspaceRoot, "scripts", script), resolve(source, "scripts", script))));
   await writeFile(facadeInstaller, await readFile(resolve(workspaceRoot, "scripts/lib/install-candidate-facade.bash"), "utf8"));
   await chmod(facadeInstaller, 0o755);
   const sourceText = await readFile(bootstrapSource, "utf8");

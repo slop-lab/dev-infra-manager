@@ -24,20 +24,22 @@ async function createFixture(): Promise<Fixture> {
   const packageRoot = resolve(root, ".local/dim-packages");
   const log = resolve(root, "invocations.log");
   const oldFacadeMutation = resolve(root, "old-facade-mutated");
-  await Promise.all([scripts, tools, packageRoot].map((directory) => mkdir(directory, { recursive: true })));
+  await Promise.all([scripts, tools, packageRoot, resolve(scripts, "local-uninstall")].map((directory) => mkdir(directory, { recursive: true })));
   await Promise.all(
-    ["install-source-build.bash", "local-package-version.bash"].map((script) =>
+    ["install-source-build.bash", "local-package-version.bash", "install-local-profile.ts", "local-uninstall/command.ts", "local-uninstall/files.ts"].map((script) =>
       copyFile(resolve(workspaceRoot, "scripts", script), resolve(scripts, script))
     )
   );
-  for (const helper of ["install-local-web.ts", "install-local-llm-operator.ts", "install-local-llm-gateway.ts", "install-local-shared-ingress.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
+  for (const helper of ["install-local-control-plane.ts", "install-local-web.ts", "install-local-llm-operator.ts", "install-local-llm-gateway.ts", "install-local-shared-ingress.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
     'import { appendFileSync } from "node:fs"; appendFileSync(process.env.DIM_INVOCATIONS!, `web-helper ${process.argv[1]} ${process.argv.slice(2).join(" ")}\\n`);\n');
   await writeFile(resolve(root, ".local/prepared-local.state"), "state=fresh\n");
   await writeFile(
     resolve(packageRoot, "packages.json"),
     `${JSON.stringify({ schemaVersion: 1, packages: [
       { name: "@slop-lab/dim-cli", version: packageVersion, file: "slop-lab-dim-cli-local.tgz" },
-      { name: "@slop-lab/dim-installer", version: packageVersion, file: "slop-lab-dim-installer-local.tgz" }
+      { name: "@slop-lab/dim-installer", version: packageVersion, file: "slop-lab-dim-installer-local.tgz" },
+      ...["dns-cloudflare", "external-urls", "mirrors"].map((name) => ({ name: `@slop-lab/dim-host-plugin-${name}`, version: packageVersion, file: `slop-lab-dim-host-plugin-${name}-local.tgz` })),
+      { name: "@slop-lab/dim-control-plane-plugin-git-repositories", version: packageVersion, file: "slop-lab-dim-control-plane-plugin-git-repositories-local.tgz" }
     ] })}\n`
   );
   await writeFile(resolve(packageRoot, "slop-lab-dim-cli-local.tgz"), "");
@@ -46,6 +48,7 @@ async function createFixture(): Promise<Fixture> {
   await writeFile(resolve(packageRoot, "slop-lab-dim-host-plugin-external-urls-local.tgz"), "");
   await writeFile(resolve(packageRoot, "slop-lab-dim-host-plugin-mirrors-local.tgz"), "");
   await writeFile(resolve(packageRoot, "unrelated-plugin-local.tgz"), "");
+  await writeFile(resolve(packageRoot, "slop-lab-dim-control-plane-plugin-git-repositories-local.tgz"), "");
   await writeFile(resolve(scripts, "local-preparation-state.bash"), `#!/usr/bin/bash
 expected_ref=${JSON.stringify(imageRef)}
 [[ "$DIM_LOCAL_IMAGE_INSPECT_REF" == "$expected_ref" ]]
@@ -116,31 +119,38 @@ afterEach(async () => {
 });
 
 describe("Project local install facade", () => {
-  it("installs the prepared base CLI without activating optional plugins or controller", async () => {
+  it("installs the complete prepared development profile and restarts the controller", async () => {
     const fixture = await createFixture();
     const result = runInstaller(fixture);
     const invocations = await readFile(fixture.log, "utf8");
     expect(result.status, result.stderr).toBe(0);
-    expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin$/m);
+    expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin --with-managed$/m);
+    expect(invocations).toContain("/scripts/install-local-control-plane.ts ");
     expect(invocations).toContain("/scripts/install-local-web.ts ");
+    expect(invocations.indexOf("installer install control-plane plugin ")).toBeLessThan(invocations.indexOf("/scripts/install-local-control-plane.ts "));
+    expect(invocations.indexOf("/scripts/install-local-control-plane.ts ")).toBeLessThan(invocations.indexOf("/scripts/install-local-web.ts "));
     expect(invocations).toContain("/scripts/install-local-llm-operator.ts ");
     expect(invocations).toContain("/scripts/install-local-shared-ingress.ts ");
     expect(invocations.indexOf("/scripts/install-local-llm-operator.ts ")).toBeLessThan(invocations.indexOf("/scripts/configure-local-web.ts "));
-    expect(invocations).not.toContain("installer install plugin");
-    expect(invocations).not.toContain("controller restart");
+    expect(invocations).toContain(`installer install plugin --local-packages ${fixture.root}/.local/dim-packages @slop-lab/dim-host-plugin-dns-cloudflare@${packageVersion} @slop-lab/dim-host-plugin-external-urls@${packageVersion} @slop-lab/dim-host-plugin-mirrors@${packageVersion}`);
+    expect(invocations).toContain(`installer install control-plane plugin --local-packages ${fixture.root}/.local/dim-packages @slop-lab/dim-control-plane-plugin-git-repositories@${packageVersion}`);
+    expect(invocations).toContain("controller restart");
+    expect(invocations).not.toContain("unrelated-plugin");
     expect(invocations).not.toContain("old-dim");
     expect(invocations.split("\n")[0]).toBe(`state ${imageRef} ${imageRef}`);
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("selects the managed library without activating optional plugins or services", async () => {
+  it("accepts --with-managed as the same complete development profile", async () => {
     const fixture = await createFixture();
     const result = runInstaller(fixture, {}, ["--with-managed"]);
     const invocations = await readFile(fixture.log, "utf8");
     expect(result.status, result.stderr).toBe(0);
     expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin --with-managed$/m);
-    expect(invocations).not.toContain("installer install plugin");
-    expect(invocations).not.toContain("controller restart");
+    expect(invocations).toContain(`installer install plugin --local-packages ${fixture.root}/.local/dim-packages @slop-lab/dim-host-plugin-dns-cloudflare@${packageVersion} @slop-lab/dim-host-plugin-external-urls@${packageVersion} @slop-lab/dim-host-plugin-mirrors@${packageVersion}`);
+    expect(invocations).toContain(`installer install control-plane plugin --local-packages ${fixture.root}/.local/dim-packages @slop-lab/dim-control-plane-plugin-git-repositories@${packageVersion}`);
+    expect(invocations).toContain("controller restart");
+    expect(invocations).not.toContain("unrelated-plugin");
   });
 
   it("preserves prepared and installed bytes when target compatibility refuses", async () => {
@@ -178,6 +188,8 @@ describe("Project local install facade", () => {
     expect(invocations).toMatch(/^target-dim installer install core /m);
     expect(invocations).not.toContain("old-dim");
     expect(invocations).not.toContain("installer install plugin");
+    expect(invocations).not.toContain("/scripts/install-local-control-plane.ts");
+    expect(invocations).not.toContain("controller restart");
     expect(await Promise.all(protectedPaths.map((path) => readFile(path)))).toEqual(before);
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   });
