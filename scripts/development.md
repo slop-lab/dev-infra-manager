@@ -106,3 +106,51 @@ It starts only an authenticated loopback backend. The static
 its workspace-owned temporary volume stays outside `/tmp` and authentication
 configuration. For local access use a separately configured local client
 origin rather than weakening the default Pages CORS policy.
+
+## Local control-plane format upgrades
+
+The published installer requires old and new service images to read each other's
+state formats so ordinary updates can roll back safely. For a local development
+installation that intentionally changes state format, this source-only helper
+uses a downtime checkpoint instead. Build workspace packages first, then run
+from the repository root:
+
+```bash
+node --import ./tests/node_modules/tsx/dist/loader.mjs --conditions=dim-source \
+  scripts/upgrade-local-control-plane.ts \
+  /absolute/setup/install.json \
+  "$HOME/.local/state/dim/control-plane" \
+  "$PWD/.local/backups"
+```
+
+It validates the selected pinned images/configuration, stops both exact-owned
+services and confirms neither process is running, and archives both data volumes
+with their ownership and modes. It verifies that the candidate reads the stopped
+state, then creates, records and activates a normal installer generation. It
+keeps the checkpoint directory even after success. This helper is not packaged
+or published and changes no installer compatibility policy.
+
+If candidate preparation or activation fails, the helper first stops the owned
+services again, verifies both archive digests before touching either volume,
+restores both checkpoints, and then restores the exact prior service generation.
+Before removing a failed candidate, it makes a bounded best-effort capture of
+both service logs into mode-0600 `diagnostics-*.log` files in the checkpoint.
+These files may contain secrets and are never printed by the helper; failures
+to collect diagnostics do not prevent data restoration.
+It refuses to continue recovery when stopping a process, checking an archive or
+restoring a volume has an uncertain outcome. Never start an old image against
+new-format data before both prior checkpoints have been restored.
+
+An interrupted process leaves evidence for explicit operator recovery rather
+than automatically adopting an incomplete transaction: the backup directory
+contains private `prior-install.json`, `prior-compose.yml`, both service archives,
+`recovery.json` with their digests, and `phase-*` markers. The installer state
+retains its transaction journal and generation artifacts. `phase-data-restored`
+means both archives were restored; `phase-complete` means the candidate was
+activated and its transaction completed. If `recovery.json` is absent, a complete
+checkpoint pair was not established and no candidate was started. For manual
+recovery, the source helper's `stopOwnedServices` and `restoreVolumes` functions
+provide the same stopped-process and complete-pair checks; retain the existing
+journal until the matching prior or candidate generation has been verified and
+activated. Do not clear the journal or replace installed records to bypass
+recovery validation.
