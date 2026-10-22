@@ -38,3 +38,31 @@ isolated backend, independently of the DIM Web session. The panel displays the
 authorization code and checks completion automatically; multiple accounts may
 authorize independently. The corresponding CLI plugin and Web plugin use the
 same typed operation API.
+
+Request and workspace-principal rows link to their exact routing project through
+the shared Web navigation action. The destination accepts only a routing-project
+target that exists in the router's loaded project catalog. Opening the current
+project focuses its policy without replacing an unsaved draft; opening another
+project keeps the existing dirty-policy confirmation, and cancellation leaves the
+current selection unchanged. Router project IDs are not interpreted as Native Git
+projects, workspace hosts or any other provider identity.
+
+An operator resolving an indeterminate request may enter both observed input and
+output token counts as nonnegative integers, or leave both blank to retain unknown
+usage. Partial or invalid accounting remains in a request-scoped draft and sends
+no operation. Drafts survive router refresh and feature navigation. A failed
+resolution preserves the fields for retry. A response with an unknown outcome
+locks that exact request and keeps its draft until an explicit successful
+**Refresh router** reads authoritative request state. If the request is still
+unresolved, the draft reopens for retry; if the router already accepted it, the
+UI does not resend the mutation. Known service rejections remain immediately
+editable and retryable. Once the router accepts a resolution, the draft is
+cleared and repeat mutation is blocked even when the subsequent request-list
+refresh fails; the UI reports the accepted resolution separately from that read
+failure.
+
+Resolving execution uncertainty without usage releases occupancy but retains
+accounting reconciliation. The finished request then offers **Record observed
+usage**, requiring both nonnegative counts and calling the same audited
+`request.resolve` operation without replaying inference. Read-only sessions show
+request metadata without resolution fields or mutation controls.

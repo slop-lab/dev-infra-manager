@@ -1,5 +1,6 @@
 // @ts-check
 import { mountAccounts } from "./accounts.js";
+import { mountTraffic } from "./traffic.js";
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
 /** @param {unknown} value @returns {Record<string,unknown>} */
 function object(value) { return value !== null && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string,unknown>} */ (value) : {}; }
@@ -21,32 +22,13 @@ function action(parent, label, run, message) {
 function table(parent, headings, values) {
   parent.append(context.ui.table(headings, values.map((cells) => cells.map(text))));
 }
-  let alive = true, selectedProject = "", projectRevision = "", policyDirty = false, savingPolicy = false, projectLoad = 0, policyEdits = 0;
+  let alive = true, selectedProject = "", projectRevision = "", policyDirty = false, savingPolicy = false, projectLoad = 0, policyEdits = 0, initialLoadFailed = false;
   /** @type {Record<string,unknown>[]} */ let projectRows = [];
   const current = () => alive && context.isCurrent();
   /** @param {string} name */ const has = (name) => context.operations.some((operation) => operation.name === name);
   const toolbar = node("div", "", "feature-actions"), message = node("p"); message.setAttribute("role", "status"); container.append(toolbar, message);
-  const overview = node("section", "", "panel"), projects = node("section", "", "panel"), policy = node("section", "", "panel"), traffic = node("section", "", "panel"), principals = node("section", "", "panel");
-  container.append(overview, projects, policy, traffic, principals); policy.hidden = true;
-  const requestList = node("div"), principalList = node("div"), trafficStatus = node("p"), principalStatus = node("p"), trafficReceipt = node("p"), principalReceipt = node("p");
-  traffic.append(node("h2", "Recent requests"), trafficStatus, trafficReceipt, requestList);
-  const requestFilters = node("div", "", "workspace-filters");
-  const requestSearch = input(requestFilters, "Find requests"), requestState = context.ui.select(requestFilters, "Request state", [{ value: "all", label: "All requests" }, { value: "active", label: "Active" }, { value: "unknown", label: "Unknown outcome" }]);
-  requestSearch.placeholder = "Project, model, account or request ID";
-  requestList.before(requestFilters);
-  function filterRequests() {
-    const query = requestSearch.value.trim().toLowerCase();
-    let matches = 0;
-    for (const row of requestList.querySelectorAll("article")) {
-      row.hidden = !row.dataset.search?.includes(query) || requestState.value === "active" && row.dataset.active !== "true" || requestState.value === "unknown" && row.dataset.unknown !== "true";
-      if (!row.hidden) matches++;
-    }
-    requestEmpty.hidden = matches !== 0 || requestList.querySelectorAll("article").length === 0;
-  }
-  const requestEmpty = node("p", "No requests match these filters."); requestEmpty.hidden = true; traffic.append(requestEmpty);
-  requestSearch.addEventListener("input", filterRequests); requestState.addEventListener("change", filterRequests);
-  principals.append(node("h2", "Workspace access"), principalStatus, principalReceipt, principalList);
-  for (const feedback of [trafficStatus, principalStatus, trafficReceipt, principalReceipt]) feedback.setAttribute("role", "status");
+  const overview = node("section", "", "panel"), projects = node("section", "", "panel"), policy = node("section", "", "panel");
+  container.append(overview, projects, policy); policy.hidden = true;
   /** @param {HTMLButtonElement} button @param {HTMLElement} feedback @param {string} receipt @param {Array<[string,()=>Promise<unknown>]>} reads */
   async function accepted(button, feedback, receipt, reads) {
     button.dataset.accepted = "true"; feedback.setAttribute("role", "status"); feedback.textContent = receipt;
@@ -61,6 +43,7 @@ function table(parent, headings, values) {
   const health = node("div");
   const accountsContainer = node("div"); overview.after(accountsContainer);
   const accountManager = mountAccounts(accountsContainer, context, refresh);
+  const trafficManager = mountTraffic(container, context, { current });
   /** @type {HTMLSelectElement|null} */ let routeSelect = null;
   if (has("project.create")) {
     const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "New routing project"; details.append(summary); projects.append(details);
@@ -80,7 +63,7 @@ function table(parent, headings, values) {
     for (const project of projectRows) {
       const row = node("article", "", "operations-row"), id = text(project.id), actions = node("div", "", "feature-actions");
       row.append(node("h3", id), node("p", `${project.enabled === false ? "Disabled" : project.paused === true ? "Paused" : "Accepting requests"} · Routes: ${Array.isArray(object(project.policy).allowedRoutes) ? object(project.policy).allowedRoutes : "—"}`), actions);
-      action(actions, `Open ${id}`, () => openProject(id), projectMessage);
+      action(actions, `Open ${id}`, async () => { await openProject(id); }, projectMessage);
       if (has("project.state")) for (const state of project.enabled === false ? ["enable"] : project.paused === true ? ["resume", "disable"] : ["pause", "disable"]) {
         action(actions, `${state[0]?.toUpperCase()}${state.slice(1)} ${id}`, async (button) => {
           if (state === "disable" && !window.confirm(`Disable new requests for ${id}? Existing request outcomes still need inspection.`)) { projectMessage.textContent = "No project state changed."; return; }
@@ -91,14 +74,14 @@ function table(parent, headings, values) {
       projectList.append(row);
     }
   }
-  /** @param {string} id */
-  async function openProject(id) {
-    if (savingPolicy) { projectMessage.textContent = 'Wait for the current policy save before opening another project.'; return; }
-    if (policyDirty && !window.confirm(`Discard unsaved policy changes for ${selectedProject} and load ${id}?`)) return;
+  /** @param {string} id @param {()=>boolean} [isCurrent] */
+  async function openProject(id, isCurrent = current) {
+    if (savingPolicy) { projectMessage.textContent = 'Wait for the current policy save before opening another project.'; return "blocked"; }
+    if (policyDirty && !window.confirm(`Discard unsaved policy changes for ${selectedProject} and load ${id}?`)) return "blocked";
     const selectedLoad = ++projectLoad, editsAtLoad = policyEdits;
     const [value, usage] = await Promise.all([context.invoke("project.policy", { projectId: id }), context.invoke("usage", { projectId: id })]);
-    if (!current() || selectedLoad !== projectLoad) return;
-    if (editsAtLoad !== policyEdits) { projectMessage.textContent = 'Project navigation stopped because the policy changed while loading. Your edits are kept; open the project again when ready.'; return; }
+    if (!current() || !isCurrent() || selectedLoad !== projectLoad) return "blocked";
+    if (editsAtLoad !== policyEdits) { projectMessage.textContent = 'Project navigation stopped because the policy changed while loading. Your edits are kept; open the project again when ready.'; return "blocked"; }
     selectedProject = id;
     policyDirty = false;
     const project = object(value), settings = object(project.policy), limits = object(settings.limits), consumption = object(usage), allowance = object(consumption.allowance);
@@ -143,52 +126,12 @@ function table(parent, headings, values) {
       form.addEventListener("submit", (event) => { event.preventDefault(); submit.click(); });
     } else for (const control of form.querySelectorAll("input,select")) if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) control.disabled = true;
     policy.scrollIntoView({ block: "nearest" });
+    return "opened";
   }
-  async function refreshRequests() {
-    const requests = await context.invoke("requests", { limit: 100 }); if (!current()) return;
-    requestList.replaceChildren(); trafficStatus.textContent = "";
-    const requestRows = rows(requests); if (!requestRows.length) requestList.append(node("p", "No requests recorded yet."));
-    for (const request of requestRows) {
-      const id = text(request.id), row = node("article", "", "operations-row"), feedback = node("p"); feedback.setAttribute("role", "status");
-      row.dataset.search = [request.id, request.project_id, request.model, request.account_id].map(text).join(" ").toLowerCase();
-      row.dataset.active = String(request.outcome === "running" || request.occupied === 1);
-      row.dataset.unknown = String(request.execution === "outcome_unknown");
-      row.append(node("h3", `${text(request.project_id)} · ${text(request.model)}`), node("p", `${text(request.outcome)} · Execution ${text(request.execution)} · Usage ${text(request.accounting)}`), node("p", `Request ${id}`, "field-hint"), feedback);
-      const details = document.createElement("details"); details.append(node("summary", "Request metadata"));
-      table(details, ["Field", "Value"], [["Account", request.account_id], ["Started", new Date(Number(request.started_at)).toLocaleString()], ["Finished", request.finished_at === null ? "Not finished" : new Date(Number(request.finished_at)).toLocaleString()], ["Delivery", request.delivery], ["Input tokens", request.input_tokens ?? "Unknown"], ["Output tokens", request.output_tokens ?? "Unknown"], ["Cancellation requested", request.cancel_requested ? "Yes" : "No"], ["Error code", request.error_code ?? "None"]]); row.append(details);
-      if (has("request.cancel") && (request.outcome === "running" || request.occupied === 1)) action(row, `Request cancellation ${id.slice(0, 8)}`, async () => { await context.invoke("request.cancel", { requestId: id }); if (current()) feedback.textContent = "Cancellation requested. Upstream termination is not confirmed; inspect the eventual outcome."; }, feedback);
-      if (has("request.resolve") && request.execution === "outcome_unknown") action(row, `Resolve unknown outcome ${id.slice(0, 8)}`, async (button) => {
-        if (!window.confirm(`Resolve unknown outcome for ${id}? This does not infer token usage or replay inference.`)) { feedback.textContent = "No request was resolved."; return; }
-        await context.invoke("request.resolve", { requestId: id }); if (current()) { feedback.textContent = ""; await accepted(button, trafficReceipt, "Resolution recorded; token usage was not supplied.", [["recent requests", refreshRequests]]); }
-      }, feedback);
-      requestList.append(row);
-    }
-    filterRequests();
-  }
-  async function refreshPrincipals() {
-    const credentials = await context.invoke("principals"); if (!current()) return;
-    principalList.replaceChildren(); principalStatus.textContent = "";
-    const credentialRows = rows(credentials); if (!credentialRows.length) principalList.append(node("p", "No workspace principals issued yet."));
-    for (const principal of credentialRows) {
-      const row = node("article", "", "operations-row"), feedback = node("p"); feedback.setAttribute("role", "status");
-      row.append(node("h3", `${text(principal.workspace_name)} · ${text(principal.project_id)}`), node("p", `Route ${text(principal.route_id)} · ${principal.enabled === 1 ? "Enabled" : "Revoked"}`), feedback);
-      if (has("principal.revoke") && principal.enabled === 1) action(row, `Revoke ${text(principal.workspace_name)}`, async (button) => {
-        if (!window.confirm(`Revoke ${text(principal.workspace_name)} access to ${text(principal.project_id)}? Reattachment requires host authorization.`)) { feedback.textContent = "No access was revoked."; return; }
-        await context.invoke("principal.revoke", { principalId: text(principal.id) }); if (current()) { feedback.textContent = ""; await accepted(button, principalReceipt, `${text(principal.workspace_name)} access revoked.`, [["workspace access", refreshPrincipals]]); }
-      }, feedback);
-      principalList.append(row);
-    }
-  }
-  async function refreshTraffic() {
-    const results = await Promise.allSettled([refreshRequests(), refreshPrincipals()]); if (!current()) return false;
-    for (const [index, feedback, label] of /** @type {Array<[number,HTMLElement,string]>} */ ([[0, trafficStatus, "Recent requests"], [1, principalStatus, "Workspace access"]])) {
-      if (results[index]?.status === "rejected") { feedback.setAttribute("role", "alert"); feedback.textContent = `${label} could not refresh. Previously loaded rows are kept; use Refresh router to retry this read.`; }
-      else feedback.setAttribute("role", "status");
-    }
-    return results.every((result) => result.status === "fulfilled");
-  }
-  async function refresh() {
+  /** @param {boolean} [reconcileUnknown] */
+  async function refresh(reconcileUnknown = false) {
     const value = object(await context.invoke("overview")); if (!current()) return;
+    initialLoadFailed = false;
     overview.replaceChildren(node("h2", "Accounts & routes"), node("p", `${text(object(value.backend).name)} ${text(object(value.backend).version)} · Provider sign-in is managed by the backend.`));
     table(overview, ["Account", "Configured reference"], rows(value.accounts).map((account) => [account.id, account.reference]));
     table(overview, ["Route", "Account", "Models"], rows(value.routes).map((route) => [route.id, route.accountId, route.models === "all" ? "All models from this account" : rows(route.models).map((model) => `${text(model.id)} (${text(model.api)})`).join(", ")]));
@@ -200,13 +143,28 @@ function table(parent, headings, values) {
       table(health, ["Account", "Authentication", "Observed at"], rows(result).map((account) => [account.accountId, account.backendAuthentication, account.observedAt]));
       message.textContent = "Authentication checked without an inference request. Provider quota remains unknown.";
     }, message);
-    const results = await Promise.allSettled([refreshProjects(), refreshTraffic(), accountManager.refresh()]); if (!current()) return;
+    const results = await Promise.allSettled([refreshProjects(), trafficManager.refresh(reconcileUnknown), accountManager.refresh()]); if (!current()) return;
     if (results[0]?.status === "rejected") { projectMessage.setAttribute("role", "alert"); projectMessage.textContent = "Project list could not refresh. Previously loaded rows and policy drafts are kept; use Refresh router to retry this read."; }
     message.textContent = results.some((result) => result.status === "rejected" || result.value === false)
       ? "Some router sections could not refresh. Available results are shown below; retry the affected reads with Refresh router."
       : "Router state refreshed. Open a project to inspect usage and policy.";
   }
-  action(toolbar, "Refresh router", refresh, message); message.textContent = "Loading router state…";
-  void refresh().catch((error) => { if (current()) { message.setAttribute("role", "alert"); message.textContent = error instanceof Error ? error.message : "Router unavailable. Check the operator connection and retry."; } });
-  return () => { alive = false; accountManager.dispose(); };
+  action(toolbar, "Refresh router", async () => { await refresh(true); }, message); message.textContent = "Loading router state…";
+  const initialLoading = refresh().catch((error) => { initialLoadFailed = true; if (current()) { message.setAttribute("role", "alert"); message.textContent = error instanceof Error ? error.message : "Router unavailable. Check the operator connection and retry."; } });
+  const disposeNavigation = context.onNavigate(async (target, isCurrent) => {
+    await initialLoading;
+    if (!current() || !isCurrent()) return { status: "unavailable", code: "session-ended", message: "This navigation request is no longer current." };
+    if (initialLoadFailed) return { status: "unavailable", code: "load-failed", message: "Routing projects could not be loaded." };
+    if (target === null || typeof target !== "object" || Array.isArray(target) || Object.keys(target).length !== 2 || !("kind" in target) || !("projectId" in target) || target.kind !== "project" || typeof target.projectId !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(target.projectId)) return { status: "unavailable", code: "invalid-target", message: "The routing project target is invalid." };
+    const id = target.projectId;
+    if (!projectRows.some((project) => project.id === id)) return { status: "unavailable", code: "target-unavailable", message: `Routing project ${id} is not available.` };
+    if (selectedProject === id && !policy.hidden) {
+      const heading = policy.querySelector("h2"); if (heading instanceof HTMLElement) { heading.tabIndex = -1; heading.focus(); }
+      policy.scrollIntoView({ block: "nearest" });
+      return { status: "opened", message: `Routing project ${id} is already open.` };
+    }
+    try { return await openProject(id, isCurrent) === "opened" ? { status: "opened", message: `Opened routing project ${id}.` } : { status: "blocked", message: `Kept unsaved routing policy changes for ${selectedProject}.` }; }
+    catch (error) { return { status: "unavailable", code: "load-failed", message: error instanceof Error ? error.message : `Routing project ${id} could not be loaded.` }; }
+  });
+  return () => { alive = false; disposeNavigation(); trafficManager.dispose(); accountManager.dispose(); };
 }
