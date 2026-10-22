@@ -39,7 +39,9 @@ test("manifest import previews host-side YAML sources and rejects an unsafe mani
   await writeFile(manifest, "schemaVersion: 1\nrepositories:\n  root: {ref: main, protect: [main], upstream: {url: https://github.com/octocat/Hello-World.git, branch: master}}\n", { mode: 0o600 });
   const result = await runCli(["project", "repository", "import-manifest", "acme", "--manifest", manifest, "--preview", "--json"], fixture.environment);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout).repositories[0], { repositoryId: "root", url: "https://github.com/octocat/Hello-World.git", branch: "master", protectedRef: "refs/heads/main", policy: { "git-sync": { upstream: { url: "https://github.com/octocat/Hello-World.git", branch: "master" } } } });
+  assert.deepEqual(JSON.parse(result.stdout).repositories[0], { repositoryId: "root", url: "https://github.com/octocat/Hello-World.git", branch: "master", protectedRef: "refs/heads/main",
+    defaultRef: "refs/heads/main", branches: { "refs/heads/main": { review: true }, "refs/heads/development": { review: false } },
+    policy: { "git-sync": { upstream: { url: "https://github.com/octocat/Hello-World.git", branch: "master" } } } });
   await chmod(manifest, 0o620);
   const rejected = await runCli(["project", "repository", "import-manifest", "acme", "--manifest", manifest, "--json"], fixture.environment);
   assert.equal(rejected.status, 2, rejected.stderr);
