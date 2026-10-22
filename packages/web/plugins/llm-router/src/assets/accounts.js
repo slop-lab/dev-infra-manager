@@ -27,6 +27,7 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
   /** @type {Map<string,HTMLElement>} */ const sessionRows = new Map();
   /** @type {Map<string,Record<string,unknown>>} */ let accountRows = new Map();
   /** @type {Record<string,unknown>[]} */ let routes = [];
+  /** @type {(accountId:string,model:Record<string,unknown>)=>void} */ let useAccountModel = () => {};
   /** @type {(value:unknown)=>void} */ let setRoutes = () => {};
   /** @param {string} accountId @param {Record<string,unknown>} session */
   function renderSession(accountId, session) {
@@ -36,7 +37,7 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
     const sessionCurrent = () => current() && activeSessions.get(accountId) === session.sessionId;
     row.replaceChildren(node('h3', `Sign in to ${label}`));
     const status = node('p'); status.setAttribute('role', 'status'); row.append(status);
-    if (session.status === 'connected') { status.textContent = 'Account connected.'; return; }
+    if (session.status === 'connected') { activeSessions.delete(accountId); status.textContent = 'Account connected.'; return; }
     status.textContent = 'Open the authorization page and complete sign-in. Then check the connection here.';
     if (typeof session.verificationUrl === 'string') {
       const url = new URL(session.verificationUrl);
@@ -57,7 +58,7 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
     button(row, 'Check connection', check, status); schedule();
   }
   /** @param {string} accountId */
-  async function login(accountId) { const result = object(await context.invoke('account.login.start', { accountId })); if (current()) renderSession(accountId, result); }
+  async function login(accountId) { const existing = sessionRows.get(accountId); if (activeSessions.has(accountId) && existing) { existing.scrollIntoView({ block: 'nearest' }); return; } const result = object(await context.invoke('account.login.start', { accountId })); if (current()) renderSession(accountId, result); }
   async function refresh() {
     if (!has('accounts')) return;
     const result = rows(await context.invoke('accounts')); if (!current()) return;
@@ -68,11 +69,13 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
         const catalog = node('div'), catalogStatus = node('p'); catalogStatus.setAttribute('role', 'status'); row.append(catalogStatus, catalog);
         button(row, 'Inspect account models', async () => {
           const models = rows(await context.invoke('account.models', { accountId: id })); if (!current()) return;
-          catalog.replaceChildren(context.ui.table(['Model', 'API', 'Context tokens', 'Output tokens'], models.map((model) => [String(model.id), String(model.api), String(model.context), String(model.output)])));
+          const table = context.ui.table(['Model', 'API', 'Context tokens', 'Output tokens', ...(has('route.upsert') ? ['Route draft'] : [])], models.map((model) => [String(model.id), String(model.api), String(model.context ?? 'Unknown'), String(model.output ?? 'Unknown'), ...(has('route.upsert') ? [''] : [])]));
+          if (has('route.upsert')) models.forEach((model, index) => { const cell = table.querySelectorAll('tbody tr')[index]?.lastElementChild; if (cell instanceof HTMLElement) button(cell, `Use ${String(model.id)}`, async () => { useAccountModel(id, model); }, catalogStatus); });
+          catalog.replaceChildren(table);
           catalogStatus.textContent = models.length ? `${models.length} models available from this account. Provider quota is not inferred.` : 'No models returned by this account.';
         }, catalogStatus);
       }
-      if (account.provider === 'codex' && account.status !== 'connected' && has('account.login.start')) button(row, 'Sign in', async () => { await login(id); if (current()) feedback.textContent = 'Complete Codex sign-in below.'; }, feedback);
+      if (account.provider === 'codex' && has('account.login.start')) button(row, account.status === 'connected' ? 'Sign in again' : 'Sign in', async () => { await login(id); if (current()) feedback.textContent = 'Complete Codex sign-in below.'; }, feedback);
       if (account.provider !== 'backend' && has('account.rename')) {
         const details = document.createElement('details'); details.append(node('summary', 'Rename account'));
         const form = document.createElement('form'); form.setAttribute('aria-label', `Rename ${String(account.reference)}`); details.append(form);
@@ -127,6 +130,16 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
     addModel(); const routeFeedback = node('p'); routeFeedback.setAttribute('role', 'status'); form.append(routeFeedback);
     button(modelList, 'Add model', async () => { addModel(); routeFeedback.textContent = 'Model row added.'; form.dispatchEvent(new Event('input', { bubbles: true })); }, routeFeedback);
     const updateScope = () => { modelList.hidden = modelScope.value === 'all'; modelList.disabled = modelScope.value === 'all'; }; updateScope(); modelScope.addEventListener('change', updateScope);
+    useAccountModel = (accountId, model) => {
+      const changedAccount = accountSelect?.value !== accountId;
+      if (changedAccount && models.some((row) => row.id.value.trim()) && !window.confirm('Replace selected models with a model from this account?')) return;
+      if (accountSelect) accountSelect.value = accountId;
+      if (changedAccount || models.every((row) => !row.id.value.trim())) { for (const model of models) model.row.remove(); models = []; }
+      if (!models.some((row) => row.id.value === model.id)) addModel({ ...model, name: model.name || model.id });
+      modelScope.value = 'selected'; updateScope(); form.dispatchEvent(new Event('input', { bubbles: true }));
+      routeFeedback.textContent = `Model ${String(model.id)} added to the route draft. Enter a route ID and save the route.`;
+      routePanel.scrollIntoView({ block: 'nearest' }); if (!routeId.value) routeId.focus();
+    };
     const submit = button(form, 'Save route', async () => { if (!form.reportValidity() || (modelScope.value !== 'all' && !models.length)) { routeFeedback.textContent = modelScope.value === 'all' ? 'Enter a route ID and choose an account.' : 'Enter a route ID, choose an account and add at least one complete model.'; return; }
       const id = routeId.value.trim(); await context.invoke('route.upsert', { routeId: id, accountId: accountSelect?.value, models: modelScope.value === 'all' ? 'all' : models.map((model) => ({ id: model.id.value.trim(), name: model.name.value.trim(), api: model.api.value, ...(model.context.value ? { context: Number(model.context.value) } : {}), ...(model.output.value ? { output: Number(model.output.value) } : {}) })) }); if (!current()) return;
       submit.dataset.accepted = 'true'; routeFeedback.textContent = `Route ${id} saved.`; try { await refreshOverview(); } catch { if (current()) routeFeedback.textContent = `Route ${id} saved. Routes could not refresh; use Refresh router. The route was accepted.`; }

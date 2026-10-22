@@ -7,14 +7,14 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }), errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const accounts = [{ id: 'account-one', reference: 'Dedicated test account', provider: 'backend', status: 'configured' }];
-  const management = ['accounts', 'account.create', 'account.rename', 'account.login.start', 'account.login.status', 'route.upsert'];
+  const management = ['accounts', 'account.models', 'account.create', 'account.rename', 'account.login.start', 'account.login.status', 'route.upsert'];
   const writes: Array<{ name: string; input: Record<string, unknown> }> = [];
   let failAccounts = false;
   const savedRoutes: Array<{ id: unknown; accountId: unknown; models: unknown }> = [];
   await page.route('**/v1/extensions', async (route) => {
     const response = await route.fetch(), features = await response.json() as Array<{ id: string; operations: Array<{ name: string; description: string; access: string }> }>;
     const feature = features.find((value) => value.id === 'llm-router')!;
-    for (const name of management) if (!feature.operations.some((value) => value.name === name)) feature.operations.push({ name, description: name, access: name === 'accounts' ? 'read' : 'operator' });
+    for (const name of management) if (!feature.operations.some((value) => value.name === name)) feature.operations.push({ name, description: name, access: ['accounts', 'account.models'].includes(name) ? 'read' : 'operator' });
     await route.fulfill({ response, json: features });
   });
   await page.route('**/v1/extensions/llm-router/operations/*', async (route) => {
@@ -23,6 +23,7 @@ try {
     if (!management.includes(name)) { await route.continue(); return; }
     const input = route.request().postDataJSON() as Record<string, unknown>;
     if (name === 'accounts') { if (failAccounts) { failAccounts = false; await route.fulfill({ status: 503, json: { error: 'read unavailable' } }); } else await route.fulfill({ json: accounts }); return; }
+    if (name === 'account.models') { await route.fulfill({ json: [{ id: 'catalog-model', name: 'Catalog model', api: 'responses', context: 1050000, output: 128000 }] }); return; }
     writes.push({ name, input });
     if (name === 'account.create') { const account = { id: String(input.accountId ?? `${String(input.provider)}-${accounts.length}`), reference: String(input.reference ?? (input.provider === 'codex' ? 'Codex account' : 'API account')), provider: String(input.provider), status: input.provider === 'codex' ? 'authorization_required' : 'configured' }; accounts.push(account); await route.fulfill({ json: account }); }
     if (name === 'account.rename') { const account = accounts.find((value) => value.id === input.accountId)!; account.reference = String(input.reference); await route.fulfill({ json: account }); }
@@ -76,6 +77,22 @@ try {
   assert.equal(await page.getByLabel('Context tokens', { exact: true }).inputValue(), ''); assert.equal(await page.getByLabel('Output tokens', { exact: true }).inputValue(), '');
   await page.getByLabel('Context tokens', { exact: true }).fill('1050000'); await page.getByLabel('Output tokens', { exact: true }).fill('128000'); await page.getByRole('button', { name: 'Save route', exact: true }).click(); await page.getByText('Route secondary saved.', { exact: true }).waitFor();
   assert.deepEqual(writes.filter((value) => value.name === 'route.upsert').at(-1)?.input.models, [{ id: 'claude-test', name: 'Claude test', api: 'chat', context: 1050000, output: 128000 }]);
+  const workAccount = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Work account', exact: true }) });
+  await workAccount.getByRole('button', { name: 'Sign in again', exact: true }).waitFor();
+  await workAccount.getByRole('button', { name: 'Sign in again', exact: true }).click();
+  await page.getByText('Account connected.', { exact: true }).first().waitFor();
+  await page.getByLabel('Load route', { exact: true }).selectOption('');
+  await workAccount.getByRole('button', { name: 'Inspect account models', exact: true }).click();
+  await workAccount.getByRole('button', { name: 'Use catalog-model', exact: true }).click();
+  assert.equal(await page.getByLabel('Route account', { exact: true }).inputValue(), 'codex-1');
+  assert.equal(await page.getByLabel('Allowed models', { exact: true }).inputValue(), 'selected');
+  assert.equal(await page.getByLabel('Model ID', { exact: true }).inputValue(), 'catalog-model');
+  assert.equal(await page.getByLabel('Model name', { exact: true }).inputValue(), 'Catalog model');
+  assert.equal(await page.getByLabel('Context tokens', { exact: true }).inputValue(), '1050000');
+  await page.getByLabel('Route ID', { exact: true }).fill('catalog-route');
+  await page.getByRole('button', { name: 'Save route', exact: true }).click();
+  await page.getByText('Route catalog-route saved.', { exact: true }).waitFor();
+  assert.deepEqual(writes.filter((value) => value.name === 'route.upsert').at(-1)?.input, { routeId: 'catalog-route', accountId: 'codex-1', models: [{ id: 'catalog-model', name: 'Catalog model', api: 'responses', context: 1050000, output: 128000 }] });
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   assert.deepEqual(errors, []); assert.equal(fixture.inferenceRequests(), 0);
   console.log('LLM account UI: multiple providers, Codex device authorization, secret wiping, accepted write receipts, account route selection, all/selected model policy round trips and mobile PASS');

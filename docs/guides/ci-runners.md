@@ -86,10 +86,17 @@ installed generation, CI/Git endpoints, an owned state directory, Git executable
 and that worker's token. See the [complete example](../../examples/features/shared-execution/README.md).
 
 ```bash
-dim --host devbox control-plane ci worker /srv/dim/worker.json
+dim --host devbox execution worker /srv/dim/worker.json
 # Build the reviewed QEMU supervisor before choosing its deployed digest:
-dim --host devbox control-plane ci qemu-image registry.example/qemu-supervisor:reviewed
+dim --host devbox execution qemu-image registry.example/qemu-supervisor:reviewed
 ```
+
+The Web Execution page lists configured worker slots and shows setup guidance.
+An idle slot is a scheduler reservation state, not proof that its worker process
+is running. When a job remains queued with an idle matching slot, check the
+worker process and its service connection on the selected host. Generic plugin
+tasks share worker capacity; their task-specific controls belong to the owning
+plugin.
 
 The worker validates Docker and required Sysbox/KVM access before reserving
 jobs. Multiple Projects share configured slots; there is no per-Project runner

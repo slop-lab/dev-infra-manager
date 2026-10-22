@@ -13,7 +13,7 @@ const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.m
 type Input = { controllerId?: string; id?: string; requestId?: string };
 const calls: Array<{ name: string; input: Input }> = [];
 const descriptors = ["controllers.list", "jobs.list", "jobs.detail", "jobs.retry", "workers.list"].map((name) => ({ name, description: name, access: "read" }));
-let failInitialJobs = true, includeNavigationJob = false, failDiscovery = false;
+let failInitialJobs = true, includeNavigationJob = false, failDiscovery = false, emptyWorkers = false, queuedDetail = false;
 let heldJobs: "manual" | "discovery" | undefined;
 let releaseManualJobs: () => void = () => {}, markManualJobs: () => void = () => {};
 let releaseDiscoveryJobs: () => void = () => {}, markDiscoveryJobs: () => void = () => {};
@@ -28,7 +28,7 @@ let failRetry = true;
 let holdStaleRefresh = false, releaseStaleRefresh: () => void = () => {}, markStaleRefresh: () => void = () => {};
 const staleRefreshGate = new Promise<void>((resolve) => { releaseStaleRefresh = resolve; });
 const staleRefreshStarted = new Promise<void>((resolve) => { markStaleRefresh = resolve; });
-const job = { id: "00000000-0000-4000-8000-000000000001", jobName: "Shared job", phase: "finished", outcome: "passed", projectId: "sample", repositoryId: "root", createdAt: new Date().toISOString(), publication: "none" };
+const job = { id: "00000000-0000-4000-8000-000000000001", jobName: "Shared job", executionKind: "ordinary-sysbox", phase: "finished", outcome: "passed", projectId: "sample", repositoryId: "root", createdAt: new Date().toISOString(), publication: "none" };
 const navigationJob = { ...job, id: "00000000-0000-4000-8000-000000000002", jobName: "Navigation job" };
 try {
   await page.exposeFunction("executionInvoke", async (name: string, input: Input) => {
@@ -52,10 +52,10 @@ try {
     if (name === "jobs.detail") {
       if (holdDetail) { holdDetail = false; markDetail(); await detailGate; }
       const selectedJob = input.id === navigationJob.id ? navigationJob : job;
-      return { job: { ...selectedJob, jobName: `${input.controllerId} detail` }, result: null };
+      return { job: { ...selectedJob, jobName: `${input.controllerId} detail`, ...(queuedDetail ? { phase: "queued" } : {}) }, result: null };
     }
     if (name === "jobs.retry") { if (failRetry) { failRetry = false; throw new Error("response lost"); } return {}; }
-    if (name === "workers.list") return [{ id: "worker-a", slots: [
+    if (name === "workers.list") return emptyWorkers ? [] : [{ id: "worker-a", slots: [
       { id: "ci", state: "busy", executionKind: "ordinary-sysbox", job: { ...job, jobName: `${input.controllerId} worker job` } },
       { id: "task", state: "busy", executionKind: "task/review", job: { id: crypto.randomUUID(), taskType: "review-predicate", executionKind: "task/review", phase: "running" } }
     ] }];
@@ -142,6 +142,16 @@ try {
   await page.getByText("Retry execution accepted.", { exact: true }).waitFor();
   const secondRetry = calls.find((call) => call.name === "jobs.retry" && call.input.controllerId === "second");
   assert(secondRetry); assert.notEqual(secondRetry.input.requestId, firstRetries[0]?.input.requestId);
+  emptyWorkers = true;
+  await page.getByRole("button", { name: "Refresh worker capacity", exact: true }).click();
+  await page.getByText(/^No execution workers configured/).waitFor();
+  await page.getByText("Set up execution workers", { exact: true }).click();
+  await page.getByText("dim execution worker /absolute/path/to/worker.json", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("link", { name: "Execution worker setup guide", exact: true }).getAttribute("href"), "https://github.com/slop-lab/dev-infra-manager/blob/development/docs/guides/ci-runners.md");
+  queuedDetail = true;
+  await page.getByRole("row", { name: /second job sample\/root/ }).getByRole("button", { name: "View job", exact: true }).click();
+  await page.getByText(/^Waiting for an active worker with a matching ordinary-sysbox slot/).waitFor();
+  queuedDetail = false;
   holdDetail = true;
   await page.getByRole("row", { name: /second job sample\/root/ }).getByRole("button", { name: "View job", exact: true }).click(); await detailStarted;
   await page.getByLabel("Controller", { exact: true }).selectOption("read-only");

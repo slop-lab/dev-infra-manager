@@ -98,6 +98,7 @@ export function mount(container, context) {
           detail.append(ui.element("h4", `${stream}${log.truncated ? " (truncated by execution service)" : ""}`), ui.element("pre", text || "No captured output.", "log-output"));
         }
       } else detail.append(ui.element("p", "Logs become available after this job completes."));
+      if (value.job.phase === "queued") detail.append(ui.element("p", `Waiting for an active worker with a matching ${value.job.executionKind} slot. Inspect Worker capacity below; configured idle slots do not prove the worker process is running.`, "field-hint"));
       if (allowed("jobs.cancel") && ["queued", "assigned", "running", "recovering"].includes(value.job.phase)) actionButton(detail, "Cancel execution", async (button) => {
         if (!window.confirm(`Cancel ${value.job.jobName} (${value.job.id})?`)) { ui.feedback(status, "Cancellation dismissed."); return false; }
         await invoke("jobs.cancel", { id: value.job.id }); return accepted(button, "Cancellation accepted.", [["job list", refreshJobs], ["job details", () => open(job)]]);
@@ -120,13 +121,22 @@ export function mount(container, context) {
       if (!scoped() || request !== jobsVersion) return;
       applyJobs(values);
     }
+    function workerSetup() {
+      const setup = document.createElement("details"); setup.append(ui.element("summary", "Set up execution workers"));
+      setup.append(ui.element("p", "Install the execution-worker host plugin on the host that will run jobs. Worker capacity is configured by an operator; installing the plugin alone does not start workers."));
+      setup.append(ui.element("p", "Configure reviewed container, VM or task slots in the execution service, deploy that configuration, then run control-plane connect to write the matching private worker.json. Each worker needs its own configured identity and state directory."));
+      setup.append(ui.element("p", "On the selected worker host, start the generated configuration:"), ui.element("pre", "dim execution worker /absolute/path/to/worker.json", "log-output"));
+      setup.append(ui.element("p", "Keep that process running, or supervise it as a host service. Remote workers need connectivity to the configured service endpoints. Idle slots describe reservations; they do not prove that a worker process is polling."));
+      const guide = ui.element("a", "Execution worker setup guide"); guide.setAttribute("href", "https://github.com/slop-lab/dev-infra-manager/blob/development/docs/guides/ci-runners.md"); guide.setAttribute("target", "_blank"); guide.setAttribute("rel", "noopener noreferrer"); setup.append(guide);
+      return setup;
+    }
     async function refreshCapacity() {
       const request = ++capacityVersion;
       try {
         const workers = /** @type {Worker[]} */ (await invoke("workers.list", {}));
         if (!scoped() || request !== capacityVersion) return;
         capacity.replaceChildren(ui.element("h3", "Worker capacity"));
-        if (!workers.length) { capacity.append(ui.element("p", "No execution workers registered.")); return; }
+        if (!workers.length) { capacity.append(ui.element("p", "No execution workers configured. Jobs will remain queued until matching capacity is configured and its worker is started."), workerSetup()); return; }
         const slots = workers.flatMap((worker) => worker.slots.map((slot) => ({ worker, slot })));
         const table = ui.table(["Worker", "Slot", "State", "Execution kind", "Current work", "Details"], slots.map(({ worker, slot }) => {
           const currentWork = !slot.job ? "None" : "jobName" in slot.job ? `${slot.job.jobName} · ${slot.job.projectId}/${slot.job.repositoryId}` : `${slot.job.taskType} / ${slot.job.executionKind}`;
@@ -138,7 +148,7 @@ export function mount(container, context) {
           const job = slot.job;
           if (cell instanceof HTMLElement && job && "jobName" in job) actionButton(cell, "View worker job", () => open(job));
         });
-        capacity.append(table);
+        capacity.append(table, workerSetup());
       } catch (error) {
         if (scoped() && request === capacityVersion) { capacity.replaceChildren(ui.element("h3", "Worker capacity")); const message = ui.element("p"); ui.feedback(message, `Worker capacity is unavailable: ${error instanceof Error ? error.message : "service unavailable"}. Jobs remain available; retry capacity independently.`, "error"); capacity.append(message); }
       }
