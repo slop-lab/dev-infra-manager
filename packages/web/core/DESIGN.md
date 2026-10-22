@@ -40,6 +40,26 @@ The core supplies only fixed controller execution with bounded JSON responses.
 Explicit manual configuration takes precedence and never silently falls back to
 another source of authority.
 
+### Related-object navigation
+
+Use the shared navigation-action primitive for repository, job and routing-project
+transitions. It uses a native secondary button, nearby pending/result feedback and
+session fencing. Navigation only selects existing data or prefills a creation
+draft; it never approves, creates, retries, resolves or publishes on its own.
+The destination validates a complete target before changing scope and reports an
+unavailable target without falling back to a different controller or object.
+Automatic controller provenance may connect Git and execution surfaces; manual
+service connections are independent even when their display IDs match.
+
+Mounted destinations register an explicit navigation handler and keep drafts when
+hidden. Lazy loading coalesces concurrent mounts; logout invalidates pending
+navigation and clears handlers. Managed workspace prefills require an operator and
+an exact configured host. Existing edited or outcome-unknown creation drafts stay
+intact; replacement is explicit and must not bypass reconciliation. Routing policy
+navigation retains the existing unsaved-edit confirmation. Unknown-request usage
+correction accepts two observed nonnegative integer counts or neither, never an
+estimate presented as observed usage.
+
 ## Workspaces and forms
 
 Show workspace names, observed state and common lifecycle actions first. Put
