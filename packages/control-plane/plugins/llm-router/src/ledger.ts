@@ -103,8 +103,10 @@ export class RouterLedger {
       if (!policy.allowedRoutes.includes(grant.routeId) || !this.database.prepare("SELECT 1 FROM principals WHERE id=? AND token_hash=? AND project_id=? AND workspace_id=? AND route_id=? AND enabled=1").get(grant.principalId, grant.credentialHash, grant.projectId, grant.workspaceId, grant.routeId)) throw new AdmissionError("principal or route is revoked", "authorization_failed");
       for (const [scope, limits] of [["service", global], ["project", policy.limits]] as const) {
         const where = scope === "project" ? "project_id=? AND " : "", parameters = scope === "project" ? [project.id] : [];
-        const count = Number(this.database.prepare(`SELECT COUNT(*) AS n FROM requests WHERE ${where}day=?`).get(...parameters, day)?.n);
-        if (count >= limits.requestsPerUtcDay) throw new AdmissionError(`${scope} UTC-day request allowance is exhausted`);
+        if (limits.requestsPerUtcDay !== null) {
+          const count = Number(this.database.prepare(`SELECT COUNT(*) AS n FROM requests WHERE ${where}day=?`).get(...parameters, day)?.n);
+          if (count >= limits.requestsPerUtcDay) throw new AdmissionError(`${scope} UTC-day request allowance is exhausted`);
+        }
         if (limits.concurrent !== null) {
           const active = Number(this.database.prepare(`SELECT COUNT(*) AS n FROM requests WHERE ${where}occupied=1`).get(...parameters)?.n);
           if (active >= limits.concurrent) throw new AdmissionError(`${scope} concurrency is occupied (including unresolved dispatches)`, "local_capacity_exhausted");
@@ -117,9 +119,9 @@ export class RouterLedger {
         const charge = Number(this.database.prepare("SELECT COALESCE(SUM(CASE WHEN input_tokens IS NULL THEN token_reservation ELSE input_tokens+output_tokens END),0) AS n FROM requests WHERE project_id=? AND day=?").get(project.id, day)?.n);
         if (charge + reservation > (policy.tokensPerUtcDay ?? 0)) throw new AdmissionError("project estimated token allowance is exhausted; unknown usage reservations remain charged");
       }
-      if (requestBytes > policy.limits.requestBytes) throw new AdmissionError("request body exceeds the current project policy", "payload_too_large");
+      if (policy.limits.requestBytes !== null && requestBytes > policy.limits.requestBytes) throw new AdmissionError("request body exceeds the current project policy", "payload_too_large");
       const bytes = policy.captureMode === "metadata" ? 0 : requestBytes;
-      if (this.captureBytes(project.id) + bytes > policy.limits.captureBytesPerProject && policy.captureMode === "required") throw new AdmissionError("project required capture allowance is exhausted", "recording_failed");
+      if (policy.limits.captureBytesPerProject !== null && this.captureBytes(project.id) + bytes > policy.limits.captureBytesPerProject && policy.captureMode === "required") throw new AdmissionError("project required capture allowance is exhausted", "recording_failed");
       const id = randomUUID(), snapshot = JSON.stringify(policy);
       this.database.prepare(`INSERT INTO requests(id,project_id,principal_id,workspace_id,route_id,account_id,attempt_id,requested_model,policy_revision,policy_snapshot,route_snapshot,
         day,started_at,outcome,execution,delivery,accounting,occupied,token_reservation,capture_state,capture_bytes)
@@ -135,9 +137,9 @@ export class RouterLedger {
   captureInput(id: string, digest: string): void { this.database.prepare("UPDATE requests SET request_sha256=? WHERE id=?").run(digest, id); }
   captureFailure(id: string, storedBytes: number): void { this.database.prepare("UPDATE requests SET capture_state='failed',capture_complete=0,capture_bytes=? WHERE id=?").run(storedBytes, id); }
   response(id: string, status: number, contentType: string): void { this.database.prepare("UPDATE requests SET response_status=?,response_content_type=? WHERE id=?").run(status, contentType, id); }
-  append(id: string, projectId: string, bytes: number, maximum: number): void {
+  append(id: string, projectId: string, bytes: number, maximum: number | null): void {
     this.transaction(() => {
-      if (this.captureBytes(projectId) + bytes > maximum) throw new AdmissionError("project capture allowance is exhausted", "recording_failed");
+      if (maximum !== null && this.captureBytes(projectId) + bytes > maximum) throw new AdmissionError("project capture allowance is exhausted", "recording_failed");
       this.database.prepare("UPDATE requests SET capture_bytes=capture_bytes+?,execution='streaming' WHERE id=? AND outcome='running'").run(bytes, id);
     });
   }
@@ -180,7 +182,9 @@ export class RouterLedger {
     const today = this.database.prepare("SELECT COUNT(*) AS requests,COALESCE(SUM(CASE WHEN input_tokens IS NULL THEN token_reservation ELSE input_tokens+output_tokens END),0) AS chargedTokens,COALESCE(SUM(token_reservation),0) AS tokenReservations,SUM(CASE WHEN dispatched=1 AND input_tokens IS NULL AND token_reservation=0 THEN 1 ELSE 0 END) AS uncoveredUnknowns FROM requests WHERE project_id=? AND day=?").get(projectId, day);
     const service = this.database.prepare("SELECT COUNT(*) AS requests FROM requests WHERE day=?").get(day);
     const serviceActive = Number(this.database.prepare("SELECT COUNT(*) AS n FROM requests WHERE occupied=1").get()?.n);
-    const remainingRequests = Math.max(0, Math.min(project.policy.limits.requestsPerUtcDay - Number(today?.requests), serviceLimits === undefined ? Number.MAX_SAFE_INTEGER : serviceLimits.requestsPerUtcDay - Number(service?.requests)));
+    const projectRemaining = project.policy.limits.requestsPerUtcDay === null ? null : Math.max(0, project.policy.limits.requestsPerUtcDay - Number(today?.requests));
+    const serviceRemaining = serviceLimits?.requestsPerUtcDay == null ? null : Math.max(0, serviceLimits.requestsPerUtcDay - Number(service?.requests));
+    const remainingRequests = projectRemaining === null ? serviceRemaining : serviceRemaining === null ? projectRemaining : Math.min(projectRemaining, serviceRemaining);
     const allowance = { utcDay: day, enabled: project.enabled, paused: project.paused, booking: "admission", projectLimits: project.policy.limits, serviceLimits: serviceLimits ?? "not supplied to this local read",
       admittedRequests: Number(today?.requests), remainingRequests, occupied: Number(aggregate?.occupied ?? 0), serviceOccupied: serviceActive,
       tokenMode: project.policy.tokenMode, tokenLimit: project.policy.tokensPerUtcDay ?? null, chargedTokensOrEstimates: Number(today?.chargedTokens),

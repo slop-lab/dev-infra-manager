@@ -225,3 +225,11 @@ it("honors an in-HOME XDG config root and rejects an outside-HOME replacement be
   expect(await hostPlugin.guest!.inspect!(f.workspace, f.context)).toMatchObject({ state: "unconfigured" });
   expect(Number(f.cp.ledger.database.prepare("SELECT COUNT(*) AS n FROM principals WHERE enabled=1").get()?.n)).toBe(1);
 });
+
+it("passes large requests through the host gateway without a hidden upload cap", async () => {
+  const f = await fixture();
+  const input = "x".repeat(17 * 1024 * 1024);
+  const response = await fetch(f.gatewayOrigin + "/v1/responses", { method: "POST", headers: { authorization: `Bearer ${f.token}`, "content-type": "application/json" }, body: JSON.stringify({ model: "reviewed-model", input }) });
+  expect(response.status).toBe(200); await response.text();
+  expect(f.cp.ledger.request(response.headers.get("x-dim-request-id")!)).toMatchObject({ outcome: "completed" });
+}, 20_000);

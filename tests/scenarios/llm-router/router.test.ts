@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createRouter } from "../../../packages/control-plane/plugins/llm-router/src/server.js";
 import { parseConfig, parsePolicy, defaultLimits, backendProfile, type RouterConfig } from "../../../packages/control-plane/plugins/llm-router/src/config.js";
-import { RouterLedger } from "../../../packages/control-plane/plugins/llm-router/src/ledger.js";
+import { RouterLedger, hash } from "../../../packages/control-plane/plugins/llm-router/src/ledger.js";
 import { backupRouter, restoreRouter, accountHealth, effectivePolicy } from "../../../packages/control-plane/plugins/llm-router/src/operator.js";
 import { captureBody, captureManifest, exportCapture, removeCapture } from "../../../packages/control-plane/plugins/llm-router/src/archive.js";
 import { workspaceRecord } from "../../support/workspaceFixture.js";
@@ -108,13 +108,46 @@ it.each([
   completed(pending[1]!);
   expect((await next).status).toBe(200);
 });
-it("requires explicit null for unlimited concurrency and rejects invalid finite bounds", () => {
+it("defaults every limit to unlimited and validates explicit finite limits without arbitrary ceilings", () => {
+  expect(Object.values(defaultLimits)).toEqual(Array(6).fill(null));
   const policy = { allowedRoutes: ["default"], captureMode: "required", tokenMode: "observe", limits: defaultLimits };
-  for (const concurrent of [0, -1, Number.MAX_SAFE_INTEGER + 1, 1.5, undefined, "unlimited"]) {
-    expect(() => parsePolicy({ ...policy, limits: { ...defaultLimits, concurrent } })).toThrow();
+  expect(parsePolicy(policy).limits).toEqual(defaultLimits);
+  for (const key of Object.keys(defaultLimits)) {
+    for (const invalid of [0, -1, Number.MAX_SAFE_INTEGER + 1, 1.5, undefined, "unlimited"]) {
+      expect(() => parsePolicy({ ...policy, limits: { ...defaultLimits, [key]: invalid } })).toThrow();
+    }
+    expect(parsePolicy({ ...policy, limits: { ...defaultLimits, [key]: Number.MAX_SAFE_INTEGER } }).limits[key as keyof typeof defaultLimits]).toBe(Number.MAX_SAFE_INTEGER);
   }
-  expect(parsePolicy(policy).limits.concurrent).toBeNull();
-  expect(parsePolicy({ ...policy, limits: { ...defaultLimits, concurrent: 256 } }).limits.concurrent).toBe(256);
+});
+it.each(["service", "project"] as const)("enforces opt-in %s daily, request and capture limits with the other scope unlimited", async (scope) => {
+  const fx = await fixture((_request, response) => completed(response));
+  const finite = { ...defaultLimits, requestBytes: 10, captureBytesPerProject: 20, requestsPerUtcDay: 2 };
+  const serviceLimits = scope === "service" ? finite : defaultLimits;
+  const projectLimits = scope === "project" ? finite : defaultLimits;
+  const policy = fx.router.ledger.project(fx.workspace.id).policy;
+  fx.router.ledger.updatePolicy(fx.workspace.id, { ...policy, limits: projectLimits });
+  const grant = fx.router.ledger.authenticate(fx.token)!;
+  const reserve = (bytes: number) => fx.router.ledger.reserve(grant, "reviewed-model", "policy", bytes, serviceLimits, { accountId: "default" });
+  expect(fx.router.ledger.usage(fx.workspace.id, serviceLimits)).toMatchObject({ allowance: { remainingRequests: 2 } });
+  expect(() => reserve(11)).toThrow(/request body/);
+  const first = reserve(10);
+  expect(first.policy.limits).toEqual(finite);
+  fx.router.ledger.append(first.id, fx.workspace.id, 10, first.policy.limits.captureBytesPerProject);
+  expect(() => fx.router.ledger.append(first.id, fx.workspace.id, 1, first.policy.limits.captureBytesPerProject)).toThrow(/capture allowance/);
+  expect(() => reserve(1)).toThrow(/required capture allowance/);
+  fx.router.ledger.captureFailure(first.id, 0);
+  reserve(1);
+  expect(fx.router.ledger.usage(fx.workspace.id, serviceLimits)).toMatchObject({ allowance: { remainingRequests: 0 } });
+  expect(() => reserve(1)).toThrow(/UTC-day request allowance/);
+});
+it("reports no remaining-request ceiling and captures without an implicit storage limit", async () => {
+  const fx = await fixture((_request, response) => completed(response));
+  const grant = fx.router.ledger.authenticate(fx.token)!;
+  expect(fx.router.ledger.usage(fx.workspace.id, defaultLimits)).toMatchObject({ allowance: { remainingRequests: null } });
+  const first = fx.router.ledger.reserve(grant, "reviewed-model", "policy", 32 * 1024 * 1024, defaultLimits, { accountId: "default" });
+  fx.router.ledger.append(first.id, fx.workspace.id, 512 * 1024 * 1024, null);
+  expect(first.policy.limits).toEqual(defaultLimits);
+  expect(fx.router.ledger.usage(fx.workspace.id)).toMatchObject({ captureBytes: 544 * 1024 * 1024, allowance: { remainingRequests: null } });
 });
 it("enforces concurrent and daily request allowances atomically and never retries a dispatched request", async () => {
   let calls = 0; let pending: ServerResponse | undefined;
@@ -486,4 +519,35 @@ it("rejects an old combined-router ledger without accepting its guest-visible pr
   const before = await readFile(file);
   expect(() => new RouterLedger(root)).toThrow(/unsupported router state/);
   expect(await readFile(file)).toEqual(before);
+});
+
+it("forwards and retrieves bodies larger than old defaults with all limits unset", async () => {
+  const size = 17 * 1024 * 1024;
+  let received = 0;
+  const responseBody = JSON.stringify({ status: "completed", model: "reviewed-model", output: "x".repeat(size), usage: { input_tokens: 1, output_tokens: 1 } });
+  const fx = await fixture((request, response) => {
+    void (async () => { for await (const bytes of request) received += Buffer.byteLength(bytes); response.writeHead(200, { "content-type": "application/json" }); response.end(responseBody); })();
+  });
+  const response = await fx.request({ input: "x".repeat(size) });
+  expect(response.status).toBe(200);
+  expect(hash(await response.text())).toBe(hash(responseBody));
+  expect(received).toBeGreaterThan(size);
+  const id = response.headers.get("x-dim-request-id")!;
+  expect(fx.router.ledger.request(id)).toMatchObject({ outcome: "completed", capture_complete: 1 });
+  const captured = await fetch(`${fx.origin}/v1/requests/${id}/request`, { headers: fx.headers });
+  expect(captured.status).toBe(200); expect((await captured.arrayBuffer()).byteLength).toBeGreaterThan(size);
+}, 20_000);
+
+it("keeps explicitly configured deadlines and accepts long deadlines without timer overflow", async () => {
+  const bounded = await fixture(() => {}, { deadlineMilliseconds: 40 });
+  const expired = await bounded.request(); expect(expired.status).toBe(503); await expired.text();
+  expect(bounded.router.ledger.database.prepare("SELECT outcome,error_code FROM requests ORDER BY started_at DESC LIMIT 1").get()).toMatchObject({ outcome: "cancelled", error_code: "deadline_expired" });
+  const long = await fixture((_request, response) => completed(response), { deadlineMilliseconds: Number.MAX_SAFE_INTEGER });
+  const success = await long.request(); expect(success.status).toBe(200); await success.text();
+});
+
+it("does not follow inference redirects or treat their JSON body as a successful completion", async () => {
+  const fx = await fixture((_request, response) => response.writeHead(302, { location: "http://127.0.0.1:1/untrusted", "content-type": "application/json" }).end(JSON.stringify({ status: "completed", model: "reviewed-model" })));
+  const response = await fx.request(); expect(response.status).toBe(502); await response.text();
+  expect(fx.router.ledger.database.prepare("SELECT outcome,error_code FROM requests LIMIT 1").get()).toMatchObject({ outcome: "failed", error_code: "unsupported_upstream_response" });
 });

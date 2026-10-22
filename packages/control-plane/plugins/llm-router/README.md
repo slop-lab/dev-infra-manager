@@ -51,8 +51,11 @@ Hosts connect using the separate [host LLM router](../../../host/plugins/llm-rou
 
 ## Policy and accounting
 
-Defaults are two active calls, 1000 admissions per UTC calendar day, 1 MiB input,
-16 MiB response, 1 MiB per observed SSE event, five-minute deadline and 256 MiB retained capture per project.
+All six service and project policy limits default to `null` (unlimited): concurrent
+requests, UTC-day admissions, request bytes, response bytes, retained capture bytes
+and request deadline. Token estimation quotas are opt-in; the default is observe-only.
+The gateway and inference transport impose no separate upload, response, SSE-event
+or inference deadline caps. Explicit positive limits remain available.
 Service request/concurrency ceilings apply in addition to project ceilings.
 Requests book their UTC day at admission, even when they finish after midnight.
 There is no scheduling queue and no automatic retry or fallback.
@@ -66,10 +69,10 @@ dim-control-plane-llm-router project-policy application --config CONFIG --policy
 Its shape is `{allowedRoutes:["default"],limits:{...},captureMode:"required",
 tokenMode:"observe"}`. `limits` has the same complete fields as the configuration:
 `concurrent`, `requestsPerUtcDay`, `requestBytes`, `responseBytes`,
-`captureBytesPerProject`, `deadlineMilliseconds`. `concurrent: null` means no
-concurrent-request cap and is the default. A positive integer enables a cap;
-service and project policies both apply, so either finite cap still bounds
-admission. Unlimited mode also leaves the router's HTTP connection count uncapped.
+`captureBytesPerProject`, `deadlineMilliseconds`. Each field accepts `null` for
+unlimited or a positive safe integer for an explicit cap. Service and project
+limits intersect: the smaller finite value applies; two null values remain
+unlimited. Web operators leave any limit field blank to select unlimited.
 `captureMode` may also be
 `best-effort` or `metadata`. `tokenMode:"estimate"` requires positive
 `tokensPerUtcDay` and `estimatedTokensPerRequest`. Estimated reservations are
@@ -145,7 +148,7 @@ retained-storage allowance is reclaimed. Existing backups retain their copies
 until the operator expires those backups separately. Private archives, exports
 and backups may contain real secrets from application content; permission to
 read an archive therefore grants access to those secrets. They are owned mode
-0600 files in private directories, with bounded retrieval/export operations.
+0600 files in private directories, with authenticated retrieval/export operations.
 
 Authenticated projects can read `GET /v1/usage`, `/v1/capabilities`,
 `/v1/requests/ID/capture`, `/v1/requests/ID/request` and

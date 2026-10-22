@@ -7,6 +7,7 @@ import { identifier, object, privateFile, text, type RouterConfig } from "./conf
 import { AdmissionError, hash, RouterLedger } from "./ledger.js";
 import { ArchiveError, ExchangeArchive, captureBody, captureManifest } from "./archive.js";
 import { UsageObserver } from "./usage.js";
+import { upstreamResponse } from "./upstream.js";
 
 import { handleRouterOperator } from "./operator-http.js";
 import { effectiveRouterConfig } from "./account-catalog.js";
@@ -21,7 +22,6 @@ export async function createRouter(baseConfig: RouterConfig) {
   if (guard === undefined) { ledger.close(); throw new Error("LLM router is already running for this state directory"); }
   ledger.recoverInterrupted();
   const active = new Set<Promise<void>>(), cancellation = new AbortController();
-  let readers = 0;
   let closing: Promise<void> | undefined;
   const server = createServer((request, response) => {
     const operation = handle(request, response).catch((error: unknown) => {
@@ -37,7 +37,7 @@ export async function createRouter(baseConfig: RouterConfig) {
     });
     active.add(operation); void operation.finally(() => active.delete(operation));
   });
-  server.requestTimeout = 15_000; server.headersTimeout = 10_000; server.keepAliveTimeout = 1_000;
+  server.requestTimeout = 0; server.headersTimeout = 10_000; server.keepAliveTimeout = 1_000;
   return { server, ledger, close() { return closing ??= (async () => {
     cancellation.abort(); server.closeAllConnections();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -83,7 +83,7 @@ export async function createRouter(baseConfig: RouterConfig) {
     if (request.method === "GET" && url.pathname === "/v1/usage") return send(response, 200, ledger.usage(grant.projectId, config.limits));
     if (request.method === "GET" && url.pathname === "/v1/capabilities") return send(response, 200, { projectId: grant.projectId, principalId: grant.principalId,
       backend: config.backend, routeId: route.id, accountId: account.id, accountAttribution: "operator exclusive-worker binding", models: await resolveRouteModels(config, route),
-      streaming: true, maximumSseEventBytes: 1024 * 1024, toolCalls: "unchanged application protocol", multimodal: "unchanged inline/referenced fields; referenced bytes not fetched", statefulContinuation: false,
+      streaming: true, maximumSseEventBytes: null, toolCalls: "unchanged application protocol", multimodal: "unchanged inline/referenced fields; referenced bytes not fetched", statefulContinuation: false,
       strictTokenBounds: false, captureBoundary: "client application bodies", policy: ledger.project(grant.projectId).policy, serviceLimits: config.limits, scheduling: "no queue; capacity rejection is immediate" });
     if (request.method === "GET" && url.pathname === "/v1/models") return send(response, 200, { object: "list", data: (await resolveRouteModels(config, route)).map((model) => ({ ...model, object: "model", owned_by: "dim-route" })) });
     const match = /^\/v1\/requests\/([a-f0-9-]{36})(?:\/(capture|request|response|cancel))?$/.exec(url.pathname);
@@ -97,9 +97,7 @@ export async function createRouter(baseConfig: RouterConfig) {
       if (request.method !== "GET" || operation === "cancel") throw new RequestError(404, "unsupported endpoint");
       ledger.audit(grant.principalId, "capture.read", id);
       if (operation === undefined || operation === "capture") return send(response, 200, captureManifest(ledger, id, grant.projectId));
-      if (readers >= 2) throw new RequestError(429, "archive read capacity is exhausted", "local_capacity_exhausted");
-      readers++;
-      try {
+      {
         let bytes: Buffer;
         try { bytes = await captureBody(ledger, id, operation === "request" ? "request" : "response", grant.projectId); }
         catch { throw new RequestError(410, "capture is unavailable, expired, incomplete or failed integrity validation", "recording_unavailable"); }
@@ -110,12 +108,14 @@ export async function createRouter(baseConfig: RouterConfig) {
           const cleanup = () => { response.off("finish", done); response.off("close", done); response.off("error", failed); };
           response.once("finish", done); response.once("close", done); response.once("error", failed); response.end(bytes);
         }); return;
-      } finally { readers--; }
+      }
     }
     const api = url.pathname === "/v1/responses" ? "responses" : url.pathname === "/v1/chat/completions" ? "chat" : undefined;
     if (request.method !== "POST" || api === undefined) throw new RequestError(404, "unsupported endpoint");
     const policy = ledger.project(grant.projectId).policy;
-    const bytes = await body(request, Math.min(policy.limits.requestBytes, config.limits.requestBytes));
+    const maximumRequest = policy.limits.requestBytes === null ? config.limits.requestBytes
+      : config.limits.requestBytes === null ? policy.limits.requestBytes : Math.min(policy.limits.requestBytes, config.limits.requestBytes);
+    const bytes = await body(request, maximumRequest);
     let payload: Record<string, unknown>;
     try { const value: unknown = JSON.parse(bytes.toString("utf8")); payload = object(value); } catch { throw new RequestError(400, "request must be a JSON object"); }
     const model = (await resolveRouteModels(config, route)).find((model) => model.id === payload.model && model.api === api);
@@ -130,8 +130,19 @@ export async function createRouter(baseConfig: RouterConfig) {
     const admission = ledger.reserve(grant, model.id, hash(JSON.stringify({ route, account: { id: account.id, reference: account.reference, endpoint: account.endpoint }, limits: config.limits })), bytes.length, config.limits, { ...route, backend: config.backend });
     const { id } = admission, limits = admission.policy.limits;
     response.setHeader("x-dim-request-id", id);
-    const stop = new AbortController(), deadline = AbortSignal.timeout(Math.min(limits.deadlineMilliseconds, config.limits.deadlineMilliseconds));
-    const signal = AbortSignal.any([stop.signal, cancellation.signal, deadline]);
+    const stop = new AbortController(), deadline = new AbortController();
+    // A cancellable timer avoids runtime timeout bounds and leaves no timer in unlimited mode.
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    let remaining = limits.deadlineMilliseconds;
+    const scheduleDeadline = () => {
+      if (remaining === null) return;
+      const delay = Math.min(remaining, 2_147_483_647);
+      remaining -= delay;
+      deadlineTimer = setTimeout(() => { if (remaining === 0) deadline.abort(); else scheduleDeadline(); }, delay);
+      deadlineTimer.unref();
+    };
+    scheduleDeadline();
+    const signal = AbortSignal.any([stop.signal, cancellation.signal, deadline.signal]);
     let clientDisconnected = false;
     const cancel = () => { if (!response.writableEnded) { clientDisconnected = true; stop.abort(); } };
     request.once("aborted", cancel); response.once("close", cancel);
@@ -144,18 +155,20 @@ export async function createRouter(baseConfig: RouterConfig) {
     let responseBytes = 0, upstreamRejected = false;
     try {
       await archive.begin(bytes); signal.throwIfAborted(); ledger.dispatch(id);
-      const upstream = await fetch(`${account.endpoint}${url.pathname}`, { method: "POST", redirect: "error", signal,
-        headers: { authorization: `Bearer ${key}`, "content-type": "application/json", accept: payload.stream === true ? "text/event-stream" : "application/json" }, body: bytes });
-      const contentType = upstream.headers.get("content-type") ?? "";
-      upstreamRejected = upstream.status >= 400;
-      if (!(contentType.startsWith("application/json") || contentType.startsWith("text/event-stream")) || upstream.body === null) {
-        await upstream.body?.cancel(); throw new RequestError(502, "upstream returned an unsupported response", "unsupported_upstream_response");
+      const upstream = await upstreamResponse(`${account.endpoint}${url.pathname}`, { signal, key, body: bytes, streaming: payload.stream === true });
+      const status = upstream.statusCode ?? 502, contentType = upstream.headers["content-type"] ?? "";
+      upstreamRejected = status >= 400;
+      if (status >= 300 && status < 400) {
+        upstream.destroy(); throw new RequestError(502, "upstream redirects are unsupported", "unsupported_upstream_response");
       }
-      ledger.response(id, upstream.status, contentType);
-      response.writeHead(upstream.status, { "content-type": contentType, "cache-control": "no-store", ...(upstreamRejected ? { "x-dim-error-category": upstream.status === 429 ? "upstream_rate_limited" : upstream.status === 401 || upstream.status === 403 ? "account_unavailable" : "upstream_rejected" } : {}) });
-      for await (const chunk of upstream.body) {
+      if (!(contentType.startsWith("application/json") || contentType.startsWith("text/event-stream"))) {
+        upstream.destroy(); throw new RequestError(502, "upstream returned an unsupported response", "unsupported_upstream_response");
+      }
+      ledger.response(id, status, contentType);
+      response.writeHead(status, { "content-type": contentType, "cache-control": "no-store", ...(upstreamRejected ? { "x-dim-error-category": status === 429 ? "upstream_rate_limited" : status === 401 || status === 403 ? "account_unavailable" : "upstream_rejected" } : {}) });
+      for await (const chunk of upstream) {
         responseBytes += chunk.byteLength;
-        if (responseBytes > Math.min(limits.responseBytes, config.limits.responseBytes)) throw new Error("upstream response exceeds configured bound");
+        if (limits.responseBytes !== null && responseBytes > limits.responseBytes) throw new Error("upstream response exceeds configured bound");
         await archive.append(chunk); observer.push(chunk);
         if (!response.write(chunk)) await once(response, "drain", { signal });
       }
@@ -172,8 +185,8 @@ export async function createRouter(baseConfig: RouterConfig) {
       ledger.finish(id, { outcome: interrupted && !(error instanceof RequestError) ? "cancelled" : "failed", captureComplete: recorded.complete && observer.completed, executionFinished: observer.completed, requestHash: hash(bytes),
         ...(recorded.responseHash === undefined ? {} : { responseHash: recorded.responseHash }), ...(observer.model === undefined ? {} : { observedModel: observer.model }),
         ...(observer.usage === undefined ? {} : { usage: observer.usage }), ...(observer.rawUsage === undefined ? {} : { rawUsage: observer.rawUsage }), delivery: clientDisconnected ? "client_disconnected" : responseBytes ? "partial" : "not_started",
-        errorCode: deadline.aborted ? "deadline_expired" : ledger.cancelled(id) ? "cancellation_requested" : error instanceof RequestError || error instanceof AdmissionError ? error.category : error instanceof ArchiveError ? "recording_failed" : "request-incomplete" });
+        errorCode: deadline.signal.aborted ? "deadline_expired" : ledger.cancelled(id) ? "cancellation_requested" : error instanceof RequestError || error instanceof AdmissionError ? error.category : error instanceof ArchiveError ? "recording_failed" : "request-incomplete" });
       throw error;
-    } finally { clearInterval(revoked); request.removeListener("aborted", cancel); response.removeListener("close", cancel); await archive.close(); }
+    } finally { if (deadlineTimer !== undefined) clearTimeout(deadlineTimer); clearInterval(revoked); request.removeListener("aborted", cancel); response.removeListener("close", cancel); await archive.close(); }
   }
 }

@@ -12,13 +12,11 @@ export class UsageObserver {
   private decoder = new TextDecoder();
   private total = "";
   private eventLines: string[] = [];
-  private eventBytes = 0;
   constructor(private readonly streaming: boolean) {}
   push(bytes: Uint8Array): void {
     const text = this.decoder.decode(bytes, { stream: true });
     if (!this.streaming) { this.total += text; return; }
     this.pending += text;
-    if (this.pending.length > 1024 * 1024) throw new Error("upstream SSE frame exceeds bound");
     for (;;) {
       const end = this.pending.indexOf("\n"); if (end < 0) break;
       const line = this.pending.slice(0, end).replace(/\r$/, ""); this.pending = this.pending.slice(end + 1);
@@ -38,13 +36,11 @@ export class UsageObserver {
     if (line === "") { this.flushEvent(); return; }
     if (!line.startsWith("data:")) return;
     const data = line.slice(5).replace(/^ /, "");
-    this.eventBytes += Buffer.byteLength(data);
-    if (this.eventBytes > 1024 * 1024) throw new Error("upstream SSE event exceeds the 1 MiB observation bound");
     this.eventLines.push(data);
   }
   private flushEvent(): void {
     if (!this.eventLines.length) return;
-    const data = this.eventLines.join("\n").trim(); this.eventLines = []; this.eventBytes = 0;
+    const data = this.eventLines.join("\n").trim(); this.eventLines = [];
     if (data === "[DONE]") this.completed = true; else this.observe(data);
   }
 

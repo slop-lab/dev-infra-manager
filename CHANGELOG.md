@@ -155,9 +155,10 @@ is implied by these source changes.
   from its model routes. Routes can allow the account’s whole discovered model
   catalog or an explicit list; Web and CLI offer both choices. OpenCode loads
   current route models through its scoped gateway at startup. Account and route
-  changes apply to new requests without restarting the router. Concurrent request
-  admission defaults to unlimited (`concurrent: null`); Web operators can leave
-  the concurrency field blank or explicitly set a finite service/project cap. Preserve authentication, request history and account
+  changes apply to new requests without restarting the router. All six router admission/capture limits
+  default to unlimited (`null`), including request/response sizes and deadlines.
+  Web operators leave fields blank or set explicit service/project caps; gateway,
+  SSE observation and capture retrieval no longer impose hidden smaller bounds. Preserve authentication, request history and account
   attribution across local reinstall. Usage-based account selection remains a
   separate routing feature.
   Configured workspace OpenCode/OMO helpers route `openai/*` through that router

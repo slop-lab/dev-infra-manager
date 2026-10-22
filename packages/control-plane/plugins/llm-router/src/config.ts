@@ -6,7 +6,7 @@ import { isIP } from "node:net";
 export interface RouterModel { id: string; name: string; api: "responses" | "chat"; context?: number; output?: number }
 export interface RouterAccount { id: string; reference: string; endpoint: string; keyFile: string; credentialDirectory?: string; provider?: "codex" | "openai" | "anthropic" }
 export interface RouterRoute { id: string; accountId: string; models: RouterModel[] | "all" }
-export interface RouterLimits { concurrent: number | null; requestsPerUtcDay: number; requestBytes: number; responseBytes: number; captureBytesPerProject: number; deadlineMilliseconds: number }
+export interface RouterLimits { concurrent: number | null; requestsPerUtcDay: number | null; requestBytes: number | null; responseBytes: number | null; captureBytesPerProject: number | null; deadlineMilliseconds: number | null }
 export interface ProjectPolicy { allowedRoutes: string[]; limits: RouterLimits; captureMode: "required" | "best-effort" | "metadata";
   tokenMode: "observe" | "estimate"; tokensPerUtcDay?: number; estimatedTokensPerRequest?: number }
 export interface RouterHostIssuer { id: string; keyFile: string; projects: { id: string; routeIds: string[] }[] }
@@ -18,8 +18,8 @@ export interface RouterConfig {
   accounts: RouterAccount[]; routes: RouterRoute[]; limits: RouterLimits;
 }
 export const backendProfile: RouterConfig["backend"] = { name: "CLIProxyAPI", version: "8.0.33", accountSelection: "exclusive-worker", attemptVisibility: "request-only", cancellation: "best-effort" };
-export const defaultLimits: RouterLimits = { concurrent: null, requestsPerUtcDay: 1000, requestBytes: 1024 * 1024,
-  responseBytes: 16 * 1024 * 1024, captureBytesPerProject: 256 * 1024 * 1024, deadlineMilliseconds: 300_000 };
+export const defaultLimits: RouterLimits = { concurrent: null, requestsPerUtcDay: null, requestBytes: null,
+  responseBytes: null, captureBytesPerProject: null, deadlineMilliseconds: null };
 export function object(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("expected an object"); return value as Record<string, unknown>;
 }
@@ -36,10 +36,11 @@ export function origin(value: unknown): string {
   if (result !== url.origin || url.username || url.password || (url.protocol !== "https:" && !(url.protocol === "http:" && isIP(url.hostname.replace(/^\[|\]$/g, ""))))) throw new Error("endpoint must be an HTTPS origin or explicit HTTP IP origin"); return result;
 }
 export function identifier(value: unknown): string { const result = text(value); if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(result)) throw new Error("invalid identifier"); return result; }
+function nullableBound(value: unknown): number | null { return value === null ? null : integer(value); }
 export function parseLimits(value: unknown): RouterLimits {
   const limits = object(value); exact(limits, Object.keys(defaultLimits));
-  return { concurrent: limits.concurrent === null ? null : integer(limits.concurrent), requestsPerUtcDay: integer(limits.requestsPerUtcDay), requestBytes: integer(limits.requestBytes, 16 * 1024 * 1024),
-    responseBytes: integer(limits.responseBytes, 128 * 1024 * 1024), captureBytesPerProject: integer(limits.captureBytesPerProject), deadlineMilliseconds: integer(limits.deadlineMilliseconds, 3_600_000) };
+  return { concurrent: nullableBound(limits.concurrent), requestsPerUtcDay: nullableBound(limits.requestsPerUtcDay), requestBytes: nullableBound(limits.requestBytes),
+    responseBytes: nullableBound(limits.responseBytes), captureBytesPerProject: nullableBound(limits.captureBytesPerProject), deadlineMilliseconds: nullableBound(limits.deadlineMilliseconds) };
 }
 export function parsePolicy(value: unknown): ProjectPolicy {
   const row = object(value); exact(row, ["allowedRoutes", "limits", "captureMode", "tokenMode"], ["tokensPerUtcDay", "estimatedTokensPerRequest"]);

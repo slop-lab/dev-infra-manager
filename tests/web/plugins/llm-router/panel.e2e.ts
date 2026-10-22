@@ -23,8 +23,12 @@ try {
   await page.getByText("New routing project", { exact: true }).click();
   await page.getByLabel("Project ID", { exact: true }).fill("browser-project"); await failNextOperation("projects"); await page.getByRole("button", { name: "Create routing project", exact: true }).click();
   await page.getByRole("heading", { name: "Project browser-project", exact: true }).waitFor();
-  assert.equal(await page.getByLabel("Concurrent requests", { exact: true }).inputValue(), "");
-  assert.equal(await page.getByLabel("Concurrent requests", { exact: true }).getAttribute("placeholder"), "No limit");
+  const limitFields = { concurrent: "Concurrent requests", requestsPerUtcDay: "Requests per UTC day", requestBytes: "Maximum request bytes", responseBytes: "Maximum response bytes", captureBytesPerProject: "Capture bytes per project", deadlineMilliseconds: "Request deadline (ms)" };
+  for (const label of Object.values(limitFields)) {
+    assert.equal(await page.getByLabel(label, { exact: true }).inputValue(), "");
+    assert.equal(await page.getByLabel(label, { exact: true }).getAttribute("placeholder"), "No limit");
+  }
+  await page.getByText(/No limit on requests\. Provider subscription quota is unknown\./).waitFor();
   await page.getByText("browser-project created. Latest project list could not refresh. Use Refresh router to read the current state; the change was accepted.", { exact: true }).waitFor();
   assert.equal(await page.getByLabel("Project ID", { exact: true }).inputValue(), "");
   assert.equal(await page.getByRole("button", { name: "Create routing project", exact: true }).isDisabled(), true);
@@ -35,20 +39,22 @@ try {
   assert.equal(fixture.router.ledger.project("browser-project").policy.limits.concurrent, null);
   assert.equal(await page.getByRole("button", { name: "Save routing policy", exact: true }).isDisabled(), true);
   assert.equal(writes.get("project.policy.update"), 1);
-  await page.getByLabel("Concurrent requests", { exact: true }).fill("256");
-  await page.getByLabel("Requests per UTC day", { exact: true }).fill("78"); await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
+  const finiteLimits = { concurrent: 256, requestsPerUtcDay: 78, requestBytes: 32 * 1024 * 1024, responseBytes: 256 * 1024 * 1024, captureBytesPerProject: 1024 * 1024 * 1024, deadlineMilliseconds: 7_200_000 };
+  for (const key of Object.keys(limitFields) as Array<keyof typeof limitFields>) await page.getByLabel(limitFields[key], { exact: true }).fill(String(finiteLimits[key]));
+  await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
   await page.getByText("Policy saved for browser-project.", { exact: true }).waitFor(); assert.equal(fixture.router.ledger.project("browser-project").policy.limits.requestsPerUtcDay, 78);
-  assert.equal(fixture.router.ledger.project("browser-project").policy.limits.concurrent, 256);
-  await page.getByLabel("Concurrent requests", { exact: true }).fill(""); await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
+  assert.deepEqual(fixture.router.ledger.project("browser-project").policy.limits, finiteLimits);
+  for (const label of Object.values(limitFields)) await page.getByLabel(label, { exact: true }).fill("");
+  await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
   await page.waitForFunction(() => document.querySelector('form[aria-label="Routing policy for browser-project"] button')?.getAttribute("data-accepted") === "true");
-  assert.equal(fixture.router.ledger.project("browser-project").policy.limits.concurrent, null);
+  assert.deepEqual(fixture.router.ledger.project("browser-project").policy.limits, Object.fromEntries(Object.keys(limitFields).map((key) => [key, null])));
   await page.getByRole("button", { name: "Pause browser-project", exact: true }).click(); await page.getByRole("button", { name: "Resume browser-project", exact: true }).waitFor(); assert.equal(fixture.router.ledger.project("browser-project").paused, true);
   await page.getByLabel("Requests per UTC day", { exact: true }).fill("79");
   await failNextOperation("project.policy.update"); await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "The connected service could not complete this operation." }).waitFor();
   assert.equal(await page.getByLabel("Requests per UTC day", { exact: true }).inputValue(), "79");
   assert.equal(await page.getByRole("button", { name: "Save routing policy", exact: true }).isEnabled(), true);
-  assert.equal(fixture.router.ledger.project("browser-project").policy.limits.requestsPerUtcDay, 78);
+  assert.equal(fixture.router.ledger.project("browser-project").policy.limits.requestsPerUtcDay, null);
   await page.getByRole("button", { name: "Reconnect feature", exact: true }).click();
   await page.getByText("Connection refreshed. Refresh this feature to load current data; your form input is kept.", { exact: true }).waitFor();
   assert.equal(await page.getByLabel("Requests per UTC day", { exact: true }).inputValue(), "79");

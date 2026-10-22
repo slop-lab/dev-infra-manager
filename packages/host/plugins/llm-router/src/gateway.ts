@@ -85,9 +85,9 @@ export async function createHostGateway(config: HostRouterConfig, store: Workspa
       } catch { return deny(response, 401); }
       if (response.destroyed || closing !== undefined) return;
       const target = new URL(config.connection.endpoint + path);
-      const remote = (target.protocol === "https:" ? httpsRequest : httpRequest)(target, { method: incoming.method,
+      const remote = (target.protocol === "https:" ? httpsRequest : httpRequest)(target, { method: incoming.method, timeout: 0,
         headers: { authorization: `Bearer ${grant.cpToken}`, "content-type": "application/json", accept: incoming.headers.accept ?? "application/json" } });
-      let finished = false, bytes = 0, checking = false;
+      let finished = false, checking = false;
       const stop = () => { remote.destroy(); incoming.unpipe(remote); if (!response.writableEnded) response.destroy(); };
       const cleanup = () => { if (finished) return; finished = true; clearInterval(watch); active.delete(stop);
         incoming.off("aborted", stop); response.off("close", stop); };
@@ -106,11 +106,10 @@ export async function createHostGateway(config: HostRouterConfig, store: Workspa
         response.writeHead(upstream.statusCode ?? 502, headers); upstream.pipe(response);
         upstream.once("error", stop); upstream.once("end", cleanup);
       });
-      incoming.on("data", (chunk: Buffer) => { bytes += chunk.length; if (bytes > 16 * 1024 * 1024) stop(); });
       incoming.pipe(remote);
     })().catch(() => { if (!response.headersSent) deny(response, 503); else response.destroy(); });
   });
-  server.headersTimeout = 10_000; server.requestTimeout = 15_000; server.keepAliveTimeout = 1000;
+  server.headersTimeout = 10_000; server.requestTimeout = 0; server.keepAliveTimeout = 1000;
   return { server, close() { return closing ??= (async () => { for (const stop of active) stop(); server.closeAllConnections();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve())); await guard.release(); })(); } };
 }

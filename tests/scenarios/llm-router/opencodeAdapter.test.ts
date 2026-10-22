@@ -82,7 +82,7 @@ it("redirects only OpenAI while preserving OMO role models, variants, fallbacks 
   await hooks.config(config);
   expect(config.agent).toEqual(originalAgents);
   expect(config).toMatchObject({ model: "openai/reviewed", small_model: "anthropic/fast", provider: {
-    anthropic, openai: { whitelist: ["reviewed", "reviewed-fast"], options: { baseURL: "http://127.0.0.1:8319/v1", apiKey: token },
+    anthropic, openai: { whitelist: ["reviewed", "reviewed-fast"], options: { baseURL: "http://127.0.0.1:8319/v1", apiKey: token, headerTimeout: false, chunkTimeout: 0 },
       models: { reviewed: { variants, options: { reasoningEffort: "high", store: false } } } }
   } });
   const parameters = { options: { reasoningEffort: "high", store: true } };
@@ -143,4 +143,12 @@ it("leaves unknown model limits unset so OpenCode retains its native catalog and
   const explicit: Record<string, unknown> = { provider: { openai: { models: { native: { limit: { context: 1050000, input: 922000, output: 128000 } } } } } };
   await hooks.config(explicit);
   expect(explicit).toMatchObject({ provider: { openai: { models: { native: { limit: { context: 1050000, input: 922000, output: 128000 } } } } } });
+});
+
+it("preserves explicit OpenCode transport deadlines while leaving absent deadlines disabled", async () => {
+  await fixture();
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json({ models: [reviewed] })));
+  const hooks = await DimLlmRouter(), config: Record<string, unknown> = { provider: { openai: { options: { headerTimeout: 1234, chunkTimeout: 2345 } } } };
+  await hooks.config(config);
+  expect(config).toMatchObject({ provider: { openai: { options: { headerTimeout: 1234, chunkTimeout: 2345 } }, "dim-responses": { options: { headerTimeout: false, chunkTimeout: 0 } } } });
 });

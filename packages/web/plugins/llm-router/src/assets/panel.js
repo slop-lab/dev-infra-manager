@@ -93,17 +93,17 @@ export function mount(container, context) {
     const project = object(value), settings = object(project.policy), limits = object(settings.limits), consumption = object(usage), allowance = object(consumption.allowance);
     projectRevision = text(project.revision); policy.hidden = false; policy.replaceChildren(node("h2", `Project ${id}`));
     const stats = node("div"); table(stats, ["Requests", "Known input tokens", "Known output tokens", "Unknown usage", "Occupied slots"], [[consumption.requests, consumption.knownInputTokens, consumption.knownOutputTokens, consumption.unknownUsageRequests, consumption.occupied]]); policy.append(stats);
-    policy.append(node("p", `Admission period: ${text(allowance.utcDay)} UTC · ${text(allowance.remainingRequests)} requests remaining. Provider subscription quota is unknown.`, "field-hint"));
+    policy.append(node("p", `Admission period: ${text(allowance.utcDay)} UTC · ${allowance.remainingRequests === null ? "No limit on requests" : `${text(allowance.remainingRequests)} requests remaining`}. Provider subscription quota is unknown.`, "field-hint"));
     const form = document.createElement("form"); form.setAttribute("aria-label", `Routing policy for ${id}`); policy.append(form);
     const routes = input(form, "Allowed routes (comma separated)", Array.isArray(settings.allowedRoutes) ? settings.allowedRoutes.join(", ") : ""); routes.required = true;
     const fields = node("div", "", "workspace-fields"); form.append(fields);
     /** @type {Map<string,HTMLInputElement>} */ const bounds = new Map();
     for (const [key, label] of [["concurrent", "Concurrent requests"], ["requestsPerUtcDay", "Requests per UTC day"], ["requestBytes", "Maximum request bytes"], ["responseBytes", "Maximum response bytes"], ["captureBytesPerProject", "Capture bytes per project"], ["deadlineMilliseconds", "Request deadline (ms)"]]) {
-      if (!key || !label) continue; const unlimited = key === "concurrent";
-      const field = input(fields, label, unlimited && limits[key] === null ? "" : text(limits[key])); field.type = "number"; field.min = "1"; field.step = "1"; field.required = !unlimited;
-      if (unlimited) { field.placeholder = "No limit"; field.parentElement?.append(node("span", "Leave blank for no concurrency limit. Explicit project and service limits both apply.", "field-hint")); }
+      if (!key || !label) continue;
+      const field = input(fields, label, limits[key] === null ? "" : text(limits[key])); field.type = "number"; field.min = "1"; field.step = "1"; field.placeholder = "No limit";
       bounds.set(key, field);
     }
+    form.append(node("p", "Leave limits blank for no limit. Explicit project and service limits both apply.", "field-hint"));
     /** @param {string} label @param {string[]} options @param {unknown} initial */
     function select(label, options, initial) { const field = node("label", label, "field"), control = document.createElement("select"); control.setAttribute("aria-label", label); for (const value of options) { const option = document.createElement("option"); option.value = value; option.textContent = value; control.append(option); } control.value = text(initial); field.append(control); fields.append(field); return control; }
     const captureMode = select("Capture mode", ["required", "best-effort", "metadata"], settings.captureMode), tokenMode = select("Token accounting", ["observe", "estimate"], settings.tokenMode);
@@ -115,7 +115,7 @@ export function mount(container, context) {
       let revision = projectRevision;
       const submit = action(form, "Save routing policy", async (button) => {
         if (!form.reportValidity()) { feedback.textContent = "Complete the routing policy fields."; return; }
-        const next = { allowedRoutes: routes.value.split(",").map((route) => route.trim()), limits: Object.fromEntries([...bounds].map(([key, field]) => [key, key === "concurrent" && field.value === "" ? null : Number(field.value)])), captureMode: captureMode.value, tokenMode: tokenMode.value,
+        const next = { allowedRoutes: routes.value.split(",").map((route) => route.trim()), limits: Object.fromEntries([...bounds].map(([key, field]) => [key, field.value === "" ? null : Number(field.value)])), captureMode: captureMode.value, tokenMode: tokenMode.value,
           ...(tokenLimit.value ? { tokensPerUtcDay: Number(tokenLimit.value) } : {}), ...(estimate.value ? { estimatedTokensPerRequest: Number(estimate.value) } : {}) };
         const saved = await context.invoke("project.policy.update", { projectId: id, expectedRevision: revision, policy: next }); if (!current()) return; revision = text(object(saved).revision); await accepted(button, feedback, `Policy saved for ${id}.`, [["project list", refreshProjects]]);
       }, feedback); submit.className = "button button-primary"; unlockOnEdit(form, submit);

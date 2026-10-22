@@ -22,7 +22,7 @@ export class ExchangeArchive {
   async begin(bytes: Buffer): Promise<void> {
     if (!this.enabled) return;
     await this.record(async () => {
-      if (this.ledger.captureUsage(this.projectId) > this.policy.limits.captureBytesPerProject) throw new ArchiveError("capture capacity exhausted");
+      if (this.policy.limits.captureBytesPerProject !== null && this.ledger.captureUsage(this.projectId) > this.policy.limits.captureBytesPerProject) throw new ArchiveError("capture capacity exhausted");
       await mkdir(this.directory, { recursive: true, mode: 0o700 });
       const input = await open(join(this.directory, "request.json"), "wx", 0o600);
       try { await input.writeFile(bytes); await input.sync(); this.stored += bytes.length; this.ledger.captureInput(this.id, hash(bytes)); } finally { await input.close(); }
@@ -66,11 +66,10 @@ export function captureManifest(ledger: RouterLedger, id: string, projectId?: st
 export async function captureBody(ledger: RouterLedger, id: string, kind: "request" | "response", projectId?: string): Promise<Buffer> {
   const row = ledger.request(id, projectId);
   if (["disabled_by_policy", "expired", "deleted"].includes(String(row.capture_state))) throw new Error(`capture is ${String(row.capture_state)}`);
-  const maximum = kind === "request" ? 16 * 1024 * 1024 : 128 * 1024 * 1024;
   const handle = await open(join(ledger.directory, "captures", text(row.id), kind === "request" ? "request.json" : "response.body"), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const info = await handle.stat();
-    if (!info.isFile() || info.uid !== process.geteuid?.() || (info.mode & 0o077) !== 0 || info.nlink !== 1 || info.size > maximum) throw new Error("unsafe or oversized payload archive");
+    if (!info.isFile() || info.uid !== process.geteuid?.() || (info.mode & 0o077) !== 0 || info.nlink !== 1) throw new Error("unsafe or oversized payload archive");
     const bytes = await handle.readFile(), expected = row[kind === "request" ? "request_sha256" : "response_sha256"];
     if (expected !== null && expected !== undefined && expected !== hash(bytes)) throw new Error("capture integrity check failed"); return bytes;
   } finally { await handle.close(); }
