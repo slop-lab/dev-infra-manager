@@ -20,6 +20,12 @@ trusted policy and exact repository input snapshots are bound to human approval.
 Changed policy, protected head, proposal, or dependency snapshot invalidates an
 old decision. Review records never execute repository code.
 
+Review lists check recorded evidence against current policy and matcher revisions,
+repository input snapshots, protected heads and proposal commit/tree identities.
+Listing does not rebuild patches or run project matchers. Opening an exact review,
+approving it or promoting it performs the full evidence and requirement checks;
+a list status is informational and never authorizes a decision.
+
 ## Conditional security review
 
 The operator-imported policy can add reviewers by path or by content. Conditions

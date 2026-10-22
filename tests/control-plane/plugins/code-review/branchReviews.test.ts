@@ -67,7 +67,7 @@ it("binds main PR rules to its target while development stays approval-free, the
     const decisionsRead = vi.spyOn(decisionStore, "readAuthoritativeNativeDecisions"), freshnessCheck = vi.spyOn(freshness, "nativeHumanReviewStaleReasons");
     const bothBranches = await list();
     expect(decisionsRead).toHaveBeenCalledTimes(1);
-    expect(freshnessCheck.mock.calls.length).toBeLessThan(bothBranches.length);
+    expect(freshnessCheck).not.toHaveBeenCalled();
     decisionsRead.mockRestore(); freshnessCheck.mockRestore();
     expect(bothBranches.some((entry) => entry.protectedRef === "refs/heads/development" && entry.status === "stale")).toBe(true);
     expect(bothBranches.find((entry) => entry.reviewId === result.reviewId)?.status).toBe("pending");

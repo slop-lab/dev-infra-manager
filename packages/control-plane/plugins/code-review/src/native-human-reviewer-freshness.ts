@@ -7,11 +7,7 @@ import type { CodeReviewRuntime } from "./plugin-api.js";
 import { reviewRequirementsForChanges } from "./authoritative-native-review.js";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
-export async function nativeHumanReviewStaleReasons(
-  runtime: CodeReviewRuntime,
-  target: AuthoritativeNativeRepositoryTarget,
-  review: AuthoritativeNativeReview
-): Promise<readonly string[]> {
+function policyStaleReasons(runtime: CodeReviewRuntime, target: AuthoritativeNativeRepositoryTarget, review: AuthoritativeNativeReview): string[] {
   const reasons: string[] = [];
   const policy = target.imported.policy;
   try {
@@ -19,6 +15,39 @@ export async function nativeHumanReviewStaleReasons(
       || review.requiredReviewRevision !== codeReviewPolicy(policy, runtime.reviewChangeMatchers, review.protectedRef).requiredReviewRevision) reasons.push("policy-changed");
   } catch { reasons.push("review-matcher-unavailable"); }
   if (review.expectedProtectedHead !== target.currentHead.commit) reasons.push("protected-head-changed");
+  return reasons;
+}
+
+/** Advisory listing status uses the persisted evidence's current security tuple.
+ * It does not rebuild patches or execute project matchers. Exact inspection and
+ * every decision still use nativeHumanReviewStaleReasons below. */
+export async function nativeHumanReviewSummaryStaleReasons(
+  runtime: CodeReviewRuntime, target: AuthoritativeNativeRepositoryTarget, review: AuthoritativeNativeReview,
+  readRefs?: () => ReturnType<typeof readAuthoritativeNativeReviewRefs>
+): Promise<readonly string[]> {
+  const reasons = policyStaleReasons(runtime, target, review);
+  if (review.projectId !== target.imported.projectId || review.repositoryId !== target.imported.repositoryId
+    || review.protectedRef !== target.currentHead.protectedRef) reasons.push("review-identity-changed");
+  if (reasons.length) return [...new Set(reasons)];
+  try { await assertReviewInputsCurrent(runtime, review); }
+  catch { reasons.push("repository-inputs-changed"); }
+  try {
+    const refs = await (readRefs ? readRefs() : readAuthoritativeNativeReviewRefs({ gitExecutable: runtime.gitExecutable, gitIdentity: runtime.gitIdentity,
+      repository: target.repository, signal: AbortSignal.timeout(30_000), protectedRef: target.currentHead.protectedRef, proposalRef: review.proposalRef }));
+    if (refs.protectedHead !== review.expectedProtectedHead) reasons.push("protected-head-changed");
+    if (refs.candidateCommit !== review.candidateCommit) reasons.push("candidate-commit-changed");
+    if (refs.candidateTree !== review.candidateTree) reasons.push("candidate-tree-changed");
+  } catch { reasons.push("candidate-ref-unavailable"); }
+  return [...new Set(reasons)];
+}
+
+export async function nativeHumanReviewStaleReasons(
+  runtime: CodeReviewRuntime,
+  target: AuthoritativeNativeRepositoryTarget,
+  review: AuthoritativeNativeReview
+): Promise<readonly string[]> {
+  const reasons = policyStaleReasons(runtime, target, review);
+  const policy = target.imported.policy;
   try { await assertReviewInputsCurrent(runtime, review); }
   catch { reasons.push("repository-inputs-changed"); }
   const git = { gitExecutable: runtime.gitExecutable, gitIdentity: runtime.gitIdentity,

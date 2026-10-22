@@ -11,7 +11,8 @@ import {
   revokeAuthoritativeNativeApproval
 } from "./authoritative-native-decision-store.js";
 import type { CodeReviewConfig } from "./config.js";
-import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
+import { nativeHumanReviewStaleReasons, nativeHumanReviewSummaryStaleReasons } from "./native-human-reviewer-freshness.js";
+import { readAuthoritativeNativeReviewRefs } from "./authoritative-native-review-git.js";
 import { nativeHumanReviewStatus } from "./native-human-reviewer-status.js";
 import {
   readAuthoritativeNativeReviewEnvelope,
@@ -364,6 +365,7 @@ async function listReviewSummaries(input: HumanReviewerHttpInput, reviewer: Huma
     // Decision records are append-only and the mutation queue is held for this
     // listing. Validate the complete store once, then project each review's view.
     const allDecisions = await readAuthoritativeNativeDecisions(target.repository);
+    const currentRefs = new Map<string, ReturnType<typeof readAuthoritativeNativeReviewRefs>>();
     for (const { review } of envelopes) {
       let branchTarget = branchTargets.get(review.protectedRef);
       if (branchTarget === undefined && Object.hasOwn(managedBranches, review.protectedRef)) {
@@ -376,7 +378,16 @@ async function listReviewSummaries(input: HumanReviewerHttpInput, reviewer: Huma
       const staleReasons = branchTarget === undefined ? ["protected-branch-unmanaged"]
         : review.expectedProtectedHead !== branchTarget.currentHead.commit ? ["protected-head-changed"]
         : review.policyRevision !== branchTarget.imported.policy.policyRevision ? ["policy-changed"]
-        : await nativeHumanReviewStaleReasons(input.runtime, branchTarget, review);
+        : await nativeHumanReviewSummaryStaleReasons(input.runtime, branchTarget, review, () => {
+          const key = JSON.stringify([branchTarget.repository, branchTarget.currentHead.protectedRef, review.proposalRef]);
+          let pending = currentRefs.get(key);
+          if (pending === undefined) {
+            pending = readAuthoritativeNativeReviewRefs({ gitExecutable: input.runtime.gitExecutable, gitIdentity: input.runtime.gitIdentity,
+              repository: branchTarget.repository, protectedRef: branchTarget.currentHead.protectedRef, proposalRef: review.proposalRef, signal: AbortSignal.timeout(30_000) });
+            currentRefs.set(key, pending);
+          }
+          return pending;
+        });
       const decisions = { approvals: allDecisions.approvals.filter((approval) => approval.reviewId === review.reviewId),
         revocations: allDecisions.revocations.filter((revocation) => revocation.reviewId === review.reviewId),
         activeApprovals: allDecisions.activeApprovals.filter((approval) => approval.reviewId === review.reviewId) };
