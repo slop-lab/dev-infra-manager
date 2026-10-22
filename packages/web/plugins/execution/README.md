@@ -23,3 +23,11 @@ The operator connection is optional. Connection files must be caller-owned,
 mode-0600 regular files. Paths and credentials are never delivered to the
 browser. Reading jobs requires `read`; capacity, cancel and retry require
 `operator`. Retries include an explicit request UUID to avoid duplicate jobs.
+
+The browser loads recent jobs and worker capacity independently. A capacity
+failure leaves the job list, filters and details usable and offers its own retry.
+Search matches job names, IDs, projects and repositories; the state filter keeps
+open job details in place. Detail views show only public result metadata and the
+bounded stdout/stderr returned by the execution query contract. An accepted
+cancel or retry remains accepted if a following read fails, and retry reuses its
+request UUID after response loss.
