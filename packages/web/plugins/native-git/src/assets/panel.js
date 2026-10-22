@@ -6,6 +6,16 @@ import { appendNativeGitNavigationActions, registerNativeGitNavigation } from ".
 /** @typedef {import('@slop-lab/dim-native-git-client').ReviewDto} Review */
 /** @typedef {{controllerId:string,projectId:string,repositoryId:string}} Scope */
 /** @typedef {{id:string,controllerKey?:string,title:string,status:'ready'|'unavailable',reviewerId?:string,projects:Array<{projectId:string,name:string,repositoryIds:string[],repositories?:Array<{repositoryId:string,defaultRef:string,branches:string[]}>}>,operations:Descriptor[]}} Controller */
+/** @param {Pick<Review,'status'|'requiredReviewerIds'|'approvals'|'revocations'>} review @param {{reviewerId?:string|undefined,browserCanApprove:boolean,controllerCanApprove:boolean}} access */
+export function reviewApprovalAvailability(review, access) {
+  if (review.status === "stale") return { state: "stale", message: "This review is stale. Resolve the proposal again to inspect current changes before approving." };
+  if (!review.requiredReviewerIds.length) return { state: "not-required", message: "No human approval is required for these changes. The candidate can be promoted when its other requirements are satisfied." };
+  if (!access.controllerCanApprove || !access.reviewerId) return { state: "connection-required", message: "This controller has no available approval connection. Ask its operator to connect the required reviewer, then reconnect Git review." };
+  if (!review.requiredReviewerIds.includes(access.reviewerId)) return { state: "identity-mismatch", message: `Approval is required from ${review.requiredReviewerIds.join(", ")}. This controller is connected as ${access.reviewerId}; use a controller connected to a required reviewer.` };
+  if (review.approvals.some((approval) => approval.reviewerId === access.reviewerId && !review.revocations.some((revocation) => revocation.approvalId === approval.approvalId))) return { state: "already-approved", message: "Your approval is already recorded for this exact candidate." };
+  if (!access.browserCanApprove) return { state: "role-required", message: "Your Web account does not have the reviewer role. Open Account & access, edit your account's roles, select Grant reviewer, enter your current password and save, then sign in again. If you cannot manage accounts, ask an account administrator." };
+  return { state: "available", message: `You can approve this exact candidate as ${access.reviewerId}.` };
+}
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
   let disposed = false, catalogVersion = 0, listVersion = 0, detailVersion = 0, formVersion = 0, scopeRevision = 0;
@@ -80,12 +90,14 @@ export function mount(container, context) {
       }); approvals.append(row);
     }
     if (!review.approvals.length) approvals.append(element("li", "No approvals recorded.")); detail.append(approvals);
-    detail.append(element("p", `Decision target: ${review.projectId}/${review.repositoryId} · ${review.protectedRef} · candidate ${review.candidateCommit}`, "workspace-feedback"));
-    if (review.status === "pending" && review.requiredReviewerIds.length) {
-      if (!has("reviews.approve")) detail.append(element("p", `Approval is required from ${review.requiredReviewerIds.join(", ")}. Your Web account needs the reviewer role to approve; ask an operator to update its access, then sign in again.`, "field-hint"));
-      else if (!reviewerId || !review.requiredReviewerIds.includes(reviewerId)) detail.append(element("p", `Approval is required from ${review.requiredReviewerIds.join(", ")}. This controller is connected as ${reviewerId ?? "an unavailable reviewer"}; use a controller connected to a required reviewer.`, "field-hint"));
+    const approvalAccess = reviewApprovalAvailability(review, { reviewerId, browserCanApprove: context.operations.some(({ name }) => name === "reviews.approve"), controllerCanApprove: Boolean(controller()?.operations.some(({ name }) => name === "reviews.approve")) });
+    const explanation = element("p", approvalAccess.message, "field-hint"); explanation.id = `review-approval-${review.reviewId}`; detail.append(explanation);
+    if (approvalAccess.state === "role-required") {
+      const configure = ui.button("Configure review access"); configure.addEventListener("click", () => window.dispatchEvent(new Event("dim-account-access"))); detail.append(configure);
     }
-    if (reviewerId && has("reviews.approve") && review.status !== "stale" && review.requiredReviewerIds.includes(reviewerId) && !review.approvals.some((approval) => approval.reviewerId === reviewerId && !review.revocations.some((revocation) => revocation.approvalId === approval.approvalId))) button(detail, "Approve exact candidate", async (button) => {
+    detail.append(element("p", `Decision target: ${review.projectId}/${review.repositoryId} · ${review.protectedRef} · candidate ${review.candidateCommit}`, "workspace-feedback"));
+    if (approvalAccess.state !== "available") { const blocked = ui.button("Approve exact candidate"); blocked.disabled = true; blocked.setAttribute("aria-describedby", explanation.id); detail.append(blocked); }
+    else button(detail, "Approve exact candidate", async (button) => {
       if (!window.confirm(`Approve ${target.projectId}/${target.repositoryId} candidate ${review.candidateCommit} for ${review.protectedRef}?`)) { status.textContent = "Approval dismissed."; return false; }
       const value = /** @type {Review} */ (await invoke(target, "reviews.approve", { reviewId: review.reviewId })); showReview(value, target);
       return accepted(button, target, "Approval recorded.", [["review list", () => refreshList(target)]]);

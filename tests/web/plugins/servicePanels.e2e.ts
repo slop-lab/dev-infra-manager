@@ -156,7 +156,11 @@ try {
   await page.getByRole("button", { name: "Git review", exact: true }).click();
   await git.getByRole("button", { name: "Open review", exact: true }).click();
   await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
-  assert.equal(await git.getByRole("button", { name: "Approve exact candidate", exact: true }).count(), 0);
+  assert.equal(await git.getByRole("button", { name: "Approve exact candidate", exact: true }).isDisabled(), true);
+  await git.getByText(/^Your Web account does not have the reviewer role\./).waitFor();
+  await git.getByRole("button", { name: "Configure review access", exact: true }).click();
+  await page.getByRole("dialog", { name: "Account & access", exact: true }).waitFor();
+  await page.keyboard.press("Escape");
   assert.equal(await git.getByLabel("Proposal ref", { exact: true }).isHidden(), true);
   const session = await page.request.get(fixture.origin + "/v1/session");
   const body: unknown = await session.json();
