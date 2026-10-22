@@ -32,7 +32,7 @@ export async function configuredManagedGitFixture(options: ManagedGitFixtureOpti
       ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })
     }),
     await merge.configure({ hostPromoters: config.hostPromoters }),
-    await gitSync.configure({ operators: [] })
+    await gitSync.configure(config.gitSync ?? { operators: [] })
   ];
   const extensions = [workflowCompilerExtension(config.ci.compiler, options.workflowCompiler ?? dimWorkflowCompiler),
     ...prepared.flatMap((entry) => entry.extensions ?? []), ...(options.extensions ?? [])];

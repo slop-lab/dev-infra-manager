@@ -1,3 +1,4 @@
+import { parseAuthoritativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
 import { UserError, validateLifecycleName } from "@slop-lab/dim-host-core";
 import { parseNativeProjectDraft } from "./nativeProjectDraftCodec.js";
 import type { NativeGitRootImportResult } from "./nativeGitRootImporterClient.js";
@@ -10,6 +11,8 @@ export interface NativeProjectRepositoryRecord {
   readonly commit: string;
   readonly tree: string;
   readonly repositoryPolicy: NativeRepositoryBootstrapPolicy["repositoryPolicy"];
+  /** Original receipt-bound policy, retained when the effective repositoryPolicy changes. */
+  readonly importedPolicy?: NativeRepositoryBootstrapPolicy["repositoryPolicy"];
   readonly importReceipt: NativeGitRootImportResult;
   readonly bundleDigest: string;
   readonly bundleSize: number;
@@ -51,17 +54,19 @@ export function parseNativeProjectPendingRecord(input: unknown): NativeProjectRe
     const repositories: Record<string, NativeProjectRepositoryRecord> = {};
     for (const [repositoryId, entry] of Object.entries(entries)) {
       const repository = object(entry);
-      exact(repository, ["repositoryId", "phase", "protectedRef", "commit", "tree", "repositoryPolicy", "importReceipt", "bundleDigest", "bundleSize", "readyAt"]);
+      exact(repository, ["repositoryId", "phase", "protectedRef", "commit", "tree", "repositoryPolicy", "importReceipt", "bundleDigest", "bundleSize", "readyAt", ...(Object.hasOwn(repository, "importedPolicy") ? ["importedPolicy"] : [])]);
       if (repository.repositoryId !== repositoryId || repository.phase !== "ready" || !timestamp(repository.readyAt)) invalid();
       const receipt = object(repository.importReceipt);
       const draft = parseNativeProjectDraft({ schemaVersion: 3, recordType: "native-project-draft", phase: "repository-imported",
         name, projectId: value.projectId, serviceId: "native-main", ownerHostId: value.ownerHostId,
         generationId: receipt.generationId, repositoryId, protectedRef: repository.protectedRef,
-        expectedCommit: repository.commit, expectedTree: repository.tree, repositoryPolicy: repository.repositoryPolicy,
+        expectedCommit: repository.commit, expectedTree: repository.tree, repositoryPolicy: repository.importedPolicy ?? repository.repositoryPolicy,
         bundleDigest: repository.bundleDigest, bundleSize: repository.bundleSize, importReceipt: repository.importReceipt });
       if (draft.phase !== "repository-imported") invalid();
+      const policy = parseAuthoritativeImportedRootPolicy(repository.repositoryPolicy);
+      if (policy.protectedRef !== draft.protectedRef) invalid();
       repositories[repositoryId] = { repositoryId, phase: "ready", protectedRef: draft.protectedRef, commit: draft.expectedCommit, tree: draft.expectedTree,
-        repositoryPolicy: draft.repositoryPolicy, importReceipt: draft.importReceipt, bundleDigest: draft.bundleDigest, bundleSize: draft.bundleSize, readyAt: repository.readyAt };
+        repositoryPolicy: policy, ...(repository.importedPolicy === undefined ? {} : { importedPolicy: draft.repositoryPolicy }), importReceipt: draft.importReceipt, bundleDigest: draft.bundleDigest, bundleSize: draft.bundleSize, readyAt: repository.readyAt };
     }
     const common: ProjectIdentity = { schemaVersion: 7, recordType: "native-project", name, projectId: value.projectId,
       serviceId: "native-main", ownerHostId: value.ownerHostId, repositories };

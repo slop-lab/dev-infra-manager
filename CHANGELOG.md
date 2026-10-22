@@ -143,8 +143,13 @@ is implied by these source changes.
   Explicitly import `.dim/repos.yml` from a local CLI file or Web paste/upload
   after previewing its repository graph, protected refs, defaults and policies.
   Preserve upstream/publish mappings and resume completed repository imports when
-  a later import fails. Managed deployment accepts these synchronization policies
-  without implicitly granting synchronization operator authority. Controller
+  a later import fails. Explicitly update an existing repository's policy from
+  the current `.dim/repos.yml`, another YAML manifest or a JSON policy file,
+  with preview and checks against concurrent policy/head changes. Preserve Git
+  data and immutable import receipts while invalidating outdated review evidence.
+  Managed preparation creates a separate Git-sync operator and connecting
+  attests its generation before writing the private host connection; upstream
+  write authentication remains explicit private service configuration. Controller
   discovery proves retained repositories against the current service generation.
   Deliver external Git events through signed,
   durable webhook subscriptions with bounded retry and restart recovery.

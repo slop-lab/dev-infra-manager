@@ -14,7 +14,9 @@ export function serviceCredentialValues(
   nativeValue: unknown,
   executionValue: unknown
 ): ServiceConfigurationValues {
-  const native = exactRecord(nativeValue, [
+  if (!isRecord(nativeValue)) throw new ControlPlaneSourceError("native Git service config must be an object");
+  const { gitSync, ...nativeRepository } = nativeValue;
+  const native = exactRecord(nativeRepository, [
     "schemaVersion", "serviceId", "host", "port", "storageRoot", "gitExecutable", "gitVersion",
     "projectRegistrars", "projectRootImporters", "projectRootReadIssuers",
     "workspaceWriteIssuers", "humanReviewers", "hostPromoters", "ci"
@@ -29,6 +31,7 @@ export function serviceCredentialValues(
   const workspaceWriteIssuers = hostCredentials(native.workspaceWriteIssuers, "native Git workspace write issuer");
   const humanReviewers = reviewerCredentials(native.humanReviewers);
   const hostPromoters = hostCredentials(native.hostPromoters, "native Git host promoter");
+  const synchronization = gitSyncCredentials(gitSync);
   assertDistinct(projectRegistrars.map((entry) => entry.hostId));
   assertDistinct(projectRootImporters.map((entry) => entry.hostId));
   assertDistinct(projectRootReadIssuers.map((entry) => entry.hostId));
@@ -73,9 +76,10 @@ export function serviceCredentialValues(
     return { id: value.id, token: value.token };
   });
   const hostBoundCredentials = [
-    ...projectRegistrars, ...projectRootImporters, ...projectRootReadIssuers, ...workspaceWriteIssuers, ...hostPromoters
+    ...projectRegistrars, ...projectRootImporters, ...projectRootReadIssuers, ...workspaceWriteIssuers, ...hostPromoters, ...synchronization.operators
   ];
-  const allCredentials = [...serviceCredentials, ...hostBoundCredentials, ...humanReviewers];
+  const allCredentials = [...serviceCredentials, ...hostBoundCredentials, ...humanReviewers,
+    ...(synchronization.upstream === undefined ? [] : [synchronization.upstream])];
   const credentialValues = [...allCredentials.map((entry) => entry.password), ...workers.map((entry) => entry.token)];
   const roleValues = [
     ...allCredentials.flatMap((entry) => [entry.username, entry.password]),
@@ -93,6 +97,26 @@ export function serviceCredentialValues(
 
 type HostCredential = Credential & { readonly hostId: string };
 type ReviewerCredential = Credential & { readonly reviewerId: string };
+
+function gitSyncCredentials(value: unknown): { operators: readonly HostCredential[]; upstream?: Credential } {
+  if (value === undefined) return { operators: [] };
+  if (!isRecord(value)) throw new ControlPlaneSourceError("native Git synchronization config must be an object");
+  const keys = ["operators", ...(Object.hasOwn(value, "credential") ? ["credential"] : []),
+    ...(Object.hasOwn(value, "allowLocalRemotes") ? ["allowLocalRemotes"] : [])];
+  const input = exactRecord(value, keys, "native Git synchronization config");
+  if (input.allowLocalRemotes !== undefined && typeof input.allowLocalRemotes !== "boolean") {
+    throw new ControlPlaneSourceError("native Git synchronization local remotes setting must be a boolean");
+  }
+  const operators = hostCredentials(input.operators, "native Git synchronization operator");
+  assertDistinct(operators.map(({ hostId }) => hostId));
+  if (input.credential === undefined) return { operators };
+  const upstream = exactRecord(input.credential, ["username", "password"], "native Git synchronization upstream credential");
+  if (typeof upstream.username !== "string" || upstream.username.length > 256 || !/^[^:\x00-\x20\x7f]+$/.test(upstream.username)
+    || typeof upstream.password !== "string" || upstream.password.length > 4096 || !/^[^\x00-\x20\x7f]+$/.test(upstream.password)) {
+    throw new ControlPlaneSourceError("native Git synchronization upstream credential is invalid");
+  }
+  return { operators, upstream: { username: upstream.username, password: upstream.password } };
+}
 
 function reviewerCredentials(value: unknown): readonly ReviewerCredential[] {
   if (!Array.isArray(value)) throw new ControlPlaneSourceError("native Git human reviewers must be an array");

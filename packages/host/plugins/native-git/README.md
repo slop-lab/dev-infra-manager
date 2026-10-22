@@ -50,6 +50,26 @@ on Native Git.
 
 `dim project console describe --json` discovers the selected control-plane generation, reviewer identity, local project catalog and available review/sync operations. Only repositories with ready import receipts for that generation are advertised. The host uses private `reviewer.json`, optional `promoter.json` and optional `git-sync.json` beside the selected host connection; each role must match its selected endpoint and generation, with host-bound roles also matching the selected host identity. No operator credentials or connection paths are returned.
 
+Existing repositories can explicitly refresh policy without another import:
+
+```bash
+dim project repository policy show PROJECT REPOSITORY --json
+dim project repository policy update PROJECT REPOSITORY --preview
+dim project repository policy update PROJECT REPOSITORY
+dim project repository policy update PROJECT REPOSITORY --file /absolute/reviewed-repos.yml
+dim project repository policy update PROJECT REPOSITORY --policy /absolute/repository-policy.json
+```
+
+The default update reads the current `.dim/repos.yml` on the selected host,
+including uncommitted edits. YAML must name this repository and protect its
+existing branch. JSON uses the import declaration format and replaces the full
+extension policy. Updates use the selected private importer connection and
+compare the server's current policy digest and protected commit before writing.
+Git history, original import receipts, checkout snapshots and existing workspace
+grants are preserved. Old approvals do not authorize the replacement policy.
+Repeat the same command to reconcile a host refresh after a lost response. See
+[Git synchronization](../../../../docs/guides/git-sync.md) for setup and examples.
+
 Clients pin the discovery result: subsequent discovery may pass `--expected-generation HASH`, and every `dim project console invoke OPERATION --expected-generation HASH --input JSON --json` must pass it. A changed selection fails before role attestation or mutation and requires reconnecting explicitly. Every invocation reloads the local project catalog and validates the requested project and repository; adding an imported repository needs no Web configuration. The shared `@slop-lab/dim-native-git-client` owns HTTP/evidence decoding and operation semantics; this plugin owns controller selection and namespace scope.
 
 ### Public repository imports

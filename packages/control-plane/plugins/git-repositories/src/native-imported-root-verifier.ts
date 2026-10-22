@@ -1,3 +1,4 @@
+import { readEffectiveRepositoryPolicy } from "./repository-policy-state.js";
 import { join } from "node:path";
 import { exactActivationIsBound } from "./native-bundle-activation.js";
 import type { NativeGitBundleState } from "./native-bundle-state.js";
@@ -18,6 +19,7 @@ import type { GitExecutableIdentity } from "./repository.js";
 
 export type LiveImportedRoot = {
   readonly imported: NativeProjectRootImportInstalled;
+  readonly importReceipt: NativeProjectRootImportInstalled;
   readonly currentHead: NativeProjectRootCurrentHead;
   readonly repository: string;
 };
@@ -80,7 +82,9 @@ export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput)
     || JSON.stringify(rereadHead) !== JSON.stringify(currentHead)) {
     throw new NativeProjectRootImportStateError("native Project imported root changed during proof");
   }
-  return { imported, currentHead, repository };
+  const effective = readEffectiveRepositoryPolicy(input.state.database, imported.projectId, imported.repositoryId);
+  if (effective.policyDigest !== currentHead.policyDigest) throw new NativeProjectRootImportStateError("repository policy changed during proof");
+  return { imported: { ...imported, ...effective }, importReceipt: imported, currentHead, repository };
 }
 
 function assertActive(input: LiveImportedRootInput): void {

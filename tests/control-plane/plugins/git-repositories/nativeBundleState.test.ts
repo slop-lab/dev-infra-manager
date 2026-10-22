@@ -26,7 +26,7 @@ describe("native Git idle bundle state", () => {
     const result = await inspectNativeGitBundleState(root);
 
     // Then
-    expect(result).toEqual({ stateFormat: 10 });
+    expect(result).toEqual({ stateFormat: 11 });
     expect(await stateTree(root)).toEqual(before);
     expect(before.map((entry) => entry.entry)).toEqual([
       ".dim-native-git-owner.sqlite3",
@@ -35,12 +35,12 @@ describe("native Git idle bundle state", () => {
     ]);
     expect(JSON.parse(await readFile(join(root, "state-format.json"), "utf8"))).toEqual({
       schemaVersion: 1,
-      stateFormat: 10,
+      stateFormat: 11,
       database: "native-idle.sqlite3",
       schemaManifestSha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
     });
     const database = new DatabaseSync(join(root, "native-idle.sqlite3"), { readOnly: true });
-    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 10 });
+    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 11 });
     expect(database.prepare(
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     ).all()).toEqual([
@@ -48,6 +48,7 @@ describe("native Git idle bundle state", () => {
       { name: "native_project_registration" },
       { name: "native_project_root_import" },
       { name: "native_repository_registration" },
+      { name: "repository_policy_update" },
       { name: "repository_ref_transition" }
     ]);
     database.close();

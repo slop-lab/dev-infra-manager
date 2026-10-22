@@ -183,8 +183,8 @@ ancestry and proposal identity, then persists an accepted authorization/evidence
 digest before atomically updating Git. It finalizes one monotonic receipt.
 Promotion changes one repository; no cross-repository transaction is provided.
 
-Repository state format **10** owns activation, registration, imports and neutral
-ref-transition intent/finalization. Startup validates the transition chain and
+Repository state format **11** owns activation, registration, immutable imports,
+head-bound policy-update history and neutral ref-transition intent/finalization. Startup validates the transition chain and
 recovers accepted operations interrupted before or after Git CAS. Recovery
 cannot invent an authorization or accept a changed base/candidate. A pending
 operation fences source proofs until recovery completes.
@@ -196,6 +196,20 @@ merge without fresh checks. Code-review and Git-CI own their private records in
 repository storage. Webhooks owns its separate subscriber/delivery state and
 backfills durable authority events without owning source decisions.
 
-Unsupported formats fail without migration or data erasure. Export required
+Format 10 is upgraded additively at startup without changing repositories, original
+import receipts, completed ref transitions or extension data. Read-only inspection
+accepts both formats without mutation. Other unsupported formats fail without data
+erasure. Export required
 user data before replacing incompatible storage. See [CI runners](../../guides/ci-runners.md)
 and the [installer facade](../14-installer-facade.md) for their own boundaries.
+
+
+The importer-only repository policy endpoint requires active exact generation and
+owner-host scope. Replacing policy uses both expected protected head and effective
+policy digest as compare-and-swap conditions. It validates every extension policy
+with its enabled owner before committing; protected-ref identity cannot change.
+The shared repository mutation queue prevents policy updates from racing promotion
+or scoped receive operations. Effective policy digests bind subsequent reviews and
+ref transitions, while original import receipts and historical transition digests
+are retained. Import proofs therefore distinguish immutable `importReceipt` policy
+identity from the effective `currentHead.policyDigest`.

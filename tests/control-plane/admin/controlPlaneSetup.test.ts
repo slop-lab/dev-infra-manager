@@ -1,3 +1,6 @@
+import { createNativeRepositoryPolicyClient } from "../../../packages/host/plugins/native-git/src/nativeRepositoryPolicyClient.js";
+import { loadNativeGitRootImporterConnection } from "../../../packages/host/plugins/native-git/src/nativeGitRootImporterConnection.js";
+import { compileNativeRepositoryBootstrapPolicy } from "../../../packages/host/plugins/native-git/src/nativeRootBootstrapPolicy.js";
 import { managedPolicyExtensions } from "../../support/git-policy.js";
 import { repositoryBinding } from "../../host/plugins/native-git/nativeProjectFixture.js";
 import { executionWorkerConfigSchema } from "../../../packages/host/plugins/execution-worker/src/config.js";
@@ -11,14 +14,14 @@ import { WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import { workspaceRecord } from "../../support/workspaceFixture.js";
 import { createNativeWorkspaceBroker } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceBroker.js";
 import { refreshNativeWorkspaceConnection } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceConnection.js";
-import { writeNativeWorkspaceAttachment, readNativeWorkspaceAttachment, nativeWorkspaceAttachmentFile, type NativeWorkspaceAttachment } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
+import { writeNativeWorkspaceAttachment, readNativeWorkspaceAttachment, nativeWorkspaceBrokerHealth, nativeWorkspaceAttachmentFile, type NativeWorkspaceAttachment } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
 import { createRequire } from "node:module";
 const { Command } = createRequire(new URL("../../../packages/control-plane/admin/package.json", import.meta.url))("commander") as { Command: new () => Parameters<typeof registerControlPlaneCommands>[0] };
 import { registerControlPlaneCommands } from "../../../packages/control-plane/admin/src/cli/control-plane-commands.js";
 import { saveControlPlaneSelection, selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../../../packages/host/plugins/native-git/src/controlPlaneSelection.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { configuredManagedGitFixture } from "../../support/managed-git-service.js";
-import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
+import { parseControlPlaneServicePair, parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
 import { prepareControlPlane, connectControlPlane } from "../../../packages/control-plane/admin/src/controlPlaneSetup.js";
 import { readControlPlaneConfig } from "../../../packages/installer/src/controlPlaneConfig.js";
 import { readControlPlaneSources } from "../../../packages/installer/src/controlPlaneSources.js";
@@ -26,6 +29,7 @@ import { loadNativeControlPlaneConnection } from "../../../packages/host/plugins
 import { createNodeNativeGitRootImporterClient } from "../../../packages/host/plugins/native-git/src/nativeGitRootImporterClient.js";
 import { bootstrapNativeProjectRepository } from "../../../packages/host/plugins/native-git/src/nativeProjectBootstrap.js";
 import { NativeProjectPendingStore } from "../../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js";
+import { loadGitSyncConnection } from "../../../packages/host/plugins/native-git/src/nativeGitSyncClient.js";
 import { loadNativeGitProjectRegistrarConnection } from "../../../packages/host/plugins/native-git/src/nativeGitProjectRegistrarConnection.js";
 
 const roots: string[] = [];
@@ -52,13 +56,26 @@ describe("optional control-plane setup", () => {
     const config = await readControlPlaneConfig(result.configFile, ["127.0.0.1"]);
     const sources = await readControlPlaneSources(config);
     expect(JSON.parse(sources.execution.config.bytes.toString()).workers).toEqual([]);
-    expect(JSON.parse(sources.nativeGit.config.bytes.toString()).projectRegistrars).toHaveLength(1);
+    const native = JSON.parse(sources.nativeGit.config.bytes.toString());
+    expect(native.projectRegistrars).toHaveLength(1);
+    expect(native.gitSync.operators).toHaveLength(1);
+    expect(native.gitSync.operators[0].hostId).toBe(result.hostId);
+    expect(sources.credentialValues).toContain(native.gitSync.operators[0].password);
     for (const file of ["install.json", "native-git.json", "execution.json", "native-git-readiness.token", "execution-readiness.token"]) {
       expect((await stat(path.join(directory, file))).mode & 0o777).toBe(0o600);
     }
     expect(sources.credentialValues.every((secret) => !JSON.stringify(result).includes(secret))).toBe(true);
     await expect(prepareControlPlane({ directory, nativeGitImage: config.nativeGit.image, executionImage: config.execution.image }))
       .rejects.toThrow(/refusing to replace/);
+  });
+
+  it.each(["operator", "provider"])("rejects synchronization %s secrets reused by the paired scheduler", async (role) => {
+    const { directory } = await fixture();
+    const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
+    const execution = JSON.parse(await readFile(path.join(directory, "execution.json"), "utf8"));
+    if (role === "operator") native.gitSync.operators[0].password = execution.credentials.query.password;
+    else native.gitSync.credential = { username: "github-sync", password: execution.credentials.query.password };
+    expect(() => parseControlPlaneServicePair(native, execution)).toThrow(/credentials must be distinct/);
   });
 
   it("binds generated bootstrap and host connections to a real native service generation", async () => {
@@ -69,6 +86,9 @@ describe("optional control-plane setup", () => {
       ciRunnerImage: `registry.example/sysbox@sha256:${"e".repeat(64)}`, ciJobImage: profile.jobBaseImage, ciVmProfile: profile });
     const ordinary = JSON.parse(await readFile(path.join(directory, "execution.json"), "utf8"));
     const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
+    const provider = { username: "github-sync", password: "private-github-provider-token" };
+    native.gitSync.credential = provider;
+    await writeFile(path.join(directory, "native-git.json"), `${JSON.stringify(native)}\n`, { mode: 0o600 });
     native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
     let service = await configuredManagedGitFixture({ workflowCompiler: dimWorkflowCompiler,
       config: parseManagedGitServiceConfig(native), stateDirectory: path.join(root, "native-state"),
@@ -110,6 +130,13 @@ describe("optional control-plane setup", () => {
       printed.mockRestore();
       const host = await loadNativeControlPlaneConnection(path.join(connected.directory, "host.json"));
       expect(host).toMatchObject({ hostId: "operator", nativeGit: { endpoint, generationId: "c".repeat(64) } });
+      expect(await loadGitSyncConnection(path.join(connected.directory, "git-sync.json")))
+        .toMatchObject({ role: "git-sync-operator", hostId: "operator", generationId: connected.generationId,
+          endpoint, credential: { username: native.gitSync.operators[0].username, password: native.gitSync.operators[0].password } });
+      expect((await stat(path.join(connected.directory, "git-sync.json"))).mode & 0o777).toBe(0o600);
+      for (const file of ["git-sync.json", "host.json", "registrar.json", "importer.json", "reviewer.json", "promoter.json"]) {
+        expect(await readFile(path.join(connected.directory, file), "utf8")).not.toContain(provider.password);
+      }
       const reviewer = JSON.parse(await readFile(path.join(connected.directory, "reviewer.json"), "utf8"));
       expect(reviewer).toMatchObject({ schemaVersion: 1, serviceId: "native-main", baseUrl: endpoint,
         reviewerId: "owner", username: "reviewer-owner", generationId: connected.generationId });
@@ -181,32 +208,61 @@ describe("optional control-plane setup", () => {
         expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
         expect((await fetch(brokerUrl, { headers })).status).toBe(200);
         for (const changedScope of [{ projectId: "another" },
-          { configuration: { ...attachment.configuration, protectedRef: "refs/heads/other" } },
-          { repositories: { ...attachment.repositories, root: { ...attachment.repositories.root!, policyRevision: "b".repeat(64) } } }]) {
+          { configuration: { ...attachment.configuration, protectedRef: "refs/heads/other" } }]) {
           await expect(refreshNativeWorkspaceConnection({ ...attachment, ...changedScope }, AbortSignal.timeout(5000), environment))
             .rejects.toThrow(/cannot reconnect/);
           expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
         }
+        // Policy is mutable trusted host metadata. A stale binding can reconnect only
+        // after the authority proves the catalog's current policy for its pinned snapshot.
+        const stalePolicyAttachment = { ...refreshed, repositories: { ...refreshed.repositories,
+          root: { ...refreshed.repositories.root!, policyRevision: "b".repeat(64) } } };
+        expect(await refreshNativeWorkspaceConnection(stalePolicyAttachment, AbortSignal.timeout(5000), environment)).toEqual(refreshed);
+        expect((await fetch(brokerUrl, { headers })).status).toBe(200);
+        const selectedHost = await loadNativeControlPlaneConnection(refreshed.connectionFile);
+        const policyClient = createNativeRepositoryPolicyClient(
+          await loadNativeGitRootImporterConnection(path.join(reconnected.directory, "importer.json")), selectedHost);
+        const previousPolicy = await policyClient.read("example", "root", AbortSignal.timeout(5000));
+        const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: repository.protectedRef,
+          extensions: { ...previousPolicy.policy.extensions, "git-sync": {
+            upstream: { url: "https://github.com/example/project.git", branch: "main" }
+          } } }).repositoryPolicy;
+        await policyClient.update(previousPolicy, policy, AbortSignal.timeout(5000));
+        const changed = await store.applyRepositoryPolicy("example", "root", policy, repository.repositoryPolicy.policyRevision, selectedHost, AbortSignal.timeout(5000));
+        expect(changed.repositories.root?.commit).toBe(repository.commit);
+        expect(changed.repositories.root?.importReceipt).toEqual(repository.importReceipt);
+        // No controller action, guest reconfiguration, grant rotation or checkout reset.
+        expect((await fetch(brokerUrl, { headers })).status).toBe(200);
+        const proof = await (await createNodeNativeGitRootImporterClient(path.join(reconnected.directory, "importer.json")))
+          .proveRepository("example", "root", AbortSignal.timeout(5000));
+        expect(proof.importReceipt.policyDigest).toBe(repository.importReceipt.policyDigest);
+        expect(proof.currentHead.policyDigest).not.toBe(proof.importReceipt.policyDigest);
+        const policyRefreshed = await refreshNativeWorkspaceConnection(refreshed, AbortSignal.timeout(5000), environment);
+        expect(policyRefreshed.repositories.root).toEqual({ ...refreshed.repositories.root, policyRevision: policy.policyRevision });
+        expect(policyRefreshed.configuration).toEqual({ ...refreshed.configuration, policyRevision: policy.policyRevision });
+        const health = await fetch(`http://127.0.0.1:${address.port}/health`, { headers });
+        expect(health.status).toBe(200);
+        expect(await health.text()).toBe(nativeWorkspaceBrokerHealth(policyRefreshed));
         const foreign = path.join(root, "foreign.json");
-        const foreignConnection = JSON.parse(await readFile(refreshed.connectionFile, "utf8"));
+        const foreignConnection = JSON.parse(await readFile(policyRefreshed.connectionFile, "utf8"));
         foreignConnection.nativeGit.endpoint = "http://127.0.0.1:1";
         await writeFile(foreign, JSON.stringify(foreignConnection), { mode: 0o600 });
-        await expect(refreshNativeWorkspaceConnection(refreshed, AbortSignal.timeout(5000), {
+        await expect(refreshNativeWorkspaceConnection(policyRefreshed, AbortSignal.timeout(5000), {
           DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: foreign
         })).rejects.toThrow(/another control-plane authority/);
-        expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
+        expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(policyRefreshed);
         // An ambient switch is a default for new workspaces. It must not block
         // the original workspace, whose broker and credentials remain usable.
         const ambient = { DIM_MANAGED_STATE_ROOT: path.join(root, "selection-state") };
-        expect(await refreshNativeWorkspaceConnection(refreshed, AbortSignal.timeout(5000), ambient)).toEqual(refreshed);
+        expect(await refreshNativeWorkspaceConnection(policyRefreshed, AbortSignal.timeout(5000), ambient)).toEqual(policyRefreshed);
         const foreignImporter = path.join(root, "foreign-importer.json");
         const importer = JSON.parse(await readFile(path.join(reconnected.directory, "importer.json"), "utf8"));
         importer.endpoint = foreignConnection.nativeGit.endpoint;
         await writeFile(foreignImporter, JSON.stringify(importer), { mode: 0o600 });
         await saveControlPlaneSelection({ hostConnectionFile: foreign, importerConnectionFile: foreignImporter }, ambient);
         expect(await selectedControlPlaneHostFile(ambient)).toBe(foreign);
-        expect(await refreshNativeWorkspaceConnection(refreshed, AbortSignal.timeout(5000), ambient)).toEqual(refreshed);
-        expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
+        expect(await refreshNativeWorkspaceConnection(policyRefreshed, AbortSignal.timeout(5000), ambient)).toEqual(policyRefreshed);
+        expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(policyRefreshed);
         expect((await fetch(brokerUrl, { headers })).status).toBe(200);
       } finally {
         await new Promise<void>((resolve, reject) => { broker.close((error) => error ? reject(error) : resolve()); broker.closeAllConnections(); });
@@ -256,6 +312,43 @@ describe("optional control-plane setup", () => {
     await expect(stat(path.join(root, "invalid"))).rejects.toMatchObject({ code: "ENOENT" });
     const client = { request: async () => { throw new Error("credentials must never be sent"); } };
     await expect(connectControlPlane(directory, { endpoint: "http://remote.example:8787", client })).rejects.toThrow(/invalid/);
+    await expect(stat(path.join(directory, "connections"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.each(["missing", "disabled"])("connects an existing %s synchronization configuration without granting its authority", async (mode) => {
+    const { directory } = await fixture();
+    const file = path.join(directory, "native-git.json");
+    const native = JSON.parse(await readFile(file, "utf8"));
+    if (mode === "missing") delete native.gitSync;
+    else native.gitSync = { operators: [] };
+    await writeFile(file, `${JSON.stringify(native)}\n`, { mode: 0o600 });
+    const seen: string[] = [];
+    const client = { request: async (input: { path: string }) => {
+      const role = input.path.slice(4, -9); seen.push(role);
+      return { statusCode: 200, contentType: "application/json", cacheControl: "no-store", body: Buffer.from(JSON.stringify({
+        schemaVersion: 1, serviceId: "native-main", role,
+        ...(role === "human-reviewer" ? { reviewerId: "owner" } : { hostId: "operator" }), generationId: "a".repeat(64)
+      })) };
+    } };
+    const connected = await connectControlPlane(directory, { client });
+    expect(seen).not.toContain("git-sync-operator");
+    await expect(stat(path.join(connected.directory, "host.json"))).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(path.join(connected.directory, "git-sync.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not publish any connections when synchronization attests a different generation", async () => {
+    const { directory } = await fixture();
+    const seen: string[] = [];
+    const client = { request: async (input: { path: string }) => {
+      const role = input.path.slice(4, -9); seen.push(role);
+      return { statusCode: 200, contentType: "application/json", cacheControl: "no-store", body: Buffer.from(JSON.stringify({
+        schemaVersion: 1, serviceId: "native-main", role,
+        ...(role === "human-reviewer" ? { reviewerId: "owner" } : { hostId: "operator" }),
+        generationId: (role === "git-sync-operator" ? "b" : "a").repeat(64)
+      })) };
+    } };
+    await expect(connectControlPlane(directory, { client })).rejects.toThrow(/generation changed/);
+    expect(seen).toContain("git-sync-operator");
     await expect(stat(path.join(directory, "connections"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 

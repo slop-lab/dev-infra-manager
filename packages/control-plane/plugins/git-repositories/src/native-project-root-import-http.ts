@@ -1,3 +1,4 @@
+import { handleNativeRepositoryPolicyHttp } from "./native-repository-policy-http.js";
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
@@ -41,6 +42,8 @@ export type RootImportHttpContext = {
   readonly gitExecutable: string;
   readonly gitIdentity: GitExecutableIdentity;
   readonly validatePolicy: (policy: import("./native-imported-root-policy.js").NativeImportedRootPolicy, selector: { readonly projectId: string; readonly repositoryId: string }) => void | Promise<void>;
+  readonly reconcilePolicy: (projectId: string, repositoryId: string) => Promise<void>;
+  readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
   readonly acquireImport: () => (() => void) | undefined;
 };
 
@@ -87,6 +90,7 @@ export function createNativeProjectRootImportService(input: RootImportServiceInp
 }
 
 export async function handleNativeProjectRootImportHttp(context: RootImportHttpContext): Promise<boolean> {
+  if (await handleNativeRepositoryPolicyHttp(context)) return true;
   if (await handleNativeProjectRootImportProofHttp(context)) return true;
   if (await handleNativeProjectRootImportFinalizeHttp(context)) return true;
   const identityRequest = context.request.method === "GET"

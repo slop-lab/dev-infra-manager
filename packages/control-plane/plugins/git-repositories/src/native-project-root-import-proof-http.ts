@@ -54,7 +54,7 @@ export async function handleNativeProjectRootImportProofHttp(
     sendJson(context.response, 409, { error: "repository proof generation conflicts with service startup" }); return true;
   }
   try {
-    const { imported, currentHead } = await verifyLiveImportedRepository({
+    const { importReceipt: imported, currentHead } = await verifyLiveImportedRepository({
       activated: context.activated,
       activationTokenDigest: context.activationTokenDigest,
       expectedGenerationId: context.expectedGenerationId,

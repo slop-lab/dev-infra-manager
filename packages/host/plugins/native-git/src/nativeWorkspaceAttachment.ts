@@ -72,7 +72,11 @@ export function nativeWorkspaceBrokerCredential(attachment: NativeWorkspaceAttac
   return first.grant;
 }
 export function nativeWorkspaceBrokerHealth(attachment: NativeWorkspaceAttachment): string {
-  return createHash("sha256").update(attachment.workspaceId).update(JSON.stringify(attachment.repositories)).digest("hex");
+  const repositories = Object.fromEntries(Object.entries(attachment.repositories).map(([id, binding]) => {
+    const { policyRevision: _revision, ...scope } = binding;
+    return [id, scope];
+  }));
+  return createHash("sha256").update(attachment.workspaceId).update(JSON.stringify(repositories)).digest("hex");
 }
 function token(value: unknown): string { const result = text(value); if (!/^[A-Za-z0-9_-]{43}$/.test(result)) throw invalid(); return result; }
 function text(value: unknown): string { if (typeof value !== "string" || !value || value.includes("\0")) throw invalid(); return value; }

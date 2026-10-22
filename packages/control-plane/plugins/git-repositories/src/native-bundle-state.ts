@@ -25,6 +25,7 @@ import {
 } from "./native-bundle-state-marker.js";
 import {
   createNativeGitBundleDatabase,
+  upgradeNativeGitBundlePolicyState,
   expectedNativeGitBundleMarker,
   NativeGitBundleStateError,
   validateNativeGitBundleStateFiles
@@ -38,7 +39,7 @@ const activeStates = new WeakSet<NativeGitBundleState>();
 
 export type NativeGitBundleState = {
   readonly database: string;
-  readonly stateFormat: 10;
+  readonly stateFormat: 11;
   readonly owner: StorageOwner;
 };
 
@@ -60,6 +61,7 @@ export async function initializeNativeGitBundleState(
       await publishNativeGitBundleMarker(join(stateDirectory, markerName), expectedNativeGitBundleMarker());
       await syncNativeGitBundlePath(stateDirectory, true);
     } else {
+      await upgradeNativeGitBundlePolicyState(stateDirectory);
       const persisted = await validateNativeGitBundleStateFiles(stateDirectory, entries);
       if (expectedGenerationId !== undefined && persisted.imports.some((rootImport) =>
         rootImport.generationId !== expectedGenerationId && rootImport.phase !== "repository-imported")) {
@@ -69,7 +71,7 @@ export async function initializeNativeGitBundleState(
     }
     const state: NativeGitBundleState = {
       database,
-      stateFormat: 10,
+      stateFormat: 11,
       owner: {
         async release() {
           if (!activeStates.delete(state)) return;
@@ -87,12 +89,12 @@ export async function initializeNativeGitBundleState(
 
 export async function inspectNativeGitBundleState(
   stateDirectory: string
-): Promise<{ readonly stateFormat: 10 }> {
+): Promise<{ readonly stateFormat: 10 | 11 }> {
   await assertDirectory(stateDirectory);
   const entries = await readdir(stateDirectory);
   await inspectStorageOwner(stateDirectory);
-  await validateNativeGitBundleStateFiles(stateDirectory, entries);
-  return { stateFormat: 10 };
+  const persisted = await validateNativeGitBundleStateFiles(stateDirectory, entries);
+  return { stateFormat: persisted.stateFormat };
 }
 
 export function registerNativeProject(state: NativeGitBundleState, generationId: string, input: unknown): void {

@@ -17,7 +17,7 @@ it("repository plugin starts and releases its owned state without review or work
   try {
     const service = await startControlPlanePlugins(entries, new AbortController().signal);
     await service.close(); await service.close();
-    expect((await inspectNativeGitBundleState(configuration.stateDirectory)).stateFormat).toBe(10);
+    expect((await inspectNativeGitBundleState(configuration.stateDirectory)).stateFormat).toBe(11);
     // Closing releases persistent state ownership without deleting durable data.
     const restarted = await startControlPlanePlugins(entries, new AbortController().signal); await restarted.close();
   } finally { await rm(root, { recursive: true, force: true }); }

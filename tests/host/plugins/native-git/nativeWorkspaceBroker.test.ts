@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WorkspaceStore, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import { createNativeWorkspaceBroker } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceBroker.js";
 import { attachmentRecord, repositoryBinding, repositoryRecord } from "./nativeProjectFixture.js";
+import { nativeWorkspaceBrokerHealth } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
 import type { NativeWorkspaceAttachment } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -80,4 +81,16 @@ it("fences each selected repository credential independently and never routes an
   expect((await fetch(`http://127.0.0.1:${address.port}/v1/projects/example/repositories/unselected.git/info/refs?service=git-upload-pack`, { headers })).status).toBe(404);
   await store.write({ ...workspace, id: randomUUID() });
   expect((await fetch(`http://127.0.0.1:${address.port}/health`, { headers })).status).toBe(410);
+});
+
+it("keeps broker identity across policy refresh while fencing changes to grants and snapshots", async () => {
+  const { endpoint, headers, attachment } = await fixture();
+  const refreshed = { ...attachment, repositories: { ...attachment.repositories,
+    public: { ...attachment.repositories.public!, policyRevision: "f".repeat(64) } } };
+  expect(await (await fetch(`${endpoint}/health`, { headers })).text()).toBe(nativeWorkspaceBrokerHealth(refreshed));
+  for (const changed of [{ grant: randomBytes(32).toString("base64url") }, { commit: "f".repeat(40) }]) {
+    const changedScope = { ...refreshed, repositories: { ...refreshed.repositories,
+      public: { ...refreshed.repositories.public!, ...changed } } };
+    expect(nativeWorkspaceBrokerHealth(changedScope)).not.toBe(nativeWorkspaceBrokerHealth(refreshed));
+  }
 });

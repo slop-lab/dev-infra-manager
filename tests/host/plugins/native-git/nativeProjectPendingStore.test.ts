@@ -8,6 +8,7 @@ import { NativeProjectPendingStore } from "../../../../packages/host/plugins/nat
 import { NativeProjectDraftStore } from "../../../../packages/host/plugins/native-git/src/nativeProjectDraftStore.js";
 import type { NativeGitRootImporterClient } from "../../../../packages/host/plugins/native-git/src/nativeGitRootImporterClient.js";
 import type { NativeControlPlaneConnection } from "../../../../packages/host/plugins/native-git/src/nativeControlPlaneConnection.js";
+import { compileNativeRepositoryBootstrapPolicy } from "../../../../packages/host/plugins/native-git/src/nativeRootBootstrapPolicy.js";
 import { repositoryRecord } from "./nativeProjectFixture.js";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -103,4 +104,41 @@ it("refuses identity collisions, foreign hosts and unsafe canonical state withou
   await chmod(file, 0o600); await link(file, path.join(root, "copy"));
   await expect(store.read("acme", "host-a")).rejects.toThrow();
   expect(await readFile(file)).toEqual(before);
+});
+
+it("updates effective policy with authenticated readiness while preserving immutable import data and replay", async () => {
+  const { root, store, connection } = await fixture();
+  await store.create({ name: "acme", projectId: "project-a", ownerHostId: "host-a" });
+  const importer = await imported(root, "public");
+  await store.admitRepository("acme", "public", importer, connection, signal());
+  const before = (await store.read("acme", "host-a"))!;
+  const original = before.repositories.public!;
+  const draftBefore = await new NativeProjectDraftStore(root).read("acme", "public");
+  const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: "public", protectedRef: original.protectedRef,
+    extensions: { "git-sync": { publish: { remote: "https://example.invalid/repo.git", branch: "main" } } } }).repositoryPolicy;
+  const updated = await store.applyRepositoryPolicy("acme", "public", policy, original.repositoryPolicy.policyRevision, connection, signal());
+  expect(updated.repositories.public).toEqual({ ...original, repositoryPolicy: policy, importedPolicy: original.repositoryPolicy });
+  expect(await new NativeProjectDraftStore(root).read("acme", "public")).toEqual(draftBefore);
+  expect(await store.read("acme", "host-a")).toEqual(updated);
+  // Replaying the original import must neither reset policy nor rewrite its receipt.
+  expect(await store.admitRepository("acme", "public", importer, connection, signal())).toEqual(updated);
+  const next = compileNativeRepositoryBootstrapPolicy({ repositoryId: "public", protectedRef: original.protectedRef,
+    extensions: { "other-plugin": { enabled: true } } }).repositoryPolicy;
+  await expect(store.applyRepositoryPolicy("acme", "public", next, original.repositoryPolicy.policyRevision, connection, signal())).rejects.toThrow(/policy changed/);
+  expect(await store.read("acme", "host-a")).toEqual(updated);
+  const restored = await store.applyRepositoryPolicy("acme", "public", original.repositoryPolicy, policy.policyRevision, connection, signal());
+  expect(restored.repositories.public).toEqual(original);
+});
+it("refuses unauthenticated policy readiness and protected-ref replacement without changing import state", async () => {
+  const { root, store, connection, wrongRepository } = await fixture();
+  await store.create({ name: "acme", projectId: "project-a", ownerHostId: "host-a" });
+  await store.admitRepository("acme", "public", await imported(root, "public"), connection, signal());
+  const before = await readFile(path.join(root, "projects/acme.json"));
+  const original = (await store.read("acme", "host-a"))!.repositories.public!;
+  const changedRef = compileNativeRepositoryBootstrapPolicy({ repositoryId: "public", protectedRef: "refs/heads/other" }).repositoryPolicy;
+  await expect(store.applyRepositoryPolicy("acme", "public", changedRef, original.repositoryPolicy.policyRevision, connection, signal())).rejects.toThrow(/protected ref/);
+  wrongRepository();
+  const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: "public", protectedRef: original.protectedRef, extensions: { extra: {} } }).repositoryPolicy;
+  await expect(store.applyRepositoryPolicy("acme", "public", policy, original.repositoryPolicy.policyRevision, connection, signal())).rejects.toThrow();
+  expect(await readFile(path.join(root, "projects/acme.json"))).toEqual(before);
 });

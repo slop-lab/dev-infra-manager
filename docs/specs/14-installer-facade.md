@@ -640,7 +640,7 @@ identical deployment.
 For an update, each candidate image MUST also expose
 `/usr/local/bin/dim-service compatibility --json`. The installer runs it for
 both candidate and prior services before container replacement and requires
-exact JSON shaped as `{"schemaVersion":1,"writeFormat":10,"readableFormats":[10]}`
+exact JSON shaped as `{"schemaVersion":1,"writeFormat":11,"readableFormats":[10,11]}`
 for current native Git and `{"schemaVersion":1,"writeFormat":102,"readableFormats":[102]}`
 for current ordinary CI.
 `writeFormat` is one positive integer; `readableFormats` is a non-empty sorted
@@ -649,7 +649,7 @@ prior images' `dim-service check-state --read-only /var/lib/dim-native-git
 --json` for native Git and `dim-service check-state --read-only
 /var/lib/dim-execution --json` for ordinary CI, with only that service's data
 volume mounted read-only. Each returns exact JSON
-`{"schemaVersion":1,"stateFormat":10}` for current native Git or
+`{"schemaVersion":1,"stateFormat":11}` for current native Git or
 `{"schemaVersion":1,"stateFormat":102}` for current ordinary CI and performs no
 write. Earlier ordinary formats are rejected unchanged, not migrated. The candidate and
 prior probes must report the same state format. The update is admitted only
@@ -707,8 +707,9 @@ docker container exec --user 10001:10001 NATIVE_ID /usr/local/bin/dim-service ac
 The image-local activation command reads only `/run/secrets/activation.token`, sends one
 bounded request to `http://127.0.0.1:8080/v1/activation`, requires the exact
 success status, headers, and body, and exits zero with empty standard output and
-standard error. No
-activation token appears in Docker argv, environment, stdin, logs, or generated
+standard error. Native Git allows 120 seconds for repository and proposal
+reconciliation; the installer bounds that Docker exec at 130 seconds. Readiness
+uses its separate short probe deadline. No activation token appears in Docker argv, environment, stdin, logs, or generated
 Compose.
 
 Before every readiness attempt, the installer re-inspects the fixed service

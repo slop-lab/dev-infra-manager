@@ -189,7 +189,7 @@ describe("native Git root importer host client", () => {
     ["foreign current Project", { outer: {}, receipt: {}, currentHead: { projectId: "project-b" } }],
     ["negative current sequence", { outer: {}, receipt: {}, currentHead: { sequence: -1 } }],
     ["changed sequence-zero head", { outer: {}, receipt: {}, currentHead: { commit: "e".repeat(40) } }],
-    ["foreign current policy", { outer: {}, receipt: {}, currentHead: { policyDigest: "f".repeat(64) } }],
+    ["malformed current policy", { outer: {}, receipt: {}, currentHead: { policyDigest: "not-a-digest" } }],
     ["extra current field", { outer: {}, receipt: {}, currentHead: { credential: "unexpected" } }]
   ] satisfies readonly (readonly [string, ProofChange])[])(
   "rejects a %s imported-root proof", async (_label, change) => {

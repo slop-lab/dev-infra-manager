@@ -56,7 +56,7 @@ export function registerControlPlaneCommands(program: Command): void {
       } else if (connected.executionWorkerCount > 1) {
         console.log("Several execution workers are configured; generate each host's private worker configuration explicitly. No worker.json was selected.");
       }
-      console.log("Create a Project with 'dim project create NAME', then import each repository with 'dim project repository import NAME REPOSITORY --source PATH --ref REF --review-policy FILE'.");
+      console.log("Create a Project with 'dim project create NAME', then import each repository with 'dim project repository import NAME REPOSITORY --source PATH --ref REF --policy FILE'.");
     });
   registerCiCommands(command);
 }

@@ -1,16 +1,16 @@
 schemaVersion: 1
 repositories:
-  root:
-    ref: main
-    protect: [main]
+  main:
+    ref: development
+    protect: [development]
     upstream:
       url: https://github.com/slop-lab/dev-infra-manager.git
       branch: development
-    publish: {main: development}
+    publish: {development: development}
 policy:
   code-review:
     requiredReviewerIds: []
     pathReviewerRules:
       - pathPrefix: .dim/
-        reviewerIds: [owner]
+        reviewerIds: [mjy]
   merge-policy: {}

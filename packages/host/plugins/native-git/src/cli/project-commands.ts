@@ -6,6 +6,7 @@ import { registerNativeProjectBootstrapCommand } from "./native-project-bootstra
 import { registerProjectConsoleCommands } from "./project-console-commands.js";
 import { registerGitSyncCommands } from "./git-sync-commands.js";
 import { registerNativeProjectManifestCommand } from "./native-project-manifest-command.js";
+import { registerRepositoryPolicyCommands } from "./repository-policy-commands.js";
 
 export function registerProjectCommands(program: Command): void {
   const project = program.command("project").description("Manage native Projects and their independent repositories");
@@ -21,6 +22,7 @@ export function registerProjectCommands(program: Command): void {
   registerNativeProjectBootstrapCommand(repository);
   registerNativeProjectManifestCommand(repository);
   registerGitSyncCommands(repository);
+  registerRepositoryPolicyCommands(repository);
   repository.command("list").alias("ls").argument("<project>").option("--json", "print machine-readable JSON")
     .action(async (name: string, flags: JsonFlags) => {
       const native = await selectNativeProject(), record = await native.store.read(name, native.connection.hostId);

@@ -26,7 +26,7 @@ describe("durable native root bundle integrity", () => {
     const { root } = await durableFixture();
     const before = await readFile(join(root, "native-idle.sqlite3"));
 
-    expect(await inspectNativeGitBundleState(root)).toEqual({ stateFormat: 10 });
+    expect(await inspectNativeGitBundleState(root)).toEqual({ stateFormat: 11 });
     expect(await readFile(join(root, "native-idle.sqlite3"))).toEqual(before);
   });
 

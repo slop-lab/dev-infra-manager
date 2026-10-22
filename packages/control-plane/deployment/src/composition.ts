@@ -23,8 +23,8 @@ export function managedGitPluginEntries(input: {
     { plugin: review, config: { humanReviewers: config.humanReviewers } },
     { plugin: gitCi, config: config.ci },
     { plugin: merge, config: { hostPromoters: config.hostPromoters } },
-    // Reviewed upstream declarations are accepted without granting synchronization authority.
-    { plugin: gitSync, config: { operators: [] } },
+    // Synchronization authority is supplied explicitly by the reviewed managed service configuration.
+    { plugin: gitSync, config: config.gitSync ?? { operators: [] } },
     { plugin: repositories, config: { service: repositoryConfiguration(config), stateDirectory: input.stateDirectory,
       readinessToken: input.readinessToken, activationToken: input.activationToken,
       expectedGenerationId: input.expectedGenerationId } },

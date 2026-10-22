@@ -42,6 +42,35 @@ describe("control-plane private source staging", () => {
       await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/paired/);
     });
 
+  it("tracks private synchronization operator and Git provider secrets in deployment redaction and activation fences", async () => {
+    const input = await fixture();
+    const operator = { hostId: "host-a", username: "git-sync-host-a", password: Buffer.alloc(32, 92).toString("base64url") };
+    const provider = { username: "github-sync", password: "github-provider-private-token" };
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), gitSync: { operators: [operator], credential: provider } })}\n`);
+    const sources = await readControlPlaneSources(input.parsed);
+    expect(sources.credentialValues).toEqual(expect.arrayContaining([operator.password, provider.password]));
+    expect(sources.roleValues).toEqual(expect.arrayContaining([operator.username, provider.username]));
+    expect(() => completeControlPlaneSourcePreflight(sources, {
+      nativeGit: Buffer.from(`${operator.password}\n`), execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
+    })).toThrow(/distinct/);
+  });
+
+  it.each(["operator", "provider"])("rejects synchronization %s credentials colliding across services", async (role) => {
+    const input = await fixture();
+    const operator = { hostId: "host-a", username: "git-sync-host-a", password: Buffer.alloc(32, 92).toString("base64url") };
+    const provider = { username: "github-sync", password: "github-provider-private-token" };
+    if (role === "operator") operator.password = controlPlaneSecrets.query;
+    else provider.password = controlPlaneSecrets.query;
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), gitSync: { operators: [operator], credential: provider } })}\n`);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/distinct/);
+  });
+
+  it("rejects unknown synchronization settings rather than hiding credentials from deployment preflight", async () => {
+    const input = await fixture();
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...nativeServiceConfig(), gitSync: { operators: [], unknown: true } })}\n`);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/fields/);
+  });
+
   it("includes runtime-independent worker credentials in redaction and activation fences", async () => {
     const input = await fixture();
     const sources = await readControlPlaneSources(input.parsed);

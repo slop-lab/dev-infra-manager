@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { UserError } from "@slop-lab/dim-host-core";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
@@ -5,11 +6,10 @@ import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
 import { proveNativeProjectReadiness } from "./nativeProjectReadinessClient.js";
 import { writeNativeWorkspaceAttachment, type NativeWorkspaceAttachment } from "./nativeWorkspaceAttachment.js";
 
-/** Reconnect only the host credential reference; the workspace's Git identity and snapshot stay pinned. */
+/** Refresh trusted host policy and credentials while preserving every checkout snapshot and scoped grant. */
 export async function refreshNativeWorkspaceConnection(attachment: NativeWorkspaceAttachment, signal: AbortSignal,
   environment: NodeJS.ProcessEnv = process.env): Promise<NativeWorkspaceAttachment> {
   const connectionFile = await selectedControlPlaneHostFile(environment, attachment.connectionFile);
-  if (connectionFile === attachment.connectionFile) return attachment;
   try {
     const previous = await loadNativeControlPlaneConnection(attachment.connectionFile);
     const selected = await loadNativeControlPlaneConnection(connectionFile);
@@ -21,23 +21,25 @@ export async function refreshNativeWorkspaceConnection(attachment: NativeWorkspa
     }
     const project = await new NativeProjectPendingStore(attachment.managedStateRoot).read(attachment.projectName, selected.hostId);
     if (project?.phase !== "ready" || project.projectId !== attachment.projectId) throw new UserError("the native Project no longer matches this workspace");
-    const bindings = [attachment.configuration, ...Object.values(attachment.repositories)];
+    const configuration = { ...attachment.configuration };
+    const repositories = Object.fromEntries(Object.entries(attachment.repositories).map(([id, binding]) => [id, { ...binding }]));
+    const bindings = [configuration, ...Object.values(repositories)];
     for (const binding of bindings) {
       const repositoryId = binding.repositoryId;
       const repository = project.repositories[repositoryId];
-      if (!repository || repository.protectedRef !== binding.protectedRef || repository.repositoryPolicy.policyRevision !== binding.policyRevision) {
-        throw new UserError(`repository '${repositoryId}' no longer matches the workspace's pinned ref and review policy`);
+      if (!repository || repository.protectedRef !== binding.protectedRef) {
+        throw new UserError(`repository '${repositoryId}' no longer matches the workspace's pinned ref`);
       }
       const proof = await proveNativeProjectReadiness(selected, project, repositoryId, signal, {
         commit: binding.commit, tree: binding.tree, allowFastForward: true
       });
-      if (proof.policyRevision !== binding.policyRevision) throw new UserError("workspace readiness policy changed");
+      binding.policyRevision = proof.policyRevision;
     }
-    const refreshed = { ...attachment, connectionFile };
-    await writeNativeWorkspaceAttachment(refreshed);
+    const refreshed = { ...attachment, connectionFile, configuration, repositories };
+    if (!isDeepStrictEqual(refreshed, attachment)) await writeNativeWorkspaceAttachment(refreshed);
     return refreshed;
   } catch (error) {
     const reason = error instanceof UserError ? error.message : "the current generation did not prove this workspace's pinned snapshot";
-    throw new UserError(`cannot reconnect this native workspace: ${reason}. Run 'dim control-plane connect SETUP --output-directory NEW_DIRECTORY' for its original authority and retry; a changed Project ref or review policy requires a new workspace`, { cause: error });
+    throw new UserError(`cannot reconnect this native workspace: ${reason}. Run 'dim control-plane connect SETUP --output-directory NEW_DIRECTORY' for its original authority and retry; a changed Project identity or protected ref requires a new workspace`, { cause: error });
   }
 }

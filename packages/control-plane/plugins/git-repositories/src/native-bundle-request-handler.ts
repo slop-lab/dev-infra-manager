@@ -73,7 +73,7 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     if (/^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/repositories\/[^/]+\/import\/proof$/.test(url.pathname)
       && (request.method !== "POST" || url.search !== "")) return sendNotFound(response);
     if (url.search === "" && (url.pathname === "/v1/operator-root-importer-identity"
-      || /^\/v1\/projects\/.+\/repositories\/[^/]+\/import(?:\/(?:finalize|proof))?$/.test(url.pathname))) {
+      || /^\/v1\/projects\/.+\/repositories\/[^/]+\/(?:import(?:\/(?:finalize|proof))?|policy)$/.test(url.pathname))) {
       if (await input.rootImportService.handle(request, response, url.pathname)) return;
     }
     if (url.search === "" && await handleNativeGitProjectRegistrarHttp({

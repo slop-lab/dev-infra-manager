@@ -23,3 +23,22 @@ it("accepts manifest synchronization policy in the managed preset without granti
     expect(publish.status).toBe(403);
   } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 });
+
+it("installs explicitly configured synchronization operators and private upstream credentials", async () => {
+  const operator = { hostId: "host-a", username: "sync-operator", password: Buffer.alloc(32, 91).toString("base64url") };
+  const credential = { username: "github-sync", password: "github-private-token" };
+  const entries = managedGitPluginEntries({ config: { ...idleNativeConfig(), gitSync: { operators: [operator], credential } },
+    stateDirectory: "/var/lib/dim-test", readinessToken: "readiness", activationToken: "activation", expectedGenerationId: generationId });
+  const sync = entries.find(({ plugin }) => plugin.name === "git-sync")!;
+  expect(sync.config).toEqual({ operators: [operator], credential, allowLocalRemotes: false });
+  const prepared = await sync.plugin.configure(sync.config);
+  const f = await fixture(true, prepared.extensions ?? [], { requiredReviewerIds: [], pathReviewerRules: [] }, [reviewer]);
+  try {
+    const identity = await fetch(`${f.origin}/v1/git-sync-operator-identity`, { headers: { authorization: basic(operator) } });
+    expect(identity.status).toBe(200);
+    expect(await identity.json()).toMatchObject({ role: "git-sync-operator", hostId: operator.hostId, generationId });
+    expect(JSON.stringify(await (await fetch(`${f.origin}/v1/git-sync-operator-identity`, {
+      headers: { authorization: basic(operator) }
+    })).json())).not.toContain(credential.password);
+  } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
+});

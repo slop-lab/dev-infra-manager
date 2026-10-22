@@ -7,6 +7,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 RUN apt-get update \
   && apt-get install --yes --no-install-recommends \
+    ca-certificates=20250419~deb12u2 \
     git=1:2.39.5-0+deb12u3 git-man=1:2.39.5-0+deb12u3 \
   && test "$(git --version)" = "git version 2.39.5" \
   && rm -rf /var/lib/apt/lists/*

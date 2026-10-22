@@ -335,14 +335,14 @@ describe("native Git image configuration preflight CLI", () => {
     expect(await Promise.all([readFile(native), readFile(execution)])).toEqual(before);
   });
 
-  it("reports exact schema-8 compatibility metadata from the built executable", async () => {
+  it("reports exact native-state compatibility metadata from the built executable", async () => {
     // Given / When
     const result = await invoke(["compatibility", "--json"]);
 
     // Then
     expect(result).toEqual({
       status: 0,
-      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 10, readableFormats: [10] })}\n`,
+      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 11, readableFormats: [10, 11] })}\n`,
       stderr: ""
     });
   });
@@ -360,7 +360,7 @@ describe("native Git image configuration preflight CLI", () => {
     const result = await run(process.execPath, [stateProbe, root]);
 
     // Then
-    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 10 })}\n`);
+    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 11 })}\n`);
     expect(result.stderr).toBe("");
     expect(await stateTree(root)).toEqual(before);
   });

@@ -91,8 +91,8 @@ evidence digests before Git CAS, then finalizes one monotonic repository
 transition. Exact retries return the original receipt. It does not interpret
 human approval or CI evidence itself.
 
-Repository state format **10** contains activation, registration, import and
-neutral ref-transition records. Feature state is separately owned: merge
+Repository state format **11** contains activation, registration, immutable import,
+policy-update history and neutral ref-transition records. Feature state is separately owned: merge
 receipts use the private `.extensions/merge-policy` directory; review and Git-CI
 own their private records in repository storage. A pending accepted ref intent
 is reconciled against Git at startup, including a crash after Git CAS but before
@@ -100,7 +100,9 @@ receipt finalization. Invalid chains, candidate identity or foreign ownership
 fail closed. Recovery never manufactures a new merge authorization.
 
 Stopping preserves repositories and durable feature data. Unsupported storage
-formats are rejected without implicit migration. Export required user data
+formats are rejected. Format 10 has one additive upgrade that preserves all data;
+startup adds policy history and publishes the format-11 marker. Read-only inspection
+accepts either format without upgrading it. Export required user data
 before replacing incompatible state. The separate installer Docker deployment
 and activation transaction retains its own facade contract.
 
@@ -129,3 +131,23 @@ The [security review example](../../../../examples/features/security-review/READ
 combines conditional path/JSON/project-matcher reviews with a separate file-retention
 ref policy. Recovery cancels unapplied pending intents; it never replays old
 permission after restart. Already-applied transitions are finalized for recovery.
+
+## Updating an imported repository policy
+
+The owner host's `operator-root-importer` credential can read or replace an existing
+repository policy at `GET` / `POST /v1/projects/:project/repositories/:repository/policy`.
+Both operations require the exact active `X-Dim-Generation-Id`. POST accepts
+`{schemaVersion:1, expectedPolicyDigest, expectedProtectedHead, policy}`. The server
+validates every selected extension and rejects disabled owners, invalid options,
+a stale digest/head, or a different protected ref. The response contains
+`schemaVersion`, `projectId`, `repositoryId`, `protectedRef`, `currentHead`, `policy`
+and `policyDigest`.
+
+Policy changes use the same mutation queue as protected-ref promotion and scoped
+workspace writes. An atomic durable history record binds each change to the current
+protected head; prior import receipts and completed transitions remain unchanged.
+Business operations use the effective policy, and older review envelopes with a
+different policy digest cannot authorize promotion. The import proof's
+`importReceipt.policyDigest` remains the original import digest, while
+`currentHead.policyDigest` identifies the current effective policy. Updating policy
+does not recreate repositories or revoke existing scoped workspace credentials.

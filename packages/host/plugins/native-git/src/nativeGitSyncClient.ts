@@ -22,7 +22,12 @@ function object(value: unknown): Record<string, unknown> {
 const identifier = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 export async function loadGitSyncConnection(file: string): Promise<GitSyncConnection> {
   if (!isAbsolute(file)) throw new UserError("Git sync connection path must be absolute on the selected host");
-  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((cause: unknown) => {
+    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") {
+      throw new UserError("Git sync connection is missing. Enable gitSync in the managed control-plane setup, deploy it, then run 'dim control-plane connect SETUP' to generate git-sync.json; use --connection for an explicit file", { cause });
+    }
+    throw cause;
+  });
   try {
     const before = await handle.stat({ bigint: true }), uid = process.geteuid?.();
     if (uid === undefined || !before.isFile() || before.uid !== BigInt(uid) || before.nlink !== 1n || (before.mode & 0o777n) !== 0o600n || before.size < 1n || before.size > 16n * 1024n) throw new UserError("Git sync connection must be a private operator-owned regular file");

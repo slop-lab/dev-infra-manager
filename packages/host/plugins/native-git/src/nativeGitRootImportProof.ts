@@ -59,7 +59,7 @@ export function parseNativeGitImportedRootProof(
   const currentCommit = field(current.commit, objectIdPattern);
   const currentTree = field(current.tree, objectIdPattern);
   if (current.projectId !== projectId || current.repositoryId !== repositoryId || current.protectedRef !== protectedRef
-    || current.policyDigest !== receipt.policyDigest || typeof sequence !== "number"
+    || typeof sequence !== "number"
     || !Number.isSafeInteger(sequence) || sequence < 0
     || currentCommit.length !== expectedCommit.length || currentTree.length !== expectedCommit.length
     || (sequence === 0 && (currentCommit !== expectedCommit || currentTree !== resolvedTree))) invalid();

@@ -8,7 +8,7 @@ repository declaration. Unknown files are ordinary checkout content.
 | Path | Owner | When it is read |
 | --- | --- | --- |
 | `.dim/workspace.json` | `@slop-lab/dim-cli` host composition | Workspace creation checks exact required host plugins in the acquired checkout before creating runtime resources. |
-| `.dim/repos.yml` | `@slop-lab/dim-host-plugin-native-git` | An explicitly selected `reviewed-manifest` bootstrap or `project repository import --repository-policy` reads the selected commit's Git blob. Ordinary workspace creation does not discover it. |
+| `.dim/repos.yml` | `@slop-lab/dim-host-plugin-native-git` | An explicitly selected `reviewed-manifest` bootstrap or `project repository import --repository-policy` reads the selected commit's Git blob. `project repository policy update` explicitly applies the operator's current file to an existing repository; `--file` selects another YAML file and `--policy` selects JSON declarations. Ordinary workspace creation does not discover it. |
 | `.dim/ci/runner.yml` | `@slop-lab/dim-control-plane-plugin-ci-workflows` | Git CI selects the `dim` workflow compiler to compile the immutable candidate's jobs. |
 | `.dim/ci/jobs/*` | The repository | Example job scripts run only when a workflow names them. Scripts can instead live elsewhere in the repository. |
 | `.dim/security-boundary.json` | The security-review example | Its trusted `boundary.ts` operator launcher reads reviewed configuration; the `.dim/` path rule requires review of changes. DIM does not discover this filename. |
@@ -46,7 +46,10 @@ not among the workspace's selected checkouts. It is not merged from every repo.
 
 ## Native Git repository policy: `repos.yml`
 
-The Native Git host plugin supports a reviewed, commit-pinned policy file:
+The Native Git host plugin reads a reviewed, commit-pinned policy at import.
+An operator can later apply an explicitly selected current file through
+`project repository policy update`; editing or pushing the file alone does not
+replace the server's policy:
 
 ```yaml
 schemaVersion: 1

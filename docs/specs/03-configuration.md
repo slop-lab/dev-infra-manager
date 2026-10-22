@@ -53,6 +53,16 @@ repositories use numeric Git sharing mode `0600`; startup rejects unsafe state
 rather than widening permissions. Candidate-controlled configuration cannot
 select host paths, devices, credentials or privileged runtime arguments.
 
+An authenticated root importer MAY explicitly replace an existing repository's
+effective policy without reimporting its Git data. The update MUST bind the
+current policy digest, protected head and serving generation; ownership and all
+selected extension policies MUST be validated. It MUST NOT change the protected
+ref, rewrite historical import receipts or make old approvals apply to the new
+policy. Host policy commands read only explicitly selected operator files;
+ordinary pushes and workspace startup MUST NOT apply candidate policy files.
+Reconciliation after a lost response MUST verify the effective server policy
+before refreshing the host catalog.
+
 Optional execution has one operator-owned capacity and execution model. A
 workflow plugin compiles candidate configuration into normalized plans; trusted
 profiles choose images, resource bounds and backend. Mirrors are optional:

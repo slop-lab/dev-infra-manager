@@ -8,30 +8,20 @@ does not require CI or a workspace runtime.
 
 ## Install and configure
 
-DIM's managed control-plane image already includes this attachment with an empty
-operator list. This accepts reviewed upstream/publish policy during manifest
-import, while granting no synchronization authority. To enable fetch, merge or
-publish commands, use an explicit service composition with the private operator
-configuration below; the managed preset does not provision that connection.
+DIM's managed control-plane image includes this attachment. New
+`dim control-plane prepare` configurations generate a separate synchronization
+operator for the prepared host. After installation, `dim control-plane connect`
+verifies its live host and generation identity and writes private `git-sync.json`
+beside `host.json`. Fetch, sync and publish commands use that connection
+automatically; no additional connection option is needed.
 
-On the control-plane machine, install the attachment alongside repository
-storage and the review/promotion services used by the Project:
-
-```bash
-dim installer install control-plane plugin \
-  '@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-git-sync@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-code-review@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-merge-policy@0.10.0'
-```
-
-Select `git-sync` in the same private runtime configuration as the repository
-service. The following is one entry in the runtime's `plugins` array:
+For an existing managed installation, add the following section to its private
+`native-git.json`. Keep the operator's `hostId` equal to the host that will run
+synchronization commands, and generate a unique operator username and secret:
 
 ```json
 {
-  "package": "@slop-lab/dim-control-plane-plugin-git-sync",
-  "config": {
+  "gitSync": {
     "operators": [
       {
         "hostId": "operator-host",
@@ -50,10 +40,32 @@ service. The following is one entry in the runtime's `plugins` array:
 Generate operator passwords with `randomBytes(32).toString('base64url')` from
 Node's `node:crypto` module. Operator credentials authorize DIM synchronization
 commands; the optional upstream credential authenticates HTTPS Git transport.
-Keep this file private, outside the repository and workspace. Select a provider
-token with access only to the intended repository. Public fetching needs no
-upstream credential; publishing requires the provider to authorize writes.
-Restart the control plane after changing configuration.
+Every role must use distinct credentials. Keep `native-git.json` mode 0600,
+outside the repository and workspace. Public fetching needs no upstream
+credential; publishing requires a provider credential with write access to the
+intended repository. The provider credential stays in the private control-plane
+configuration and is never included in host connection files or workspaces.
+
+Redeploy the reviewed service configuration, then reconnect into a new directory
+so the connections bind to the new generation:
+
+```bash
+dim installer install control-plane --config /absolute/setup/install.json
+dim control-plane connect /absolute/setup \
+  --output-directory /absolute/setup/connections-updated
+```
+
+`connect` selects the generated host connections automatically. Existing service
+configurations without `gitSync`, or with an empty operator list, still validate
+upstream and publish policy but grant no synchronization authority.
+
+An independently composed control plane can install
+`@slop-lab/dim-control-plane-plugin-git-sync@0.10.0` alongside the Git repositories
+plugin, then select it in the private runtime's `plugins` array. Its `config`
+contains the same `operators`, optional `credential`, and optional
+`allowLocalRemotes` fields as the managed `gitSync` section above. Review and
+promotion plugins remain separate optional services selected by repository
+policy.
 
 Production remotes use credential-free HTTPS URLs without query strings or
 fragments. `allowLocalRemotes: true` enables local file remotes explicitly for
@@ -106,13 +118,57 @@ the manifest. The manifest's upstream and publication declaration become the
 repository's revision-bound `git-sync` policy. `--policy FILE` is an alternative
 to `--repository-policy`; a plain import selects neither automatically.
 
-This repository's declaration maps managed `main` to GitHub `development`.
-The `.dim/` path rule requires `owner` review for configuration changes. Other
+The example above maps managed `main` to GitHub `development`. This source
+repository's own declaration selects repository `main`, managed `development`
+and reviewer `mjy` to match its installed Project.
+The example's `.dim/` path rule requires `owner` review for configuration changes. Other
 changes require no human approval but still pass the normal current-review and
 promotion checks. Protect review matcher dependencies and scripts that can
 change a secret boundary explicitly, including dependencies outside `.dim/`.
 The [security-review example](../../examples/features/security-review/README.md)
 shows that configuration for a secret-bearing secure runtime.
+
+## Update an existing repository's policy
+
+Import is not required again when upstream mappings or review rules change.
+On the trusted operator host, inspect the live effective policy and preview the
+current working tree's `.dim/repos.yml` before applying it:
+
+```bash
+dim project repository policy show dim main --json
+dim project repository policy update dim main --preview --json
+dim project repository policy update dim main
+```
+
+The default file is `.dim/repos.yml` relative to the command's current directory
+on the selected host. Unlike `import --repository-policy`, this explicit update
+reads the current file, including uncommitted edits. To select another reviewed
+YAML manifest or an existing JSON policy declaration:
+
+```bash
+dim project repository policy update dim main --file /absolute/reviewed-repos.yml --preview
+dim project repository policy update dim main --file /absolute/reviewed-repos.yml
+dim project repository policy update dim main --policy /absolute/repository-policy.json
+```
+
+JSON uses the import format `{ "schemaVersion": 1, "repositoryId": "main",
+"extensions": { ... } }`. It replaces the complete extension policy, rather
+than merging individual fields. YAML must name the selected repository and
+protect its existing branch. Changing the protected branch requires a separate
+repository, not a policy update. Files must be caller-owned regular files,
+without symlinks, multiple hard links or group/world write permission.
+
+The selected private importer connection authorizes updates. `--connection`
+selects another root importer connection, which must attest the same host,
+endpoint and generation. Workspace Git credentials cannot revise policy.
+The server validates enabled feature policies and compares the current policy
+digest and protected commit before committing the update. A concurrent change
+requires another preview/update. Old review evidence no longer authorizes
+promotion under a changed policy. Git history, data and original import receipts
+are preserved; the host catalog records the new effective policy separately.
+If the server accepted an update but the host refresh failed, repeat the same
+command to reconcile it safely. A file edit or an ordinary Git push never
+applies configuration by itself.
 
 ## Fetch, merge, publish
 

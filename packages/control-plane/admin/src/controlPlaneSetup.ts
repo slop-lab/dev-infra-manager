@@ -55,6 +55,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     projectRegistrars: [hostRole("registrar")],
     projectRootImporters: [hostRole("importer")], projectRootReadIssuers: [hostRole("reader")],
     workspaceWriteIssuers: [hostRole("writer")],
+    gitSync: { operators: [hostRole("git-sync")] },
     humanReviewers: [{ reviewerId: "owner", ...credential("reviewer-owner") }], hostPromoters: [hostRole("promoter")],
     ci: { grantIssuer: roles.grantIssuer, candidateReader: roles.candidateReader, resultReporter: roles.resultReporter,
       webhook: { endpoint: "http://execution:8080/v1/jobs", ...roles.webhook } }
@@ -141,6 +142,12 @@ export async function connectControlPlane(directoryInput: string, options: {
     await attest("host-promoter", promoterCredential)]) {
     if (attested.generationId !== generationId) throw new UserError("control-plane generation changed while connecting");
   }
+  const syncOperator = native.gitSync?.operators.find((candidate) => candidate.hostId === hostId);
+  const syncCredential = syncOperator === undefined ? undefined : { username: syncOperator.username, password: syncOperator.password };
+  if (syncCredential !== undefined) {
+    const attested = await attest("git-sync-operator", syncCredential);
+    if (attested.generationId !== generationId) throw new UserError("control-plane generation changed while connecting");
+  }
   const importerConnection = parseNativeGitRootImporterConnection({ schemaVersion: 1, endpoint, serviceId: "native-main",
     role: "operator-root-importer", hostId, generationId, credential: importerCredential });
   const registrarConnection = parseNativeGitProjectRegistrarConnection({ schemaVersion: 1, endpoint, serviceId: "native-main",
@@ -167,6 +174,8 @@ export async function connectControlPlane(directoryInput: string, options: {
     await json(path.join(output, "registrar.json"), registrarConnection);
     await json(path.join(output, "importer.json"), importerConnection);
     await json(path.join(output, "host.json"), hostConnection);
+    if (syncCredential !== undefined) await json(path.join(output, "git-sync.json"), { schemaVersion: 1, serviceId: "native-main",
+      role: "git-sync-operator", hostId, generationId, endpoint, credential: syncCredential });
     await json(path.join(output, "ci-query.json"), ciQueryConnection);
     await json(path.join(output, "execution-operator.json"), { ...ciQueryConnection, role: "operator", credential: execution.credentials.operator });
     if (workerConfig !== undefined) await json(path.join(output, "worker.json"), workerConfig);

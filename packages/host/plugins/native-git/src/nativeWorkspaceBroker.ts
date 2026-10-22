@@ -43,7 +43,7 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       // A verified reconnect updates only this private host-side reference. The running
       // broker retains its original UUID, scope and workspace credential.
       const current = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(attachment.managedStateRoot, attachment.workspaceId));
-      if (!isDeepStrictEqual({ ...attachment, connectionFile: "" }, { ...current, connectionFile: "" })) {
+      if (!isDeepStrictEqual(immutableAttachmentScope(attachment), immutableAttachmentScope(current))) {
         response.writeHead(409).end(); return;
       }
       const connection = await loadNativeControlPlaneConnection(current.connectionFile);
@@ -53,9 +53,8 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       const proof = await proveNativeProjectReadiness(connection, project, repositoryId, AbortSignal.timeout(5000), {
         commit: repository.commit, tree: repository.tree, allowFastForward: true
       });
-      if (proof.policyRevision !== repository.policyRevision) {
-        response.writeHead(409).end(); return;
-      }
+      // Readiness authenticates the catalog's effective policy on every request.
+      // Existing grants keep their scope while the authority enforces the new policy.
       const lease = await createNativeGitWorkspaceWriteIssuerClient({ schemaVersion: 1, endpoint: connection.nativeGit.endpoint,
         serviceId: "native-main", role: "operator-workspace-write-issuer", hostId: connection.hostId,
         generationId: proof.generationId, credential: connection.nativeGit.workspaceWriteIssuer
@@ -84,4 +83,14 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
   });
   server.requestTimeout = 35_000; server.headersTimeout = 10_000;
   return server;
+}
+
+/** Policy revisions and connection paths are refreshable host metadata, never Git scope. */
+function immutableAttachmentScope(attachment: NativeWorkspaceAttachment): unknown {
+  const withoutRevision = <T extends { policyRevision: string }>(binding: T): Omit<T, "policyRevision"> => {
+    const { policyRevision: _revision, ...scope } = binding;
+    return scope;
+  };
+  return { ...attachment, connectionFile: "", configuration: withoutRevision(attachment.configuration),
+    repositories: Object.fromEntries(Object.entries(attachment.repositories).map(([id, binding]) => [id, withoutRevision(binding)])) };
 }

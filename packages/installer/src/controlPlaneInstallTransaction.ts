@@ -219,7 +219,8 @@ async function activateService(
       "container", "exec", "--user", user, containerId,
       "/usr/local/bin/dim-service", "activate", target.generationId
     ],
-    timeoutMilliseconds: 10_000,
+    // Native activation reconciles existing repositories before its exact acknowledgment.
+    timeoutMilliseconds: service === "native-git" ? 130_000 : 10_000,
     maximumOutputBytes: 4 * 1024
   });
   if (result.exitCode !== 0 || result.stdout !== "" || result.stderr !== "") {

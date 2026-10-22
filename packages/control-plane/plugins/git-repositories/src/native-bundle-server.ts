@@ -1,3 +1,5 @@
+import { readNativeProposalRefs } from "./native-proposal-reconciler.js";
+import { readEffectiveRepositoryPolicy } from "./repository-policy-state.js";
 import { refUpdatePolicies, refUpdatePolicyRevision } from "./ref-update-policies.js";
 import { lstat, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -77,10 +79,10 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
       try { refUpdatePolicyRevision(policy, refPolicies); for (const attachment of attachments) await attachment.validatePolicy?.(policy, selector); }
       catch (error) { throw new NativeProjectRootImportStateError("repository feature policy is invalid", { cause: error }); }
     };
-    for (const imported of readNativeProjectRootImportsFromDatabase(state.database)) await validatePolicy(imported.policy, imported);
+    for (const imported of readNativeProjectRootImportsFromDatabase(state.database)) await validatePolicy(readEffectiveRepositoryPolicy(state.database, imported.projectId, imported.repositoryId).policy, imported);
     const activate = async () => { if (businessReady) return; activated = true; for (const attachment of attachments) await attachment.activate?.(); businessReady = true; };
     if (activated) await activate();
-    const rootImportService = createNativeProjectRootImportService({ activated: () => businessReady, activationTokenDigest, available: () => !closed, expectedGenerationId: options.expectedGenerationId, stateDirectory: options.stateDirectory, state, importers: config.projectRootImporters, knownCredentials, gitExecutable: config.gitExecutable, gitIdentity, validatePolicy });
+    const rootImportService = createNativeProjectRootImportService({ activated: () => businessReady, activationTokenDigest, available: () => !closed, expectedGenerationId: options.expectedGenerationId, stateDirectory: options.stateDirectory, state, importers: config.projectRootImporters, knownCredentials, gitExecutable: config.gitExecutable, gitIdentity, validatePolicy, serialize, async reconcilePolicy(projectId, repositoryId) { await context.reconcileProposals(projectId, repositoryId, [...(await readNativeProposalRefs(runtime, projectId, repositoryId)).keys()]); } });
     const rootReadService = createNativeProjectRootReadService({ activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.projectRootReadIssuers, knownCredentials, now: options.rootReadLeaseClock ?? Date.now, operations, ...(options.rootReadLeaseHooks === undefined ? {} : { hooks: options.rootReadLeaseHooks }), state, stateDirectory: options.stateDirectory });
     const workspaceWriteService = createNativeProjectWorkspaceWriteService({ activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.workspaceWriteIssuers, knownCredentials, now: options.workspaceWriteLeaseClock ?? Date.now, operations, reconcileProposalRefs: context.reconcileProposals, serializeReceive: serialize, ...(options.workspaceWriteLeaseHooks === undefined ? {} : { hooks: options.workspaceWriteLeaseHooks }), state, stateDirectory: options.stateDirectory });
     const prepareProject: NativeGitBundleServer["prepareProject"] = (generationId, ownerHostId, input) => serialize(async () => {

@@ -1,3 +1,4 @@
+import { parseAuthoritativeImportedRootPolicy, type NativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
 import { lstat, mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -70,9 +71,37 @@ export class NativeProjectPendingStore {
         repositoryPolicy: draft.repositoryPolicy, importReceipt: draft.importReceipt, bundleDigest: draft.bundleDigest, bundleSize: draft.bundleSize,
         readyAt: current.repositories[repositoryId]?.readyAt ?? new Date().toISOString() };
       const existing = current.repositories[repositoryId];
-      if (existing && !isDeepStrictEqual(existing, candidate)) throw new NativeProjectPendingStoreError("repository replay changes immutable import intent");
-      const updated = parseNativeProjectPendingRecord({ ...current, repositories: { ...current.repositories, [repositoryId]: candidate } });
+      if (existing && !isDeepStrictEqual({ ...existing, repositoryPolicy: existing.importedPolicy ?? existing.repositoryPolicy, importedPolicy: undefined }, { ...candidate, importedPolicy: undefined })) throw new NativeProjectPendingStoreError("repository replay changes immutable import intent");
+      const updated = parseNativeProjectPendingRecord({ ...current, repositories: { ...current.repositories, [repositoryId]: existing ?? candidate } });
       await proveNativeProjectReadiness(connection, updated, repositoryId, signal);
+      await this.replace(current, updated);
+      return updated;
+    } finally { await release(); }
+  }
+  /** Update only effective policy; import receipts, bundles and selected snapshots remain immutable. */
+  async applyRepositoryPolicy(name: string, repositoryId: string, input: NativeImportedRootPolicy,
+    expectedPolicyRevision: string, connection: NativeControlPlaneConnection, signal: AbortSignal): Promise<NativeProjectRecord> {
+    const policy = parseAuthoritativeImportedRootPolicy(input);
+    const release = await this.#state.acquireProjectLock(name);
+    try {
+      const current = await this.read(name, connection.hostId);
+      const repository = current?.repositories[repositoryId];
+      if (!current || !repository) throw new NativeProjectPendingStoreError("Project repository does not exist");
+      if (repository.protectedRef !== policy.protectedRef) throw new NativeProjectPendingStoreError("policy update cannot change the repository's protected ref");
+      if (repository.repositoryPolicy.policyRevision !== expectedPolicyRevision
+        && repository.repositoryPolicy.policyRevision !== policy.policyRevision) {
+        throw new NativeProjectPendingStoreError("repository policy changed; refresh its current policy and retry");
+      }
+      const originalPolicy = repository.importedPolicy ?? repository.repositoryPolicy;
+      const { importedPolicy: _importedPolicy, ...identity } = repository;
+      const updated = parseNativeProjectPendingRecord({ ...current, repositories: { ...current.repositories,
+        [repositoryId]: { ...identity, repositoryPolicy: policy,
+          ...(isDeepStrictEqual(originalPolicy, policy) ? {} : { importedPolicy: originalPolicy }) } } });
+      // An authenticated authority must confirm this policy and the original snapshot's
+      // ancestry before local state changes. Updating policy never advances the checkout.
+      await proveNativeProjectReadiness(connection, updated, repositoryId, signal, {
+        commit: repository.commit, tree: repository.tree, allowFastForward: true
+      });
       await this.replace(current, updated);
       return updated;
     } finally { await release(); }

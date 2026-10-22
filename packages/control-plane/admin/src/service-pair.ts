@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gitSyncConfigurationSchema } from "@slop-lab/dim-control-plane-plugin-git-sync/config";
 import { parseCodeReviewConfig } from "@slop-lab/dim-control-plane-plugin-code-review/config";
 import { mergePolicyConfigurationSchema } from "@slop-lab/dim-control-plane-plugin-merge-policy/config";
 import { gitCiConfigSchema } from "@slop-lab/dim-control-plane-plugin-git-ci/config";
@@ -16,7 +17,7 @@ export function parseControlPlaneServicePair(nativeValue: unknown, executionValu
   assertPair(native.ci.webhook, execution.credentials.webhook);
   const credentials = [...native.projectRegistrars, ...native.projectRootImporters, ...native.projectRootReadIssuers,
     ...native.workspaceWriteIssuers, ...native.humanReviewers, ...native.hostPromoters,
-    ...gitCiCredentials(native.ci), execution.credentials.query, execution.credentials.operator,
+    ...gitCiCredentials(native.ci), ...gitSyncCredentials(native.gitSync), execution.credentials.query, execution.credentials.operator,
     ...(execution.credentials.tasks === undefined ? [] : [execution.credentials.tasks]),
     ...execution.workers.map((worker) => ({ username: worker.id, password: worker.token }))];
   const values = credentials.flatMap((entry) => [entry.username, entry.password]);
@@ -30,23 +31,32 @@ function assertPair(left: { username: string; password: string }, right: { usern
 /** The managed preset selects features explicitly; repositories themselves have no such dependencies. */
 export function parseManagedGitServiceConfig(value: unknown) {
   const object = z.record(z.string(), z.unknown()).parse(value);
-  const { humanReviewers, hostPromoters, ci, webhooks, ...repositoryInput } = object;
+  const { humanReviewers, hostPromoters, ci, gitSync, webhooks, ...repositoryInput } = object;
   const repository = parseNativeGitBundleConfig(repositoryInput);
   const review = parseCodeReviewConfig({ humanReviewers });
   const merge = mergePolicyConfigurationSchema.parse({ hostPromoters });
   const integration = gitCiConfigSchema.parse(ci);
+  const synchronization = gitSync === undefined ? undefined : gitSyncConfigurationSchema.parse(gitSync);
+  if (synchronization !== undefined && new Set(synchronization.operators.map(({ hostId }) => hostId)).size !== synchronization.operators.length) {
+    throw new Error("managed Git synchronization host identities must be unique");
+  }
   const credentials = [...repository.projectRegistrars, ...repository.projectRootImporters,
     ...repository.projectRootReadIssuers, ...repository.workspaceWriteIssuers,
-    ...review.humanReviewers, ...merge.hostPromoters, ...gitCiCredentials(integration)];
+    ...review.humanReviewers, ...merge.hostPromoters, ...gitCiCredentials(integration), ...gitSyncCredentials(synchronization)];
   const values = credentials.flatMap((entry) => [entry.username, entry.password]);
   if (new Set(values).size !== values.length) throw new Error("managed Git credentials must be globally distinct");
   return { ...repository, ...review, ...merge, ci: integration,
+    ...(synchronization === undefined ? {} : { gitSync: synchronization }),
     ...(webhooks === undefined ? {} : { webhooks }) };
 }
 export function repositoryConfiguration(config: ReturnType<typeof parseManagedGitServiceConfig>) {
-  const { humanReviewers: _reviewers, hostPromoters: _promoters, ci: _ci, webhooks: _webhooks, ...repository } = config;
+  const { humanReviewers: _reviewers, hostPromoters: _promoters, ci: _ci, gitSync: _gitSync, webhooks: _webhooks, ...repository } = config;
   return repository;
 }
 export function gitCiCredentials(config: ReturnType<typeof gitCiConfigSchema.parse>) {
   return [config.grantIssuer, config.candidateReader, config.resultReporter, config.webhook];
+}
+
+function gitSyncCredentials(config: ReturnType<typeof gitSyncConfigurationSchema.parse> | undefined) {
+  return config === undefined ? [] : [...config.operators, ...(config.credential === undefined ? [] : [config.credential])];
 }

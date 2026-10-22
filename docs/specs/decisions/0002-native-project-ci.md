@@ -43,7 +43,7 @@ it does not authorize host commands or determine which valid proposal jobs run.
 A canonical trusted policy envelope binds the protected ref and selected feature
 sections. Import and startup reject a section without its enabled owner. The
 full policy is bound to review, including quality policy; changing it requires
-fresh human approval. Repository state format 10 stores neutral CAS transitions,
+fresh human approval. Repository state format 11 stores policy history and neutral CAS transitions,
 while review, merge authorization and CI evidence remain owned by their plugins.
 
 The trusted Git-CI policy bounds selectable repository inputs. A job

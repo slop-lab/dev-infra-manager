@@ -3,7 +3,7 @@ import { parseControlPlaneServicePair, parseManagedGitServiceConfig } from "@slo
 import { managedGitPluginEntries } from "./composition.js";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
-import { request } from "node:http";
+import { activateNativeGitGeneration } from "./native-git-activation.js";
 import { pathToFileURL } from "node:url";
 import { startControlPlanePlugins } from "@slop-lab/dim-control-plane-core";
 import { inspectNativeGitBundleState } from "@slop-lab/dim-control-plane-plugin-git-repositories/service";
@@ -14,8 +14,7 @@ const configPath = "/run/secrets/service.json";
 const stateDirectory = "/var/lib/dim-native-git";
 const readinessTokenPath = "/run/secrets/readiness.token";
 const activationTokenPath = "/run/secrets/activation.token";
-const activationResponseLimit = 4 * 1024;
-const activationTimeoutMilliseconds = 2_000;
+const activationTimeoutMilliseconds = 120_000;
 
 const USAGE = [
   "usage: dim-service check-config /run/secrets/service.json",
@@ -45,7 +44,7 @@ export async function runNativeGitServiceCli(
     return;
   }
   if (command === "compatibility" && arguments_.length === 2 && arguments_[1] === "--json") {
-    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 10, readableFormats: [10] })}\n`);
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 11, readableFormats: [10, 11] })}\n`);
     return;
   }
   if (command === "check-state" && arguments_.length === 4 && arguments_[1] === "--read-only"
@@ -75,7 +74,7 @@ export async function runNativeGitServiceCli(
   }
   if (command === "activate" && arguments_.length === 2) {
     const generationId = parseGenerationId(arguments_[1]);
-    await activate(generationId, await readToken(activationTokenPath, "activation"));
+    await activateNativeGitGeneration({ origin: "http://127.0.0.1:8080", generationId, token: await readToken(activationTokenPath, "activation"), timeoutMilliseconds: activationTimeoutMilliseconds });
     return;
   }
   if (command === "ready" && arguments_.length === 1) {
@@ -112,68 +111,6 @@ export class NativeGitServiceCliError extends Error {
 function parseGenerationId(value: string | undefined): string {
   if (value === undefined || !/^[0-9a-f]{64}$/.test(value)) throw new NativeGitServiceCliError(USAGE);
   return value;
-}
-
-async function activate(generationId: string, token: string): Promise<void> {
-  const body = JSON.stringify({ schemaVersion: 1, generationId });
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const fail = (): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      reject(new NativeGitServiceCliError("native Git activation failed"));
-    };
-    const outgoing = request("http://127.0.0.1:8080/v1/activation", {
-      method: "POST",
-      agent: false,
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: "application/json",
-        "content-type": "application/json",
-        "content-length": Buffer.byteLength(body)
-      }
-    }, (incoming) => {
-      const chunks: Buffer[] = [];
-      let size = 0;
-      incoming.on("data", (chunk: Buffer) => {
-        size += chunk.length;
-        if (size > activationResponseLimit) {
-          incoming.destroy();
-          fail();
-        }
-        else chunks.push(chunk);
-      });
-      incoming.once("error", fail);
-      incoming.once("end", () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(deadline);
-        const response = exactActivationResponse(Buffer.concat(chunks).toString("utf8"), generationId);
-        if (incoming.statusCode === 200 && incoming.headers["content-type"] === "application/json"
-          && incoming.headers["cache-control"] === "no-store" && response) resolve();
-        else reject(new NativeGitServiceCliError("native Git activation failed"));
-      });
-    });
-    const deadline = setTimeout(() => {
-      outgoing.destroy();
-      fail();
-    }, activationTimeoutMilliseconds);
-    outgoing.once("error", fail);
-    outgoing.end(body);
-  });
-}
-
-function exactActivationResponse(body: string, generationId: string): boolean {
-  try {
-    const value: unknown = JSON.parse(body);
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-      && Object.keys(value).length === 3 && Reflect.get(value, "schemaVersion") === 1
-      && Reflect.get(value, "generationId") === generationId && Reflect.get(value, "activated") === true;
-  } catch (error) {
-    if (error instanceof SyntaxError) return false;
-    throw error;
-  }
 }
 
 async function readToken(path: string, label: string): Promise<string> {
