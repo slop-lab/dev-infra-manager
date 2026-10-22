@@ -120,6 +120,11 @@ both. Workspace mounts receive `context.workspace` with `hostId`, `name`, `id`
 and `phase`, plus `refreshWorkspace()`. Their lifecycle follows the exact row UUID,
 phase and browser session. `isCurrent()` and the shared transport reject calls
 after disposal. Host-side handlers still verify UUID ownership for every action.
+Workspace contexts also provide `openFeature(featureId)`, which opens and focuses
+an installed feature section in the same workspace row. It returns `false` for
+an absent feature or an expired mount; it cannot navigate to another workspace
+or grant additional operations. Workspace tools uses this to open External
+routes when configuring access to an OpenCode server.
 
 The browser entry exports `mount(container, context)`, optionally returning a
 cleanup function. `context.operations` lists the currently permitted operation
@@ -131,6 +136,23 @@ Keep credentials and connection selection server-side, render results as text,
 and dispose listeners or polling when the console calls the cleanup function.
 Panels must distinguish a confirmed mutation from a failed subsequent refresh
 and preserve unsaved inputs when data or connections are refreshed.
+
+Both browser surfaces receive `context.ui`, the shared `WebPluginUi` primitives:
+`element`, `button`, labeled `input` and `select`, live-region `feedback`, and a
+semantic, horizontally scrollable `table`. Buttons support primary, secondary
+and danger variants; feedback supports status and error tones. Text and table
+cells are rendered as text, not HTML. Plugins retain ownership of domain forms,
+operation selection and state rather than deriving forms from operation schemas.
+
+Transport errors carry `outcome: "unknown"` when a request loses its response,
+returns a server error, or returns unreadable successful JSON. An unknown outcome
+does not establish whether a mutation ran. Workspace tools and External routes
+lock further changes until their authoritative status refresh succeeds. Keep
+drafts, distinguish rejected requests from uncertain writes, and do not present
+an automatic repeat as safe without the operation's own idempotency contract.
+Execution retries retain their request UUID. Router policy edits remain bound to
+their loaded project and revision, including edits made while navigation or a
+save is in flight.
 
 The browser receives feature descriptions, allowed operations and sanitized
 results, never raw connection files. Feature panels own their interactions and
