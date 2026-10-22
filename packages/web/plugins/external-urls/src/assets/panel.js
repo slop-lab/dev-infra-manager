@@ -2,13 +2,10 @@
 /** @typedef {import('../../../../core/src/plugin-api.js').WebPluginWorkspaceBrowserContext} Context */
 /** @typedef {{id:string,ingress:string,url:string,permalink?:string,approval:'not-required'|'pending'|'approved'|'revoked',port:number,containers:string[],protocol:'http'|'https'|'tcp'}} Route */
 /** @typedef {{ingresses:Array<{name:string,description:string,scheme:string,driver:string}>,routes:Route[]}} Snapshot */
-/** @param {string} tag @param {string} [text] */
-function node(tag, text = '') { const element = document.createElement(tag); element.textContent = text; return element; }
-/** @param {HTMLElement} parent @param {string} label @param {string} value */
-function field(parent, label, value) { const wrapper = node('label'), input = document.createElement('input'); wrapper.className = 'field'; input.setAttribute('aria-label', label); input.value = value; wrapper.append(node('span', label), input); parent.append(wrapper); return input; }
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
-  let disposed = false, busy = false, version = 0;
+  const { element: node, input: field } = context.ui;
+  let disposed = false, busy = false, reconciliation = false, version = 0;
   /** @type {Map<string,string>} */ const ingressSchemes = new Map();
   const current = () => !disposed && context.isCurrent(), allowed = new Set(context.operations.map(({name}) => name));
   const status = node('p'), routes = node('div'), form = document.createElement('form'); status.setAttribute('role', 'status');
@@ -21,9 +18,9 @@ export function mount(container, context) {
   protocolField.append(node('span','Protocol'),protocol); form.append(protocolField);
   function defaultProtocol() { protocol.value = ingressSchemes.get(ingress.value) === 'tcp' ? 'tcp' : 'http'; }
   ingress.addEventListener('change',defaultProtocol);
-  const create = document.createElement('button'); create.type = 'submit'; create.textContent = 'Create route'; create.className = 'button button-primary'; form.append(create);
+  const create = context.ui.button('Create route', 'primary'); create.type = 'submit'; form.append(create);
   form.append(node('p', 'OpenCode normally listens on port 4096. Leave Nested container empty for a service running directly in the workspace. Pending routes require explicit approval.'));
-  const refresh = document.createElement('button'); refresh.type = 'button'; refresh.textContent = 'Refresh routes'; refresh.className = 'button button-secondary';
+  const refresh = context.ui.button('Refresh routes');
   container.append(refresh,status,routes); if (allowed.has('routes.create')) container.append(form);
   /** @param {string} operation @param {Record<string,unknown>} [input] */
   const invoke = (operation,input = {}) => context.invoke(operation,{...input,controllerId:context.workspace.hostId,workspace:context.workspace.name,workspaceId:context.workspace.id},{timeoutMilliseconds:150_000});
@@ -52,18 +49,26 @@ export function mount(container, context) {
         }
       } else item.append(node('p',route.approval === 'pending' ? 'Awaiting operator approval. This route is not available yet.' : 'This route has been revoked.'));
       if (route.approval === 'pending' && allowed.has('routes.approve')) action(item,'Approve route',()=>run('routes.approve',{id:route.id}));
-      if (route.approval !== 'revoked' && allowed.has('routes.revoke')) action(item,'Revoke route',()=>run('routes.revoke',{id:route.id}));
+      if (route.approval !== 'revoked' && allowed.has('routes.revoke')) action(item,'Revoke route',async () => {
+        if (!window.confirm(`Revoke ${route.ingress} route for ${context.workspace.name} port ${route.port}? Its external URL will stop serving this workspace.`)) { context.ui.feedback(status, 'Route revocation dismissed.'); return; }
+        await run('routes.revoke',{id:route.id});
+      });
       routes.append(item);
     }
   }
   /** @param {HTMLElement} parent @param {string} label @param {()=>Promise<void>} callback */
-  function action(parent,label,callback) { const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.className = 'button button-secondary'; button.disabled = busy; button.addEventListener('click',()=>{void callback();}); parent.append(button); }
+  function action(parent,label,callback) { const button = context.ui.button(label); button.disabled = busy || reconciliation; button.addEventListener('click',()=>{void callback();}); parent.append(button); }
   /** @param {string} operation @param {Record<string,unknown>} [input] */
   async function run(operation,input = {}) {
-    if (busy || !current()) return; busy = true; const selected = ++version; disable(true); status.textContent = 'Updating routes…';
-    try { const result = /** @type {Snapshot} */ (await invoke(operation,input)); if (current() && selected === version) { render(result); status.textContent = operation === 'routes.create' ? 'Route created. Approval status is shown below.' : 'Routes refreshed.'; } }
-    catch { if (current() && selected === version) status.textContent = 'Routes could not be updated. Refresh routes before retrying; ask an operator to check the external-urls host plugin and ingress connection. Your input is kept.'; }
-    finally { busy = false; if(current()) {disable(false); create.disabled = !ingress.options.length;} }
+    if (busy || !current() || reconciliation && operation !== 'routes.list') return; busy = true; const selected = ++version; disable(true); context.ui.feedback(status, 'Updating routes…');
+    try { const result = /** @type {Snapshot} */ (await invoke(operation,input)); if (current() && selected === version) { reconciliation = false; render(result); context.ui.feedback(status, operation === 'routes.create' ? 'Route created. Approval status is shown below.' : 'Routes refreshed.'); } }
+    catch (error) {
+      if (current() && selected === version) {
+        if (operation !== 'routes.list' && error instanceof Error && 'outcome' in error && error.outcome === 'unknown') reconciliation = true;
+        context.ui.feedback(status, reconciliation ? 'Route change outcome is unknown. Changes remain locked until Refresh routes succeeds. Your input is kept; inspect current routes before another action.' : 'Routes could not be updated. Refresh routes before retrying; ask an operator to check the external-urls host plugin and ingress connection. Your input is kept.', 'error');
+      }
+    }
+    finally { busy = false; if(current()) {disable(false); for (const control of routes.querySelectorAll('button')) control.disabled = reconciliation; create.disabled = reconciliation || !ingress.options.length;} }
   }
   refresh.addEventListener('click',()=>{void run('routes.list');});
   form.addEventListener('submit',(event)=>{event.preventDefault();if(!form.reportValidity() || !ingress.value)return;void run('routes.create',{ingress:ingress.value,name:name.value.trim(),port:Number(port.value),protocol:protocol.value,...(nested.value.trim()?{container:nested.value.trim()}: {})});});
