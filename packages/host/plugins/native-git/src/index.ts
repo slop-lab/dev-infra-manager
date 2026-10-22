@@ -16,6 +16,7 @@ export * from "./nativeProjectReadinessClient.js";
 export * from "./nativeControlPlaneConnection.js";
 export * from "./controlPlaneSelection.js";
 export * from "./nativeWorkspaceMetadata.js";
+export { reconnectNativeWorkspaces } from "./nativeWorkspaceReconnect.js";
 export { hostPlugin } from "./plugin.js";
 export * from "./nativeProjectState.js";
 

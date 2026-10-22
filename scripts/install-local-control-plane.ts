@@ -57,7 +57,10 @@ async function defaultOperations(paths: ReturnType<typeof removalPaths>, env: No
       });
     },
     connect: (directory, output) => admin.connectControlPlane(directory, { outputDirectory: output }),
-    select: (directory) => native.saveControlPlaneSelection({ hostConnectionFile: join(directory, "host.json"), importerConnectionFile: join(directory, "importer.json") }),
+    async select(directory) {
+      await native.saveControlPlaneSelection({ hostConnectionFile: join(directory, "host.json"), importerConnectionFile: join(directory, "importer.json") });
+      console.log(`[install] reconnected ${await native.reconnectNativeWorkspaces()} existing workspace Git brokers`);
+    },
     registry: ensureLocalImageRegistry
   };
 }

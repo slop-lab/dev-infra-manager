@@ -9,11 +9,12 @@ import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import { workspaceRecord } from "../../support/workspaceFixture.js";
 import { createNativeWorkspaceBroker } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceBroker.js";
 import { refreshNativeWorkspaceConnection } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceConnection.js";
+import { reconnectNativeWorkspaces } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceReconnect.js";
 import { writeNativeWorkspaceAttachment, readNativeWorkspaceAttachment, nativeWorkspaceBrokerHealth, nativeWorkspaceAttachmentFile, type NativeWorkspaceAttachment } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
 import { createRequire } from "node:module";
 const { Command } = createRequire(new URL("../../../packages/control-plane/admin/package.json", import.meta.url))("commander") as { Command: new () => Parameters<typeof registerControlPlaneCommands>[0] };
@@ -203,7 +204,12 @@ describe("optional control-plane setup", () => {
         expect((await fetch(brokerUrl, { headers })).status).toBe(502);
         const reconnected = await connectControlPlane(directory, { endpoint, outputDirectory: path.join(root, "reconnected") });
         const environment = { DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: path.join(reconnected.directory, "host.json") };
-        const refreshed = await refreshNativeWorkspaceConnection(attachment, AbortSignal.timeout(5000), environment);
+        const reconnectEnvironment = { DIM_MANAGED_STATE_ROOT: hostState, DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: attachment.connectionFile };
+        await saveControlPlaneSelection({ hostConnectionFile: environment.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE,
+          importerConnectionFile: path.join(reconnected.directory, "importer.json") }, reconnectEnvironment);
+        await writeNativeWorkspaceAttachment({ ...attachment, workspaceName: "already-discarded", workspaceId: randomUUID() });
+        expect(await reconnectNativeWorkspaces(reconnectEnvironment)).toBe(1);
+        const refreshed = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id));
         expect(refreshed).toEqual({ ...attachment, connectionFile: environment.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE });
         expect(await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(hostState, workspace.id))).toEqual(refreshed);
         expect((await fetch(brokerUrl, { headers })).status).toBe(200);

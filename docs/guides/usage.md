@@ -24,6 +24,8 @@ the complete local development profile, including all bundled host and
 control-plane plugins. It deploys the local service pair, renews generation-bound
 connections, and restarts the controller and Web UI. Published installation
 retains its explicit optional component selection.
+Existing workspace Git brokers reconnect through their private host attachments;
+their scoped grants, checkout snapshots and guest processes remain unchanged.
 The matching installer is retained under the DIM data directory. With mise,
 installation links and selects that exact source facade globally, so later
 installer commands use the same implementation. Without mise, add the printed

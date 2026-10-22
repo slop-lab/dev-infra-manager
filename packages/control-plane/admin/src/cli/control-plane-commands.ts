@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { saveControlPlaneSelection } from "@slop-lab/dim-host-plugin-native-git";
+import { saveControlPlaneSelection, reconnectNativeWorkspaces } from "@slop-lab/dim-host-plugin-native-git";
 import { registerCiCommands } from "./ci-commands.js";
 import type { Command } from "commander";
 import { prepareControlPlane, connectControlPlane } from "../controlPlaneSetup.js";
@@ -47,9 +47,11 @@ export function registerControlPlaneCommands(program: Command): void {
       const connected = await connectControlPlane(directory, flags);
       await saveControlPlaneSelection({ hostConnectionFile: path.join(connected.directory, "host.json"),
         importerConnectionFile: path.join(connected.directory, "importer.json") });
+      const reconnected = await reconnectNativeWorkspaces();
       console.log(`Connected host ${connected.hostId} to generation ${connected.generationId}`);
       console.log(`Private connections: ${connected.directory}`);
       console.log("Selected this control plane for native Project and workspace commands on this host.");
+      if (reconnected) console.log(`Reconnected ${reconnected} existing workspace Git brokers without restarting guests.`);
       if (connected.workerConfigFile !== undefined) {
         console.log("Execution capacity is configured but no worker was started. Run on the selected worker host:");
         console.log(`dim execution worker ${quote(connected.workerConfigFile)}`);
