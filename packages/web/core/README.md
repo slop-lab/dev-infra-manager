@@ -64,6 +64,18 @@ the request. Errors stay beside the affected form or host, with a retry for host
 lookup. **Settings** holds resource edits, recreation and explicit discard
 confirmation; canceling discard sends no mutation.
 
+Each host also has a scoped refresh, name search and state filter. Filters retain
+mounted rows, open settings, focus and drafts, and distinguish no matches from an
+empty or unavailable host. Resource settings identify unsaved edits and can reset
+to the last limits returned by the host. Examples include `unlimited`; removing a
+limit may replace the runtime while preserving workspace data.
+
+If a mutation response is lost, the console reports an unknown outcome and blocks
+repeat submission until **Check current state** succeeds. It applies the same gate
+when the host accepts a mutation but the following workspace read fails. Creation
+cannot be resubmitted under a name found during reconciliation, and the console
+does not claim that a discovered workspace was created by the interrupted request.
+
 Source examples and suggested names distinguish ordinary Git URLs from
 `dim://my-project` managed sources. The latter requires an existing project on
 the selected host; repository selection appears only for managed sources.

@@ -1,18 +1,18 @@
 // @ts-check
 /** @typedef {{name:string,id:string,phase:string}} Workspace */
 /** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'>}} Controller */
-/** @typedef {{operations:Array<{name:string}>,invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean,workspace:{hostId:string,name:string,id:string,phase:string}}} Context */
+/** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginWorkspaceBrowserContext} Context */
 /** @typedef {{state:'running'|'stopped',port:number,url:string,directory:string,username:string,credentialsFile:string,logFile:string,externalUrls?:Array<{url:string,permalink?:string,ingress:string,approval:string}>,externalUrlsAvailable?:boolean}} Server */
-/** @param {string} tag @param {string} [text] */
-function element(tag, text = '') { const node = document.createElement(tag); node.textContent = text; return node; }
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
-  let disposed = false, revision = 0;
+  const { element } = context.ui;
+  let disposed = false, revision = 0, discoveryVersion = 0;
   const current = () => !disposed && context.isCurrent();
   const allowed = new Set(context.operations.map(({ name }) => name));
   const content = element('section'), notice = element('p'); notice.setAttribute('role', 'status');
   content.className = 'feature-form';
   container.append(element('p', 'Install tools in a running workspace and manage its OpenCode server. Installation can take a few minutes.'), notice, content);
+  const retryDiscovery = context.ui.button('Retry workspace tools'); retryDiscovery.hidden = true; container.prepend(retryDiscovery);
   /** @param {Controller} controller @param {Workspace|undefined} workspace */
   function show(controller, workspace) {
     const version = ++revision;
@@ -25,18 +25,22 @@ export function mount(container, context) {
     const tools = element('div'), server = element('div'); tools.className = server.className = 'panel feature-form'; content.append(tools, server);
     /** @param {string} name @param {Record<string,unknown>} [input] */
     const invoke = (name, input = {}) => context.invoke(name, { ...input, controllerId: controller.id, workspace: workspace.name, workspaceId: workspace.id }, { timeoutMilliseconds: 185_000 });
-    /** @type {HTMLButtonElement[]} */ const actions = [];
-    let busy = false, stateVersion = 0;
-    /** @param {HTMLElement} parent @param {string} label @param {()=>Promise<void>} action */
-    function button(parent, label, action) {
-      const node = document.createElement('button'); node.type = 'button'; node.className = 'button button-secondary'; node.textContent = label;
+    /** @type {Array<{node:HTMLButtonElement,write:boolean}>} */ const actions = [];
+    let busy = false, reconciliation = false, stateVersion = 0;
+    /** @param {HTMLElement} parent @param {string} label @param {()=>Promise<boolean|void>} action @param {boolean} [write] */
+    function button(parent, label, action, write = false) {
+      const node = context.ui.button(label);
       node.addEventListener('click', async () => {
-        if (!scoped() || busy) return;
-        busy = true; ++stateVersion; for (const item of actions) item.disabled = true; notice.textContent = `${label}…`;
-        try { await action(); if (scoped()) notice.textContent = `${label} completed.`; }
-        catch { if (scoped()) notice.textContent = `${label} could not complete. Refresh status before retrying; the workspace or controller may be unavailable.`; }
-        finally { busy = false; if (scoped()) for (const item of actions) item.disabled = false; }
-      }); actions.push(node); parent.append(node); return node;
+        if (!scoped() || busy || write && reconciliation) return;
+        busy = true; ++stateVersion; for (const item of actions) item.node.disabled = true; context.ui.feedback(notice, `${label}…`);
+        try { const result = await action(); if (scoped() && result !== false) context.ui.feedback(notice, `${label} completed.`); }
+        catch (error) {
+          if (!scoped()) return;
+          if (write && error instanceof Error && 'outcome' in error && error.outcome === 'unknown') reconciliation = true;
+          context.ui.feedback(notice, reconciliation ? `${label}: outcome is unknown. Changes are locked until Refresh status succeeds. Do not repeat the action yet.` : `${label} could not complete. Refresh status before retrying; the workspace or controller may be unavailable.`, 'error');
+        }
+        finally { busy = false; if (scoped()) for (const item of actions) item.node.disabled = reconciliation && item.write; }
+      }); actions.push({ node, write }); parent.append(node); return node;
     }
     /** @param {unknown} result */
     function renderTools(result) {
@@ -73,7 +77,12 @@ export function mount(container, context) {
             server.append(row);
           }
         }
-      } else server.append(element('p', value.externalUrlsAvailable === false ? 'External route status unavailable. Refresh status or inspect External routes for this workspace.' : 'No approved external URL. Create a route for this server port in External routes, then refresh status.'));
+      } else {
+        server.append(element('p', value.externalUrlsAvailable === false ? 'External route status unavailable. Refresh status or inspect External routes for this workspace.' : 'No approved external URL. Create a route for this server port in External routes, then refresh status.'));
+        const configure = context.ui.button('Configure external access');
+        configure.addEventListener('click', () => { if (!context.openFeature('external-urls')) context.ui.feedback(notice, 'External routes is not installed for this workspace. Ask an operator to install its Web and host plugins, or use the forwarding command below.'); });
+        server.append(configure);
+      }
       server.append(element('p', `Username: ${value.username}.`));
       const credentialActions = element('div'); credentialActions.className = 'feature-actions'; server.append(credentialActions);
       if (allowed.has('server.credentials')) button(credentialActions, 'Copy server password', async () => {
@@ -94,7 +103,7 @@ export function mount(container, context) {
           if (!form.reportValidity()) return;
           const next = password.value; password.value = '';
           renderServer(await invoke('server.password', { password: next }));
-        });
+        }, true);
         form.addEventListener('submit', (event) => { event.preventDefault(); save.click(); }); server.append(form);
       }
       if (value.state !== 'running') return;
@@ -107,27 +116,39 @@ export function mount(container, context) {
     }
     const toolbar = element('div'); toolbar.className = 'feature-actions'; content.prepend(toolbar);
     if (allowed.has('tools.status') && allowed.has('server.status')) button(toolbar, 'Refresh status', async () => {
-      const [installed, running] = await Promise.all([invoke('tools.status'), invoke('server.status')]); renderTools(installed); renderServer(running);
+      const [installed, running] = await Promise.allSettled([invoke('tools.status'), invoke('server.status')]);
+      if (!scoped()) return false;
+      if (installed.status === 'fulfilled') renderTools(installed.value);
+      else tools.replaceChildren(element('h4', 'Installed tools'), element('p', 'Tool status unavailable. Server status is loaded independently; use Refresh status to retry.'));
+      if (running.status === 'fulfilled') renderServer(running.value);
+      else server.replaceChildren(element('h4', 'OpenCode server'), element('p', 'Server status unavailable. Tool status is loaded independently; use Refresh status to retry.'));
+      if (installed.status === 'rejected' || running.status === 'rejected') { context.ui.feedback(notice, 'Some status reads failed. Available results are shown; Refresh status retries without changing the workspace.', 'error'); return false; }
+      reconciliation = false;
     });
-    if (allowed.has('tools.setup')) for (const tool of controller.tools) button(toolbar, `Install ${tool}`, async () => { renderTools(await invoke('tools.setup', { tool })); });
-    if (allowed.has('server.start')) button(toolbar, 'Start OpenCode server', async () => { renderServer(await invoke('server.start')); });
-    if (allowed.has('server.stop')) button(toolbar, 'Stop OpenCode server', async () => { renderServer(await invoke('server.stop')); });
+    if (allowed.has('tools.setup')) for (const tool of controller.tools) button(toolbar, `Install ${tool}`, async () => { renderTools(await invoke('tools.setup', { tool })); }, true);
+    if (allowed.has('server.start')) button(toolbar, 'Start OpenCode server', async () => { renderServer(await invoke('server.start')); }, true);
+    if (allowed.has('server.stop')) button(toolbar, 'Stop OpenCode server', async () => { renderServer(await invoke('server.stop')); }, true);
     if (allowed.has('tools.status')) void invoke('tools.status').then((value) => { if (stateVersion === 0) renderTools(value); }).catch(() => { if (scoped() && stateVersion === 0) tools.textContent = 'Tool status unavailable. Use Refresh status to retry.'; });
     if (allowed.has('server.status')) void invoke('server.status').then((value) => { if (stateVersion === 0) renderServer(value); }).catch(() => { if (scoped() && stateVersion === 0) server.textContent = 'Server status unavailable. Install OpenCode if needed, then refresh status.'; });
   }
   async function discover() {
+    const selected = ++discoveryVersion;
+    retryDiscovery.hidden = true; retryDiscovery.disabled = true;
     notice.textContent = 'Discovering workspace tools…';
     try {
       const { controllers } = /** @type {{controllers:Controller[]}} */ (await context.invoke('controllers.list', {}));
-      if (!current()) return;
+      if (!current() || selected !== discoveryVersion) return;
       const controller = controllers.find(({ id }) => id === context.workspace.hostId);
       const workspace = controller?.workspaces.find(({ id, name }) => id === context.workspace.id && name === context.workspace.name);
       if (!controller || controller.status !== 'ready' || !workspace) {
+        retryDiscovery.hidden = false;
         notice.textContent = 'Workspace tools are unavailable for this workspace identity. Refresh workspaces or ask the operator to install the agent-tools host plugin.'; return;
       }
       show(controller, { ...workspace, phase: context.workspace.phase });
-    } catch { if (current()) notice.textContent = 'Could not discover workspace tools. Refresh workspaces to retry.'; }
+    } catch { if (current() && selected === discoveryVersion) { retryDiscovery.hidden = false; notice.textContent = 'Could not discover workspace tools. Use Retry workspace tools to retry.'; } }
+    finally { if (current() && selected === discoveryVersion) retryDiscovery.disabled = false; }
   }
+  retryDiscovery.addEventListener('click', () => { if (current() && !retryDiscovery.hidden && !retryDiscovery.disabled) void discover(); });
   void discover();
   return () => { disposed = true; ++revision; content.replaceChildren(); };
 }

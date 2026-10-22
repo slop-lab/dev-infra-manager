@@ -50,6 +50,7 @@ fs.writeFileSync(path,JSON.stringify(rows));console.log(JSON.stringify(args[2]==
       actions: async () => JSON.parse(await readFile(actions, "utf8")) as string[],
       workspace: async () => (JSON.parse(await readFile(state, "utf8")) as Array<{ id: string; name: string; phase: string; resources: { cpuCount: string; memory: string; pidsLimit: string } }>).find((row) => row.name === "development")!,
       createdWorkspace: async () => (JSON.parse(await readFile(state, "utf8")) as Array<{ name: string; source: string; runtime: string; image: string; resources: { cpuCount: string } }>).find((row) => row.name === "browser-created"),
+      workspaceNamed: async (name: string) => (JSON.parse(await readFile(state, "utf8")) as Array<{ id: string; name: string; phase: string; resources: { cpuCount: string; memory: string; pidsLimit: string } }>).find((row) => row.name === name),
       async close() { await web.close(); await rm(root, { recursive: true, force: true }); } };
   } catch (error) { await rm(root, { recursive: true, force: true }); throw error; }
 }

@@ -32,6 +32,13 @@ required for resolve/approve/revoke, and `operator` for promotion/synchronizatio
 The controller and underlying service still enforce catalog scope and protection
 policies for every invocation.
 
+Within the selected repository, review search matches the proposal ref,
+protected ref and review ID, while the state filter distinguishes pending,
+approved, revoked and stale reviews. Filtering the list does not discard the
+currently opened exact evidence, patch or approval actions. Scope changes still
+clear that evidence immediately, and late list or detail responses cannot populate
+a newer controller, project or repository selection.
+
 An explicit manual connection overrides automatic controller discovery:
 
 ```json

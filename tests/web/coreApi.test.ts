@@ -9,7 +9,7 @@ it("serves only shipped console assets with a same-origin CSP", async () => {
   const page = await fetch(f.baseUrl);
   expect(page.headers.get("content-security-policy")).toBe("default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   expect(await page.text()).toContain('<script src="/assets/app.js" type="module"></script>');
-  for (const path of ["app.js", "session-data.js", "operation-coordinator.js"]) {
+  for (const path of ["app.js", "session-data.js", "operation-coordinator.js", "workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "feature-ui.js"]) {
     const asset = await fetch(`${f.baseUrl}/assets/${path}`);
     expect(asset.status).toBe(200); expect(asset.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
   }

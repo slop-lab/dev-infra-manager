@@ -119,6 +119,13 @@ is implied by these source changes.
   configured feature without losing drafts. Distinguish accepted changes from
   failed follow-up reads. Local source installation includes the feature panels
   while preserving accounts and explicit connection choices.
+  Share labeled controls, semantic tables and accessible feedback across feature
+  panels. Search and filter jobs, reviews and router requests without discarding
+  opened evidence; inspect account model catalogs and request metadata. Load
+  independent service status separately, preserve policy drafts across in-flight
+  navigation, and reconcile uncertain workspace tool or route changes before
+  allowing another write. Open External routes directly from workspace tools
+  and confirm route revocation explicitly.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
   repositories through the Native Git plugin, with explicit controller, Project

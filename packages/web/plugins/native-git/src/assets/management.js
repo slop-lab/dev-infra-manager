@@ -1,7 +1,7 @@
 // @ts-check
 import { mountManifestImport } from "./manifest.js";
 /** @typedef {{controllerId:string,projectId:string}} Target */
-/** @typedef {{operations:Array<{name:string}>,invoke(name:string,input?:unknown,options?:{timeoutMilliseconds:number}):Promise<unknown>,isCurrent():boolean}} Context */
+/** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
 /** @typedef {{scope():Target,has(name:string):boolean,refresh(preferred:{controllerId:string,projectId:string,repositoryId?:string}):Promise<void>}} Navigation */
 /** @param {string} tag @param {string} [text] */
 function element(tag, text = "") { const node = document.createElement(tag); node.textContent = text; return node; }

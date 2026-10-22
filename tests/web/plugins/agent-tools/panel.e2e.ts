@@ -6,14 +6,16 @@ import { chromium } from "playwright-core";
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
 const panel = await readFile(new URL("../../../../packages/web/plugins/agent-tools/src/assets/panel.js", import.meta.url));
+const featureUi = await readFile(new URL("../../../../packages/web/core/src/assets/feature-ui.js", import.meta.url));
 const workspaceId = "17094660-a627-4a17-acd2-6418c0b79967", stoppedId = "27094660-a627-4a17-acd2-6418c0b79967";
 const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
-let installed = false, running = false, holdStatus = true;
+let installed = false, running = false, holdStatus = true, failTools = false, loseStart = false;
 let pending: ServerResponse | undefined, pendingCredential: ServerResponse | undefined, holdCredential = false;
 let password = "private-server-password";
 function status() { return { workspace: "development", workspaceId, state: running ? "running" : "stopped", port: 4096, directory: "/workspace/main", url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log", externalUrlsAvailable: true, externalUrls: [{ url: "https://opencode.example.test:8443", permalink: "https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967", ingress: "shared", approval: "approved" }, { url: "https://pending.example.test", ingress: "shared", approval: "pending" }] }; }
 const server = createServer((request, response) => {
   if (request.url === "/panel.js") { response.setHeader("Content-Type", "text/javascript"); response.end(panel); return; }
+  if (request.url === "/feature-ui.js") { response.setHeader("Content-Type", "text/javascript"); response.end(featureUi); return; }
   if (request.url === "/") { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><div id="panel"></div>'); return; }
   if (request.url !== "/invoke" || request.method !== "POST") { response.statusCode = 404; response.end(); return; }
   const chunks: Buffer[] = [];
@@ -21,10 +23,12 @@ const server = createServer((request, response) => {
   request.on("end", () => {
     const { name, input } = JSON.parse(Buffer.concat(chunks).toString()) as { name: string; input: Record<string, unknown> };
     calls.push({ name, input }); response.setHeader("Content-Type", "application/json");
+    if (name === "tools.status" && failTools) { failTools = false; response.writeHead(503); response.end('{}'); return; }
     if (name === "controllers.list") { response.end(JSON.stringify({ controllers: [{ id: "local", title: "local", status: "ready", workspaces: [{ name: "development", id: workspaceId, phase: "running" }, { name: "offline", id: stoppedId, phase: "stopped" }], tools: ["opencode", "codex"] }] })); return; }
     if (name === "tools.setup") installed = true;
     if (name.startsWith("tools.")) { response.end(JSON.stringify({ workspace: "development", workspaceId, tools: [{ name: "opencode", installed, version: installed ? "1.18.31" : "" }] })); return; }
     if (name === "server.start") running = true;
+    if (name === "server.start" && loseStart) { loseStart = false; response.writeHead(503); response.end('{}'); return; }
     if (name === "server.stop") running = false;
     if (name === "server.credentials") { if (holdCredential) { pendingCredential = response; return; } response.end(JSON.stringify({ workspace: "development", workspaceId, username: "opencode", password })); return; }
     if (name === "server.password") password = String(input.password);
@@ -38,14 +42,16 @@ const origin = `http://127.0.0.1:${address.port}`, browser = await chromium.laun
 const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
 async function mount(operator: boolean, stopped = false) {
   await page.goto(origin);
-  await page.addScriptTag({ type: "module", content: `import { mount } from '/panel.js';
+   await page.addScriptTag({ type: "module", content: `import { mount } from '/panel.js'; import { featureUi } from '/feature-ui.js';
     window.sessionCurrent = true;
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText() { throw new Error('clipboard unavailable'); } } });
     window.disposePanel = mount(document.querySelector('#panel'), {
+      ui: featureUi,
+      openFeature: () => false,
       operations: ${JSON.stringify(["controllers.list", "tools.status", "server.status", ...(operator ? ["tools.setup", "server.start", "server.stop", "server.credentials", "server.password"] : [])].map((name) => ({ name })))},
       isCurrent: () => window.sessionCurrent,
       workspace: ${JSON.stringify({hostId:"local",name:stopped ? "offline":"development",id:stopped ? stoppedId:workspaceId,phase:stopped ? "stopped":"running"})},
-      async invoke(name, input) { const response = await fetch('/invoke', {method:'POST',body:JSON.stringify({name,input})}); return response.json(); }
+      async invoke(name, input) { const response = await fetch('/invoke', {method:'POST',body:JSON.stringify({name,input})}); if(!response.ok) throw Object.assign(new Error('outcome unknown'),{outcome:'unknown'}); return response.json(); }
     });` });
 }
 try {
@@ -88,8 +94,22 @@ try {
   assert.equal(await page.getByLabel('New server password', { exact: true }).inputValue(), '');
   assert.equal(await page.locator('input').evaluateAll((inputs) => inputs.some((input) => (input as HTMLInputElement).value === 'updated-secret-password')), false);
   await page.getByRole("button", { name: "Stop OpenCode server", exact: true }).click();
-  await page.getByText("Server stopped. Port 4096 is inside the workspace.", { exact: true }).waitFor();
-  assert.equal(await page.locator("select").count(), 0);
+   await page.getByText("Server stopped. Port 4096 is inside the workspace.", { exact: true }).waitFor();
+   failTools = true;
+   await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+   await page.getByText('Some status reads failed.', { exact: false }).waitFor();
+   await page.getByText('Server stopped. Port 4096 is inside the workspace.', { exact: true }).waitFor();
+   loseStart = true;
+   await page.getByRole('button', { name: 'Start OpenCode server', exact: true }).click();
+   await page.getByText('outcome is unknown', { exact: false }).waitFor();
+   assert.equal(await page.getByRole('button', { name: 'Retry workspace tools', exact: true }).isVisible(), false);
+   assert.equal(await page.getByRole('button', { name: 'Start OpenCode server', exact: true }).isDisabled(), true);
+   const starts = calls.filter(({ name }) => name === 'server.start').length;
+   await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+   await page.getByText('Refresh status completed.', { exact: true }).waitFor();
+   assert.equal(calls.filter(({ name }) => name === 'server.start').length, starts);
+   assert.equal(await page.getByRole('button', { name: 'Start OpenCode server', exact: true }).isEnabled(), true);
+   assert.equal(await page.locator("select").count(), 0);
   await mount(true, true);
   await page.getByText("Start this workspace from Workspaces before inspecting or installing tools.", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Start OpenCode server", exact: true }).count(), 0);

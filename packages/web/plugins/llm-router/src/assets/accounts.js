@@ -4,20 +4,17 @@
 function object(value) { return value !== null && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string,unknown>} */ (value) : {}; }
 /** @param {unknown} value @returns {Record<string,unknown>[]} */
 function rows(value) { return Array.isArray(value) ? value.map(object) : []; }
-/** @param {string} tag @param {string} [content] */
-function node(tag, content = '') { const result = document.createElement(tag); result.textContent = content; return result; }
-/** @param {HTMLElement} parent @param {string} label @param {string} [value] */
-function input(parent, label, value = '') { const field = node('label', label), control = document.createElement('input'); field.className = 'field'; control.value = value; control.setAttribute('aria-label', label); field.append(control); parent.append(field); return control; }
+/** @param {HTMLElement} container @param {Context} context @param {()=>Promise<void>} refreshOverview */
+export function mountAccounts(container, context, refreshOverview) {
+  const { element: node, input } = context.ui;
 /** @param {HTMLElement} parent @param {string} label */
-function select(parent, label) { const field = node('label', label), control = document.createElement('select'); field.className = 'field'; control.setAttribute('aria-label', label); field.append(control); parent.append(field); return control; }
+function select(parent, label) { return context.ui.select(parent, label, []); }
 /** @param {HTMLSelectElement} control @param {string} value @param {string} label */
 function option(control, value, label) { const item = document.createElement('option'); item.value = value; item.textContent = label; control.append(item); }
 /** @param {HTMLElement} parent @param {string} label @param {()=>Promise<void>} run @param {HTMLElement} feedback */
-function button(parent, label, run, feedback) { const result = document.createElement('button'); result.type = 'button'; result.className = 'button button-secondary'; result.textContent = label; result.addEventListener('click', () => { if (result.disabled) return; result.disabled = true; result.dataset.pending = 'true'; feedback.setAttribute('role', 'status'); feedback.textContent = `${label}…`; void run().catch((error) => { feedback.setAttribute('role', 'alert'); feedback.textContent = error instanceof Error ? error.message : 'Operation failed. Refresh before retrying.'; }).finally(() => { delete result.dataset.pending; result.disabled = result.dataset.accepted === 'true'; }); }); parent.append(result); return result; }
+function button(parent, label, run, feedback) { const result = context.ui.button(label); result.addEventListener('click', () => { if (result.disabled) return; result.disabled = true; result.dataset.pending = 'true'; context.ui.feedback(feedback, `${label}…`); void run().catch((error) => { context.ui.feedback(feedback, error instanceof Error ? error.message : 'Operation failed. Refresh before retrying.', 'error'); }).finally(() => { delete result.dataset.pending; result.disabled = result.dataset.accepted === 'true'; }); }); parent.append(result); return result; }
 /** @param {HTMLFormElement} form @param {HTMLButtonElement} submit */
 function editable(form, submit) { form.addEventListener('submit', (event) => { event.preventDefault(); submit.click(); }); form.addEventListener('input', () => { delete submit.dataset.accepted; if (submit.dataset.pending !== 'true') submit.disabled = false; }); }
-/** @param {HTMLElement} container @param {Context} context @param {()=>Promise<void>} refreshOverview */
-export function mountAccounts(container, context, refreshOverview) {
   let alive = true;
   /** @type {Set<number>} */ const timers = new Set();
   /** @type {Map<string,unknown>} */ const activeSessions = new Map();
@@ -67,6 +64,14 @@ export function mountAccounts(container, context, refreshOverview) {
     accountRows = new Map(result.map((account) => [String(account.id), account])); list.replaceChildren();
     if (!result.length) list.append(node('p', 'No provider accounts connected yet.'));
     for (const account of result) { const row = node('article'); row.className = 'operations-row'; const id = String(account.id); row.append(node('h3', String(account.reference)), node('p', `${String(account.provider)} · ${String(account.status)}`));
+      if (has('account.models')) {
+        const catalog = node('div'), catalogStatus = node('p'); catalogStatus.setAttribute('role', 'status'); row.append(catalogStatus, catalog);
+        button(row, 'Inspect account models', async () => {
+          const models = rows(await context.invoke('account.models', { accountId: id })); if (!current()) return;
+          catalog.replaceChildren(context.ui.table(['Model', 'API', 'Context tokens', 'Output tokens'], models.map((model) => [String(model.id), String(model.api), String(model.context), String(model.output)])));
+          catalogStatus.textContent = models.length ? `${models.length} models available from this account. Provider quota is not inferred.` : 'No models returned by this account.';
+        }, catalogStatus);
+      }
       if (account.provider === 'codex' && account.status !== 'connected' && has('account.login.start')) button(row, 'Sign in', async () => { await login(id); if (current()) feedback.textContent = 'Complete Codex sign-in below.'; }, feedback);
       if (account.provider !== 'backend' && has('account.rename')) {
         const details = document.createElement('details'); details.append(node('summary', 'Rename account'));

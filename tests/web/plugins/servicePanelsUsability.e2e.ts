@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium } from "playwright-core";
+import { createServicePanelsFixture } from "./servicePanelsFixture.js";
+
+const executablePath = process.env.DIM_CHROMIUM;
+if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
+const evidence = process.env.DIM_WEB_EVIDENCE ?? await mkdtemp(join(tmpdir(), "dim-web-service-evidence-"));
+await mkdir(evidence, { recursive: true });
+const fixture = await createServicePanelsFixture();
+const browser = await chromium.launch({ executablePath, headless: true });
+const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+page.setDefaultTimeout(10_000);
+const errors: string[] = [];
+page.on("pageerror", (error) => errors.push(error.message));
+
+try {
+  await page.goto(fixture.origin);
+  await page.getByLabel("Username", { exact: true }).fill(fixture.username);
+  await page.getByLabel("Password", { exact: true }).fill(fixture.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.route("**/v1/extensions/execution/operations/workers.list", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }), { times: 1 });
+  await page.getByRole("button", { name: "Execution", exact: true }).click();
+  const execution = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Execution", exact: true, level: 1 }) });
+  await execution.getByText(/^Worker capacity is unavailable:/).waitFor();
+  await execution.getByRole("cell", { name: "queued", exact: true }).first().waitFor();
+  await execution.getByLabel("Job state", { exact: true }).selectOption("finished");
+  assert.equal(await execution.getByRole("cell", { name: "queued", exact: true }).count(), 0);
+  await execution.getByRole("button", { name: "View job", exact: true }).click();
+  await execution.getByText("browser-safe-diagnostic", { exact: false }).waitFor();
+  await page.route("**/v1/extensions/execution/operations/jobs.retry", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }), { times: 1 });
+  await execution.getByRole("button", { name: "Retry execution", exact: true }).click();
+  await execution.getByText(/^Retry execution failed:.*outcome is unknown/i).waitFor();
+  await execution.getByLabel("Search jobs", { exact: true }).fill("does-not-match");
+  await execution.getByText("No jobs match the current search and state filter.", { exact: true }).waitFor();
+  assert.equal(await execution.getByText("browser-safe-diagnostic", { exact: false }).count(), 1);
+  await execution.getByText("Selected job details are retained independently of list filters.", { exact: true }).waitFor();
+  await execution.getByRole("button", { name: "Refresh worker capacity", exact: true }).click();
+  await execution.getByRole("heading", { name: "Worker capacity", exact: true }).waitFor();
+  await page.screenshot({ path: `${evidence}/execution-desktop.png`, fullPage: true });
+
+  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  const git = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Git review", exact: true, level: 1 }) });
+  await git.getByLabel("Repository", { exact: true }).selectOption("root");
+  await git.getByRole("button", { name: "Open review", exact: true }).click();
+  await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
+  await git.getByLabel("Search reviews", { exact: true }).fill("does-not-match");
+  await git.getByText("No reviews match the current search and state filter.", { exact: true }).waitFor();
+  assert.equal(await git.getByRole("heading", { name: "Changed files", exact: true }).count(), 1);
+  await git.getByText("Selected review evidence is retained independently of list filters.", { exact: true }).waitFor();
+  await git.getByLabel("Search reviews", { exact: true }).fill("");
+  await git.getByLabel("Review state", { exact: true }).selectOption("stale");
+  await git.getByText("No reviews match the current search and state filter.", { exact: true }).waitFor();
+  await page.screenshot({ path: `${evidence}/native-git-desktop.png`, fullPage: true });
+  await page.setViewportSize({ width: 375, height: 812 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: `${evidence}/native-git-mobile.png`, fullPage: true });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: `${evidence}/native-git-mobile-rest.png` });
+  await page.locator('.skip-link').focus();
+  assert.equal(await page.locator('.skip-link').evaluate((link) => link.getBoundingClientRect().top >= 0), true);
+  await page.screenshot({ path: `${evidence}/native-git-mobile-keyboard.png` });
+  assert.deepEqual(errors, []);
+  process.stdout.write("Execution and Native Git shared UI usability passed.\n");
+} finally {
+  await browser.close();
+  await fixture.close();
+  if (!process.env.DIM_WEB_EVIDENCE) await rm(evidence, { recursive: true, force: true });
+}

@@ -15,7 +15,7 @@ export async function llmWebFixture() {
   const privateWrite = async (name: string, value: string) => { const file = join(root, name); await writeFile(file, value, { mode: 0o600 }); return file; };
   try {
     let inferenceRequests = 0;
-    const backend = createServer((request, response) => { if (request.url !== "/v1/models") inferenceRequests++; response.setHeader("content-type", "application/json"); response.end('{"data":[]}'); });
+    const backend = createServer((request, response) => { if (request.url !== "/v1/models") inferenceRequests++; response.setHeader("content-type", "application/json"); response.end('{"data":[{"id":"model-one","api":"responses","context":1000,"output":100}]}'); });
     await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
     cleanup.push(() => new Promise<void>((resolve) => { backend.closeAllConnections(); backend.close(() => resolve()); }));
     const backendAddress = backend.address(); if (!backendAddress || typeof backendAddress === "string") throw new Error("missing backend address");

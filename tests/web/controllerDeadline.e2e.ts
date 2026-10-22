@@ -24,12 +24,12 @@ try {
   async function invoke(options: unknown) {
     return page.evaluate(async (options) => {
       const invoke = (globalThis as unknown as { fixtureInvoke(name: string, input: unknown, options: unknown): Promise<unknown> }).fixtureInvoke;
-      try { return { result: await invoke("slow", {}, options) }; } catch (error) { return { error: String(error) }; }
+      try { return { result: await invoke("slow", {}, options) }; } catch (error) { return { error: String(error), outcome: error instanceof Error && 'outcome' in error ? error.outcome : null }; }
     }, options);
   }
   for (const options of [{ timeoutMilliseconds: 0 }, { timeoutMilliseconds: -1 }, { timeoutMilliseconds: 185001 }, { timeoutMilliseconds: 1.5 }, { timeoutMilliseconds: 100, unexpected: true }]) assert.match(String((await invoke(options)).error), /Invalid feature request timeout/);
   assert.equal(dispatched, 0);
-  assert.match(String((await invoke({ timeoutMilliseconds: 20 })).error), /Timeout|abort/i);
+  assert.equal((await invoke({ timeoutMilliseconds: 20 })).outcome, 'unknown');
   assert.deepEqual((await invoke({ timeoutMilliseconds: 500 })).result, {}); assert.equal(dispatched, 2);
   process.stdout.write("Generic browser invoke: invalid options reject before dispatch; explicit deadline abort and valid deadline passed.\n");
 } finally { await browser.close(); await web.close(); await rm(root, { recursive: true, force: true }); }

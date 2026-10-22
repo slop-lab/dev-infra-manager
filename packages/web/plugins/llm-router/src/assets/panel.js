@@ -1,36 +1,27 @@
 // @ts-check
 import { mountAccounts } from "./accounts.js";
-/** @typedef {{operations:Array<{name:string,description:string,access:string}>,invoke(name:string,input?:unknown):Promise<unknown>,isCurrent():boolean}} Context */
+/** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
 /** @param {unknown} value @returns {Record<string,unknown>} */
 function object(value) { return value !== null && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string,unknown>} */ (value) : {}; }
 /** @param {unknown} value */
 function rows(value) { return Array.isArray(value) ? value.map(object) : []; }
 /** @param {unknown} value */
 function text(value) { return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : "—"; }
-/** @param {string} tag @param {string} [content] @param {string} [className] */
-function node(tag, content = "", className = "") { const element = document.createElement(tag); element.textContent = content; element.className = className; return element; }
-/** @param {HTMLElement} parent @param {string} label @param {string} [value] */
-function input(parent, label, value = "") {
-  const field = node("label", "", "field"), control = document.createElement("input"); field.append(node("span", label), control); control.value = value; control.setAttribute("aria-label", label); parent.append(field); return control;
-}
+/** @param {HTMLElement} container @param {Context} context */
+export function mount(container, context) {
+  const { element: node, input } = context.ui;
 /** @param {HTMLElement} parent @param {string} label @param {(button:HTMLButtonElement)=>Promise<void>} run @param {HTMLElement} message */
 function action(parent, label, run, message) {
-  const button = document.createElement("button"); button.type = "button"; button.className = "button button-secondary"; button.textContent = label;
+  const button = context.ui.button(label);
   button.addEventListener("click", () => { if (button.disabled) return; button.disabled = true; button.dataset.pending = "true"; message.textContent = `${label}…`; message.setAttribute("role", "status");
     void run(button).catch((error) => { message.setAttribute("role", "alert"); message.textContent = error instanceof Error ? error.message : "Operation failed. Refresh before retrying."; }).finally(() => { delete button.dataset.pending; button.disabled = button.dataset.accepted === "true"; }); });
   parent.append(button); return button;
 }
 /** @param {HTMLElement} parent @param {string[]} headings @param {unknown[][]} values */
 function table(parent, headings, values) {
-  const wrapper = node("div", "", "feature-table"), result = document.createElement("table"), head = document.createElement("thead"), tr = document.createElement("tr");
-  for (const title of headings) { const th = document.createElement("th"); th.scope = "col"; th.textContent = title; tr.append(th); } head.append(tr); result.append(head);
-  const body = document.createElement("tbody");
-  for (const cells of values) { const row = document.createElement("tr"); for (const value of cells) row.append(node("td", text(value))); body.append(row); }
-  result.append(body); wrapper.append(result); parent.append(wrapper);
+  parent.append(context.ui.table(headings, values.map((cells) => cells.map(text))));
 }
-/** @param {HTMLElement} container @param {Context} context */
-export function mount(container, context) {
-  let alive = true, selectedProject = "", projectRevision = "";
+  let alive = true, selectedProject = "", projectRevision = "", policyDirty = false, savingPolicy = false, projectLoad = 0, policyEdits = 0;
   /** @type {Record<string,unknown>[]} */ let projectRows = [];
   const current = () => alive && context.isCurrent();
   /** @param {string} name */ const has = (name) => context.operations.some((operation) => operation.name === name);
@@ -39,6 +30,21 @@ export function mount(container, context) {
   container.append(overview, projects, policy, traffic, principals); policy.hidden = true;
   const requestList = node("div"), principalList = node("div"), trafficStatus = node("p"), principalStatus = node("p"), trafficReceipt = node("p"), principalReceipt = node("p");
   traffic.append(node("h2", "Recent requests"), trafficStatus, trafficReceipt, requestList);
+  const requestFilters = node("div", "", "workspace-filters");
+  const requestSearch = input(requestFilters, "Find requests"), requestState = context.ui.select(requestFilters, "Request state", [{ value: "all", label: "All requests" }, { value: "active", label: "Active" }, { value: "unknown", label: "Unknown outcome" }]);
+  requestSearch.placeholder = "Project, model, account or request ID";
+  requestList.before(requestFilters);
+  function filterRequests() {
+    const query = requestSearch.value.trim().toLowerCase();
+    let matches = 0;
+    for (const row of requestList.querySelectorAll("article")) {
+      row.hidden = !row.dataset.search?.includes(query) || requestState.value === "active" && row.dataset.active !== "true" || requestState.value === "unknown" && row.dataset.unknown !== "true";
+      if (!row.hidden) matches++;
+    }
+    requestEmpty.hidden = matches !== 0 || requestList.querySelectorAll("article").length === 0;
+  }
+  const requestEmpty = node("p", "No requests match these filters."); requestEmpty.hidden = true; traffic.append(requestEmpty);
+  requestSearch.addEventListener("input", filterRequests); requestState.addEventListener("change", filterRequests);
   principals.append(node("h2", "Workspace access"), principalStatus, principalReceipt, principalList);
   for (const feedback of [trafficStatus, principalStatus, trafficReceipt, principalReceipt]) feedback.setAttribute("role", "status");
   /** @param {HTMLButtonElement} button @param {HTMLElement} feedback @param {string} receipt @param {Array<[string,()=>Promise<unknown>]>} reads */
@@ -87,14 +93,21 @@ export function mount(container, context) {
   }
   /** @param {string} id */
   async function openProject(id) {
-    selectedProject = id;
+    if (savingPolicy) { projectMessage.textContent = 'Wait for the current policy save before opening another project.'; return; }
+    if (policyDirty && !window.confirm(`Discard unsaved policy changes for ${selectedProject} and load ${id}?`)) return;
+    const selectedLoad = ++projectLoad, editsAtLoad = policyEdits;
     const [value, usage] = await Promise.all([context.invoke("project.policy", { projectId: id }), context.invoke("usage", { projectId: id })]);
-    if (!current() || selectedProject !== id) return;
+    if (!current() || selectedLoad !== projectLoad) return;
+    if (editsAtLoad !== policyEdits) { projectMessage.textContent = 'Project navigation stopped because the policy changed while loading. Your edits are kept; open the project again when ready.'; return; }
+    selectedProject = id;
+    policyDirty = false;
     const project = object(value), settings = object(project.policy), limits = object(settings.limits), consumption = object(usage), allowance = object(consumption.allowance);
     projectRevision = text(project.revision); policy.hidden = false; policy.replaceChildren(node("h2", `Project ${id}`));
     const stats = node("div"); table(stats, ["Requests", "Known input tokens", "Known output tokens", "Unknown usage", "Occupied slots"], [[consumption.requests, consumption.knownInputTokens, consumption.knownOutputTokens, consumption.unknownUsageRequests, consumption.occupied]]); policy.append(stats);
     policy.append(node("p", `Admission period: ${text(allowance.utcDay)} UTC · ${allowance.remainingRequests === null ? "No limit on requests" : `${text(allowance.remainingRequests)} requests remaining`}. Provider subscription quota is unknown.`, "field-hint"));
     const form = document.createElement("form"); form.setAttribute("aria-label", `Routing policy for ${id}`); policy.append(form);
+    let formRevision = 0;
+    form.addEventListener("input", () => { policyDirty = true; formRevision++; policyEdits++; });
     const routes = input(form, "Allowed routes (comma separated)", Array.isArray(settings.allowedRoutes) ? settings.allowedRoutes.join(", ") : ""); routes.required = true;
     const fields = node("div", "", "workspace-fields"); form.append(fields);
     /** @type {Map<string,HTMLInputElement>} */ const bounds = new Map();
@@ -117,7 +130,15 @@ export function mount(container, context) {
         if (!form.reportValidity()) { feedback.textContent = "Complete the routing policy fields."; return; }
         const next = { allowedRoutes: routes.value.split(",").map((route) => route.trim()), limits: Object.fromEntries([...bounds].map(([key, field]) => [key, field.value === "" ? null : Number(field.value)])), captureMode: captureMode.value, tokenMode: tokenMode.value,
           ...(tokenLimit.value ? { tokensPerUtcDay: Number(tokenLimit.value) } : {}), ...(estimate.value ? { estimatedTokensPerRequest: Number(estimate.value) } : {}) };
-        const saved = await context.invoke("project.policy.update", { projectId: id, expectedRevision: revision, policy: next }); if (!current()) return; revision = text(object(saved).revision); await accepted(button, feedback, `Policy saved for ${id}.`, [["project list", refreshProjects]]);
+        const submittedRevision = formRevision, savingLoad = ++projectLoad;
+        savingPolicy = true;
+        try {
+          const saved = await context.invoke("project.policy.update", { projectId: id, expectedRevision: revision, policy: next });
+          if (!current() || savingLoad !== projectLoad) return;
+          policyDirty = submittedRevision !== formRevision; revision = text(object(saved).revision);
+          await accepted(button, feedback, `Policy saved for ${id}.`, [["project list", refreshProjects]]);
+          if (submittedRevision !== formRevision) delete button.dataset.accepted;
+        } finally { savingPolicy = false; }
       }, feedback); submit.className = "button button-primary"; unlockOnEdit(form, submit);
       form.addEventListener("submit", (event) => { event.preventDefault(); submit.click(); });
     } else for (const control of form.querySelectorAll("input,select")) if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) control.disabled = true;
@@ -129,7 +150,12 @@ export function mount(container, context) {
     const requestRows = rows(requests); if (!requestRows.length) requestList.append(node("p", "No requests recorded yet."));
     for (const request of requestRows) {
       const id = text(request.id), row = node("article", "", "operations-row"), feedback = node("p"); feedback.setAttribute("role", "status");
+      row.dataset.search = [request.id, request.project_id, request.model, request.account_id].map(text).join(" ").toLowerCase();
+      row.dataset.active = String(request.outcome === "running" || request.occupied === 1);
+      row.dataset.unknown = String(request.execution === "outcome_unknown");
       row.append(node("h3", `${text(request.project_id)} · ${text(request.model)}`), node("p", `${text(request.outcome)} · Execution ${text(request.execution)} · Usage ${text(request.accounting)}`), node("p", `Request ${id}`, "field-hint"), feedback);
+      const details = document.createElement("details"); details.append(node("summary", "Request metadata"));
+      table(details, ["Field", "Value"], [["Account", request.account_id], ["Started", new Date(Number(request.started_at)).toLocaleString()], ["Finished", request.finished_at === null ? "Not finished" : new Date(Number(request.finished_at)).toLocaleString()], ["Delivery", request.delivery], ["Input tokens", request.input_tokens ?? "Unknown"], ["Output tokens", request.output_tokens ?? "Unknown"], ["Cancellation requested", request.cancel_requested ? "Yes" : "No"], ["Error code", request.error_code ?? "None"]]); row.append(details);
       if (has("request.cancel") && (request.outcome === "running" || request.occupied === 1)) action(row, `Request cancellation ${id.slice(0, 8)}`, async () => { await context.invoke("request.cancel", { requestId: id }); if (current()) feedback.textContent = "Cancellation requested. Upstream termination is not confirmed; inspect the eventual outcome."; }, feedback);
       if (has("request.resolve") && request.execution === "outcome_unknown") action(row, `Resolve unknown outcome ${id.slice(0, 8)}`, async (button) => {
         if (!window.confirm(`Resolve unknown outcome for ${id}? This does not infer token usage or replay inference.`)) { feedback.textContent = "No request was resolved."; return; }
@@ -137,6 +163,7 @@ export function mount(container, context) {
       }, feedback);
       requestList.append(row);
     }
+    filterRequests();
   }
   async function refreshPrincipals() {
     const credentials = await context.invoke("principals"); if (!current()) return;

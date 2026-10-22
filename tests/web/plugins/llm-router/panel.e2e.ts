@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mkdir } from 'node:fs/promises';
 import { chromium } from "playwright-core";
 import { llmWebFixture } from "./fixture.js";
 const executablePath = process.env.DIM_CHROMIUM; if (!executablePath) throw new Error("DIM_CHROMIUM is required");
@@ -51,7 +52,7 @@ try {
   await page.getByRole("button", { name: "Pause browser-project", exact: true }).click(); await page.getByRole("button", { name: "Resume browser-project", exact: true }).waitFor(); assert.equal(fixture.router.ledger.project("browser-project").paused, true);
   await page.getByLabel("Requests per UTC day", { exact: true }).fill("79");
   await failNextOperation("project.policy.update"); await page.getByRole("button", { name: "Save routing policy", exact: true }).click();
-  await page.getByRole("alert").filter({ hasText: "The connected service could not complete this operation." }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "outcome is unknown" }).waitFor();
   assert.equal(await page.getByLabel("Requests per UTC day", { exact: true }).inputValue(), "79");
   assert.equal(await page.getByRole("button", { name: "Save routing policy", exact: true }).isEnabled(), true);
   assert.equal(fixture.router.ledger.project("browser-project").policy.limits.requestsPerUtcDay, null);
@@ -66,6 +67,41 @@ try {
   await page.getByText("No workspace principals issued yet.", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Git review", exact: true }).click(); await page.getByRole("heading", { name: "Connection required", exact: true }).waitFor();
   await page.getByRole("button", { name: "LLM router", exact: true }).click(); assert.equal(await page.getByLabel("Requests per UTC day", { exact: true }).inputValue(), "79");
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await page.getByRole('button', { name: 'Open example', exact: true }).click();
+  assert.equal(await page.getByLabel('Requests per UTC day', { exact: true }).inputValue(), '79');
+  let releaseNavigation: (() => void) | undefined;
+  const navigationHeld = new Promise<void>((resolve) => { releaseNavigation = resolve; });
+  let navigationStarted: (() => void) | undefined;
+  const navigationReady = new Promise<void>((resolve) => { navigationStarted = resolve; });
+  await page.route('**/v1/extensions/llm-router/operations/project.policy', async (route) => { navigationStarted?.(); await navigationHeld; await route.continue(); }, { times: 1 });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Open example', exact: true }).click();
+  await navigationReady;
+  await page.getByLabel('Requests per UTC day', { exact: true }).fill('80');
+  const navigationResponse = page.waitForResponse((response) => response.url().endsWith('/operations/project.policy'));
+  releaseNavigation?.(); await (await navigationResponse).finished();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  assert.equal(await page.getByLabel('Requests per UTC day', { exact: true }).inputValue(), '80');
+  await page.getByRole('button', { name: 'Inspect account models', exact: true }).click();
+  await page.getByText('1 models available from this account. Provider quota is not inferred.', { exact: true }).waitFor();
+  const firstRequest = { id: '17094660-a627-4a17-acd2-6418c0b79967', project_id: 'example', principal_id: 'workspace', account_id: 'account-one', started_at: 1_700_000_000_000, finished_at: null, model: 'model-one', outcome: 'running', execution: 'outcome_unknown', delivery: 'pending', accounting: 'unknown', occupied: 1, cancel_requested: 0, input_tokens: null, output_tokens: null, error_code: null };
+  await page.route('**/v1/extensions/llm-router/operations/requests', (route) => route.fulfill({ json: [firstRequest, { ...firstRequest, id: '27094660-a627-4a17-acd2-6418c0b79967', outcome: 'succeeded', execution: 'completed', occupied: 0, finished_at: 1_700_000_001_000 }] }), { times: 1 });
+  await page.getByRole('button', { name: 'Refresh router', exact: true }).click();
+  await page.getByText(`Request ${firstRequest.id}`, { exact: true }).waitFor();
+  await page.getByLabel('Find requests', { exact: true }).fill('does-not-match');
+  await page.getByText('No requests match these filters.', { exact: true }).waitFor();
+  await page.getByLabel('Find requests', { exact: true }).fill('account-one');
+  await page.getByLabel('Request state', { exact: true }).selectOption('unknown');
+  assert.equal(await page.getByText('Request 27094660-a627-4a17-acd2-6418c0b79967', { exact: true }).isVisible(), false);
+  const request = page.locator('article').filter({ has: page.getByText(`Request ${firstRequest.id}`, { exact: true }) });
+  await request.getByText('Request metadata', { exact: true }).click();
+  await request.getByRole('cell', { name: 'account-one', exact: true }).waitFor();
+  for (const width of [375, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    if (process.env.DIM_WEB_EVIDENCE) { await mkdir(process.env.DIM_WEB_EVIDENCE, { recursive: true }); await page.screenshot({ path: `${process.env.DIM_WEB_EVIDENCE}/router-${width}.png`, fullPage: true }); }
+  }
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   await page.getByRole("button", { name: "Sign out", exact: true }).click(); await page.getByLabel("Username", { exact: true }).fill("observer"); await page.getByLabel("Password", { exact: true }).fill(fixture.password); await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("button", { name: "LLM router", exact: true }).click(); await page.getByRole("button", { name: "Open example", exact: true }).waitFor(); assert.equal(await page.getByRole("button", { name: "Create routing project", exact: true }).count(), 0);

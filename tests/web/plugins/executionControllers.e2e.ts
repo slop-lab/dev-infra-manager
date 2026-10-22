@@ -4,6 +4,7 @@ import { chromium } from "playwright-core";
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
 const source = await readFile(new URL("../../../packages/web/plugins/execution/src/assets/panel.js", import.meta.url), "utf8");
+const uiSource = await readFile(new URL("../../../packages/web/core/src/assets/feature-ui.js", import.meta.url), "utf8");
 const browser = await chromium.launch({ executablePath, headless: true });
 const page = await browser.newPage(); page.setDefaultTimeout(10_000);
 const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
@@ -37,12 +38,17 @@ try {
   await page.goto("http://localhost/");
   await page.evaluate(`(async () => {
     const module = await import(${JSON.stringify(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`)});
+    const { featureUi } = await import(${JSON.stringify(`data:text/javascript;base64,${Buffer.from(uiSource).toString("base64")}`)});
     module.mount(document.querySelector("main"), {
       operations: ${JSON.stringify(descriptors)},
-      invoke: (name, input) => window.executionInvoke(name, input), isCurrent: () => true
+      invoke: (name, input) => window.executionInvoke(name, input), isCurrent: () => true, ui: featureUi
     });
   })()`);
   await page.getByRole("cell", { name: "first job", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Worker capacity", exact: true }).waitFor();
+  await page.getByLabel("Search jobs", { exact: true }).fill("missing");
+  await page.getByText("No jobs match the current search and state filter.", { exact: true }).waitFor();
+  await page.getByLabel("Search jobs", { exact: true }).fill("first");
   await page.getByRole("button", { name: "View job", exact: true }).click();
   await page.getByRole("heading", { name: "first detail — finished", exact: true }).waitFor();
   await page.getByRole("button", { name: "Retry execution", exact: true }).click();

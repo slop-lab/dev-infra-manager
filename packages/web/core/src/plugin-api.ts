@@ -40,12 +40,22 @@ export interface WebPluginWorkspace {
   readonly id: string;
   readonly phase: string;
 }
+export interface WebPluginUi {
+  element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text?: string, className?: string): HTMLElementTagNameMap[Tag];
+  button(label: string, variant?: "primary" | "secondary" | "danger"): HTMLButtonElement;
+  input(parent: HTMLElement, label: string, value?: string): HTMLInputElement;
+  select(parent: HTMLElement, label: string, choices: readonly { readonly value: string; readonly label: string }[], value?: string): HTMLSelectElement;
+  feedback(target: HTMLElement, text: string, tone?: "status" | "error"): void;
+  table(headings: readonly string[], rows: readonly (readonly string[])[]): HTMLDivElement;
+}
 export interface WebPluginBrowserContext {
   readonly operations: readonly import("@slop-lab/dim-contracts-operations").OperationDescriptor[];
+  readonly ui: WebPluginUi;
   isCurrent(): boolean;
   invoke(name: string, input?: unknown, options?: WebPluginInvokeOptions): Promise<unknown>;
 }
 export interface WebPluginWorkspaceBrowserContext extends WebPluginBrowserContext {
   readonly workspace: WebPluginWorkspace;
   refreshWorkspace(): Promise<boolean>;
+  openFeature(featureId: string): boolean;
 }

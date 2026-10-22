@@ -1,4 +1,5 @@
 // @ts-check
+import { featureUi } from "./feature-ui.js";
 /** @typedef {import("./types.js").Session} Session */
 /** @typedef {{name:string,description:string,access:string}} Operation */
 /** @typedef {{id:string,title:string,description:string,configured:boolean,status:"ready"|"unconfigured"|"unavailable",browserEntry:string,surfaces?:Array<"navigation"|"workspace">,operations:Operation[]}} Feature */
@@ -82,6 +83,7 @@ async function selectFeature(id) {
     if (typeof plugin.mount !== "function") throw new Error("Feature UI entrypoint is unavailable");
     const dispose = await plugin.mount(content, {
       operations: view.feature.operations,
+      ui: featureUi,
       isCurrent: () => selected === generation,
       invoke: featureInvoker(view.feature, active, () => selected === generation)
     });
@@ -131,12 +133,18 @@ function featureInvoker(feature, active, current) {
     if (options !== undefined && (typeof options !== "object" || options === null || Object.keys(options).some((key) => key !== "timeoutMilliseconds"))
       || !Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 185_000) throw new Error("Invalid feature request timeout.");
     if (!current() || !feature.operations.some((operation) => operation.name === name)) throw new Error("This operation is not available to this account.");
-    const response = await fetch(`/v1/extensions/${feature.id}/operations/${encodeURIComponent(name)}`, { method: "POST", credentials: "same-origin",
-      headers: { "content-type": "application/json", "x-dim-csrf": active.csrfToken }, body: JSON.stringify(input), signal: AbortSignal.timeout(timeout) });
+    let response;
+    try {
+      response = await fetch(`/v1/extensions/${feature.id}/operations/${encodeURIComponent(name)}`, { method: "POST", credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-dim-csrf": active.csrfToken }, body: JSON.stringify(input), signal: AbortSignal.timeout(timeout) });
+    } catch (cause) {
+      throw Object.assign(new Error("The operation did not return a reliable response, so its outcome is unknown. Refresh current state before retrying.", { cause }), { outcome: "unknown" });
+    }
     if (!current()) throw new Error("Your session ended or workspace changed.");
     if (response.status === 401) window.dispatchEvent(new Event("dim-session-expired"));
-    if (!response.ok) throw new Error(response.status === 401 ? "Your session ended. Sign in again." : response.status === 403 ? "This account does not have permission for that action." : "The connected service could not complete this operation. Refresh its state before retrying; your input is kept.");
-    return response.json();
+    if (!response.ok) throw Object.assign(new Error(response.status === 401 ? "Your session ended. Sign in again." : response.status === 403 ? "This account does not have permission for that action." : response.status >= 500 ? "The operation did not return a reliable outcome, so its outcome is unknown. Refresh current state before retrying; your input is kept." : "The connected service rejected this operation. Refresh its state before retrying; your input is kept."), { outcome: response.status >= 500 ? "unknown" : "rejected" });
+    try { return await response.json(); }
+    catch (cause) { throw Object.assign(new Error("The operation succeeded but its response was unreadable, so its outcome is unknown. Refresh current state before retrying.", { cause }), { outcome: "unknown" }); }
   };
 }
 /** Mount optional feature-owned controls into one exact workspace row.
@@ -150,11 +158,13 @@ export function mountWorkspaceFeatures(container, workspace, active, refreshWork
   /** @type {Array<()=>void>} */ let cleanup = [];
   function refresh() {
     const selected = ++revision, currentSession = session;
+    /** @type {Map<string,HTMLDetailsElement>} */ const sections = new Map();
     for (const dispose of cleanup) dispose(); cleanup = []; container.replaceChildren();
     if (disposed || !active() || !currentSession) return;
     for (const feature of catalog.filter((entry) => (entry.surfaces ?? ["navigation"]).includes("workspace"))) {
       const details = document.createElement("details"), summary = document.createElement("summary"), content = document.createElement("div");
       summary.textContent = feature.title; details.className = "workspace-feature"; content.className = "feature-form"; details.append(summary, content); container.append(details);
+      sections.set(feature.id, details);
       let mounted = false;
       const current = () => !disposed && active() && selected === revision && session === currentSession;
       details.addEventListener("toggle", () => {
@@ -165,9 +175,10 @@ export function mountWorkspaceFeatures(container, workspace, active, refreshWork
           try {
             const plugin = await import(feature.browserEntry); if (!current()) return;
             if (typeof plugin.mount !== "function") throw new Error("Missing workspace feature entrypoint");
-            const dispose = await plugin.mount(content, { workspace, refreshWorkspace, operations: feature.operations, isCurrent: current, invoke: featureInvoker(feature, currentSession, current) });
+            const dispose = await plugin.mount(content, { workspace, refreshWorkspace, operations: feature.operations, ui: featureUi, isCurrent: current, invoke: featureInvoker(feature, currentSession, current),
+              openFeature(/** @type {string} */ id) { const target = sections.get(id); if (!current() || !target) return false; target.open = true; target.querySelector("summary")?.focus(); return true; } });
             if (typeof dispose === "function") { if (current()) cleanup.push(dispose); else dispose(); }
-          } catch { if (current()) content.textContent = "This workspace feature could not load. Refresh workspaces and try again."; }
+          } catch { if (current()) { mounted = false; content.textContent = "This workspace feature could not load. Close and reopen this section to retry; other workspace controls remain available."; } }
         })();
       });
     }

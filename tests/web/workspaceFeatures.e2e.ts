@@ -5,7 +5,7 @@ import { chromium } from "playwright-core";
 
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
-const assets = new Map(await Promise.all(["workspace-hosts.js", "feature-panels.js", "session-data.js"].map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
+const assets = new Map(await Promise.all(["workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "feature-panels.js", "feature-ui.js", "session-data.js"].map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
 const firstId = "17094660-a627-4a17-acd2-6418c0b79967", secondId = "27094660-a627-4a17-acd2-6418c0b79967";
 let id = firstId, phase = "running";
 const calls: Array<{ name: string; input: unknown; csrf: string | undefined }> = [];
@@ -49,7 +49,11 @@ try {
     await showFeaturePlugins({roles:['operator'],csrfToken:'fixture-csrf',capabilities:{operations:true}});
   ` });
   await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
-  await page.getByText(`${firstId} running`, { exact: true }).waitFor();
+   await page.getByText(`${firstId} running`, { exact: true }).waitFor();
+   assert.equal(await page.evaluate("contexts[0].openFeature('not-installed')"), false);
+   await page.locator('.workspace-feature').evaluate((details) => { if (details instanceof HTMLDetailsElement) details.open = false; });
+   assert.equal(await page.evaluate("contexts[0].openFeature('inline')"), true);
+   assert.equal(await page.locator('.workspace-feature').evaluate((details) => details instanceof HTMLDetailsElement && details.open), true);
   assert.equal(await page.locator("#feature-tabs button").count(), 0);
   assert.equal(await page.locator("#feature-navigation").isHidden(), true);
   await page.getByRole("button", { name: "Start scoped server" }).click();
@@ -62,7 +66,8 @@ try {
   id = secondId;
   await page.evaluate("fixture.hosts.refresh(['local'],true)");
   assert.equal(await page.evaluate("disposals"), 1);
-  assert.equal(await page.evaluate("contexts[0].isCurrent()"), false);
+   assert.equal(await page.evaluate("contexts[0].isCurrent()"), false);
+   assert.equal(await page.evaluate("contexts[0].openFeature('inline')"), false);
   assert.equal(await page.evaluate("contexts[0].invoke('start',{}).then(()=>false,()=>true)"), true);
   assert.equal(calls.length, 1);
   await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
