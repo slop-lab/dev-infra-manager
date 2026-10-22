@@ -21,7 +21,7 @@ export async function automaticRouterConnections(context: WebPluginContext): Pro
     controllers = await Promise.all(context.controllers.map(async (controller) => {
       try {
         const expected = selections.get(controller.id);
-        const description = descriptionSchema.parse(await controller.run(["llm-router", "console", "describe", ...(expected ? ["--expected-selection", expected] : []), "--json"]));
+        const description = descriptionSchema.parse(await controller.run(["llm-router", "console", "describe", ...(expected ? ["--expected-selection", expected] : [])]));
         if (expected && description.selectionId !== expected) throw new Error("Selected router connection changed; reconnect this feature");
         for (const operation of description.operations) if (!llmOperations.some((known) => known.name === operation.name && known.access === operation.access)) throw new Error("Unknown router capability");
         selections.set(controller.id, description.selectionId);
@@ -38,6 +38,6 @@ export async function automaticRouterConnections(context: WebPluginContext): Pro
     const operation = llmOperations.find((value) => value.name === name);
     if (!controller || !operation || !controllers.some((value) => value.id === id && value.status === "ready" && value.operations.some((available) => available.name === name))) throw new Error("Controller router operation is unavailable");
     const selection = selections.get(id); if (!selection) throw new Error("Router connection has not been attested");
-    return operation.parseOutput(await controller.run(["llm-router", "console", "invoke", name, "--expected-selection", selection, "--input", "-", "--json"], { input: JSON.stringify(operation.parseInput(input)), timeoutMilliseconds: name === "account.login.start" ? 60_000 : 30_000 }));
+    return operation.parseOutput(await controller.run(["llm-router", "console", "invoke", name, "--expected-selection", selection, "--input", "-"], { input: JSON.stringify(operation.parseInput(input)), timeoutMilliseconds: name === "account.login.start" ? 60_000 : 30_000 }));
   } };
 }

@@ -1,3 +1,7 @@
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { webPluginContext } from "../../../../packages/web/core/src/controllers.js";
 import { expect, it } from "vitest";
 import { webPlugin } from "../../../../packages/web/plugins/llm-router/src/index.js";
 const selectionId = "a".repeat(64);
@@ -13,9 +17,9 @@ it("discovers each controller's selected router and binds every operation to its
   expect(catalog).toMatchObject({ controllers: [{ id: "remote", controllerKey: "remote", status: "ready" }, { id: "offline", status: "unavailable", operations: [] }] });
   expect(JSON.stringify(catalog)).not.toMatch(/private|operator key/);
   expect(await runtime.invoke("projects", { controllerId: "remote" })).toEqual([]);
-  expect(calls.at(-1)).toEqual(["llm-router", "console", "invoke", "projects", "--expected-selection", selectionId, "--input", "-", "--json"]);
+  expect(calls.at(-1)).toEqual(["llm-router", "console", "invoke", "projects", "--expected-selection", selectionId, "--input", "-"]);
   expect(inputs.at(-1)).toEqual({ input: "{}", timeoutMilliseconds: 30_000 });
-  expect(calls[1]).toEqual(["llm-router", "console", "describe", "--expected-selection", selectionId, "--json"]);
+  expect(calls[1]).toEqual(["llm-router", "console", "describe", "--expected-selection", selectionId]);
   await expect(runtime.invoke("projects", { controllerId: "offline" })).rejects.toThrow(/unavailable/);
   await expect(runtime.invoke("projects", { controllerId: "foreign" })).rejects.toThrow(/unavailable/);
   await expect(runtime.invoke("projects", { controllerId: "remote", connectionFile: "/tmp/untrusted" })).rejects.toThrow();
@@ -47,4 +51,25 @@ it("keeps provider credentials out of process arguments and preserves the device
   expect(JSON.parse(write.options!.input!)).toMatchObject({ apiKey: secret });
   await runtime.invoke("account.login.start", { controllerId: "remote", accountId: "managed" });
   expect(calls.at(-1)?.options?.timeoutMilliseconds).toBe(60_000);
+});
+
+it("discovers and invokes through the actual Web controller transport without overriding reserved flags", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-router-web-transport-"));
+  try {
+    const executable = join(root, "controller");
+    await writeFile(executable, `#!${process.execPath}
+// @ts-check
+const args = process.argv.slice(2);
+if (args.filter((arg) => arg === "--json").length !== 1 || args[0] !== "--host" || args[1] !== "selected-host") process.exit(2);
+(async () => {
+  if (args.includes("describe")) { process.stdout.write(JSON.stringify(${JSON.stringify({ schemaVersion: 1, selectionId, operations: capabilities })})); return; }
+  const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
+  if (args[args.indexOf("--input") + 1] !== "-" || JSON.stringify(JSON.parse(Buffer.concat(chunks).toString("utf8"))) !== "{}") process.exit(3);
+  process.stdout.write("[]");
+})().catch(() => { process.exitCode = 4; });
+`, { mode: 0o700 });
+    const runtime = await webPlugin.autoConnect!(webPluginContext([{ id: "transport", selector: "selected-host", executable }]));
+    expect(await runtime.invoke("controllers.list", {})).toMatchObject({ controllers: [{ id: "transport", status: "ready" }] });
+    expect(await runtime.invoke("projects", { controllerId: "transport" })).toEqual([]);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
