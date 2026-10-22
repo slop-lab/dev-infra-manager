@@ -1,6 +1,10 @@
 import { createLlmRouterClient, llmOperation, llmOperations, privateOperatorFile } from "@slop-lab/dim-llm-router-client";
 import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
+import { runLlmRouterConsole } from "./console.js";
 const help = `dim llm-router OPERATION --connection /absolute/operator.json [options]
+  connect --connection /absolute/operator.json
+  console describe --json
+  console invoke OPERATION --expected-selection HASH --input JSON --json
   capabilities | overview | accounts | health | projects | principals
   account.create [--account ID --reference NAME] --provider codex|openai|anthropic [--endpoint URL --api-key-file PRIVATE_FILE]
   account.rename --account ID --reference NAME
@@ -17,9 +21,14 @@ const help = `dim llm-router OPERATION --connection /absolute/operator.json [opt
   requests [--project ID] [--active true|false] [--limit 1..200]
   request.cancel --request UUID
   request.resolve --request UUID [--input-tokens N --output-tokens N]
-Credentials and policy files must be owned mode-0600 files. Results are JSON.`;
+Credentials and policy files must be owned mode-0600 files. Results are JSON.
+Connect selects a private controller operator connection for Web discovery.
+Without a selection, console uses $XDG_CONFIG_HOME/dim/llm/operator.json (or ~/.config/dim/llm/operator.json).
+The operator connection is separate from workspace inference and host issuer credentials.`;
 export async function runLlmRouterCommand(args: readonly string[], signal?: AbortSignal): Promise<void> {
   if (args.length === 1 || args.includes("--help") || args.includes("-h")) { console.log(help); return; }
+  if (args[1] === "console") return runLlmRouterConsole(args.slice(2), signal);
+  if (args[1] === "connect") return runLlmRouterConsole(args.slice(1), signal);
   const name = args[1]; if (!name) throw new Error(help);
   const operation = llmOperation(name), flags = new Map<string, string>();
   for (let index = 2; index < args.length; index += 2) { const key = args[index], value = args[index + 1]; if (!key?.startsWith("--") || !value || flags.has(key)) throw new Error(help); flags.set(key, value); }

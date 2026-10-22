@@ -1,4 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -8,6 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createLlmRouterClient, llmOperation, llmOperations } from "../../../packages/clients/llm-router/src/index.js";
 import { operationDescriptors } from "../../../packages/contracts/operations/src/index.js";
 import { runLlmRouterCommand } from "../../../packages/cli/plugins/llm-router/src/index.js";
+import { connectControllerLlmRouter, createControllerLlmRouterConsole, runLlmRouterConsole } from "../../../packages/cli/plugins/llm-router/src/console.js";
 import { RouterLedger } from "../../../packages/control-plane/plugins/llm-router/src/ledger.js";
 import { createRouterOperatorServer } from "../../../packages/control-plane/plugins/llm-router/src/operator-server.js";
 import { createRouter } from "../../../packages/control-plane/plugins/llm-router/src/server.js";
@@ -29,6 +32,72 @@ async function fixture(backendHandler?: (request: IncomingMessage, response: Ser
   const observer = await privateWrite("observer.json", JSON.stringify({ schemaVersion: 1, endpoint, actorId: "observer", keyFile: readerPath }));
   return { directory, config, router, endpoint, admin, issuer, adminPath, connection, observer, client: createLlmRouterClient(connection), privateWrite };
 }
+it("discovers a separately hosted router through host-owned operator state and fences rotated request credentials", async () => {
+  const fx = await fixture();
+  const backendExecutable = join(fx.directory, "managed-backend.ts");
+  await writeFile(backendExecutable, `#!${process.execPath}\n${await readFile(new URL("./managedBackendFixture.ts", import.meta.url), "utf8")}`, { mode: 0o700 });
+  fx.config.accountManagement = { backendExecutable };
+  const hostConfig = join(fx.directory, "controller-config"), hostDirectory = join(hostConfig, "dim/llm");
+  await mkdir(hostDirectory, { recursive: true, mode: 0o700 });
+  const hostKey = join(hostDirectory, "operator.key"), hostConnection = join(hostDirectory, "operator.json");
+  await writeFile(hostKey, fx.admin, { mode: 0o600 });
+  await writeFile(hostConnection, JSON.stringify({ schemaVersion: 1, endpoint: fx.endpoint, actorId: "admin", keyFile: hostKey }), { mode: 0o600 });
+  const environment = { XDG_CONFIG_HOME: hostConfig };
+  const console = await createControllerLlmRouterConsole(environment);
+  expect(console.selectionId).toMatch(/^[a-f0-9]{64}$/);
+  expect(console.operations.some(({ name }) => name === "project.create")).toBe(true);
+  expect(JSON.stringify({ selectionId: console.selectionId, operations: console.operations })).not.toContain(fx.admin);
+  expect(JSON.stringify(console.operations)).not.toContain(hostDirectory);
+  expect(await connectControllerLlmRouter(hostConnection, environment)).toEqual({ schemaVersion: 1, selectionId: console.selectionId });
+  expect((await createControllerLlmRouterConsole(environment, console.selectionId)).selectionId).toBe(console.selectionId);
+  await console.invoke("project.create", { projectId: "controller-project", routeId: "default" });
+  expect(await fx.client.invoke("projects", {})).toMatchObject([{ id: "controller-project" }]);
+  const fetchCalls = vi.spyOn(globalThis, "fetch");
+  const before = fetchCalls.mock.calls.length;
+  await writeFile(hostKey, randomBytes(32).toString("base64url"));
+  await expect(console.invoke("project.create", { projectId: "wrong-authority", routeId: "default" })).rejects.toThrow("selection changed");
+  await expect(createControllerLlmRouterConsole(environment, console.selectionId)).rejects.toThrow("selection changed");
+  expect(fetchCalls.mock.calls.length).toBe(before);
+  await writeFile(hostKey, fx.admin);
+  expect(await fx.client.invoke("projects", {})).toHaveLength(1);
+  const pointer = join(hostDirectory, "operator-selection.json"), previous = await readFile(pointer, "utf8");
+  const issuer = join(hostDirectory, "issuer-operator.json"), issuerKey = join(hostDirectory, "issuer.key");
+  await writeFile(issuerKey, fx.issuer, { mode: 0o600 });
+  await writeFile(issuer, JSON.stringify({ schemaVersion: 1, endpoint: fx.endpoint, actorId: "host", keyFile: issuerKey }), { mode: 0o600 });
+  await expect(connectControllerLlmRouter(issuer, environment)).rejects.toThrow("authentication failed");
+  expect(await readFile(pointer, "utf8")).toBe(previous);
+  const observer = await createControllerLlmRouterConsole({ ...environment, DIM_LLM_ROUTER_OPERATOR_CONNECTION_FILE: fx.observer });
+  expect(observer.operations.every(({ access }) => access === "read")).toBe(true);
+  await expect(observer.invoke("project.create", { projectId: "reader-mutation", routeId: "default" })).rejects.toThrow("not available");
+  const piped = async (operation: string, serialized: string) => {
+    const child = spawn(process.execPath, ["--import", fileURLToPath(new URL("../../node_modules/tsx/dist/loader.mjs", import.meta.url)), "--conditions=dim-source",
+      fileURLToPath(new URL("../../../packages/cli/plugins/llm-router/src/main.ts", import.meta.url)), "console", "invoke", operation,
+      "--expected-selection", console.selectionId, "--input", "-", "--json"], { env: { ...process.env, ...environment }, stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); }); child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    child.stdin.on("error", () => {}); child.stdin.end(serialized);
+    const code = await new Promise<number | null>((resolve, reject) => { child.once("error", reject); child.once("close", resolve); });
+    return { code, stdout, stderr, args: child.spawnargs };
+  };
+  const apiKey = "provider-secret-via-private-stdin";
+  const added = await piped("account.create", JSON.stringify({ accountId: "stdin-account", provider: "openai", endpoint: "https://api.example.test/v1", apiKey }));
+  expect(added.code, added.stderr.replaceAll(apiKey, "[redacted]")).toBe(0); expect(JSON.parse(added.stdout)).toMatchObject({ id: "stdin-account", provider: "openai" });
+  expect(JSON.stringify(added.args)).not.toContain(apiKey); expect(added.stdout + added.stderr).not.toContain(apiKey);
+  const malformed = await piped("account.create", `{"apiKey":"${apiKey}`);
+  expect(malformed.code).toBe(1); expect(malformed.stderr).toContain("must be valid JSON"); expect(malformed.stderr).not.toContain(apiKey);
+  const oversized = await piped("projects", "x".repeat(64 * 1024 + 1));
+  expect(oversized.code).toBe(1); expect(oversized.stderr).toContain("exceeds 64 KiB");
+  await chmod(pointer, 0o644);
+  await expect(createControllerLlmRouterConsole(environment)).rejects.toThrow("mode-0600");
+});
+it("rejects incomplete or duplicate bridge options before reading private selections", async () => {
+  for (const args of [["describe", "--expected-selection"], ["describe", "--expected-selection", "--json"],
+    ["invoke", "projects", "--expected-selection", "a".repeat(64), "--input"],
+    ["invoke", "projects", "--expected-selection", "a".repeat(64), "--input", "{}", "--input", "{}"],
+    ["describe", "--connection", "/untrusted-browser-file.json"]]) {
+    await expect(runLlmRouterConsole(args)).rejects.toThrow(/option|trusted operator selection/);
+  }
+});
 it("shares checked operation definitions across remote CLI and service without exposing provider or workspace secrets", async () => {
   const fx = await fixture(), out = vi.spyOn(console, "log").mockImplementation(() => {});
   expect(fx.client.operations()).toEqual(operationDescriptors(llmOperations));
