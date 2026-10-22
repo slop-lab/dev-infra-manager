@@ -71,6 +71,10 @@ export class SessionStore {
     this.#sessions.delete(id);
   }
 
+  deleteAccount(accountId: string): void {
+    for (const session of this.#sessions.values()) if (session.accountId === accountId) this.#sessions.delete(session.id);
+  }
+
   pruneExpired(): void {
     const timestamp = this.now();
     for (const session of this.#sessions.values()) {
@@ -96,12 +100,14 @@ export class AccountAuthenticator {
   #lastRefillAt: number;
 
   constructor(
-    private readonly accounts: readonly Account[],
+    private accounts: readonly Account[],
     private readonly maximumInFlight: number,
     private readonly now: () => number
   ) {
     this.#lastRefillAt = now();
   }
+
+  replaceAccounts(accounts: readonly Account[]): void { this.accounts = accounts; }
 
   async authenticate(username: string, password: string): Promise<AuthenticationResult> {
     if (this.#inFlight >= this.maximumInFlight) return { kind: "busy" };
@@ -126,7 +132,7 @@ export class AccountAuthenticator {
         options: { N: Number(cost), r: Number(blockSize), p: Number(parallelization), maxmem: 32 * 1024 * 1024 }
       });
       const matches = timingSafeEqual(actual, expected);
-      return account !== undefined && matches
+      return account !== undefined && matches && this.accounts.find((candidate) => candidate.username === username) === account
         ? { kind: "accepted", accountId: account.username }
         : { kind: "rejected" };
     } finally {

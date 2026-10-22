@@ -3,7 +3,7 @@ import { changeWebAccount, defaultWebAccountConfig, listWebAccounts, parseAccoun
 
 export const accountUsage = `dim-web account list [--config FILE] [--json]
 dim-web account add USER --roles read,reviewer [--config FILE] [--json]
-dim-web account set-roles USER --roles read,operator,reviewer [--config FILE] [--json]
+dim-web account set-roles USER --roles read,operator,reviewer,account-admin [--config FILE] [--json]
 dim-web account reset-password USER [--config FILE] [--json]
 dim-web account remove USER [--config FILE] [--json]
 

@@ -25,8 +25,8 @@ Startup consumes one absolute, caller-owned, non-symlink, single-link,
 mode-0600 regular JSON file. Listener addresses are loopback only; public origins
 are exact HTTPS or loopback HTTP origins without credentials or paths.
 
-Configuration contains hashed local accounts with explicit read, operator and
-reviewer roles; optional ordinary host operations; a plugin runtime path; and
+Configuration contains hashed local accounts with explicit read, operator,
+reviewer and account-admin roles; optional ordinary host operations; a plugin runtime path; and
 explicit plugin selections `{package,config?}`. No role implies another. A
 selection without config may use the selected plugin's optional controller
 adapter. Without that adapter or configured controllers it is unconfigured and
@@ -35,17 +35,43 @@ startup, before
 binding. An unavailable backend leaves that feature unavailable while unrelated
 features and workspaces remain usable. Invalid installed module declarations
 still reject startup. A failed feature cannot perform actions or silently connect
-to another service. Configuration changes require restart. An authenticated,
+to another service. Configuration changes outside the account API require restart. An authenticated,
 CSRF-protected reconnect retries only the original private configuration and
 must attest it again before exposing operations. Automatic connections rediscover
 through the same fixed controllers; explicit configuration never falls back to
 discovery after a failure.
 
 `dim-web init-operations SETTINGS --output CONFIG` initializes ordinary hosts
-without contacting a control plane. `dim-web init-features SPEC --output CONFIG
+without contacting a control plane, with read/operator/account-admin authority
+for its initial account. `dim-web init-features SPEC --output CONFIG
 --roles ROLES` requires an explicit comma-separated role selection and validates
 configured plugins before writing. Both initialize a fresh browser password,
 store only its scrypt hash, write mode-0600 files and refuse overwrite.
+
+## Browser account administration
+
+`GET /v1/accounts` requires `account-admin` and returns usernames and roles only.
+`POST /v1/accounts` requires that role, exact Origin, CSRF and the administrator's
+`currentPassword`, verified by the same bounded authenticator as login. Its strict
+body selects `add`, `set-roles`, `reset-password` or `remove`, a username, and roles
+only for add/set-roles. No ordinary operator or reviewer may self-grant account
+administration. Existing installations retain their chosen roles; trusted OS-owner
+CLI configuration provides bootstrap/recovery.
+
+The writer rechecks the actor against current private configuration under its
+account lock before committing. It preserves other configuration, rejects removal
+of the last account or the last administrator, enforces the loader's serialized
+size limit, and atomically replaces the private file. Web writes replace the live
+account snapshot and authenticator without changing plugin connections. Role
+changes, resets and removals invalidate the target's sessions, including the
+caller's own when applicable. A login in flight against a replaced snapshot may
+not recreate a revoked session. The API returns only public accounts, the affected
+username, an optional generated password shown once, and `signInRequired`.
+No password hash, config path or raw host/service credential is returned by this API.
+An update rejected before commit may return a bounded conflict explanation;
+unknown errors do not expose filesystem or service diagnostics. Independent
+editors/install-local do not share the account writer lock and must not write the
+configuration concurrently.
 
 ## Trusted controller capability
 

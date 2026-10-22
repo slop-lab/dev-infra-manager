@@ -5,6 +5,9 @@ import { z } from "zod";
 import { operationsConfigSchema } from "./operations.js";
 
 export const MAX_CONFIG_BYTES = 64 * 1024;
+export const accountRolesSchema = z.array(z.enum(["read", "operator", "reviewer", "account-admin"])).min(1).max(4)
+  .refine((roles) => new Set(roles).size === roles.length, "roles must be unique");
+export type AccountRole = z.infer<typeof accountRolesSchema>[number];
 const exactOrigin = z.string().url().superRefine((input, context) => {
   const url = new URL(input);
   const loopback = url.hostname === "127.0.0.1" || url.hostname === "[::1]";
@@ -36,7 +39,7 @@ const configSchema = z.object({
   accounts: z.array(z.object({
     username: z.string().min(1).max(256),
     passwordHash,
-    roles: z.array(z.enum(["read", "operator", "reviewer"])).min(1).max(3).refine((roles) => new Set(roles).size === roles.length).readonly()
+    roles: accountRolesSchema.readonly()
   }).strict().readonly()).min(1).max(256).readonly(),
   session: z.object({
     idleSeconds: z.number().int().positive().max(86_400),

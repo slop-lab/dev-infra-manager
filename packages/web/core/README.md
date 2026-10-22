@@ -2,7 +2,7 @@
 
 Authenticated operations console for local or SSH development hosts and explicit
 feature plugins. Ordinary Git hosts need no control plane. Browser accounts
-have explicit `read`, `operator`, and `reviewer` roles. Host selectors, executable
+have explicit `read`, `operator`, `reviewer`, and `account-admin` roles. Host selectors, executable
 paths, service credentials and worker leases remain on the server.
 
 ## Ordinary Git hosts
@@ -157,7 +157,8 @@ connections.
 
 The listener binds loopback only. Use an SSH tunnel or a trusted HTTPS proxy
 and set `publicOrigin` to its exact public origin. Account roles are explicit:
-`read` for queries, `operator` for mutation and `reviewer` for human decisions.
+`read` for queries, `operator` for feature mutations, `reviewer` for human decisions,
+and `account-admin` for browser account administration.
 Roles do not imply one another. Each plugin operation advertises its required
 role, validates input and bounds its public result. Session roles and CSRF are
 checked before dispatch; authoritative services retain their own scope,
@@ -181,24 +182,34 @@ fixtures exercise real service protocols independently.
 
 ## Browser accounts and review access
 
-Open **Account & access** in the console header to inspect the current username
-and roles. Operators get exact, copyable commands for this installation;
-read-only users are directed to the console owner. Browser permissions and the
-Native Git service reviewer identity are independent and both must permit approval.
+Open **Account & access** in the console header. An `account-admin` can list,
+add or remove accounts, select their roles, and reset passwords directly in the
+Web UI. Each change requires the administrator's current password, an authenticated
+session, the exact console origin and its CSRF token. No other role grants account
+administration. The initial `init-operations` account includes `account-admin`;
+`init-features --roles` always uses the explicitly selected roles.
 
-Run `dim-web account --help` on the console server as its configuration owner.
-For example, create a separate reviewer or update an existing account:
+Web changes apply immediately, persist across restarts and preserve service
+connections. Role changes, password resets and removal end the affected account's
+sessions. If editing your own account, save any generated password before choosing
+**Sign in again**. Generated passwords are shown once. The last administrator
+cannot be removed or demoted; create another administrator first. Browser account
+roles and the Native Git service reviewer identity remain independent: both must
+permit a review approval.
+
+Existing installations retain their explicit roles. On the console server, its
+configuration owner can bootstrap an existing account through the local CLI:
 
 ```sh
 dim-web account list
-dim-web account add reviewer --roles read,reviewer
-dim-web account set-roles local-operator --roles read,operator,reviewer
+dim-web account set-roles operator --roles read,operator,account-admin
+systemctl --user restart dim-web.service
 ```
 
-Use `--config /absolute/web.json` for a nondefault configuration. Account changes
-preserve other settings and existing passwords; `reset-password` generates a new
-password, and `remove` refuses to delete the last account. New passwords are shown
-once. Restart the console and sign in again to apply changes; with install-local,
-run `systemctl --user restart dim-web.service`. The console cannot grant browser
-roles through HTTP. Account administration commands serialize their own writes;
-avoid changing the same configuration with install-local or another editor concurrently.
+Use `--config /absolute/web.json` for a nondefault configuration. Operators without
+`account-admin` receive an exact copyable command for their installation. Read-only
+users are directed to the console owner. `dim-web account --help` also describes
+add, reset-password and remove. CLI changes require a restart and fresh sign-in;
+existing passwords are preserved unless explicitly reset. Account commands and
+Web updates serialize their own writes; avoid changing the same configuration
+with install-local or another editor concurrently.

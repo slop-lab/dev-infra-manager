@@ -17,7 +17,7 @@ it("initializes an ordinary host operations account through the public CLI witho
     const password = /Browser password: (\S+)/.exec(stdout)?.[1]; expect(password).toBeTruthy();
     const bytes = await readFile(output, "utf8"); expect(bytes).not.toContain(password!);
     const config: unknown = JSON.parse(bytes);
-    expect(config).toMatchObject({ accounts: [{ username: "operator", roles: ["read", "operator"] }], operations: { hosts: [{ id: "devbox" }] } });
+    expect(config).toMatchObject({ accounts: [{ username: "operator", roles: ["read", "operator", "account-admin"] }], operations: { hosts: [{ id: "devbox" }] } });
     expect(config).not.toHaveProperty("nativeGit"); expect((await stat(output)).mode & 0o777).toBe(0o600);
     await expect(promisify(execFile)(process.execPath, args)).rejects.toThrow();
     expect(await readFile(output, "utf8")).toBe(bytes);

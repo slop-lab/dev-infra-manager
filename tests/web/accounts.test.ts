@@ -46,7 +46,7 @@ it("rejects invalid mutations and a competing lock without changing the private 
   expect(() => parseAccountRoles("read,read")).toThrow();
   expect(() => parseAccountRoles("admin")).toThrow();
   await writeFile(`${file}.accounts.lock`, "other writer", { mode: 0o600 });
-  await expect(changeWebAccount(file, { operation: "reset-password", username: WEB_USERNAME })).rejects.toThrow("Cannot lock");
+  await expect(changeWebAccount(file, { operation: "reset-password", username: WEB_USERNAME })).rejects.toThrow("settings are busy");
   expect(await readFile(`${file}.accounts.lock`, "utf8")).toBe("other writer");
   expect(await readFile(file, "utf8")).toBe(original);
 });
@@ -80,4 +80,21 @@ it("treats a username after the option delimiter literally even when it is --hel
     await runAccountCli(["set-roles", "--config", file, "--roles", "read,reviewer", "--", "--help"]);
     expect((await listWebAccounts(file))[1]?.roles).toEqual(["read", "reviewer"]);
   } finally { output.mockRestore(); }
+});
+
+it("does not let a login started before account replacement recreate a revoked session", async () => {
+  const { file } = await fixture(), config = await loadWebConfig(file);
+  const authenticator = new AccountAuthenticator(config.accounts, 2, Date.now);
+  const pending = authenticator.authenticate(WEB_USERNAME, WEB_PASSWORD);
+  authenticator.replaceAccounts([]);
+  expect(await pending).toEqual({ kind: "rejected" });
+});
+it("checks write authority under the account lock and protects the last administrator", async () => {
+  const { file } = await fixture();
+  await changeWebAccount(file, { operation: "set-roles", username: WEB_USERNAME, roles: ["read", "account-admin"] });
+  await changeWebAccount(file, { operation: "add", username: "reader", roles: ["read"] });
+  const before = await readFile(file, "utf8");
+  await expect(changeWebAccount(file, { operation: "set-roles", username: WEB_USERNAME, roles: ["read"] })).rejects.toThrow("last account administrator");
+  await expect(changeWebAccount(file, { operation: "remove", username: "reader" }, { authorize() { throw new Error("revoked authority"); } })).rejects.toThrow("revoked authority");
+  expect(await readFile(file, "utf8")).toBe(before);
 });

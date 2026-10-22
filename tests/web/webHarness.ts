@@ -1,3 +1,4 @@
+import type { AccountRole } from "../../packages/web/core/src/config.js";
 import { scryptSync } from "node:crypto";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -21,6 +22,7 @@ export const WEB_PASSWORD = "local-operator-password";
 export type WebFixtureOptions = {
   readonly accounts?: readonly string[];
   readonly operatorAccountId?: string;
+  readonly operatorRoles?: readonly AccountRole[];
   readonly defaultClock?: boolean;
   readonly secureOrigin?: boolean;
   readonly server?: WebServerOptions;
@@ -51,6 +53,7 @@ export async function webFixture(options: WebFixtureOptions = {}): Promise<WebFi
     accounts: options.accounts ?? [WEB_USERNAME],
     publicOrigin: origin,
     port,
+    ...(options.operatorRoles === undefined ? {} : { operatorRoles: options.operatorRoles }),
     operatorAccountId: options.operatorAccountId ?? options.accounts?.[0] ?? WEB_USERNAME
   });
   await writeFile(configPath, `${JSON.stringify(config)}\n`, { mode: 0o600 });
@@ -92,6 +95,7 @@ export function webConfig(input: {
   readonly publicOrigin: string;
   readonly port: number;
   readonly operatorAccountId?: string;
+  readonly operatorRoles?: readonly AccountRole[];
 }): JsonObject {
   const salt = Buffer.from("0123456789abcdef", "utf8");
   const hash = scryptSync(WEB_PASSWORD, salt, 32, { N: 16_384, r: 8, p: 1 });
@@ -103,7 +107,7 @@ export function webConfig(input: {
     operations: { hosts: [], consoles: [] },
     accounts: (input.accounts ?? [WEB_USERNAME]).map((username) => ({
       username,
-      roles: username === (input.operatorAccountId ?? WEB_USERNAME) ? ["read", "operator"] : ["read"],
+      roles: username === (input.operatorAccountId ?? WEB_USERNAME) ? input.operatorRoles ?? ["read", "operator"] : ["read"],
       passwordHash: `scrypt$16384$8$1$${salt.toString("base64")}$${hash.toString("base64")}`
     })),
     session: { idleSeconds: 10, absoluteSeconds: 30 }

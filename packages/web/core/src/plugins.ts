@@ -5,7 +5,8 @@ import { pathToFileURL } from "node:url";
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { operationDescriptors, type OperationAccess } from "@slop-lab/dim-contracts-operations";
+import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
+import type { AccountRole } from "./config.js";
 import type { WebPlugin, WebPluginRuntime, WebPluginContext } from "./plugin-api.js";
 import { HttpResponseError } from "./http-response.js";
 
@@ -63,7 +64,7 @@ export function webPluginCatalog(plugins: readonly LoadedWebPlugin[], roles: rea
     configured: config !== undefined || definition.autoConnect !== undefined && context.controllers.length > 0, browserEntry: `/v1/extensions/${definition.id}/assets/${definition.browserEntry}`,
     operations: operationDescriptors(runtime?.operations ?? []).filter(({ access }) => roles.includes(access)) }));
 }
-export async function invokeWebPlugin(plugin: LoadedWebPlugin, name: string, input: unknown, roles: readonly OperationAccess[]): Promise<unknown> {
+export async function invokeWebPlugin(plugin: LoadedWebPlugin, name: string, input: unknown, roles: readonly AccountRole[]): Promise<unknown> {
   if (!plugin.runtime) throw new HttpResponseError(409, "This feature connection is not ready. Configure its private connection or reconnect the feature before retrying.");
   const operation = plugin.runtime.operations?.find((candidate) => candidate.name === name);
   if (!operation) throw new HttpResponseError(404, "operation not found");

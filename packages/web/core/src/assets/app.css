@@ -254,3 +254,11 @@ label.field { color: var(--color-text-secondary); font-size: var(--font-control)
 .account-access-dialog::backdrop { background: rgb(0 0 0 / .6); }
 .account-access-dialog .field { display: grid; gap: .5rem; margin-top: 1rem; }
 .account-access-dialog input { width: 100%; }
+.account-management { display: grid; gap: var(--space-3); min-inline-size: 0; }
+.account-management form { display: grid; gap: var(--space-3); }
+.account-role-options { display: flex; flex-wrap: wrap; gap: var(--space-3); border: var(--line) solid var(--color-border); border-radius: var(--radius-control); padding: var(--space-3); min-inline-size: 0; }
+.account-role-options label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.account-management td:last-child { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.account-management [role="status"] { overflow-wrap: anywhere; }
+.account-role-options label { white-space: nowrap; }
+.account-access-dialog .account-role-options input { inline-size: auto; }

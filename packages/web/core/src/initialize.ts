@@ -3,9 +3,9 @@ import { randomBytes, scryptSync } from "node:crypto";
 import { mkdir, open } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { z } from "zod";
-import { loadPrivateJson, parseWebConfig, type WebConfig } from "./config.js";
+import { accountRolesSchema, loadPrivateJson, parseWebConfig, type WebConfig, type AccountRole } from "./config.js";
 import { operationsConfigSchema } from "./operations.js";
-export function browserAccount(username: string, roles: readonly ("read" | "reviewer" | "operator")[]) {
+export function browserAccount(username: string, roles: readonly AccountRole[]) {
   const password = randomBytes(24).toString("base64url"), salt = randomBytes(16);
   const hash = scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 });
   return { password, account: { username, roles, passwordHash: `scrypt$16384$8$1$${salt.toString("base64")}$${hash.toString("base64")}` } };
@@ -28,8 +28,7 @@ export async function initializeFeaturesWeb(input: { specification: string; role
     plugins: z.array(z.object({ package: z.string().min(1).max(214), config: z.unknown().optional() }).strict()).min(1).max(64),
     operations: operationsConfigSchema.optional()
   }).strict().parse(await loadPrivateJson(resolve(input.specification)));
-  const roles = z.array(z.enum(["read", "operator", "reviewer"])).min(1).max(3)
-    .refine((value) => new Set(value).size === value.length).parse(input.roles);
+  const roles = accountRolesSchema.parse(input.roles);
   const browser = browserAccount("operator", roles);
   const config = parseWebConfig({ ...listener(input.port), ...specification, accounts: [browser.account] });
   // Resolve and attest every configured feature before writing credentials or binding.
@@ -41,7 +40,7 @@ export async function initializeFeaturesWeb(input: { specification: string; role
 /** Ordinary Git hosts need no managed Git or CI package. Existing files are never overwritten. */
 export async function initializeOperationsWeb(input: { operations: string; output: string; port?: number }) {
   const operations = operationsConfigSchema.parse(await loadPrivateJson(resolve(input.operations)));
-  const browser = browserAccount("operator", ["read", "operator"]);
+  const browser = browserAccount("operator", ["read", "operator", "account-admin"]);
   const config = parseWebConfig({ ...listener(input.port), operations, accounts: [browser.account] });
   return { configPath: await writeConfig(input.output, config), username: browser.account.username, password: browser.password };
 }
