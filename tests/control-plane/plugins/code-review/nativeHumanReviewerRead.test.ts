@@ -2,7 +2,8 @@ import { parseCodeReviewConfig } from "@slop-lab/dim-control-plane-plugin-code-r
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as repositoryTargets from "../../../../packages/control-plane/plugins/git-repositories/src/authoritative-native-root-target.js";
 import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
 import { configuredManagedGitFixture } from "../../../support/managed-git-service.js";
 import { bundleSecrets, idleNativeConfig } from "../git-repositories/bundleConfigFixture.js";
@@ -107,7 +108,10 @@ describe("installed imported-root human reviewer", () => {
     const identity = await fetch(`${fixture.service.origin}/v1/human-reviewer-identity`, {
       headers: { authorization: humanReviewerAuthorization }
     });
+    const proofs = vi.spyOn(repositoryTargets, "resolveAuthoritativeNativeRepositoryTarget");
     const current = await fetch(`${fixture.service.origin}${path}`, { headers });
+    expect(proofs).toHaveBeenCalledTimes(2);
+    proofs.mockRestore();
     await addCandidateCommit(fixture.clone, "review-drift.txt", Buffer.from("drift\n"));
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
     await closeFinalizeService(fixture.service);

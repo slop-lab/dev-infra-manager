@@ -21,6 +21,7 @@ it("shares immutable multi-repository review operations while fencing catalog an
   await writeFile(promoter, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", endpoint: native.service.origin, generationId, role: "host-promoter", hostId: hostPromoter.hostId, credential: { username: hostPromoter.username, password: hostPromoter.password } }), { mode: 0o600 });
   const projects: NativeGitOperatorProject[] = [{ projectId: "project-a", name: "codyssey", repositoryIds: ["public", "private"] }];
   const runtime = await createNativeGitOperator({ reviewerConnection: reviewer, promoterConnection: promoter, projects: async () => projects });
+  expect(runtime.reviewerId).toBe("owner");
   expect(await runtime.invoke("projects.list", {})).toEqual({ reviewerId: "owner", projects });
   expect(runtime.operations.some((operation) => operation.name === "reviews.promote")).toBe(true);
   expect(runtime.operations.some((operation) => operation.name.startsWith("sync."))).toBe(false);

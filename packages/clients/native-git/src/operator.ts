@@ -44,6 +44,7 @@ export async function createNativeGitOperator(config: {
   const sync = config.syncConnection ? await createSyncClient(config.syncConnection, { baseUrl: reviewer.baseUrl, generationId: reviewer.generationId, ...(hostId ? { hostId } : {}) }) : undefined;
   const operations = nativeGitOperations.filter((operation) => (promoter || !["reviews.promote", "merges.prepare"].includes(operation.name)) && (sync || !operation.name.startsWith("sync.")));
   return {
+    get reviewerId() { return reviewer.reviewerId; },
     operations,
     async invoke(name: string, raw: unknown): Promise<unknown> {
       const operation = operations.find((operation) => operation.name === name);

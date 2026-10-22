@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import * as decisionStore from "../../../../packages/control-plane/plugins/code-review/src/authoritative-native-decision-store.js";
+import * as freshness from "../../../../packages/control-plane/plugins/code-review/src/native-human-reviewer-freshness.js";
 import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
 import { reviewChangeMatcherExtension } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
 import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-merge-policy";
@@ -62,7 +64,11 @@ it("binds main PR rules to its target while development stays approval-free, the
       if (!Array.isArray(value)) throw new Error("review summaries are missing");
       return value.map(record);
     };
+    const decisionsRead = vi.spyOn(decisionStore, "readAuthoritativeNativeDecisions"), freshnessCheck = vi.spyOn(freshness, "nativeHumanReviewStaleReasons");
     const bothBranches = await list();
+    expect(decisionsRead).toHaveBeenCalledTimes(1);
+    expect(freshnessCheck.mock.calls.length).toBeLessThan(bothBranches.length);
+    decisionsRead.mockRestore(); freshnessCheck.mockRestore();
     expect(bothBranches.some((entry) => entry.protectedRef === "refs/heads/development" && entry.status === "stale")).toBe(true);
     expect(bothBranches.find((entry) => entry.reviewId === result.reviewId)?.status).toBe("pending");
     const beforeRemoval = record(await (await fetch(path + "/policy", { headers: headers({ username: "importer", password: token(1) }) })).json());

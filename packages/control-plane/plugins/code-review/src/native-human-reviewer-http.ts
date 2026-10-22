@@ -317,8 +317,10 @@ async function inspectExactReview(
   if (envelope.review.requiredReviewerIds.length > 0 && !envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
     sendJson(response, 403, { error: "reviewer is not required for this review" }); return undefined;
   }
-  try { target = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, protectedRef: envelope.review.protectedRef }); }
-  catch { sendJson(response, 503, { error: "human review proof is unavailable" }); return undefined; }
+  if (target.currentHead.protectedRef !== envelope.review.protectedRef) {
+    try { target = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, protectedRef: envelope.review.protectedRef }); }
+    catch { sendJson(response, 503, { error: "human review proof is unavailable" }); return undefined; }
+  }
   const staleReasons = await nativeHumanReviewStaleReasons(input.runtime, target, envelope.review);
   try {
     const confirmed = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, protectedRef: envelope.review.protectedRef });
@@ -359,6 +361,9 @@ async function listReviewSummaries(input: HumanReviewerHttpInput, reviewer: Huma
     // that repository-wide work for every historical review envelope.
     const branchTargets = new Map([[target.currentHead.protectedRef, target]]);
     const managedBranches = nativeRepositoryBranches(target.imported.policy);
+    // Decision records are append-only and the mutation queue is held for this
+    // listing. Validate the complete store once, then project each review's view.
+    const allDecisions = await readAuthoritativeNativeDecisions(target.repository);
     for (const { review } of envelopes) {
       let branchTarget = branchTargets.get(review.protectedRef);
       if (branchTarget === undefined && Object.hasOwn(managedBranches, review.protectedRef)) {
@@ -366,8 +371,15 @@ async function listReviewSummaries(input: HumanReviewerHttpInput, reviewer: Huma
         catch { return sendJson(response, 503, { error: "human review proof is unavailable" }); }
         branchTargets.set(review.protectedRef, branchTarget);
       }
-      const staleReasons = branchTarget === undefined ? ["protected-branch-unmanaged"] : await nativeHumanReviewStaleReasons(input.runtime, branchTarget, review);
-      const decisions = await readAuthoritativeNativeDecisions(target.repository, review.reviewId);
+      // A summary needs only the status. An authoritative head or policy mismatch
+      // already proves staleness; exact review reads still collect all reasons.
+      const staleReasons = branchTarget === undefined ? ["protected-branch-unmanaged"]
+        : review.expectedProtectedHead !== branchTarget.currentHead.commit ? ["protected-head-changed"]
+        : review.policyRevision !== branchTarget.imported.policy.policyRevision ? ["policy-changed"]
+        : await nativeHumanReviewStaleReasons(input.runtime, branchTarget, review);
+      const decisions = { approvals: allDecisions.approvals.filter((approval) => approval.reviewId === review.reviewId),
+        revocations: allDecisions.revocations.filter((revocation) => revocation.reviewId === review.reviewId),
+        activeApprovals: allDecisions.activeApprovals.filter((approval) => approval.reviewId === review.reviewId) };
       summaries.push({ reviewId: review.reviewId, proposalRef: review.proposalRef, protectedRef: review.protectedRef,
         candidateCommit: review.candidateCommit, createdAt: review.createdAt,
         status: nativeHumanReviewStatus(review.requiredReviewerIds, staleReasons, decisions) });
