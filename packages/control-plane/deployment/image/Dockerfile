@@ -18,6 +18,7 @@ COPY dim-service /usr/local/bin/dim-service
 RUN groupadd --gid 10001 dim-service \
   && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin dim-service \
   && install -d -o 10001 -g 10001 -m 0750 /var/lib/dim-native-git \
+  && chmod -R a+rX,go-w /usr/local/lib/dim/node_modules \
   && chmod 0444 /usr/local/lib/dim/package.json /usr/local/lib/dim/package-lock.json \
   && chmod 0555 /usr/local/lib/dim/node_modules/@this-project/control-plane-deployment/deployment-cli.js \
   && chmod 0555 /usr/local/bin/dim-service

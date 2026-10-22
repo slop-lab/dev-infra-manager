@@ -12,6 +12,7 @@ COPY dim-service /usr/local/bin/dim-service
 RUN groupadd --gid 10002 dim-service \
   && useradd --uid 10002 --gid 10002 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin dim-service \
   && install -d -o 10002 -g 10002 -m 0750 /var/lib/dim-execution \
+  && chmod -R a+rX,go-w /usr/local/lib/dim/node_modules \
   && chmod 0444 /usr/local/lib/dim/package.json /usr/local/lib/dim/package-lock.json \
   && chmod 0555 /usr/local/lib/dim/node_modules/@slop-lab/dim-control-plane-plugin-execution-scheduler/cli.js \
   && chmod 0555 /usr/local/bin/dim-service
