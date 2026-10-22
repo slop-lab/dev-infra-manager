@@ -22,6 +22,7 @@ const assets = new Map<string, StaticAsset>([
   ["/assets/workspace-row.js", asset("workspace-row.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/workspace-ui.js", asset("workspace-ui.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/feature-panels.js", asset("feature-panels.js", "text/javascript; charset=utf-8", ASSET_CSP)],
+  ["/assets/feature-ui.js", asset("feature-ui.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/session-data.js", asset("session-data.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/app.js", asset("app.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/operation-coordinator.js", asset("operation-coordinator.js", "text/javascript; charset=utf-8", ASSET_CSP)],
