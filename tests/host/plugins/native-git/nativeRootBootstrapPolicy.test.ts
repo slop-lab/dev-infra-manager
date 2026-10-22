@@ -27,6 +27,24 @@ describe("repository bootstrap policy", () => {
     expect(explicit.repositoryPolicy.extensions).toEqual({});
     expect(parseNativeRootBootstrapManifestYaml(manifest(""), "refs/heads/main", "root")).toEqual(explicit);
   });
+  it("defaults to main and separates review selection from the immutable import branch", () => {
+    const policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/development" }).repositoryPolicy;
+    expect(policy.protectedRef).toBe("refs/heads/development");
+    expect(policy.defaultRef).toBe("refs/heads/main");
+    expect(policy.branches).toEqual({ "refs/heads/main": { review: true }, "refs/heads/development": { review: false } });
+    const yaml = manifest("").replace("ref: main, protect: [main]", "ref: development, defaultBranch: release, protect: [main, development, release], branches: {development: {review: true}, release: {review: false}}");
+    const customized = parseNativeRootBootstrapManifestYaml(yaml, "refs/heads/development", "root").repositoryPolicy;
+    expect(customized.defaultRef).toBe("refs/heads/release");
+    expect(customized.branches?.["refs/heads/development"]).toEqual({ review: true });
+    expect(customized.branches?.["refs/heads/release"]).toEqual({ review: false });
+    expect(customized.policyRevision).not.toBe(policy.policyRevision);
+  });
+  it("accepts branch defaults without redundant protect and rejects malformed branch declarations", () => {
+    expect(parseNativeRootBootstrapManifestYaml("schemaVersion: 1\nrepositories: {root: {ref: main}}", "refs/heads/main", "root").repositoryPolicy.defaultRef).toBe("refs/heads/main");
+    for (const option of ["defaultBranch: ../bad", "branches: {main: {review: yes}}", "branches: {main: {review: true, forcePush: true}}", "branches: {main: {review: true}, refs/heads/main: {review: false}}", "branches: []"]) {
+      expect(() => parseNativeRootBootstrapManifestYaml(manifest("").replace("ref: main", `ref: main, ${option}`), "refs/heads/main", "root")).toThrow();
+    }
+  });
   it("changes approval-bound policy identity when quality requirements change", () => {
     const compile = (value: unknown) => compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main", extensions: value }).repositoryPolicy.policyRevision;
     expect(compile({ ...extensions, "git-ci": { ...extensions["git-ci"], requiredJobs: [] } })).not.toBe(compile(extensions));

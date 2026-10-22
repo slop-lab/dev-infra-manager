@@ -15,8 +15,10 @@ export function compileNativeRepositoryBootstrapPolicy(input: {
   readonly repositoryId: string;
   readonly protectedRef: string;
   readonly extensions?: unknown;
+  readonly defaultRef?: string;
+  readonly branches?: Readonly<Record<string, { readonly review: boolean }>>;
 }): NativeRepositoryBootstrapPolicy {
-  if (Object.keys(input).some((key) => !["repositoryId", "protectedRef", "extensions"].includes(key))) {
+  if (Object.keys(input).some((key) => !["repositoryId", "protectedRef", "extensions", "defaultRef", "branches"].includes(key))) {
     throw new UserError("repository policy input contains unknown fields");
   }
   const repositoryId = input.repositoryId;
@@ -27,9 +29,13 @@ export function compileNativeRepositoryBootstrapPolicy(input: {
   }
   const extensions = input.extensions ?? {};
   if (!isRecord(extensions)) throw new UserError("repository policy extensions must be an object");
+  const defaultRef = input.defaultRef ?? "refs/heads/main";
+  const branches = input.branches ?? { "refs/heads/main": { review: true }, "refs/heads/development": { review: false },
+    ...(protectedRef === "refs/heads/main" || protectedRef === "refs/heads/development" ? {} : { [protectedRef]: { review: true } }),
+    ...(defaultRef === "refs/heads/main" || defaultRef === "refs/heads/development" || defaultRef === protectedRef ? {} : { [defaultRef]: { review: true } }) };
   try {
-    const policy = parseAuthoritativeImportedRootPolicy({ schemaVersion: 1, protectedRef, extensions,
-      policyRevision: nativeRepositoryPolicyRevision({ protectedRef, extensions }) });
+    const policy = parseAuthoritativeImportedRootPolicy({ schemaVersion: 1, protectedRef, defaultRef, branches, extensions,
+      policyRevision: nativeRepositoryPolicyRevision({ protectedRef, defaultRef, branches, extensions }) });
     if (Buffer.byteLength(JSON.stringify(policy)) > maximumManifestBytes) throw new Error("policy exceeds 64 KiB");
     return { repositoryId, protectedRef, repositoryPolicy: policy };
   } catch (cause) {
@@ -54,16 +60,30 @@ export function parseNativeRootBootstrapManifestYaml(
   if (manifest.schemaVersion !== 1 || !isRecord(manifest.repositories) || !Object.keys(manifest.repositories).length) {
     throw new UserError("native bootstrap manifest requires schemaVersion 1 and nonempty repositories");
   }
-  const entries = new Map<string, { ref?: string; protect: readonly string[]; upstream?: unknown; publish?: unknown }>();
+  const entries = new Map<string, { ref?: string; protect: readonly string[]; defaultRef?: string; branches?: Readonly<Record<string, { readonly review: boolean }>>; upstream?: unknown; publish?: unknown }>();
   for (const [id, value] of Object.entries(manifest.repositories)) {
     if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(id)) throw new UserError("invalid repository ID in native bootstrap manifest");
-    const entry = exactRecord(value, ["protect"], ["ref", "upstream", "publish"], `native bootstrap repository '${id}'`);
+    const entry = exactRecord(value, [], ["ref", "protect", "defaultBranch", "branches", "upstream", "publish"], `native bootstrap repository '${id}'`);
     if (entry.ref !== undefined && typeof entry.ref !== "string") throw new UserError("repository ref must be a string");
-    if (!Array.isArray(entry.protect) || !entry.protect.length || entry.protect.length > 64
-      || !entry.protect.every((pattern: unknown) => typeof pattern === "string" && pattern.length > 0 && pattern.length <= 512 && !/[\x00-\x20\x7f]/.test(pattern))) {
+    const protect = entry.protect ?? ["main", "development"];
+    if (!Array.isArray(protect) || !protect.length || protect.length > 64
+      || !protect.every((pattern: unknown) => typeof pattern === "string" && pattern.length > 0 && pattern.length <= 512 && !/[\x00-\x20\x7f]/.test(pattern))) {
       throw new UserError("repository protect must contain 1–64 branch patterns");
     }
-    entries.set(id, { ...(entry.ref === undefined ? {} : { ref: normalizeRepositoryRef(entry.ref) }), protect: entry.protect,
+    if (entry.defaultBranch !== undefined && (typeof entry.defaultBranch !== "string" || !safeHeadRef(normalizeRepositoryRef(entry.defaultBranch)))) throw new UserError("defaultBranch must be a safe branch");
+    let branches: Record<string, { readonly review: boolean }> | undefined;
+    if (entry.branches !== undefined) {
+      if (!isRecord(entry.branches) || Object.keys(entry.branches).length === 0) throw new UserError("repository branches must be a nonempty branch policy map");
+      branches = {};
+      for (const [branch, options] of Object.entries(entry.branches)) {
+        const ref = normalizeRepositoryRef(branch);
+        const rule = exactRecord(options, ["review"], [], `repository branch '${branch}'`);
+        if (!safeHeadRef(ref) || typeof rule.review !== "boolean" || Object.hasOwn(branches, ref)) throw new UserError("repository branch policy is invalid or duplicated");
+        branches[ref] = { review: rule.review };
+      }
+    }
+    entries.set(id, { ...(entry.ref === undefined ? {} : { ref: normalizeRepositoryRef(entry.ref) }), protect,
+      ...(entry.defaultBranch === undefined ? {} : { defaultRef: normalizeRepositoryRef(entry.defaultBranch) }), ...(branches === undefined ? {} : { branches }),
       ...(entry.upstream === undefined ? {} : { upstream: entry.upstream }), ...(entry.publish === undefined ? {} : { publish: entry.publish }) });
   }
   const entry = entries.get(repositoryId);
@@ -84,7 +104,16 @@ export function parseNativeRootBootstrapManifestYaml(
     extensions = { ...extensions, "git-sync": { ...(entry.upstream === undefined ? {} : { upstream: entry.upstream }),
       ...(entry.publish === undefined ? {} : { publish: entry.publish }) } };
   }
-  return compileNativeRepositoryBootstrapPolicy({ repositoryId, protectedRef: normalizedRef, extensions });
+  const defaultRef = entry.defaultRef ?? "refs/heads/main";
+  const branches: Record<string, { readonly review: boolean }> = { "refs/heads/main": { review: true }, "refs/heads/development": { review: false },
+    [normalizedRef]: { review: normalizedRef !== "refs/heads/development" }, [defaultRef]: { review: defaultRef !== "refs/heads/development" }, ...entry.branches };
+  // Concrete protect entries declare additional managed branches; wildcard entries select the imported ref.
+  for (const pattern of entry.protect) if (!pattern.includes("*") && !pattern.includes("?")) {
+    const ref = normalizeRepositoryRef(pattern);
+    if (!safeHeadRef(ref)) throw new UserError("protected branch is unsafe");
+    branches[ref] ??= { review: ref !== "refs/heads/development" };
+  }
+  return compileNativeRepositoryBootstrapPolicy({ repositoryId, protectedRef: normalizedRef, defaultRef, branches, extensions });
 }
 
 function safeHeadRef(ref: string): boolean {

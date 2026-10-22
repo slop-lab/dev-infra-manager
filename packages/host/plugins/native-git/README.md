@@ -103,7 +103,7 @@ dim project repository import-manifest my-project --manifest /absolute/path/.dim
 dim project repository import-manifest my-project --manifest /absolute/path/.dim/repos.yml --json
 ```
 
-Each entry must declare `ref`, `protect`, and `upstream: {url, branch}`. Acquisition
+Each entry must declare `ref` and `upstream: {url, branch}`. Acquisition
 uses the public HTTPS upstream branch; DIM imports that commit under the managed
 `ref`, so `main` can start from upstream `development`. Per-repository `publish`
 and manifest `policy` become the imported policy, including reviewer identities
@@ -111,6 +111,17 @@ exactly as supplied. Inspect those identities against the configured service;
 DIM does not translate `owner` into another reviewer. This explicit action trusts
 the supplied declarative policy; ordinary URL import continues to ignore remote
 `.dim/repos.yml`. No repository code, hooks or checkout runs during import.
+
+The initial `ref` and `defaultBranch` are independent: importing `development`
+can create a repository whose default branch is `main`. New policies default to
+managed `main` and `development` branches, with force pushes forbidden on both.
+`main` evaluates configured review rules through the proposal path;
+`development` skips human review by default. Override this with per-repository
+`branches: {main: {review: true}, development: {review: true}}` and select another
+default using `defaultBranch`. `protect` defaults to `[main, development]`;
+concrete entries add managed branches. See
+[repository configuration](../../../../docs/guides/repository-configuration.md#native-git-repository-policy-reposyml)
+for the complete declaration and change matcher behavior.
 
 The preview includes every source, managed ref, complete policy, and proposed
 configuration/default repository. A new project's first declared entry supplies

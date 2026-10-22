@@ -30,6 +30,39 @@ proposal grants and reviews, and an explicit integration job. The included
 repositories contain disposable sample files so verification needs no GitHub
 credentials or access to private product code.
 
+Each repository has its own branches. New imports default to `main`; `main`
+evaluates configured review-target changes and `development` skips human review
+unless explicitly enabled. Both branches prohibit force pushes. A reviewed
+`.dim/repos.yml` can choose this independently for each repository:
+
+```yaml
+schemaVersion: 1
+repositories:
+  public:
+    ref: main
+    defaultBranch: main
+    protect: [main, development]
+    branches: {main: {review: true}, development: {review: false}}
+  private:
+    ref: main
+    defaultBranch: main
+    protect: [main, development]
+    branches: {main: {review: true}, development: {review: true}}
+policy:
+  code-review:
+    requiredReviewerIds: []
+    pathReviewerRules: [{pathPrefix: .dim/, reviewerIds: [owner]}]
+  merge-policy: {}
+```
+
+This policy enables review-target evaluation on both private branches. Replace
+`owner` with a configured reviewer. For a local source import, commit the file in
+the selected source and pass `--repository-policy` instead of `--policy FILE`.
+The runnable recipe below uses operator-owned JSON policy files and additionally
+requires CI results; the snippet illustrates branch selection only. See
+[repository configuration](../../../docs/guides/repository-configuration.md#native-git-repository-policy-reposyml)
+for URL-manifest import and full configuration.
+
 ## Required components
 
 On the selected workspace host, `dim installer install core --with-managed`

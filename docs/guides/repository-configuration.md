@@ -56,7 +56,11 @@ schemaVersion: 1
 repositories:
   root:
     ref: main
-    protect: [main]
+    defaultBranch: main
+    protect: [main, development]
+    branches:
+      main: {review: true}
+      development: {review: false}
     upstream:
       url: https://github.com/slop-lab/dev-infra-manager.git
       branch: development
@@ -71,10 +75,28 @@ policy:
 ```
 
 `schemaVersion` must be `1`. `repositories` is a nonempty map keyed by repository
-ID. Each entry requires `protect`, containing 1–64 branch patterns (`*` and `?`
-are supported); the selected branch must match. Optional `ref` must match the
-selected branch after normalization to `refs/heads/...`. Unknown fields fail.
+ID. `ref` selects the initial imported branch; it is independent of
+`defaultBranch`, which defaults to `main`. Both `main` and `development` are
+managed branches by default. Managed branch updates always pass through DIM's
+proposal and promotion path and must be fast-forwards; changing branch policy
+does not allow force pushes or branch deletion. Optional `protect` contains
+1–64 branch patterns (`*` and `?` are supported) and defaults to
+`[main, development]`; the imported branch must match. Concrete entries add
+managed branches, while patterns select the imported branch.
+Optional `ref` must match the selected import branch after normalization to
+`refs/heads/...`. Unknown fields fail.
 Each pattern is limited to 512 characters; the whole manifest is at most 64 KiB.
+
+The `branches` map selects whether a branch applies the configured human review
+rules. `main` defaults to `review: true`, `development` to `review: false`;
+additional managed branches default to `true`. With `review: true`, DIM evaluates
+the proposal's changes and requires approval only from reviewers selected by
+`policy.code-review` (paths, JSON fields or other installed matchers). Ordinary
+changes can still have no required human reviewer. `review: false` skips those
+human requirements while retaining the proposal, protected head comparison and
+other installed merge checks. Set a branch's `review` explicitly to override its
+default. Changing these choices or the default branch changes the whole policy
+revision and invalidates approvals for an earlier policy.
 
 Optional top-level `policy` carries namespaced feature declarations for the
 selected repository. It becomes that repository's `extensions` policy and is
