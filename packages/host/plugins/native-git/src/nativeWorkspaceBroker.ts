@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
 import { timingSafeEqual } from "node:crypto";
+import { nativeWorkspaceBrokerRuntimeRevision } from "./nativeWorkspaceBrokerRuntime.js";
 import { createServer, request as httpRequest, type Server } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { WorkspaceStore, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
@@ -28,7 +29,7 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       try { workspace = await store.read(attachment.workspaceName); } catch { response.writeHead(410).end(); return; }
       if (workspace.id !== attachment.workspaceId || workspace.phase === "discarding") { response.writeHead(410).end(); return; }
       if (health) {
-        response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" }).end(nativeWorkspaceBrokerHealth(attachment)); return;
+        response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store", "x-dim-native-git-runtime": nativeWorkspaceBrokerRuntimeRevision }).end(nativeWorkspaceBrokerHealth(attachment)); return;
       }
       if (!workspace.initialized || workspace.phase !== "running") { response.writeHead(409).end(); return; }
       if (!repository || !repositoryId) { response.writeHead(404).end(); return; }

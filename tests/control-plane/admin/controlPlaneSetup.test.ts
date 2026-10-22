@@ -186,6 +186,8 @@ describe("optional control-plane setup", () => {
       await new Promise<void>((resolve) => broker.listen(0, "127.0.0.1", resolve));
       try {
         const address = broker.address(); if (!address || typeof address === "string") throw new Error("missing broker address");
+        attachment.port = address.port;
+        await writeNativeWorkspaceAttachment(attachment);
         const brokerUrl = `http://127.0.0.1:${address.port}/v1/projects/example/repositories/root.git/info/refs?service=git-upload-pack`;
         const headers = { authorization: `Basic ${Buffer.from(`dim:${attachment.repositories.root!.grant}`).toString("base64")}` };
         expect((await fetch(brokerUrl, { headers })).status).toBe(200);

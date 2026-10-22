@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { UserError, WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import { createNativeWorkspaceBroker } from "./nativeWorkspaceBroker.js";
+import { nativeWorkspaceBrokerRuntimeRevision } from "./nativeWorkspaceBrokerRuntime.js";
+import { retireNativeWorkspaceBrokers } from "./nativeWorkspaceBrokerOwnership.js";
 import { nativeWorkspaceAttachmentFile, nativeWorkspaceBrokerHealth, nativeWorkspaceBrokerCredential, readNativeWorkspaceAttachment,
   type NativeWorkspaceAttachment } from "./nativeWorkspaceAttachment.js";
 
@@ -14,13 +16,16 @@ export async function ensureNativeWorkspaceBroker(attachment: NativeWorkspaceAtt
         headers: { authorization: `Basic ${Buffer.from(`dim:${nativeWorkspaceBrokerCredential(attachment)}`).toString("base64")}` },
         signal: AbortSignal.timeout(500)
       });
-      return response.status === 200 && await response.text() === nativeWorkspaceBrokerHealth(attachment);
+      return response.status === 200 && response.headers.get("x-dim-native-git-runtime") === nativeWorkspaceBrokerRuntimeRevision
+        && await response.text() === nativeWorkspaceBrokerHealth(attachment);
     } catch { return false; }
   };
   if (await ready()) return;
   const file = nativeWorkspaceAttachmentFile(attachment.managedStateRoot, attachment.workspaceId);
   const compiled = fileURLToPath(new URL("./nativeWorkspaceBrokerProcess.js", import.meta.url));
-  const executable = await stat(compiled).then(() => compiled, () => fileURLToPath(new URL("./nativeWorkspaceBrokerProcess.ts", import.meta.url)));
+  const source = fileURLToPath(new URL("./nativeWorkspaceBrokerProcess.ts", import.meta.url));
+  const executable = await stat(compiled).then(() => compiled, () => source);
+  await retireNativeWorkspaceBrokers([compiled, source], file);
   const deadline = Date.now() + 10_000;
   let nextAttempt = 0;
   while (Date.now() < deadline) {

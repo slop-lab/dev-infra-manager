@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkspaceStore, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import { createNativeWorkspaceBroker } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceBroker.js";
+import { nativeWorkspaceBrokerRuntimeRevision } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceBrokerRuntime.js";
 import { attachmentRecord, repositoryBinding, repositoryRecord } from "./nativeProjectFixture.js";
 import { nativeWorkspaceBrokerHealth } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
 import type { NativeWorkspaceAttachment } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
@@ -40,7 +41,9 @@ describe("native workspace broker authority", () => {
     expect(unauthorized.status).toBe(401);
     expect(unauthorized.headers.get("www-authenticate")).toContain("Basic");
     expect((await fetch(`${endpoint}/health`, { headers: { authorization: "Basic invalid" } })).status).toBe(401);
-    expect((await fetch(`${endpoint}/health`, { headers })).status).toBe(200);
+    const healthy = await fetch(`${endpoint}/health`, { headers });
+    expect(healthy.status).toBe(200);
+    expect(healthy.headers.get("x-dim-native-git-runtime")).toBe(nativeWorkspaceBrokerRuntimeRevision);
     for (const request of ["/api/host-inputs/secret", "/v1/call/workspace.discard", "/health?extra=true",
       "/v1/projects/foreign/repositories/public.git/info/refs?service=git-upload-pack",
       `${gitPath}&service=git-receive-pack`]) {

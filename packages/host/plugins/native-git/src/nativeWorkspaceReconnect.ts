@@ -4,8 +4,9 @@ import { MissingRecordError, UserError, WorkspaceStore } from "@slop-lab/dim-hos
 import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 import { readNativeWorkspaceAttachment } from "./nativeWorkspaceAttachment.js";
 import { refreshNativeWorkspaceConnection } from "./nativeWorkspaceConnection.js";
+import { ensureNativeWorkspaceBroker } from "./nativeWorkspaceBrokerProcess.js";
 
-/** Reconnect private host references without restarting brokers or touching guests. */
+/** Reconnect private host references and replace stale host brokers without touching guests. */
 export async function reconnectNativeWorkspaces(environment: NodeJS.ProcessEnv = process.env): Promise<number> {
   const selected = { ...environment };
   // An explicit connect selected the persisted authority; stale shell overrides
@@ -27,6 +28,7 @@ export async function reconnectNativeWorkspaces(environment: NodeJS.ProcessEnv =
       const workspace = await new WorkspaceStore(attachment.workspaceStateRoot).read(attachment.workspaceName);
       if (workspace.id !== attachment.workspaceId || workspace.phase === "discarding") continue;
       const updated = await refreshNativeWorkspaceConnection(attachment, AbortSignal.timeout(10_000), selected);
+      if (workspace.phase === "running") await ensureNativeWorkspaceBroker(updated, AbortSignal.timeout(15_000));
       if (updated.connectionFile !== attachment.connectionFile) refreshed++;
     } catch (error) {
       if (!(error instanceof MissingRecordError)) failed.push(attachment.workspaceName);
