@@ -34,6 +34,7 @@ it("reads jobs with private query credentials and omits unconfigured execution a
   expect(runtime.operations?.map((operation) => operation.name)).toEqual(["jobs.list", "jobs.detail"]);
   await expect(runtime.invoke("jobs.cancel", { id: crypto.randomUUID() })).rejects.toThrow("unavailable");
   expect(selected.calls).toEqual(["GET /v1/jobs"]);
+  expect(runtime.operations?.map((operation) => operation.name)).not.toContain("controllers.list");
 });
 it("exposes worker capacity only with a private operator connection", async () => {
   const selected = await fixture(true), runtime = await webPlugin.create(selected.config);
@@ -68,7 +69,7 @@ it("discovers controllers without Web connection files and pins every execution 
     if (args[2] === "describe") return { schemaVersion: 1, generationId, operations: operations.map(({ name, description, access }) => ({ name, description, access })) };
     return [];
   } }] });
-  expect(await runtime.invoke("controllers.list", {})).toMatchObject({ controllers: [{ id: "local", status: "ready" }] });
+  expect(await runtime.invoke("controllers.list", {})).toMatchObject({ controllers: [{ id: "local", controllerKey: "local", status: "ready" }] });
   expect(await runtime.invoke("jobs.list", { controllerId: "local" })).toEqual([]);
   expect(calls.at(-1)).toEqual(["execution", "console", "invoke", "jobs.list", "--expected-generation", generationId, "--input", "{}"]);
   expect(calls[1]).toEqual(["execution", "console", "describe", "--expected-generation", generationId]);
@@ -83,7 +84,7 @@ it("isolates unavailable controllers and rejects changed generations and undecla
     { id: "broken", async run() { throw new Error("private path/password must not escape"); } }
   ] });
   const catalog = await runtime.invoke("controllers.list", {});
-  expect(catalog).toMatchObject({ controllers: [{ id: "ready", status: "ready" }, { id: "broken", status: "unavailable", operations: [] }] });
+  expect(catalog).toMatchObject({ controllers: [{ id: "ready", controllerKey: "ready", status: "ready" }, { id: "broken", controllerKey: "broken", status: "unavailable", operations: [] }] });
   expect(JSON.stringify(catalog)).not.toContain("password");
   await expect(runtime.invoke("jobs.cancel", { controllerId: "ready", id: crypto.randomUUID() })).rejects.toThrow("unavailable");
   generationId = "b".repeat(64);
