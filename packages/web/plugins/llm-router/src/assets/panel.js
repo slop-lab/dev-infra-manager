@@ -1,4 +1,5 @@
 // @ts-check
+import { mountRouterControllers } from "./controllers.js";
 import { mountAccounts } from "./accounts.js";
 import { mountTraffic } from "./traffic.js";
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
@@ -10,6 +11,10 @@ function rows(value) { return Array.isArray(value) ? value.map(object) : []; }
 function text(value) { return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : "—"; }
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
+  return context.operations.some(({ name }) => name === "controllers.list") ? mountRouterControllers(container, context, mountRouter) : mountRouter(container, context);
+}
+/** @param {HTMLElement} container @param {Context} context */
+function mountRouter(container, context) {
   const { element: node, input } = context.ui;
 /** @param {HTMLElement} parent @param {string} label @param {(button:HTMLButtonElement)=>Promise<void>} run @param {HTMLElement} message */
 function action(parent, label, run, message) {
@@ -25,6 +30,9 @@ function table(parent, headings, values) {
   let alive = true, selectedProject = "", projectRevision = "", policyDirty = false, savingPolicy = false, projectLoad = 0, policyEdits = 0, initialLoadFailed = false;
   /** @type {Record<string,unknown>[]} */ let projectRows = [];
   const current = () => alive && context.isCurrent();
+  /** @param {Event} event */
+  const markDraft = (event) => { const target = event.target; const form = target instanceof Element ? target.closest("form") : null; if (form && container.contains(form)) { form.dataset.routerDraft = "true"; for (const button of form.querySelectorAll("button[data-accepted]")) delete /** @type {HTMLButtonElement} */ (button).dataset.accepted; } };
+  container.addEventListener("input", markDraft); container.addEventListener("change", markDraft);
   /** @param {string} name */ const has = (name) => context.operations.some((operation) => operation.name === name);
   const toolbar = node("div", "", "feature-actions"), message = node("p"); message.setAttribute("role", "status"); container.append(toolbar, message);
   const overview = node("section", "", "panel"), projects = node("section", "", "panel"), policy = node("section", "", "panel");
@@ -166,5 +174,6 @@ function table(parent, headings, values) {
     try { return await openProject(id, isCurrent) === "opened" ? { status: "opened", message: `Opened routing project ${id}.` } : { status: "blocked", message: `Kept unsaved routing policy changes for ${selectedProject}.` }; }
     catch (error) { return { status: "unavailable", code: "load-failed", message: error instanceof Error ? error.message : `Routing project ${id} could not be loaded.` }; }
   });
-  return () => { alive = false; disposeNavigation(); trafficManager.dispose(); accountManager.dispose(); };
+  const dispose = () => { alive = false; container.removeEventListener("input", markDraft); container.removeEventListener("change", markDraft); disposeNavigation(); trafficManager.dispose(); accountManager.dispose(); for (const input of container.querySelectorAll('input[type="password"]')) if (input instanceof HTMLInputElement) input.value = ""; };
+  return Object.assign(dispose, { canLeave: () => !savingPolicy && !policyDirty && ![...container.querySelectorAll("form[data-router-draft]")].some((form) => !form.querySelector('button[data-accepted="true"]')), isSaving: () => savingPolicy });
 }

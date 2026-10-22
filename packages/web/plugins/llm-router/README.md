@@ -1,25 +1,51 @@
 # LLM router Web plugin
 
-Install this package alongside the matching `@slop-lab/dim-web` and add a
-private Web configuration entry:
+Install this package alongside the matching `@slop-lab/dim-web`. With a
+package-only Web entry, the plugin discovers router connections through the
+configured local and SSH controllers:
+
+```json
+{"plugins":[{"package":"@slop-lab/dim-web-plugin-llm-router"}]}
+```
+
+On each trusted controller, `dim llm-router connect --connection FILE` selects
+its private operator connection. **Router controller** selects which service to
+inspect or manage. Discovery isolates unavailable controllers; operations bind
+to the selected connection fingerprint. Changing that private selection requires
+reconnecting the feature before new operations. The router can run on the control
+plane or another reachable machine; it need not run beside Web or the workspace.
+Web forwards typed operations through the controller and never supplies an
+operator file path, provider credential or connection override.
+
+An explicit private Web connection remains available and takes precedence over
+automatic controller discovery. This direct connection is also pinned until
+feature reconnection, so editing its file cannot silently redirect a live panel:
 
 ```json
 {"plugins":[{"package":"@slop-lab/dim-web-plugin-llm-router","config":{"connectionFile":"/absolute/private/router-operator.json"}}]}
 ```
 
-The connection and referenced key are caller-owned mode-0600 files. They remain
-on the Web server. The router's separately configured operator identity owns
-remote authority; browser read/operator roles further restrict access. A feature
-selection without `config` displays connection setup status instead of invoking
-an unconfigured backend. Provider keys are sent only by an operator to the
-router account creation API; they are never returned in account metadata and the
-password field is cleared as soon as the write succeeds. The browser never
-receives stored provider tokens.
+The connection and referenced key are caller-owned mode-0600 files on the trusted
+server. The router's configured operator identity owns remote authority; browser
+read/operator roles further restrict access. Provider keys are sent only by an
+operator to the router account creation API, never returned in account metadata,
+and cleared from the password field after a successful write. Stored provider
+tokens never reach the browser.
+
+Switching controllers asks before discarding unsaved policy, route or account
+forms. Cancelling preserves the selected controller and fields. A policy save
+must finish before switching; late responses from a previous controller cannot
+replace the new controller's panel. Request and workspace links carry the exact
+router controller and project identity. With several available routers, an
+external routing-project navigation target must include `controllerKey`; matching
+project IDs do not establish a connection between those routers.
 
 The UI connects multiple independent Codex accounts through device authorization
 and accepts separate OpenAI-compatible or Anthropic-compatible API base URLs and
 keys. Accounts retain their own credentials; routes select an account and
-explicit model mappings. The route editor supports multiple models and changing
+explicit model mappings. **Inspect account models** can add discovered models, including their API and
+context/output metadata, directly to a route draft. Connected Codex accounts
+offer **Sign in again** for credential renewal. The route editor supports multiple models and changing
 the account without replacing its credentials. Account selection remains
 explicit; usage-based automatic account routing is a future policy. Read-only
 users can inspect accounts but cannot create accounts, start sign-in, or save

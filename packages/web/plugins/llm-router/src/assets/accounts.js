@@ -58,7 +58,7 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
     button(row, 'Check connection', check, status); schedule();
   }
   /** @param {string} accountId */
-  async function login(accountId) { const existing = sessionRows.get(accountId); if (activeSessions.has(accountId) && existing) { existing.scrollIntoView({ block: 'nearest' }); return; } const result = object(await context.invoke('account.login.start', { accountId })); if (current()) renderSession(accountId, result); }
+  async function login(accountId) { const existing = sessionRows.get(accountId); if (activeSessions.has(accountId) && existing) { existing.scrollIntoView({ block: 'nearest' }); return; } const result = object(await context.invoke('account.login.start', { accountId }, { timeoutMilliseconds: 65_000 })); if (current()) renderSession(accountId, result); }
   async function refresh() {
     if (!has('accounts')) return;
     const result = rows(await context.invoke('accounts')); if (!current()) return;

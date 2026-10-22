@@ -1,3 +1,4 @@
+import { webPlugin } from "../../../../packages/web/plugins/llm-router/src/index.js";
 import { expect, it } from "vitest";
 import { llmWebFixture } from "./fixture.js";
 import { readFile, writeFile } from "node:fs/promises";
@@ -52,4 +53,20 @@ it("isolates an unavailable optional connection and reconnects only its configur
     expect(connected.status).toBe(200);
     expect(await connected.json()).toMatchObject({ id: "llm-router", configured: true, status: "ready", operations: expect.arrayContaining([expect.objectContaining({ name: "projects", access: "read" })]) });
   } finally { await fixture.close(); }
+});
+
+it("pins an explicit connection until reconnect rather than silently following another router", async () => {
+  const first = await llmWebFixture(), second = await llmWebFixture();
+  try {
+    const runtime = await webPlugin.create({ connectionFile: first.connectionFile });
+    expect(await runtime.invoke("projects", {})).toMatchObject([{ id: "example" }]);
+    await writeFile(first.connectionFile, await readFile(second.connectionFile), { mode: 0o600 });
+    await expect(runtime.invoke("project.state", { projectId: "example", action: "pause" })).rejects.toThrow(/selection changed/);
+    expect(first.router.ledger.project("example").paused).toBe(false);
+    expect(second.router.ledger.project("example").paused).toBe(false);
+    const reconnected = await webPlugin.create({ connectionFile: first.connectionFile });
+    await reconnected.invoke("project.state", { projectId: "example", action: "pause" });
+    expect(second.router.ledger.project("example").paused).toBe(true);
+    expect(first.router.ledger.project("example").paused).toBe(false);
+  } finally { await second.close(); await first.close(); }
 });
