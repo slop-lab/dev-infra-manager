@@ -129,6 +129,35 @@ envelope. Handler responses are bounded; a backend error is sanitized.
 Feature UI pending operations cannot populate a later account's view, and
 sign-out clears mounted panels, drafts and session-owned content.
 
+The browser core owns one session-scoped navigation broker. Installed navigation
+features register one strict target handler through `onNavigate`; the method
+returns a handler disposer while plugin `mount` retains its existing optional
+mount-disposer return shape. Lazy mounts are coalesced. A newer navigation request,
+logout, session replacement or destination disposal fences older completion
+before its target handler can run or its result can update caller feedback.
+The handler receives a request-current predicate and rechecks it after awaited
+reads before changing domain selection. Context-owned navigation capabilities
+also reject new calls after their originating session or workspace is disposed.
+Navigation performs no generic operation invoke and does not fall back to another
+feature, controller, Project, repository or host. Outcomes are explicit
+`opened`, `blocked`, or `unavailable` results, with unavailable codes distinguishing
+installation, readiness, authority, target validation, target availability,
+load failure and ended sessions. The shared navigation-action control renders a
+native secondary button with scoped pending, disabled and result feedback.
+
+Git/execution cross-feature targets carry automatic controller provenance plus
+complete project/repository or job identity. Manual connections do not acquire
+that provenance from matching display IDs. Routing-project targets refer only to
+the selected router's catalog and do not imply a managed Git project or host.
+Observed unknown-request resolution accepts both safe nonnegative token counts
+or no usage; it remains the existing explicit operator operation and never replays
+inference. An unknown correction response retains its draft and blocks repeat
+submission until an explicit authoritative read started after that lock reconciles
+the same request. An older in-flight read cannot unlock a newer unknown outcome.
+Finished requests with unresolved accounting can subsequently record both observed
+counts, without re-resolving execution or inventing zero usage. Navigation itself
+grants none of these mutation roles.
+
 ## Workspace operations
 
 Authenticated status exposes only configured host IDs and credential-free
@@ -151,6 +180,18 @@ credentials and private paths never cross this boundary. The browser maps those
 categories to fixed recovery text and retains submitted input. An uninitialized
 workspace cannot be offered Start or Recreate; its existing explicit discard
 confirmation remains required before deletion.
+
+Managed workspace navigation is a browser-only prefill, never a create request.
+It requires both ordinary operations and the operator role, accepts exactly a
+configured `hostId`, `projectId`, nonempty unique `repositoryIds` and a
+`workingRepositoryId` contained in that selection, then opens the existing host
+creation form with `dim://PROJECT`, repository selection, working repository and
+the default container runtime. It sends no request until the user submits the
+ordinary form. A pristine form may be populated directly. An edited draft is
+preserved and requires the explicit replacement control. A pending request or
+an outcome-unknown/accepted-without-readable-state draft cannot be replaced until
+the existing current-state reconciliation succeeds. Read-only sessions cannot
+open or replace a managed creation draft.
 
 ## Feature authority
 
