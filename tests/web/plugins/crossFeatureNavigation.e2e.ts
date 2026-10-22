@@ -51,20 +51,20 @@ try {
   assert.deepEqual(reviewTarget, { status: "opened", message: `Opened review ${fixture.reviewId}.` });
   await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
   await capture("git-review-navigation");
-  let releaseReviewList: () => void = () => {}, markReviewList: () => void = () => {};
-  const reviewListGate = new Promise<void>((resolve) => { releaseReviewList = resolve; });
-  const reviewListStarted = new Promise<void>((resolve) => { markReviewList = resolve; });
-  await page.route("**/v1/extensions/native-git/operations/reviews.list", async (route) => {
-    const response = await route.fetch(); markReviewList(); await reviewListGate; await route.fulfill({ response });
+  let releaseReviewDetail: () => void = () => {}, markReviewDetail: () => void = () => {};
+  const reviewDetailGate = new Promise<void>((resolve) => { releaseReviewDetail = resolve; });
+  const reviewDetailStarted = new Promise<void>((resolve) => { markReviewDetail = resolve; });
+  await page.route("**/v1/extensions/native-git/operations/reviews.detail", async (route) => {
+    const response = await route.fetch(); markReviewDetail(); await reviewDetailGate; await route.fulfill({ response });
   }, { times: 1 });
   const heldReviewTarget = page.evaluate(`import('/assets/navigation-broker.js').then(({ navigation }) => navigation.openFeature('native-git', { kind: 'review', controllerKey: 'devbox', projectId: 'project-a', repositoryId: 'root', reviewId: ${JSON.stringify(fixture.reviewId)} }))`);
-  await reviewListStarted;
+  await reviewDetailStarted;
   await git.getByLabel("Controller", { exact: true }).selectOption("otherbox");
   await git.getByRole("button", { name: "Open review", exact: true }).waitFor();
-  releaseReviewList();
+  releaseReviewDetail();
   assert.deepEqual(await heldReviewTarget, { status: "unavailable", code: "target-unavailable", message: "The requested Git target is unavailable." });
   assert.equal(await git.getByLabel("Controller", { exact: true }).inputValue(), "otherbox");
-  await page.unroute("**/v1/extensions/native-git/operations/reviews.list");
+  await page.unroute("**/v1/extensions/native-git/operations/reviews.detail");
   await git.getByLabel("Controller", { exact: true }).selectOption("devbox");
   await git.getByLabel("Repository", { exact: true }).selectOption("root");
   await git.getByRole("button", { name: "View execution jobs", exact: true }).click();

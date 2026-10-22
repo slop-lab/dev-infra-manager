@@ -220,15 +220,20 @@ export function mount(container, context) {
       const entry = controllers.find(({ controllerKey }) => controllerKey === target.controllerKey);
       if (!entry) return false;
       const requested = { controllerId: entry.id, projectId: target.projectId, repositoryId: target.repositoryId };
+      /** @type {Review|undefined} */ let reviewed;
       if (reviewId) {
-        const reviews = /** @type {Array<{reviewId:string}>} */ (await invoke(requested, "reviews.list"));
-        if (!reviews.some((review) => review.reviewId === reviewId)) return false;
+        // The exact read authenticates and scopes the review itself. Listing the
+        // entire history first duplicates initial discovery and excludes valid
+        // deep links once their review ages out of the bounded summary list.
+        try { reviewed = /** @type {Review} */ (await invoke(requested, "reviews.detail", { reviewId })); }
+        catch { return false; }
+        if (reviewed.projectId !== requested.projectId || reviewed.repositoryId !== requested.repositoryId) return false;
       }
       if (!current() || !isCurrent() || revision !== scopeRevision || catalog !== catalogVersion || selection !== key(scope())) return false;
       saveDraft(); host.control.value = entry.id; fillProjects(target.projectId, target.repositoryId);
       if (project.control.value !== target.projectId || repository.control.value !== target.repositoryId) return false;
-      switchScope();
-      if (reviewId) await open(requested, reviewId, isCurrent);
+      if (selection !== key(requested)) switchScope();
+      if (reviewed) showReview(reviewed, requested);
       return true;
     }
   });

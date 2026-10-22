@@ -22,6 +22,7 @@ import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-contro
 import { exactActivationIsBound } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { NativeGitBundleHttpError, readBoundedJson, sendJson, sendNotFound } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { readNativeProjectRegistrations } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
 
 type Credential = { readonly username: string; readonly password: string };
 type HumanReviewer = CodeReviewConfig["humanReviewers"][number];
@@ -353,14 +354,25 @@ async function listReviewSummaries(input: HumanReviewerHttpInput, reviewer: Huma
       .filter((entry) => entry.review.projectId === projectId && entry.review.repositoryId === repositoryId && (entry.review.requiredReviewerIds.length === 0 || entry.review.requiredReviewerIds.includes(reviewer.reviewerId)))
       .sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt)).slice(0, 100);
     const summaries = [];
+    // Every resolver proves the complete repository and its durable objects. Hold
+    // one proof per branch for this serialized listing, rather than repeating
+    // that repository-wide work for every historical review envelope.
+    const branchTargets = new Map([[target.currentHead.protectedRef, target]]);
+    const managedBranches = nativeRepositoryBranches(target.imported.policy);
     for (const { review } of envelopes) {
-      const branchTarget = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, protectedRef: review.protectedRef });
-      const staleReasons = await nativeHumanReviewStaleReasons(input.runtime, branchTarget, review);
+      let branchTarget = branchTargets.get(review.protectedRef);
+      if (branchTarget === undefined && Object.hasOwn(managedBranches, review.protectedRef)) {
+        try { branchTarget = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, protectedRef: review.protectedRef }); }
+        catch { return sendJson(response, 503, { error: "human review proof is unavailable" }); }
+        branchTargets.set(review.protectedRef, branchTarget);
+      }
+      const staleReasons = branchTarget === undefined ? ["protected-branch-unmanaged"] : await nativeHumanReviewStaleReasons(input.runtime, branchTarget, review);
       const decisions = await readAuthoritativeNativeDecisions(target.repository, review.reviewId);
       summaries.push({ reviewId: review.reviewId, proposalRef: review.proposalRef, protectedRef: review.protectedRef,
         candidateCommit: review.candidateCommit, createdAt: review.createdAt,
         status: nativeHumanReviewStatus(review.requiredReviewerIds, staleReasons, decisions) });
     }
+    if (!input.runtime.activated() || !exactActivationIsBound(input.runtime.state, input.runtime.expectedGenerationId, input.runtime.activationTokenDigest)) return sendJson(response, 503, { error: "human review is unavailable" });
     sendJson(response, 200, summaries);
   });
 }

@@ -55,5 +55,28 @@ it("binds main PR rules to its target while development stays approval-free, the
     expect(review.protectedRef).toBe("refs/heads/main"); expect(review.requiredReviewerIds).toEqual(["owner"]);
     expect((await post(`/reviews/${text(result, "reviewId")}/promotions`, { schemaVersion: 1 }, promoter)).status).toBe(409);
     for (const sourceRef of ["refs/heads/unmanaged", "refs/heads/main"]) expect((await post("/merges", { schemaVersion: 1, sourceRef, targetRef: "refs/heads/main" }, promoter)).status).toBe(409);
+    const list = async () => {
+      const response = await fetch(path + "/reviews", { headers: headers(reviewer) });
+      expect(response.status, await response.clone().text()).toBe(200);
+      const value: unknown = await response.json();
+      if (!Array.isArray(value)) throw new Error("review summaries are missing");
+      return value.map(record);
+    };
+    const bothBranches = await list();
+    expect(bothBranches.some((entry) => entry.protectedRef === "refs/heads/development" && entry.status === "stale")).toBe(true);
+    expect(bothBranches.find((entry) => entry.reviewId === result.reviewId)?.status).toBe("pending");
+    const beforeRemoval = record(await (await fetch(path + "/policy", { headers: headers({ username: "importer", password: token(1) }) })).json());
+    const mainOnly = { ...policyInput, branches: { "refs/heads/main": { review: true } } };
+    const removed = await post("/policy", { schemaVersion: 1, expectedPolicyDigest: beforeRemoval.policyDigest, expectedProtectedHead: record(beforeRemoval.currentHead).commit,
+      policy: { schemaVersion: 1, ...mainOnly, policyRevision: nativeRepositoryPolicyRevision(mainOnly) } }, { username: "importer", password: token(1) });
+    expect(removed.status, await removed.clone().text()).toBe(200);
+    const refreshed = await post("/reviews/resolve", { schemaVersion: 1, proposalRef: result.proposalRef, protectedRef: "refs/heads/main" });
+    expect(refreshed.status, await refreshed.clone().text()).toBe(200);
+    const refreshedReview = record(record(await refreshed.json()).review);
+    const mainAndHistory = await list();
+    expect(mainAndHistory.find((entry) => entry.reviewId === refreshedReview.reviewId)?.status).toBe("pending");
+    expect(mainAndHistory.find((entry) => entry.reviewId === result.reviewId)?.status).toBe("stale");
+    const retired = mainAndHistory.filter((entry) => entry.protectedRef === "refs/heads/development");
+    expect(retired.length).toBeGreaterThan(1); expect(retired.every((entry) => entry.status === "stale")).toBe(true);
   } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 }, 30_000);
