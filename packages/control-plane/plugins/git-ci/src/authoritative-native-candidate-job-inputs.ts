@@ -12,6 +12,7 @@ const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const selectorSchema = z.object({
   projectId: identifier,
   repositoryId: identifier,
+  protectedRef: z.string().startsWith("refs/heads/").optional(),
   candidateCommit: objectId,
   candidateTree: objectId
 }).strict().readonly();
@@ -31,7 +32,7 @@ export async function loadAuthoritativeNativeCandidateJobInputs(
         cause: selector.error
       });
     }
-    const verified = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId });
+    const verified = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId, ...(selector.data.protectedRef === undefined ? {} : { protectedRef: selector.data.protectedRef }) });
     const target = {
       protectedRef: verified.currentHead.protectedRef,
       expectedProtectedHead: verified.currentHead.commit,
@@ -47,7 +48,7 @@ export async function loadAuthoritativeNativeCandidateJobInputs(
       target,
       runtime.workflowCompiler
     );
-    const current = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId });
+    const current = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId, ...(selector.data.protectedRef === undefined ? {} : { protectedRef: selector.data.protectedRef }) });
     if (current.repository !== verified.repository
       || JSON.stringify(current.imported) !== JSON.stringify(verified.imported)
       || JSON.stringify(current.currentHead) !== JSON.stringify(verified.currentHead)) {

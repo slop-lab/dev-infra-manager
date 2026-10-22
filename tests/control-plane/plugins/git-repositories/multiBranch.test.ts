@@ -104,3 +104,17 @@ it("imports configured branches together and uses the configured default for bar
     expect((await git("/usr/bin/git", ["--git-dir", target.repository, "symbolic-ref", "HEAD"])).stdout.trim()).toBe("refs/heads/development");
   } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 }, 30_000);
+
+it("rejects a branch baseline rewritten to another branch's transition instead of its import-anchor seed", async () => {
+  const f = await fixture(false);
+  try {
+    expect((await configure(f)).status).toBe(200);
+    const development = await candidate(f, "development branch seed must not be adopted\n", "refs/heads/development", f.initial, "b");
+    await f.service.context.serialize(() => compareAndSwapProtectedRef(f.service.context, development));
+    expect((await configure(f, "refs/heads/main", { "refs/heads/release": { review: true } })).status).toBe(200);
+    const database = new DatabaseSync(f.service.context.runtime.state.database);
+    try { database.prepare("UPDATE repository_branch_baseline SET seed_sequence=1,seed_commit=?,seed_tree=? WHERE protected_ref='refs/heads/release'").run(development.candidateCommit, development.candidateTree); }
+    finally { database.close(); }
+    expect(() => readNativeProjectRootCurrentHeadFromDatabase(f.service.context.runtime.state.database, "project", "main", "refs/heads/release")).toThrow(/no authoritative seed/);
+  } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
+}, 30_000);

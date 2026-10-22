@@ -6,7 +6,7 @@ import { resolveAuthoritativeNativeRepositoryTarget, AuthoritativeRepositoryErro
 
 /** Resolve candidate-requested repositories only inside the imported, trusted allowlist. */
 export async function captureExecutionInputs(runtime: GitCiRuntime,
-  input: { projectId: string; repositoryId: string; candidateCommit: string; candidateTree: string; repositories: readonly string[] }): Promise<ExecutionInputs> {
+  input: { projectId: string; repositoryId: string; protectedRef?: string; candidateCommit: string; candidateTree: string; repositories: readonly string[] }): Promise<ExecutionInputs> {
   const target = await executionTarget(runtime, inputSelector(input));
   const repositories = [...new Set([input.repositoryId, ...input.repositories])].sort();
   if (repositories.some((id) => !gitCiPolicy(target.imported.policy, input.repositoryId).ciRepositoryIds.includes(id))) {
@@ -24,7 +24,7 @@ export async function captureExecutionInputs(runtime: GitCiRuntime,
 
 /** Frozen dependencies stay pinned; moved protected heads require a new integration snapshot. */
 export async function assertExecutionInputsCurrent(runtime: GitCiRuntime,
-  input: { projectId: string; repositoryId: string; candidateCommit: string; candidateTree: string; inputs: ExecutionInputs }): Promise<void> {
+  input: { projectId: string; repositoryId: string; protectedRef?: string; candidateCommit: string; candidateTree: string; inputs: ExecutionInputs }): Promise<void> {
   const target = await executionTarget(runtime, inputSelector(input));
   if (!Object.hasOwn(input.inputs, input.repositoryId) || !isDeepStrictEqual(input.inputs[input.repositoryId], { commit: input.candidateCommit, tree: input.candidateTree })
     || Object.keys(input.inputs).some((id) => !gitCiPolicy(target.imported.policy, input.repositoryId).ciRepositoryIds.includes(id))) {
@@ -38,9 +38,9 @@ export async function assertExecutionInputsCurrent(runtime: GitCiRuntime,
     }
   }
 }
-function inputSelector(input: { projectId: string; repositoryId: string }) { return { projectId: input.projectId, repositoryId: input.repositoryId }; }
+function inputSelector(input: { projectId: string; repositoryId: string; protectedRef?: string }) { return { projectId: input.projectId, repositoryId: input.repositoryId, ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }) }; }
 
-async function executionTarget(runtime: GitCiRuntime, selector: { projectId: string; repositoryId: string }) {
+async function executionTarget(runtime: GitCiRuntime, selector: { projectId: string; repositoryId: string; protectedRef?: string }) {
   try { return await resolveAuthoritativeNativeRepositoryTarget(runtime, selector); }
   catch (error) {
     if (error instanceof AuthoritativeRepositoryError) throw new CandidateExecutionError("execution repository is unavailable", { cause: error });

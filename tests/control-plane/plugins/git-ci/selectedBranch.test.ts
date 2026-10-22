@@ -1,0 +1,38 @@
+import { afterEach, expect, it } from "vitest";
+import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
+import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { loadAuthoritativeNativeCandidateJobInputs } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-candidate-job-inputs.js";
+import { loadAuthoritativeExecutionReview, loadCurrentAuthoritativeExecutionInputs } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-execution-review-inputs.js";
+import { nativeBundleReviewFixture, reviewProposalRef } from "./nativeBundleReviewFixture.js";
+import { authoritativePolicy } from "../git-repositories/authoritativeNativeCandidateFixture.js";
+import { descendantCommit, seedRootPromotion } from "../git-repositories/nativeCurrentRootProofFixture.js";
+import { cleanupFinalizeFixtures } from "../git-repositories/nativeRootImportFinalizeFixture.js";
+afterEach(cleanupFinalizeFixtures);
+it("plans and reloads a development review independently of the default main branch moving", async () => {
+  const body = { ...authoritativePolicy(), defaultRef: "refs/heads/main", branches: { "refs/heads/main": { review: true }, "refs/heads/development": { review: false } } };
+  const policy = { ...body, policyRevision: nativeRepositoryPolicyRevision(body) };
+  const f = await nativeBundleReviewFixture("selected-development", undefined, policy);
+  const runtime = { ...f.service.context.runtime, workflowCompiler: dimWorkflowCompiler };
+  const extension = f.service.context.extensions.find(({ kind }) => kind === "dim.code-review.service");
+  if (!extension) throw new Error("review service missing");
+  const reviews = extension.value as CodeReviewService;
+  const review = await reviews.create(f.service.context, { projectId: "project-a", repositoryId: "root", protectedRef: "refs/heads/development", proposalRef: reviewProposalRef });
+  const selector = { projectId: "project-a", repositoryId: "root", reviewId: review.review.reviewId };
+  const snapshot = await loadAuthoritativeExecutionReview(runtime, selector);
+  expect(snapshot.target.currentHead.protectedRef).toBe("refs/heads/development");
+  expect(snapshot.envelope.planning.status).toBe("valid");
+  const before = await loadCurrentAuthoritativeExecutionInputs(runtime, snapshot);
+  expect(before.review.protectedRef).toBe("refs/heads/development");
+  const main = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: "project-a", repositoryId: "root" });
+  const movedMain = await descendantCommit(f.root, main.currentHead.tree, main.currentHead.commit);
+  await seedRootPromotion({ root: f.root, candidateCommit: movedMain, candidateTree: main.currentHead.tree });
+  const after = await loadCurrentAuthoritativeExecutionInputs(runtime, snapshot);
+  expect(after).toEqual(before);
+  expect((await loadAuthoritativeExecutionReview(runtime, selector)).target.currentHead.protectedRef).toBe("refs/heads/development");
+  const candidate = { projectId: "project-a", repositoryId: "root", candidateCommit: before.review.candidateCommit, candidateTree: before.review.candidateTree };
+  expect((await loadAuthoritativeNativeCandidateJobInputs(runtime, { ...candidate, protectedRef: "refs/heads/development" })).plan.map((job) => job.name)).toEqual(["source", "integration"]);
+  expect((await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: "project-a", repositoryId: "root" })).currentHead.commit).toBe(movedMain);
+
+}, 30_000);

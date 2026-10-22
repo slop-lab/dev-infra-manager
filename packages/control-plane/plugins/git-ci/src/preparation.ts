@@ -20,12 +20,12 @@ export function gitCiPreparation(compiler: () => WorkflowCompiler): ReviewPrepar
       const policy = gitCiPolicy(input.target.imported.policy, input.selector.repositoryId);
       let planning: AuthoritativeNativePlanning;
       try {
-        const candidate = await loadAuthoritativeNativeCandidateJobInputs(runtime, { projectId: input.selector.projectId, repositoryId: input.selector.repositoryId,
+        const candidate = await loadAuthoritativeNativeCandidateJobInputs(runtime, { projectId: input.selector.projectId, repositoryId: input.selector.repositoryId, protectedRef: input.target.currentHead.protectedRef,
           candidateCommit: input.evidence.candidateCommit, candidateTree: input.evidence.candidateTree });
         planning = { status: "valid", configBlob: candidate.configBlob,
           jobs: await Promise.all(candidate.plan.map(async (job) => ({ executionKind: job.kind, jobName: job.name,
             evidenceClass: "candidate-controlled" as const, script: job.script, argv: job.argv,
-            inputs: await captureExecutionInputs(runtime, { projectId: input.selector.projectId, repositoryId: input.selector.repositoryId,
+            inputs: await captureExecutionInputs(runtime, { projectId: input.selector.projectId, repositoryId: input.selector.repositoryId, protectedRef: input.target.currentHead.protectedRef,
               candidateCommit: input.evidence.candidateCommit, candidateTree: input.evidence.candidateTree, repositories: job.repositories }) }))) };
       } catch (error) { if (!(error instanceof CandidateExecutionError)) throw error; planning = { status: "invalid", reason: "invalid-candidate-job-plan" }; }
       const primary = { [input.selector.repositoryId]: { commit: input.evidence.candidateCommit, tree: input.evidence.candidateTree } };
@@ -43,7 +43,7 @@ export function gitCiPreparation(compiler: () => WorkflowCompiler): ReviewPrepar
       if (attachment === undefined) return;
       const runtime: GitCiRuntime = { ...base, workflowCompiler: compiler() };
       await assertExecutionInputsCurrent(runtime, review);
-      const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: review.projectId, repositoryId: review.repositoryId });
+      const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: review.projectId, repositoryId: review.repositoryId, protectedRef: review.protectedRef });
       if (!isDeepStrictEqual(target.currentHead.commit, review.expectedProtectedHead)) throw new Error("review protected head changed");
     }
   };

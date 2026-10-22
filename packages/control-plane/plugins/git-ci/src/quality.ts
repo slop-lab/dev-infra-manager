@@ -8,10 +8,11 @@ export type GitCiQualityInput = { readonly projectId: string; readonly repositor
   readonly repository: string; readonly policyDigest: string; readonly candidateCommit: string; readonly candidateTree: string;
   readonly expectedProtectedHead: string; readonly attachments: readonly { readonly kind: string; readonly id: string; readonly digest: string }[] };
 export async function assertGitCiPromotable(runtime: GitCiRuntime, input: GitCiQualityInput): Promise<readonly { readonly kind: string; readonly id: string; readonly digest: string }[]> {
-  const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: input.projectId, repositoryId: input.repositoryId });
+  let target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: input.projectId, repositoryId: input.repositoryId });
   if (!Object.hasOwn(target.imported.policy.extensions, "git-ci") && !input.attachments.some(({ kind }) => kind === "git-ci")) return [];
   if (!Object.hasOwn(target.imported.policy.extensions, "git-ci")) throw new Error("Git CI review attachment has no trusted policy");
   const envelope = await readAuthoritativeNativeReviewEnvelope(target.repository, input.reviewId);
+  if (envelope) target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: input.projectId, repositoryId: input.repositoryId, protectedRef: envelope.review.protectedRef });
   const policy = gitCiPolicy(target.imported.policy, input.repositoryId);
   if (target.repository !== input.repository || !envelope || envelope.review.expectedProtectedHead !== input.expectedProtectedHead || envelope.policyDigest !== input.policyDigest || envelope.policyDigest !== target.imported.policyDigest
     || envelope.review.candidateCommit !== input.candidateCommit || envelope.review.candidateTree !== input.candidateTree

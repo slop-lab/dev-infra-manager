@@ -23,7 +23,7 @@ export function assertRepositoryBranchBaselines(database: DatabaseSync): readonl
       : transitions.find(({ transition, finalized }) => finalized && transition.projectId === baseline.project_id && transition.repositoryId === baseline.repository_id && transition.sequence === baseline.seed_sequence)?.transition;
     const commit = source !== undefined && "candidateCommit" in source ? source.candidateCommit : source?.commit;
     const tree = source !== undefined && "candidateTree" in source ? source.candidateTree : source?.tree;
-    if (imported?.phase !== "repository-imported" || imported.importNonce !== baseline.import_nonce || imported.protectedRef === baseline.protected_ref || commit !== baseline.seed_commit || tree !== baseline.seed_tree) throw new RepositoryRefStateError("repository branch baseline has no authoritative seed");
+    if (imported?.phase !== "repository-imported" || imported.importNonce !== baseline.import_nonce || imported.protectedRef === baseline.protected_ref || (source !== undefined && "protectedRef" in source && source.protectedRef !== imported.protectedRef) || commit !== baseline.seed_commit || tree !== baseline.seed_tree) throw new RepositoryRefStateError("repository branch baseline has no authoritative seed");
   }
   return baselines;
 }
