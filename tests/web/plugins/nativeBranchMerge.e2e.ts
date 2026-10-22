@@ -55,7 +55,12 @@ try {
   await page.getByRole("button", { name: "Sign in", exact: true }).click(); await page.getByRole("button", { name: "Git review", exact: true }).click();
   assert.equal(await page.getByLabel("Merge source branch", { exact: true }).inputValue(), "development");
   assert.equal(await page.getByLabel("Merge target branch", { exact: true }).inputValue(), "main");
+  await page.route("**/v1/extensions/native-git/operations/reviews.detail", (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporary detail failure"}' }), { times: 1 });
   await page.getByRole("button", { name: "Create branch merge review", exact: true }).click();
+  await page.getByText(/Branch merge review created\..*Latest review details could not refresh/).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Create branch merge review", exact: true }).isDisabled(), true);
+  const mergeRow = page.locator("tr").filter({ hasText: "/merge/" });
+  await mergeRow.getByRole("button", { name: "Open review", exact: true }).click();
   try { await page.getByRole("button", { name: "Approve exact candidate", exact: true }).waitFor(); }
   catch (error) { process.stderr.write(`${await page.locator("body").innerText()}\nBrowser errors: ${errors.join("; ")}\n`); throw error; }
   assert.equal(await page.getByRole("button", { name: "Promote protected ref", exact: true }).count(), 0);

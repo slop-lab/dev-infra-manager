@@ -2,7 +2,7 @@
 /** @typedef {import('./management.js').Target} Target */
 /** @typedef {import('./management.js').Context} Context */
 /** @typedef {import('./management.js').Navigation} Navigation */
-/** @typedef {{manifest:string,message:string,pending:boolean,accepted:boolean,preview?:{projectId:string,repositories:Array<{repositoryId:string,url:string,branch:string,protectedRef:string}>,configurationRepositoryId:string,defaultWorkingRepositoryId:string},previewSource?:string}} Draft */
+/** @typedef {{manifest:string,message:string,pending:boolean,accepted:boolean,preview?:{projectId:string,repositories:Array<{repositoryId:string,url:string,branch:string,protectedRef:string,defaultRef:string,branches:Record<string,{review:boolean}>}>,configurationRepositoryId:string,defaultWorkingRepositoryId:string},previewSource?:string}} Draft */
 /** @param {string} tag @param {string} [text] */
 function element(tag, text = "") { const node = document.createElement(tag); node.textContent = text; return node; }
 /** @param {HTMLElement} container @param {Context} context @param {Navigation} navigation */
@@ -30,7 +30,7 @@ export function mountManifestImport(container, context, navigation) {
     previewRegion.replaceChildren();
     if (draft.preview) {
       previewRegion.append(element("h4", "Repositories to import"));
-      const list = element("ul"); for (const repo of draft.preview.repositories) list.append(element("li", `${repo.repositoryId}: ${repo.url} (${repo.branch} → ${repo.protectedRef})`));
+      const list = element("ul"); for (const repo of draft.preview.repositories) list.append(element("li", `${repo.repositoryId}: ${repo.url} (${repo.branch} → ${repo.protectedRef}). Default checkout branch: ${repo.defaultRef}. Protected branches: ${Object.entries(repo.branches).map(([ref, policy]) => `${ref}${policy.review ? " (review rules apply)" : " (no human review)"}`).join(", ")}.`));
       previewRegion.append(list, element("p", `Configuration repository: ${draft.preview.configurationRepositoryId}. Default checkout: ${draft.preview.defaultWorkingRepositoryId}.`));
       const policy = document.createElement("details"); policy.append(element("summary", "Complete import configuration and policy"), element("pre", JSON.stringify(draft.preview, null, 2))); previewRegion.append(policy);
     }

@@ -34,6 +34,7 @@ try {
   await form.getByLabel("Select repos.yml file", { exact: true }).setInputFiles({ name: "repos.yml", mimeType: "text/yaml", buffer: Buffer.from(manifest) }); await form.getByText("File loaded. Preview the manifest before importing.", { exact: true }).waitFor(); assert.equal(await input.inputValue(), manifest); await preview.click(); await form.getByText(/Configuration repository: public. Default checkout: public./).waitFor();
   assert.equal(await submit.isEnabled(), true); await input.fill(manifest + "\n"); assert.equal(await submit.isHidden(), true);
   await preview.click(); await submit.waitFor();
+  await form.getByText(/Default checkout branch: refs\/heads\/main\. Protected branches:/).first().waitFor();
   let failCatalog = true; await page.route("**/v1/extensions/native-git/operations/projects.list", async (route) => { if (failCatalog) { failCatalog = false; await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"fixture read unavailable"}' }); } else await route.continue(); });
   await submit.click(); await form.getByText(/Manifest imported: .*Latest project catalog could not refresh/).waitFor(); assert.equal(await submit.isDisabled(), true); assert.equal(imports, 1);
   await submit.dispatchEvent("click"); assert.equal(imports, 1);

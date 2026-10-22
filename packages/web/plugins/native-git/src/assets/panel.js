@@ -81,6 +81,10 @@ export function mount(container, context) {
     }
     if (!review.approvals.length) approvals.append(element("li", "No approvals recorded.")); detail.append(approvals);
     detail.append(element("p", `Decision target: ${review.projectId}/${review.repositoryId} · ${review.protectedRef} · candidate ${review.candidateCommit}`, "workspace-feedback"));
+    if (review.status === "pending" && review.requiredReviewerIds.length) {
+      if (!has("reviews.approve")) detail.append(element("p", `Approval is required from ${review.requiredReviewerIds.join(", ")}. Your Web account needs the reviewer role to approve; ask an operator to update its access, then sign in again.`, "field-hint"));
+      else if (!reviewerId || !review.requiredReviewerIds.includes(reviewerId)) detail.append(element("p", `Approval is required from ${review.requiredReviewerIds.join(", ")}. This controller is connected as ${reviewerId ?? "an unavailable reviewer"}; use a controller connected to a required reviewer.`, "field-hint"));
+    }
     if (reviewerId && has("reviews.approve") && review.status !== "stale" && review.requiredReviewerIds.includes(reviewerId) && !review.approvals.some((approval) => approval.reviewerId === reviewerId && !review.revocations.some((revocation) => revocation.approvalId === approval.approvalId))) button(detail, "Approve exact candidate", async (button) => {
       if (!window.confirm(`Approve ${target.projectId}/${target.repositoryId} candidate ${review.candidateCommit} for ${review.protectedRef}?`)) { status.textContent = "Approval dismissed."; return false; }
       const value = /** @type {Review} */ (await invoke(target, "reviews.approve", { reviewId: review.reviewId })); showReview(value, target);
@@ -116,15 +120,16 @@ export function mount(container, context) {
     guidance.replaceChildren(element("h3", "Repository workflow"));
     if (!target.repositoryId) { guidance.append(element("p", "Select a repository to see its exact target and available next actions.")); return; }
     guidance.append(element("p", `Current repository target: ${target.controllerId} · ${target.projectId}/${target.repositoryId}.`, "workspace-feedback"));
+    guidance.append(element("p", `Review and upstream actions target ${targetBranch.value || metadata()?.defaultRef || "the default branch"}. Branch merge reviews use the explicit source and target below.`, "field-hint"));
     const capabilities = element("ul");
     capabilities.append(element("li", has("reviews.resolve")
       ? `Reviewer: available${controller()?.reviewerId ? ` as ${controller()?.reviewerId}` : ""}. Resolution and decisions stay bound to exact evidence.`
-      : "Review-only: evidence can be inspected. Resolution and decisions are unavailable to this session and connection."));
+      : "Review-only: evidence can be inspected. To resolve or approve reviews, ask an operator for the reviewer role on your Web account and sign in again. A matching controller reviewer connection must also be available."));
     capabilities.append(element("li", has("sync.merge")
       ? "Sync operator: available. Merge creates a proposal and never advances the protected ref."
       : "Sync operator: unavailable. Operator browser access and a matching sync connection are required."));
     capabilities.append(element("li", has("reviews.promote")
-      ? "Promoter: available after exact approval; current policy and heads are rechecked."
+      ? "Promoter: available when this review's requirements are satisfied; current policy and heads are rechecked."
       : "Promoter: unavailable. Operator browser access and a matching promoter connection are required."));
     guidance.append(capabilities, element("p", "These controls describe this session and configured connection only. The service rechecks repository scope and authority for every action.", "field-hint"));
   }
@@ -138,31 +143,35 @@ export function mount(container, context) {
       source.value = "development"; destination.value = (metadata()?.defaultRef ?? "refs/heads/main").slice("refs/heads/".length); source.required = destination.required = true;
       const prepare = ui.button("Create branch merge review", "primary"); prepare.type = "submit"; mergeForm.append(prepare); actions.append(mergeForm);
       mergeForm.addEventListener("submit", async (event) => {
-        event.preventDefault(); if (prepare.disabled) return; const target = scope(); prepare.disabled = true;
+        event.preventDefault(); if (prepare.disabled) return; const target = scope(); prepare.disabled = source.disabled = destination.disabled = true;
         const ref = (/** @type {string} */ value) => value.startsWith("refs/heads/") ? value : `refs/heads/${value}`;
         try {
           const result = /** @type {{outcome:string,reviewId?:string}} */ (await invoke(target, "merges.prepare", { sourceRef: ref(source.value.trim()), targetRef: ref(destination.value.trim()) }));
+          if (result.outcome === "proposed") prepare.dataset.accepted = "true";
           if (!selected(target)) return;
-          if (result.reviewId) await open(target, result.reviewId);
-          await refreshList(target);
-          status.textContent = result.outcome === "proposed" ? "Branch merge review created. Inspect its changes and required approvals, then promote it." : result.outcome === "conflict" ? "Branches conflict. Resolve the changes in a workspace and submit a proposal." : "The target already contains the source branch.";
+          const receipt = result.outcome === "proposed" ? "Branch merge review created. Inspect its changes and required approvals, then promote it." : result.outcome === "conflict" ? "Branches conflict. Resolve the changes in a workspace and submit a proposal." : "The target already contains the source branch.";
+          /** @type {Array<[string,()=>Promise<unknown>]>} */ const reads = [["review list", () => refreshList(target)]];
+          if (result.reviewId) { const reviewId = result.reviewId; reads.push(["review details", () => open(target, reviewId)]); }
+          await accepted(prepare, target, receipt, reads, result.outcome === "proposed");
         } catch (error) { if (selected(target)) status.textContent = `Could not create branch merge review: ${error instanceof Error ? error.message : "service unavailable"}.`; }
-        finally { if (current()) prepare.disabled = false; }
+        finally { if (current()) { prepare.disabled = prepare.dataset.accepted === "true"; source.disabled = destination.disabled = false; } }
       });
+      for (const input of [source, destination]) input.addEventListener("input", () => { delete prepare.dataset.accepted; prepare.disabled = false; });
     }
     button(actions, "Refresh reviews", (_button, target) => refreshList(target));
     for (const [operation, title] of [["sync.fetch", "Fetch upstream"], ["sync.merge", "Propose upstream merge"], ["sync.publish", "Publish protected head"]]) {
       if (!operation || !title || !has(operation)) continue;
       button(actions, title, async (actionButton, target) => {
-        if (operation === "sync.publish" && !window.confirm(`Publish ${target.projectId}/${target.repositoryId} protected head to its configured upstream branch?`)) { status.textContent = "Publish dismissed."; return false; }
-        const result = /** @type {{outcome:string,proposalRef?:string,upstreamRef?:string,upstreamCommit?:string,sourceCommit?:string,targetRef?:string,candidateCommit?:string}} */ (await invoke(target, operation, { protectedRef: targetBranch.value }));
+        const protectedRef = targetBranch.value;
+        if (operation === "sync.publish" && !window.confirm(`Publish ${target.projectId}/${target.repositoryId} ${protectedRef} to its configured upstream branch?`)) { status.textContent = "Publish dismissed."; return false; }
+        const result = /** @type {{outcome:string,proposalRef?:string,upstreamRef?:string,upstreamCommit?:string,sourceCommit?:string,targetRef?:string,candidateCommit?:string}} */ (await invoke(target, operation, { protectedRef }));
         if (!selected(target)) return false;
         syncStatus.replaceChildren(element("h3", `Upstream ${result.outcome}`));
         if (result.outcome === "conflict") syncStatus.append(element("p", "Upstream changes conflict with the protected branch. Resolve conflicts in a workspace and submit a proposal for review."));
         const details = element("dl"); for (const [label, value] of [["Upstream ref", result.upstreamRef], ["Upstream commit", result.upstreamCommit], ["Proposal ref", result.proposalRef], ["Candidate commit", result.candidateCommit], ["Published commit", result.sourceCommit], ["Published branch", result.targetRef]]) if (value) details.append(element("dt", label), element("dd", value)); syncStatus.append(details);
         if (operation === "sync.merge" && result.proposalRef) {
           if (has("reviews.resolve")) button(syncStatus, "Review upstream proposal", async (reviewButton, reviewTarget) => {
-            const review = /** @type {Review} */ (await invoke(reviewTarget, "reviews.resolve", { proposalRef: result.proposalRef, protectedRef: targetBranch.value }));
+            const review = /** @type {Review} */ (await invoke(reviewTarget, "reviews.resolve", { proposalRef: result.proposalRef, protectedRef }));
             showReview(review, reviewTarget);
             return accepted(reviewButton, reviewTarget, "Proposal review resolved.", [["review list", () => refreshList(reviewTarget)]]);
           });
@@ -172,7 +181,8 @@ export function mount(container, context) {
       });
     }
     const target = scope(), controllerKey = controller()?.controllerKey;
-    appendNativeGitNavigationActions(actions, status, context, { ...(controllerKey ? { controllerKey } : {}), projectId: target.projectId, repositoryId: target.repositoryId }, () => selected(target));
+    const projectRepositories = controller()?.projects.find(({ projectId }) => projectId === target.projectId)?.repositoryIds;
+    appendNativeGitNavigationActions(actions, status, context, { ...(controllerKey ? { controllerKey } : {}), projectId: target.projectId, repositoryId: target.repositoryId, ...(projectRepositories ? { repositoryIds: projectRepositories } : {}) }, () => selected(target));
   }
   function switchScope() {
     const branchPolicy = metadata(), refs = branchPolicy?.branches ?? ["refs/heads/main"];
@@ -198,7 +208,7 @@ export function mount(container, context) {
   }
   host.control.addEventListener("change", () => { saveDraft(); fillProjects(); switchScope(); });
   project.control.addEventListener("change", () => { saveDraft(); fillRepositories(); switchScope(); });
-  targetBranch.addEventListener("change", () => { paintReviews(); detail.replaceChildren(); });
+  targetBranch.addEventListener("change", () => { paintReviews(); detail.replaceChildren(); renderGuidance(); });
   repository.control.addEventListener("change", () => { saveDraft(); switchScope(); });
   proposal.addEventListener("input", () => { saveDraft(); delete submit.dataset.accepted; if (submit.dataset.pending !== "true") submit.disabled = false; });
   reviewSearch.addEventListener("input", paintReviews); reviewState.addEventListener("change", paintReviews);

@@ -128,8 +128,8 @@ try {
   await git.getByRole("button", { name: "Review upstream proposal", exact: true }).click();
   await git.getByText("Proposal review resolved.", { exact: true }).waitFor();
   assert.deepEqual(nativeOperations.filter(({ name }) => name === "reviews.resolve").map(({ input }) => input), [
-    { controllerId: "devbox", projectId: "project-a", repositoryId: "root", proposalRef: fixture.proposalRef },
-    { controllerId: "devbox", projectId: "project-a", repositoryId: "root", proposalRef: fixture.proposalRef }
+    { controllerId: "devbox", projectId: "project-a", repositoryId: "root", proposalRef: fixture.proposalRef, protectedRef: "refs/heads/main" },
+    { controllerId: "devbox", projectId: "project-a", repositoryId: "root", proposalRef: fixture.proposalRef, protectedRef: "refs/heads/main" }
   ]);
   assert.equal(await git.getByLabel("Proposal ref", { exact: true }).inputValue(), "refs/heads/project-a-root-draft");
 

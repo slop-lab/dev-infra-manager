@@ -85,6 +85,11 @@ try {
   assert.equal(await page.getByLabel("Managed working repository (optional) on devbox", { exact: true }).inputValue(), "root");
   assert.equal(creates, 0);
   await capture("managed-workspace-draft");
+  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await git.getByRole("button", { name: "Create workspace with all repositories", exact: true }).click();
+  assert.equal(await page.getByLabel("Managed repositories (comma separated, optional) on devbox", { exact: true }).inputValue(), "root, private");
+  assert.equal(await page.getByLabel("Managed working repository (optional) on devbox", { exact: true }).inputValue(), "root");
+  assert.equal(creates, 0);
   await page.route("**/v1/extensions/native-git/operations/projects.list", (route) => route.fulfill({ status: 503, json: { error: "initial discovery unavailable" } }), { times: 1 });
   await page.reload();
   await page.getByRole("button", { name: "Git review", exact: true }).click();
