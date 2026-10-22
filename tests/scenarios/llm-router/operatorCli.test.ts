@@ -58,3 +58,15 @@ it("control-plane operator commands retrieve, expires, exports, backs up and res
     expect(inferenceCalls).toBe(2);
   } finally { await router?.close(); backend.closeAllConnections(); await new Promise<void>((resolve) => backend.close(() => resolve())); }
 });
+it("prepares dedicated remote operator authority separately from inference and host issuance", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-llm-provision-")); roots.push(root);
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const context = { signal: new AbortController().signal };
+  const base = ["--backend", "http://127.0.0.1:8317", "--backend-key-file", join(root, "backend.key"), "--exclusive-account-reference", "account", "--model", "reviewed", "--context-tokens", "10000", "--output-tokens", "1000"];
+  await expect(runRouterCommand(["llm", "prepare", join(root, "missing"), ...base, "--operator-id", "console"], context)).rejects.toThrow("--operator-key-file");
+  await expect(readFile(join(root, "missing/router.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(runRouterCommand(["llm", "prepare", join(root, "shared"), ...base, "--operator-id", "console", "--operator-key-file", join(root, "backend.key")], context)).rejects.toThrow("dedicated");
+  const directory = join(root, "remote");
+  await runRouterCommand(["llm", "prepare", directory, ...base, "--operator-id", "console", "--operator-key-file", join(root, "operator.key")], context);
+  expect(await loadConfig(join(directory, "router.json"))).toMatchObject({ operators: [{ id: "console", role: "operator", keyFile: join(root, "operator.key") }], hostIssuers: [] });
+});

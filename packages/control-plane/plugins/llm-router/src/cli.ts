@@ -10,7 +10,7 @@ import { createRouterOperatorServer } from "./operator-server.js";
 import { exportCapture, removeCapture } from "./archive.js";
 import { backupRouter, effectivePolicy, restoreRouter } from "./operator.js";
 
-const usage = `dim-control-plane-llm-router prepare DIRECTORY --backend ORIGIN --backend-key-file FILE --exclusive-account-reference NAME --model ID --context-tokens N --output-tokens N
+const usage = `dim-control-plane-llm-router prepare DIRECTORY --backend ORIGIN --backend-key-file FILE --exclusive-account-reference NAME --model ID --context-tokens N --output-tokens N [--operator-id ID --operator-key-file FILE]
   dim-control-plane-llm-router serve|operator-serve|health|projects|principals|active CONFIG
   dim-control-plane-llm-router project-add|project-policy|policy|pause|resume|disable|enable|usage PROJECT --config CONFIG [--route ID] [--policy-file FILE]
   dim-control-plane-llm-router principal-revoke PRINCIPAL --config CONFIG
@@ -23,14 +23,16 @@ export async function runRouterCommand(args: string[], context: { signal: AbortS
   const [command, action, positional, ...tail] = args;
   if (command !== "llm" || !action || !positional || positional.startsWith("-")) throw new Error(usage);
   const flags = new Map<string, string>();
-  const allowed = new Set(["--backend", "--backend-key-file", "--exclusive-account-reference", "--backend-auth-directory", "--model", "--context-tokens", "--output-tokens", "--api", "--listen-host", "--port", "--config", "--endpoint", "--route", "--project", "--principal", "--policy-file", "--output", "--before", "--usage-file", "--backend-state-quiesced", "--issuer-id", "--issuer-key-file", "--issuer-project", "--issuer-route"]);
+  const allowed = new Set(["--backend", "--backend-key-file", "--exclusive-account-reference", "--backend-auth-directory", "--model", "--context-tokens", "--output-tokens", "--api", "--listen-host", "--port", "--config", "--endpoint", "--route", "--project", "--principal", "--policy-file", "--output", "--before", "--usage-file", "--backend-state-quiesced", "--issuer-id", "--issuer-key-file", "--issuer-project", "--issuer-route", "--operator-id", "--operator-key-file"]);
   for (let index = 0; index < tail.length; index += 2) {
     const key = tail[index], value = tail[index + 1]; if (!key || !allowed.has(key) || !value || flags.has(key)) throw new Error(usage); flags.set(key, value);
   }
   const required = (name: string) => { const value = flags.get(name); if (value === undefined) throw new Error(`required ${name}\n${usage}`); return value; };
   if (action === "prepare") {
     const directory = resolve(positional), api = flags.get("--api") ?? "responses";
-    const config = parseConfig({ schemaVersion: 3, stateDirectory: join(directory, "state"),
+    const operators = flags.has("--operator-id") || flags.has("--operator-key-file")
+      ? [{ id: required("--operator-id"), keyFile: resolve(required("--operator-key-file")), role: "operator" as const }] : undefined;
+    const config = parseConfig({ schemaVersion: 3, stateDirectory: join(directory, "state"), ...(operators === undefined ? {} : { operators }),
       hostIssuers: flags.has("--issuer-id") ? [{ id: required("--issuer-id"), keyFile: resolve(required("--issuer-key-file")), projects: [{ id: required("--issuer-project"), routeIds: [flags.get("--issuer-route") ?? "default"] }] }] : [],
       listen: { host: flags.get("--listen-host") ?? "127.0.0.1", port: Number(flags.get("--port") ?? 8318) }, backend: backendProfile,
       accounts: [{ id: "default", reference: required("--exclusive-account-reference"), endpoint: required("--backend"), keyFile: resolve(required("--backend-key-file")),

@@ -235,3 +235,48 @@ positive safe integers.
 Credential, connection and model files must be private mode 0600. A model file is an array such as `[{"id":"MODEL_ID","name":"MODEL_ID","api":"responses","context":128000,"output":16384}]`. Select `chat` for Chat Completions clients. Account IDs are stable identities. `account.rename` changes only a managed account label and preserves its credentials, routes and usage; static configuration accounts must be renamed in their configuration. Multiple accounts may share a label; multiple accounts may use the same provider URL. Creating an account does not grant any project access: explicitly add a route to that project's policy and to the trusted host issuer's allowed routes when host attachment is needed.
 
 Consistent backups require stopping inference, operator and credential writers. They include dynamic account/route state, API worker configuration and OAuth directories, and restore rewrites managed credential paths. A different host must provision its own trusted pinned CLIProxyAPI executable and update `accountManagement.backendExecutable`; backup archives do not contain executable code. Local reinstall retains the selected backend executable, the entire router state directory and configured operator keys. Raw keys, backend paths, refresh tokens and prompt content never appear in account-list DTOs or enrollment audit records.
+
+## Connect a controller and the Web console
+
+The router may run on a separate control-plane machine. The controller needs
+only its reachable operator endpoint and a dedicated operator credential; it
+does not need the router state directory, provider login files or workspace core
+on the control-plane machine.
+
+When preparing a router, `--operator-id console --operator-key-file /private/operator.key`
+adds that separate operator to `router.json`. Generate the key as 32 random bytes
+encoded as base64url in a private mode-0600 file. Do not reuse a backend or host
+issuer key. Existing routers can add the corresponding `operators` entry and
+restart the router. Ensure the listener is reachable from the selected controller;
+use HTTPS across untrusted networks or a trusted private transport.
+
+On the controller machine, securely provision that operator key in its own
+mode-0600 file and create a private connection file:
+
+```json
+{
+  "schemaVersion": 1,
+  "endpoint": "https://router.control-plane.example",
+  "actorId": "console",
+  "keyFile": "/absolute/controller-private/router-operator.key"
+}
+```
+
+```sh
+dim llm-router connect --connection /absolute/controller-private/router-operator.json
+dim llm-router console describe --json
+```
+
+Select the Web plugin without a direct `config` to discover the router through
+its trusted controllers. Choose the controller in **LLM router**. Each controller
+can select a different router. The controller retains the private connection and
+credential; the Web server and browser receive typed operation results only.
+Reconnecting after a selection or credential change explicitly attests the new
+selection. A configured direct Web connection remains explicit and is never
+silently replaced by controller discovery.
+
+Workspace inference is separate from operator access. Configure the host's
+`dim llm prepare --control-plane ROUTER_ORIGIN ...` issuer/gateway connection,
+then attach workspaces as described in the host plugin README. Never give an
+operator key to a gateway or workspace. Existing attached workspaces do not
+change routes merely because the Web console changes its selected controller.

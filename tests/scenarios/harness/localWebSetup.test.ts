@@ -67,7 +67,7 @@ it("initializes private access without requiring user systemd", async () => {
   expect(f.calls.some((args) => args.includes("restart"))).toBe(false);
 });
 
-it("discovers the private conventional router connection while preserving operator plugin selections and accounts", async () => {
+it("uses controller discovery rather than pinning the Web server router file, preserving explicit selections", async () => {
   const f = await fixture();
   const llm = join(f.paths.configuration, "llm");
   await mkdir(llm, { mode: 0o700 });
@@ -76,7 +76,7 @@ it("discovers the private conventional router connection while preserving operat
   await configureLocalWeb(f.env, f.run);
   const file = join(f.paths.configuration, "web/config.json");
   const saved = JSON.parse(await readFile(file, "utf8"));
-  expect(saved.plugins[0]).toEqual({ package: defaultWebPluginPackages[0], config: { connectionFile } });
+  expect(saved.plugins[0]).toEqual({ package: defaultWebPluginPackages[0] });
   saved.plugins = [
     { package: defaultWebPluginPackages[0], config: { connectionFile: "/operator/other-router.json" } },
     { package: "@operator/custom-plugin", config: { privateValue: "preserve" } }
@@ -92,11 +92,13 @@ it("discovers the private conventional router connection while preserving operat
   expect(await readFile(file, "utf8")).toBe(before);
 });
 
-it("refuses an insecure discovered router connection instead of silently configuring it", async () => {
+it("does not inspect an unrelated Web-server router file when controllers own the selection", async () => {
   const f = await fixture();
   const llm = join(f.paths.configuration, "llm");
   await mkdir(llm, { mode: 0o700 });
   await writeFile(join(llm, "operator.json"), "{}", { mode: 0o644 });
-  await expect(configureLocalWeb(f.env, f.run)).rejects.toThrow("mode 0600");
-  expect(f.calls.some((args) => args.includes("restart"))).toBe(false);
+  await configureLocalWeb(f.env, f.run);
+  const saved = JSON.parse(await readFile(join(f.paths.configuration, "web/config.json"), "utf8"));
+  expect(saved.plugins[0]).toEqual({ package: defaultWebPluginPackages[0] });
+  expect(f.calls.some((args) => args.includes("restart"))).toBe(true);
 });

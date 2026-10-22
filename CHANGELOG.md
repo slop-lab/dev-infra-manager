@@ -138,7 +138,10 @@ is implied by these source changes.
   Keep unrelated features usable when a service is unavailable; reconnect a
   configured feature without losing drafts. Distinguish accepted changes from
   failed follow-up reads. Local source installation includes the feature panels
-  while preserving accounts and explicit connection choices.
+  while preserving accounts and explicit connection choices. Discover LLM routers
+  through trusted controllers, including routers on separate control-plane hosts,
+  and select the target explicitly in Web. Keep operator credentials on the
+  controller, fence changed selections and preserve direct connection choices.
   Share labeled controls, semantic tables and accessible feedback across feature
   panels. Search and filter jobs, reviews and router requests without discarding
   opened evidence; inspect account model catalogs and request metadata. Load

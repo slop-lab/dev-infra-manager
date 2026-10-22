@@ -44,11 +44,7 @@ export async function configureLocalWeb(env: NodeJS.ProcessEnv = process.env, ru
   for (const packageName of defaultWebPluginPackages) {
     // Existing entries, including deliberately unconfigured entries, are operator owned.
     if (plugins.some((entry) => object(entry).package === packageName)) continue;
-    const selection: { package: string; config?: { connectionFile: string } } = { package: packageName };
-    if (packageName === "@slop-lab/dim-web-plugin-llm-router") {
-      const connectionFile = join(paths.configuration, "llm/operator.json");
-      if (await privateFile(connectionFile)) selection.config = { connectionFile };
-    }
+    const selection = { package: packageName };
     plugins.push(selection); changed = true;
   }
   if (changed) {
