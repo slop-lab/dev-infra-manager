@@ -18,7 +18,7 @@ export const basic = (credential: { username: string; password: string }) => `Ba
 export function record(value: unknown): Record<string, unknown> { if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("expected object"); return Object.fromEntries(Object.entries(value)); }
 export function text(value: Record<string, unknown>, key: string): string { const result = value[key]; if (typeof result !== "string") throw new Error(`missing ${key}`); return result; }
 
-export async function fixture(withReview: boolean, extraExtensions: readonly ControlPlaneExtension[] = [], reviewPolicy: unknown = { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, humanReviewers = [reviewer], additionalPolicies: Readonly<Record<string, unknown>> = {}, branches?: { readonly defaultRef: string; readonly branches: Readonly<Record<string, { readonly review: boolean }>> }) {
+export async function fixture(withReview: boolean, extraExtensions: readonly ControlPlaneExtension[] = [], reviewPolicy: unknown = { requiredReviewerIds: ["owner"], pathReviewerRules: [] }, humanReviewers = [reviewer], additionalPolicies: Readonly<Record<string, unknown>> = {}, branches?: { readonly defaultRef: string; readonly branches: Readonly<Record<string, { readonly review: boolean }>> }, importRef = "refs/heads/main") {
   const root = await mkdtemp(join(tmpdir(), "dim-optional-git-"));
   const source = join(root, "source");
   const version = /git version (\d+\.\d+\.\d+)/.exec((await git("/usr/bin/git", ["--version"])).stdout)?.[1];
@@ -31,16 +31,16 @@ export async function fixture(withReview: boolean, extraExtensions: readonly Con
     const activated = await fetch(`${origin}/v1/activation`, { method: "POST", headers: { authorization: `Bearer ${token(5)}`, "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 1, generationId }) });
     assert.equal(activated.status, 200);
     await service.prepareProject(generationId, importer.hostId, { serviceId: "native-main", projectId: "project", repositoryId: "main" });
-    await git("/usr/bin/git", ["init", "--initial-branch=main", source]);
+    await git("/usr/bin/git", ["init", `--initial-branch=${importRef.slice("refs/heads/".length)}`, source]);
     await writeFile(join(source, "README.md"), "initial\n");
     await git("/usr/bin/git", ["-C", source, "add", "."]);
     const commit = async () => { await git("/usr/bin/git", ["-C", source, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-am", "change"]); return (await git("/usr/bin/git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim(); };
     const initial = await commit();
     const bundle = join(root, "initial.bundle");
-    await git("/usr/bin/git", ["-C", source, "bundle", "create", bundle, "refs/heads/main"]);
+    await git("/usr/bin/git", ["-C", source, "bundle", "create", bundle, importRef]);
     const extensions = { ...(withReview ? { "code-review": reviewPolicy } : {}), ...additionalPolicies };
-    const policy = { schemaVersion: 1, protectedRef: "refs/heads/main", ...branches, policyRevision: nativeRepositoryPolicyRevision({ protectedRef: "refs/heads/main", extensions, ...branches }), extensions };
-    const prelude = { schemaVersion: 1, serviceId: "native-main", generationId, projectId: "project", repositoryId: "main", protectedRef: "refs/heads/main", expectedCommit: initial, policy };
+    const policy = { schemaVersion: 1, protectedRef: importRef, ...branches, policyRevision: nativeRepositoryPolicyRevision({ protectedRef: importRef, extensions, ...branches }), extensions };
+    const prelude = { schemaVersion: 1, serviceId: "native-main", generationId, projectId: "project", repositoryId: "main", protectedRef: importRef, expectedCommit: initial, policy };
     const uploaded = await fetch(`${origin}/v1/projects/project/repositories/main/import`, { method: "POST", headers: { authorization: basic(importer), "content-type": "application/octet-stream" }, body: Buffer.concat([Buffer.from(`${JSON.stringify(prelude)}\n`), await readFile(bundle)]) });
     assert.equal(uploaded.status, 200, await uploaded.clone().text());
     const uploadedBody = record(await uploaded.json());
