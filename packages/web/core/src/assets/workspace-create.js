@@ -48,14 +48,15 @@ export function createWorkspaceForm(options) {
   const pidsLimit = input(fields, "pidsLimit", "PID limit (optional)", `on ${host}`);
   advanced.append(node("p", "field-hint", "Examples: CPUs 2 or 1.5, memory 4g, PIDs 2048. Empty uses the host default; unlimited removes a limit."));
   const result = node("p", "workspace-feedback");
-  const actions = node("div", "workspace-actions"), submit = button("Create workspace", "button-primary"), cancel = button("Cancel"), check = button("Check current state");
+  const actions = node("div", "workspace-actions"), submit = button("Create workspace", "button-primary"), replace = button("Replace draft with managed selection"), cancel = button("Cancel"), check = button("Check current state");
   submit.type = "submit";
   submit.setAttribute("aria-label", `Create workspace on ${host}`);
   cancel.setAttribute("aria-label", `Cancel new workspace on ${host}`);
-  check.hidden = true;
-  actions.append(submit, check, cancel);
+  check.hidden = true; replace.hidden = true;
+  actions.append(submit, replace, check, cancel);
   form.append(result, actions);
-  let nameEdited = false, busy = false, blockedName = "";
+  let nameEdited = false, busy = false, blockedName = "", dirty = false;
+  /** @type {import("../plugin-api.js").WebManagedWorkspaceCreateTarget | null} */ let pendingPrefill = null;
 
   function updateSource() {
     const managed = source.value.trim().startsWith("dim://");
@@ -67,15 +68,16 @@ export function createWorkspaceForm(options) {
   function updateGate() {
     const selectedName = name.value.trim(), exists = hasName(selectedName), blocked = blockedName !== "" && selectedName === blockedName;
     submit.disabled = busy || blocked || exists;
-    cancel.disabled = busy;
+    cancel.disabled = busy; replace.disabled = busy || blockedName !== "";
     for (const field of form.querySelectorAll("input")) field.disabled = busy;
     if (!busy) updateSource();
     check.hidden = !blocked;
     if (blocked) check.setAttribute("aria-label", `Check current state for ${blockedName}`);
     if (!blocked && selectedName && exists) feedback(result, `${selectedName} already exists in the current host state. Choose another name.`, true);
   }
-  name.addEventListener("input", () => { nameEdited = true; updateGate(); });
+  name.addEventListener("input", () => { dirty = true; nameEdited = true; updateGate(); });
   source.addEventListener("input", () => {
+    dirty = true;
     updateSource();
     if (nameEdited) return;
     try {
@@ -85,6 +87,8 @@ export function createWorkspaceForm(options) {
       updateGate();
     } catch {}
   });
+  for (const field of [ref, runtime, image, repositories, workingDirectory, cpuCount, memory, pidsLimit]) field.addEventListener("input", () => { dirty = true; });
+  replace.addEventListener("click", () => { if (pendingPrefill && !busy && blockedName === "") applyPrefill(pendingPrefill); });
   cancel.addEventListener("click", () => { form.hidden = true; close(); });
   check.addEventListener("click", () => { void (async () => {
     check.disabled = true;
@@ -122,7 +126,7 @@ export function createWorkspaceForm(options) {
         const loaded = await refresh();
         if (!loaded) { blockedName = selectedName; feedback(result, `The create request for ${selectedName} was accepted, but current state could not be read. Do not submit it again. Check current state.`, true); }
         else if (hasName(selectedName)) {
-          form.reset(); nameEdited = false; updateSource(); advanced.open = false; blockedName = "";
+          form.reset(); nameEdited = false; dirty = false; pendingPrefill = null; replace.hidden = true; updateSource(); advanced.open = false; blockedName = "";
           feedback(result, `The host accepted ${selectedName}, and the workspace is listed below.`);
         } else { blockedName = selectedName; feedback(result, `The host accepted the request, but ${selectedName} is not visible in the current state. Check current state before any retry.`, true); }
       } catch (error) {
@@ -132,6 +136,32 @@ export function createWorkspaceForm(options) {
       } finally { busy = false; form.removeAttribute("aria-busy"); updateSource(); updateGate(); }
     })();
   });
+  /** @param {import("../plugin-api.js").WebManagedWorkspaceCreateTarget} target */
+  function applyPrefill(target) {
+    form.reset(); nameEdited = false; dirty = false;
+    source.value = `dim://${target.projectId}`;
+    repositories.value = target.repositoryIds.join(", ");
+    workingDirectory.value = target.workingRepositoryId;
+    runtime.value = "container";
+    name.value = target.projectId.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z0-9]+/, "").slice(0, 48);
+    pendingPrefill = null; replace.hidden = true; advanced.open = true; updateSource(); updateGate(); source.focus();
+    feedback(result, `Managed project ${target.projectId} is ready for review. Creation has not been submitted.`);
+  }
+  /** @param {import("../plugin-api.js").WebManagedWorkspaceCreateTarget} target @returns {import("../plugin-api.js").WebNavigationResult} */
+  function prefill(target) {
+    form.hidden = false;
+    if (busy || blockedName !== "") {
+      source.focus();
+      return { status: "blocked", message: "The current creation request must be reconciled before this draft can be replaced." };
+    }
+    if (dirty) {
+      pendingPrefill = target; replace.hidden = false; replace.disabled = false; replace.focus();
+      feedback(result, "This creation form has an edited draft. Replace it explicitly to use the managed project selection.", true);
+      return { status: "blocked", message: "The existing workspace draft was kept. Use Replace draft with managed selection in the creation form." };
+    }
+    applyPrefill(target);
+    return { status: "opened", message: `Opened a workspace draft for managed project ${target.projectId}.` };
+  }
   updateSource();
-  return { form, source, updateGate };
+  return { form, source, updateGate, prefill };
 }

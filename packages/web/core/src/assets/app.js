@@ -3,6 +3,7 @@ import { parseSession, record, text } from "./session-data.js";
 import { createOperationCoordinator } from "./operation-coordinator.js";
 import { clearOperations, showOperations } from "./operations-panel.js";
 import { showFeaturePlugins, clearFeaturePlugins } from "./feature-panels.js";
+import { endNavigationSession, startNavigationSession } from "./navigation-broker.js";
 
 /** @template {typeof HTMLElement} T @param {string} id @param {T} type @returns {InstanceType<T>} */
 function element(id, type) {
@@ -25,7 +26,7 @@ async function request(path, operation, options = {}) {
 }
 /** @param {string} [message] */
 function signedOut(message = "") {
-  operations.start(); session = null; clearOperations(); clearFeaturePlugins();
+  operations.start(); session = null; endNavigationSession(); clearOperations(); clearFeaturePlugins();
   element("restore-state", HTMLElement).hidden = true; element("login-view", HTMLElement).hidden = false; actions.hidden = true;
   loginError.textContent = message; alerts.textContent = message;
   const invalid = message.startsWith("Sign-in failed.");
@@ -34,6 +35,7 @@ function signedOut(message = "") {
 /** @param {import("./types.js").Session} active */
 function signedIn(active) {
   session = active; password.value = ""; loginError.textContent = ""; alerts.textContent = "";
+  startNavigationSession(active);
   element("restore-state", HTMLElement).hidden = true; element("login-view", HTMLElement).hidden = true; actions.hidden = false;
   element("account-label", HTMLElement).textContent = active.roles.join(" · ");
   showOperations(active); void showFeaturePlugins(active);

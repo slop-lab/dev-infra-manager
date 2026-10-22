@@ -136,7 +136,20 @@ is implied by these source changes.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
   repositories through the Native Git plugin, with explicit controller, Project
-  and repository selection and generation fencing for every action.
+  and repository selection and generation fencing for every action. Carry an
+  upstream merge's returned proposal directly into exact review resolution, while
+  keeping merge and review as separate mutations. Show the current repository and
+  explain review-only, reviewer, sync-operator and promoter availability without
+  implying authority that the service has not rechecked.
+  Shared session-scoped navigation connects Git repositories to managed workspace
+  drafts and exact execution filters, execution jobs back to repository reviews,
+  and occupied worker slots to their CI job details. Existing creation drafts
+  require explicit replacement, and direct service connections are never inferred
+  to share a controller. Router requests and workspace access open their routing
+  project's policy and usage; uncertain requests can record both observed token
+  counts or explicitly retain unknown accounting without replaying inference.
+  Lost correction responses require an explicit current-state check before retry,
+  and unresolved accounting can receive observed counts later.
   Execution also discovers the selected controllers' private query/operator
   connections automatically. Select a controller to inspect jobs, logs and
   worker capacity or cancel/retry executions without copying service credentials

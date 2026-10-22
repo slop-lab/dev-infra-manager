@@ -1,21 +1,21 @@
 // @ts-check
 import { mountManagement } from "./management.js";
+import { appendNativeGitNavigationActions, registerNativeGitNavigation } from "./navigation.js";
 /** @typedef {{name:string,description:string,access:string}} Descriptor */
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
 /** @typedef {import('@slop-lab/dim-native-git-client').ReviewDto} Review */
 /** @typedef {{controllerId:string,projectId:string,repositoryId:string}} Scope */
-/** @typedef {{id:string,title:string,status:'ready'|'unavailable',reviewerId?:string,projects:Array<{projectId:string,name:string,repositoryIds:string[]}>,operations:Descriptor[]}} Controller */
+/** @typedef {{id:string,controllerKey?:string,title:string,status:'ready'|'unavailable',reviewerId?:string,projects:Array<{projectId:string,name:string,repositoryIds:string[]}>,operations:Descriptor[]}} Controller */
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
-  let disposed = false, catalogVersion = 0, listVersion = 0, detailVersion = 0, formVersion = 0;
+  let disposed = false, catalogVersion = 0, listVersion = 0, detailVersion = 0, formVersion = 0, scopeRevision = 0;
   /** @type {Controller[]} */ let controllers = [];
   /** @type {Map<string,string>} */ const drafts = new Map();
   const { ui } = context, element = ui.element;
   const current = () => !disposed && context.isCurrent();
-  const permitted = new Set(context.operations.map(({ name }) => name));
   const status = element("p"); status.setAttribute("role", "status");
   const managementRegion = element("div");
-  const availability = element("div"), selectors = element("div"), toolbar = element("div"), actions = element("div"), list = element("section"), detail = element("section"), syncStatus = element("section");
+  const availability = element("div"), selectors = element("div"), guidance = element("section", "", "panel"), toolbar = element("div"), actions = element("div"), list = element("section"), detail = element("section"), syncStatus = element("section", "", "sync-result");
   toolbar.className = actions.className = "feature-actions";
   /** @param {string} label */
   function selector(label) { const control = ui.select(selectors, label, []); const field = control.parentElement; if (!(field instanceof HTMLLabelElement)) throw new Error("Missing selector field"); return { field, control }; }
@@ -26,13 +26,13 @@ export function mount(container, context) {
     { value: "", label: "All states" }, { value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "revoked", label: "Revoked" }, { value: "stale", label: "Stale" }
   ]);
   reviewSearch.placeholder = "Proposal, protected ref or review ID";
-  container.append(element("p", "Select a controller, project and repository to inspect exact review evidence."), toolbar, availability, selectors, managementRegion, actions, status, form, syncStatus, filters, list, detail);
+  container.append(element("p", "Select a controller, project and repository to inspect exact review evidence."), toolbar, availability, selectors, guidance, managementRegion, actions, status, form, syncStatus, filters, list, detail);
   /** @type {Array<{reviewId:string,proposalRef:string,protectedRef:string,status:string,createdAt:string}>} */ let loadedReviews = [];
   /** @returns {Scope} */ const scope = () => ({ controllerId: host.control.value, projectId: project.control.value, repositoryId: repository.control.value });
   /** @param {Scope} value */ const key = (value) => JSON.stringify([value.controllerId, value.projectId, value.repositoryId]);
   /** @param {Scope} value */ const selected = (value) => current() && key(value) === key(scope());
   const controller = () => controllers.find(({ id }) => id === host.control.value);
-  /** @param {string} name */ const has = (name) => permitted.has(name) && Boolean(controller()?.operations.some((operation) => operation.name === name));
+  /** @param {string} name */ const has = (name) => context.operations.some((operation) => operation.name === name) && Boolean(controller()?.operations.some((operation) => operation.name === name));
   /** @param {Scope} target @param {string} name @param {Record<string,unknown>} [input] */
   const invoke = (target, name, input = {}) => context.invoke(name, { ...target, ...input });
   const management = mountManagement(managementRegion, context, { scope, has, refresh: (preferred) => refreshCatalog(preferred) });
@@ -89,8 +89,8 @@ export function mount(container, context) {
       await invoke(target, "reviews.promote", { reviewId: review.reviewId }); return accepted(button, target, "Protected ref promotion accepted.", [["review list", () => refreshList(target)], ["review details", () => open(target, review.reviewId)]]);
     });
   }
-  /** @param {Scope} target @param {string} reviewId */
-  async function open(target, reviewId) { const version = ++detailVersion; const value = /** @type {Review} */ (await invoke(target, "reviews.detail", { reviewId })); if (selected(target) && detailVersion === version) showReview(value, target); }
+  /** @param {Scope} target @param {string} reviewId @param {()=>boolean} [isCurrent] */
+  async function open(target, reviewId, isCurrent = current) { const version = ++detailVersion; const value = /** @type {Review} */ (await invoke(target, "reviews.detail", { reviewId })); if (isCurrent() && selected(target) && detailVersion === version) showReview(value, target); }
   function paintReviews() {
     const query = reviewSearch.value.trim().toLowerCase(), state = reviewState.value;
     const reviews = loadedReviews.filter((review) => (!state || review.status === state) && (!query || [review.reviewId, review.proposalRef, review.protectedRef].some((value) => value.toLowerCase().includes(query))));
@@ -109,26 +109,54 @@ export function mount(container, context) {
     if (!selected(target) || version !== listVersion) return;
     loadedReviews = reviews; paintReviews();
   }
+  function renderGuidance() {
+    const target = scope();
+    guidance.replaceChildren(element("h3", "Repository workflow"));
+    if (!target.repositoryId) { guidance.append(element("p", "Select a repository to see its exact target and available next actions.")); return; }
+    guidance.append(element("p", `Current repository target: ${target.controllerId} · ${target.projectId}/${target.repositoryId}.`, "workspace-feedback"));
+    const capabilities = element("ul");
+    capabilities.append(element("li", has("reviews.resolve")
+      ? `Reviewer: available${controller()?.reviewerId ? ` as ${controller()?.reviewerId}` : ""}. Resolution and decisions stay bound to exact evidence.`
+      : "Review-only: evidence can be inspected. Resolution and decisions are unavailable to this session and connection."));
+    capabilities.append(element("li", has("sync.merge")
+      ? "Sync operator: available. Merge creates a proposal and never advances the protected ref."
+      : "Sync operator: unavailable. Operator browser access and a matching sync connection are required."));
+    capabilities.append(element("li", has("reviews.promote")
+      ? "Promoter: available after exact approval; current policy and heads are rechecked."
+      : "Promoter: unavailable. Operator browser access and a matching promoter connection are required."));
+    guidance.append(capabilities, element("p", "These controls describe this session and configured connection only. The service rechecks repository scope and authority for every action.", "field-hint"));
+  }
   function renderActions() {
     management.update();
+    renderGuidance();
     actions.replaceChildren(); form.hidden = !has("reviews.resolve") || !scope().repositoryId;
     if (!scope().repositoryId) return;
     button(actions, "Refresh reviews", (_button, target) => refreshList(target));
     for (const [operation, title] of [["sync.fetch", "Fetch upstream"], ["sync.merge", "Propose upstream merge"], ["sync.publish", "Publish protected head"]]) {
       if (!operation || !title || !has(operation)) continue;
-      button(actions, title, async (button, target) => {
+      button(actions, title, async (actionButton, target) => {
         if (operation === "sync.publish" && !window.confirm(`Publish ${target.projectId}/${target.repositoryId} protected head to its configured upstream branch?`)) { status.textContent = "Publish dismissed."; return false; }
         const result = /** @type {{outcome:string,proposalRef?:string,upstreamRef?:string,upstreamCommit?:string,sourceCommit?:string,targetRef?:string,candidateCommit?:string}} */ (await invoke(target, operation));
         if (!selected(target)) return false;
         syncStatus.replaceChildren(element("h3", `Upstream ${result.outcome}`));
         if (result.outcome === "conflict") syncStatus.append(element("p", "Upstream changes conflict with the protected branch. Resolve conflicts in a workspace and submit a proposal for review."));
         const details = element("dl"); for (const [label, value] of [["Upstream ref", result.upstreamRef], ["Upstream commit", result.upstreamCommit], ["Proposal ref", result.proposalRef], ["Candidate commit", result.candidateCommit], ["Published commit", result.sourceCommit], ["Published branch", result.targetRef]]) if (value) details.append(element("dt", label), element("dd", value)); syncStatus.append(details);
-        return accepted(button, target, `${title}: ${result.outcome}.`, [["review list", () => refreshList(target)]], false);
+        if (operation === "sync.merge" && result.proposalRef) {
+          if (has("reviews.resolve")) button(syncStatus, "Review upstream proposal", async (reviewButton, reviewTarget) => {
+            const review = /** @type {Review} */ (await invoke(reviewTarget, "reviews.resolve", { proposalRef: result.proposalRef }));
+            showReview(review, reviewTarget);
+            return accepted(reviewButton, reviewTarget, "Proposal review resolved.", [["review list", () => refreshList(reviewTarget)]]);
+          });
+          else syncStatus.append(element("p", "This proposal is ready for exact review, but proposal resolution is not available to this session and connection.", "field-hint"));
+        }
+        return accepted(actionButton, target, `${title}: ${result.outcome}.`, [["review list", () => refreshList(target)]], false);
       });
     }
+    const target = scope(), controllerKey = controller()?.controllerKey;
+    appendNativeGitNavigationActions(actions, status, context, { ...(controllerKey ? { controllerKey } : {}), projectId: target.projectId, repositoryId: target.repositoryId }, () => selected(target));
   }
   function switchScope() {
-    ++listVersion; ++detailVersion; ++formVersion; loadedReviews = []; delete submit.dataset.pending; list.replaceChildren(); detail.replaceChildren(); syncStatus.replaceChildren(); status.textContent = ""; restoreDraft(); renderActions();
+    ++scopeRevision; ++listVersion; ++detailVersion; ++formVersion; loadedReviews = []; delete submit.dataset.pending; list.replaceChildren(); detail.replaceChildren(); syncStatus.replaceChildren(); status.textContent = ""; restoreDraft(); renderActions();
     const target = scope(); void refreshList(target).catch((error) => { if (selected(target)) status.textContent = `Could not load repository reviews: ${error instanceof Error ? error.message : "service unavailable"}.`; });
   }
   /** @param {HTMLSelectElement} control @param {Array<{id:string,title:string}>} values @param {string} preferred */
@@ -160,6 +188,28 @@ export function mount(container, context) {
   });
   button(toolbar, "Refresh projects", () => refreshCatalog());
   form.hidden = true;
-  void refreshCatalog().catch((error) => { if (current()) status.textContent = `Could not discover projects: ${error instanceof Error ? error.message : "service unavailable"}. Use Refresh projects to retry.`; });
-  return () => { management.dispose(); disposed = true; ++catalogVersion; ++detailVersion; ++listVersion; container.replaceChildren(); };
+  const initialDiscovery = refreshCatalog();
+  const disposeNavigation = registerNativeGitNavigation(context, {
+    ready: initialDiscovery,
+    controllers: () => controllers,
+    async open(target, isCurrent) {
+      const revision = scopeRevision, catalog = catalogVersion, selection = key(scope());
+      const reviewId = target.kind === "review" ? target.reviewId : undefined;
+      const entry = controllers.find(({ controllerKey }) => controllerKey === target.controllerKey);
+      if (!entry) return false;
+      const requested = { controllerId: entry.id, projectId: target.projectId, repositoryId: target.repositoryId };
+      if (reviewId) {
+        const reviews = /** @type {Array<{reviewId:string}>} */ (await invoke(requested, "reviews.list"));
+        if (!reviews.some((review) => review.reviewId === reviewId)) return false;
+      }
+      if (!current() || !isCurrent() || revision !== scopeRevision || catalog !== catalogVersion || selection !== key(scope())) return false;
+      saveDraft(); host.control.value = entry.id; fillProjects(target.projectId, target.repositoryId);
+      if (project.control.value !== target.projectId || repository.control.value !== target.repositoryId) return false;
+      switchScope();
+      if (reviewId) await open(requested, reviewId, isCurrent);
+      return true;
+    }
+  });
+  void initialDiscovery.catch((error) => { if (current()) status.textContent = `Could not discover projects: ${error instanceof Error ? error.message : "service unavailable"}. Use Refresh projects to retry.`; });
+  return () => { disposeNavigation(); management.dispose(); disposed = true; ++catalogVersion; ++detailVersion; ++listVersion; container.replaceChildren(); };
 }

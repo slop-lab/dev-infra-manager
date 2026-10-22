@@ -6,12 +6,19 @@ import { button, feedback, node, recovery } from "./workspace-ui.js";
 
 /** @typedef {(path:string, body?:unknown, timeout?:number)=>Promise<unknown>} Request */
 
-/** @param {HTMLElement} container @param {Request} request */
-export function createWorkspaceHosts(container, request) {
+/** @param {HTMLElement} container @param {Request} request @param {()=>void} [reveal] */
+export function createWorkspaceHosts(container, request, reveal = () => {}) {
   let generation = 0;
   /** @type {Map<string,ReturnType<typeof createHost>>} */ const views = new Map();
   return {
     clear() { generation++; for (const view of views.values()) view.dispose(); views.clear(); container.replaceChildren(); },
+    /** @param {import("../plugin-api.js").WebManagedWorkspaceCreateTarget} target @returns {import("../plugin-api.js").WebNavigationResult} */
+    openCreate(target) {
+      const view = views.get(target.hostId);
+      if (!view) return { status: "unavailable", code: "target-unavailable", message: `Host ${target.hostId} is not configured for this console.` };
+      reveal();
+      return view.openCreate(target);
+    },
     /** @param {string[]} ids @param {boolean} canOperate */
     async refresh(ids, canOperate) {
       const selected = generation;
@@ -96,5 +103,5 @@ function createHost(id, canOperate, request, active) {
   refreshButton.addEventListener("click", () => { void refresh(); }); retry.addEventListener("click", () => { void refresh(); });
   search.addEventListener("input", applyFilters); state.addEventListener("change", applyFilters); clearFilters.addEventListener("click", () => { search.value = ""; state.value = "all"; applyFilters(); search.focus(); });
   section.append(message, retry, list);
-  return { section, refresh, dispose() { disposed = true; for (const view of workspaces.values()) view.dispose(); workspaces.clear(); } };
+  return { section, refresh, openCreate(/** @type {import("../plugin-api.js").WebManagedWorkspaceCreateTarget} */ target) { open.setAttribute("aria-expanded", "true"); return form.prefill(target); }, dispose() { disposed = true; for (const view of workspaces.values()) view.dispose(); workspaces.clear(); } };
 }

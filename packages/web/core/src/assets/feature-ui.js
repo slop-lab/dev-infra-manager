@@ -75,5 +75,34 @@ function table(headings, rows) {
   return wrapper;
 }
 
+/** @type {import("../plugin-api.js").WebPluginUi["navigationAction"]} */
+function navigationAction(parent, options) {
+  const control = button(options.label), label = element("span", options.label), spinner = element("span", "", "spinner");
+  spinner.setAttribute("aria-hidden", "true");
+  control.replaceChildren(spinner, label);
+  let revision = 0;
+  control.addEventListener("click", () => {
+    if (control.disabled || !options.isCurrent()) return;
+    const selected = ++revision, statusRevision = (navigationStatusRevisions.get(options.status) ?? 0) + 1;
+    navigationStatusRevisions.set(options.status, statusRevision);
+    control.disabled = true; control.classList.add("is-loading"); control.setAttribute("aria-busy", "true");
+    feedback(options.status, "Opening destination");
+    void options.open().then((result) => {
+      if (selected !== revision || navigationStatusRevisions.get(options.status) !== statusRevision || !options.isCurrent()) return;
+      feedback(options.status, result.message, result.status === "unavailable" ? "error" : "status");
+    }).catch(() => {
+      if (selected === revision && navigationStatusRevisions.get(options.status) === statusRevision && options.isCurrent()) feedback(options.status, "The destination could not be opened. Retry navigation; your input is kept.", "error");
+    }).finally(() => {
+      if (selected !== revision || !options.isCurrent()) return;
+      control.disabled = false; control.classList.remove("is-loading"); control.removeAttribute("aria-busy");
+    });
+  });
+  parent.append(control);
+  return control;
+}
+
+/** @type {WeakMap<HTMLElement,number>} */
+const navigationStatusRevisions = new WeakMap();
+
 /** @type {import("../plugin-api.js").WebPluginUi} */
-export const featureUi = Object.freeze({ element, button, input, select, feedback, table });
+export const featureUi = Object.freeze({ element, button, input, select, feedback, table, navigationAction });

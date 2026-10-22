@@ -231,6 +231,7 @@ label.field { color: var(--color-text-secondary); font-size: var(--font-control)
 .feature-content td, .feature-content th { padding: var(--space-3); border-block-end: 1px solid var(--color-border-subtle); overflow-wrap: anywhere; }
 .feature-content th { color: var(--color-text-secondary); font-size: var(--font-meta); }
 .feature-content pre { white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 30rem; overflow: auto; background: var(--color-recessed); padding: var(--space-4); }
+.feature-content .sync-result dd { overflow-wrap: anywhere; }
 .feature-content .feature-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .feature-content h2, .feature-content h3 { margin-block-end: var(--space-3); }
 .feature-content [role="alert"] { color: var(--color-error-text); }

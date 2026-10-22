@@ -31,3 +31,12 @@ open job details in place. Detail views show only public result metadata and the
 bounded stdout/stderr returned by the execution query contract. An accepted
 cancel or retry remains accepted if a following read fails, and retry reuses its
 request UUID after response loss.
+
+Automatically discovered execution controllers retain the configured host ID as
+navigation provenance. Git can open an exact repository-scoped job filter, and a
+CI job can open the matching Native Git repository without inferring another
+controller. Job links and repository filters are accepted only while the target
+is present in the selected controller's current job catalog. Direct query/operator
+connections remain independent and expose no inferred Git identity. Worker
+capacity links active CI slots to the existing job detail view; generic task slots
+show their task type and execution kind without calling the CI detail operation.

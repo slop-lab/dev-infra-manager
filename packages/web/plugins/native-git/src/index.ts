@@ -8,7 +8,7 @@ const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const controllerId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const projectsSchema = z.array(nativeGitProjectSchema).max(1000).refine((projects) => new Set(projects.map(({ projectId }) => projectId)).size === projects.length);
 const descriptor = z.object({ name: z.string(), description: z.string().max(2000), access: z.enum(["read", "operator", "reviewer"]) }).strict();
-const controllerSchema = z.object({ id: controllerId, title: z.string().min(1).max(256), status: z.enum(["ready", "unavailable"]), reviewerId: identifier.optional(),
+const controllerSchema = z.object({ id: controllerId, controllerKey: controllerId.optional(), title: z.string().min(1).max(256), status: z.enum(["ready", "unavailable"]), reviewerId: identifier.optional(),
   projects: projectsSchema, operations: z.array(descriptor).max(128) }).strict();
 const discoverySchema = z.object({ schemaVersion: z.literal(1), generationId: z.string().regex(/^[a-f0-9]{64}$/), reviewerId: identifier,
   projects: projectsSchema, operations: z.array(descriptor).max(128) }).strict();
@@ -42,8 +42,8 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
         if (expected && description.generationId !== expected) throw new Error("Controller generation changed; reconnect this feature");
         for (const operation of description.operations) if (!controllerOperations.some((known) => known.name === operation.name && known.access === operation.access)) throw new Error("unknown controller operation");
         generations.set(controller.id, description.generationId);
-        return { id: controller.id, title: controller.id, status: "ready" as const, reviewerId: description.reviewerId, projects: description.projects, operations: description.operations };
-      } catch { return { id: controller.id, title: controller.id, status: "unavailable" as const, projects: [], operations: [] }; }
+        return { id: controller.id, controllerKey: controller.id, title: controller.id, status: "ready" as const, reviewerId: description.reviewerId, projects: description.projects, operations: description.operations };
+      } catch { return { id: controller.id, controllerKey: controller.id, title: controller.id, status: "unavailable" as const, projects: [], operations: [] }; }
     }));
     return { controllers };
   }
@@ -80,7 +80,7 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
 }
 export const webPlugin: WebPlugin = {
   id: "native-git", title: "Git review", description: "Controller projects, repository proposals, review evidence and protected promotion", operations,
-  assets: { "panel.js": new URL("./assets/panel.js", import.meta.url), "management.js": new URL("./assets/management.js", import.meta.url), "manifest.js": new URL("./assets/manifest.js", import.meta.url) }, browserEntry: "panel.js",
+  assets: { "panel.js": new URL("./assets/panel.js", import.meta.url), "navigation.js": new URL("./assets/navigation.js", import.meta.url), "management.js": new URL("./assets/management.js", import.meta.url), "manifest.js": new URL("./assets/manifest.js", import.meta.url) }, browserEntry: "panel.js",
   autoConnect: automatic,
   async create(input) {
     const config = configSchema.parse(input), projects = config.projects.map((project) => ({ ...project, name: project.name ?? project.projectId }));

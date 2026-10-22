@@ -144,6 +144,38 @@ and danger variants; feedback supports status and error tones. Text and table
 cells are rendered as text, not HTML. Plugins retain ownership of domain forms,
 operation selection and state rather than deriving forms from operation schemas.
 
+Navigation surfaces also receive the session-scoped `context.navigation` broker.
+`hasFeature(id)` reports only an installed navigation destination;
+`openFeature(id, target)` lazily mounts it once and passes the complete target to
+the single decoder registered with `context.onNavigate(handler)`. The handler
+receives `(target, isCurrent)` and must check `isCurrent()` after asynchronous
+reads and before applying a selection. The registration
+returns its own disposer and does not change the existing `mount` return contract.
+The destination rejects incomplete or unavailable targets without selecting a
+fallback controller or invoking a server operation. Concurrent opens share the
+mount, but only the newest request may reach the decoder; sign-out, session
+replacement and destination disposal fence late results.
+
+Use `context.ui.navigationAction(parent, { label, status, isCurrent, open })` for
+related-object links. It renders the common native secondary button, owns its
+pending/disabled state and writes the returned result beside the caller. Stale
+completion cannot replace feedback in a later mount. A failed navigation is not
+reported as a successful generic tab change.
+Each mounted context receives its own lifecycle-fenced navigation capability;
+retaining an old context cannot open a destination after session or workspace
+replacement. Invalid targets leave the current tab and selection unchanged.
+
+`navigation.canCreateWorkspace` is true only for an operator session with ordinary
+host operations. `openWorkspaceCreate` accepts exactly `hostId`, `projectId`,
+`repositoryIds` and `workingRepositoryId`; IDs must be bounded nonempty strings,
+repository IDs must be unique, and the working repository must be selected. The
+host must exactly match a configured host in the current session. Success opens
+the existing creation form and prefills `dim://PROJECT`, repository selection,
+working repository and the default container runtime without submitting. An
+edited draft is retained until **Replace draft with managed selection** is chosen.
+Pending or outcome-unknown creation remains locked behind current-state
+reconciliation and cannot be replaced through navigation.
+
 Transport errors carry `outcome: "unknown"` when a request loses its response,
 returns a server error, or returns unreadable successful JSON. An unknown outcome
 does not establish whether a mutation ran. Workspace tools and External routes
