@@ -9,7 +9,7 @@ export type ReviewAttachment = { readonly kind: string; readonly id: string; rea
 export type RepositorySnapshots = Readonly<Record<string, { readonly commit: string; readonly tree: string }>>;
 export type ReviewPreparationInput = {
   readonly runtime: RepositoryRuntime;
-  readonly selector: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string };
+  readonly selector: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined };
   readonly target: AuthoritativeNativeRepositoryTarget;
   readonly evidence: Awaited<ReturnType<typeof inspectAuthoritativeNativeReviewGit>>;
   readonly identity: Omit<AuthoritativeNativeReviewIdentity, "inputs">;
@@ -31,7 +31,7 @@ export function reviewPreparations(extensions: readonly ControlPlaneExtension[])
 }
 export type CodeReviewService = {
   readonly name: "code-review";
-  create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string }): Promise<AuthoritativeNativeReviewEnvelope>;
+  create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined }): Promise<AuthoritativeNativeReviewEnvelope>;
 };
 export * from "./authoritative-native-review-schema.js";
 export * from "./authoritative-native-review-store.js";

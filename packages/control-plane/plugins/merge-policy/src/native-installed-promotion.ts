@@ -6,10 +6,11 @@ export type NativeInstalledPromotionHooks = { readonly afterIntent?: () => void 
 export type NativeInstalledPromotionContext = { readonly repository: RepositoryExtensionContext; readonly store: MergeAuthorizationStore; readonly guards: readonly MergeQualityGuard[]; readonly hooks?: NativeInstalledPromotionHooks };
 export type NativeInstalledPromotionResult = { readonly schemaVersion: 1; readonly outcome: "promoted" | "already-current"; readonly reviewId: string; readonly protectedRef: string; readonly expectedProtectedHead: string; readonly candidateCommit: string; readonly candidateTree: string; readonly sequence: number };
 export async function promoteInstalledNativeReview(context: NativeInstalledPromotionContext, projectId: string, repositoryId: string, reviewId: string): Promise<NativeInstalledPromotionResult> {
-  const target = await resolveAuthoritativeNativeRepositoryTarget(context.repository.runtime, { projectId, repositoryId });
-  const envelope = await readAuthoritativeNativeReviewEnvelope(target.repository, reviewId);
+  const initial = await resolveAuthoritativeNativeRepositoryTarget(context.repository.runtime, { projectId, repositoryId });
+  const envelope = await readAuthoritativeNativeReviewEnvelope(initial.repository, reviewId);
   if (!envelope || envelope.review.projectId !== projectId || envelope.review.repositoryId !== repositoryId) throw new Error("review was not found");
   const { review } = envelope;
+  const target = await resolveAuthoritativeNativeRepositoryTarget(context.repository.runtime, { projectId, repositoryId, protectedRef: review.protectedRef });
   const previous = context.store.read().find((entry) => entry.authorization.projectId === projectId && entry.authorization.repositoryId === repositoryId && entry.authorization.reviewId === reviewId && entry.sequence !== undefined);
   if (previous && target.currentHead.commit === previous.authorization.candidateCommit && review.candidateCommit === previous.authorization.candidateCommit && review.candidateTree === previous.authorization.candidateTree) return result("already-current", previous.authorization, previous.sequence!);
   if ((await nativeHumanReviewStaleReasons({ ...context.repository.runtime, reviewChangeMatchers: reviewChangeMatchers(context.repository.extensions) }, target, review)).length) throw new Error("review security tuple is stale");
@@ -29,7 +30,7 @@ export async function promoteInstalledNativeReview(context: NativeInstalledPromo
     approvals: approvals.map(({ reviewerId, recordDigest }) => ({ reviewerId, recordDigest })), attachments };
   const prepared = context.store.prepare(authorization);
   await context.hooks?.afterIntent?.();
-  const receipt = await compareAndSwapProtectedRef(context.repository, { projectId, repositoryId, proposalRef: authorization.proposalRef,
+  const receipt = await compareAndSwapProtectedRef(context.repository, { projectId, repositoryId, protectedRef: review.protectedRef, proposalRef: authorization.proposalRef,
     expectedCommit: authorization.expectedCommit, candidateCommit: authorization.candidateCommit, candidateTree: authorization.candidateTree,
     authorizationId: prepared.authorizationId, evidenceDigest: prepared.evidenceDigest });
   await context.hooks?.afterCompareAndSwap?.();

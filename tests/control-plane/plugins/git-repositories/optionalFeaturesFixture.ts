@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect } from "vitest";
+import assert from "node:assert/strict";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-git-repositories";
 import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
 import { controlPlanePlugin as codeReviewPlugin } from "@slop-lab/dim-control-plane-plugin-code-review";
@@ -29,7 +29,7 @@ export async function fixture(withReview: boolean, extraExtensions: readonly Con
   try {
     const origin = await service.listen("127.0.0.1", 0);
     const activated = await fetch(`${origin}/v1/activation`, { method: "POST", headers: { authorization: `Bearer ${token(5)}`, "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 1, generationId }) });
-    expect(activated.status).toBe(200);
+    assert.equal(activated.status, 200);
     await service.prepareProject(generationId, importer.hostId, { serviceId: "native-main", projectId: "project", repositoryId: "main" });
     await git("/usr/bin/git", ["init", "--initial-branch=main", source]);
     await writeFile(join(source, "README.md"), "initial\n");
@@ -42,15 +42,15 @@ export async function fixture(withReview: boolean, extraExtensions: readonly Con
     const policy = { schemaVersion: 1, protectedRef: "refs/heads/main", ...branches, policyRevision: nativeRepositoryPolicyRevision({ protectedRef: "refs/heads/main", extensions, ...branches }), extensions };
     const prelude = { schemaVersion: 1, serviceId: "native-main", generationId, projectId: "project", repositoryId: "main", protectedRef: "refs/heads/main", expectedCommit: initial, policy };
     const uploaded = await fetch(`${origin}/v1/projects/project/repositories/main/import`, { method: "POST", headers: { authorization: basic(importer), "content-type": "application/octet-stream" }, body: Buffer.concat([Buffer.from(`${JSON.stringify(prelude)}\n`), await readFile(bundle)]) });
-    expect(uploaded.status, await uploaded.clone().text()).toBe(200);
+    assert.equal(uploaded.status, 200, await uploaded.clone().text());
     const uploadedBody = record(await uploaded.json());
     const receipt = { importNonce: text(uploadedBody, "importNonce"), policyDigest: text(uploadedBody, "policyDigest"), bundleDigest: text(uploadedBody, "bundleDigest"), bundleSize: uploadedBody.bundleSize };
     if (typeof receipt.bundleSize !== "number") throw new Error("bundle size is missing");
     const finalized = await fetch(`${origin}/v1/projects/project/repositories/main/import/finalize`, { method: "POST", headers: { authorization: basic(importer), "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 1, generationId, importNonce: receipt.importNonce, bundleDigest: receipt.bundleDigest }) });
-    expect(finalized.status, await finalized.clone().text()).toBe(200);
+    assert.equal(finalized.status, 200, await finalized.clone().text());
     const workspaceId = token(6);
     const leased = await fetch(`${origin}/v1/projects/project/repositories/main/workspace-write-leases`, { method: "POST", headers: { authorization: basic(writer), "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "main", workspaceId }) });
-    expect(leased.status, await leased.clone().text()).toBe(201);
+    assert.equal(leased.status, 201, await leased.clone().text());
     const leaseBody = record(await leased.json());
     const lease = { username: text(leaseBody, "username"), password: text(leaseBody, "password") };
     const remote = new URL(`/v1/projects/project/repositories/main.git`, origin); remote.username = lease.username; remote.password = lease.password;

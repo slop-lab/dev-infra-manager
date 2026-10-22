@@ -30,6 +30,7 @@ const proposalName = z.string().min(1).max(1024).refine((value) => !value.starts
 const selectorSchema = z.object({
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
+  protectedRef: z.string().startsWith("refs/heads/").optional(),
   proposalRef: z.string()
 }).strict().readonly().transform((selector, context) => {
   const match = /^refs\/heads\/proposals\/([^/]+)\/(.+)$/.exec(selector.proposalRef);
@@ -58,7 +59,7 @@ export async function createAuthoritativeNativeReview(
         cause: selector.error
       });
     }
-    const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId });
+    const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId, ...(selector.data.protectedRef === undefined ? {} : { protectedRef: selector.data.protectedRef }) });
     const signal = AbortSignal.timeout(30_000);
     const evidence = await inspectAuthoritativeNativeReviewGit({
       gitExecutable: runtime.gitExecutable,
@@ -70,18 +71,18 @@ export async function createAuthoritativeNativeReview(
       proposalRef: selector.data.proposalRef
     });
     const policy = target.imported.policy;
-    const requirements = await reviewRequirementsForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead);
+    const requirements = await reviewRequirementsForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead, target.currentHead.protectedRef);
     let identity: AuthoritativeNativeReviewIdentity = {
       schemaVersion: 2,
       serviceId: "native-main",
       projectId: selector.data.projectId,
       repositoryId: selector.data.repositoryId,
       inputs: { [selector.data.repositoryId]: { commit: evidence.candidateCommit, tree: evidence.candidateTree } },
-      protectedRef: policy.protectedRef,
+      protectedRef: target.currentHead.protectedRef,
       proposalRef: selector.data.proposalRef,
       ...evidence,
       policyRevision: policy.policyRevision,
-      requiredReviewRevision: codeReviewPolicy(policy, runtime.reviewChangeMatchers).requiredReviewRevision,
+      requiredReviewRevision: codeReviewPolicy(policy, runtime.reviewChangeMatchers, target.currentHead.protectedRef).requiredReviewRevision,
       workspaceId: selector.data.workspaceId,
       requiredReviewerIds: requirements.reviewerIds,
       ...(requirements.evidence.length === 0 ? {} : { changeRuleEvidence: requirements.evidence })
@@ -101,14 +102,14 @@ export async function createAuthoritativeNativeReview(
     const envelope = createAuthoritativeNativeReviewEnvelope({ identity,
       policyDigest: target.imported.policyDigest, attachments, createdAt: new Date().toISOString() });
     await hooks.beforeFinalVerification?.();
-    const current = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId });
+    const current = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId, ...(selector.data.protectedRef === undefined ? {} : { protectedRef: selector.data.protectedRef }) });
     if (current.repository !== target.repository
       || JSON.stringify(current.imported) !== JSON.stringify(target.imported)
       || JSON.stringify(current.currentHead) !== JSON.stringify(target.currentHead)) {
       throw new AuthoritativeNativeReviewError("authoritative imported repository changed during review creation");
     }
-    const currentRequirements = await reviewRequirementsForChanges(runtime, current.imported.policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead);
-    if (codeReviewPolicy(current.imported.policy, runtime.reviewChangeMatchers).requiredReviewRevision !== identity.requiredReviewRevision
+    const currentRequirements = await reviewRequirementsForChanges(runtime, current.imported.policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead, target.currentHead.protectedRef);
+    if (codeReviewPolicy(current.imported.policy, runtime.reviewChangeMatchers, current.currentHead.protectedRef).requiredReviewRevision !== identity.requiredReviewRevision
       || JSON.stringify(currentRequirements.reviewerIds) !== JSON.stringify(identity.requiredReviewerIds)
       || JSON.stringify(currentRequirements.evidence) !== JSON.stringify(identity.changeRuleEvidence ?? [])) {
       throw new AuthoritativeNativeReviewError("required review matcher changed during review creation");
@@ -155,9 +156,9 @@ function pathRequiredReviewers(
 
 export async function reviewRequirementsForChanges(
   runtime: CodeReviewRuntime, policy: NativeImportedRootPolicy, changes: readonly AuthoritativeNativeChangedPath[],
-  repository: string, candidateCommit: string, baseCommit?: string
+  repository: string, candidateCommit: string, baseCommit?: string, protectedRef?: string
 ): Promise<{ readonly reviewerIds: readonly string[]; readonly evidence: readonly { readonly rule: number; readonly digest: string }[] }> {
-  const reviewed = codeReviewPolicy(policy, runtime.reviewChangeMatchers);
+  const reviewed = codeReviewPolicy(policy, runtime.reviewChangeMatchers, protectedRef);
   const reviewers = new Set(pathRequiredReviewers(reviewed, changes));
   const objectIds = new Set(changes.flatMap(({ oldObjectId, newObjectId }) => [oldObjectId, newObjectId]).filter((id) => id !== "0"));
   const blobs = new Map<string, Promise<Buffer>>();

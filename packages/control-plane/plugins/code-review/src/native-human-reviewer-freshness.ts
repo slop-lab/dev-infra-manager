@@ -16,7 +16,7 @@ export async function nativeHumanReviewStaleReasons(
   const policy = target.imported.policy;
   try {
     if (review.policyRevision !== policy.policyRevision
-      || review.requiredReviewRevision !== codeReviewPolicy(policy, runtime.reviewChangeMatchers).requiredReviewRevision) reasons.push("policy-changed");
+      || review.requiredReviewRevision !== codeReviewPolicy(policy, runtime.reviewChangeMatchers, review.protectedRef).requiredReviewRevision) reasons.push("policy-changed");
   } catch { reasons.push("review-matcher-unavailable"); }
   if (review.expectedProtectedHead !== target.currentHead.commit) reasons.push("protected-head-changed");
   try { await assertReviewInputsCurrent(runtime, review); }
@@ -34,9 +34,9 @@ export async function nativeHumanReviewStaleReasons(
       expectedProtectedHead: target.currentHead.commit });
     const workspaceId = /^refs\/heads\/proposals\/([A-Za-z0-9_-]{43})\//.exec(review.proposalRef)?.[1];
     if (workspaceId === undefined) return ["review-identity-changed"];
-    const requirements = await reviewRequirementsForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead);
+    const requirements = await reviewRequirementsForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead, review.protectedRef);
     if (review.projectId !== target.imported.projectId || review.repositoryId !== target.imported.repositoryId
-      || review.protectedRef !== policy.protectedRef || review.workspaceId !== workspaceId
+      || review.protectedRef !== target.currentHead.protectedRef || review.workspaceId !== workspaceId
       || review.patch !== evidence.patch || review.patchBytes !== evidence.patchBytes
       || !isDeepStrictEqual(review.changes, evidence.changes)
       || !isDeepStrictEqual(review.requiredReviewerIds, requirements.reviewerIds)

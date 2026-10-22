@@ -25,6 +25,18 @@ it("rejects missing, duplicate, malformed and invalidly configured matchers and 
   expect(() => codeReviewPolicy(policy({ ...reviewPolicy, changeReviewerRules: [{ ...reviewPolicy.changeReviewerRules[0]!, options: "candidate" }] }), [matcher])).toThrow(/options/);
   expect(codeReviewPolicy(policy(), [matcher]).requiredReviewRevision).not.toBe(codeReviewPolicy(policy(), [{ ...matcher, revision: "2".repeat(64) }]).requiredReviewRevision);
 });
+it("applies configured review rules only to branches that enable review", () => {
+  const base = policy();
+  const branches = { "refs/heads/main": { review: true }, "refs/heads/development": { review: false } };
+  const input = { ...base, defaultRef: "refs/heads/main", branches };
+  const configured = { ...input, policyRevision: nativeRepositoryPolicyRevision(input) };
+  expect(codeReviewPolicy(configured, [matcher], "refs/heads/main").requiredReviewerIds).toEqual(["owner"]);
+  const development = codeReviewPolicy(configured, [matcher], "refs/heads/development");
+  expect(development.requiredReviewerIds).toEqual([]);
+  expect(development.pathReviewerRules).toEqual([]);
+  expect(development.changeReviewerRules).toEqual([]);
+  expect(() => codeReviewPolicy(configured, [matcher], "refs/heads/unmanaged")).toThrow(/not managed/);
+});
 it.each([true, false])("unions mandatory path guards with matcher result %s and rejects stale matcher merge approvals", async (matches) => {
   const promoter = { hostId: "host-a", username: "promoter", password: token(10) };
   const security = { reviewerId: "security", username: "security", password: token(11) };

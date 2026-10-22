@@ -5,7 +5,7 @@ import { appendNativeGitNavigationActions, registerNativeGitNavigation } from ".
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
 /** @typedef {import('@slop-lab/dim-native-git-client').ReviewDto} Review */
 /** @typedef {{controllerId:string,projectId:string,repositoryId:string}} Scope */
-/** @typedef {{id:string,controllerKey?:string,title:string,status:'ready'|'unavailable',reviewerId?:string,projects:Array<{projectId:string,name:string,repositoryIds:string[]}>,operations:Descriptor[]}} Controller */
+/** @typedef {{id:string,controllerKey?:string,title:string,status:'ready'|'unavailable',reviewerId?:string,projects:Array<{projectId:string,name:string,repositoryIds:string[],repositories?:Array<{repositoryId:string,defaultRef:string,branches:string[]}>}>,operations:Descriptor[]}} Controller */
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
   let disposed = false, catalogVersion = 0, listVersion = 0, detailVersion = 0, formVersion = 0, scopeRevision = 0;
@@ -20,8 +20,10 @@ export function mount(container, context) {
   /** @param {string} label */
   function selector(label) { const control = ui.select(selectors, label, []); const field = control.parentElement; if (!(field instanceof HTMLLabelElement)) throw new Error("Missing selector field"); return { field, control }; }
   const host = selector("Controller"), project = selector("Project"), repository = selector("Repository");
+  const metadata = () => controller()?.projects.find(({ projectId }) => projectId === project.control.value)?.repositories?.find(({ repositoryId }) => repositoryId === repository.control.value);
+  const targetBranch = ui.select(selectors, "Target branch", [{value:"refs/heads/main",label:"main"}]);
   const form = document.createElement("form"), proposal = ui.input(form, "Proposal ref"), submit = ui.button("Resolve proposal review", "primary");
-  proposal.required = true; proposal.maxLength = 1024; proposal.placeholder = "refs/dim/proposals/…"; submit.type = "submit"; form.append(submit);
+  proposal.required = true; proposal.maxLength = 1024; proposal.placeholder = "refs/heads/proposals/…"; submit.type = "submit"; form.append(submit);
   const filters = element("div", "", "workspace-filters"), reviewSearch = ui.input(filters, "Search reviews"), reviewState = ui.select(filters, "Review state", [
     { value: "", label: "All states" }, { value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "revoked", label: "Revoked" }, { value: "stale", label: "Stale" }
   ]);
@@ -93,7 +95,7 @@ export function mount(container, context) {
   async function open(target, reviewId, isCurrent = current) { const version = ++detailVersion; const value = /** @type {Review} */ (await invoke(target, "reviews.detail", { reviewId })); if (isCurrent() && selected(target) && detailVersion === version) showReview(value, target); }
   function paintReviews() {
     const query = reviewSearch.value.trim().toLowerCase(), state = reviewState.value;
-    const reviews = loadedReviews.filter((review) => (!state || review.status === state) && (!query || [review.reviewId, review.proposalRef, review.protectedRef].some((value) => value.toLowerCase().includes(query))));
+    const reviews = loadedReviews.filter((review) => (!state || review.status === state) && review.protectedRef === targetBranch.value && (!query || [review.reviewId, review.proposalRef, review.protectedRef].some((value) => value.toLowerCase().includes(query))));
     list.replaceChildren(element("h3", "Reviews"));
     if (!loadedReviews.length) { list.append(element("p", "No reviews for this repository. Resolve a proposal ref below to start one.")); return; }
     if (!reviews.length) { list.append(element("p", "No reviews match the current search and state filter.")); return; }
@@ -131,19 +133,36 @@ export function mount(container, context) {
     renderGuidance();
     actions.replaceChildren(); form.hidden = !has("reviews.resolve") || !scope().repositoryId;
     if (!scope().repositoryId) return;
+    if (has("merges.prepare")) {
+      const mergeForm = document.createElement("form"), source = ui.input(mergeForm, "Merge source branch"), destination = ui.input(mergeForm, "Merge target branch");
+      source.value = "development"; destination.value = (metadata()?.defaultRef ?? "refs/heads/main").slice("refs/heads/".length); source.required = destination.required = true;
+      const prepare = ui.button("Create branch merge review", "primary"); prepare.type = "submit"; mergeForm.append(prepare); actions.append(mergeForm);
+      mergeForm.addEventListener("submit", async (event) => {
+        event.preventDefault(); if (prepare.disabled) return; const target = scope(); prepare.disabled = true;
+        const ref = (/** @type {string} */ value) => value.startsWith("refs/heads/") ? value : `refs/heads/${value}`;
+        try {
+          const result = /** @type {{outcome:string,reviewId?:string}} */ (await invoke(target, "merges.prepare", { sourceRef: ref(source.value.trim()), targetRef: ref(destination.value.trim()) }));
+          if (!selected(target)) return;
+          if (result.reviewId) await open(target, result.reviewId);
+          await refreshList(target);
+          status.textContent = result.outcome === "proposed" ? "Branch merge review created. Inspect its changes and required approvals, then promote it." : result.outcome === "conflict" ? "Branches conflict. Resolve the changes in a workspace and submit a proposal." : "The target already contains the source branch.";
+        } catch (error) { if (selected(target)) status.textContent = `Could not create branch merge review: ${error instanceof Error ? error.message : "service unavailable"}.`; }
+        finally { if (current()) prepare.disabled = false; }
+      });
+    }
     button(actions, "Refresh reviews", (_button, target) => refreshList(target));
     for (const [operation, title] of [["sync.fetch", "Fetch upstream"], ["sync.merge", "Propose upstream merge"], ["sync.publish", "Publish protected head"]]) {
       if (!operation || !title || !has(operation)) continue;
       button(actions, title, async (actionButton, target) => {
         if (operation === "sync.publish" && !window.confirm(`Publish ${target.projectId}/${target.repositoryId} protected head to its configured upstream branch?`)) { status.textContent = "Publish dismissed."; return false; }
-        const result = /** @type {{outcome:string,proposalRef?:string,upstreamRef?:string,upstreamCommit?:string,sourceCommit?:string,targetRef?:string,candidateCommit?:string}} */ (await invoke(target, operation));
+        const result = /** @type {{outcome:string,proposalRef?:string,upstreamRef?:string,upstreamCommit?:string,sourceCommit?:string,targetRef?:string,candidateCommit?:string}} */ (await invoke(target, operation, { protectedRef: targetBranch.value }));
         if (!selected(target)) return false;
         syncStatus.replaceChildren(element("h3", `Upstream ${result.outcome}`));
         if (result.outcome === "conflict") syncStatus.append(element("p", "Upstream changes conflict with the protected branch. Resolve conflicts in a workspace and submit a proposal for review."));
         const details = element("dl"); for (const [label, value] of [["Upstream ref", result.upstreamRef], ["Upstream commit", result.upstreamCommit], ["Proposal ref", result.proposalRef], ["Candidate commit", result.candidateCommit], ["Published commit", result.sourceCommit], ["Published branch", result.targetRef]]) if (value) details.append(element("dt", label), element("dd", value)); syncStatus.append(details);
         if (operation === "sync.merge" && result.proposalRef) {
           if (has("reviews.resolve")) button(syncStatus, "Review upstream proposal", async (reviewButton, reviewTarget) => {
-            const review = /** @type {Review} */ (await invoke(reviewTarget, "reviews.resolve", { proposalRef: result.proposalRef }));
+            const review = /** @type {Review} */ (await invoke(reviewTarget, "reviews.resolve", { proposalRef: result.proposalRef, protectedRef: targetBranch.value }));
             showReview(review, reviewTarget);
             return accepted(reviewButton, reviewTarget, "Proposal review resolved.", [["review list", () => refreshList(reviewTarget)]]);
           });
@@ -156,6 +175,8 @@ export function mount(container, context) {
     appendNativeGitNavigationActions(actions, status, context, { ...(controllerKey ? { controllerKey } : {}), projectId: target.projectId, repositoryId: target.repositoryId }, () => selected(target));
   }
   function switchScope() {
+    const branchPolicy = metadata(), refs = branchPolicy?.branches ?? ["refs/heads/main"];
+    options(targetBranch, refs.map((id) => ({ id, title: id.slice("refs/heads/".length) })), branchPolicy?.defaultRef ?? "refs/heads/main");
     ++scopeRevision; ++listVersion; ++detailVersion; ++formVersion; loadedReviews = []; delete submit.dataset.pending; list.replaceChildren(); detail.replaceChildren(); syncStatus.replaceChildren(); status.textContent = ""; restoreDraft(); renderActions();
     const target = scope(); void refreshList(target).catch((error) => { if (selected(target)) status.textContent = `Could not load repository reviews: ${error instanceof Error ? error.message : "service unavailable"}.`; });
   }
@@ -177,12 +198,13 @@ export function mount(container, context) {
   }
   host.control.addEventListener("change", () => { saveDraft(); fillProjects(); switchScope(); });
   project.control.addEventListener("change", () => { saveDraft(); fillRepositories(); switchScope(); });
+  targetBranch.addEventListener("change", () => { paintReviews(); detail.replaceChildren(); });
   repository.control.addEventListener("change", () => { saveDraft(); switchScope(); });
   proposal.addEventListener("input", () => { saveDraft(); delete submit.dataset.accepted; if (submit.dataset.pending !== "true") submit.disabled = false; });
   reviewSearch.addEventListener("input", paintReviews); reviewState.addEventListener("change", paintReviews);
   form.addEventListener("submit", async (event) => {
     event.preventDefault(); if (submit.disabled) return; const target = scope(), version = ++formVersion; submit.dataset.pending = "true"; submit.disabled = true;
-    try { const value = /** @type {Review} */ (await invoke(target, "reviews.resolve", { proposalRef: proposal.value.trim() })); if (version !== formVersion) return; showReview(value, target); if (selected(target)) await accepted(submit, target, "Proposal review resolved.", [["review list", () => refreshList(target)]]); }
+    try { const value = /** @type {Review} */ (await invoke(target, "reviews.resolve", { proposalRef: proposal.value.trim(), protectedRef: targetBranch.value.startsWith("refs/heads/") ? targetBranch.value : `refs/heads/${targetBranch.value}` })); if (version !== formVersion) return; showReview(value, target); if (selected(target)) await accepted(submit, target, "Proposal review resolved.", [["review list", () => refreshList(target)]]); }
     catch (error) { if (version === formVersion && selected(target)) status.textContent = `Could not resolve proposal: ${error instanceof Error ? error.message : "service unavailable"}. Check the proposal ref and retry.`; }
     finally { if (version === formVersion) { delete submit.dataset.pending; if (current()) submit.disabled = selected(target) && submit.dataset.accepted === "true"; } }
   });

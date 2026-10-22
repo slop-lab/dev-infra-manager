@@ -38,6 +38,7 @@ const approvalRequestSchema = z.object({ requestId: z.string().uuid() }).strict(
 const revocationRequestSchema = z.object({ approvalId: z.string().regex(/^[0-9a-f]{64}$/) }).strict().readonly();
 const resolveRequestSchema = z.object({
   schemaVersion: z.literal(1),
+  protectedRef: z.string().startsWith("refs/heads/").optional(),
   proposalRef: z.string().min(1).max(1024)
 }).strict().readonly();
 
@@ -125,7 +126,7 @@ async function resolveCurrentEnvelope(
     )) return sendJson(response, 503, { error: "human review proof is unavailable" });
     let target: Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;
     try {
-      target = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId });
+      target = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, ...(body.protectedRef === undefined ? {} : { protectedRef: body.protectedRef }) });
     } catch (error) {
       if (error instanceof Error) return sendJson(response, 404, { error: "not found" });
       throw error;
@@ -133,26 +134,31 @@ async function resolveCurrentEnvelope(
     const envelopes = (await readAuthoritativeNativeReviewEnvelopes(target.repository))
       .filter((envelope) => envelope.review.projectId === projectId && envelope.review.repositoryId === repositoryId
         && envelope.review.proposalRef === body.proposalRef
+        && envelope.review.protectedRef === target.currentHead.protectedRef
         && envelope.policyDigest === target.imported.policyDigest
 )
       .sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt));
     for (const envelope of envelopes) {
+      if (envelope.review.requiredReviewerIds.length > 0 && !envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) return sendJson(response, 403, { error: "reviewer is not required for this review" });
       const staleReasons = await nativeHumanReviewStaleReasons(input.runtime, target, envelope.review);
       if (staleReasons.includes("repository-inputs-changed")) {
-        if (!envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) return sendJson(response, 403, { error: "reviewer is not required for this review" });
         let refreshed;
-        try { refreshed = await createAuthoritativeNativeReview(input.runtime, { projectId, repositoryId, proposalRef: body.proposalRef }); }
+        try { refreshed = await createAuthoritativeNativeReview(input.runtime, { projectId, repositoryId, proposalRef: body.proposalRef, protectedRef: target.currentHead.protectedRef }); }
         catch (error) { if (error instanceof AuthoritativeNativeReviewError) return sendJson(response, 409, { error: "review input snapshot is unavailable" }); throw error; }
-        if (!refreshed.review.requiredReviewerIds.includes(reviewer.reviewerId)) return sendJson(response, 403, { error: "reviewer is not required for this review" });
+        if (refreshed.review.requiredReviewerIds.length > 0 && !refreshed.review.requiredReviewerIds.includes(reviewer.reviewerId)) return sendJson(response, 403, { error: "reviewer is not required for this review" });
         return sendJson(response, 200, refreshed);
       }
       if (staleReasons.length !== 0) continue;
-      if (!envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
-        return sendJson(response, 403, { error: "reviewer is not required for this review" });
-      }
       return sendJson(response, 200, envelope);
     }
-    return sendNotFound(response);
+    try {
+      const created = await createAuthoritativeNativeReview(input.runtime, { projectId, repositoryId, proposalRef: body.proposalRef, protectedRef: target.currentHead.protectedRef });
+      if (created.review.requiredReviewerIds.length > 0 && !created.review.requiredReviewerIds.includes(reviewer.reviewerId)) return sendJson(response, 403, { error: "reviewer is not required for this review" });
+      return sendJson(response, 200, created);
+    } catch (error) {
+      if (error instanceof AuthoritativeNativeReviewError) return sendJson(response, 409, { error: "review candidate is unavailable" });
+      throw error;
+    }
   });
 }
 
@@ -199,6 +205,7 @@ async function approveExactReview(
     const result = await input.serialize(async () => {
       const selected = await inspectExactReview(input, reviewer, projectId, repositoryId, reviewId, request, response);
       if (selected === undefined || response.writableEnded) return undefined;
+      if (!selected.envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) { sendJson(response, 403, { error: "reviewer is not required for this review" }); return undefined; }
       if (selected.staleReasons.length > 0) {
         sendJson(response, 409, { error: "review is stale" });
         return undefined;
@@ -306,13 +313,14 @@ async function inspectExactReview(
     sendNotFound(response);
     return undefined;
   }
-  if (!envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
-    sendJson(response, 403, { error: "reviewer is not required for this review" });
-    return undefined;
+  if (envelope.review.requiredReviewerIds.length > 0 && !envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
+    sendJson(response, 403, { error: "reviewer is not required for this review" }); return undefined;
   }
+  try { target = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, protectedRef: envelope.review.protectedRef }); }
+  catch { sendJson(response, 503, { error: "human review proof is unavailable" }); return undefined; }
   const staleReasons = await nativeHumanReviewStaleReasons(input.runtime, target, envelope.review);
   try {
-    const confirmed = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId });
+    const confirmed = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, protectedRef: envelope.review.protectedRef });
     if (JSON.stringify(confirmed) !== JSON.stringify(target)) {
       sendJson(response, 503, { error: "human review proof is unavailable" });
       return undefined;
@@ -342,11 +350,12 @@ async function listReviewSummaries(input: HumanReviewerHttpInput, reviewer: Huma
     try { target = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId }); }
     catch { return sendNotFound(response); }
     const envelopes = (await readAuthoritativeNativeReviewEnvelopes(target.repository))
-      .filter((entry) => entry.review.projectId === projectId && entry.review.repositoryId === repositoryId && entry.review.requiredReviewerIds.includes(reviewer.reviewerId))
+      .filter((entry) => entry.review.projectId === projectId && entry.review.repositoryId === repositoryId && (entry.review.requiredReviewerIds.length === 0 || entry.review.requiredReviewerIds.includes(reviewer.reviewerId)))
       .sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt)).slice(0, 100);
     const summaries = [];
     for (const { review } of envelopes) {
-      const staleReasons = await nativeHumanReviewStaleReasons(input.runtime, target, review);
+      const branchTarget = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId, protectedRef: review.protectedRef });
+      const staleReasons = await nativeHumanReviewStaleReasons(input.runtime, branchTarget, review);
       const decisions = await readAuthoritativeNativeDecisions(target.repository, review.reviewId);
       summaries.push({ reviewId: review.reviewId, proposalRef: review.proposalRef, protectedRef: review.protectedRef,
         candidateCommit: review.candidateCommit, createdAt: review.createdAt,

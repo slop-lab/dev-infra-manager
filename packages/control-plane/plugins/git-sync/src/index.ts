@@ -36,7 +36,8 @@ export const controlPlanePlugin: ControlPlanePlugin = {
                   generationId: context.runtime.expectedGenerationId }); return true;
               }
               let validBody = false;
-              try { z.object({ schemaVersion: z.literal(1) }).strict().parse(await readBoundedJson(request)); validBody = true; }
+              let protectedRef: string | undefined;
+              try { const body = z.object({ schemaVersion: z.literal(1), protectedRef: z.string().startsWith("refs/heads/").max(1024).optional() }).strict().parse(await readBoundedJson(request)); protectedRef = body.protectedRef; validBody = true; }
               catch (error) { if (!(error instanceof z.ZodError || error instanceof NativeGitBundleHttpError)) throw error; }
               if (!validBody) { sendJson(response, 400, { error: "git-sync request is invalid" }); return true; }
               const projectId = route![1]!, repositoryId = route![2]!, operation = route![3]! as GitSyncOperation;
@@ -52,7 +53,7 @@ export const controlPlanePlugin: ControlPlanePlugin = {
                 try { target = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId, repositoryId }); }
                 catch { sendJson(response, 404, { error: "repository not found" }); return; }
                 if (target.imported.ownerHostId !== operator.hostId) { sendJson(response, 404, { error: "repository not found" }); return; }
-                try { sendJson(response, 200, await synchronizeRepository(context, config, { projectId, repositoryId }, operation)); }
+                try { sendJson(response, 200, await synchronizeRepository(context, config, { projectId, repositoryId, ...(protectedRef === undefined ? {} : { protectedRef }) }, operation)); }
                 catch { sendJson(response, 409, { error: "Git synchronization failed; check reviewed policy, remote authorization, upstream divergence and proposal state" }); }
               });
               return true;

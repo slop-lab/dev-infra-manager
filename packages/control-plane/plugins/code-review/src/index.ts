@@ -21,7 +21,7 @@ export const controlPlanePlugin: ControlPlanePlugin = { apiVersion: 1, name: "co
 export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly review?: AuthoritativeNativeReviewHooks; readonly humanReviewer?: NativeHumanReviewerHooks } = {}): PreparedControlPlanePlugin {
     let attached: RepositoryExtensionContext | undefined;
     const service = {
-      async create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string }) {
+      async create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string }) {
         return context.serialize(() => createAuthoritativeNativeReview({ ...context.runtime, reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) }, input, hooks.review));
       }
     };

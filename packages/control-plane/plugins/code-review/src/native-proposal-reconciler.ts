@@ -1,3 +1,4 @@
+import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
 import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { createAuthoritativeNativeReview, type AuthoritativeNativeReviewHooks } from "./authoritative-native-review.js";
 import type { AuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-schema.js";
@@ -14,9 +15,11 @@ export async function reconcileNativeProposalRefs(
   if (!Object.hasOwn(target.imported.policy.extensions, "code-review")) return [];
   const envelopes: AuthoritativeNativeReviewEnvelope[] = [];
   for (const proposalRef of proposalRefs) {
-    envelopes.push(await createAuthoritativeNativeReview(runtime, {
-      projectId, repositoryId, proposalRef
-    }, hooks));
+    for (const protectedRef of Object.keys(nativeRepositoryBranches(target.imported.policy))) {
+      envelopes.push(await createAuthoritativeNativeReview(runtime, {
+        projectId, repositoryId, proposalRef, protectedRef
+      }, hooks));
+    }
   }
   return envelopes;
 }

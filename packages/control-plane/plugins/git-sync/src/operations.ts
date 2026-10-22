@@ -5,7 +5,7 @@ import { GitSyncOperationError, gitRunner } from "./git.js";
 
 export type GitSyncOperation = "fetch" | "merge" | "publish";
 export async function synchronizeRepository(context: RepositoryExtensionContext, config: GitSyncConfiguration,
-  selector: { readonly projectId: string; readonly repositoryId: string }, operation: GitSyncOperation) {
+  selector: { readonly projectId: string; readonly repositoryId: string; readonly protectedRef?: string | undefined }, operation: GitSyncOperation) {
   const target = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, selector);
   const policy = parseGitSyncPolicy(target.imported.policy.extensions["git-sync"], config.allowLocalRemotes);
   const git = gitRunner(context.runtime, target.repository, config, context.signal, policy.upstream.url);

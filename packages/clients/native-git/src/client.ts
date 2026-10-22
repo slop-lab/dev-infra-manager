@@ -13,8 +13,12 @@ const identitySchema = z.object({
   schemaVersion: z.literal(1), serviceId: z.literal("native-main"), role: z.literal("human-reviewer"),
   reviewerId: z.string(), generationId: z.string().regex(/^[0-9a-f]{64}$/)
 }).strict();
+export const preparedBranchMergeSchema = z.object({ schemaVersion: z.literal(1), outcome: z.enum(["proposed", "unchanged", "conflict"]),
+  sourceRef: z.string().startsWith("refs/heads/"), targetRef: z.string().startsWith("refs/heads/"),
+  sourceCommit: z.string().regex(/^[a-f0-9]{40,64}$/), expectedProtectedHead: z.string().regex(/^[a-f0-9]{40,64}$/),
+  proposalRef: z.string().startsWith("refs/heads/proposals/").optional(), candidateCommit: z.string().regex(/^[a-f0-9]{40,64}$/).optional(), reviewId: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 
-type NativeRequest = { readonly method: "GET" | "POST"; readonly path: string; readonly body?: unknown };
+type NativeRequest = { readonly method: "GET" | "POST"; readonly path: string; readonly body?: unknown; readonly timeoutMilliseconds?: number };
 
 export class NativeGitClient {
   private generationId: string | undefined;
@@ -36,6 +40,10 @@ export class NativeGitClient {
       candidateCommit: z.string().regex(/^[0-9a-f]{40,64}$/), createdAt: z.string().datetime(), status: z.string().max(64) }).strict()).max(100)
       .parse(await this.request({ method: "GET", path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews` }));
   }
+  async prepareMerge(projectId: string, repositoryId: string, input: { sourceRef: string; targetRef: string }) {
+    if (!this.config.promoter) throw new NativeGitHttpError(403);
+    return preparedBranchMergeSchema.parse(await this.request({ method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/merges`, body: { schemaVersion: 1, sourceRef: input.sourceRef, targetRef: input.targetRef }, timeoutMilliseconds: 60_000 }, this.config.promoter));
+  }
   async promote(projectId: string, repositoryId: string, reviewId: string) {
     if (!this.config.promoter) throw new NativeGitHttpError(403);
     return z.object({ schemaVersion: z.literal(1), outcome: z.enum(["promoted", "already-current"]), reviewId: z.string(),
@@ -50,10 +58,10 @@ export class NativeGitClient {
     }));
   }
 
-  async resolveReview(projectId: string, repositoryId: string, body: { proposalRef: string }): Promise<ReviewDto> {
+  async resolveReview(projectId: string, repositoryId: string, body: { proposalRef: string; protectedRef?: string | undefined }): Promise<ReviewDto> {
     const result = z.object({ review: z.object({ reviewId: z.string().regex(/^[0-9a-f]{64}$/) }) }).parse(await this.request({
       method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/resolve`,
-      body: { schemaVersion: 1, proposalRef: body.proposalRef }
+      body: { schemaVersion: 1, proposalRef: body.proposalRef, ...(body.protectedRef === undefined ? {} : { protectedRef: body.protectedRef }) }
     }));
     return this.getReview(projectId, repositoryId, result.review.reviewId);
   }
@@ -93,7 +101,7 @@ export class NativeGitClient {
           ...(this.generationId === undefined ? {} : { "X-Dim-Generation-Id": this.generationId }),
           ...(body === undefined ? {} : { "Content-Type": "application/json", "Content-Length": String(body.length) })
         },
-        signal: AbortSignal.timeout(5_000)
+        signal: AbortSignal.timeout(input.timeoutMilliseconds ?? 5_000)
       }, (incoming) => {
         const chunks: Buffer[] = [];
         let size = 0;
