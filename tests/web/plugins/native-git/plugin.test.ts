@@ -37,6 +37,7 @@ async function fixture(options: { promoter?: boolean; sync?: boolean; stale?: bo
 it("attests configured reviewer, exposes scoped repositories and omits unconfigured authority", async () => {
   const selected = await fixture(); const runtime = await webPlugin.create(selected.config);
   expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "direct", reviewerId: "owner", projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }] }] });
+  expect(await runtime.invoke("projects.list", {})).not.toMatchObject({ controllers: [{ controllerKey: expect.anything() }] });
   expect(await runtime.invoke("reviews.list", { controllerId: "direct", projectId: "project-a", repositoryId: "public" })).toEqual([]);
   expect(runtime.operations?.map((operation) => operation.name)).not.toContain("reviews.promote");
   expect(runtime.operations?.map((operation) => operation.name)).not.toContain("projects.create");
@@ -86,8 +87,8 @@ it("discovers controller projects independently and refreshes their live reposit
     } }
   ] });
   expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [
-    { id: "offline", status: "unavailable", projects: [] },
-    { id: "devbox", status: "ready", projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }, { projectId: "project-b" }] }
+    { id: "offline", controllerKey: "offline", status: "unavailable", projects: [] },
+    { id: "devbox", controllerKey: "devbox", status: "ready", projects: [{ projectId: "project-a", repositoryIds: ["public", "private"] }, { projectId: "project-b" }] }
   ] });
   expect(await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-b", repositoryId: "public" })).toEqual([]);
   expect(calls.at(-1)?.args).toEqual(["project", "console", "invoke", "reviews.list", "--expected-generation", "a".repeat(64), "--input", JSON.stringify({ projectId: "project-b", repositoryId: "public" })]);
@@ -131,7 +132,7 @@ it("pins controller discovery generation across refresh and sends it before dele
 
 it("keeps an empty registered-project catalog available but reports wholly unavailable controllers", async () => {
   const offline = await webPlugin.autoConnect!({ controllers: [{ id: "offline", async run() { throw new Error("host plugin missing"); } }] });
-  expect(await offline.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "offline", status: "unavailable", projects: [] }] });
+  expect(await offline.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "offline", controllerKey: "offline", status: "unavailable", projects: [] }] });
   const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "empty", async run() { return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [], operations: [] }; } }] });
   expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "empty", status: "ready", projects: [] }] });
 });
