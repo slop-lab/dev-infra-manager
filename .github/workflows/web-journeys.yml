@@ -17,8 +17,6 @@ jobs:
   review:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      DIM_WEB_JOURNEY_ARTIFACTS: ${{ runner.temp }}/dim-web-journeys
     steps:
       - name: Check out exact candidate
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -49,6 +47,8 @@ jobs:
           appendFileSync(process.env.GITHUB_ENV, `DIM_CHROMIUM=${chromium.executablePath()}\nDIM_CHROMIUM_VERSION=${version}\n`);
           NODE
       - name: Run disposable source Web journeys
+        env:
+          DIM_WEB_JOURNEY_ARTIFACTS: ${{ runner.temp }}/dim-web-journeys
         run: pnpm --dir tests run test:web-journeys
       - name: Upload sanitized timings and failure evidence
         if: always()
