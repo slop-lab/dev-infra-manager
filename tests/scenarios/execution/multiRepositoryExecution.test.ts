@@ -1,4 +1,4 @@
-import { parseAuthoritativeNativeReviewEnvelope } from "../../../packages/control-plane/plugins/code-review/src/authoritative-native-review-schema.js";
+import { parseAuthoritativeNativeReviewEnvelope } from "../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.js";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";

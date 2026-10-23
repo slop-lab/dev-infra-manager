@@ -4,8 +4,8 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { createProjectReviewMatcher, type ProjectMatcherExecutor } from "../../../examples/features/security-review/project-matcher.ts";
-import { reviewChangeMatcherExtension, type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
-import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-merge-policy";
+import { reviewChangeMatcherExtension, type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { basic, fixture, generationId, git, record, token } from "../../control-plane/plugins/git-repositories/optionalFeaturesFixture.js";
 
 /** Ordinary CI verifies the adapter protocol without evaluating candidate code. */

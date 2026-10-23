@@ -1,4 +1,4 @@
-import { createLlmRouterClient, privateOperatorFile } from "@slop-lab/dim-llm-router-client";
+import { createLlmRouterClient, privateOperatorFile } from "@slop-lab/dim-service-client-llm-router";
 import { llmOperation } from "@slop-lab/dim-contracts-llm-router";
 import { runLlmRouterConsole } from "./console.js";
 const help = `dim llm-router OPERATION --connection /absolute/operator.json [options]

@@ -2,7 +2,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
-import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-merge-policy";
+import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { readNativeProjectRootCurrentHeadFromDatabase } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { basic, fixture, generationId, git, record, reviewer, text, token } from "./optionalFeaturesFixture.js";
 it("promotes development after five legacy anchor transitions and adding default main without rewriting the import", async () => {

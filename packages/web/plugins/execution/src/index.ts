@@ -2,7 +2,7 @@ import { isAbsolute } from "node:path";
 import { z } from "zod";
 import type { WebPlugin, WebPluginContext, WebPluginRuntime } from "@slop-lab/dim-web/plugin-api";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
-import { createExecutionConsole, executionOperations } from "@slop-lab/dim-execution-client";
+import { createExecutionConsole, executionOperations } from "@slop-lab/dim-service-client-execution";
 
 const privatePath = z.string().refine(isAbsolute, "connection path must be absolute");
 const configSchema = z.object({ queryConnection: privatePath, operatorConnection: privatePath.optional() }).strict();

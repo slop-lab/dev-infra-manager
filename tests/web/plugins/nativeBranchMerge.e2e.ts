@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
-import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-merge-policy";
+import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { basic, fixture, generationId, git, record, reviewer, text, token } from "../../control-plane/plugins/git-repositories/optionalFeaturesFixture.js";
 import { initializeOperationsWeb } from "../../../packages/web/core/src/initialize.js";
 import { parseWebConfig } from "../../../packages/web/core/src/config.js";

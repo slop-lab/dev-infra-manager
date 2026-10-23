@@ -15,7 +15,7 @@ import {
   readReviewJson,
   recoverPublishedReviewStaging,
   replaceReviewRecord
-} from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+} from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 
 const maximumEvents = 100_000;
 const maximumMarkerBytes = 4 * 1024;

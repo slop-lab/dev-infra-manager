@@ -76,13 +76,13 @@
     "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:0.10.0",
     "commander": "14.0.0",
     "zod": "4.1.11",
-    "@slop-lab/dim-control-plane-plugin-code-review": "workspace:0.10.0",
-    "@slop-lab/dim-control-plane-plugin-merge-policy": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-review": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-merge-policy": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-git-ci": "workspace:0.10.0",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0",
     "@slop-lab/dim-contracts-execution": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-execution-scheduler": "workspace:0.10.0",
-    "@slop-lab/dim-execution-client": "workspace:0.10.0",
+    "@slop-lab/dim-service-client-execution": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-git-sync": "workspace:0.10.0"
   },
   "devDependencies": {

@@ -10,11 +10,11 @@ Production packages are grouped by where they run and what they own:
 | `packages/control-plane/plugins/<name>` | `@slop-lab/dim-control-plane-plugin-<name>` | Independent authoritative services and workflow interpretation |
 | `packages/control-plane/deployment` | `@this-project/control-plane-deployment` (private) | Composition artifact for the installer’s fixed service-image profile |
 | `packages/control-plane/admin` | `@slop-lab/dim-control-plane-admin` | Explicit service deployment and operator connection tools |
-| `packages/review-tracing/runtimes/node` | `@slop-lab/dim-review-tracing-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
-| `packages/review-tracing/core` | `@slop-lab/dim-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
+| `packages/git-review-tracing/runtimes/node` | `@slop-lab/dim-git-review-tracing-runtime-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
+| `packages/git-review-tracing/engine` | `@slop-lab/dim-git-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
 | `packages/cli/core` | `@slop-lab/dim-cli` | Client host selection, terminal streams and transport |
-| `packages/clients/<name>` | Feature-specific client packages | Shared service calls and validated operations without running their authoritative service; LLM router, execution and Native Git clients |
+| `packages/service-clients/<name>` | `@slop-lab/dim-service-client-<name>` | Shared service calls and validated operations without running their authoritative service; LLM router, execution and Native Git clients |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
 | `packages/web/core` | `@slop-lab/dim-web` | Authenticated console shell, host workspaces, plugin loading and session enforcement |
 | `packages/web/plugins/<name>` | `@slop-lab/dim-web-plugin-<name>` | Feature-specific server connection and browser panel |
@@ -37,18 +37,23 @@ transports arguments, streams and status through the retained
 can add commands without updating the client. CLI and Web use the same feature
 contracts through their owning host and Web adapters.
 
-Client packages own caller-side transport, private connection loading and
+Service client packages own caller-side transport, private connection loading and
 validated operations shared by presenters. They are libraries, not installed
 plugins. Services depend on neutral wire contracts, never on their clients;
-for example, LLM router operation definitions live in `contracts/llm-router`.
+A client runs where its caller runs: the controller host, the Web server, or a
+trusted service plugin. The client name describes the remote service it calls,
+not where that service must be deployed. For example, LLM router operation definitions live in `contracts/llm-router`.
 The execution queue and lease store live inside the control-plane scheduler;
-the scheduled task issuer is exposed by `execution-client/tasks`. A new runtime
+the scheduled task issuer is exposed by `@slop-lab/dim-service-client-execution/tasks`. A new runtime
 adapter or presenter does not require copying that store into another package.
 
-Review tracing is optional. The shared tracing package contains no service,
-container runner or language loader. The control-plane `review-tracing` plugin
-connects immutable Git snapshots to review requirements; runtime plugins such as
-`review-tracing-node` own isolated execution and import/file-read mediation.
+Git review tracing is optional. These are shared libraries, usable from either
+host or control-plane adapters. Their location does not select an installation
+target. The tracing engine contains no service,
+container runner or language loader. The control-plane `git-review-tracing` plugin
+connects immutable Git snapshots to review requirements. The host and control-plane
+`git-review-tracing-node` plugins register the shared isolated Node runtime; the
+runtime library owns execution and import/file-read mediation.
 Additional runtimes implement the same tracing contract without changing review
 or ref-policy core. The Node implementation is a neutral package; control-plane
 and host plugins register it in their owning runtimes. The scheduled adapter
@@ -64,7 +69,7 @@ Plugin implementation entrypoints are named explicitly:
 | `@slop-lab/dim-web/plugin-api` | Web feature panels and validated operation handlers |
 | `@slop-lab/dim-contracts-operations` | Shared client operation declarations and access descriptions |
 | `@slop-lab/dim-contracts-execution/plugin-api` | Worker task handlers |
-| `@slop-lab/dim-review-tracing/plugin-api` | Review detector runtime adapters |
+| `@slop-lab/dim-git-review-tracing/plugin-api` | Review detector runtime adapters |
 | `@slop-lab/dim-contracts-ci/workflow-plugin-api` | CI workflow compilers |
 | `@slop-lab/dim-host-plugin-mirrors/protocol-plugin-api` | Mirror protocol adapters |
 
@@ -84,6 +89,11 @@ The mirrors consumer and cache-server deployment are separate host plugins.
 Mirrors owns its included and installed protocol adapters, scoped relay and guest
 client configuration; cache-server owns local cache service resources. Their
 shared placement input is a URL catalog, with only selected protocols required.
+
+Git review and merge policy are extensions of the Git repository host. Their
+control-plane package prefix states where they are installed; `git-review` and
+`git-merge-policy` identify the service they extend. The repository extension API
+attaches their policy, proposal and HTTP behavior to the repository owner.
 
 Repository hosting, external Git synchronization, code review, merge policy,
 Git-CI and external webhook transport are separate control-plane plugins.

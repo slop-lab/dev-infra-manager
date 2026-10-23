@@ -75,9 +75,9 @@ The policies in this example select the following control-plane plugins:
 ```bash
 dim installer install control-plane plugin \
   '@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-code-review@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-git-review@0.10.0' \
   '@slop-lab/dim-control-plane-plugin-git-ci@0.10.0' \
-  '@slop-lab/dim-control-plane-plugin-merge-policy@0.10.0' \
+  '@slop-lab/dim-control-plane-plugin-git-merge-policy@0.10.0' \
   '@slop-lab/dim-control-plane-plugin-ci-workflows@0.10.0' \
   '@slop-lab/dim-control-plane-plugin-execution-scheduler@0.10.0'
 ```

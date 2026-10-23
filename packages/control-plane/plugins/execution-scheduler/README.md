@@ -26,11 +26,11 @@ shape; operator worker status, cancellation and recovery include general tasks.
 An interactive task retry requires a fresh issuer session rather than replaying
 callbacks from an earlier evaluation.
 
-Task producers use `runScheduledTask` from `@slop-lab/dim-execution-client/tasks`.
+Task producers use `runScheduledTask` from `@slop-lab/dim-service-client-execution/tasks`.
 That entry point handles task submission and bounded exchange without loading
 the scheduler, SQLite store or host implementation. Shared task schemas remain
 in the execution contracts; composed CI/task status and worker configuration
 belong to the CI contracts used by both service and operator adapters.
 
-See [scheduled review detectors](../review-tracing-scheduled/README.md) for a
+See [scheduled review detectors](../git-review-tracing-scheduled/README.md) for a
 complete non-CI use case, required host/control-plane plugins and setup.

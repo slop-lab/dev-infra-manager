@@ -51,11 +51,11 @@ try {
     artifact("@slop-lab/dim-installer")]);
   const controlPlanePlugins = ["@slop-lab/dim-control-plane-plugin-git-repositories",
     "@slop-lab/dim-control-plane-plugin-git-sync",
-    "@slop-lab/dim-control-plane-plugin-code-review", "@slop-lab/dim-control-plane-plugin-merge-policy",
+    "@slop-lab/dim-control-plane-plugin-git-review", "@slop-lab/dim-control-plane-plugin-git-merge-policy",
     "@slop-lab/dim-control-plane-plugin-git-ci", "@slop-lab/dim-control-plane-plugin-webhooks",
     "@slop-lab/dim-control-plane-plugin-ci-workflows", "@slop-lab/dim-control-plane-plugin-llm-router", "@slop-lab/dim-control-plane-plugin-execution-scheduler",
-    "@slop-lab/dim-control-plane-plugin-review-tracing", "@slop-lab/dim-control-plane-plugin-review-tracing-node",
-    "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled"];
+    "@slop-lab/dim-control-plane-plugin-git-review-tracing", "@slop-lab/dim-control-plane-plugin-git-review-tracing-node",
+    "@slop-lab/dim-control-plane-plugin-git-review-tracing-scheduled"];
   run(facade, ["installer", "install", "control-plane", "plugin", "--local-packages", bundle,
     ...controlPlanePlugins.map((name) => `${name}@${packages.find((entry) => entry.name === name)?.version}`)]);
   assert.equal(existsSync(runtime), false, "control-plane plugins must not install a host runtime");
@@ -76,10 +76,10 @@ try {
     const {requireWorkflowCompiler} = await load('@slop-lab/dim-contracts-ci/workflow-plugin-api');
     const jobs = requireWorkflowCompiler(prepared.extensions).compile(Buffer.from('jobs:\\n  source: {script: check.bash}\\n'));
     if (jobs[0]?.name !== 'source') throw new Error('installed workflow compiler did not compile');
-    const {controlPlanePlugin: nodeTracing} = await load('@slop-lab/dim-control-plane-plugin-review-tracing-node');
+    const {controlPlanePlugin: nodeTracing} = await load('@slop-lab/dim-control-plane-plugin-git-review-tracing-node');
     const tracePrepared = await nodeTracing.configure({});
     if (tracePrepared.extensions[0]?.kind !== 'dim.review-tracing.runtime') throw new Error('installed Node trace runtime is unavailable');
-    const {controlPlanePlugin: tracing} = await load('@slop-lab/dim-control-plane-plugin-review-tracing');
+    const {controlPlanePlugin: tracing} = await load('@slop-lab/dim-control-plane-plugin-git-review-tracing');
     if (!(await tracing.configure({})).extensions.length) throw new Error('installed trace matcher is unavailable');
     const running = await startControlPlanePlugins([{plugin:controlPlanePlugin,config:{}}],new AbortController().signal);
     await running.close();
@@ -152,14 +152,14 @@ try {
   assert.deepEqual(JSON.parse(run(facade, ["ls", "--json"]).stdout), []);
 
 
-  const selectedHostPlugins = ["@slop-lab/dim-host-plugin-mirrors", "@slop-lab/dim-host-plugin-cache-server", "@slop-lab/dim-host-plugin-external-urls", "@slop-lab/dim-host-plugin-review-tracing-node"];
+  const selectedHostPlugins = ["@slop-lab/dim-host-plugin-mirrors", "@slop-lab/dim-host-plugin-cache-server", "@slop-lab/dim-host-plugin-external-urls", "@slop-lab/dim-host-plugin-git-review-tracing-node"];
   run(facade, ["installer", "install", "plugin", "--local-packages", bundle,
     ...selectedHostPlugins.map((name) => `${name}@${packages.find((entry) => entry.name === name)?.version}`)]);
   assert.ok(existsSync(path.join(runtime, "node_modules/@slop-lab/dim-contracts-external-url")), "host plugin bundle must install its contracts dependency");
   run(process.execPath, ["--input-type=module", "--eval", `
     import {createRequire} from 'node:module'; import {pathToFileURL} from 'node:url';
     const require = createRequire(${JSON.stringify(path.join(runtime, "package.json"))});
-    const {reviewTracingTaskHandler,hostPlugin} = await import(pathToFileURL(require.resolve('@slop-lab/dim-host-plugin-review-tracing-node')).href);
+    const {reviewTracingTaskHandler,hostPlugin} = await import(pathToFileURL(require.resolve('@slop-lab/dim-host-plugin-git-review-tracing-node')).href);
     if (!/^[a-f0-9]{64}$/.test(reviewTracingTaskHandler.revision) || hostPlugin.extensions[0]?.value !== reviewTracingTaskHandler) throw new Error('installed detector task handler is unavailable');
   `]);
   run(facade, install);

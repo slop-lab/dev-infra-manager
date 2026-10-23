@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { createNativeGitOperator, type NativeGitOperatorProject } from "../../packages/clients/native-git/src/index.js";
+import { createNativeGitOperator, type NativeGitOperatorProject } from "../../packages/service-clients/native-git/src/index.js";
 import { nativeBundleReviewFixture, createBundleReview } from "../control-plane/plugins/git-ci/nativeBundleReviewFixture.js";
 import { authoritativePolicy } from "../control-plane/plugins/git-repositories/authoritativeNativeCandidateFixture.js";
 import { cleanupFinalizeFixtures, createRootBundle, uploadRootBundle, parseImportReceipt, finalizeRootImport, generationId, importer, projectInput, humanReviewer, hostPromoter } from "../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";

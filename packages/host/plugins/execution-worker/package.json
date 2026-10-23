@@ -30,7 +30,7 @@
     "zod": "4.1.11",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0",
     "@slop-lab/dim-contracts-execution": "workspace:0.10.0",
-    "@slop-lab/dim-execution-client": "workspace:0.10.0",
+    "@slop-lab/dim-service-client-execution": "workspace:0.10.0",
     "@slop-lab/dim-contracts-operations": "workspace:0.10.0"
   },
   "peerDependencies": {

@@ -1,11 +1,11 @@
 import type { ExampleRecipe } from "../../../scripts/examples/recipe.ts";
 import { configuredNativeGitBundleServer } from "../../../packages/control-plane/plugins/git-repositories/src/native-bundle-server.js";
 import { repositoryConfiguration, parseManagedGitServiceConfig } from "../../../packages/control-plane/admin/src/service-pair.js";
-import { controlPlanePlugin as reviewPlugin } from "../../../packages/control-plane/plugins/code-review/src/index.js";
+import { controlPlanePlugin as reviewPlugin } from "../../../packages/control-plane/plugins/git-review/src/index.js";
 import { controlPlanePlugin as gitCiPlugin } from "../../../packages/control-plane/plugins/git-ci/src/index.js";
-import { controlPlanePlugin as mergePlugin } from "../../../packages/control-plane/plugins/merge-policy/src/index.js";
+import { controlPlanePlugin as mergePlugin } from "../../../packages/control-plane/plugins/git-merge-policy/src/index.js";
 import { controlPlanePlugin as workflowPlugin } from "../../../packages/control-plane/plugins/ci-workflows/src/index.js";
-import type { CodeReviewService } from "../../../packages/control-plane/plugins/code-review/src/plugin-api.js";
+import type { CodeReviewService } from "../../../packages/control-plane/plugins/git-review/src/plugin-api.js";
 import { idleNativeConfig } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { activationToken, finalizeReadinessToken, generationId, importer, humanReviewer, hostPromoter,
   workspaceWriteIssuer } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";

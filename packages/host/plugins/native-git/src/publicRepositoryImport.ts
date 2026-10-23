@@ -3,7 +3,7 @@ import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { acquireLifecycleLock, atomicWrite, UserError, validateLifecycleName } from "@slop-lab/dim-host-core";
-import { loadPrivateJson } from "@slop-lab/dim-native-git-client";
+import { loadPrivateJson } from "@slop-lab/dim-service-client-native-git";
 import { preparePublicGitSource, publicGitBranch, publicGitUrl } from "./public-git-source.js";
 import { compileNativeRepositoryBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
 import { bootstrapNativeProjectRepository, resumeNativeProjectRepository } from "./nativeProjectBootstrap.js";

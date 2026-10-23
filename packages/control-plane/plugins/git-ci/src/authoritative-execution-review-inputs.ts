@@ -5,7 +5,7 @@ import { readAuthoritativeNativeReviewEnvelope } from "./plan-store.js";
 
 import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
-import { nativeHumanReviewStaleReasons } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import { nativeHumanReviewStaleReasons } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 
 type Target = Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;
 type Envelope = NonNullable<Awaited<ReturnType<typeof readAuthoritativeNativeReviewEnvelope>>>;

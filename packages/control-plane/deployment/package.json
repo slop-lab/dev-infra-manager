@@ -33,8 +33,8 @@
   "dependencies": {
     "@slop-lab/dim-control-plane-core": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:0.10.0",
-    "@slop-lab/dim-control-plane-plugin-code-review": "workspace:0.10.0",
-    "@slop-lab/dim-control-plane-plugin-merge-policy": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-review": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-merge-policy": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-git-ci": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-git-sync": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-webhooks": "workspace:0.10.0",

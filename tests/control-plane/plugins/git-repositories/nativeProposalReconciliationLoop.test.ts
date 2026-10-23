@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNativeProposalReconciliationLoop } from
-  "../../../../packages/control-plane/plugins/code-review/src/native-proposal-reconciliation-loop.js";
+  "../../../../packages/control-plane/plugins/git-review/src/native-proposal-reconciliation-loop.js";
 
 afterEach(() => {
   vi.useRealTimers();

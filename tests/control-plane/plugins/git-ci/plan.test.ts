@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/code-review/src/authoritative-native-review-schema.js";
-import { saveAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/code-review/src/authoritative-native-review-store.js";
+import { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.js";
+import { saveAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-store.js";
 import { gitCiEnvelope, saveGitCiPlan, type GitCiPlan } from "../../../../packages/control-plane/plugins/git-ci/src/plan-store.js";
 import { gitCiPolicy, parseGitCiPolicy, requiredJobsRevision } from "../../../../packages/control-plane/plugins/git-ci/src/policy.js";
 

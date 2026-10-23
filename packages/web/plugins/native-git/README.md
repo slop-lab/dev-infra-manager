@@ -3,7 +3,7 @@
 `@slop-lab/dim-web-plugin-native-git` owns controller/project/repository navigation,
 review evidence and patches, proposal resolution, approval/revocation, protected
 promotion and upstream synchronization. Shared typed operations and private role
-connections belong to `@slop-lab/dim-native-git-client`.
+connections belong to `@slop-lab/dim-service-client-native-git`.
 
 With this plugin installed, ordinary Web controller configuration is sufficient.
 The plugin asks each configured controller for its current managed projects,

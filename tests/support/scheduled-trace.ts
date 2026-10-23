@@ -7,7 +7,7 @@ import { configuredExecutionServer } from "../../packages/control-plane/plugins/
 import { executionWorkerClient } from "../../packages/host/plugins/execution-worker/src/client.js";
 import { runExecutionWorker } from "../../packages/host/plugins/execution-worker/src/worker.js";
 import type { ExecutionTaskHandler } from "@slop-lab/dim-contracts-execution/plugin-api";
-import { createScheduledReviewTraceRuntime } from "../../packages/control-plane/plugins/review-tracing-scheduled/src/index.js";
+import { createScheduledReviewTraceRuntime } from "../../packages/control-plane/plugins/git-review-tracing-scheduled/src/index.js";
 
 export const generationId = "a".repeat(64);
 export const secret = (value: number) => Buffer.alloc(32, value).toString("base64url");
@@ -64,7 +64,7 @@ export async function startWorker(fixture: Awaited<ReturnType<typeof schedulerFi
 
 /** Real scheduler + installed host handler; one shared worker lifecycle. */
 export async function scheduledReviewFixture() {
-  const { reviewTracingTaskHandler } = await import("../../packages/host/plugins/review-tracing-node/src/index.js");
+  const { reviewTracingTaskHandler } = await import("../../packages/host/plugins/git-review-tracing-node/src/index.js");
   const scheduler = await schedulerFixture(reviewTracingTaskHandler.revision);
   try {
     const worker = await startWorker(scheduler, reviewTracingTaskHandler);

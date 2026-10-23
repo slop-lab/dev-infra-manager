@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { it } from "vitest";
 import type { ExecutionTaskHandler } from "@slop-lab/dim-contracts-execution/plugin-api";
-import { runScheduledTask } from "@slop-lab/dim-execution-client/tasks";
-import { createScheduledReviewTraceRuntime } from "../../../packages/control-plane/plugins/review-tracing-scheduled/src/index.js";
+import { runScheduledTask } from "@slop-lab/dim-service-client-execution/tasks";
+import { createScheduledReviewTraceRuntime } from "../../../packages/control-plane/plugins/git-review-tracing-scheduled/src/index.js";
 import { loadExampleRecipe, resolveExamplePath } from "../../../scripts/examples/recipe.js";
 
 import { schedulerFixture, startWorker, generationId, credential, secret } from "../../support/scheduled-trace.js";
@@ -17,8 +17,8 @@ import { schedulerFixture, startWorker, generationId, credential, secret } from 
 async function scheduledRecipe() {
   const recipe = await loadExampleRecipe(fileURLToPath(new URL("../../../examples/features/scheduled-review", import.meta.url)));
   assert.deepEqual(recipe.plugins, {
-    host: ["@slop-lab/dim-host-plugin-execution-worker@0.10.0", "@slop-lab/dim-host-plugin-review-tracing-node@0.10.0"],
-    controlPlane: ["@slop-lab/dim-control-plane-plugin-execution-scheduler@0.10.0", "@slop-lab/dim-control-plane-plugin-review-tracing-scheduled@0.10.0"]
+    host: ["@slop-lab/dim-host-plugin-execution-worker@0.10.0", "@slop-lab/dim-host-plugin-git-review-tracing-node@0.10.0"],
+    controlPlane: ["@slop-lab/dim-control-plane-plugin-execution-scheduler@0.10.0", "@slop-lab/dim-control-plane-plugin-git-review-tracing-scheduled@0.10.0"]
   });
   assert.deepEqual(recipe.repositories, [{ id: "root", path: "repository" }]);
   return recipe;
@@ -32,7 +32,7 @@ it("declares the scheduled runtime's required plugins and strictly type-checks i
     await cp(resolveExamplePath(recipe, "repository"), project, { recursive: true });
     const scope = join(project, "node_modules/@slop-lab");
     await mkdir(scope, { recursive: true });
-    await symlink(fileURLToPath(new URL("../../../packages/review-tracing/runtimes/node", import.meta.url)), join(scope, "dim-review-tracing-node"), "dir");
+    await symlink(fileURLToPath(new URL("../../../packages/git-review-tracing/runtimes/node", import.meta.url)), join(scope, "dim-git-review-tracing-runtime-node"), "dir");
     await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url)),
       "-p", join(project, "tsconfig.json"), "--noEmit", "--customConditions", "dim-source"]);
   } finally { await rm(directory, { recursive: true, force: true }); }
@@ -131,7 +131,7 @@ it("keeps repository dependency accounting on the issuer and rejects traversal f
 it.skipIf(process.env.DIM_TEST_REVIEW_TRACE_DOCKER !== "1")("runs a TypeScript detector through the HTTP scheduler and installed host handler in real Docker", async () => {
   const recipe = await scheduledRecipe();
   const repository = resolveExamplePath(recipe, "repository");
-  const { reviewTracingTaskHandler } = await import("../../../packages/host/plugins/review-tracing-node/src/index.js");
+  const { reviewTracingTaskHandler } = await import("../../../packages/host/plugins/git-review-tracing-node/src/index.js");
   const fixture = await schedulerFixture(reviewTracingTaskHandler.revision);
   const worker = await startWorker(fixture, reviewTracingTaskHandler);
   try {

@@ -24,7 +24,10 @@ is implied by these source changes.
 
 - Split managed Git into independent repository, code-review, merge-policy,
   Git CI and webhook control-plane plugins. Repository hosting no longer
-  requires review, CI or a workflow compiler. The managed deployment preset
+  requires review, CI or a workflow compiler. Name Git review, merge policy
+  and tracing plugins explicitly as Git service extensions. Shared service-call
+  packages use the `dim-service-client-*` family; Git review tracing libraries
+  distinguish the shared engine from language runtimes. The managed deployment preset
   composes the full workflow, while repository policies explicitly select
   their features. Host policy transport and control-plane lifecycle remain
   independent of feature implementations. Approvals bind the complete policy;

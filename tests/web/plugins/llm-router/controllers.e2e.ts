@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { createLlmRouterClient } from '../../../../packages/clients/llm-router/src/index.js';
+import { createLlmRouterClient } from '../../../../packages/service-clients/llm-router/src/index.js';
 import { llmWebFixture } from './fixture.js';
 const executablePath = process.env.DIM_CHROMIUM; if (!executablePath) throw new Error('DIM_CHROMIUM is required');
 const first = await llmWebFixture(), second = await llmWebFixture();

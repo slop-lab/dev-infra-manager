@@ -1,7 +1,7 @@
 import { lstat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
-import { nativeGitManagementOperations } from "@slop-lab/dim-native-git-client";
+import { nativeGitManagementOperations } from "@slop-lab/dim-service-client-native-git";
 import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 import { selectedControlPlaneImporterFile } from "./controlPlaneSelection.js";
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";

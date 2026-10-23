@@ -49,14 +49,14 @@
   "peerDependencies": {
     "@slop-lab/dim-control-plane-core": "0.10.0",
     "@slop-lab/dim-control-plane-plugin-git-repositories": "0.10.0",
-    "@slop-lab/dim-control-plane-plugin-code-review": "0.10.0"
+    "@slop-lab/dim-control-plane-plugin-git-review": "0.10.0"
   },
   "devDependencies": {
     "@slop-lab/dim-control-plane-core": "workspace:0.10.0",
     "@types/node": "24.13.3",
     "typescript": "5.8.3",
     "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:0.10.0",
-    "@slop-lab/dim-control-plane-plugin-code-review": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-plugin-git-review": "workspace:0.10.0"
   },
   "engines": {
     "node": "^24.0.0 || ^26.0.0"

@@ -26,7 +26,7 @@
     "node": "^24.0.0 || ^26.0.0"
   },
   "dependencies": {
-    "@slop-lab/dim-llm-router-client": "workspace:0.10.0",
+    "@slop-lab/dim-service-client-llm-router": "workspace:0.10.0",
     "@slop-lab/dim-contracts-operations": "workspace:0.10.0",
     "zod": "4.1.11",
     "@slop-lab/dim-contracts-llm-router": "workspace:0.10.0"

@@ -5,8 +5,8 @@ navigation in `@slop-lab/dim-web`. Optional features own their server connection
 validated operations and browser panel in separate Web plugin packages. Shared
 operation declarations live in `@slop-lab/dim-contracts-operations`; feature
 clients can reuse their input, output and access contracts across CLI and Web.
-The feature clients are `@slop-lab/dim-llm-router-client`,
-`@slop-lab/dim-execution-client` and `@slop-lab/dim-native-git-client`;
+The feature clients are `@slop-lab/dim-service-client-llm-router`,
+`@slop-lab/dim-service-client-execution` and `@slop-lab/dim-service-client-native-git`;
 none starts its authoritative service.
 
 A Web plugin is installed on the trusted Web server, not in a repository or

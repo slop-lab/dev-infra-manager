@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { expect, it } from "vitest";
 import { configuredExecutionServer } from "../../../../packages/control-plane/plugins/execution-scheduler/src/service.js";
 import { executionServiceConfigSchema } from "../../../../packages/control-plane/plugins/execution-scheduler/src/config.js";
-import { runScheduledTask } from "@slop-lab/dim-execution-client/tasks";
+import { runScheduledTask } from "@slop-lab/dim-service-client-execution/tasks";
 import { taskJobSchema, type TaskAssignment } from "@slop-lab/dim-contracts-execution";
 
 const generationId = "a".repeat(64), revision = "b".repeat(64);

@@ -78,8 +78,8 @@ for container in "$native_container" "$execution_container"; do
     if (process.argv[1] !== "native") expected.push("dim-execution-scheduler");
     if (process.argv[1] === "native") expected.push(
       "dim-control-plane-core", "dim-control-plane-admin", "dim-control-plane-plugin-ci-workflows",
-      "dim-control-plane-plugin-git-repositories", "dim-control-plane-plugin-code-review",
-      "dim-control-plane-plugin-merge-policy", "dim-control-plane-plugin-git-ci", "dim-control-plane-plugin-webhooks");
+      "dim-control-plane-plugin-git-repositories", "dim-control-plane-plugin-git-review",
+      "dim-control-plane-plugin-git-merge-policy", "dim-control-plane-plugin-git-ci", "dim-control-plane-plugin-webhooks");
     assert.deepEqual(readdirSync("/usr/local/lib/dim/node_modules/@slop-lab").sort(), expected.sort(),
       "service image must contain only its reviewed control-plane dependency closure");
   ' "$([[ "$container" == "$native_container" ]] && printf native || printf execution)"

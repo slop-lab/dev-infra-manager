@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { reviewApprovalAvailability } from "../../../../packages/web/plugins/native-git/src/assets/panel.js";
-import type { ReviewDto } from "@slop-lab/dim-native-git-client";
+import type { ReviewDto } from "@slop-lab/dim-service-client-native-git";
 
 const pending: Pick<ReviewDto, "status" | "requiredReviewerIds" | "approvals" | "revocations"> = { status: "pending", requiredReviewerIds: ["owner"], approvals: [], revocations: [] };
 const access = { reviewerId: "owner", browserCanApprove: true, controllerCanApprove: true };

@@ -1,7 +1,7 @@
 /** Trusted fixture controller; real SDK calls exercise actual Native Git APIs. */
 import { readFile } from "node:fs/promises";
-import { createNativeGitOperator, nativeGitProjectSchema } from "@slop-lab/dim-native-git-client";
-import { createExecutionConsole } from "@slop-lab/dim-execution-client";
+import { createNativeGitOperator, nativeGitProjectSchema } from "@slop-lab/dim-service-client-native-git";
+import { createExecutionConsole } from "@slop-lab/dim-service-client-execution";
 const args = process.argv.slice(2), settingsFlag = args.indexOf("--fixture-settings"), settingsPath = args[settingsFlag + 1];
 if (settingsFlag < 0 || !settingsPath || args[0] !== "--host" || args[1] !== "fixture") throw new Error("invalid fixture controller invocation");
 const command = args.slice(2, settingsFlag).filter((arg) => arg !== "--json");

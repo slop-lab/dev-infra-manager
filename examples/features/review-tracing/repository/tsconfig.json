@@ -10,7 +10,7 @@
     "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["@slop-lab/dim-review-tracing-node/review-api"]
+    "types": ["@slop-lab/dim-git-review-tracing-runtime-node/review-api"]
   },
   "include": [".dim/review/**/*.ts"]
 }

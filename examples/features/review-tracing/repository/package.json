@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": { "check": "tsc --noEmit" },
   "devDependencies": {
-    "@slop-lab/dim-review-tracing-node": "0.10.0",
+    "@slop-lab/dim-git-review-tracing-runtime-node": "0.10.0",
     "typescript": "5.8.3"
   }
 }

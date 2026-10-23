@@ -7,7 +7,7 @@ scheduler service uses `execution-scheduler`, and the execution host installs `e
 The scheduler may run separately from the repository-owning control plane and
 the execution host. Configuration, worker registration, handler revision pins
 and private task credentials are described in the
-[scheduled runtime guide](../../../packages/control-plane/plugins/review-tracing-scheduled/README.md).
+[scheduled runtime guide](../../../packages/control-plane/plugins/git-review-tracing-scheduled/README.md).
 
 The repository template contains `guard/main.ts`, its relative TypeScript helper
 and `app.json`. The detector compares the `runtime.isolation` field between two

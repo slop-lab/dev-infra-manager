@@ -7,7 +7,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-git-repositories";
 import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
-import { controlPlanePlugin as codeReviewPlugin } from "@slop-lab/dim-control-plane-plugin-code-review";
+import { controlPlanePlugin as codeReviewPlugin } from "@slop-lab/dim-control-plane-plugin-git-review";
 export const git = promisify(execFile);
 export const generationId = "a".repeat(64);
 export const token = (byte: number) => Buffer.alloc(32, byte).toString("base64url");

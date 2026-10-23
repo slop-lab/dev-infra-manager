@@ -7,7 +7,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
-import { createLlmRouterClient } from "../../../packages/clients/llm-router/src/index.js";
+import { createLlmRouterClient } from "../../../packages/service-clients/llm-router/src/index.js";
 import { llmOperation, llmOperations } from "../../../packages/contracts/llm-router/src/index.js";
 import { operationDescriptors } from "../../../packages/contracts/operations/src/index.js";
 import { runLlmRouterCommand } from "../../../packages/host/plugins/llm-router/src/operator/commands.js";

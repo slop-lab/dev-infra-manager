@@ -15,12 +15,12 @@ const manifest = { schemaVersion: 1, packages: [
   { name: "@slop-lab/dim-contracts-ci", version, file: "ci.tgz" },
   { name: "@slop-lab/dim-contracts-execution", version, file: "execution.tgz" },
   { name: "@slop-lab/dim-contracts-git", version, file: "git.tgz" },
-  { name: "@slop-lab/dim-execution-client", version, file: "execution-client.tgz", requires: { "@slop-lab/dim-contracts-ci": version, "@slop-lab/dim-contracts-execution": version } },
+  { name: "@slop-lab/dim-service-client-execution", version, file: "execution-client.tgz", requires: { "@slop-lab/dim-contracts-ci": version, "@slop-lab/dim-contracts-execution": version } },
   { name: "@slop-lab/dim-contracts-llm-router", version, file: "llm-contracts.tgz", requires: { "@slop-lab/dim-contracts-operations": version } },
-  { name: "@slop-lab/dim-llm-router-client", version, file: "llm-client.tgz", requires: { "@slop-lab/dim-contracts-llm-router": version } },
+  { name: "@slop-lab/dim-service-client-llm-router", version, file: "llm-client.tgz", requires: { "@slop-lab/dim-contracts-llm-router": version } },
   ...defaultWebPluginPackages.map((name) => ({ name, version, file: `${name.split("/")[1]}.tgz`, requires: {
     "@slop-lab/dim-contracts-operations": version,
-    [name.endsWith("llm-router") ? "@slop-lab/dim-llm-router-client" : name.endsWith("execution") ? "@slop-lab/dim-execution-client" : "@slop-lab/dim-contracts-git"]: version
+    [name.endsWith("llm-router") ? "@slop-lab/dim-service-client-llm-router" : name.endsWith("execution") ? "@slop-lab/dim-service-client-execution" : "@slop-lab/dim-contracts-git"]: version
   } })),
   { name: "@slop-lab/dim-control-plane-admin", version, file: "admin.tgz", requires: { "@slop-lab/dim-host-core": version } },
   { name: "@slop-lab/dim-host-core", version, file: "core.tgz" },
@@ -30,7 +30,7 @@ it("includes exact operator-client dependencies and rejects mismatches or escape
   const artifacts = webArtifacts(manifest);
   expect(artifacts.map(({ name }) => name).sort()).toEqual([
     "@slop-lab/dim-contracts-operations", "@slop-lab/dim-contracts-ci", "@slop-lab/dim-contracts-execution", "@slop-lab/dim-contracts-git",
-    "@slop-lab/dim-execution-client", "@slop-lab/dim-contracts-llm-router", "@slop-lab/dim-llm-router-client", "@slop-lab/dim-web", ...defaultWebPluginPackages
+    "@slop-lab/dim-service-client-execution", "@slop-lab/dim-contracts-llm-router", "@slop-lab/dim-service-client-llm-router", "@slop-lab/dim-web", ...defaultWebPluginPackages
   ].sort());
   expect(artifacts.some(({ name }) => name === "@slop-lab/dim-cli" || name.startsWith("@slop-lab/dim-control-plane-plugin-"))).toBe(false);
   expect(() => webArtifacts({ ...manifest, packages: manifest.packages.map((entry) => entry.file === "operations.tgz" ? { ...entry, version: "0.9.0" } : entry) })).toThrow(/matching/);

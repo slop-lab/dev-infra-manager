@@ -52,8 +52,8 @@ try {
   const config = { ...parsed, gitVersion: execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().replace(/^git version /, "") };
   await writeFile(join(setup, "native-git.json"), JSON.stringify(config), { mode: 0o600 });
   const configurations: Readonly<Record<string, unknown>> = {
-    "@slop-lab/dim-control-plane-plugin-code-review": { humanReviewers: config.humanReviewers },
-    "@slop-lab/dim-control-plane-plugin-merge-policy": { hostPromoters: config.hostPromoters },
+    "@slop-lab/dim-control-plane-plugin-git-review": { humanReviewers: config.humanReviewers },
+    "@slop-lab/dim-control-plane-plugin-git-merge-policy": { hostPromoters: config.hostPromoters },
     "@slop-lab/dim-control-plane-plugin-git-ci": config.ci,
     "@slop-lab/dim-control-plane-plugin-ci-workflows": {}
   };

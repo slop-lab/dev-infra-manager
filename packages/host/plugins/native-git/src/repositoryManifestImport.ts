@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { parseDocument } from "yaml";
 import { acquireLifecycleLock, atomicWrite, UserError } from "@slop-lab/dim-host-core";
-import { loadPrivateJson } from "@slop-lab/dim-native-git-client";
+import { loadPrivateJson } from "@slop-lab/dim-service-client-native-git";
 import { parseNativeRootBootstrapManifestYaml } from "./nativeRootBootstrapPolicy.js";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
 import { publicGitBranch, publicGitUrl } from "./public-git-source.js";

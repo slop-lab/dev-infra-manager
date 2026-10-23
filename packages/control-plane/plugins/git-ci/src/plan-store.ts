@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import { readAuthoritativeNativeReviewEnvelope as readReview, readAuthoritativeNativeReviewEnvelopes as readReviews,
   assertAuthoritativeNativeReviewStore as assertReviewStore, type AuthoritativeNativeReviewEnvelope as ReviewEnvelope,
-  type ReviewAttachment } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
-import { ownedReviewDirectory, writeImmutableReviewRecord, readReviewJson } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+  type ReviewAttachment } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { ownedReviewDirectory, writeImmutableReviewRecord, readReviewJson } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { gitCiPlanningSchema, authoritativeNativeRequiredJobSchema, createAuthoritativeNativeReviewEnvelope,
   type AuthoritativeNativeReviewEnvelope } from "./plan-schema.js";
 

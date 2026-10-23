@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { ReviewPreparation, ReviewPreparationInput } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import type { ReviewPreparation, ReviewPreparationInput } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { CandidateExecutionError, executionInputsSchema } from "@slop-lab/dim-contracts-ci/descriptor";
 import type { WorkflowCompiler } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";

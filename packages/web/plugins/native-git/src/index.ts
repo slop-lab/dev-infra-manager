@@ -2,7 +2,7 @@ import { isAbsolute } from "node:path";
 import { z } from "zod";
 import type { WebPlugin, WebPluginContext, WebPluginRuntime } from "@slop-lab/dim-web/plugin-api";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
-import { createNativeGitOperator, nativeGitOperations, nativeGitManagementOperations, nativeGitProjectSchema } from "@slop-lab/dim-native-git-client";
+import { createNativeGitOperator, nativeGitOperations, nativeGitManagementOperations, nativeGitProjectSchema } from "@slop-lab/dim-service-client-native-git";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const controllerId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);

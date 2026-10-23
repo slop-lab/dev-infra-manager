@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import type { ControlPlanePluginEntry } from "@slop-lab/dim-control-plane-core";
 import { controlPlanePlugin as repositories } from "@slop-lab/dim-control-plane-plugin-git-repositories";
-import { controlPlanePlugin as review } from "@slop-lab/dim-control-plane-plugin-code-review";
-import { controlPlanePlugin as merge } from "@slop-lab/dim-control-plane-plugin-merge-policy";
+import { controlPlanePlugin as review } from "@slop-lab/dim-control-plane-plugin-git-review";
+import { controlPlanePlugin as merge } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { controlPlanePlugin as gitCi } from "@slop-lab/dim-control-plane-plugin-git-ci";
 import { controlPlanePlugin as gitSync } from "@slop-lab/dim-control-plane-plugin-git-sync";
 import { controlPlanePlugin as workflows } from "@slop-lab/dim-control-plane-plugin-ci-workflows";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
 import { createProjectReviewMatcher } from "../../../examples/features/security-review/project-matcher.ts";
-import type { AuthoritativeNativeChangedPath } from "../../../packages/control-plane/plugins/code-review/src/authoritative-native-review-schema.ts";
+import type { AuthoritativeNativeChangedPath } from "../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.ts";
 const source = await readFile(new URL("../../../examples/features/security-review/repository/.dim/review/matcher.mjs", import.meta.url), "utf8");
 function change(path: string): AuthoritativeNativeChangedPath {
   return { status: "modified", oldPath: path, newPath: path, oldPathBytes: Buffer.from(path).toString("base64"), newPathBytes: Buffer.from(path).toString("base64"), oldMode: "100644", newMode: "100644", oldObjectId: "a".repeat(40), newObjectId: "b".repeat(40) };

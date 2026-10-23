@@ -4,7 +4,7 @@ import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
 import { createNativeProjectManagement } from "./projectManagement.js";
 import type { PublicRepositoryImportDependencies } from "./publicRepositoryImport.js";
-import { createNativeGitOperator, nativeGitOperations } from "@slop-lab/dim-native-git-client";
+import { createNativeGitOperator, nativeGitOperations } from "@slop-lab/dim-service-client-native-git";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";

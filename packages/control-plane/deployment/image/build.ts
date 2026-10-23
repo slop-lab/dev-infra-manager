@@ -4,8 +4,8 @@ import { buildServiceImage } from "../../../../scripts/packages/build-service-im
 const root = resolve(import.meta.dirname, "../../../..");
 const packages = [
   "control-plane/core", "control-plane/admin", "control-plane/deployment",
-  "control-plane/plugins/git-repositories", "control-plane/plugins/code-review",
-  "control-plane/plugins/merge-policy", "control-plane/plugins/git-ci",
+  "control-plane/plugins/git-repositories", "control-plane/plugins/git-review",
+  "control-plane/plugins/git-merge-policy", "control-plane/plugins/git-ci",
   "control-plane/plugins/git-sync",
   "control-plane/plugins/webhooks", "control-plane/plugins/ci-workflows",
   "contracts/git", "contracts/ci", "contracts/execution",

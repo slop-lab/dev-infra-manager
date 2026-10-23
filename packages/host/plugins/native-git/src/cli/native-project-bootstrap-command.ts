@@ -1,4 +1,4 @@
-import { loadPrivateJson, reviewerConnectionSchema } from "@slop-lab/dim-native-git-client";
+import { loadPrivateJson, reviewerConnectionSchema } from "@slop-lab/dim-service-client-native-git";
 import { importNativeProjectPublicRepository } from "../publicRepositoryImport.js";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";

@@ -28,9 +28,9 @@ also uses `@slop-lab/dim-host-plugin-native-git` and operator tools from
 
 For the repository workflows in these examples, configure control-plane plugins
 `@slop-lab/dim-control-plane-plugin-git-repositories`,
-`@slop-lab/dim-control-plane-plugin-code-review`,
+`@slop-lab/dim-control-plane-plugin-git-review`,
 `@slop-lab/dim-control-plane-plugin-git-ci`,
-`@slop-lab/dim-control-plane-plugin-merge-policy` and
+`@slop-lab/dim-control-plane-plugin-git-merge-policy` and
 `@slop-lab/dim-control-plane-plugin-ci-workflows`, alongside the CI coordinator.
 Install them using `dim installer install control-plane plugin PACKAGE@EXACT_VERSION`.
 The compiler supplies jobs; Git-CI captures their reviewed inputs; the coordinator

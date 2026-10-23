@@ -6,7 +6,7 @@ import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
 import { ciQueryConnectionSchema } from "@slop-lab/dim-contracts-ci/connections";
 import { executionOperatorConnectionSchema } from "@slop-lab/dim-contracts-execution/connections";
-import { createExecutionConsole } from "@slop-lab/dim-execution-client";
+import { createExecutionConsole } from "@slop-lab/dim-service-client-execution";
 const absolutePath = z.string().refine(isAbsolute);
 const selectionSchema = z.object({ schemaVersion: z.literal(1), hostConnectionFile: absolutePath, importerConnectionFile: absolutePath }).strict();
 async function privateJson(file: string): Promise<unknown> {

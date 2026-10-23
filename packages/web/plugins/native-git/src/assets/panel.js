@@ -3,7 +3,7 @@ import { mountManagement } from "./management.js";
 import { appendNativeGitNavigationActions, registerNativeGitNavigation } from "./navigation.js";
 /** @typedef {{name:string,description:string,access:string}} Descriptor */
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
-/** @typedef {import('@slop-lab/dim-native-git-client').ReviewDto} Review */
+/** @typedef {import('@slop-lab/dim-service-client-native-git').ReviewDto} Review */
 /** @typedef {{controllerId:string,projectId:string,repositoryId:string}} Scope */
 /** @typedef {{id:string,controllerKey?:string,title:string,status:'ready'|'unavailable',reviewerId?:string,projects:Array<{projectId:string,name:string,repositoryIds:string[],repositories?:Array<{repositoryId:string,defaultRef:string,branches:string[]}>}>,operations:Descriptor[]}} Controller */
 /** @param {Pick<Review,'status'|'requiredReviewerIds'|'approvals'|'revocations'>} review @param {{reviewerId?:string|undefined,browserCanApprove:boolean,controllerCanApprove:boolean}} access */

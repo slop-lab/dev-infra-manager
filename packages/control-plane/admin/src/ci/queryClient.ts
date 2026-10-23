@@ -1,7 +1,7 @@
 import path from "node:path";
 import { selectedControlPlaneHostFile } from "@slop-lab/dim-host-plugin-native-git";
 import { UserError } from "@slop-lab/dim-host-core";
-import { createCiQueryClient as createClient } from "@slop-lab/dim-execution-client";
+import { createCiQueryClient as createClient } from "@slop-lab/dim-service-client-execution";
 
 /** CLI default selection belongs to the operator adapter, not the remote client. */
 export async function createCiQueryClient(override?: string, environment: NodeJS.ProcessEnv = process.env) {

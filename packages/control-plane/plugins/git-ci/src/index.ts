@@ -2,7 +2,7 @@ import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/h
 import type { CiDeliveryPublicationFaults } from "./delivery-publication.js";
 import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { repositoryExtension, repositoryExtensionKind } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { reviewPreparationExtension, reviewPreparations } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
+import { reviewPreparationExtension, reviewPreparations } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { requireWorkflowCompiler, WORKFLOW_COMPILER_EXTENSION, type WorkflowCompiler } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
 import { gitCiConfigSchema } from "./config.js";

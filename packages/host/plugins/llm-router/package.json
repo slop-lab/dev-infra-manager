@@ -46,7 +46,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-llm-router-client": "workspace:0.10.0",
+    "@slop-lab/dim-service-client-llm-router": "workspace:0.10.0",
     "@slop-lab/dim-contracts-llm-router": "workspace:0.10.0"
   },
   "peerDependenciesMeta": {

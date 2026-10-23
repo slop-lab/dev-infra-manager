@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { gitSyncConfigurationSchema } from "@slop-lab/dim-control-plane-plugin-git-sync/config";
-import { parseCodeReviewConfig } from "@slop-lab/dim-control-plane-plugin-code-review/config";
-import { mergePolicyConfigurationSchema } from "@slop-lab/dim-control-plane-plugin-merge-policy/config";
+import { parseCodeReviewConfig } from "@slop-lab/dim-control-plane-plugin-git-review/config";
+import { mergePolicyConfigurationSchema } from "@slop-lab/dim-control-plane-plugin-git-merge-policy/config";
 import { gitCiConfigSchema } from "@slop-lab/dim-control-plane-plugin-git-ci/config";
 import { parseNativeGitBundleConfig } from "@slop-lab/dim-control-plane-plugin-git-repositories/config";
 import { executionServiceConfigSchema } from "@slop-lab/dim-control-plane-plugin-execution-scheduler/config";

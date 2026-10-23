@@ -27,69 +27,6 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/clients/execution:
-    dependencies:
-      '@slop-lab/dim-contracts-ci':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/ci
-      '@slop-lab/dim-contracts-execution':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/execution
-      '@slop-lab/dim-contracts-git':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/git
-      '@slop-lab/dim-contracts-operations':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/operations
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/clients/llm-router:
-    dependencies:
-      '@slop-lab/dim-contracts-llm-router':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/llm-router
-      '@slop-lab/dim-contracts-operations':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/operations
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/clients/native-git:
-    dependencies:
-      '@slop-lab/dim-contracts-git':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/git
-      '@slop-lab/dim-contracts-operations':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/operations
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
   packages/contracts/ci:
     dependencies:
       '@slop-lab/dim-contracts-execution':
@@ -189,33 +126,33 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../contracts/git
-      '@slop-lab/dim-control-plane-plugin-code-review':
-        specifier: workspace:0.10.0
-        version: link:../plugins/code-review
       '@slop-lab/dim-control-plane-plugin-execution-scheduler':
         specifier: workspace:0.10.0
         version: link:../plugins/execution-scheduler
       '@slop-lab/dim-control-plane-plugin-git-ci':
         specifier: workspace:0.10.0
         version: link:../plugins/git-ci
+      '@slop-lab/dim-control-plane-plugin-git-merge-policy':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-merge-policy
       '@slop-lab/dim-control-plane-plugin-git-repositories':
         specifier: workspace:0.10.0
         version: link:../plugins/git-repositories
+      '@slop-lab/dim-control-plane-plugin-git-review':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-review
       '@slop-lab/dim-control-plane-plugin-git-sync':
         specifier: workspace:0.10.0
         version: link:../plugins/git-sync
-      '@slop-lab/dim-control-plane-plugin-merge-policy':
-        specifier: workspace:0.10.0
-        version: link:../plugins/merge-policy
-      '@slop-lab/dim-execution-client':
-        specifier: workspace:0.10.0
-        version: link:../../clients/execution
       '@slop-lab/dim-host-core':
         specifier: workspace:0.10.0
         version: link:../../host/core
       '@slop-lab/dim-host-plugin-native-git':
         specifier: workspace:0.10.0
         version: link:../../host/plugins/native-git
+      '@slop-lab/dim-service-client-execution':
+        specifier: workspace:0.10.0
+        version: link:../../service-clients/execution
       commander:
         specifier: 14.0.0
         version: 14.0.0
@@ -253,21 +190,21 @@ importers:
       '@slop-lab/dim-control-plane-plugin-ci-workflows':
         specifier: workspace:0.10.0
         version: link:../plugins/ci-workflows
-      '@slop-lab/dim-control-plane-plugin-code-review':
-        specifier: workspace:0.10.0
-        version: link:../plugins/code-review
       '@slop-lab/dim-control-plane-plugin-git-ci':
         specifier: workspace:0.10.0
         version: link:../plugins/git-ci
+      '@slop-lab/dim-control-plane-plugin-git-merge-policy':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-merge-policy
       '@slop-lab/dim-control-plane-plugin-git-repositories':
         specifier: workspace:0.10.0
         version: link:../plugins/git-repositories
+      '@slop-lab/dim-control-plane-plugin-git-review':
+        specifier: workspace:0.10.0
+        version: link:../plugins/git-review
       '@slop-lab/dim-control-plane-plugin-git-sync':
         specifier: workspace:0.10.0
         version: link:../plugins/git-sync
-      '@slop-lab/dim-control-plane-plugin-merge-policy':
-        specifier: workspace:0.10.0
-        version: link:../plugins/merge-policy
       '@slop-lab/dim-control-plane-plugin-webhooks':
         specifier: workspace:0.10.0
         version: link:../plugins/webhooks
@@ -294,31 +231,6 @@ importers:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
         version: link:../../core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/control-plane/plugins/code-review:
-    dependencies:
-      '@slop-lab/dim-contracts-git':
-        specifier: workspace:0.10.0
-        version: link:../../../contracts/git
-      jsonc-parser:
-        specifier: 3.3.1
-        version: 3.3.1
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      '@slop-lab/dim-control-plane-core':
-        specifier: workspace:0.10.0
-        version: link:../../core
-      '@slop-lab/dim-control-plane-plugin-git-repositories':
-        specifier: workspace:0.10.0
-        version: link:../git-repositories
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -385,12 +297,37 @@ importers:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
         version: link:../../core
-      '@slop-lab/dim-control-plane-plugin-code-review':
-        specifier: workspace:0.10.0
-        version: link:../code-review
       '@slop-lab/dim-control-plane-plugin-git-repositories':
         specifier: workspace:0.10.0
         version: link:../git-repositories
+      '@slop-lab/dim-control-plane-plugin-git-review':
+        specifier: workspace:0.10.0
+        version: link:../git-review
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/git-merge-policy:
+    dependencies:
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/git
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../git-repositories
+      '@slop-lab/dim-control-plane-plugin-git-review':
+        specifier: workspace:0.10.0
+        version: link:../git-review
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -406,6 +343,91 @@ importers:
       zod:
         specifier: 4.1.11
         version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/git-review:
+    dependencies:
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/git
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../git-repositories
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/git-review-tracing:
+    dependencies:
+      '@slop-lab/dim-git-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../../../git-review-tracing/engine
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@slop-lab/dim-control-plane-plugin-git-repositories':
+        specifier: workspace:0.10.0
+        version: link:../git-repositories
+      '@slop-lab/dim-control-plane-plugin-git-review':
+        specifier: workspace:0.10.0
+        version: link:../git-review
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/git-review-tracing-node:
+    dependencies:
+      '@slop-lab/dim-git-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../../../git-review-tracing/engine
+      '@slop-lab/dim-git-review-tracing-runtime-node':
+        specifier: workspace:0.10.0
+        version: link:../../../git-review-tracing/runtimes/node
+    devDependencies:
+      '@slop-lab/dim-control-plane-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/control-plane/plugins/git-review-tracing-scheduled:
+    dependencies:
+      '@slop-lab/dim-git-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../../../git-review-tracing/engine
+      '@slop-lab/dim-service-client-execution':
+        specifier: workspace:0.10.0
+        version: link:../../../service-clients/execution
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -455,91 +477,6 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/control-plane/plugins/merge-policy:
-    dependencies:
-      '@slop-lab/dim-contracts-git':
-        specifier: workspace:0.10.0
-        version: link:../../../contracts/git
-      zod:
-        specifier: 4.1.11
-        version: 4.1.11
-    devDependencies:
-      '@slop-lab/dim-control-plane-core':
-        specifier: workspace:0.10.0
-        version: link:../../core
-      '@slop-lab/dim-control-plane-plugin-code-review':
-        specifier: workspace:0.10.0
-        version: link:../code-review
-      '@slop-lab/dim-control-plane-plugin-git-repositories':
-        specifier: workspace:0.10.0
-        version: link:../git-repositories
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/control-plane/plugins/review-tracing:
-    dependencies:
-      '@slop-lab/dim-review-tracing':
-        specifier: workspace:0.10.0
-        version: link:../../../review-tracing/core
-    devDependencies:
-      '@slop-lab/dim-control-plane-core':
-        specifier: workspace:0.10.0
-        version: link:../../core
-      '@slop-lab/dim-control-plane-plugin-code-review':
-        specifier: workspace:0.10.0
-        version: link:../code-review
-      '@slop-lab/dim-control-plane-plugin-git-repositories':
-        specifier: workspace:0.10.0
-        version: link:../git-repositories
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/control-plane/plugins/review-tracing-node:
-    dependencies:
-      '@slop-lab/dim-review-tracing':
-        specifier: workspace:0.10.0
-        version: link:../../../review-tracing/core
-      '@slop-lab/dim-review-tracing-node':
-        specifier: workspace:0.10.0
-        version: link:../../../review-tracing/runtimes/node
-    devDependencies:
-      '@slop-lab/dim-control-plane-core':
-        specifier: workspace:0.10.0
-        version: link:../../core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/control-plane/plugins/review-tracing-scheduled:
-    dependencies:
-      '@slop-lab/dim-execution-client':
-        specifier: workspace:0.10.0
-        version: link:../../../clients/execution
-      '@slop-lab/dim-review-tracing':
-        specifier: workspace:0.10.0
-        version: link:../../../review-tracing/core
-    devDependencies:
-      '@slop-lab/dim-control-plane-core':
-        specifier: workspace:0.10.0
-        version: link:../../core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
   packages/control-plane/plugins/webhooks:
     dependencies:
       zod:
@@ -549,6 +486,28 @@ importers:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
         version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/git-review-tracing/engine:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/git-review-tracing/runtimes/node:
+    dependencies:
+      '@slop-lab/dim-git-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../../engine
+    devDependencies:
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -632,9 +591,9 @@ importers:
       '@slop-lab/dim-contracts-operations':
         specifier: workspace:0.10.0
         version: link:../../../contracts/operations
-      '@slop-lab/dim-execution-client':
+      '@slop-lab/dim-service-client-execution':
         specifier: workspace:0.10.0
-        version: link:../../../clients/execution
+        version: link:../../../service-clients/execution
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -671,6 +630,28 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/host/plugins/git-review-tracing-node:
+    dependencies:
+      '@slop-lab/dim-contracts-execution':
+        specifier: workspace:0.10.0
+        version: link:../../../contracts/execution
+      '@slop-lab/dim-git-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../../../git-review-tracing/engine
+      '@slop-lab/dim-git-review-tracing-runtime-node':
+        specifier: workspace:0.10.0
+        version: link:../../../git-review-tracing/runtimes/node
+    devDependencies:
+      '@slop-lab/dim-host-core':
+        specifier: workspace:0.10.0
+        version: link:../../core
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/host/plugins/kvm:
     devDependencies:
       '@slop-lab/dim-host-core':
@@ -688,9 +669,9 @@ importers:
       '@slop-lab/dim-contracts-llm-router':
         specifier: workspace:0.10.0
         version: link:../../../contracts/llm-router
-      '@slop-lab/dim-llm-router-client':
+      '@slop-lab/dim-service-client-llm-router':
         specifier: workspace:0.10.0
-        version: link:../../../clients/llm-router
+        version: link:../../../service-clients/llm-router
     devDependencies:
       '@slop-lab/dim-host-core':
         specifier: workspace:0.10.0
@@ -722,37 +703,15 @@ importers:
       '@slop-lab/dim-contracts-operations':
         specifier: workspace:0.10.0
         version: link:../../../contracts/operations
-      '@slop-lab/dim-native-git-client':
+      '@slop-lab/dim-service-client-native-git':
         specifier: workspace:0.10.0
-        version: link:../../../clients/native-git
+        version: link:../../../service-clients/native-git
       commander:
         specifier: 14.0.0
         version: 14.0.0
       yaml:
         specifier: 2.8.3
         version: 2.8.3
-    devDependencies:
-      '@slop-lab/dim-host-core':
-        specifier: workspace:0.10.0
-        version: link:../../core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/host/plugins/review-tracing-node:
-    dependencies:
-      '@slop-lab/dim-contracts-execution':
-        specifier: workspace:0.10.0
-        version: link:../../../contracts/execution
-      '@slop-lab/dim-review-tracing':
-        specifier: workspace:0.10.0
-        version: link:../../../review-tracing/core
-      '@slop-lab/dim-review-tracing-node':
-        specifier: workspace:0.10.0
-        version: link:../../../review-tracing/runtimes/node
     devDependencies:
       '@slop-lab/dim-host-core':
         specifier: workspace:0.10.0
@@ -838,7 +797,23 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/review-tracing/core:
+  packages/service-clients/execution:
+    dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/ci
+      '@slop-lab/dim-contracts-execution':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/execution
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/git
+      '@slop-lab/dim-contracts-operations':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/operations
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -847,11 +822,36 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/review-tracing/runtimes/node:
+  packages/service-clients/llm-router:
     dependencies:
-      '@slop-lab/dim-review-tracing':
+      '@slop-lab/dim-contracts-llm-router':
         specifier: workspace:0.10.0
-        version: link:../../core
+        version: link:../../contracts/llm-router
+      '@slop-lab/dim-contracts-operations':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/operations
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/service-clients/native-git:
+    dependencies:
+      '@slop-lab/dim-contracts-git':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/git
+      '@slop-lab/dim-contracts-operations':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/operations
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -906,9 +906,9 @@ importers:
       '@slop-lab/dim-contracts-operations':
         specifier: workspace:0.10.0
         version: link:../../../contracts/operations
-      '@slop-lab/dim-execution-client':
+      '@slop-lab/dim-service-client-execution':
         specifier: workspace:0.10.0
-        version: link:../../../clients/execution
+        version: link:../../../service-clients/execution
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -950,9 +950,9 @@ importers:
       '@slop-lab/dim-contracts-operations':
         specifier: workspace:0.10.0
         version: link:../../../contracts/operations
-      '@slop-lab/dim-llm-router-client':
+      '@slop-lab/dim-service-client-llm-router':
         specifier: workspace:0.10.0
-        version: link:../../../clients/llm-router
+        version: link:../../../service-clients/llm-router
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -972,9 +972,9 @@ importers:
       '@slop-lab/dim-contracts-operations':
         specifier: workspace:0.10.0
         version: link:../../../contracts/operations
-      '@slop-lab/dim-native-git-client':
+      '@slop-lab/dim-service-client-native-git':
         specifier: workspace:0.10.0
-        version: link:../../../clients/native-git
+        version: link:../../../service-clients/native-git
       zod:
         specifier: 4.1.11
         version: 4.1.11
@@ -1021,69 +1021,69 @@ importers:
       '@slop-lab/dim-control-plane-plugin-ci-workflows':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/ci-workflows
-      '@slop-lab/dim-control-plane-plugin-code-review':
-        specifier: workspace:*
-        version: link:../packages/control-plane/plugins/code-review
       '@slop-lab/dim-control-plane-plugin-execution-scheduler':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/execution-scheduler
       '@slop-lab/dim-control-plane-plugin-external-urls':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/external-urls
+      '@slop-lab/dim-control-plane-plugin-git-merge-policy':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/git-merge-policy
       '@slop-lab/dim-control-plane-plugin-git-repositories':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/git-repositories
+      '@slop-lab/dim-control-plane-plugin-git-review':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/git-review
+      '@slop-lab/dim-control-plane-plugin-git-review-tracing':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/git-review-tracing
+      '@slop-lab/dim-control-plane-plugin-git-review-tracing-node':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/git-review-tracing-node
+      '@slop-lab/dim-control-plane-plugin-git-review-tracing-scheduled':
+        specifier: workspace:*
+        version: link:../packages/control-plane/plugins/git-review-tracing-scheduled
       '@slop-lab/dim-control-plane-plugin-git-sync':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/git-sync
       '@slop-lab/dim-control-plane-plugin-llm-router':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/llm-router
-      '@slop-lab/dim-control-plane-plugin-merge-policy':
-        specifier: workspace:*
-        version: link:../packages/control-plane/plugins/merge-policy
-      '@slop-lab/dim-control-plane-plugin-review-tracing':
-        specifier: workspace:*
-        version: link:../packages/control-plane/plugins/review-tracing
-      '@slop-lab/dim-control-plane-plugin-review-tracing-node':
-        specifier: workspace:*
-        version: link:../packages/control-plane/plugins/review-tracing-node
-      '@slop-lab/dim-control-plane-plugin-review-tracing-scheduled':
-        specifier: workspace:*
-        version: link:../packages/control-plane/plugins/review-tracing-scheduled
       '@slop-lab/dim-control-plane-plugin-webhooks':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/webhooks
-      '@slop-lab/dim-execution-client':
+      '@slop-lab/dim-git-review-tracing':
         specifier: workspace:*
-        version: link:../packages/clients/execution
+        version: link:../packages/git-review-tracing/engine
+      '@slop-lab/dim-git-review-tracing-runtime-node':
+        specifier: workspace:*
+        version: link:../packages/git-review-tracing/runtimes/node
       '@slop-lab/dim-host-core':
         specifier: workspace:*
         version: link:../packages/host/core
       '@slop-lab/dim-host-plugin-execution-worker':
         specifier: workspace:*
         version: link:../packages/host/plugins/execution-worker
+      '@slop-lab/dim-host-plugin-git-review-tracing-node':
+        specifier: workspace:*
+        version: link:../packages/host/plugins/git-review-tracing-node
       '@slop-lab/dim-host-plugin-mirrors':
         specifier: workspace:*
         version: link:../packages/host/plugins/mirrors
       '@slop-lab/dim-host-plugin-native-git':
         specifier: workspace:*
         version: link:../packages/host/plugins/native-git
-      '@slop-lab/dim-host-plugin-review-tracing-node':
+      '@slop-lab/dim-service-client-execution':
         specifier: workspace:*
-        version: link:../packages/host/plugins/review-tracing-node
-      '@slop-lab/dim-llm-router-client':
+        version: link:../packages/service-clients/execution
+      '@slop-lab/dim-service-client-llm-router':
         specifier: workspace:*
-        version: link:../packages/clients/llm-router
-      '@slop-lab/dim-native-git-client':
+        version: link:../packages/service-clients/llm-router
+      '@slop-lab/dim-service-client-native-git':
         specifier: workspace:*
-        version: link:../packages/clients/native-git
-      '@slop-lab/dim-review-tracing':
-        specifier: workspace:*
-        version: link:../packages/review-tracing/core
-      '@slop-lab/dim-review-tracing-node':
-        specifier: workspace:*
-        version: link:../packages/review-tracing/runtimes/node
+        version: link:../packages/service-clients/native-git
       '@slop-lab/dim-web-plugin-agent-tools':
         specifier: workspace:*
         version: link:../packages/web/plugins/agent-tools

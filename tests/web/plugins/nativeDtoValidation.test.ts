@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { reviewDto } from "@slop-lab/dim-native-git-client";
+import { reviewDto } from "@slop-lab/dim-service-client-native-git";
 import { installedReviewerFixture, type ReviewFixture } from "./nativeFixture.js";
 
 const fixtures: ReviewFixture[] = [];

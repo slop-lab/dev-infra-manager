@@ -3,7 +3,7 @@ import { mkdir, open, rename, unlink, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { createLlmRouterClient, privateOperatorFile } from "@slop-lab/dim-llm-router-client";
+import { createLlmRouterClient, privateOperatorFile } from "@slop-lab/dim-service-client-llm-router";
 import { llmOperation, llmOperations } from "@slop-lab/dim-contracts-llm-router";
 
 const selectionFile = (environment: NodeJS.ProcessEnv) => resolve(environment.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "dim/llm/operator-selection.json");

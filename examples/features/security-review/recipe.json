@@ -5,8 +5,8 @@
     "host": [],
     "controlPlane": [
       "@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0",
-      "@slop-lab/dim-control-plane-plugin-code-review@0.10.0",
-      "@slop-lab/dim-control-plane-plugin-merge-policy@0.10.0"
+      "@slop-lab/dim-control-plane-plugin-git-review@0.10.0",
+      "@slop-lab/dim-control-plane-plugin-git-merge-policy@0.10.0"
     ]
   },
   "repositories": [{"id":"root","path":"repository","policy":"repository-policy.json"}],

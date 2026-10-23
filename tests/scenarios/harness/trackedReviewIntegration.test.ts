@@ -6,12 +6,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
-import { createReadTracker } from "@slop-lab/dim-review-tracing";
-import { reviewTraceRuntimeExtension, type ReviewTraceRuntime } from "@slop-lab/dim-review-tracing/plugin-api";
-import { prepareReviewTracing } from "@slop-lab/dim-control-plane-plugin-review-tracing";
-import { createNodeReviewTraceRuntime } from "@slop-lab/dim-control-plane-plugin-review-tracing-node";
-import type { CodeReviewService } from "@slop-lab/dim-control-plane-plugin-code-review/plugin-api";
-import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-merge-policy";
+import { createReadTracker } from "@slop-lab/dim-git-review-tracing";
+import { reviewTraceRuntimeExtension, type ReviewTraceRuntime } from "@slop-lab/dim-git-review-tracing/plugin-api";
+import { prepareReviewTracing } from "@slop-lab/dim-control-plane-plugin-git-review-tracing";
+import { createNodeReviewTraceRuntime } from "@slop-lab/dim-control-plane-plugin-git-review-tracing-node";
+import type { CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { basic, fixture, generationId, git, record, token } from "../../control-plane/plugins/git-repositories/optionalFeaturesFixture.js";
 import { scheduledReviewFixture } from "../../support/scheduled-trace.js";
 
@@ -24,7 +24,7 @@ it("strictly type-checks the standalone TypeScript detector template against its
     await mkdir(scope, { recursive: true });
     // Resolve the repository source export instead of requiring a registry
     // publication or package build just to validate a candidate template.
-    await symlink(fileURLToPath(new URL("../../../packages/review-tracing/runtimes/node", import.meta.url)), join(scope, "dim-review-tracing-node"), "dir");
+    await symlink(fileURLToPath(new URL("../../../packages/git-review-tracing/runtimes/node", import.meta.url)), join(scope, "dim-git-review-tracing-runtime-node"), "dir");
     await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url)),
       "-p", join(project, "tsconfig.json"), "--noEmit", "--customConditions", "dim-source"]);
   } finally { await rm(directory, { recursive: true, force: true }); }

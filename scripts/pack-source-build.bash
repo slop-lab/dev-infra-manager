@@ -109,13 +109,13 @@ packages:
   - packages/control-plane/deployment
   - packages/control-plane/plugins/*
   - packages/contracts/*
-  - packages/review-tracing/core
-  - packages/review-tracing/runtimes/node
+  - packages/git-review-tracing/engine
+  - packages/git-review-tracing/runtimes/node
   - packages/cli/core
   - packages/installer
   - packages/web/core
   - packages/web/plugins/*
-  - packages/clients/*
+  - packages/service-clients/*
 linkWorkspacePackages: true
 EOF
 

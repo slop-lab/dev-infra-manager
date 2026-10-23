@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { expect, it } from "vitest";
-import { NativeGitClient } from "@slop-lab/dim-native-git-client";
+import { NativeGitClient } from "@slop-lab/dim-service-client-native-git";
 
 it("allows real repository review reads and promotions to finish after the old five-second identity deadline", async () => {
   const generationId = "a".repeat(64), timers = new Set<ReturnType<typeof setTimeout>>();

@@ -7,7 +7,7 @@ const version = publishPackageVersion(value.version);
 await writeFile(new URL("../dist/package.json", import.meta.url), JSON.stringify({
   name: value.name, version, type: "module", license: "MIT", main: "./index.js", types: "./index.d.ts",
   exports: { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" }, "./opencode": { types: "./opencode.d.ts", import: "./opencode.js", default: "./opencode.js" } },
-  dependencies: { "@slop-lab/dim-llm-router-client": version, "@slop-lab/dim-contracts-llm-router": version },
+  dependencies: { "@slop-lab/dim-service-client-llm-router": version, "@slop-lab/dim-contracts-llm-router": version },
   peerDependencies: { "@slop-lab/dim-host-core": version }, peerDependenciesMeta: { "@slop-lab/dim-host-core": { optional: true } },
   bin: { "dim-llm-router": "./operator/main.js" }, engines: { node: "^24.0.0 || ^26.0.0" }
 }, null, 2) + "\n");

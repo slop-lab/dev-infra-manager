@@ -69,8 +69,8 @@ credentials or the workspace lifecycle token as a shortcut.
 | `@slop-lab/dim-control-plane-core` | Standalone service plugin runtime; loading, capability validation and shutdown |
 | `@slop-lab/dim-control-plane-plugin-git-repositories` | Repository storage, scoped Git transport and durable protected-ref CAS |
 | `@slop-lab/dim-control-plane-plugin-git-sync` | Explicit upstream fetch, merge proposals and nonforce publication of protected commits |
-| `@slop-lab/dim-control-plane-plugin-code-review` | Immutable review evidence and human approvals/revocations |
-| `@slop-lab/dim-control-plane-plugin-merge-policy` | Promotion authorization from current review and selected quality evidence |
+| `@slop-lab/dim-control-plane-plugin-git-review` | Immutable review evidence and human approvals/revocations |
+| `@slop-lab/dim-control-plane-plugin-git-merge-policy` | Promotion authorization from current review and selected quality evidence |
 | `@slop-lab/dim-control-plane-plugin-git-ci` | Candidate planning, execution grants/evidence and CI event delivery |
 | `@slop-lab/dim-control-plane-plugin-webhooks` | Independent external subscriptions and durable signed delivery |
 | `@slop-lab/dim-control-plane-plugin-execution-scheduler` | Durable execution coordination and worker admission |

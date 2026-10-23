@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createWebServerFromConfigFile } from "../../packages/web/core/src/server.js";
-import { nativeGitManagementOperations } from "../../packages/clients/native-git/src/management.js";
+import { nativeGitManagementOperations } from "../../packages/service-clients/native-git/src/management.js";
 import { webPluginContext } from "../../packages/web/core/src/controllers.js";
 import { invokeWebPlugin, loadWebPlugins, reconnectWebPlugin, webPluginCatalog } from "../../packages/web/core/src/plugins.js";
 const roots: string[] = [];

@@ -1,1 +1,1 @@
-export { createExecutionOperatorClient } from "@slop-lab/dim-execution-client";
+export { createExecutionOperatorClient } from "@slop-lab/dim-service-client-execution";
