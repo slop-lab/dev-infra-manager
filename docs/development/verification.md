@@ -94,7 +94,30 @@ GitHub uploads per-lane source-check logs even on failure, separately from the
 exact-source evidence. No installed DIM service or provider credential is needed
 for this source gate.
 
-The managed branch browser check starts disposable Native Git and Web services,
+### Browser user journeys
+
+The `Web journeys` workflow runs the default-operator review journey on every
+development push and on pull requests and merge groups targeting main. Making
+its `review` check mandatory requires the repository's admission rules to select
+it; adding a workflow does not change those rules. It connects disposable real Web,
+host console and Native Git services, creates/imports a project through the UI,
+opens pending evidence, obtains reviewer access through account settings,
+signs in again, approves and promotes a candidate, then verifies the actual Git
+ref. It does not pregrant the browser's reviewer role or use installed operator
+credentials. Run locally after building packages:
+
+```bash
+DIM_CHROMIUM=/absolute/path/to/chromium pnpm --dir tests run test:web-journeys
+```
+
+This is an explicit browser gate, separate from Vitest's ordinary `.test.ts`
+suite. See [journey ownership and diagnostics](../../tests/web/journeys/README.md)
+for the replaceable UI adapter, safe failure artifacts and how to add a journey.
+Current source journeys are not installed-VM verification. The examples VM gate
+still checks separate control-plane and host VMs without browser flows; a future
+installed environment adapter can reuse the same review journey.
+
+The narrower managed branch browser check starts disposable Native Git and Web services,
 then creates a `development` → `main` proposal, verifies the required reviewer,
 approves it and promotes it through the UI. With Chromium installed, run:
 

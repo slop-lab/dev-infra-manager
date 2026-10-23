@@ -1,0 +1,60 @@
+name: Web journeys
+
+on:
+  push:
+    branches: [development]
+  pull_request:
+    branches: [main]
+  merge_group:
+    branches: [main]
+    types: [checks_requested]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DIM_WEB_JOURNEY_ARTIFACTS: ${{ runner.temp }}/dim-web-journeys
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26.5.0
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+        with:
+          version: 10.13.1
+      - run: pnpm install --frozen-lockfile
+      - name: Build candidate packages
+        run: pnpm run workspace:build
+      - name: Install Chromium pinned by playwright-core 1.64.1
+        run: |
+          pnpm --dir tests exec playwright-core install --with-deps chromium
+          pnpm --dir tests exec node --input-type=module <<'NODE'
+          import { chromium } from "playwright-core";
+          import { appendFileSync, readFileSync } from "node:fs";
+          import { createRequire } from "node:module";
+          import path from "node:path";
+          const require = createRequire(import.meta.url);
+          const manifestPath = path.join(path.dirname(require.resolve("playwright-core/package.json")), "browsers.json");
+          const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+          const version = manifest.browsers.find(browser => browser.name === "chromium").browserVersion;
+          appendFileSync(process.env.GITHUB_ENV, `DIM_CHROMIUM=${chromium.executablePath()}\nDIM_CHROMIUM_VERSION=${version}\n`);
+          NODE
+      - name: Run disposable source Web journeys
+        run: pnpm --dir tests run test:web-journeys
+      - name: Upload sanitized timings and failure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-journeys-${{ github.sha }}
+          path: ${{ runner.temp }}/dim-web-journeys
+          if-no-files-found: warn
+          retention-days: 7
