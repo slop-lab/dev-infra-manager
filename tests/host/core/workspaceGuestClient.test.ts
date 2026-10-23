@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
 import { chmod, link, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -171,6 +172,40 @@ require('node:module').syncBuiltinESMExports();
     try { await expect(run("service", "resume")).rejects.toThrow(/private user-owned/); }
     finally { await chmod(owner, 0o600); }
   } finally { await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true }); }
+});
+
+it("service resume retries an exiting supervisor's guard instead of treating contention as readiness", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "dim-guest-service-handoff-"));
+  const bin = path.join(home, "bin"), attempts = path.join(home, "attempts");
+  const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}` };
+  await mkdir(bin);
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  await writeFile(path.join(bin, "flock"), `#!/bin/sh\nprintf '%s\\n' attempt >> ${quote(attempts)}\nexec /usr/bin/flock "$@"\n`, { mode: 0o700 });
+  const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env });
+  let released = false, resume: Promise<void> | undefined;
+  const guard = path.join(home, ".local/state/dim/services/worker.lock.guard");
+  await run("service", "register", "--name", "worker", "--", process.execPath, "-e", "require('node:fs').appendFileSync(process.argv[1],'started\\n');setInterval(()=>{},1000)", path.join(home, "starts"));
+  await writeFile(guard, "", { mode: 0o600 }); const inode = (await stat(guard)).ino;
+  // Model the precise interval after owner.json removal but before process exit:
+  // the old kernel guard still exists and no live service can be claimed.
+  const holder = spawn("/usr/bin/flock", ["--exclusive", "--no-fork", guard, process.execPath, "-e", "process.stdout.write('locked');setInterval(()=>{},1000)"], { stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    await once(holder.stdout!, "data");
+    let finished = false; resume = run("service", "resume").then(() => { finished = true; });
+    // Wait for a real retry while the guard remains held. The old implementation
+    // instead finishes after its first conflict, which must fail this assertion.
+    await expect.poll(async () => finished || (await readFile(attempts, "utf8").catch(() => "")).trim().split("\n").length >= 2).toBe(true);
+    expect(finished).toBe(false);
+    const closed = once(holder, "close"); holder.kill("SIGTERM"); await closed; released = true;
+    await resume;
+    await expect.poll(() => readFile(path.join(home, "starts"), "utf8")).toBe("started\n");
+    expect((await stat(guard)).ino).toBe(inode);
+    expect(JSON.parse((await run("service", "list")).stdout)).toEqual([{ name: "worker", running: true }]);
+  } finally {
+    if (!released) { const closed = once(holder, "close"); holder.kill("SIGTERM"); await closed; }
+    await resume?.catch(() => {});
+    await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true });
+  }
 });
 
 it("one failed registered service does not prevent other independent services from starting", async () => {

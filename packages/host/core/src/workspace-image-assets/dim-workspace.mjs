@@ -195,16 +195,24 @@ async function services(args) {
           if (!metadata.isFile() || metadata.uid !== process.geteuid?.() || (metadata.mode & 0o777) !== 0o600 || metadata.nlink !== 1) {
             throw new Error("expected a private user-owned service guard");
           }
-          // Open the validated inherited descriptor, rather than resolving the user path again.
-          // --no-fork makes the supervisor itself retain the kernel lock until it exits.
-          const child = spawn("flock", ["--exclusive", "--nonblock", "--conflict-exit-code", "75", "--no-fork", "/proc/self/fd/4",
-            process.execPath, process.argv[1] ?? "", "service", "__run", name],
-          { detached: true, stdio: ["ignore", log.fd, log.fd, "ipc", guard.fd] });
-          await new Promise((resolve, reject) => {
-            child.once("error", reject);
-            child.once("message", () => { child.disconnect(); child.unref(); resolve(undefined); });
-            child.once("exit", (code) => { if (code !== 0 && code !== 75) reject(new Error(`service '${name}' failed; inspect ${name}.log`)); else resolve(undefined); });
-          });
+          const deadline = Date.now() + 5000;
+          while (!await serviceAlive(name)) {
+            if (Date.now() >= deadline) throw new Error(`service '${name}' did not complete its supervisor handoff; inspect ${name}.log`);
+            // Open the validated inherited descriptor, rather than resolving the user path again.
+            // --no-fork makes the supervisor retain the kernel lock until it exits.
+            const child = spawn("flock", ["--exclusive", "--nonblock", "--conflict-exit-code", "75", "--no-fork", "/proc/self/fd/4",
+              process.execPath, process.argv[1] ?? "", "service", "__run", name],
+            { detached: true, stdio: ["ignore", log.fd, log.fd, "ipc", guard.fd] });
+            const contended = await new Promise((resolve, reject) => {
+              child.once("error", reject);
+              child.once("message", () => { child.disconnect(); child.unref(); resolve(false); });
+              child.once("exit", (code) => { if (code !== 0 && code !== 75) reject(new Error(`service '${name}' failed; inspect ${name}.log`)); else resolve(code === 75); });
+            });
+            if (!contended) break;
+            // An exiting supervisor can remove its owner record before releasing
+            // the kernel guard. Contention alone does not prove a running service.
+            await new Promise((resolve) => setTimeout(resolve, 30));
+          }
         } finally { await guard.close(); }
       } finally { await log.close(); }
     } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
