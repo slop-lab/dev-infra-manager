@@ -2,7 +2,7 @@ import { executionSummary, executionSummaryRowSchema, type ExecutionSummary } fr
 import { executionEventSchema, executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
 import { executionResultSchema, parseExecution, type Execution, type ExecutionAssignment, type ExecutionEvent,
   type ExecutionGrant, type ExecutionResult, type ExecutionProfile, type WorkerSlot } from "@slop-lab/dim-contracts-ci/aggregate";
-import { TaskStore, assertSchedulingIndexes } from "@slop-lab/dim-execution-scheduler";
+import { TaskStore, assertSchedulingIndexes } from "./task-store.js";
 import { taskEventSchema, taskGrantSchema, taskResultSchema, taskJobSchema,
   type TaskEvent, type TaskProfile, type TaskGrant, type TaskResult, type TaskExecution, type TaskAssignment, type ScheduledSlot } from "@slop-lab/dim-contracts-execution";
 

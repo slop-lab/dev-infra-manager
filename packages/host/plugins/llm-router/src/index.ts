@@ -1,9 +1,15 @@
 import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { deployRouterHelpers, hasRouterConnection } from "./integration.js";
 import { runLlmCommand } from "./cli.js";
+import { runLlmRouterCommand } from "./operator/commands.js";
 export const hostPlugin: WorkspaceHostPlugin = { name: "host-llm-router", commands: [
-  { name: "llm", description: "Connect a host gateway and attach workspaces to control-plane LLM routing" }
- ], run: runLlmCommand,
+  { name: "llm", description: "Connect a host gateway and attach workspaces to control-plane LLM routing" },
+  { name: "llm-router", description: "Inspect and manage an LLM router through a private operator connection" }
+ ],
+  async run(args, context) {
+    if (args[0] === "llm-router") await runLlmRouterCommand(args, context.signal);
+    else await runLlmCommand(args, context);
+  },
   async workspaceReady(workspace, context) {
     if (await hasRouterConnection(workspace, context)) await deployRouterHelpers(workspace, context);
   },

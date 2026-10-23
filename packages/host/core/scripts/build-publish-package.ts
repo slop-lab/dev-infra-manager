@@ -24,6 +24,8 @@ output.exports = {
   },
   "./plugin-api": { types: "./plugin-api.d.ts", import: "./plugin-api.js", default: "./plugin-api.js" },
   "./workspace": { types: "./workspace.d.ts", import: "./workspace.js" },
+  "./application/protocol": { types: "./application/protocol.d.ts", import: "./application/protocol.js", default: "./application/protocol.js" },
+  "./application": { types: "./application/index.d.ts", import: "./application/index.js", default: "./application/index.js" },
   "./controller": { types: "./controller/index.d.ts", import: "./controller/index.js", default: "./controller/index.js" },
   "./controller/cli": { types: "./controller/cli/index.d.ts", import: "./controller/cli/index.js", default: "./controller/cli/index.js" }
 };

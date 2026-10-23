@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { HostContextStore } from "../../packages/cli/core/src/host-context.js";
-import { encodeHostRequest } from "../../packages/cli/core/src/host-transport.js";
+import { encodeHostRequest } from "@slop-lab/dim-host-core/application/protocol";
 
 const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
 

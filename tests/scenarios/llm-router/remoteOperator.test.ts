@@ -7,10 +7,11 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
-import { createLlmRouterClient, llmOperation, llmOperations } from "../../../packages/clients/llm-router/src/index.js";
+import { createLlmRouterClient } from "../../../packages/clients/llm-router/src/index.js";
+import { llmOperation, llmOperations } from "../../../packages/contracts/llm-router/src/index.js";
 import { operationDescriptors } from "../../../packages/contracts/operations/src/index.js";
-import { runLlmRouterCommand } from "../../../packages/cli/plugins/llm-router/src/index.js";
-import { connectControllerLlmRouter, createControllerLlmRouterConsole, runLlmRouterConsole } from "../../../packages/cli/plugins/llm-router/src/console.js";
+import { runLlmRouterCommand } from "../../../packages/host/plugins/llm-router/src/operator/commands.js";
+import { connectControllerLlmRouter, createControllerLlmRouterConsole, runLlmRouterConsole } from "../../../packages/host/plugins/llm-router/src/operator/console.js";
 import { RouterLedger } from "../../../packages/control-plane/plugins/llm-router/src/ledger.js";
 import { createRouterOperatorServer } from "../../../packages/control-plane/plugins/llm-router/src/operator-server.js";
 import { createRouter } from "../../../packages/control-plane/plugins/llm-router/src/server.js";
@@ -71,7 +72,7 @@ it("discovers a separately hosted router through host-owned operator state and f
   await expect(observer.invoke("project.create", { projectId: "reader-mutation", routeId: "default" })).rejects.toThrow("not available");
   const piped = async (operation: string, serialized: string) => {
     const child = spawn(process.execPath, ["--import", fileURLToPath(new URL("../../node_modules/tsx/dist/loader.mjs", import.meta.url)), "--conditions=dim-source",
-      fileURLToPath(new URL("../../../packages/cli/plugins/llm-router/src/main.ts", import.meta.url)), "console", "invoke", operation,
+      fileURLToPath(new URL("../../../packages/host/plugins/llm-router/src/operator/main.ts", import.meta.url)), "console", "invoke", operation,
       "--expected-selection", console.selectionId, "--input", "-", "--json"], { env: { ...process.env, ...environment }, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "", stderr = "";
     child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); }); child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });

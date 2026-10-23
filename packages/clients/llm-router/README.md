@@ -1,6 +1,6 @@
 # LLM router operator client
 
-This package owns the shared LLM routing operation definitions and a bounded HTTP client. It has no router database or provider dependency. CLI and Web plugins call the same definitions, and the service validates both directions with them.
+This package owns bounded operator HTTP calls and private connection-file access. Shared operation definitions and wire schemas belong to `@slop-lab/dim-contracts-llm-router`. It has no router database or provider dependency. CLI and Web plugins call the same definitions, and the service validates both directions with them.
 
 Create a private, owned mode-0600 connection file with absolute paths:
 

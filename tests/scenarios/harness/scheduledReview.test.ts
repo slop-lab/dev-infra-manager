@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { it } from "vitest";
 import type { ExecutionTaskHandler } from "@slop-lab/dim-contracts-execution/plugin-api";
-import { runScheduledTask } from "../../../packages/execution-scheduler/src/client.js";
+import { runScheduledTask } from "@slop-lab/dim-execution-client/tasks";
 import { createScheduledReviewTraceRuntime } from "../../../packages/control-plane/plugins/review-tracing-scheduled/src/index.js";
 import { loadExampleRecipe, resolveExamplePath } from "../../../scripts/examples/recipe.js";
 
@@ -32,7 +32,7 @@ it("declares the scheduled runtime's required plugins and strictly type-checks i
     await cp(resolveExamplePath(recipe, "repository"), project, { recursive: true });
     const scope = join(project, "node_modules/@slop-lab");
     await mkdir(scope, { recursive: true });
-    await symlink(fileURLToPath(new URL("../../../packages/review-tracing-node", import.meta.url)), join(scope, "dim-review-tracing-node"), "dir");
+    await symlink(fileURLToPath(new URL("../../../packages/review-tracing/runtimes/node", import.meta.url)), join(scope, "dim-review-tracing-node"), "dir");
     await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url)),
       "-p", join(project, "tsconfig.json"), "--noEmit", "--customConditions", "dim-source"]);
   } finally { await rm(directory, { recursive: true, force: true }); }

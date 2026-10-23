@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@slop-lab/dim-review-tracing": "workspace:0.10.0",
-    "@slop-lab/dim-execution-scheduler": "workspace:0.10.0"
+    "@slop-lab/dim-execution-client": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

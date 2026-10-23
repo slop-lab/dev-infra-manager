@@ -118,8 +118,10 @@ is implied by these source changes.
   lifecycle and resources, with explicit Web plugins for LLM router governance,
   execution diagnostics and authoritative Git review. Shared validated operation
   clients connect CLI and Web to the same service authority without requiring
-  host or control-plane implementations in the console. Discover installed CLI
-  plugin commands through root help. Separate
+  host or control-plane implementations in the console. Discover commands from
+  installed host plugins through root help; the LLM router host plugin supplies
+  both workspace integration and operator commands. Keep shared operation wire
+  schemas in contracts, independently of client transports. Separate
   read, operator and reviewer roles. Organize workspaces by host, disclose
   creation and advanced settings on demand, preserve drafts across refresh and
   failed operations, and provide scoped recovery and explicit discard cancellation.

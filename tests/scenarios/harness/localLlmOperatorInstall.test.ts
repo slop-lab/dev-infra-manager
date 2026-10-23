@@ -12,9 +12,9 @@ const roots: string[] = [];
 const version = "0.10.0-local-test";
 const manifest = { schemaVersion: 1, packages: [
   { name: "@slop-lab/dim-cli", version, file: "cli.tgz" },
-  { name: "@slop-lab/dim-control-plane-plugin-llm-router", version, file: "router.tgz", requires: { "@slop-lab/dim-control-plane-core": version, "@slop-lab/dim-llm-router-client": version } },
+  { name: "@slop-lab/dim-control-plane-plugin-llm-router", version, file: "router.tgz", requires: { "@slop-lab/dim-control-plane-core": version, "@slop-lab/dim-contracts-llm-router": version } },
   { name: "@slop-lab/dim-control-plane-core", version, file: "cp-core.tgz" },
-  { name: "@slop-lab/dim-llm-router-client", version, file: "client.tgz", requires: { "@slop-lab/dim-contracts-operations": version } },
+  { name: "@slop-lab/dim-contracts-llm-router", version, file: "contracts.tgz", requires: { "@slop-lab/dim-contracts-operations": version } },
   { name: "@slop-lab/dim-contracts-operations", version, file: "operations.tgz" },
   { name: "@slop-lab/dim-host-core", version, file: "host-core.tgz" }
 ] };
@@ -40,8 +40,8 @@ async function fixture(withConfig = true) {
   return { env, paths, configuration, bundle, retainedKey, retainedData, calls, run, install };
 }
 it("selects the operator's exact dependency closure without the host or presentation runtime", () => {
-  expect(llmOperatorArtifacts(manifest).map(({ file }) => file).sort()).toEqual(["router.tgz", "cp-core.tgz", "client.tgz", "operations.tgz"].sort());
-  expect(() => llmOperatorArtifacts({ ...manifest, packages: manifest.packages.map((entry) => entry.file === "client.tgz" ? { ...entry, version: "0.9.0" } : entry) })).toThrow(/matching/);
+  expect(llmOperatorArtifacts(manifest).map(({ file }) => file).sort()).toEqual(["router.tgz", "cp-core.tgz", "contracts.tgz", "operations.tgz"].sort());
+  expect(() => llmOperatorArtifacts({ ...manifest, packages: manifest.packages.map((entry) => entry.file === "contracts.tgz" ? { ...entry, version: "0.9.0" } : entry) })).toThrow(/matching/);
 });
 it("skips optional operator restoration when no retained service configuration exists", async () => {
   const f = await fixture(false);

@@ -1,4 +1,4 @@
-import { executionWorkerConfigSchema } from "./config.js";
+import { executionWorkerConfigSchema } from "@slop-lab/dim-contracts-ci/worker";
 import { constants } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import { join } from "node:path";

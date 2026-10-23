@@ -12,5 +12,8 @@ of the scheduler implementation and CI repository jobs.
   configuration; the contracts do not depend on those implementations.
 - `/connections` defines operator connection data; `/query` defines task status.
 
-The implementation lives in `@slop-lab/dim-execution-scheduler`. Its `/client`
-entry point submits tasks without importing the SQLite-backed store.
+The durable queue and HTTP service belong to
+`@slop-lab/dim-control-plane-plugin-execution-scheduler`. Producers submit tasks
+through `@slop-lab/dim-execution-client/tasks`, without importing the SQLite-backed
+store. Composed CI/task worker configuration and query projections live in
+`@slop-lab/dim-contracts-ci/worker` and `/query`.

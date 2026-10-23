@@ -1,3 +1,4 @@
+import { encodeHostRequest, decodeHostRequest } from "@slop-lab/dim-host-core/application/protocol";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { execFile, spawn } from "node:child_process";
@@ -9,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
 import {
-  callHost, decodeHostRequest, encodeHostRequest, hostInvocation, HostTransportError, streamHost
+  callHost, hostInvocation, HostTransportError, streamHost
 } from "../../packages/cli/core/src/host-transport.js";
 
 const peer = fileURLToPath(new URL("./fixtures/host-peer.ts", import.meta.url));

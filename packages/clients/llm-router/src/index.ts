@@ -5,8 +5,7 @@ import { isIP } from "node:net";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
-import { capabilitiesSchema, llmOperation, llmOperations } from "./operations.js";
-export { llmOperation, llmOperations, limitsSchema, policySchema, projectSchema } from "./operations.js";
+import { capabilitiesSchema, llmOperation, llmOperations } from "@slop-lab/dim-contracts-llm-router";
 export async function privateOperatorFile(path: string, maximum = 64 * 1024): Promise<string> {
   if (!isAbsolute(path)) throw new Error("operator files require absolute paths");
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

@@ -24,7 +24,7 @@ it("strictly type-checks the standalone TypeScript detector template against its
     await mkdir(scope, { recursive: true });
     // Resolve the repository source export instead of requiring a registry
     // publication or package build just to validate a candidate template.
-    await symlink(fileURLToPath(new URL("../../../packages/review-tracing-node", import.meta.url)), join(scope, "dim-review-tracing-node"), "dir");
+    await symlink(fileURLToPath(new URL("../../../packages/review-tracing/runtimes/node", import.meta.url)), join(scope, "dim-review-tracing-node"), "dir");
     await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url)),
       "-p", join(project, "tsconfig.json"), "--noEmit", "--customConditions", "dim-source"]);
   } finally { await rm(directory, { recursive: true, force: true }); }

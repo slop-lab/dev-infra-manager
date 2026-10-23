@@ -10,7 +10,7 @@ import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { prepareControlPlane, connectControlPlane } from "../../../packages/control-plane/admin/src/controlPlaneSetup.js";
 import { executionServiceConfigSchema } from "../../../packages/control-plane/plugins/execution-scheduler/src/config.js";
-import { executionWorkerConfigSchema } from "../../../packages/host/plugins/execution-worker/src/config.js";
+import { executionWorkerConfigSchema } from "@slop-lab/dim-contracts-ci/worker";
 import { executionWorkerClient } from "../../../packages/host/plugins/execution-worker/src/client.js";
 import { configuredExecutionServer } from "../../../packages/control-plane/plugins/execution-scheduler/src/service.js";
 

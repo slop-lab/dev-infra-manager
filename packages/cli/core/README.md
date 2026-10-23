@@ -1,7 +1,9 @@
 # @slop-lab/dim-cli
 
 `dim` creates persistent, isolated development workspaces from ordinary Git
-repositories on a local or SSH host. Managed Git, review and CI are optional.
+repositories on a local or SSH host. It owns command presentation, host selection
+and transport; `@slop-lab/dim-host-core/application` executes the selected-host
+application. Managed Git, review and CI are optional.
 Repositories do not need `.dim` configuration.
 
 ## Installation
@@ -17,6 +19,12 @@ dim doctor
 
 Linux development hosts need Docker, Compose, Buildx and `sysbox-runc`. A remote
 client needs Node.js and SSH; runtime operations execute on the selected host.
+
+CLI and host core currently use exact matching release versions. Changing a host
+implementation does not require changing command presentation, but the installer
+updates the matched CLI/core package set together. Independent cross-version
+CLI/host protocol compatibility is not promised for pre-stable releases. The
+installer facade is a separate retained entrypoint.
 
 ## Local development
 
@@ -49,7 +57,7 @@ grouping is helpful.
 ### Required workspace plugins
 
 The [repository configuration guide](../../../docs/guides/repository-configuration.md)
-lists all `.dim` readers. The CLI's generic declaration is `workspace.json`;
+lists all `.dim` readers. The host application's generic declaration is `workspace.json`;
 repository-policy and workflow YAML belong to optional plugins.
 
 A repository may declare exact host plugin packages in `.dim/workspace.json`:

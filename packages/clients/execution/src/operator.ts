@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { z } from "zod";
 import { executionOperatorConnectionSchema } from "@slop-lab/dim-contracts-execution/connections";
-import { scheduledSummarySchema, executionWorkersSchema } from "./schemas.js";
+import { scheduledSummarySchema, executionWorkersSchema } from "@slop-lab/dim-contracts-ci/query";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 
 export async function createExecutionOperatorClient(file: string) {

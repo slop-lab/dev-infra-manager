@@ -1,3 +1,4 @@
+import { executionWorkersSchemaFor, taskSummarySchema } from "@slop-lab/dim-contracts-execution/query";
 import { z } from "zod";
 import { executionEventSchema } from "./execution-protocol.js";
 import { executionSchema, executionResultSchema, type Execution } from "./aggregate.js";
@@ -28,3 +29,7 @@ const { logs: _logs, ...metadata } = executionResultSchema.shape;
 export const executionSummaryRowSchema = z.object({ ...executionSchema.shape,
   grant: z.undefined().optional(), leaseToken: z.undefined().optional(), profile: z.undefined().optional(), result: z.object(metadata).strict().optional()
 }).strict();
+
+/** The deployed execution service schedules CI jobs and generic plugin tasks together. */
+export const scheduledSummarySchema = z.union([executionSummarySchema, taskSummarySchema]);
+export const executionWorkersSchema = executionWorkersSchemaFor(scheduledSummarySchema);

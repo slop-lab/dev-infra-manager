@@ -11,7 +11,7 @@ import {
   writeUserConfig,
   type DimCliConfig
 } from "./installConfig.js";
-import { prepareCliPluginGraph, verifySelectedPlugins, type CliPluginSelection } from "./cliPluginGraph.js";
+import { prepareRuntimePluginGraph, verifySelectedPlugins, type RuntimePluginSelection } from "./runtimePluginGraph.js";
 import {
   installManagedSymlink,
   restoreManagedSymlink,
@@ -23,7 +23,7 @@ import { runStagedStatePreflight } from "./statePreflight.js";
 import type { InstallerOperation } from "./installProgress.js";
 import { managedControllerIsActive } from "./controllerActivation.js";
 
-export type { CliPluginSelection } from "./cliPluginGraph.js";
+export type { RuntimePluginSelection } from "./runtimePluginGraph.js";
 export { installManagedSymlink } from "./managedSymlink.js";
 
 export interface CliInstallOptions {
@@ -37,7 +37,7 @@ export interface CliInstallOptions {
   readonly npmCommand?: string;
   readonly operation?: InstallerOperation;
   readonly restartController?: boolean;
-  readonly plugins?: readonly CliPluginSelection[];
+  readonly plugins?: readonly RuntimePluginSelection[];
 }
 
 export { readLocalPackageBundle, type LocalPackageBundle } from "./localPackageBundle.js";
@@ -61,7 +61,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     ?? (options.version ? [`@slop-lab/dim-cli@${options.version}`] : undefined);
   if (!requestedPackages) throw new Error("a CLI version or local package bundle is required");
   const selectedPlugins = options.plugins ?? [];
-  const pluginGraph = await prepareCliPluginGraph(currentDirectory, selectedPlugins, options.packageNames ?? []);
+  const pluginGraph = await prepareRuntimePluginGraph(currentDirectory, selectedPlugins, options.packageNames ?? []);
   const packageSpecifiers = [...requestedPackages, ...pluginGraph.specifiers];
   const configPath = options.configPath ?? defaultUserConfigPath();
   const backupDirectory = path.join(managedRoot, `.previous-${process.pid}-${Date.now()}`);

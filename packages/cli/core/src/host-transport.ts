@@ -1,11 +1,7 @@
+import { encodeHostRequest, type HostRequest } from "@slop-lab/dim-host-core/application/protocol";
 import { spawn } from "node:child_process";
 import { type Readable, type Writable } from "node:stream";
 import { type HostTarget, validateTarget } from "./host-context.js";
-
-export interface HostRequest {
-  readonly operation: string;
-  readonly input?: Record<string, unknown>;
-}
 
 export interface HostTransportOptions {
   /** Override for an embedded client or a test host, without invoking a shell. */
@@ -26,22 +22,6 @@ export class HostTransportError extends Error {
   constructor(message: string, readonly exitCode = 1, options?: ErrorOptions & { reported?: boolean }) {
     super(message, options);
     this.reported = options?.reported ?? false;
-  }
-}
-
-export function encodeHostRequest(request: HostRequest): string {
-  validateRequest(request);
-  return Buffer.from(JSON.stringify(request), "utf8").toString("base64url");
-}
-
-export function decodeHostRequest(encoded: string): HostRequest {
-  try {
-    if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error("invalid request encoding");
-    const request: unknown = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-    validateRequest(request);
-    return request;
-  } catch (error) {
-    throw new HostTransportError("invalid host request", 2, { cause: error });
   }
 }
 
@@ -193,13 +173,4 @@ function processExit(child: ReturnType<typeof spawn>, target: HostTarget, signal
     if (signal?.aborted) abort();
     else signal?.addEventListener("abort", abort, { once: true });
   });
-}
-
-function validateRequest(value: unknown): asserts value is HostRequest {
-  if (!value || typeof value !== "object" || Array.isArray(value)
-    || !("operation" in value) || typeof value.operation !== "string"
-    || !/^[a-z][a-zA-Z0-9.]*$/.test(value.operation)
-    || ("input" in value && (value.input === null || typeof value.input !== "object" || Array.isArray(value.input)))) {
-    throw new HostTransportError("invalid host request", 2);
-  }
 }

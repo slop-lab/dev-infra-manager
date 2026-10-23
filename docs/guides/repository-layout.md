@@ -5,17 +5,15 @@ Production packages are grouped by where they run and what they own:
 | Directory | Published package | Responsibility |
 | --- | --- | --- |
 | `packages/host/core` | `@slop-lab/dim-host-core` | Workspace lifecycle, host controller, plugin composition and scoped guest access |
-| `packages/host/plugins/<name>` | `@slop-lab/dim-host-plugin-<name>` | Optional host capabilities and their workspace or agent integration |
+| `packages/host/plugins/<name>` | `@slop-lab/dim-host-plugin-<name>` | Optional host capabilities, their selected-host CLI commands and workspace or agent integration |
 | `packages/control-plane/core` | `@slop-lab/dim-control-plane-core` | Standalone control-plane plugin runtime |
 | `packages/control-plane/plugins/<name>` | `@slop-lab/dim-control-plane-plugin-<name>` | Independent authoritative services and workflow interpretation |
 | `packages/control-plane/deployment` | `@this-project/control-plane-deployment` (private) | Composition artifact for the installer’s fixed service-image profile |
 | `packages/control-plane/admin` | `@slop-lab/dim-control-plane-admin` | Explicit service deployment and operator connection tools |
-| `packages/execution-scheduler` | `@slop-lab/dim-execution-scheduler` | Durable queue and lease implementation; isolated `/client` transport entrypoint |
-| `packages/review-tracing-node` | `@slop-lab/dim-review-tracing-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
-| `packages/review-tracing` | `@slop-lab/dim-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
+| `packages/review-tracing/runtimes/node` | `@slop-lab/dim-review-tracing-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
+| `packages/review-tracing/core` | `@slop-lab/dim-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
 | `packages/cli/core` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
-| `packages/cli/plugins/<name>` | `@slop-lab/dim-cli-plugin-<name>` | Feature commands using client-side operation APIs |
 | `packages/clients/<name>` | Feature-specific client packages | Shared service calls and validated operations without running their authoritative service; LLM router, execution and Native Git clients |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
 | `packages/web/core` | `@slop-lab/dim-web` | Authenticated console shell, host workspaces, plugin loading and session enforcement |
@@ -27,6 +25,21 @@ machine; they describe authority and installation, not physical topology.
 Host plugins own delivery of their workspace and agent helpers through the
 shared host integration mechanism. Repositories need no plugin configuration
 for capabilities selected by the operator.
+
+There is one CLI command transport, not a separate CLI plugin loader. Optional
+commands belong to the selected host plugin and are discovered from its command
+contributions. Installing the LLM router host plugin supplies both gateway/guest
+integration (`llm`) and operator presentation (`llm-router`); its standalone
+operator executable imports neither the host application nor a router service.
+CLI and Web remain separate presentations of the same service contracts.
+
+Client packages own caller-side transport, private connection loading and
+validated operations shared by presenters. They are libraries, not installed
+plugins. Services depend on neutral wire contracts, never on their clients;
+for example, LLM router operation definitions live in `contracts/llm-router`.
+The execution queue and lease store live inside the control-plane scheduler;
+the scheduled task issuer is exposed by `execution-client/tasks`. A new runtime
+adapter or presenter does not require copying that store into another package.
 
 Review tracing is optional. The shared tracing package contains no service,
 container runner or language loader. The control-plane `review-tracing` plugin

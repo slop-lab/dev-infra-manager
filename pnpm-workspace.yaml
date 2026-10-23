@@ -6,11 +6,9 @@ packages:
   - packages/control-plane/deployment
   - packages/control-plane/plugins/*
   - packages/contracts/*
-  - packages/review-tracing
-  - packages/review-tracing-node
-  - packages/execution-scheduler
+  - packages/review-tracing/core
+  - packages/review-tracing/runtimes/node
   - packages/cli/core
-  - packages/cli/plugins/*
   - packages/installer
   - packages/web/core
   - packages/web/plugins/*

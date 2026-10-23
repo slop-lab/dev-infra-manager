@@ -1,0 +1,15 @@
+{
+  "extends": "../../../../tsconfig.source.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "rootDir": "src",
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.mjs"
+  ]
+}

@@ -3,7 +3,7 @@ import { loadNativeGitRootImporterConnection } from "../../../packages/host/plug
 import { compileNativeRepositoryBootstrapPolicy } from "../../../packages/host/plugins/native-git/src/nativeRootBootstrapPolicy.js";
 import { managedPolicyExtensions } from "../../support/git-policy.js";
 import { repositoryBinding } from "../../host/plugins/native-git/nativeProjectFixture.js";
-import { executionWorkerConfigSchema } from "../../../packages/host/plugins/execution-worker/src/config.js";
+import { executionWorkerConfigSchema } from "@slop-lab/dim-contracts-ci/worker";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";

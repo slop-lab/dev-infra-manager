@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { ContainerWorkspaceRuntime, ProcessRunner, WorkspaceService, WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import { type HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
 import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
-import { resolveHostExecutionRouting } from "../../../../packages/cli/core/src/host-plugins.js";
+import { resolveHostExecutionRouting } from "../../../../packages/host/core/src/application/host-plugins.js";
 import { hostPlugin } from "../../../../packages/host/plugins/execution-worker/src/index.js";
 import { runHostExecutionWorker } from "../../../../packages/host/plugins/execution-worker/src/host.js";
 vi.mock("../../../../packages/host/plugins/execution-worker/src/host.js", () => ({ runHostExecutionWorker: vi.fn(async () => {}) }));

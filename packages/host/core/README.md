@@ -46,13 +46,22 @@ failures do not rewrite lifecycle state.
 The root export and `/workspace` expose workspace state, lifecycle, runtime and
 guest-delivery APIs. `/controller` exposes generic route, administration,
 host-input and extension registration; `/controller/cli` supplies controller
-commands and transport helpers. These entrypoints do not select feature plugins.
+commands and transport helpers.
+
+`/application` composes the explicitly installed host plugins, source providers,
+runtimes, checkout requirements and scoped guest bridge. It executes host requests
+without depending on the DIM CLI or control-plane administration packages. Optional
+operator commands are supplied by the caller. `/application/protocol` contains
+only request and exact-plugin-spec validation for transport clients. The guest
+bridge launches its own host-core entrypoint; its generation binds that launcher
+and application code so updates fence previous bridge credentials.
 
 `WorkspaceHostPlugin` defines optional runtime, command, guest-preparation and
 execution-routing capabilities. Native Project acquisition belongs to
 `@slop-lab/dim-host-plugin-native-git`; CI workers and VM runtimes have their own
 host plugins. Control-plane authority and coordination live in separate
-control-plane packages. The host CLI composes explicitly enabled capabilities.
+control-plane packages. The host application composes explicitly enabled capabilities; the CLI routes
+commands to that application on the selected host.
 
 See [plugin responsibilities](../../../docs/guides/plugins.md) and
 [host/guest preparation](../../../docs/guides/plugin-scopes.md).

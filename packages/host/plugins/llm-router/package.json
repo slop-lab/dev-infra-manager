@@ -2,7 +2,7 @@
   "name": "@slop-lab/dim-host-plugin-llm-router",
   "version": "0.10.0",
   "private": true,
-  "description": "Workspace-bound gateway and OpenCode attachment for the optional control-plane LLM router",
+  "description": "Host workspace gateway and remote operator commands for the optional LLM router",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -44,5 +44,17 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@slop-lab/dim-llm-router-client": "workspace:0.10.0",
+    "@slop-lab/dim-contracts-llm-router": "workspace:0.10.0"
+  },
+  "peerDependenciesMeta": {
+    "@slop-lab/dim-host-core": {
+      "optional": true
+    }
+  },
+  "bin": {
+    "dim-llm-router": "./dist/operator/main.js"
   }
 }

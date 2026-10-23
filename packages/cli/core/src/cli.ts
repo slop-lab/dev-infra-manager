@@ -12,15 +12,13 @@ await main();
 async function main(): Promise<void> {
   try {
     const args = process.argv.slice(process.argv[2] === "--" ? 3 : 2);
-    if (args[0] === "__agent") {
-      if (args.length !== 2) throw new UserError("workspace bridge requires exactly one private configuration path");
-      const { runWorkspaceAgent } = await import("./workspace-agent.js");
-      await runWorkspaceAgent(args[1]!); return;
-    }
     if (args[0] === "__host") {
       if (args.length !== 2) throw new UserError("host mode requires exactly one encoded request");
-      const { runHostRequest } = await import("./host-application.js");
-      await runHostRequest(args[1]!);
+      const { runHostRequest } = await import("@slop-lab/dim-host-core/application");
+      await runHostRequest(args[1]!, {
+        controller: async (command) => { const { runControllerApplication } = await import("./controller-application.js"); await runControllerApplication(command); },
+        controlPlane: async (command) => { const { runControlPlaneApplication } = await import("./control-plane-application.js"); await runControlPlaneApplication(command); }
+      });
       return;
     }
     // Optional administration follows the selected host. The root controller

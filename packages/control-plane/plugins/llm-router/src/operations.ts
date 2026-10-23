@@ -1,4 +1,4 @@
-import { llmOperation, llmOperations } from "@slop-lab/dim-llm-router-client";
+import { llmOperation, llmOperations } from "@slop-lab/dim-contracts-llm-router";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
 import { object, parsePolicy, text, type RouterConfig } from "./config.js";
 import { type RouterLedger, type Usage } from "./ledger.js";

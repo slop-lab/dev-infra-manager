@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { llmOperations } from "@slop-lab/dim-llm-router-client";
+import { llmOperations } from "@slop-lab/dim-contracts-llm-router";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
 import type { WebPluginContext, WebPluginRuntime } from "@slop-lab/dim-web/plugin-api";
 const controllerId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);

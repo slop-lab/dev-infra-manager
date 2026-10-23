@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { execFile } from "node:child_process";
+import childProcess, { execFile, type SpawnOptions } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { promisify } from "node:util";
 import { request as httpRequest } from "node:http";
 import { cp, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -8,8 +9,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceService, WorkspaceStore, type WorkspaceRuntime } from "@slop-lab/dim-host-core/workspace";
-import { loadHostPlugins } from "../../../packages/cli/core/src/host-plugins.js";
-import { createWorkspaceAgentServer, ensureWorkspaceAgent, runWorkspaceAgent, workspaceAgentGeneration } from "../../../packages/cli/core/src/workspace-agent.js";
+import { loadHostPlugins } from "../../../packages/host/core/src/application/host-plugins.js";
+import { createWorkspaceAgentServer, ensureWorkspaceAgent, runWorkspaceAgent, workspaceAgentGeneration } from "../../../packages/host/core/src/application/workspace-agent.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(cleanup.splice(0).map((action) => action())); });
@@ -261,8 +262,18 @@ setInterval(()=>{},1000);process.on('SIGTERM',()=>process.exit(0));
     expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${value.token}`);
     return new Response("{}", { headers: { "x-dim-bridge-generation": value.generation } });
   });
-  const original = process.argv[1]; if (!original) throw new Error("missing test entrypoint");
-  process.argv[1] = script;
+  const spawn = childProcess.spawn;
+  const launch = vi.spyOn(childProcess, "spawn").mockImplementation(((command: string, argumentsOrOptions?: readonly string[] | SpawnOptions, options: SpawnOptions = {}) => {
+    const args = Array.isArray(argumentsOrOptions) ? argumentsOrOptions : [];
+    const settings = argumentsOrOptions && !Array.isArray(argumentsOrOptions) ? argumentsOrOptions as SpawnOptions : options;
+    if (args?.some((argument) => /workspace-agent-process\.(?:ts|js)$/.test(argument))) {
+      // Replace only the detached bridge process; real guest writes still use
+      // their exact runtime subprocess. No CLI launcher participates.
+      return spawn(command, [script, file], settings);
+    }
+    return spawn(command, args, settings);
+  }) as typeof childProcess.spawn);
+  syncBuiltinESMExports();
   try {
     await ensureWorkspaceAgent(f.record, context);
     const configured: unknown = JSON.parse(await readFile(file, "utf8"));
@@ -277,7 +288,7 @@ setInterval(()=>{},1000);process.on('SIGTERM',()=>process.exit(0));
     await writeFile(file, JSON.stringify(stale), { mode: 0o600 });
     await expect(runWorkspaceAgent(file)).rejects.toThrow(/generation changed before startup/);
   } finally {
-    process.argv[1] = original; probe.mockRestore();
+    launch.mockRestore(); syncBuiltinESMExports(); probe.mockRestore();
     try { process.kill(Number(await readFile(pidFile, "utf8")), "SIGTERM"); } catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
   }
 });

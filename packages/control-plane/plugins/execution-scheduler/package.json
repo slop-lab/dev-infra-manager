@@ -25,15 +25,6 @@
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js",
       "default": "./dist/config.js"
-    },
-    "./query": {
-      "dim-source": {
-        "types": "./src/query.ts",
-        "default": "./src/query.ts"
-      },
-      "types": "./dist/query.d.ts",
-      "import": "./dist/query.js",
-      "default": "./dist/query.js"
     }
   },
   "engines": {
@@ -47,7 +38,6 @@
     "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
     "zod": "4.1.11",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0",
-    "@slop-lab/dim-execution-scheduler": "workspace:0.10.0",
     "@slop-lab/dim-contracts-execution": "workspace:0.10.0"
   },
   "peerDependencies": {

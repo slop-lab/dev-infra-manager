@@ -6,9 +6,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { ProcessRunner, WorkspaceService, WorkspaceStore, acquireWorkspaceSource, type WorkspaceRuntime, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
-import { exactPluginSpec, installRequiredPlugins, missingPlugins, workspaceRequirements } from "../../packages/cli/core/src/workspace-requirements.js";
+import { installRequiredPlugins, missingPlugins, workspaceRequirements } from "../../packages/host/core/src/application/workspace-requirements.js";
 import { createWorkspaceWithPlugins } from "../../packages/cli/core/src/workspace-create-client.js";
-import { encodeHostRequest, type HostRequest } from "../../packages/cli/core/src/host-transport.js";
+import { exactPluginSpec, encodeHostRequest, type HostRequest } from "@slop-lab/dim-host-core/application/protocol";
 import { HostContextStore } from "../../packages/cli/core/src/host-context.js";
 
 const spec = "@slop-lab/dim-host-plugin-mirrors@0.10.0";

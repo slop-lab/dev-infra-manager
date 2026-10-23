@@ -1,7 +1,8 @@
 import { automaticRouterConnections, controllerOperation, controllerScoped } from "./controllers.js";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import { createLlmRouterClient, llmOperations } from "@slop-lab/dim-llm-router-client";
+import { createLlmRouterClient } from "@slop-lab/dim-llm-router-client";
+import { llmOperations } from "@slop-lab/dim-contracts-llm-router";
 import type { WebPlugin } from "@slop-lab/dim-web/plugin-api";
 const configuration = z.strictObject({ connectionFile: z.string().refine(isAbsolute) });
 export const webPlugin: WebPlugin = {

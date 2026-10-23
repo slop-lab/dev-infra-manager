@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { backendProfile, defaultLimits } from "../../../packages/control-plane/plugins/llm-router/src/config.js";
 
-it("starts the published control-plane plugin and operator CLI with its service SDK and operation client, without host core", async () => {
+it("starts the published control-plane plugin with wire contracts, without host core or an operator client", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-llm-standalone-"));
   try {
     const modules = join(root, "node_modules/@slop-lab"); await mkdir(modules, { recursive: true });
@@ -16,12 +16,14 @@ it("starts the published control-plane plugin and operator CLI with its service 
     await cp(fileURLToPath(new URL("../../../packages/control-plane/plugins/llm-router/dist/", import.meta.url)), plugin, { recursive: true });
     await cp(fileURLToPath(new URL("../../../packages/control-plane/core/dist", import.meta.url)), join(modules, "dim-control-plane-core"), { recursive: true });
     await cp(fileURLToPath(new URL("../../../packages/contracts/operations/dist", import.meta.url)), join(modules, "dim-contracts-operations"), { recursive: true });
-    await cp(fileURLToPath(new URL("../../../packages/clients/llm-router/dist", import.meta.url)), join(modules, "dim-llm-router-client"), { recursive: true });
-    await cp(await realpath(fileURLToPath(new URL("../../../packages/clients/llm-router/node_modules/zod", import.meta.url))), join(root, "node_modules/zod"), { recursive: true });
+    await cp(fileURLToPath(new URL("../../../packages/contracts/llm-router/dist", import.meta.url)), join(modules, "dim-contracts-llm-router"), { recursive: true });
+    await cp(await realpath(fileURLToPath(new URL("../../../packages/contracts/llm-router/node_modules/zod", import.meta.url))), join(root, "node_modules/zod"), { recursive: true });
     await expect(stat(join(modules, "dim-host-core"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(modules, "dim-llm-router-client"))).rejects.toMatchObject({ code: "ENOENT" });
     const metadata: unknown = JSON.parse(await readFile(join(plugin, "package.json"), "utf8"));
-    expect(metadata).toMatchObject({ dependencies: { "@slop-lab/dim-control-plane-core": expect.any(String), "@slop-lab/dim-llm-router-client": expect.any(String), "@slop-lab/dim-contracts-operations": expect.any(String) } });
+    expect(metadata).toMatchObject({ dependencies: { "@slop-lab/dim-control-plane-core": expect.any(String), "@slop-lab/dim-contracts-llm-router": expect.any(String), "@slop-lab/dim-contracts-operations": expect.any(String) } });
     expect(JSON.stringify(metadata)).not.toContain("dim-host-core");
+    expect(JSON.stringify(metadata)).not.toContain("dim-llm-router-client");
     const probe = createServer(); await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
     const address = probe.address(); if (!address || typeof address === "string") throw new Error("missing port");
     await new Promise<void>((resolve) => probe.close(() => resolve()));

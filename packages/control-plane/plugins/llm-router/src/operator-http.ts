@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { llmOperation } from "@slop-lab/dim-llm-router-client";
+import { llmOperation } from "@slop-lab/dim-contracts-llm-router";
 import { privateFile, type RouterConfig } from "./config.js";
 import { hash, type RouterLedger } from "./ledger.js";
 import { invokeRouterOperation } from "./operations.js";

@@ -1,6 +1,6 @@
 # Control-plane execution scheduler
 
-`@slop-lab/dim-control-plane-plugin-execution-scheduler` hosts the shared task scheduler and its CI admission/result adapter. Durable queue, slot ownership, leases and state transitions belong to `@slop-lab/dim-execution-scheduler`; this plugin owns HTTP coordination and CI-specific authorization/publication. It starts no Docker containers or VMs and requires no host core or workspace store.
+`@slop-lab/dim-control-plane-plugin-execution-scheduler` owns the shared durable task queue, slot ownership, leases and state transitions, along with HTTP coordination and CI-specific authorization/publication. Its internal `TaskStore` validates domain codecs and complete persisted aggregates; it is not a separate service or installable library. It starts no Docker containers or VMs and requires no host core or workspace store.
 
 Install it explicitly for the control plane:
 
@@ -25,6 +25,12 @@ tasks must be evaluated again. CI-only query/log operations retain their CI
 shape; operator worker status, cancellation and recovery include general tasks.
 An interactive task retry requires a fresh issuer session rather than replaying
 callbacks from an earlier evaluation.
+
+Task producers use `runScheduledTask` from `@slop-lab/dim-execution-client/tasks`.
+That entry point handles task submission and bounded exchange without loading
+the scheduler, SQLite store or host implementation. Shared task schemas remain
+in the execution contracts; composed CI/task status and worker configuration
+belong to the CI contracts used by both service and operator adapters.
 
 See [scheduled review detectors](../review-tracing-scheduled/README.md) for a
 complete non-CI use case, required host/control-plane plugins and setup.

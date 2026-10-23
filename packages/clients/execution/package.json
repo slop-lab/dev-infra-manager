@@ -16,6 +16,15 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./tasks": {
+      "dim-source": {
+        "types": "./src/tasks.ts",
+        "default": "./src/tasks.ts"
+      },
+      "types": "./dist/tasks.d.ts",
+      "import": "./dist/tasks.js",
+      "default": "./dist/tasks.js"
     }
   },
   "scripts": {

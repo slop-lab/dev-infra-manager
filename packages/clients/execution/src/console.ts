@@ -3,7 +3,7 @@ import type { Operation } from "@slop-lab/dim-contracts-operations";
 import { executionSummarySchema, executionDetailSchema } from "@slop-lab/dim-contracts-ci/query";
 import { createCiQueryClient } from "./query.js";
 import { createExecutionOperatorClient } from "./operator.js";
-import { executionWorkersSchema, scheduledSummarySchema } from "./schemas.js";
+import { executionWorkersSchema, scheduledSummarySchema } from "@slop-lab/dim-contracts-ci/query";
 const empty = z.object({}).strict().default({});
 const job = z.object({ id: z.string().uuid() }).strict();
 const retry = job.extend({ requestId: z.string().uuid() });

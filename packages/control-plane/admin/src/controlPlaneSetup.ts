@@ -1,4 +1,4 @@
-import { executionWorkerConfigSchema } from "@slop-lab/dim-host-plugin-execution-worker/config";
+import { executionWorkerConfigSchema } from "@slop-lab/dim-contracts-ci/worker";
 import { executionProfileSchema, type ExecutionProfile } from "@slop-lab/dim-contracts-ci/execution";
 import { ciQueryConnectionSchema } from "@slop-lab/dim-contracts-ci/connections";
 import { parseControlPlaneServicePair, parseManagedGitServiceConfig } from "./service-pair.js";

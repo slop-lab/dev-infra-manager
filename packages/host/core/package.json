@@ -63,6 +63,24 @@
       "types": "./dist/plugin-api.d.ts",
       "import": "./dist/plugin-api.js",
       "default": "./dist/plugin-api.js"
+    },
+    "./application": {
+      "dim-source": {
+        "types": "./src/application/index.ts",
+        "default": "./src/application/index.ts"
+      },
+      "types": "./dist/application/index.d.ts",
+      "import": "./dist/application/index.js",
+      "default": "./dist/application/index.js"
+    },
+    "./application/protocol": {
+      "dim-source": {
+        "types": "./src/application/protocol.ts",
+        "default": "./src/application/protocol.ts"
+      },
+      "types": "./dist/application/protocol.d.ts",
+      "import": "./dist/application/protocol.js",
+      "default": "./dist/application/protocol.js"
     }
   },
   "scripts": {

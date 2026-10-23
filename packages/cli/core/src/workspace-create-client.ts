@@ -1,7 +1,8 @@
 import { UserError, parseWorkspaceRecord, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import type { HostTarget } from "./host-context.js";
-import { callHost, type HostRequest } from "./host-transport.js";
-import { pluginSpecs, type RequiredPlugins } from "./workspace-requirements.js";
+import { callHost } from "./host-transport.js";
+import type { HostRequest } from "@slop-lab/dim-host-core/application/protocol";
+import { pluginSpecs, type RequiredPlugins } from "@slop-lab/dim-host-core/application/protocol";
 
 export interface CreateWorkspaceClientOptions {
   readonly signal?: AbortSignal;

@@ -1,6 +1,6 @@
-# Host LLM router gateway
+# Host LLM router integration
 
-This optional host plugin attaches existing workspaces to a separately operated [control-plane LLM router](../../../control-plane/plugins/llm-router/README.md). It owns local workspace liveness checks, a persistent gateway and the OpenCode adapter. It never hosts provider credentials, project ledgers or account management. The host package depends on workspace core; the CP package does not.
+This optional host plugin attaches existing workspaces to a separately operated [control-plane LLM router](../../../control-plane/plugins/llm-router/README.md). It owns local workspace liveness checks, a persistent gateway and the OpenCode adapter. It never stores provider credentials or project ledgers. Its operator commands manage a local or remote router through a separate private operator connection. Installing this one host plugin exposes both `dim llm` and `dim llm-router` on the selected host; no CLI companion is needed. The control-plane service remains independent of workspace core.
 
 ```sh
 dim installer install plugin @slop-lab/dim-host-plugin-llm-router@0.10.0
@@ -84,3 +84,48 @@ connection requires an explicit host-side attachment again.
 Codex may use an explicitly configured custom Responses provider with this same
 scoped bearer token. No TLS interception or copying of ChatGPT authentication is
 needed. DIM does not rewrite an existing Codex provider configuration.
+
+## Operator commands
+
+Install this host plugin to use `dim llm-router --help`. It connects to a router's explicit private operator connection; it does not open the service database or install a router backend.
+
+```bash
+dim llm-router account.create --connection /absolute/operator.json --provider codex
+# Use the returned generated ID to start device login:
+dim llm-router account.login.start --connection /absolute/operator.json --account ACCOUNT_ID
+dim llm-router account.rename --connection /absolute/operator.json --account ACCOUNT_ID --reference "Work account"
+dim llm-router overview --connection /absolute/operator.json
+dim llm-router requests --connection /absolute/operator.json --active true
+dim llm-router project.state --connection /absolute/operator.json --project demo --action pause
+```
+
+Enrollment generates a unique account ID and provider label unless `--account` or `--reference` is supplied. Labels can be changed later while account IDs, credential partitions and usage attribution remain stable.
+
+To make a router available through a controller to DIM Web, select its private
+operator connection on that controller:
+
+```bash
+dim llm-router connect --connection /absolute/controller/operator.json
+dim llm-router console describe --json
+```
+
+The router may run on another control-plane machine. Selection stores only an
+owned mode-0600 pointer in `$XDG_CONFIG_HOME/dim/llm/operator-selection.json` (or
+`~/.config/dim/llm/operator-selection.json`); the connection and key remain private
+on the controller. Without that pointer, discovery uses `dim/llm/operator.json`
+under the same configuration root. Trusted host processes can instead set
+`DIM_LLM_ROUTER_OPERATOR_CONNECTION_FILE` to an absolute operator connection.
+An issuer connection for workspace attachments cannot authenticate operator actions.
+
+Discovery publishes allowed operation descriptors and an opaque `selectionId`.
+This identifies the selected endpoint and operator authority independently of
+Native Git or deployment generations. Every bridged invocation requires
+`--expected-selection HASH`; changed endpoint, actor or credentials require a
+Web feature reconnect. The fingerprint is checked against the exact connection
+and key snapshot used for the HTTP request. Web sends JSON through bounded stdin
+(`--input -`), keeping provider API keys out of process arguments. Read-only
+operator actors expose only their permitted read operations.
+
+Project policy replacement takes `--policy-file` with an owned mode-0600 JSON file. Each operation rejects unrelated flags and validates its arguments with the same definition used by the service and Web plugin. Workspace inference principals and host issuer credentials cannot authenticate this interface.
+
+The package also provides the standalone `dim-llm-router` executable with the same arguments (omit the `dim llm-router` prefix). This client requires no host runtime, local workspace installation or control-plane service implementation. Its host-core peer is optional; this isolated executable imports only the remote client and operation contracts, without loading the workspace gateway or host integration.
