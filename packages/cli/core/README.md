@@ -1,15 +1,21 @@
 # @slop-lab/dim-cli
 
-`dim` creates persistent, isolated development workspaces from ordinary Git
-repositories on a local or SSH host. It owns command presentation, host selection
-and transport; `@slop-lab/dim-host-core/application` executes the selected-host
-application. Managed Git, review and CI are optional.
-Repositories do not need `.dim` configuration.
+`dim` selects local or SSH hosts and forwards command arguments, terminal streams
+and exit status. Host commands, plugins, resource validation and workspace records
+belong to the selected host. The client imports no host runtime or control-plane
+implementation.
+
+CLI and host releases negotiate the small `dim.cli-host` wire protocol, not package
+version equality. A compatible host can add commands and flags without updating
+the client. `dim host ...` edits client-local connections; `dim forward` owns the
+client loopback listener and pins each stream to the selected workspace identity.
+Bare `dim --version` reports the client release. `dim --host-protocol` reports its
+supported wire versions without contacting a host.
 
 ## Installation
 
-The supported facade is `@slop-lab/dim-installer`. Install the same exact
-version on each development host:
+The supported facade is `@slop-lab/dim-installer`. Runtime packages use reviewed
+exact versions; CLI and host updates are separate installation choices:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.10.0'
@@ -20,11 +26,15 @@ dim doctor
 Linux development hosts need Docker, Compose, Buildx and `sysbox-runc`. A remote
 client needs Node.js and SSH; runtime operations execute on the selected host.
 
-CLI and host core currently use exact matching release versions. Changing a host
-implementation does not require changing command presentation, but the installer
-updates the matched CLI/core package set together. Independent cross-version
-CLI/host protocol compatibility is not promised for pre-stable releases. The
-installer facade is a separate retained entrypoint.
+`dim installer install core` installs or updates the host and bootstraps a client
+when needed. It preserves an existing compatible client. Use `dim installer
+install cli` to update only the client. The installer rejects incompatible wire
+versions before promoting a staged host. Host/plugin dependency versions remain
+independent of client compatibility.
+
+The [v1 wire contract](../../../docs/specs/cli-host-protocol-v1.md) is retained
+across releases. Internal host APIs and command-specific output are not frozen
+by that contract. The installer facade remains the supported entrypoint.
 
 ## Local development
 

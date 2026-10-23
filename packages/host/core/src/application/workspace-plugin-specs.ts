@@ -1,39 +1,6 @@
 import { UserError } from "../errors.js";
 import type { AcquiredWorkspaceSource } from "../workspace/models.js";
 
-export interface HostRequest {
-  readonly operation: string;
-  readonly input?: Record<string, unknown>;
-}
-
-export class HostRequestError extends UserError {}
-
-export function encodeHostRequest(request: HostRequest): string {
-  validateRequest(request);
-  return Buffer.from(JSON.stringify(request), "utf8").toString("base64url");
-}
-
-export function decodeHostRequest(encoded: string): HostRequest {
-  try {
-    if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error("invalid request encoding");
-    const request: unknown = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-    validateRequest(request);
-    return request;
-  } catch (error) {
-    throw new HostRequestError("invalid host request", { cause: error });
-  }
-}
-
-
-function validateRequest(value: unknown): asserts value is HostRequest {
-  if (!value || typeof value !== "object" || Array.isArray(value)
-    || !("operation" in value) || typeof value.operation !== "string"
-    || !/^[a-z][a-zA-Z0-9.]*$/.test(value.operation)
-    || ("input" in value && (value.input === null || typeof value.input !== "object" || Array.isArray(value.input)))) {
-    throw new HostRequestError("invalid host request");
-  }
-}
-
 export interface RequiredPlugins {
   readonly status: "requires-plugins";
   readonly source: AcquiredWorkspaceSource;

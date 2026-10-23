@@ -1,3 +1,4 @@
+import { hostExecutable } from "../support/host-executable.js";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
@@ -42,7 +43,7 @@ export function buildPublishedCli(environment: NodeJS.ProcessEnv): PublishedCliF
 export async function runPublishedCli(args: readonly string[], environment: NodeJS.ProcessEnv): Promise<PublishedCliResult> {
   const fixture = isolatedPackage();
   try {
-    let invocationEnvironment = environment;
+    let invocationEnvironment: NodeJS.ProcessEnv = { ...environment, DIM_HOST_EXECUTABLE: await hostExecutable(fixture.root, true) };
     if (args[0] === "external-url") {
       const home = path.join(fixture.root, "plugins");
       mkdirSync(path.join(home, "node_modules", "@slop-lab"), { recursive: true });
@@ -50,7 +51,7 @@ export async function runPublishedCli(args: readonly string[], environment: Node
       writeFileSync(path.join(home, "package.json"), '{"private":true}');
       writeFileSync(path.join(home, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-external-urls"] }));
       symlinkSync(path.resolve(packageDirectory, "../../host/plugins/external-urls"), path.join(home, "node_modules", "@slop-lab", "dim-host-plugin-external-urls"), "dir");
-      invocationEnvironment = { ...environment, DIM_PLUGIN_HOME: home };
+      invocationEnvironment = { ...invocationEnvironment, DIM_PLUGIN_HOME: home };
     }
     const child = spawn(process.execPath, ["dist/cli.js", ...args], { cwd: fixture.directory, env: invocationEnvironment, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "", stderr = "";

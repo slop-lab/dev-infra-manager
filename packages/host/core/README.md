@@ -26,9 +26,8 @@ await service.recreate(workspace.name);
 
 Source acquisition stages an independent committed checkout. The runtime owns
 only its labeled container, private network and home/checkout/Docker/temp volumes.
-The application owns state transitions and locking. Transport and command
-presentation belong to the CLI, and SSH executes these same application
-operations on the selected host.
+The application owns state transitions and locking. The CLI owns host selection and transport. Command parsing, help and presentation
+belong to this host application, including when invoked through SSH.
 
 `create` initializes source once; subsequent start/restart/recreate does not
 reset user files. `recreate` preserves existing storage. `discard` removes it.
@@ -49,10 +48,12 @@ host-input and extension registration; `/controller/cli` supplies controller
 commands and transport helpers.
 
 `/application` composes the explicitly installed host plugins, source providers,
-runtimes, checkout requirements and scoped guest bridge. It executes host requests
-without depending on the DIM CLI or control-plane administration packages. Optional
-operator commands are supplied by the caller. `/application/protocol` contains
-only request and exact-plugin-spec validation for transport clients. The guest
+runtimes, checkout requirements and scoped guest bridge. Its `dim-host` executable
+interprets commands and loads optional operator integrations without depending on
+the DIM CLI. Control-plane administration is loaded only for its own commands.
+The CLI uses the retained [v1 wire contract](../../../docs/specs/cli-host-protocol-v1.md)
+from `@slop-lab/dim-contracts-cli-host`; domain operations stay inside the host.
+Capability negotiation does not load feature implementations. The guest
 bridge launches its own host-core entrypoint; its generation binds that launcher
 and application code so updates fence previous bridge credentials.
 

@@ -10,8 +10,9 @@ services belong to explicit host and control-plane plugins.
 
 The coding agent and containers it starts are untrusted. DIM owns their host
 boundary; it does not own agent reasoning, project-specific tools or product
-code. The CLI owns presentation and transport. Workspace application logic and
-runtime adapters execute on the selected host without a required daemon.
+code. The CLI owns host selection and transport; the selected host owns command
+parsing, help and presentation. Workspace application logic and runtime adapters
+execute on that host without a required daemon.
 
 ## Goals
 
@@ -78,8 +79,10 @@ provider-specific tools; do not assume that `origin` is GitHub.
 ## Pre-stable compatibility
 
 DIM has not had a stable release. Current releases are pre-stable `0.x`
-versions. The published `@slop-lab/dim-installer` facade is the retained
-compatibility boundary; other backward compatibility is not a requirement.
+versions. Retain the published `@slop-lab/dim-installer` facade and the small
+versioned CLI–host wire contract in `docs/specs/cli-host-protocol-v1.md`.
+Other backward compatibility is not a requirement. Package release versions do
+not determine CLI–host wire compatibility; preserve the frozen version-1 fixtures.
 
 - Do not preserve old CLI, API, configuration, state, or internal extension
   contracts solely for backward compatibility.

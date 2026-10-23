@@ -48,7 +48,7 @@ describe("installer progress", () => {
 
     scheduler.fire();
     expect(stream.text()).toContain("Current: package installation");
-    expect(stream.text()).toContain("Remaining: version verification, state preflight, runtime promotion, controller readiness, configuration");
+    expect(stream.text()).toContain("Remaining: version verification, protocol compatibility, state preflight, runtime promotion, controller readiness, configuration");
     progress.update("controller readiness");
     scheduler.fire();
     expect(stream.chunks.at(-1)?.toString()).toContain("Current: controller readiness");

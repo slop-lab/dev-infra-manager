@@ -28,7 +28,7 @@ export function usesSystemdManagedController(options: LifecycleOptions): boolean
 
 export async function startSystemdManagedController(options: LifecycleOptions): Promise<void> {
   const script = process.argv[1];
-  if (!script) throw new UserError("cannot locate the DIM CLI entrypoint");
+  if (!script) throw new UserError("cannot locate the DIM host entrypoint");
   const unitDirectory = path.join(
     process.env.XDG_CONFIG_HOME ?? path.join(homedir(), ".config"),
     "systemd",

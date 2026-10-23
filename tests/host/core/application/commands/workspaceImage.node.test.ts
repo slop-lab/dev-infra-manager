@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const cli = fileURLToPath(new URL("../../packages/cli/core/dist/cli.js", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../packages/cli/core", import.meta.url));
+const cli = fileURLToPath(new URL("../../../../../packages/host/core/dist/application/host-main.js", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../../../../packages/host/core", import.meta.url));
 
 type ImageFixture = {
   readonly root: string;
@@ -25,9 +25,9 @@ test("workspace image build uses shipped context without controller or backend c
     });
 
     assert.equal(result.status, 0, result.stderr);
-    const coreMetadata = JSON.parse(await readFile(new URL("../../packages/host/core/dist/package.json", import.meta.url), "utf8")) as { version: string };
+    const coreMetadata = JSON.parse(await readFile(new URL("../../../../../packages/host/core/dist/package.json", import.meta.url), "utf8")) as { version: string };
     const image = `dev-infra-project-workspace:${coreMetadata.version}`;
-    assert.equal(result.stdout, `Built workspace image '${image}' on 'local'\n`);
+    assert.equal(result.stdout, `Built workspace image '${image}' on '${hostname()}'\n`);
     const log = await readFile(fixture.commandLog, "utf8");
     const escapedImage = image.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     assert.match(log, new RegExp(`^docker buildx build --load --build-arg DIM_UID=\\d+ --build-arg DIM_GID=\\d+ --tag ${escapedImage} --file Dockerfile \\.\\n$`));

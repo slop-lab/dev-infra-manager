@@ -1,5 +1,6 @@
 export {
   cliExecutable,
+  hostExecutable,
   configuredCli,
   defaultBinDirectory,
   defaultDataHome,
@@ -20,6 +21,7 @@ export {
   type InstalledCli,
   type LocalPackageBundle
 } from "./cliInstall.js";
+export { installHostRuntime, type HostRuntimeInstallOptions, type InstalledHostRuntime } from "./hostRuntimeInstall.js";
 export {
   isPluginEnabled,
   installPlugins,
@@ -108,4 +110,4 @@ export {
   type ControlPlaneStaging
 } from "./controlPlaneState.js";
 
-export { readLocalPackageBundle, readControlPlanePackageBundle, readHostPluginPackageBundle } from "./localPackageBundle.js";
+export { readHostPackageBundle, readCliPackageBundle, readControlPlanePackageBundle, readHostPluginPackageBundle } from "./localPackageBundle.js";

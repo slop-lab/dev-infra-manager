@@ -16,12 +16,7 @@ const output = minifyPackageJson(source, {
 });
 output.version = publishPackageVersion(source.version);
 
-output.dependencies = {
-  ...source.dependencies,
-  "@slop-lab/dim-host-core": output.version
-};
-output.peerDependencies = { "@slop-lab/dim-control-plane-admin": output.version };
-output.peerDependenciesMeta = { "@slop-lab/dim-control-plane-admin": { optional: true } };
+output.dependencies = Object.fromEntries(Object.entries(source.dependencies).map(([name, version]) => [name, version.startsWith("workspace:") ? output.version : version]));
 output.bin = {
   dim: "cli.js"
 };

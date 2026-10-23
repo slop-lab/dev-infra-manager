@@ -5,38 +5,22 @@ import {
   WorkspaceService, WorkspaceStore
 } from "../workspace.js";
 import { createWorkspaceOnHost, ensureWorkspaceIntegration, type WorkspaceHostCreateInput } from "./workspace-composition.js";
-import { decodeHostRequest } from "./protocol.js";
 import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting, hostPluginExtensions } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
 import { installRequiredPlugins, workspaceRequirements } from "./workspace-requirements.js";
 
-export interface HostApplicationDelegates {
-  readonly controller?: (args: string[]) => Promise<void>;
-  readonly controlPlane?: (args: string[]) => Promise<void>;
-}
+export interface HostOperationRequest { readonly operation: string; readonly input?: Record<string, unknown> }
 
-/** All filesystem/runtime work happens on the selected host. Optional operator
- * entrypoints are supplied by the caller, never imported into workspace core. */
-export async function runHostRequest(encoded: string, delegates: HostApplicationDelegates = {}): Promise<void> {
-  const request = decodeHostRequest(encoded);
-  if (request.operation === "controlPlane.cli" || request.operation === "controller.cli") {
-    const args = request.input?.args;
-    if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string" || arg.includes("\0"))) throw new UserError("operator command must be an argument array");
-    const run = request.operation === "controller.cli" ? delegates.controller : delegates.controlPlane;
-    if (!run) throw new UserError("requested operator command is unavailable in this host application");
-    await run(args as string[]);
-    return;
-  }
+export async function executeHostOperation(request: HostOperationRequest, signal?: AbortSignal): Promise<unknown> {
   const abort = new AbortController();
   const stop = () => abort.abort();
   process.once("SIGINT", stop); process.once("SIGTERM", stop); process.once("SIGHUP", stop);
-  try { await dispatchHostRequest(encoded, abort.signal); }
+  try { return await dispatchHostOperation(request, signal ? AbortSignal.any([signal, abort.signal]) : abort.signal); }
   finally { process.off("SIGINT", stop); process.off("SIGTERM", stop); process.off("SIGHUP", stop); }
 }
 
-async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promise<void> {
+async function dispatchHostOperation(request: HostOperationRequest, signal: AbortSignal): Promise<unknown> {
   if (process.platform !== "linux") throw new Error(`DIM runtime hosts require Linux; unsupported platform '${process.platform}'`);
-  const request = decodeHostRequest(encoded);
   const input = request.input ?? {};
   const expectedId = input.expectedId === undefined ? undefined : string(input.expectedId, "expectedId");
   const processRunner = new ProcessRunner();
@@ -170,7 +154,7 @@ async function dispatchHostRequest(encoded: string, signal: AbortSignal): Promis
     }
     default: throw new UserError(`unknown host operation '${request.operation}'`);
   }
-  process.stdout.write(`${JSON.stringify(result)}\n`);
+  return result;
 }
 
 function createInput(input: Record<string, unknown>): WorkspaceHostCreateInput {

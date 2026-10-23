@@ -1,4 +1,4 @@
-import { UserError } from "@slop-lab/dim-host-core/workspace";
+import { UserError } from "../../workspace.js";
 
 /** Operator composition is optional on the selected host, separate from its server runtime. */
 export async function runControlPlaneApplication(args: string[]): Promise<void> {
@@ -9,6 +9,8 @@ export async function runControlPlaneApplication(args: string[]): Promise<void> 
     }
     throw error;
   }
-  const { runControlPlaneAdminCli } = await import("@slop-lab/dim-control-plane-admin/cli");
+  const module: unknown = await import(import.meta.resolve("@slop-lab/dim-control-plane-admin/cli"));
+  if (!module || typeof module !== "object" || !("runControlPlaneAdminCli" in module) || typeof module.runControlPlaneAdminCli !== "function") throw new UserError("Invalid control-plane administration entrypoint");
+  const runControlPlaneAdminCli = module.runControlPlaneAdminCli as (args: string[]) => Promise<void>;
   await runControlPlaneAdminCli(args);
 }

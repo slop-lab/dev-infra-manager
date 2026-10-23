@@ -16,7 +16,7 @@ export async function ownedLlmGatewayUnit(paths: RemovalPaths): Promise<boolean>
     try { return (token.startsWith('"') ? JSON.parse(token) as string : token).replaceAll("%%", "%"); }
     catch { throw new Error("unsupported DIM LLM router gateway unit argument quoting"); }
   });
-  const executable = join(paths.hostPlugins, "node_modules/.bin/dim");
+  const executable = join(paths.hostPlugins, "node_modules/.bin/dim-host");
   const target = await realpath(executable).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return executable; });
   const runtime = await realpath(paths.hostPlugins).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return paths.hostPlugins; });
   const configuration = join(paths.configuration, "llm-host/gateway.json");

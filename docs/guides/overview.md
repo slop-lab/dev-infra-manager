@@ -2,8 +2,9 @@
 
 DIM provides persistent isolated development workspaces from ordinary Git
 repositories on local or SSH-selected Linux hosts. The host owns identity,
-source acquisition, state and runtime resources. The CLI owns presentation and
-transport. A workspace owns its development tools, checkout and private nested
+source acquisition, state, command presentation and runtime resources. The CLI
+selects hosts and transports arguments and streams through a small versioned
+protocol. A workspace owns its development tools, checkout and private nested
 Docker daemon.
 
 The base runtime is one unprivileged Sysbox container with persistent checkout,

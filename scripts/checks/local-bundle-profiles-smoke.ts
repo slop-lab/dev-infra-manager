@@ -32,6 +32,7 @@ Object.assign(env, {
 });
 const facade = path.join(scratch, "facade/node_modules/.bin/dim");
 const runtime = path.join(scratch, "data/dim/runtime/current");
+const cliRuntime = path.join(scratch, "data/dim/cli/runtime/current");
 const controlPlaneRuntime = path.join(scratch, "data/dim/control-plane/runtime/current");
 const dependencies = () => object(object(parseJson(readFileSync(path.join(runtime, "package.json"), "utf8"))).dependencies);
 const plugins = () => {
@@ -86,7 +87,10 @@ try {
   console.log("control-plane artifacts: native Git, workflows and router install without host core, CLI or admin");
   const install = ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"];
   run(facade, install);
-  assert.deepEqual(Object.keys(dependencies()).sort(), ["@slop-lab/dim-cli", "@slop-lab/dim-host-core"]);
+  assert.deepEqual(Object.keys(dependencies()).sort(), ["@slop-lab/dim-contracts-cli-host", "@slop-lab/dim-host-core"]);
+  assert.equal(existsSync(path.join(runtime, "node_modules/@slop-lab/dim-cli")), false);
+  assert.ok(existsSync(path.join(cliRuntime, "node_modules/@slop-lab/dim-cli")));
+  assert.equal(existsSync(path.join(cliRuntime, "node_modules/@slop-lab/dim-host-core")), false);
   assert.equal(existsSync(path.join(runtime, "node_modules/@slop-lab/dim-control-plane-admin")), false);
   assert.deepEqual(JSON.parse(run(facade, ["ls", "--json"]).stdout), []);
   const absent = run(facade, ["control-plane", "--help"], true);
@@ -94,10 +98,44 @@ try {
   assert.match(absent.stderr, /install core --with-managed/);
   console.log("base artifacts: installed CLI/core only, no managed service or backend configuration required");
 
+  // Pack the same frozen v1 client as another release, with its own neutral contract.
+  // This exercises installed binaries and npm dependency closure rather than fake version probes.
+  const skewBundle = path.join(scratch, "independent-cli-bundle");
+  mkdirSync(skewBundle);
+  const skewVersion = "0.99.0-independent-client";
+  const skewEntries = ["@slop-lab/dim-contracts-cli-host", "@slop-lab/dim-cli"].map(name => {
+    const source = packages.find(entry => entry.name === name);
+    assert.ok(source);
+    const unpacked = path.join(skewBundle, name.split("/").at(-1)!);
+    mkdirSync(unpacked);
+    run("tar", ["-xzf", artifact(name), "-C", unpacked, "--strip-components=1"]);
+    const packagePath = path.join(unpacked, "package.json");
+    const metadata = object(parseJson(readFileSync(packagePath, "utf8")));
+    metadata.version = skewVersion;
+    const requires: Record<string, string> = {};
+    if (name === "@slop-lab/dim-cli") {
+      object(metadata.dependencies)["@slop-lab/dim-contracts-cli-host"] = skewVersion;
+      requires["@slop-lab/dim-contracts-cli-host"] = skewVersion;
+      writeFileSync(path.join(unpacked, "package-version.js"), `export const packageVersion = ${JSON.stringify(skewVersion)};\n`);
+    }
+    writeFileSync(packagePath, JSON.stringify(metadata));
+    const packed = array(parseJson(run("npm", ["pack", unpacked, "--pack-destination", skewBundle, "--json"]).stdout));
+    return { name, version: skewVersion, file: string(object(packed[0]).filename), requires };
+  });
+  writeFileSync(path.join(skewBundle, "packages.json"), JSON.stringify({ schemaVersion: 1, packages: skewEntries }));
+  const hostBeforeCliUpdate = readFileSync(path.join(runtime, "package.json"));
+  run(facade, ["installer", "install", "cli", "--local-packages", skewBundle, "--no-local-bin"]);
+  assert.match(run(facade, ["--version"]).stdout, /DIM CLI 0\.99\.0-independent-client/);
+  assert.deepEqual(readFileSync(path.join(runtime, "package.json")), hostBeforeCliUpdate);
+  assert.deepEqual(JSON.parse(run(facade, ["ls", "--json"]).stdout), []);
+  const retainedCliConfig = object(parseJson(readFileSync(env.DIM_CONFIG_PATH!, "utf8"))).cli;
+  console.log("independent CLI release: packed v1 client updates alone and talks to the retained host");
+
   run(facade, [...install, "--with-managed"]);
   const profilePlugins = ["@slop-lab/dim-host-plugin-native-git", "@slop-lab/dim-host-plugin-execution-worker"];
   assert.deepEqual(plugins().sort(), [...profilePlugins].sort());
-  for (const name of ["@slop-lab/dim-cli", "@slop-lab/dim-host-core", "@slop-lab/dim-control-plane-admin", ...profilePlugins]) {
+  assert.deepEqual(object(parseJson(readFileSync(env.DIM_CONFIG_PATH!, "utf8"))).cli, retainedCliConfig);
+  for (const name of ["@slop-lab/dim-host-core", "@slop-lab/dim-control-plane-admin", ...profilePlugins]) {
     assert.ok(existsSync(path.join(runtime, "node_modules", name)), `profile is missing ${name}`);
   }
   run(facade, ["control-plane", "--help"]);
@@ -108,6 +146,11 @@ try {
     assert.equal(object(parseJson(readFileSync(path.join(runtime, "node_modules", name, "package.json"), "utf8"))).version, expected);
   }
   console.log("host profile: explicit native Git and execution worker plugins with operator tools");
+  const hostBeforeClientRestore = readFileSync(path.join(runtime, "package.json"));
+  run(facade, ["installer", "install", "cli", "--local-packages", bundle, "--no-local-bin"]);
+  assert.deepEqual(readFileSync(path.join(runtime, "package.json")), hostBeforeClientRestore);
+  assert.deepEqual(JSON.parse(run(facade, ["ls", "--json"]).stdout), []);
+
 
   const selectedHostPlugins = ["@slop-lab/dim-host-plugin-mirrors", "@slop-lab/dim-host-plugin-cache-server", "@slop-lab/dim-host-plugin-external-urls", "@slop-lab/dim-host-plugin-review-tracing-node"];
   run(facade, ["installer", "install", "plugin", "--local-packages", bundle,

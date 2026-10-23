@@ -33,6 +33,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
     "packages/host/core",
     "packages/control-plane/core",
     "packages/contracts/ci",
+    "packages/contracts/cli-host",
     "packages/contracts/execution",
     "packages/contracts/operations",
     "packages/contracts/llm-router",

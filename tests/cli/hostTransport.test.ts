@@ -1,4 +1,4 @@
-import { encodeHostRequest, decodeHostRequest } from "@slop-lab/dim-host-core/application/protocol";
+import { createHostRequest, encodeHostRequest, decodeHostRequest } from "@slop-lab/dim-contracts-cli-host";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { execFile, spawn } from "node:child_process";
@@ -19,7 +19,7 @@ const local = { name: "local" };
 const execFileAsync = promisify(execFile);
 
 test("record operations use the real local host process and preserve structured input", async () => {
-  const request = { operation: "create", input: { name: "dev", source: { url: "https://example.com/repo.git" } } };
+  const request = createHostRequest("command", { args: ["create", "https://example.com/repo.git", "dev"] });
   const result = await callHost(local, request, { localCommand });
   assert.deepEqual(result, { request });
 });
@@ -27,15 +27,15 @@ test("record operations use the real local host process and preserve structured 
 test("host failures preserve stderr and status, and malformed responses fail clearly", async () => {
   let diagnostic = "";
   const stderr = new Writable({ write(chunk, _encoding, callback) { diagnostic += String(chunk); callback(); } });
-  await assert.rejects(callHost(local, { operation: "fail" }, { localCommand, stderr }), (error: unknown) => {
+  await assert.rejects(callHost(local, createHostRequest("command", { args: ["fail"] }), { localCommand, stderr }), (error: unknown) => {
     assert.ok(error instanceof HostTransportError);
     assert.equal(error.exitCode, 2);
     assert.match(error.message, /source acquisition failed/);
     return true;
   });
   assert.equal(diagnostic, "source acquisition failed\n");
-  await assert.rejects(callHost(local, { operation: "invalid" }, { localCommand }), /invalid JSON result/);
-  await assert.rejects(callHost(local, { operation: "list" }, {
+  await assert.rejects(callHost(local, createHostRequest("command", { args: ["invalid"] }), { localCommand }), /invalid JSON result/);
+  await assert.rejects(callHost(local, createHostRequest("command", { args: ["list"] }), {
     localCommand: { file: "/missing/dim-host-process" }
   }), /could not run command/);
 });
@@ -44,7 +44,7 @@ test("SSH shell execution cannot interpret command input, source URLs or names a
   const directory = await mkdtemp(path.join(tmpdir(), "dim-host-shell-"));
   const marker = path.join(directory, "executed");
   const dangerous = `a'; touch '${marker}'; echo '$(touch ${marker})\n\`touch ${marker}\`;$HOME`;
-  const request = { operation: "create", input: { name: dangerous, source: { url: dangerous } } };
+  const request = createHostRequest("command", { args: ["create", dangerous, dangerous] });
   try {
     const invocation = hostInvocation({ name: "remote", ssh: "alice@build-host" }, request);
     assert.deepEqual(invocation.args.slice(0, 3), ["-T", "--", "alice@build-host"]);
@@ -66,7 +66,7 @@ test("SSH shell execution cannot interpret command input, source URLs or names a
 test("exec transport streams stdin, stdout and stderr without JSON conversion and keeps exit status", async () => {
   const transport = new URL("../../packages/cli/core/src/host-transport.ts", import.meta.url).href;
   const script = `import { streamHost } from ${JSON.stringify(transport)};
-    process.exitCode = await streamHost({name:'local'}, {operation:'exec', input:{exitCode:17}},
+    process.exitCode = await streamHost({name:'local'}, {protocol:'dim.cli-host',version:1,operation:'command',input:{args:['exec','17']}},
       {localCommand: ${JSON.stringify(localCommand)}});`;
   const child = spawn(process.execPath, ["--conditions=dim-source", "--import", import.meta.resolve("tsx"), "--input-type=module", "-e", script], {
     stdio: ["pipe", "pipe", "pipe"]
@@ -90,7 +90,7 @@ test("SSH bootstraps mise in non-interactive PATH and reports a missing installa
   const bin = path.join(directory, "bin");
   const home = path.join(directory, "home");
   const userBin = path.join(home, ".local", "bin");
-  const request = { operation: "list" };
+  const request = createHostRequest("command", { args: ["list"] });
   const command = hostInvocation({ name: "remote", ssh: "build-host" }, request).args[3]!;
   await mkdir(bin);
   await mkdir(userBin, { recursive: true });
@@ -120,11 +120,11 @@ exec ${shellArgument(process.execPath)} ${shellArgument(peer)} "$@"
 });
 
 test("request envelope validation rejects malformed encoding and non-object input", () => {
-  assert.deepEqual(decodeHostRequest(encodeHostRequest({ operation: "list" })), { operation: "list" });
+  assert.deepEqual(decodeHostRequest(encodeHostRequest(createHostRequest("command", { args: ["list"] }))), createHostRequest("command", { args: ["list"] }));
   for (const encoded of ["", "not+base64/", Buffer.from('{"operation":"exec","input":[]}').toString("base64url")]) {
-    assert.throws(() => decodeHostRequest(encoded), /invalid host request/);
+    assert.throws(() => decodeHostRequest(encoded), /DIM CLI\/host/);
   }
-  assert.throws(() => hostInvocation({ name: "remote", ssh: "-oProxyCommand=bad" }, { operation: "list" }), /SSH target/);
+  assert.throws(() => hostInvocation({ name: "remote", ssh: "-oProxyCommand=bad" }, createHostRequest("command", { args: ["list"] })), /SSH target/);
 });
 
 test("custom streams cancel an unresponsive host process and restore stream listeners", async () => {
@@ -132,7 +132,7 @@ test("custom streams cancel an unresponsive host process and restore stream list
   const abort = new AbortController();
   const inputErrors = input.listenerCount("error"), outputErrors = output.listenerCount("error");
   const ready = once(output, "data");
-  const call = streamHost(local, { operation: "ignorecancel" }, {
+  const call = streamHost(local, createHostRequest("command", { args: ["ignorecancel"] }), {
     localCommand, stdin: input, stdout: output, signal: abort.signal
   });
   await ready;

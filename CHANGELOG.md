@@ -7,6 +7,14 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
+- Retain a small versioned CLI–host wire contract with explicit capability
+  negotiation. Move command parsing, help and workspace creation orchestration
+  into the host; the CLI keeps host contexts, terminal transport and pinned
+  loopback forwarding. Install and update CLI and host independently, preserve
+  compatible clients during host updates, and reject incompatible staged hosts
+  before activation. Frozen v1 peers verify compatibility without importing the
+  current codec.
+
 - Make `install-local` install and update the complete development profile,
   including prepared Native Git/execution images and every bundled host and
   control-plane plugin. Preserve running workspaces, service credentials and Web

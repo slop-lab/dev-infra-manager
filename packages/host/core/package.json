@@ -72,15 +72,6 @@
       "types": "./dist/application/index.d.ts",
       "import": "./dist/application/index.js",
       "default": "./dist/application/index.js"
-    },
-    "./application/protocol": {
-      "dim-source": {
-        "types": "./src/application/protocol.ts",
-        "default": "./src/application/protocol.ts"
-      },
-      "types": "./dist/application/protocol.d.ts",
-      "import": "./dist/application/protocol.js",
-      "default": "./dist/application/protocol.js"
     }
   },
   "scripts": {
@@ -100,6 +91,10 @@
     "typescript": "5.8.3"
   },
   "dependencies": {
-    "commander": "14.0.0"
+    "commander": "14.0.0",
+    "@slop-lab/dim-contracts-cli-host": "workspace:0.10.0"
+  },
+  "bin": {
+    "dim-host": "./dist/application/host-main.js"
   }
 }

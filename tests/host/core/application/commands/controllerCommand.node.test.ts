@@ -8,8 +8,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const cli = fileURLToPath(new URL("../../packages/cli/core/dist/cli.js", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../packages/cli/core", import.meta.url));
+const cli = fileURLToPath(new URL("../../../../../packages/host/core/dist/application/host-main.js", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../../../../packages/host/core", import.meta.url));
 
 test("controller serve preserves the active owner and cleans up its runtime files", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-test-"));
@@ -240,7 +240,7 @@ test("controller serve identifies plugin route initialization as the failing sta
     assert.equal(result.status, 2);
     assert.equal(
       result.stderr,
-      "controller startup failed while initializing plugin routes: ingress startup refused\n"
+      "dim-host: controller startup failed while initializing plugin routes: ingress startup refused\n"
     );
   } finally {
     await rm(root, { recursive: true, force: true });

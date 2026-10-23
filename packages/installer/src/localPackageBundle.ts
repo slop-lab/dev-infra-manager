@@ -16,11 +16,17 @@ interface BundlePackage {
 }
 
 /** A local bundle is an artifact graph; optional artifacts are not install roots. */
-export async function readLocalPackageBundle(
+export async function readHostPackageBundle(
   directory: string,
   selectedPackages: readonly string[] = []
 ): Promise<LocalPackageBundle> {
-  return readArtifactClosure(directory, ["@slop-lab/dim-cli", "@slop-lab/dim-host-core", ...selectedPackages], "@slop-lab/dim-cli");
+  return readArtifactClosure(directory, ["@slop-lab/dim-host-core", ...selectedPackages], "@slop-lab/dim-host-core");
+}
+
+export async function readCliPackageBundle(directory: string): Promise<LocalPackageBundle> {
+  const bundle = await readArtifactClosure(directory, ["@slop-lab/dim-cli"], "@slop-lab/dim-cli");
+  if (bundle.packageNames.some((name) => name === "@slop-lab/dim-host-core" || name === "@slop-lab/dim-control-plane-admin" || name.startsWith("@slop-lab/dim-host-plugin-") || name.startsWith("@slop-lab/dim-control-plane-plugin-"))) throw new Error("CLI artifact closure must not contain host or control-plane implementations");
+  return bundle;
 }
 
 export async function readControlPlanePackageBundle(directory: string, selectedSpecifiers: readonly string[]): Promise<LocalPackageBundle> {
@@ -30,7 +36,7 @@ export async function readControlPlanePackageBundle(directory: string, selectedS
 
 export async function readHostPluginPackageBundle(directory: string, selectedSpecifiers: readonly string[], retainedPlugins: readonly string[] = []): Promise<LocalPackageBundle> {
   const versions = selectedPluginVersions(selectedSpecifiers);
-  return readArtifactClosure(directory, ["@slop-lab/dim-cli", "@slop-lab/dim-host-core", ...retainedPlugins, ...versions.keys()], "@slop-lab/dim-cli", versions);
+  return readArtifactClosure(directory, ["@slop-lab/dim-host-core", ...retainedPlugins, ...versions.keys()], "@slop-lab/dim-host-core", versions);
 }
 
 function selectedPluginVersions(selectedSpecifiers: readonly string[]): ReadonlyMap<string, string> {
@@ -90,6 +96,7 @@ async function readArtifactClosure(directory: string, roots: readonly string[], 
   if (runtime === "@slop-lab/dim-control-plane-core" && [...selected].some((name) => ["@slop-lab/dim-cli", "@slop-lab/dim-host-core", "@slop-lab/dim-control-plane-admin"].includes(name) || name.startsWith("@slop-lab/dim-host-plugin-"))) {
     throw new Error("control-plane bundle closure must not include host CLI, core, admin or host plugin packages");
   }
+  if (runtime === "@slop-lab/dim-host-core" && selected.has("@slop-lab/dim-cli")) throw new Error("host runtime artifact closure must not include the presentation CLI");
   const entries = [...packages.values()].filter(({ name }) => selected.has(name));
   const specifiers = entries.map(({ file }) => path.join(bundleDirectory, file));
   await Promise.all(specifiers.map((file) => access(file, constants.R_OK)));

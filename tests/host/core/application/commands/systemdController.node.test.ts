@@ -7,11 +7,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { lifecycleOptions } from "../../packages/host/core/src/controller/lifecycleOptions.js";
-import { startSystemdManagedController } from "../../packages/host/core/src/controller/cli/systemd-controller.js";
+import { lifecycleOptions } from "../../../../../packages/host/core/src/controller/lifecycleOptions.js";
+import { startSystemdManagedController } from "../../../../../packages/host/core/src/controller/cli/systemd-controller.js";
 
-const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
-const packageDirectory = fileURLToPath(new URL("../../packages/cli/core", import.meta.url));
+const cli = fileURLToPath(new URL("../../../../../packages/host/core/src/application/host-main.ts", import.meta.url));
+const packageDirectory = fileURLToPath(new URL("../../../../../packages/host/core", import.meta.url));
 const tsxImport = import.meta.resolve("tsx");
 
 test("successful controller restart keeps the existing systemd command path", async () => {

@@ -9,11 +9,15 @@ import {
   defaultPluginHome,
   defaultUserConfigPath,
   installDimCli,
+  installHostRuntime,
+  hostExecutable,
+  cliExecutable,
   installManagedSymlink,
   installPlugins,
   packageNameFromSpecifier,
   queryCliVersion,
-  readLocalPackageBundle,
+  readHostPackageBundle,
+  readCliPackageBundle,
   readHostPluginPackageBundle,
   readUserConfig,
   validateConfiguredCli
@@ -93,579 +97,215 @@ describe("@slop-lab/dim-installer", () => {
     });
   });
 
-  describe("installDimCli", () => {
-    it("installs the pinned CLI version, verifies it is executable, and writes proxied config", async () => {
-      const root = await tempDir("dim-install-cli-");
+  describe("independent host and CLI installation", () => {
+    async function setup(version = "2.0.0", extra: Partial<Parameters<typeof writeFakeCliNpm>[1]> = {}) {
+      const root = await tempDir("dim-independent-runtime-");
       const npm = join(root, "npm.mjs");
-      const argumentsFile = join(root, "arguments.json");
-      const controllerArgsFile = join(root, "controller-arguments.json");
-      await writeFakeCliNpm(npm, { argsFile: argumentsFile, versionOutput: "9.9.9", controllerArgsFile });
-
-      const dataHome = join(root, "data-home");
-      const configPath = join(root, "config", "dim", "config.json");
-      await mkdir(dirname(configPath), { recursive: true });
-      await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
-
-      const installed = await installDimCli({
-        version: "9.9.9",
-        exposeOnPath: false,
-        npmCommand: npm,
-        dataHome,
-        configPath
-      });
-
-      const npmArgs = JSON.parse(await readFile(argumentsFile, "utf8")) as string[];
-      const stagingDirectory = npmArgs[npmArgs.indexOf("--prefix") + 1];
-      expect(stagingDirectory).toMatch(new RegExp(`^${join(dataHome, "runtime", ".staging-")}`));
-      expect(npmArgs).toEqual([
-        "install",
-        "--prefix",
-        stagingDirectory,
-        "--save-exact",
-        "--no-fund",
-        "--no-audit",
-        "@slop-lab/dim-cli@9.9.9"
-      ]);
-
-      const executable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
-      expect(installed).toEqual({ executable, mode: "proxied", version: "9.9.9" });
-      expect("symlink" in installed).toBe(false);
-
-      expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
-        schemaVersion: 1,
-        workspaceBackend: "sysbox",
-        cli: { mode: "proxied", version: "9.9.9", executable }
-      });
-      expect(await configuredCli({ DIM_CONFIG_PATH: configPath })).toEqual({
-        mode: "proxied",
-        version: "9.9.9",
-        executable
-      });
-      await expect(access(controllerArgsFile)).rejects.toMatchObject({ code: "ENOENT" });
-    });
-
-    it("installs and activates selected plugins in the promoted graph before controller readiness", async () => {
-      // Given
-      const root = await tempDir("dim-install-cli-selected-plugin-");
-      const npm = join(root, "npm.mjs");
-      const argumentsFile = join(root, "arguments.json");
-      const controllerStateFile = join(root, "controller-state.json");
-      await writeFakeCliNpm(npm, {
-        argsFile: argumentsFile,
-        versionOutput: "9.9.9",
-        controllerManifestFile: controllerStateFile
-      });
-      const dataHome = join(root, "data-home");
-
-      // When
-      await installDimCli({
-        restartController: true,
-        packageSpecifiers: ["@slop-lab/dim-cli@9.9.9", "@slop-lab/dim-control-plane-admin@9.9.9"],
-        version: "9.9.9",
-        plugins: [{
-          name: "@slop-lab/dim-host-plugin-mirrors",
-          specifier: "@slop-lab/dim-host-plugin-mirrors@9.9.9"
-        }],
-        exposeOnPath: false,
-        npmCommand: npm,
-        dataHome,
-        configPath: join(root, "config.json")
-      });
-
-      // Then
-      expect(JSON.parse(await readFile(argumentsFile, "utf8"))).toContain(
-        "@slop-lab/dim-host-plugin-mirrors@9.9.9"
-      );
-      expect(JSON.parse(await readFile(controllerStateFile, "utf8"))).toEqual({
-        schemaVersion: 1,
-        plugins: ["@slop-lab/dim-host-plugin-mirrors"]
-      });
-      expect(JSON.parse(await readFile(join(dataHome, "runtime", "current", "plugins.json"), "utf8"))).toEqual({
-        schemaVersion: 1,
-        plugins: ["@slop-lab/dim-host-plugin-mirrors"]
-      });
-    });
-
-    it("creates a managed ~/.local/bin symlink in direct mode", async () => {
-      const root = await tempDir("dim-install-direct-");
-      const npm = join(root, "npm.mjs");
-      const argumentsFile = join(root, "arguments.json");
-      await writeFakeCliNpm(npm, { argsFile: argumentsFile, versionOutput: "1.0.0" });
-
-      const dataHome = join(root, "data-home");
-      const binDirectory = join(root, "bin");
-      const configPath = join(root, "config", "dim.json");
-
-      const installed = await installDimCli({
-        version: "1.0.0",
-        exposeOnPath: true,
-        npmCommand: npm,
-        dataHome,
-        binDirectory,
-        configPath
-      });
-
-      const executable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
-      const linkPath = join(binDirectory, "dim");
-      expect(installed).toEqual({ executable, mode: "direct", version: "1.0.0", symlink: linkPath });
-      expect(await readlink(linkPath)).toBe(executable);
-      expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({
-        cli: { mode: "direct", version: "1.0.0", executable }
-      });
-    });
-
-    it("preserves unknown fields already present in the user config", async () => {
-      const root = await tempDir("dim-install-preserve-");
-      const npm = join(root, "npm.mjs");
-      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
-
-      const configPath = join(root, "dim.json");
-      await mkdir(root, { recursive: true });
-      await writeFile(
-        configPath,
-        JSON.stringify({ schemaVersion: 1, futureFeature: { enabled: true } })
-      );
-
-      await installDimCli({
-        version: "2.0.0",
-        exposeOnPath: false,
-        npmCommand: npm,
-        dataHome: join(root, "data-home"),
-        configPath
-      });
-
-      const written = JSON.parse(await readFile(configPath, "utf8"));
-      expect(written.futureFeature).toEqual({ enabled: true });
-      expect(written.cli).toEqual({
-        mode: "proxied",
-        version: "2.0.0",
-        executable: join(root, "data-home", "runtime", "current", "node_modules", ".bin", "dim")
-      });
-    });
-
-    it("does not prune the previous installation when the replacement fails verification", async () => {
-      const root = await tempDir("dim-install-failed-replacement-");
-      const npm = join(root, "npm.mjs");
-      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "wrong-version" });
-      const dataHome = join(root, "data-home");
-      const previous = join(dataHome, "runtime", "current");
-      await mkdir(previous, { recursive: true });
-      await writeFile(join(previous, "sentinel"), "previous install");
-
-      await expect(installDimCli({
-        version: "2.0.0",
-        plugins: [{
-          name: "@slop-lab/dim-host-plugin-mirrors",
-          specifier: "@slop-lab/dim-host-plugin-mirrors@2.0.0"
-        }],
-        exposeOnPath: false,
-        npmCommand: npm,
-        dataHome,
-        configPath: join(root, "dim.json")
-      })).rejects.toThrow(/reports wrong-version, expected 2.0.0/);
-
-      expect(await readFile(join(previous, "sentinel"), "utf8")).toBe("previous install");
-    });
-
-    it("runs the staged target core preflight before changing installed state", async () => {
-      // Given
-      const root = await tempDir("dim-install-preflight-refusal-");
-      const npm = join(root, "npm.mjs");
-      await writeFakeCliNpm(npm, {
-        argsFile: join(root, "arguments.json"),
-        versionOutput: "2.0.0",
-        preflightSource: `export async function preflightStateCompatibility() {
-  throw new Error("target core rejected workspace state");
-}\n`
-      });
-      const dataHome = join(root, "data-home");
-      const current = join(dataHome, "runtime", "current");
+      const argsFile = join(root, "npm-args.json");
+      const dataHome = join(root, "data");
       const configPath = join(root, "config.json");
-      const binDirectory = join(root, "bin");
-      const linkPath = join(binDirectory, "dim");
-      await mkdir(current, { recursive: true });
-      await mkdir(binDirectory);
-      await writeFile(join(current, "sentinel"), "previous runtime");
-      await writeFile(configPath, '{"schemaVersion":1,"preserved":"config"}\n');
-      await symlink(join(current, "node_modules", ".bin", "dim"), linkPath);
-      const configBefore = await readFile(configPath);
-      const linkBefore = await readlink(linkPath);
+      await writeFakeCliNpm(npm, { argsFile, versionOutput: version, ...extra });
+      return { root, npm, argsFile, dataHome, configPath, version };
+    }
 
-      // When
-      const installation = installDimCli({
-        version: "2.0.0",
-        exposeOnPath: true,
-        npmCommand: npm,
-        dataHome,
-        configPath,
-        binDirectory
-      });
-
-      // Then
-      await expect(installation).rejects.toThrow(/target core rejected workspace state/);
-      expect(await readFile(join(current, "sentinel"), "utf8")).toBe("previous runtime");
-      expect(await readFile(configPath)).toEqual(configBefore);
-      expect(await readlink(linkPath)).toBe(linkBefore);
-      expect(await readdir(join(dataHome, "runtime"))).toEqual(["current"]);
+    it("installs presentation separately and preserves unrelated configuration without starting a controller", async () => {
+      const fixture = await setup();
+      const calls = join(fixture.root, "controller.json");
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: fixture.version, controllerArgsFile: calls });
+      await writeFile(fixture.configPath, JSON.stringify({ schemaVersion: 1, futureFeature: { enabled: true } }));
+      const installed = await installDimCli({ ...fixture, exposeOnPath: false, npmCommand: fixture.npm });
+      expect(installed).toEqual({ executable: cliExecutable(fixture.dataHome), mode: "proxied", version: fixture.version });
+      const args = JSON.parse(await readFile(fixture.argsFile, "utf8")) as string[];
+      expect(args.at(-1)).toBe("@slop-lab/dim-cli@2.0.0");
+      expect(args[args.indexOf("--prefix") + 1]).toContain("/cli/runtime/.staging-");
+      expect(await readUserConfig(fixture.configPath)).toMatchObject({ futureFeature: { enabled: true }, cli: installed });
+      await expect(access(calls)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(join(fixture.dataHome, "runtime"))).rejects.toMatchObject({ code: "ENOENT" });
     });
 
-    it("restores current when configuration fails after promotion", async () => {
-      const root = await tempDir("dim-install-failed-config-");
-      const npm = join(root, "npm.mjs");
-      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
-      const dataHome = join(root, "data-home");
-      const current = join(dataHome, "runtime", "current");
-      await mkdir(current, { recursive: true });
-      await writeFile(join(current, "sentinel"), "previous install");
-      const configPath = join(root, "dim.json");
-      await writeFile(configPath, "not json");
-
-      await expect(installDimCli({
-        version: "2.0.0",
-        plugins: [{
-          name: "@slop-lab/dim-host-plugin-mirrors",
-          specifier: "@slop-lab/dim-host-plugin-mirrors@2.0.0"
-        }],
-        exposeOnPath: false,
-        npmCommand: npm,
-        dataHome,
-        configPath
-      })).rejects.toThrow();
-
-      expect(await readFile(join(current, "sentinel"), "utf8")).toBe("previous install");
+    it("updates host and plugins while retaining a different compatible CLI release and durable data", async () => {
+      const fixture = await setup();
+      const cli = await installDimCli({ ...fixture, exposeOnPath: false, npmCommand: fixture.npm, packageSpecifiers: ["@slop-lab/dim-cli@2.0.0"] });
+      const cliBefore = await readFile(cli.executable);
+      const durable = join(fixture.dataHome, "workspaces");
+      await mkdir(durable, { recursive: true }); await writeFile(join(durable, "checkout"), "keep");
+      const calls = join(fixture.root, "controller.json");
+      const manifest = join(fixture.root, "manifest.json");
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "3.0.0", controllerArgsFile: calls, controllerManifestFile: manifest });
+      const host = await installHostRuntime({ ...fixture, version: "3.0.0", npmCommand: fixture.npm, restartController: true, plugins: [{ name: "@slop-lab/dim-host-plugin-mirrors", specifier: "@slop-lab/dim-host-plugin-mirrors@3.0.0" }] });
+      expect(host).toEqual({ executable: hostExecutable(fixture.dataHome), version: "3.0.0" });
+      expect(await readFile(cli.executable)).toEqual(cliBefore);
+      expect((await readUserConfig(fixture.configPath)).cli).toEqual({ mode: cli.mode, executable: cli.executable, version: cli.version });
+      expect((await readUserConfig(fixture.configPath)).host).toEqual(host);
+      expect(JSON.parse(await readFile(manifest, "utf8"))).toEqual({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-mirrors"] });
+      expect(JSON.parse(await readFile(calls, "utf8"))).toEqual([["controller", "restart"]]);
+      expect(await readFile(join(durable, "checkout"), "utf8")).toBe("keep");
+      const args = JSON.parse(await readFile(fixture.argsFile, "utf8")) as string[];
+      expect(args).toContain("@slop-lab/dim-host-core@3.0.0"); expect(args.some(value => value.startsWith("@slop-lab/dim-cli@"))).toBe(false);
     });
 
-    it("restores the prior managed symlink when direct installation fails after promotion", async () => {
-      // Given
-      const root = await tempDir("dim-install-direct-link-rollback-");
-      const npm = join(root, "npm.mjs");
-      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
-      const dataHome = join(root, "data-home");
-      const current = join(dataHome, "runtime", "current");
-      const previousExecutable = join(current, "node_modules", ".bin", "dim");
-      const priorManagedTarget = join(dataHome, "runtime", "prior-link-target", "dim");
-      const binDirectory = join(root, "bin");
-      const linkPath = join(binDirectory, "dim");
-      const configPath = join(root, "dim.json");
-      await mkdir(dirname(previousExecutable), { recursive: true });
-      await mkdir(dirname(priorManagedTarget), { recursive: true });
-      await mkdir(binDirectory, { recursive: true });
-      await writeStubCli(previousExecutable, { versionOutput: "1.0.0" });
-      await writeStubCli(priorManagedTarget, { versionOutput: "1.0.0" });
-      await symlink(priorManagedTarget, linkPath);
-      await writeFile(configPath, "not json");
-
-      // When
-      const installation = installDimCli({
-        version: "2.0.0",
-        exposeOnPath: true,
-        npmCommand: npm,
-        dataHome,
-        binDirectory,
-        configPath
-      });
-
-      // Then
-      await expect(installation).rejects.toThrow();
-      expect(await readlink(linkPath)).toBe(priorManagedTarget);
+    it("upgrades retained official host plugins to the host release while keeping the CLI release", async () => {
+      const fixture = await setup();
+      const cli = await installDimCli({ ...fixture, exposeOnPath: false, npmCommand: fixture.npm });
+      await installHostRuntime({ ...fixture, npmCommand: fixture.npm, plugins: [{
+        name: "@slop-lab/dim-host-plugin-cache-server", specifier: "@slop-lab/dim-host-plugin-cache-server@2.0.0"
+      }, { name: "@example/custom", specifier: "@example/custom@1.2.3" }] });
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "3.0.0" });
+      await installHostRuntime({ ...fixture, version: "3.0.0", npmCommand: fixture.npm });
+      const args = JSON.parse(await readFile(fixture.argsFile, "utf8")) as string[];
+      expect(args).toContain("@slop-lab/dim-host-plugin-cache-server@3.0.0");
+      expect(args).not.toContain("@slop-lab/dim-host-plugin-cache-server@2.0.0");
+      expect(args).toContain("@example/custom@1.2.3");
+      expect(await queryCliVersion(cli.executable)).toBe("2.0.0");
+      expect((await readUserConfig(fixture.configPath)).cli?.version).toBe("2.0.0");
     });
 
-    it("removes a newly added direct symlink when a formerly proxied installation rolls back", async () => {
-      // Given
-      const root = await tempDir("dim-install-new-link-rollback-");
-      const npm = join(root, "npm.mjs");
-      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
-      const dataHome = join(root, "data-home");
-      const previousExecutable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
-      const binDirectory = join(root, "bin");
-      const linkPath = join(binDirectory, "dim");
-      const configPath = join(root, "dim.json");
-      await mkdir(dirname(previousExecutable), { recursive: true });
-      await writeStubCli(previousExecutable, { versionOutput: "1.0.0" });
-      await writeFile(configPath, "not json");
-
-      // When
-      const installation = installDimCli({
-        version: "2.0.0",
-        exposeOnPath: true,
-        npmCommand: npm,
-        dataHome,
-        binDirectory,
-        configPath
-      });
-
-      // Then
-      await expect(installation).rejects.toThrow();
-      await expect(access(linkPath)).rejects.toMatchObject({ code: "ENOENT" });
+    it("updates only CLI while preserving the host runtime, plugin state and configured host release", async () => {
+      const fixture = await setup();
+      const host = await installHostRuntime({ ...fixture, npmCommand: fixture.npm });
+      const marker = join(fixture.dataHome, "runtime", "current", "sentinel"); await writeFile(marker, "host stays");
+      const manifestBefore = await readFile(join(fixture.dataHome, "runtime", "current", "plugins.json"));
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "8.0.0" });
+      await installDimCli({ ...fixture, version: "8.0.0", exposeOnPath: false, npmCommand: fixture.npm });
+      expect(await readFile(marker, "utf8")).toBe("host stays");
+      expect(await readFile(join(fixture.dataHome, "runtime", "current", "plugins.json"))).toEqual(manifestBefore);
+      expect((await readUserConfig(fixture.configPath)).host).toEqual(host);
     });
 
-    it("preserves a foreign bin file when direct installation rejects it", async () => {
-      // Given
-      const root = await tempDir("dim-install-foreign-bin-");
-      const npm = join(root, "npm.mjs");
-      const targetControllerArgs = join(root, "target-controller-arguments.json");
-      const controllerRunning = join(root, "controller-running");
-      await writeFakeCliNpm(npm, {
-        argsFile: join(root, "arguments.json"),
-        versionOutput: "2.0.0",
-        controllerArgsFile: targetControllerArgs,
-        controllerRunningFile: controllerRunning
-      });
-      const dataHome = join(root, "data-home");
-      const previousExecutable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
-      const previousControllerArgs = join(root, "previous-controller-arguments.json");
-      const binDirectory = join(root, "bin");
-      const linkPath = join(binDirectory, "dim");
-      await mkdir(dirname(previousExecutable), { recursive: true });
-      await mkdir(binDirectory, { recursive: true });
-      await writeStubCli(previousExecutable, { versionOutput: "1.0.0", echoFile: previousControllerArgs });
-      await writeFile(join(dataHome, "runtime", "current", "sentinel"), "previous install");
-      await writeFile(linkPath, "user-owned dim");
-
-      // When
-      const installation = installDimCli({
-        restartController: true,
-        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-control-plane-admin@2.0.0"],
-        version: "2.0.0",
-        exposeOnPath: true,
-        npmCommand: npm,
-        dataHome,
-        binDirectory,
-        configPath: join(root, "dim.json")
-      });
-
-      // Then
-      await expect(installation).rejects.toThrow(/not managed by DIM installer/);
-      expect(JSON.parse(await readFile(targetControllerArgs, "utf8"))).toEqual([
-        ["controller", "restart"],
-        ["controller", "stop"]
-      ]);
-      await expect(access(controllerRunning)).rejects.toMatchObject({ code: "ENOENT" });
-      expect(await readFile(join(dataHome, "runtime", "current", "sentinel"), "utf8"))
-        .toBe("previous install");
-      expect(JSON.parse(await readFile(previousControllerArgs, "utf8"))).toMatchObject({
-        argv: ["controller", "restart"]
-      });
-      expect(await readFile(linkPath, "utf8")).toBe("user-owned dim");
+    it("rejects incompatible host updates before promotion and keeps the retained CLI", async () => {
+      const fixture = await setup();
+      const cli = await installDimCli({ ...fixture, exposeOnPath: false, npmCommand: fixture.npm });
+      await installHostRuntime({ ...fixture, npmCommand: fixture.npm });
+      const before = await readFile(fixture.configPath);
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "3.0.0", protocolVersions: [2] });
+      await expect(installHostRuntime({ ...fixture, version: "3.0.0", npmCommand: fixture.npm })).rejects.toThrow(/protocol/);
+      expect(await queryCliVersion(hostExecutable(fixture.dataHome))).toBe("2.0.0");
+      expect(await queryCliVersion(cli.executable)).toBe("2.0.0");
+      expect(await readFile(fixture.configPath)).toEqual(before);
     });
 
-    it("stops a clean-install target before rolling back a foreign-bin failure", async () => {
-      // Given
-      const root = await tempDir("dim-install-clean-foreign-bin-rollback-");
-      const npm = join(root, "npm.mjs");
-      const controllerCalls = join(root, "controller-calls.json");
-      const controllerRunning = join(root, "controller-running");
-      await writeFakeCliNpm(npm, {
-        argsFile: join(root, "npm-arguments.json"),
-        versionOutput: "2.0.0",
-        controllerArgsFile: controllerCalls,
-        controllerRunningFile: controllerRunning
-      });
-      const dataHome = join(root, "data-home");
-      const binDirectory = join(root, "bin");
-      const linkPath = join(binDirectory, "dim");
-      const configPath = join(root, "dim.json");
-      await mkdir(binDirectory, { recursive: true });
-      await writeFile(linkPath, "user-owned dim");
-
-      // When
-      const installation = installDimCli({
-        restartController: true,
-        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-control-plane-admin@2.0.0"],
-        version: "2.0.0",
-        exposeOnPath: true,
-        npmCommand: npm,
-        dataHome,
-        binDirectory,
-        configPath
-      });
-
-      // Then
-      await expect(installation).rejects.toThrow(/not managed by DIM installer/);
-      expect(JSON.parse(await readFile(controllerCalls, "utf8"))).toEqual([
-        ["controller", "restart"],
-        ["controller", "stop"]
-      ]);
-      await expect(access(controllerRunning)).rejects.toMatchObject({ code: "ENOENT" });
-      await expect(access(join(dataHome, "runtime", "current"))).rejects.toMatchObject({ code: "ENOENT" });
-      await expect(access(configPath)).rejects.toMatchObject({ code: "ENOENT" });
-      expect(await readFile(linkPath, "utf8")).toBe("user-owned dim");
+    it("rejects incompatible CLI updates before promotion without changing host or configuration", async () => {
+      const fixture = await setup();
+      await installHostRuntime({ ...fixture, npmCommand: fixture.npm });
+      const previous = await installDimCli({ ...fixture, exposeOnPath: false, npmCommand: fixture.npm });
+      const before = await readFile(fixture.configPath);
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "3.0.0", protocolVersions: [2] });
+      await expect(installDimCli({ ...fixture, version: "3.0.0", exposeOnPath: false, npmCommand: fixture.npm })).rejects.toThrow(/protocol/);
+      expect(await queryCliVersion(previous.executable)).toBe("2.0.0");
+      expect(await queryCliVersion(hostExecutable(fixture.dataHome))).toBe("2.0.0");
+      expect(await readFile(fixture.configPath)).toEqual(before);
     });
 
-    it("stops a clean-install target before restoring malformed config bytes", async () => {
-      // Given
-      const root = await tempDir("dim-install-clean-config-rollback-");
-      const npm = join(root, "npm.mjs");
-      const controllerCalls = join(root, "controller-calls.json");
-      const controllerRunning = join(root, "controller-running");
-      await writeFakeCliNpm(npm, {
-        argsFile: join(root, "npm-arguments.json"),
-        versionOutput: "2.0.0",
-        controllerArgsFile: controllerCalls,
-        controllerRunningFile: controllerRunning
-      });
-      const dataHome = join(root, "data-home");
-      const configPath = join(root, "dim.json");
-      const malformedConfig = "not json\n";
-      await writeFile(configPath, malformedConfig);
-
-      // When
-      const installation = installDimCli({
-        restartController: true,
-        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-control-plane-admin@2.0.0"],
-        version: "2.0.0",
-        exposeOnPath: false,
-        npmCommand: npm,
-        dataHome,
-        configPath
-      });
-
-      // Then
-      await expect(installation).rejects.toThrow();
-      expect(JSON.parse(await readFile(controllerCalls, "utf8"))).toEqual([
-        ["controller", "restart"],
-        ["controller", "stop"]
-      ]);
-      await expect(access(controllerRunning)).rejects.toMatchObject({ code: "ENOENT" });
-      await expect(access(join(dataHome, "runtime", "current"))).rejects.toMatchObject({ code: "ENOENT" });
-      expect(await readFile(configPath, "utf8")).toBe(malformedConfig);
+    it("rejects a wrong staged version without pruning the previous CLI", async () => {
+      const fixture = await setup();
+      const previous = await installDimCli({ ...fixture, exposeOnPath: false, npmCommand: fixture.npm });
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "wrong-version" });
+      await expect(installDimCli({ ...fixture, exposeOnPath: false, npmCommand: fixture.npm })).rejects.toThrow(/reports wrong-version/);
+      expect(await queryCliVersion(previous.executable)).toBe("2.0.0");
     });
 
-    it("preserves the running target and original install error when target stop fails", async () => {
-      // Given
-      const root = await tempDir("dim-install-stop-failure-");
-      const npm = join(root, "npm.mjs");
-      const controllerCalls = join(root, "controller-calls.json");
-      const controllerRunning = join(root, "controller-running");
-      await writeFakeCliNpm(npm, {
-        argsFile: join(root, "npm-arguments.json"),
-        versionOutput: "2.0.0",
-        controllerArgsFile: controllerCalls,
-        controllerRunningFile: controllerRunning,
-        controllerStopExitCode: 9
-      });
-      const dataHome = join(root, "data-home");
-      const current = join(dataHome, "runtime", "current");
-      const previousExecutable = join(current, "node_modules", ".bin", "dim");
-      const binDirectory = join(root, "bin");
-      const linkPath = join(binDirectory, "dim");
-      const configPath = join(root, "dim.json");
-      await mkdir(dirname(previousExecutable), { recursive: true });
-      await mkdir(binDirectory, { recursive: true });
-      await writeStubCli(previousExecutable, { versionOutput: "1.0.0" });
-      await writeFile(join(current, "sentinel"), "previous install");
-      await writeFile(linkPath, "user-owned dim");
-
-      // When
-      const installation = installDimCli({
-        restartController: true,
-        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-control-plane-admin@2.0.0"],
-        version: "2.0.0",
-        exposeOnPath: true,
-        npmCommand: npm,
-        dataHome,
-        binDirectory,
-        configPath
-      });
-
-      // Then
-      await expect(installation).rejects.toThrow(/not managed by DIM installer/);
-      expect(JSON.parse(await readFile(controllerCalls, "utf8"))).toEqual([
-        ["controller", "restart"],
-        ["controller", "stop"]
-      ]);
-      await access(controllerRunning);
-      await access(join(current, "node_modules", ".bin", "dim"));
-      await expect(access(join(current, "sentinel"))).rejects.toMatchObject({ code: "ENOENT" });
-      const backups = (await readdir(join(dataHome, "runtime"))).filter((entry) => entry.startsWith(".previous-"));
-      expect(backups).toHaveLength(1);
-      expect(await readFile(join(dataHome, "runtime", backups[0] ?? "", "sentinel"), "utf8"))
-        .toBe("previous install");
-      await expect(access(configPath)).rejects.toMatchObject({ code: "ENOENT" });
-      expect(await readFile(linkPath, "utf8")).toBe("user-owned dim");
+    it("exposes a managed CLI launcher that supplies the owned host endpoint", async () => {
+      const fixture = await setup();
+      const binDirectory = join(fixture.root, "bin");
+      const cli = await installDimCli({ ...fixture, exposeOnPath: true, binDirectory, npmCommand: fixture.npm });
+      expect(await readlink(join(binDirectory, "dim"))).toBe(cli.executable);
+      const capture = join(fixture.root, "captured.json");
+      await writeStubCli(join(fixture.dataHome, "cli", "runtime", "current", "node_modules", ".bin", "dim"), { versionOutput: "2.0.0", echoFile: capture });
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      await promisify(execFile)(join(binDirectory, "dim"), ["workspace", "ls"]);
+      expect(JSON.parse(await readFile(capture, "utf8"))).toMatchObject({ argv: ["workspace", "ls"], env: { DIM_HOST_EXECUTABLE: hostExecutable(fixture.dataHome) } });
     });
 
-    it("restores and restarts the previous runtime when target controller readiness fails", async () => {
-      const root = await tempDir("dim-install-failed-controller-");
-      const npm = join(root, "npm.mjs");
-      const targetControllerArgs = join(root, "target-controller-arguments.json");
-      await writeFakeCliNpm(npm, {
-        argsFile: join(root, "npm-arguments.json"),
-        versionOutput: "2.0.0",
-        controllerArgsFile: targetControllerArgs,
-        controllerExitCode: 9
-      });
-      const dataHome = join(root, "data-home");
-      const current = join(dataHome, "runtime", "current");
-      const previousExecutable = join(current, "node_modules", ".bin", "dim");
-      const previousControllerArgs = join(root, "previous-controller-arguments.json");
-      await mkdir(dirname(previousExecutable), { recursive: true });
-      await writeStubCli(previousExecutable, { versionOutput: "1.0.0", echoFile: previousControllerArgs });
-      await writeFile(join(current, "sentinel"), "previous install");
-
-      await expect(installDimCli({
-        restartController: true,
-        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-control-plane-admin@2.0.0"],
-        version: "2.0.0",
-        plugins: [{
-          name: "@slop-lab/dim-host-plugin-mirrors",
-          specifier: "@slop-lab/dim-host-plugin-mirrors@2.0.0"
-        }],
-        exposeOnPath: false,
-        npmCommand: npm,
-        dataHome,
-        configPath: join(root, "dim.json")
-      })).rejects.toThrow(/controller restart/);
-
-      expect(await readFile(join(current, "sentinel"), "utf8")).toBe("previous install");
-      expect(JSON.parse(await readFile(targetControllerArgs, "utf8"))).toEqual([["controller", "restart"]]);
-      expect(JSON.parse(await readFile(previousControllerArgs, "utf8"))).toMatchObject({
-        argv: ["controller", "restart"]
-      });
+    it("moves the exact former installer symlink into the separate CLI prefix", async () => {
+      const fixture = await setup(); const binDirectory = join(fixture.root, "bin");
+      const old = join(fixture.dataHome, "runtime/current/node_modules/.bin/dim");
+      await mkdir(dirname(old), { recursive: true }); await writeStubCli(old, { versionOutput: "1.0.0" });
+      await mkdir(binDirectory); await symlink(old, join(binDirectory, "dim"));
+      const cli = await installDimCli({ ...fixture, exposeOnPath: true, binDirectory, npmCommand: fixture.npm });
+      expect(await readlink(join(binDirectory, "dim"))).toBe(cli.executable);
+      expect(await queryCliVersion(old)).toBe("1.0.0");
     });
 
-    it("restarts the restored runtime after cancellation during target readiness", async () => {
-      const root = await tempDir("dim-install-cancelled-controller-");
-      const npm = join(root, "npm.mjs");
-      await writeFakeCliNpm(npm, {
-        argsFile: join(root, "npm-arguments.json"),
-        versionOutput: "2.0.0"
-      });
-      const dataHome = join(root, "data-home");
-      const previousExecutable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
-      const previousControllerArgs = join(root, "previous-controller-arguments.json");
-      await mkdir(dirname(previousExecutable), { recursive: true });
-      await writeStubCli(previousExecutable, { versionOutput: "1.0.0", echoFile: previousControllerArgs });
+    it("restores the previous CLI and managed symlink when configuration fails after promotion", async () => {
+      const fixture = await setup(); const binDirectory = join(fixture.root, "bin");
+      const previous = await installDimCli({ ...fixture, exposeOnPath: true, binDirectory, npmCommand: fixture.npm });
+      const priorTarget = await readlink(join(binDirectory, "dim"));
+      await writeFile(fixture.configPath, "not json");
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "3.0.0" });
+      await expect(installDimCli({ ...fixture, version: "3.0.0", exposeOnPath: true, binDirectory, npmCommand: fixture.npm })).rejects.toThrow();
+      expect(await queryCliVersion(previous.executable)).toBe("2.0.0");
+      expect(await readlink(join(binDirectory, "dim"))).toBe(priorTarget);
+    });
+
+    it("preserves foreign bin files and removes a failed clean CLI candidate", async () => {
+      const fixture = await setup(); const binDirectory = join(fixture.root, "bin");
+      await mkdir(binDirectory); await writeFile(join(binDirectory, "dim"), "user owned");
+      await expect(installDimCli({ ...fixture, exposeOnPath: true, binDirectory, npmCommand: fixture.npm })).rejects.toThrow(/not managed by DIM installer/);
+      expect(await readFile(join(binDirectory, "dim"), "utf8")).toBe("user owned");
+      await expect(access(cliExecutable(fixture.dataHome))).rejects.toMatchObject({ code: "ENOENT" });
+    });
+
+    it("runs the staged host preflight before changing installed state", async () => {
+      const fixture = await setup();
+      await installHostRuntime({ ...fixture, npmCommand: fixture.npm });
+      const before = await readFile(fixture.configPath);
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "3.0.0", preflightSource: 'export async function preflightStateCompatibility() { throw new Error("target core rejected workspace state"); }' });
+      await expect(installHostRuntime({ ...fixture, version: "3.0.0", npmCommand: fixture.npm })).rejects.toThrow(/target core rejected workspace state/);
+      expect(await queryCliVersion(hostExecutable(fixture.dataHome))).toBe("2.0.0");
+      expect(await readFile(fixture.configPath)).toEqual(before);
+      expect(await readdir(join(fixture.dataHome, "runtime"))).toEqual(["current"]);
+    });
+
+    it("restores and restarts the previous host when candidate readiness fails", async () => {
+      const fixture = await setup();
+      const oldCalls = join(fixture.root, "old-calls.json");
+      await installHostRuntime({ ...fixture, npmCommand: fixture.npm });
+      await writeStubCli(hostExecutable(fixture.dataHome), { versionOutput: "2.0.0", echoFile: oldCalls });
+      const calls = join(fixture.root, "calls.json");
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "3.0.0", controllerArgsFile: calls, controllerExitCode: 9 });
+      await expect(installHostRuntime({ ...fixture, version: "3.0.0", restartController: true, npmCommand: fixture.npm })).rejects.toThrow(/controller restart/);
+      expect(await queryCliVersion(hostExecutable(fixture.dataHome))).toBe("2.0.0");
+      expect(JSON.parse(await readFile(calls, "utf8"))).toEqual([["controller", "restart"]]);
+      expect(JSON.parse(await readFile(oldCalls, "utf8"))).toMatchObject({ argv: ["controller", "restart"] });
+    });
+
+    it("stops a ready clean host candidate before rollback when final configuration fails", async () => {
+      const fixture = await setup(); const calls = join(fixture.root, "calls.json"); const running = join(fixture.root, "running");
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: fixture.version, controllerArgsFile: calls, controllerRunningFile: running, controllerCorruptConfigFile: fixture.configPath });
+      await expect(installHostRuntime({ ...fixture, restartController: true, npmCommand: fixture.npm })).rejects.toThrow();
+      expect(JSON.parse(await readFile(calls, "utf8"))).toEqual([["controller", "restart"], ["controller", "stop"]]);
+      await expect(access(running)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(hostExecutable(fixture.dataHome))).rejects.toMatchObject({ code: "ENOENT" });
+    });
+
+    it("preserves a running candidate and previous host backup if stopping it fails", async () => {
+      const fixture = await setup(); await installHostRuntime({ ...fixture, npmCommand: fixture.npm });
+      const oldMarker = join(fixture.dataHome, "runtime", "current", "sentinel"); await writeFile(oldMarker, "previous");
+      const calls = join(fixture.root, "calls.json"); const running = join(fixture.root, "running");
+      await writeFakeCliNpm(fixture.npm, { argsFile: fixture.argsFile, versionOutput: "3.0.0", controllerArgsFile: calls, controllerRunningFile: running, controllerStopExitCode: 9, controllerCorruptConfigFile: fixture.configPath });
+      await expect(installHostRuntime({ ...fixture, version: "3.0.0", restartController: true, npmCommand: fixture.npm })).rejects.toThrow();
+      expect(await queryCliVersion(hostExecutable(fixture.dataHome))).toBe("3.0.0"); await access(running);
+      const backup = (await readdir(join(fixture.dataHome, "runtime"))).find(name => name.startsWith(".previous-"));
+      expect(backup).toBeDefined(); expect(await readFile(join(fixture.dataHome, "runtime", backup!, "sentinel"), "utf8")).toBe("previous");
+    });
+
+    it("restarts the restored host after cancellation during candidate readiness", async () => {
+      const fixture = await setup(); await installHostRuntime({ ...fixture, npmCommand: fixture.npm });
+      const calls = join(fixture.root, "old-calls.json"); await writeStubCli(hostExecutable(fixture.dataHome), { versionOutput: fixture.version, echoFile: calls });
       const abort = new AbortController();
-
-      await expect(installDimCli({
-        restartController: true,
-        packageSpecifiers: ["@slop-lab/dim-cli@2.0.0", "@slop-lab/dim-control-plane-admin@2.0.0"],
-        version: "2.0.0",
-        exposeOnPath: false,
-        npmCommand: npm,
-        dataHome,
-        configPath: join(root, "dim.json"),
-        operation: {
-          signal: abort.signal,
-          activity: vi.fn(),
-          reportProgress(stage) { if (stage === "controller readiness") abort.abort(new Error("cancelled")); }
-        }
-      })).rejects.toThrow();
-
-      expect(JSON.parse(await readFile(previousControllerArgs, "utf8"))).toMatchObject({
-        argv: ["controller", "restart"]
-      });
+      await expect(installHostRuntime({ ...fixture, npmCommand: fixture.npm, restartController: true, operation: { signal: abort.signal, activity() {}, reportProgress(stage) { if (stage === "controller readiness") abort.abort(new Error("cancelled")); } } })).rejects.toThrow();
+      expect(JSON.parse(await readFile(calls, "utf8"))).toMatchObject({ argv: ["controller", "restart"] });
     });
   });
 
-  describe("readLocalPackageBundle", () => {
+  describe("readHostPackageBundle", () => {
     async function bundleFixture() {
       const root = await tempDir("dim-local-bundle-");
       const version = "0.10.0-local-test";
       const entries = [
         { name: "@slop-lab/dim-host-core", file: "core.tgz", version, requires: {} },
-        { name: "@slop-lab/dim-cli", file: "cli.tgz", version, requires: { "@slop-lab/dim-host-core": version } },
+        { name: "@slop-lab/dim-cli", file: "cli.tgz", version, requires: {} },
         { name: "@slop-lab/dim-contracts-external-url", file: "contract.tgz", version, requires: {} },
         { name: "@slop-lab/dim-control-plane-plugin-git-repositories", file: "native-git.tgz", version, requires: { "@slop-lab/dim-contracts-external-url": version } },
         { name: "@slop-lab/dim-control-plane-admin", file: "managed.tgz", version, requires: { "@slop-lab/dim-host-core": version, "@slop-lab/dim-control-plane-plugin-git-repositories": version } },
@@ -678,20 +318,21 @@ describe("@slop-lab/dim-installer", () => {
       return { root, entries, publish };
     }
 
-    it("selects only the base CLI and required core artifacts", async () => {
+    it("selects only host artifacts and independently selects presentation artifacts", async () => {
       const { root } = await bundleFixture();
-      expect(await readLocalPackageBundle(root)).toEqual({
+      expect(await readHostPackageBundle(root)).toEqual({
         version: "0.10.0-local-test",
-        packageSpecifiers: [join(root, "core.tgz"), join(root, "cli.tgz")],
-        packageNames: ["@slop-lab/dim-host-core", "@slop-lab/dim-cli"]
+        packageSpecifiers: [join(root, "core.tgz")],
+        packageNames: ["@slop-lab/dim-host-core"]
       });
+      expect((await readCliPackageBundle(root)).packageNames).toEqual(["@slop-lab/dim-cli"]);
     });
 
     it("includes the complete managed dependency closure without unrelated plugins or installer", async () => {
       const { root } = await bundleFixture();
-      const selected = await readLocalPackageBundle(root, ["@slop-lab/dim-control-plane-admin"]);
+      const selected = await readHostPackageBundle(root, ["@slop-lab/dim-control-plane-admin"]);
       expect(selected.packageNames).toEqual([
-        "@slop-lab/dim-host-core", "@slop-lab/dim-cli", "@slop-lab/dim-contracts-external-url",
+        "@slop-lab/dim-host-core", "@slop-lab/dim-contracts-external-url",
         "@slop-lab/dim-control-plane-plugin-git-repositories", "@slop-lab/dim-control-plane-admin"
       ]);
       expect(selected.packageSpecifiers).not.toContain(join(root, "mirrors.tgz"));
@@ -700,15 +341,15 @@ describe("@slop-lab/dim-installer", () => {
 
     it("installs a base workspace plugin without optional managed components", async () => {
       const { root } = await bundleFixture();
-      expect((await readLocalPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors"])).packageNames).toEqual([
-        "@slop-lab/dim-host-core", "@slop-lab/dim-cli", "@slop-lab/dim-host-plugin-mirrors"
+      expect((await readHostPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors"])).packageNames).toEqual([
+        "@slop-lab/dim-host-core", "@slop-lab/dim-host-plugin-mirrors"
       ]);
     });
 
     it("selects exact host plugins from a bundle and rejects a different requested version", async () => {
       const { root } = await bundleFixture();
       expect((await readHostPluginPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors@0.10.0-local-test"])).packageNames).toEqual([
-        "@slop-lab/dim-host-core", "@slop-lab/dim-cli", "@slop-lab/dim-host-plugin-mirrors"
+        "@slop-lab/dim-host-core", "@slop-lab/dim-host-plugin-mirrors"
       ]);
       await expect(readHostPluginPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors@0.9.0"])).rejects.toThrow(/does not match selected plugin/);
       await expect(readHostPluginPackageBundle(root, ["@slop-lab/dim-host-plugin-mirrors@latest"])).rejects.toThrow(/exact PACKAGE@VERSION/);
@@ -717,21 +358,21 @@ describe("@slop-lab/dim-installer", () => {
     it("rejects selected missing or version-mismatched dependencies instead of falling back to a registry", async () => {
       const { root, entries, publish } = await bundleFixture();
       await publish(entries.filter(({ name }) => name !== "@slop-lab/dim-control-plane-plugin-git-repositories"));
-      await expect(readLocalPackageBundle(root, ["@slop-lab/dim-control-plane-admin"])).rejects.toThrow(/requires missing bundle package/);
-      await expect(readLocalPackageBundle(root)).resolves.toMatchObject({ packageNames: ["@slop-lab/dim-host-core", "@slop-lab/dim-cli"] });
+      await expect(readHostPackageBundle(root, ["@slop-lab/dim-control-plane-admin"])).rejects.toThrow(/requires missing bundle package/);
+      await expect(readHostPackageBundle(root)).resolves.toMatchObject({ packageNames: ["@slop-lab/dim-host-core"] });
       await publish(entries.map((entry) => entry.name === "@slop-lab/dim-control-plane-plugin-git-repositories" ? { ...entry, version: "0.9.0" } : entry));
-      await expect(readLocalPackageBundle(root, ["@slop-lab/dim-control-plane-admin"])).rejects.toThrow(/requires .*but the bundle contains/);
-      await expect(readLocalPackageBundle(root, ["missing-plugin"])).rejects.toThrow(/does not contain required package 'missing-plugin'/);
+      await expect(readHostPackageBundle(root, ["@slop-lab/dim-control-plane-admin"])).rejects.toThrow(/requires .*but the bundle contains/);
+      await expect(readHostPackageBundle(root, ["missing-plugin"])).rejects.toThrow(/does not contain required package 'missing-plugin'/);
     });
 
-    it("rejects bundles without the CLI or with unsafe filenames", async () => {
+    it("rejects bundles without host core or with unsafe filenames", async () => {
       const root = await tempDir("dim-invalid-local-bundle-");
       await writeFile(join(root, "packages.json"), JSON.stringify({ schemaVersion: 1, packages: [] }));
-      await expect(readLocalPackageBundle(root)).rejects.toThrow(/does not contain/);
+      await expect(readHostPackageBundle(root)).rejects.toThrow(/does not contain/);
       await writeFile(join(root, "packages.json"), JSON.stringify({ schemaVersion: 1, packages: [
         { name: "@slop-lab/dim-cli", version: "0.9.0", file: "../cli.tgz", requires: {} }
       ] }));
-      await expect(readLocalPackageBundle(root)).rejects.toThrow(/invalid local package filename/);
+      await expect(readHostPackageBundle(root)).rejects.toThrow(/invalid local package filename/);
     });
   });
 
@@ -791,7 +432,7 @@ describe("@slop-lab/dim-installer", () => {
     it("throws a helpful error when the executable is missing", async () => {
       const root = await tempDir("dim-validate-missing-");
       const cli = { mode: "proxied" as const, version: "1.0.0", executable: join(root, "does-not-exist") };
-      await expect(validateConfiguredCli(cli, undefined)).rejects.toThrow(/run 'dim installer install core'/);
+      await expect(validateConfiguredCli(cli, undefined)).rejects.toThrow(/run 'dim installer install cli'/);
     });
 
     it("throws when the executable exists but is not executable", async () => {
@@ -856,7 +497,7 @@ describe("@slop-lab/dim-installer", () => {
 
       const pluginHome = join(root, "plugins");
       await mkdir(join(pluginHome, "node_modules", ".bin"), { recursive: true });
-      await writeStubCli(join(pluginHome, "node_modules", ".bin", "dim"), { versionOutput: "1.0.0" });
+      await writeStubCli(join(pluginHome, "node_modules", ".bin", "dim-host"), { versionOutput: "1.0.0" });
       const installed = await installPlugins(
         ["@dev-infra-manager/plugin-github@1.0.0", "dim-plugin-example@2.0.0"],
         { pluginHome, npmCommand: npm }
@@ -888,7 +529,7 @@ describe("@slop-lab/dim-installer", () => {
         JSON.stringify({ schemaVersion: 1, plugins: ["zzz-existing-plugin"] })
       );
       await mkdir(join(pluginHome, "node_modules", ".bin"), { recursive: true });
-      await writeStubCli(join(pluginHome, "node_modules", ".bin", "dim"), { versionOutput: "1.0.0" });
+      await writeStubCli(join(pluginHome, "node_modules", ".bin", "dim-host"), { versionOutput: "1.0.0" });
 
       const npm = join(root, "npm.mjs");
       await writeFakePluginNpm(npm, { argsFile: join(root, "arguments.json") });
@@ -944,7 +585,7 @@ describe("@slop-lab/dim-installer", () => {
       // Given
       const root = await tempDir("dim-install-plugin-controller-rollback-");
       const pluginHome = join(root, "runtime", "current");
-      const executable = join(pluginHome, "node_modules", ".bin", "dim");
+      const executable = join(pluginHome, "node_modules", ".bin", "dim-host");
       const controllerCalls = join(root, "controller-calls.json");
       await mkdir(dirname(executable), { recursive: true });
       await writeFile(join(pluginHome, "package.json"), JSON.stringify({

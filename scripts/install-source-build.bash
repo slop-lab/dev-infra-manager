@@ -116,6 +116,8 @@ fi
 echo "[host] install package bundle"
 core_options=(--local-packages "$package_root" --no-local-bin --with-managed)
 "${dim_command[@]}" installer install core "${core_options[@]}"
+echo "[cli] install presentation package bundle"
+"${dim_command[@]}" installer install cli --local-packages "$package_root" --no-local-bin
 validate_preparation
 
 # Keep the matching installer after this transaction. An older mise facade can

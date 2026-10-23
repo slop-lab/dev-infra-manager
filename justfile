@@ -54,10 +54,10 @@ reinstall-local *args:
 restart-controller:
     if command -v mise >/dev/null 2>&1; then mise exec -- dim controller restart; else "${DIM_INSTALL_PREFIX:-$HOME/.local}/bin/dim" controller restart; fi
 
-# Build the base core, then run the local CLI from source without installation.
+# Build the host and its contracts, then select it explicitly for the source client.
 run-cli *args:
-    pnpm --filter @slop-lab/dim-host-core run build
-    pnpm --dir tests exec tsx ../packages/cli/core/src/cli.ts {{ args }}
+    pnpm --filter @slop-lab/dim-host-core... run build
+    DIM_HOST_EXECUTABLE="$PWD/packages/host/core/dist/application/host-main.js" pnpm --dir tests exec tsx ../packages/cli/core/src/cli.ts {{ args }}
 
 # Check that the local CLI source can be executed without installing it.
 check-run-cli:

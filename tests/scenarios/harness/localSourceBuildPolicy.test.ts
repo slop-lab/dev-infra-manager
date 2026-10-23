@@ -392,7 +392,7 @@ describe("local source build policy", () => {
     // The recipe's compile prerequisite is outside this image-command test.
     // Keep the real CLI invocation while preserving artifacts used by other suites.
     await writeFile(resolve(tools, "pnpm"), `#!/usr/bin/env bash
-if [[ "$#" == 4 && "$1" == --filter && "$2" == @slop-lab/dim-host-core && "$3" == run && "$4" == build ]]; then
+if [[ "$#" == 4 && "$1" == --filter && "$2" == @slop-lab/dim-host-core... && "$3" == run && "$4" == build ]]; then
   exit 0
 fi
 exec "$DIM_TEST_REAL_PNPM" "$@"
@@ -423,6 +423,7 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
         DIM_TEST_REAL_PNPM: actualPnpm.stdout.trim()
       }
     });
+    expect(result.status, result.stderr).toBe(0);
     const invocations = await readFile(log, "utf8");
 
     // Then

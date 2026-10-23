@@ -34,21 +34,12 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-host-core": "workspace:0.10.0",
+    "@slop-lab/dim-contracts-cli-host": "workspace:0.10.0",
     "commander": "14.0.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
-    "typescript": "5.8.3",
-    "@slop-lab/dim-control-plane-admin": "workspace:0.10.0"
-  },
-  "peerDependencies": {
-    "@slop-lab/dim-control-plane-admin": "0.10.0"
-  },
-  "peerDependenciesMeta": {
-    "@slop-lab/dim-control-plane-admin": {
-      "optional": true
-    }
+    "typescript": "5.8.3"
   }
 }

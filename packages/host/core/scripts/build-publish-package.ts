@@ -1,5 +1,5 @@
 import source from "../package.json" with { type: "json" };
-import { cp, copyFile, writeFile } from "node:fs/promises";
+import { chmod, cp, copyFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
 import { publishPackageVersion } from "../../../../scripts/packages/publish-package-version.ts";
 
@@ -15,6 +15,8 @@ const output = minifyPackageJson(source, {
   includeFields: ["publishConfig", "exports", "types"]
 });
 output.version = publishPackageVersion(source.version);
+output.bin = { "dim-host": "./application/host-main.js" };
+output.dependencies = Object.fromEntries(Object.entries(source.dependencies).map(([name, version]) => [name, version.startsWith("workspace:") ? output.version : version]));
 
 output.types = "./index.d.ts";
 output.exports = {
@@ -24,7 +26,6 @@ output.exports = {
   },
   "./plugin-api": { types: "./plugin-api.d.ts", import: "./plugin-api.js", default: "./plugin-api.js" },
   "./workspace": { types: "./workspace.d.ts", import: "./workspace.js" },
-  "./application/protocol": { types: "./application/protocol.d.ts", import: "./application/protocol.js", default: "./application/protocol.js" },
   "./application": { types: "./application/index.d.ts", import: "./application/index.js", default: "./application/index.js" },
   "./controller": { types: "./controller/index.d.ts", import: "./controller/index.js", default: "./controller/index.js" },
   "./controller/cli": { types: "./controller/cli/index.d.ts", import: "./controller/cli/index.js", default: "./controller/cli/index.js" }
@@ -43,3 +44,5 @@ await cp(
   new URL("../dist/workspace-image-assets", import.meta.url),
   { recursive: true }
 );
+
+await chmod(new URL("../dist/application/host-main.js", import.meta.url), 0o755);

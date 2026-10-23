@@ -1,10 +1,11 @@
+import { hostExecutable } from "../support/host-executable.js";
 import { managedPolicyExtensions } from "../support/git-policy.js";
 import assert from "node:assert/strict";
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { execFile, spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createNodeNativeGitRootImporterClient, NativeProjectDraftStore, NativeProjectPendingStore, parseNativeControlPlaneConnection } from "@slop-lab/dim-host-plugin-native-git";
@@ -92,6 +93,7 @@ export async function nativeFixture(options: NativeFixtureOptions = {}): Promise
   await writeFile(controlPath,
     JSON.stringify(controlConnection(service.origin, importer.hostId, generationId)), { mode: 0o600 });
   const environment = cleanEnvironment();
+  environment.DIM_HOST_EXECUTABLE = await hostExecutable(root);
   const pluginHome = join(root, "plugins");
   await mkdir(join(pluginHome, "node_modules", "@slop-lab"), { recursive: true });
   await writeFile(join(pluginHome, "package.json"), '{"private":true}');
@@ -148,8 +150,10 @@ export async function rewriteJson(
 
 export async function runCli(args: readonly string[], environment: NodeJS.ProcessEnv,
   nodeArguments: readonly string[] = []) {
-  const child = spawn(process.execPath, ["--conditions=dim-source", "--import", tsxImport, ...nodeArguments, cli, ...args], {
-    cwd: packageDirectory, env: environment, stdio: ["ignore", "pipe", "pipe"]
+  const endpoint = environment.DIM_HOST_EXECUTABLE;
+  const invocationEnvironment = nodeArguments.length && endpoint ? { ...environment, DIM_HOST_EXECUTABLE: await hostExecutable(dirname(endpoint), false, nodeArguments) } : environment;
+  const child = spawn(process.execPath, ["--conditions=dim-source", "--import", tsxImport, cli, ...args], {
+    cwd: packageDirectory, env: invocationEnvironment, stdio: ["ignore", "pipe", "pipe"]
   });
   let stdout = "";
   let stderr = "";

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { configuredCli, queryCliVersion, validateConfiguredCli } from "./install.js";
+import { hostExecutable, configuredCli, queryCliVersion, validateConfiguredCli } from "./install.js";
 import { interactiveInstall, installerCommand } from "./installerCommands.js";
 import { printFacadeHelp } from "./installerHelp.js";
 import { installerVersion } from "./installerVersion.js";
@@ -34,6 +34,8 @@ async function dispatch(commandArgs: string[]): Promise<number> {
     return 2;
   }
 
+  if (first === "__host") return proxyCli(hostExecutable(), commandArgs, await installerVersion());
+
   const cli = await configuredCli();
   if (cli === undefined) {
     if (first === undefined) {
@@ -59,7 +61,7 @@ async function dispatch(commandArgs: string[]): Promise<number> {
     console.log(`DIM CLI ${installedVersion} (via DIM installer ${await installerVersion()})`);
     if (installedVersion !== cli.version) {
       console.error(
-        `dim: warning: configured version ${cli.version} does not match installed ${installedVersion}; run 'dim installer install core' to repair`
+        `dim: warning: configured version ${cli.version} does not match installed ${installedVersion}; run 'dim installer install cli' to repair`
       );
     }
     return 0;
@@ -73,6 +75,7 @@ async function proxyCli(executable: string, commandArgs: string[], version: stri
       cwd: process.cwd(),
       env: {
         ...process.env,
+        DIM_HOST_EXECUTABLE: hostExecutable(),
         DIM_INVOKED_VIA_INSTALLER: "1",
         DIM_INSTALLER_VERSION: version,
         DIM_INSTALLER_ENTRYPOINT: fileURLToPath(import.meta.url)

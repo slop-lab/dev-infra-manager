@@ -2,8 +2,8 @@
 
 `@slop-lab/dim-installer` is the pinned installer and facade for
 `@slop-lab/dim-cli`. Its executable is also `dim`. It installs exact package
-versions without `sudo`; commands outside the installer namespace are
-forwarded unchanged to the installed CLI.
+versions without `sudo`. Presentation commands use the separately installed CLI;
+the frozen `dim __host` transport enters the host runtime directly, even without a CLI.
 
 DIM supports Linux hosts only. Pin and review one exact release:
 
@@ -24,6 +24,7 @@ npx '@slop-lab/dim-installer@0.10.0' installer install core
 dim installer
 dim installer install core [--local-bin|--no-local-bin] [--prefix PATH]
   [--with-managed] [--host-mirror-plugin PACKAGE@EXACT_VERSION]
+dim installer install cli [--local-packages DIRECTORY] [--local-bin|--no-local-bin]
 dim installer install control-plane --config ABSOLUTE_FILE
 dim installer recover control-plane --roll-forward --generation GENERATION
 dim installer install plugin [--local-packages DIRECTORY] PACKAGE@EXACT_VERSION...
@@ -33,7 +34,7 @@ dim installer remove-plugin PACKAGE...
 ```
 
 Bare `dim installer` is interactive only on a TTY. Once a CLI is installed,
-all non-installer commands are forwarded to that exact CLI. The obsolete
+presentation commands are forwarded to that exact CLI. The obsolete
 `install-cp` token is rejected rather than aliased or forwarded.
 
 ## Core installation
@@ -42,7 +43,12 @@ The installer stages a complete candidate runtime, validates its package and
 plugin graph, runs the candidate core's read-only compatibility preflight, and
 only then promotes it. Base installation requires no control plane, mirror
 plugin, configured container backend, or running controller. It installs the
-CLI without starting a controller service. An already active owned controller
+host runtime without starting a controller service. It bootstraps a missing presentation
+CLI into a separate prefix; subsequent host updates retain that CLI.
+`dim installer install cli` updates only the CLI and never restarts the controller.
+Both executables advertise supported CLI–host protocol versions; independent
+releases are accepted when they share a protocol version. An incompatible candidate
+is rejected before promotion. An already active owned controller
 is restarted against the candidate runtime; failed readiness restores the
 previous runtime and controller. Generic controller functionality belongs to
 host core and is available in the base installation. Separate control-plane
@@ -72,8 +78,8 @@ and run `dim mirrors configure FILE`; use addresses reachable from that host.
 Installing either plugin never starts cache services. Base installation does
 not select either package.
 
-An already enabled host-mirror integration is updated to the installer's exact
-version during core installation. A fresh install does not select it or prompt
+Already enabled official host plugins are updated to the target host release
+during core installation; independently versioned third-party plugin pins are retained. A fresh install does not select it or prompt
 for it. Project and agent input cannot select host installation dependencies.
 
 Managed Git, review and shared CI are also optional:
@@ -86,21 +92,22 @@ This selects the exact-version Native Git and execution worker host plugins toge
 with control-plane operator tools. It does not deploy a control plane. Later
 core installations retain selected operator tools and enabled plugins.
 Local package bundles declare the exact
-dependency graph in `packages.json`; base installation selects only CLI/core
-and their required dependencies. `--with-managed` selects those host plugins and operator tools. Previously enabled plugins remain selected and
+dependency graph in `packages.json`; host and CLI installation select separate
+artifact closures and prefixes. `--with-managed` selects those host plugins and operator tools. Previously enabled plugins remain selected and
 use matched bundle artifacts. Missing or mismatched selected dependencies fail
 before package installation instead of falling back to a registry.
 
-Repository source installation uses the same optional profiles:
+Repository source installation installs the complete development profile:
 
 ```bash
 bash scripts/install-source-build.bash
 bash scripts/install-source-build.bash --with-managed
 ```
 
-The latter selects the Native Git and execution worker host plugins with operator
-tools. Other plugins and service deployments remain explicit operator choices.
-Host plugins use their matched host-core peer.
+Both forms select all prepared host and control-plane plugins, operator tools
+and local services; `--with-managed` is accepted for convenience. They update the host
+first, then explicitly update the separate CLI. Host plugins use their matched
+host-core peer. The published installer keeps optional components opt-in.
 
 These repository-only source commands also install a separate matched Web UI
 runtime and configure local host access. With user systemd they enable
@@ -167,7 +174,7 @@ explicit operator action.
 For a matched source bundle, use `--local-packages DIRECTORY` with exact plugin
 versions on either host or control-plane installs. The installer selects the
 complete declared dependency closure from `packages.json`; it enables only the
-requested plugins. A host bundle must match the installed CLI version. The
+requested plugins. A host bundle must match the installed host version; the CLI may have a different release. The
 artifact directory can contain other optional packages without selecting them.
 
 Plugin coordinates must be exact versions. Local tarballs are copied into
@@ -177,7 +184,8 @@ validated before activation. Control-plane plugins use their separate runtime.
 
 Installer configuration is stored below
 `${XDG_CONFIG_HOME:-$HOME/.config}/dim`; runtime data is below
-`${XDG_DATA_HOME:-$HOME/.local/share}/dim`. Treat both as trusted host state.
+`${XDG_DATA_HOME:-$HOME/.local/share}/dim`. The host prefix is `runtime/current`;
+the independently updated presentation prefix is `cli/runtime/current`. Treat both as trusted host state.
 
 See the normative [installer contract](../../docs/specs/14-installer-facade.md)
 and [adoption guide](../../docs/guides/adoption.md).

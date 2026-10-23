@@ -2,8 +2,9 @@
 
 ## Client and host
 
-The CLI selects a local or SSH host context, presents results and transports
-input/output. Lifecycle and source acquisition execute on the selected host.
+The CLI selects a local or SSH host context and transports arguments and
+input/output through the retained [v1 wire contract](cli-host-protocol-v1.md).
+Command parsing, presentation, lifecycle and source acquisition execute on the selected host.
 A source path is a path on that host. SSH uses the user's existing authentication
 and host-key verification; DIM does not disable these checks.
 

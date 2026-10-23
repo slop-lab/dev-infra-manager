@@ -1,18 +1,18 @@
-import { UserError, parseWorkspaceRecord, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
-import type { HostTarget } from "./host-context.js";
-import { callHost } from "./host-transport.js";
-import type { HostRequest } from "@slop-lab/dim-host-core/application/protocol";
-import { pluginSpecs, type RequiredPlugins } from "@slop-lab/dim-host-core/application/protocol";
+import { UserError, parseWorkspaceRecord, type WorkspaceRecord } from "../../workspace.js";
+interface HostTarget { readonly name: string }
+import { runRecordOperation } from "./operations.js";
+import type { HostOperationRequest as HostRequest } from "../host-application.js";
+import { pluginSpecs, type RequiredPlugins } from "../workspace-plugin-specs.js";
 
-export interface CreateWorkspaceClientOptions {
+export interface CreateWorkspaceOptions {
   readonly signal?: AbortSignal;
   /** Only an interactive operator may supply approval. Non-TTY clients omit this callback. */
   readonly approve?: (required: RequiredPlugins, host: HostTarget) => Promise<boolean>;
   readonly request?: (target: HostTarget, request: HostRequest, signal?: AbortSignal) => Promise<unknown>;
 }
 
-export async function createWorkspaceWithPlugins(target: HostTarget, input: Record<string, unknown>, options: CreateWorkspaceClientOptions = {}): Promise<WorkspaceRecord> {
-  const request = options.request ?? ((host, message, signal) => callHost(host, message, signal ? { signal } : {}));
+export async function createWorkspaceWithPlugins(target: HostTarget, input: Record<string, unknown>, options: CreateWorkspaceOptions = {}): Promise<WorkspaceRecord> {
+  const request = options.request ?? ((_host, message, signal) => runRecordOperation(message, signal ? { signal } : {}));
   const result = await request(target, { operation: "create", input }, options.signal);
   const required = requiredPlugins(result);
   if (!required) return workspaceRecord(result);

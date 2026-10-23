@@ -14,7 +14,8 @@ export interface RuntimePluginGraph {
 export async function prepareRuntimePluginGraph(
   currentDirectory: string,
   selectedPlugins: readonly RuntimePluginSelection[],
-  packageNames: readonly string[]
+  packageNames: readonly string[],
+  hostVersion?: string
 ): Promise<RuntimePluginGraph> {
   const previousManifest = await readManifest(path.join(currentDirectory, "plugins.json"));
   const previousPackage = await readPackageJson(path.join(currentDirectory, "package.json"));
@@ -24,7 +25,9 @@ export async function prepareRuntimePluginGraph(
     .map((name) => {
       const version = previousPackage?.dependencies?.[name];
       if (!version) throw new Error(`enabled plugin '${name}' is not installed in the DIM runtime`);
-      return `${name}@${version}`;
+      const selectedVersion = hostVersion !== undefined && name.startsWith("@slop-lab/dim-host-plugin-")
+        ? hostVersion : version;
+      return `${name}@${selectedVersion}`;
     });
   return {
     specifiers: [...selectedPlugins.map(({ specifier }) => specifier), ...previousSpecifiers],

@@ -10,16 +10,13 @@ importers:
 
   packages/cli/core:
     dependencies:
-      '@slop-lab/dim-host-core':
+      '@slop-lab/dim-contracts-cli-host':
         specifier: workspace:0.10.0
-        version: link:../../host/core
+        version: link:../../contracts/cli-host
       commander:
         specifier: 14.0.0
         version: 14.0.0
     devDependencies:
-      '@slop-lab/dim-control-plane-admin':
-        specifier: workspace:0.10.0
-        version: link:../../control-plane/admin
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -101,6 +98,15 @@ importers:
       zod:
         specifier: 4.1.11
         version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/contracts/cli-host:
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -552,6 +558,9 @@ importers:
 
   packages/host/core:
     dependencies:
+      '@slop-lab/dim-contracts-cli-host':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/cli-host
       commander:
         specifier: 14.0.0
         version: 14.0.0
@@ -985,6 +994,9 @@ importers:
       '@slop-lab/dim-contracts-ci':
         specifier: workspace:*
         version: link:../packages/contracts/ci
+      '@slop-lab/dim-contracts-cli-host':
+        specifier: workspace:*
+        version: link:../packages/contracts/cli-host
       '@slop-lab/dim-contracts-execution':
         specifier: workspace:*
         version: link:../packages/contracts/execution

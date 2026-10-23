@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { managedControllerIsActive } from "../../packages/installer/src/controllerActivation.js";
-import { installDimCli } from "../../packages/installer/src/cliInstall.js";
+import { installHostRuntime } from "../../packages/installer/src/hostRuntimeInstall.js";
 import { writeFakeCliNpm, writeStubCli } from "./support.js";
 import { readFile } from "node:fs/promises";
 
@@ -56,7 +56,7 @@ describe("existing managed controller activation", () => {
   it("automatically restarts an active installation and restores its prior runtime when readiness fails", async () => {
     const { root, runtime, env } = await runningFixture();
     for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DIM_STATE_ROOT"] as const) vi.stubEnv(name, env[name]);
-    const previous = path.join(runtime, "node_modules/.bin/dim");
+    const previous = path.join(runtime, "node_modules/.bin/dim-host");
     const priorCalls = path.join(root, "prior-calls.json");
     const targetCalls = path.join(root, "target-calls.json");
     await mkdir(path.dirname(previous), { recursive: true });
@@ -64,7 +64,7 @@ describe("existing managed controller activation", () => {
     const npm = path.join(root, "npm.mjs");
     await writeFakeCliNpm(npm, { argsFile: path.join(root, "npm-args.json"), versionOutput: "2.0.0",
       controllerArgsFile: targetCalls, controllerExitCode: 9 });
-    await expect(installDimCli({ version: "2.0.0", packageSpecifiers: ["@slop-lab/dim-cli@2.0.0"], exposeOnPath: false, npmCommand: npm,
+    await expect(installHostRuntime({ version: "2.0.0", packageSpecifiers: ["@slop-lab/dim-host-core@2.0.0"], npmCommand: npm,
       dataHome: root, configPath: path.join(root, "config.json") })).rejects.toThrow(/controller restart/);
     expect(JSON.parse(await readFile(targetCalls, "utf8"))).toEqual([["controller", "restart"]]);
     expect(JSON.parse(await readFile(priorCalls, "utf8"))).toMatchObject({ argv: ["controller", "restart"] });
@@ -73,7 +73,7 @@ describe("existing managed controller activation", () => {
   it.each([undefined, false])("upgrades the generic controller without optional integrations (restart=%s)", async (restartController) => {
     const { root, runtime, env } = await runningFixture();
     for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DIM_STATE_ROOT"] as const) vi.stubEnv(name, env[name]);
-    const previous = path.join(runtime, "node_modules/.bin/dim");
+    const previous = path.join(runtime, "node_modules/.bin/dim-host");
     await mkdir(path.dirname(previous), { recursive: true });
     await writeStubCli(previous, { versionOutput: "1.0.0" });
     const configPath = path.join(root, "dim-config.json");
@@ -81,11 +81,11 @@ describe("existing managed controller activation", () => {
     const targetCalls = path.join(root, "target-calls.json");
     const argsFile = path.join(root, "args.json"), npm = path.join(root, "npm.mjs");
     await writeFakeCliNpm(npm, { argsFile, versionOutput: "2.0.0", controllerArgsFile: targetCalls });
-    await installDimCli({ version: "2.0.0", exposeOnPath: false, npmCommand: npm, dataHome: root, configPath,
+    await installHostRuntime({ version: "2.0.0", npmCommand: npm, dataHome: root, configPath,
       ...(restartController === undefined ? {} : { restartController })});
-    expect(JSON.parse(await readFile(argsFile, "utf8"))).toContain("@slop-lab/dim-cli@2.0.0");
+    expect(JSON.parse(await readFile(argsFile, "utf8"))).toContain("@slop-lab/dim-host-core@2.0.0");
     expect(JSON.parse(await readFile(argsFile, "utf8"))).not.toContain("@slop-lab/dim-control-plane-admin@2.0.0");
-    expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ custom: "retained", cli: { version: "2.0.0" } });
+    expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ custom: "retained", host: { version: "2.0.0" } });
     if (restartController === false) await expect(readFile(targetCalls)).rejects.toMatchObject({ code: "ENOENT" });
     else expect(JSON.parse(await readFile(targetCalls, "utf8"))).toEqual([["controller","restart"]]);
   });

@@ -40,9 +40,17 @@ async function createFixture(): Promise<Fixture> {
   const dataHome = resolve(root, "installed/data");
   await Promise.all([scripts, tools, bundle, temporaryRoot, stateRoot, resolve(configPath, "..")]
     .map((directory) => mkdir(directory, { recursive: true })));
-  // Exercise real source installation and its stdlib-only helper dependencies.
+  // Exercise real package installation and facade selection. Service image
+  // preparation and activation have their own disposable integration fixtures.
   await cp(resolve(workspaceRoot, "scripts"), scripts, { recursive: true });
-  await writeFile(resolve(scripts, "configure-local-web.ts"), "// Service configuration is covered separately.\n");
+  for (const helper of ["install-local-control-plane", "install-local-web", "install-local-llm-operator", "install-local-llm-gateway", "install-local-shared-ingress", "configure-local-web"]) {
+    await writeFile(resolve(scripts, `${helper}.ts`), `import { appendFileSync } from "node:fs";\nappendFileSync(process.env.DIM_INVOCATIONS!, ${JSON.stringify(`service ${helper}\n`)});\n`);
+  }
+  const sourceInstallation = resolve(scripts, "install-source-build.bash");
+  const source = await readFile(sourceInstallation, "utf8");
+  const restart = '"${dim_command[@]}" controller restart';
+  expect(source).toContain(restart);
+  await writeFile(sourceInstallation, source.replace(restart, `printf 'service controller restart\\n' >>"$DIM_INVOCATIONS"`));
   await writeFile(resolve(scripts, "local-preparation-state.bash"), `#!/usr/bin/bash
 printf 'state\n' >>"$DIM_INVOCATIONS"
 printf 'state=fresh\n'
@@ -69,6 +77,9 @@ exec "$@"
     DIM_CONFIG_PATH: configPath,
     DIM_DATA_HOME: dataHome,
     DIM_STATE_ROOT: stateRoot,
+    DIM_CONTROLLER_SOCKET: resolve(root, "runtime/workspace.sock"),
+    DIM_ADMIN_CONTROLLER_SOCKET: resolve(root, "runtime/admin.sock"),
+    XDG_RUNTIME_DIR: resolve(root, "runtime"),
     DIM_INVOCATIONS: log,
     DIM_OLD_FACADE_MUTATION: oldFacadeMutation
   };
@@ -159,8 +170,9 @@ exec "$DIM_TEST_REAL_MISE" "$@"
       const installed = install();
       expect(installed.status, installed.stderr).toBe(0);
     }
-    // Absent retained operator configuration must not activate an optional listener.
-    await expect(readdir(resolve(environment.DIM_DATA_HOME!, "llm-operator"))).rejects.toMatchObject({ code: "ENOENT" });
+    const serviceInvocations = await readFile(fixture.log, "utf8");
+    expect(serviceInvocations).toContain("service install-local-control-plane\n");
+    expect(serviceInvocations).toContain("service controller restart\n");
     expect((await readdir(environment.TMPDIR ?? ""))
       .some((entry) => entry.startsWith("dim-target-installer."))).toBe(false);
     const followup = spawnSync(located.stdout.trim(), ["exec", "--", "dim", "installer", "install", "core",

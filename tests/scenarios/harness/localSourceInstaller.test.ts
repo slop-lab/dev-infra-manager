@@ -12,6 +12,7 @@ type PackageEntry = {
   readonly name: string;
   readonly version: string;
   readonly file: string;
+  readonly requires: Readonly<Record<string, string>>;
 };
 
 type PackageManifest = {
@@ -98,18 +99,14 @@ describe("local source installation", () => {
       await readFile(resolve(dataHome, "runtime", "current", "package.json"), "utf8")
     ) as { readonly dependencies: Readonly<Record<string, string>> };
     expect(runtimeManifest.dependencies["@slop-lab/dim-installer"]).toBeUndefined();
-    expect(Object.keys(runtimeManifest.dependencies).sort()).toEqual(["@slop-lab/dim-cli", "@slop-lab/dim-host-core"]);
-    for (const entry of manifest.packages.filter(({ name }) => ["@slop-lab/dim-cli", "@slop-lab/dim-host-core"].includes(name))) {
+    expect(Object.keys(runtimeManifest.dependencies).sort()).toEqual(["@slop-lab/dim-contracts-cli-host", "@slop-lab/dim-host-core"]);
+    for (const entry of manifest.packages.filter(({ name }) => ["@slop-lab/dim-host-core"].includes(name))) {
       expect(runtimeManifest.dependencies[entry.name]).toContain(entry.file);
     }
     const pluginNames = ["cache-server", "host-mirrors", "host-llm-router", "vm", "kvm", "workspace-check", "agent-tools", "tunnels"]
       .map((name) => `@slop-lab/dim-host-plugin-${name.replace(/^host-/, "")}`);
-    const pluginArtifacts = pluginNames.map((name) => {
-      const entry = manifest.packages.find((entry) => entry.name === name);
-      if (!entry) throw new Error(`matched plugin bundle is missing ${name}`);
-      return resolve(bundle, entry.file);
-    });
-    const installedPlugins = run(facade, ["installer", "install", "plugin", ...pluginArtifacts], environment);
+    const installedPlugins = run(facade, ["installer", "install", "plugin", "--local-packages", bundle,
+      ...pluginNames.map(name => `${name}@${aggregateVersion}`)], environment);
     expect(installedPlugins.status, installedPlugins.stderr).toBe(0);
     const discovered = run(facade, ["plugins"], environment);
     expect(discovered.status, discovered.stderr).toBe(0);
@@ -119,7 +116,15 @@ describe("local source installation", () => {
     expect(metadata.find(({ name }) => name === "vm")?.runtime).toBe("vm");
     expect(metadata.find(({ name }) => name === "kvm")?.runtime).toBe("container-kvm");
     const expanded = JSON.parse(await readFile(resolve(dataHome, "runtime/current/package.json"), "utf8")) as { dependencies: Record<string, string> };
-    expect(Object.keys(expanded.dependencies).sort()).toEqual(["@slop-lab/dim-cli", "@slop-lab/dim-host-core", ...pluginNames].sort());
+    expect(Object.keys(expanded.dependencies)).toEqual(expect.arrayContaining(pluginNames));
+    expect(expanded.dependencies["@slop-lab/dim-cli"]).toBeUndefined();
+    for (const [name, specifier] of Object.entries(expanded.dependencies)) {
+      const entry = manifest.packages.find(entry => entry.name === name);
+      expect(entry, `selected dependency ${name} must come from the reviewed bundle`).toBeDefined();
+      expect(specifier.startsWith("file:")).toBe(true);
+      expect(await readFile(resolve(dataHome, "runtime/current", specifier.slice(5)))).toEqual(await readFile(resolve(bundle, entry!.file)));
+      for (const dependency of Object.keys(entry!.requires)) expect(expanded.dependencies).toHaveProperty(dependency);
+    }
     for (const optional of ["@slop-lab/dim-control-plane-admin", "@slop-lab/dim-control-plane-plugin-git-repositories"]) {
       await expect(access(resolve(dataHome, "runtime/current/node_modules", optional))).rejects.toMatchObject({ code: "ENOENT" });
     }

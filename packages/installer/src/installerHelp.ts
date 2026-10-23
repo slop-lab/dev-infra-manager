@@ -7,6 +7,7 @@ Usage:
   dim                         Open the interactive installer
   dim installer               Open the interactive installer
   dim installer install core [options]
+  dim installer install cli [--local-packages DIRECTORY] [--no-local-bin | --local-bin]
   dim installer install control-plane --config FILE
   dim installer recover control-plane --roll-forward --generation GENERATION
   dim installer install plugin PACKAGE@EXACT_VERSION...
@@ -25,6 +26,7 @@ Source: https://github.com/slop-lab/dev-infra-manager`);
 export function printInstallerHelp(): void {
   console.log(`Usage:
   dim installer
+  dim installer install cli [--local-packages DIRECTORY] [--no-local-bin | --local-bin]
   dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--with-managed] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [--local-packages PATH] [--defer-controller-restart]
   dim installer install control-plane --config FILE
   dim installer recover control-plane --roll-forward --generation GENERATION
@@ -38,7 +40,9 @@ export function printInstallerHelp(): void {
   dim installer control-plane remove-plugin PACKAGE...
 
 The installer owns the installer namespace.
-All other commands are forwarded unchanged to the installed DIM CLI.`);
+The stable __host entry is routed directly to the host runtime, without a CLI.
+Other commands are forwarded unchanged to the installed DIM CLI.
+install core updates the host and bootstraps a missing CLI; install cli updates only presentation.`);
 }
 
 export function printInstallCoreHelp(): void {
@@ -66,7 +70,7 @@ export function printInstallPluginHelp(target: "host" | "control-plane" = "host"
   if (target === "host") {
     console.log(`Usage: dim installer install plugin [options] PACKAGE@EXACT_VERSION...
 
-Installs host plugins beside an installed DIM CLI. For standalone service plugins
+Installs host plugins beside the installed DIM host runtime. For standalone service plugins
 use 'dim installer install control-plane plugin'.
 
 Options:

@@ -14,7 +14,7 @@ export default defineConfig({
       "cli/host/**/*.test.ts",
       "scenarios/{harness,execution,llm-router}/**/*.test.ts"
     ],
-    exclude: ["scenarios/harness/{qemu*,kvm*,bootstrapInstallerSafety}.test.ts"]
+    exclude: ["**/*.node.test.ts", "scenarios/harness/{qemu*,kvm*,bootstrapInstallerSafety}.test.ts"]
   },
   // Keep linked package SDKs in the same source graph as direct owner imports.
   ssr: {

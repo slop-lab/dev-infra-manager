@@ -4,12 +4,13 @@ import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import { it as test } from "vitest";
 import { ProcessRunner, WorkspaceService, WorkspaceStore, acquireWorkspaceSource, type WorkspaceRuntime, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
-import { installRequiredPlugins, missingPlugins, workspaceRequirements } from "../../packages/host/core/src/application/workspace-requirements.js";
-import { createWorkspaceWithPlugins } from "../../packages/cli/core/src/workspace-create-client.js";
-import { exactPluginSpec, encodeHostRequest, type HostRequest } from "@slop-lab/dim-host-core/application/protocol";
-import { HostContextStore } from "../../packages/cli/core/src/host-context.js";
+import { installRequiredPlugins, missingPlugins, workspaceRequirements } from "../../../../packages/host/core/src/application/workspace-requirements.js";
+import { createWorkspaceWithPlugins } from "../../../../packages/host/core/src/application/commands/create-workspace.js";
+import { exactPluginSpec } from "../../../../packages/host/core/src/application/workspace-plugin-specs.js";
+import type { HostOperationRequest as HostRequest } from "../../../../packages/host/core/src/application/host-application.js";
+import { encodeHostRequest, createHostRequest } from "@slop-lab/dim-contracts-cli-host";
 
 const spec = "@slop-lab/dim-host-plugin-mirrors@0.10.0";
 const commit = "a".repeat(40), target = { name: "remote", ssh: "dev@example.invalid" };
@@ -46,13 +47,14 @@ test("actual Git checkout requirements fail before records/runtime; source movem
       assert.equal(check.missing?.source.commit, await git("rev-parse", "HEAD"));
       assert.deepEqual(check.missing?.plugins, [spec]); assert.equal(runtimeCalls, 0); assert.deepEqual(await store.list(), []);
       assert.deepEqual(await readdir(path.join(store.root, "staging")), []);
-      const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
-      const tsx = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
-      const response = await runner.run(process.execPath, ["--conditions=dim-source", tsx, cli, "__host", encodeHostRequest({ operation: "create", input: { name: "dev", source: { url: source } } })], {
+      const cli = fileURLToPath(new URL("../../../../packages/host/core/src/application/host-main.ts", import.meta.url));
+      const tsx = fileURLToPath(new URL("../../../node_modules/tsx/dist/loader.mjs", import.meta.url));
+      const response = await runner.run(process.execPath, ["--disable-warning=DEP0205", "--conditions=dim-source", "--import", tsx, cli, "__host", encodeHostRequest(createHostRequest("command", { args: ["create", source, "dev", "--json"] }))], {
         env: { ...process.env, DIM_PLUGIN_HOME: home, DIM_STATE_ROOT: store.root }
       });
-      assert.equal(response.exitCode, 0, response.stderr);
-      assert.deepEqual(JSON.parse(response.stdout), check.missing);
+      assert.equal(response.exitCode, 2, response.stderr);
+      assert.match(response.stderr, /needs plugins/);
+      assert.match(response.stderr, /dim-host-plugin-mirrors/);
       assert.deepEqual(await store.list(), []);
       await installed(home, "0.10.0");
       await writeFile(path.join(source, "changed"), "new commit"); await git("add", ".");
@@ -139,24 +141,23 @@ test("actual facade subprocess uses explicit argv, bounded diagnostics, private 
   });
 });
 
-test("real client TTY prompts before selected-SSH-host installation and retries the inspected commit", async () => {
+test("host TTY owns required-plugin approval and pins its local retry to the inspected commit", async () => {
   await fixture(async (root) => {
-    const config = path.join(root, "config"), bin = path.join(root, "bin"); await mkdir(bin);
-    await new HostContextStore(config).add(target);
-    const ssh = path.join(bin, "ssh");
-    await writeFile(ssh, `#!/usr/bin/env node\n// @ts-check\nimport fs from 'node:fs';
+    const operations = path.join(root, "operations.mjs"), preload = path.join(root, "preload.mjs");
+    await writeFile(operations, `// @ts-check\nimport fs from 'node:fs';
 const root=process.env.DIM_TEST_REQUIRED_ROOT;if(!root)throw Error('root');
-const encoded=/__host ([A-Za-z0-9_-]+)/.exec(process.argv.at(-1)||'')?.[1];if(!encoded)throw Error('host payload');
-const request=JSON.parse(Buffer.from(encoded,'base64url').toString());fs.appendFileSync(root+'/requests',JSON.stringify(request)+'\\n');
-if(request.operation==='plugins.installRequired'){fs.writeFileSync(root+'/installed','yes');console.log(JSON.stringify({installed:true}));}
-else console.log(JSON.stringify(fs.existsSync(root+'/installed')?${JSON.stringify(record)}:${JSON.stringify(required)}));`, { mode: 0o700 });
-    const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
-    const tsx = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
-    const command = [process.execPath, "--conditions=dim-source", tsx, cli, "--host", "remote", "create", "/srv/repo", "dev", "--json"].map(shellQuote).join(" ");
+export async function runRecordOperation(request){fs.appendFileSync(root+'/requests',JSON.stringify(request)+'\\n');
+if(request.operation==='plugins.installRequired'){fs.writeFileSync(root+'/installed','yes');return {installed:true};}
+return fs.existsSync(root+'/installed')?${JSON.stringify(record)}:${JSON.stringify(required)};}
+export async function runStreamOperation(){throw Error('unexpected stream');}`);
+    await writeFile(preload, `// @ts-check\nimport {registerHooks} from 'node:module';import {pathToFileURL} from 'node:url';
+registerHooks({resolve(specifier,context,next){if(specifier==='./operations.js'&&context.parentURL?.includes('/application/commands/'))return {url:pathToFileURL(${JSON.stringify(operations)}).href,shortCircuit:true};return next(specifier,context);}});`);
+    const host = fileURLToPath(new URL("../../../../packages/host/core/src/application/host-main.ts", import.meta.url));
+    const tsx = fileURLToPath(new URL("../../../node_modules/tsx/dist/loader.mjs", import.meta.url));
+    const command = [process.execPath, "--conditions=dim-source", "--import", tsx, "--import", preload, host, "create", "/srv/repo", "dev", "--json"].map(shellQuote).join(" ");
     const output = await new Promise<string>((resolve, reject) => {
       const child = spawn("script", ["--quiet", "--return", "--command", command, "/dev/null"], {
-        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, XDG_CONFIG_HOME: config, DIM_TEST_REQUIRED_ROOT: root },
-        stdio: ["pipe", "pipe", "pipe"]
+        env: { ...process.env, DIM_TEST_REQUIRED_ROOT: root }, stdio: ["pipe", "pipe", "pipe"]
       });
       let data = "", approved = false;
       const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`TTY prompt timed out: ${data}`)); }, 10_000);
@@ -164,7 +165,7 @@ else console.log(JSON.stringify(fs.existsSync(root+'/installed')?${JSON.stringif
       child.stdout.on("data", collect); child.stderr.on("data", collect); child.once("error", reject);
       child.once("close", (code) => { clearTimeout(timer); if (code !== 0) reject(new Error(data)); else resolve(data); });
     });
-    assert.match(output, /Install and enable host code on 'remote'/);
+    assert.match(output, /Install and enable host code/);
     assert.match(output, new RegExp(commit));
     const requests = (await readFile(path.join(root, "requests"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as HostRequest);
     assert.deepEqual(requests.map(({ operation }) => operation), ["create", "plugins.installRequired", "create"]);

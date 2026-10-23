@@ -1,4 +1,5 @@
-import { encodeHostRequest, type HostRequest } from "@slop-lab/dim-host-core/application/protocol";
+import { cliHostVersion, createHostRequest, encodeHostRequest, parseCapabilities, type HostRequest } from "@slop-lab/dim-contracts-cli-host";
+import path from "node:path";
 import { spawn } from "node:child_process";
 import { type Readable, type Writable } from "node:stream";
 import { type HostTarget, validateTarget } from "./host-context.js";
@@ -40,10 +41,9 @@ export function hostInvocation(
       args: [options.terminal ? "-tt" : "-T", "--", target.ssh, remoteHostCommand(encoded)]
     };
   }
-  const local = options.localCommand ?? {
-    file: process.execPath,
-    args: [...process.execArgv, process.argv[1] ?? ""]
-  };
+  const executable = process.env.DIM_HOST_EXECUTABLE;
+  if (executable !== undefined && !path.isAbsolute(executable)) throw new HostTransportError("DIM_HOST_EXECUTABLE must select an absolute trusted host executable", 2);
+  const local = options.localCommand ?? { file: executable ?? "dim-host" };
   if (!local.file || local.args?.some((argument) => argument.length === 0)) {
     throw new HostTransportError("cannot locate the local DIM host entrypoint");
   }
@@ -173,4 +173,10 @@ function processExit(child: ReturnType<typeof spawn>, target: HostTarget, signal
     if (signal?.aborted) abort();
     else signal?.addEventListener("abort", abort, { once: true });
   });
+}
+
+/** Release numbers are irrelevant: the selected endpoint must speak this wire version. */
+export async function negotiateHost(target: HostTarget, options: HostTransportOptions = {}): Promise<void> {
+  const capabilities = parseCapabilities(await callHost(target, createHostRequest("capabilities", {}), { ...options, terminal: false, maxOutputBytes: 64 * 1024 }));
+  if (!capabilities.versions.includes(cliHostVersion)) throw new HostTransportError("Selected host does not support DIM CLI/host protocol version 1; update the client or host", 2);
 }

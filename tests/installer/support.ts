@@ -34,6 +34,8 @@ export async function writeFakeCliNpm(
   options: {
     argsFile: string;
     versionOutput: string;
+    protocolVersions?: number[];
+    controllerCorruptConfigFile?: string;
     preflightSource?: string;
     controllerArgsFile?: string;
     controllerManifestFile?: string;
@@ -48,6 +50,9 @@ import path from "node:path";
 
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(options.argsFile)}, JSON.stringify(args));
+const historyPath = ${JSON.stringify(options.argsFile + ".calls")};
+const history = existsSync(historyPath) ? JSON.parse(readFileSync(historyPath, "utf8")) : [];
+history.push(args); writeFileSync(historyPath, JSON.stringify(history));
 
 const prefixIndex = args.indexOf("--prefix");
 if (prefixIndex === -1) {
@@ -81,10 +86,12 @@ writeFileSync(path.join(coreDirectory, "package.json"), JSON.stringify({
   exports: { ".": { import: "./index.js" } }
 }));
 writeFileSync(path.join(coreDirectory, "index.js"), ${JSON.stringify(options.preflightSource ?? "export async function preflightStateCompatibility() { return { warnings: [] }; }\n")});
-const stubPath = path.join(binDirectory, "dim");
 const stub = ${JSON.stringify(stubDimSource(options))}.replace("__VERSION__", ${JSON.stringify(options.versionOutput)});
-writeFileSync(stubPath, stub);
-chmodSync(stubPath, 0o755);
+for (const name of ["dim", "dim-host"]) {
+  const stubPath = path.join(binDirectory, name);
+  writeFileSync(stubPath, stub);
+  chmodSync(stubPath, 0o755);
+}
 process.exit(0);
 `;
   await writeExecutable(scriptPath, content);
@@ -143,6 +150,8 @@ process.exit(${options.exitCode ?? 0});
 }
 
 function stubDimSource(options: {
+  protocolVersions?: number[];
+  controllerCorruptConfigFile?: string;
   controllerArgsFile?: string;
   controllerManifestFile?: string;
   controllerExitCode?: number;
@@ -156,6 +165,11 @@ if (args[0] === "--version") {
   console.log("__VERSION__");
   process.exit(0);
 }
+if (args[0] === "--host-protocol") {
+  console.log(JSON.stringify({ protocol: "dim.cli-host", versions: ${JSON.stringify(options.protocolVersions ?? [1])} }));
+  process.exit(0);
+}
+${options.controllerCorruptConfigFile ? `if (args[0] === "controller" && args[1] === "restart") writeFileSync(${JSON.stringify(options.controllerCorruptConfigFile)}, "not json");` : ""}
 ${options.controllerArgsFile ? `if (args[0] === "controller") {
   const target = ${JSON.stringify(options.controllerArgsFile)};
   const calls = existsSync(target) ? JSON.parse(readFileSync(target, "utf8")) : [];
@@ -183,7 +197,7 @@ process.exit(0);
 /** A standalone fake `dim` executable, independent of any fake npm run. */
 export async function writeStubCli(
   scriptPath: string,
-  options: { versionOutput: string; echoFile?: string }
+  options: { versionOutput: string; echoFile?: string; protocolVersions?: number[] }
 ): Promise<void> {
   const content = `#!/usr/bin/env node
 import { writeFileSync } from "node:fs";
@@ -193,11 +207,16 @@ if (args[0] === "--version") {
   console.log(${JSON.stringify(options.versionOutput)});
   process.exit(0);
 }
+if (args[0] === "--host-protocol") {
+  console.log(JSON.stringify({ protocol: "dim.cli-host", versions: ${JSON.stringify(options.protocolVersions ?? [1])} }));
+  process.exit(0);
+}
 ${options.echoFile
     ? `writeFileSync(${JSON.stringify(options.echoFile)}, JSON.stringify({
   argv: args,
   cwd: process.cwd(),
   env: {
+    DIM_HOST_EXECUTABLE: process.env.DIM_HOST_EXECUTABLE ?? null,
     DIM_INVOKED_VIA_INSTALLER: process.env.DIM_INVOKED_VIA_INSTALLER ?? null,
     DIM_INSTALLER_VERSION: process.env.DIM_INSTALLER_VERSION ?? null,
     DIM_INSTALLER_ENTRYPOINT: process.env.DIM_INSTALLER_ENTRYPOINT ?? null

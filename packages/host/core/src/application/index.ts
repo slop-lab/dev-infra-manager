@@ -1,6 +1,6 @@
-/** Selected-host application entrypoints. Transport and operator presentations
- * remain with their callers; this module owns composition and host authority. */
-export { runHostRequest, type HostApplicationDelegates } from "./host-application.js";
-export { encodeHostRequest, decodeHostRequest, HostRequestError, type HostRequest } from "./protocol.js";
+/** Selected-host application entrypoints own command presentation, composition
+ * and host authority. The independent CLI owns connection transport. */
+export { executeHostOperation, type HostOperationRequest } from "./host-application.js";
+export { runCliHostRequest, hostProtocolCapabilities } from "./cli-host.js";
 export { resolveWorkspaceMetadata } from "./workspace-composition.js";
-export { pluginSpecs, type RequiredPlugins } from "./protocol.js";
+export { pluginSpecs, type RequiredPlugins } from "./workspace-plugin-specs.js";

@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { access, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { validatePluginTarget, assertControlPlaneClosure } from "./pluginTarget.js";
+import { queryCliVersion } from "./cliInstall.js";
 import { installerVersion } from "./installerVersion.js";
 
 import { atomicWrite, readManifest, readPackageJson, run } from "./runtimeFiles.js";
@@ -23,6 +24,7 @@ export interface InstallOptions {
   readonly npmCommand?: string;
   readonly operation?: InstallerOperation;
   readonly restartController?: boolean;
+  readonly expectedHostVersion?: string;
 }
 
 export async function isPluginEnabled(name: string, pluginHome: string): Promise<boolean> {
@@ -53,6 +55,10 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
     }
     options.operation?.reportProgress("package installation");
     const installed = await installPluginsInStage(specifiers, options, stagingDirectory);
+    if (options.expectedHostVersion !== undefined) {
+      const actual = await queryCliVersion(path.join(stagingDirectory, "node_modules", ".bin", "dim-host"));
+      if (actual !== options.expectedHostVersion) throw new Error("plugin installation must not change the installed host release; install the matching core first");
+    }
     options.operation?.reportProgress("runtime promotion");
     try {
       await rename(currentDirectory, backupDirectory);
@@ -67,7 +73,7 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
       options.operation?.reportProgress("controller readiness");
       try {
         await run(
-          path.join(currentDirectory, "node_modules", ".bin", "dim"),
+          path.join(currentDirectory, "node_modules", ".bin", "dim-host"),
           ["controller", "restart"],
           currentDirectory,
           options.operation
@@ -85,7 +91,7 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
       if (controllerRestartAttempted) {
         options.operation?.activity();
         await run(
-          path.join(currentDirectory, "node_modules", ".bin", "dim"),
+          path.join(currentDirectory, "node_modules", ".bin", "dim-host"),
           ["controller", "restart"],
           currentDirectory
         );

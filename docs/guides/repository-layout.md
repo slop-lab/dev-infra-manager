@@ -13,7 +13,7 @@ Production packages are grouped by where they run and what they own:
 | `packages/review-tracing/runtimes/node` | `@slop-lab/dim-review-tracing-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
 | `packages/review-tracing/core` | `@slop-lab/dim-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
-| `packages/cli/core` | `@slop-lab/dim-cli` | Command presentation, host selection and transport |
+| `packages/cli/core` | `@slop-lab/dim-cli` | Client host selection, terminal streams and transport |
 | `packages/clients/<name>` | Feature-specific client packages | Shared service calls and validated operations without running their authoritative service; LLM router, execution and Native Git clients |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
 | `packages/web/core` | `@slop-lab/dim-web` | Authenticated console shell, host workspaces, plugin loading and session enforcement |
@@ -31,7 +31,11 @@ commands belong to the selected host plugin and are discovered from its command
 contributions. Installing the LLM router host plugin supplies both gateway/guest
 integration (`llm`) and operator presentation (`llm-router`); its standalone
 operator executable imports neither the host application nor a router service.
-CLI and Web remain separate presentations of the same service contracts.
+The host owns command parsing and presentation; the CLI only selects hosts and
+transports arguments, streams and status through the retained
+[CLI–host v1 contract](../specs/cli-host-protocol-v1.md). Compatible host releases
+can add commands without updating the client. CLI and Web use the same feature
+contracts through their owning host and Web adapters.
 
 Client packages own caller-side transport, private connection loading and
 validated operations shared by presenters. They are libraries, not installed

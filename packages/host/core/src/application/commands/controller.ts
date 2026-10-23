@@ -1,8 +1,8 @@
 import os from "node:os";
 import path from "node:path";
-import { ProcessRunner } from "@slop-lab/dim-host-core/workspace";
-import { runControllerCli } from "@slop-lab/dim-host-core/controller/cli";
-import { resolveWorkspaceMetadata } from "@slop-lab/dim-host-core/application";
+import { ProcessRunner } from "../../workspace.js";
+import { runControllerCli } from "../../controller/cli/index.js";
+import { resolveWorkspaceMetadata } from "../workspace-composition.js";
 
 export async function runControllerApplication(args: string[]): Promise<void> {
   const runner = new ProcessRunner();

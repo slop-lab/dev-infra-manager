@@ -9,10 +9,16 @@ export interface DimCliConfig {
   readonly executable: string;
 }
 
+export interface DimHostConfig {
+  readonly version: string;
+  readonly executable: string;
+}
+
 export interface DimUserConfig {
   readonly schemaVersion: 1;
   readonly installPrefix?: string;
   readonly cli?: DimCliConfig;
+  readonly host?: DimHostConfig;
   readonly workspaceBackend?: "sysbox";
   readonly [key: string]: unknown;
 }
@@ -45,7 +51,11 @@ export function defaultBinDirectory(env: NodeJS.ProcessEnv = process.env): strin
 }
 
 export function cliExecutable(dataHome = defaultDataHome()): string {
-  return path.join(path.resolve(dataHome), "runtime", "current", "node_modules", ".bin", "dim");
+  return path.join(path.resolve(dataHome), "cli", "runtime", "current", "dim");
+}
+
+export function hostExecutable(dataHome = defaultDataHome()): string {
+  return path.join(path.resolve(dataHome), "runtime", "current", "node_modules", ".bin", "dim-host");
 }
 
 export async function configuredCli(env: NodeJS.ProcessEnv = process.env): Promise<DimCliConfig | undefined> {
@@ -57,8 +67,9 @@ export async function readUserConfig(target: string): Promise<DimUserConfig> {
   try {
     const value: unknown = JSON.parse(await readFile(target, "utf8"));
     if (!isRecord(value) || value.schemaVersion !== 1) throw new Error(`invalid DIM user config at ${target}`);
-    const { cli, schemaVersion: _schemaVersion, workspaceBackend, ...fields } = value;
+    const { cli, host, schemaVersion: _schemaVersion, workspaceBackend, ...fields } = value;
     if (cli !== undefined) validateCliConfig(cli, target);
+    if (host !== undefined) validateHostConfig(host, target);
     if (workspaceBackend !== undefined && workspaceBackend !== "sysbox") {
       throw new Error(`invalid workspaceBackend in DIM user config at ${target}`);
     }
@@ -66,6 +77,7 @@ export async function readUserConfig(target: string): Promise<DimUserConfig> {
       ...fields,
       schemaVersion: 1,
       ...(cli === undefined ? {} : { cli }),
+      ...(host === undefined ? {} : { host }),
       ...(workspaceBackend === undefined ? {} : { workspaceBackend })
     };
   } catch (error) {
@@ -88,6 +100,13 @@ function validateCliConfig(value: unknown, target: string): asserts value is Dim
     || value.executable.length === 0
   ) {
     throw new Error(`invalid cli configuration in DIM user config at ${target}`);
+  }
+}
+
+function validateHostConfig(value: unknown, target: string): asserts value is DimHostConfig {
+  if (!isRecord(value) || typeof value.version !== "string" || !value.version
+      || typeof value.executable !== "string" || !path.isAbsolute(value.executable)) {
+    throw new Error(`invalid host configuration in DIM user config at ${target}`);
   }
 }
 

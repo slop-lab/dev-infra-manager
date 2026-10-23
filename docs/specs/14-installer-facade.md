@@ -3,8 +3,8 @@
 ## Scope
 
 `@slop-lab/dim-installer` exposes an executable also named `dim`. It is a thin
-facade: it owns the `installer` namespace plus the one explicit obsolete
-`install-cp` rejection and proxies everything else to a
+facade: it owns the `installer` namespace, the reserved `__host` endpoint and
+the explicit obsolete `install-cp` rejection. It proxies ordinary commands to a
 separately installed `@slop-lab/dim-cli`. `@slop-lab/dim-cli` must not
 implement `installer`, and the facade
 must not duplicate `@slop-lab/dim-cli`'s command tree or reimplement its
@@ -24,6 +24,7 @@ The target facade owns:
 
 ```bash
 dim installer                         # interactive installer (TTY only), always
+dim installer install cli [options]
 dim installer install core [--with-managed] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [options]
 dim installer install control-plane --config FILE
 dim installer install control-plane plugin [--local-packages DIRECTORY] PACKAGE@EXACT_VERSION...
@@ -84,6 +85,7 @@ no args, CLI set          -> proxied to the configured executable (empty argv;
 install-cp                 -> exit 2 with a message pointing at
                               `installer install control-plane --config FILE`;
                               never proxy and make no host change
+__host ENCODED           -> configured host executable; never require or proxy through CLI
 anything else, no CLI     -> exit 2 with a message pointing at `installer install core`
 anything else, CLI set    -> proxied to the configured executable
 ```
@@ -100,12 +102,13 @@ State lives at `$DIM_CONFIG_PATH`, defaulting to
 ```json
 {
   "schemaVersion": 1,
-  "cli": { "mode": "direct" | "proxied", "version": "0.10.0", "executable": "/abs/path" }
+  "cli": { "mode": "direct" | "proxied", "version": "0.10.0", "executable": "/abs/client/path" },
+  "host": { "version": "0.10.0", "executable": "/abs/host/path" }
 }
 ```
 
-This file is shared with `@slop-lab/dim-cli` (for plugin discovery); both
-readers must preserve unknown fields on write. This is a separate,
+The installer preserves unknown fields on write. The host owns plugin discovery;
+the transport CLI does not load this installation configuration. This is a separate,
 package-local config file, not the schema-versioned `DIM_STATE_ROOT` covered
 by [Configuration](03-configuration.md).
 
@@ -116,13 +119,25 @@ to fall back to.
 
 ## Install modes
 
-Both modes install the selected DIM runtime—CLI/core plus optional managed
-components and enabled plugins—into one
-private stable directory outside `PATH`:
+Client and host occupy independent private prefixes outside `PATH`:
 
 ```text
-$XDG_DATA_HOME/dim/runtime/current/node_modules/.bin/dim
+$XDG_DATA_HOME/dim/cli/runtime/current/              # client and its launcher
+$XDG_DATA_HOME/dim/runtime/current/node_modules/.bin/dim-host
 ```
+
+`installer install cli` replaces only the client. `installer install core`
+replaces the host, optional operator components and host plugins, preserving an
+existing compatible independent client. A missing client is bootstrapped after
+host state preflight. Source development installation explicitly updates both.
+The launcher provides the trusted absolute host executable to a local client,
+including when invoked through a direct symlink. Remote clients discover the
+host through the remote facade.
+
+The retained [CLI–host v1 contract](cli-host-protocol-v1.md) uses capability
+intersection, not package release equality. Check protocol support before host
+promotion. Reject an incompatible staged host while preserving the active host
+and client. Host/plugin dependency versions remain exact and separate.
 
 The installer prepares each replacement in a temporary sibling directory,
 verifies its executable, and runs the staged target core package's read-only
@@ -171,7 +186,7 @@ command; only its explicit `dim cache-server ensure` operation deploys services.
 Neither server nor client depends on the managed component. Client connection
 configuration and server deployment are outside installer transaction policy.
 
-A selected plugin must join the core and CLI in the same staged npm graph and
+A selected host plugin must join the host core in the same staged npm graph and
 be recorded in staged `plugins.json` before promotion. After a successful
 preflight, the installer promotes the staged runtime. Package installation must
 not create or start a controller service. Before promotion it determines whether
@@ -182,7 +197,7 @@ that refers to that runtime, in the corresponding default host context. A stale
 PID or another installation must not select restart. Detection must require no
 backend configuration or core/managed module import.
 
-When that controller is active, the promoted CLI's `controller restart` runs
+When that controller is active, the promoted host's `controller restart` runs
 once and its readiness check is part of the installation transaction. If restart/readiness or later configuration fails, the installer
 must stop a target that already reached readiness before removing its runtime,
 then restore the previous `current` directory and restart the prior controller
@@ -224,7 +239,7 @@ mode positively and use `Y` as their displayed default, so repeatedly answering
 `installer install core --local-packages PATH` accepts the generated schema-1
 `packages.json` artifact graph. Each package entry declares its package name,
 exact version, sibling `.tgz` filename and `requires` map of internal package
-names to exact versions. The base roots are CLI and core. `--with-managed`, an
+names to exact versions. Host installation selects host core; client installation selects CLI in its own graph. `--with-managed`, an
 already selected managed component and already enabled plugins add roots. The
 installer includes only their transitive required dependencies, including
 non-optional component peers. Merely including an optional component or plugin
@@ -233,7 +248,7 @@ missing from the bundle or bound to another version must fail before npm;
 there is no registry fallback for a required bundle artifact. The installer
 facade itself must not be installed as a runtime dependency.
 
-All selected tarballs join one npm transaction. The installed CLI must report
+Each independently selected component uses its own npm transaction. The installed CLI must report
 the exact version declared by its selected artifact. The normal direct/proxied
 selection still applies; manifest versions do not select filesystem paths.
 Local artifact metadata is generated from the matched production packages;
@@ -242,11 +257,9 @@ legacy format.
 
 The local-bundle-only `--defer-controller-restart` option suppresses restart of
 an existing active controller while a reviewed source installer installs its
-selected plugins. Other install sources must reject that option. The default
-source installation selects only the base workspace tools. Its explicit
-`--with-managed` profile selects the managed component as a library. It must
-not implicitly select plugins or activate a controller. It does not implicitly build a managed
-workspace image or deploy a control plane.
+selected plugins. Other install sources must reject that option. The source development installer owns its explicit complete development profile,
+including service images and plugin selection. Base facade installation remains
+independent of that development orchestration.
 
 Optional managed tooling may prepare private control-plane source files and
 generation-bound host connections. Service configuration generation belongs to
@@ -260,7 +273,7 @@ Plugins install into a temporary sibling copy of the same `runtime/current`
 npm project and replace `current` only after npm and activation-manifest
 validation succeed. Plugin packages
 must declare the exact compatible `@slop-lab/dim-host-core` as a peer dependency so
-npm rejects an incompatible host before activation. CLI replacement reinstalls
+npm rejects an incompatible host before activation. Host replacement reinstalls
 the enabled plugin set in staging and must succeed as one dependency graph
 before promotion. Plugin installation restarts a controller only when that
 installation was already active, with the same readiness and rollback
@@ -277,8 +290,7 @@ entry and prunes unreferenced managed tarballs.
 
 When forwarding a command to the configured `@slop-lab/dim-cli`, the facade
 must preserve argv (including everything after `--`), the current working
-directory, stdio and TTY, the exit code, and process signals, and must add
-exactly two environment variables:
+directory, stdio and TTY, the exit code, and process signals, and must add these facade context variables:
 
 ```text
 DIM_INVOKED_VIA_INSTALLER=1
@@ -289,13 +301,19 @@ DIM_INSTALLER_VERSION=<installer version>
 display text (root help and a short per-subcommand footer). They must not
 affect command dispatch, configuration resolution, credential handling,
 JSON output, lifecycle behavior, or exit codes, and must produce
-byte-identical output to unset when unset.
+byte-identical output to unset when unset. The facade also provides
+`DIM_HOST_EXECUTABLE` from its trusted host configuration for local transport;
+this path must not come from a repository. The reserved `__host` invocation
+routes directly to this host before configured-CLI lookup. The facade supplies
+its absolute `DIM_INSTALLER_ENTRYPOINT` to the host for an explicitly approved
+required-plugin installation; this is host installation context, outside the
+CLI wire envelope.
 
 ## Plugin installation
 
-`dim installer install plugin` requires an installed CLI because plugins join its npm
-project and npm must validate their managed-component peer dependency against
-that runtime.
+`dim installer install plugin` requires an installed host runtime. Plugins join
+its npm project, and npm validates their exact host-core peer dependency. A CLI
+is not required.
 `installer enable-plugin`, `installer disable-plugin`, and `installer remove-plugin` provide recovery without
 hand-editing the managed npm project or activation manifest.
 

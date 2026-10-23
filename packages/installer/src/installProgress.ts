@@ -2,7 +2,8 @@ const clearLine = "\r\u001b[K";
 const frames = ["-", "\\", "|", "/"] as const;
 
 const profiles = {
-  core: ["package installation", "version verification", "state preflight", "runtime promotion", "controller readiness", "configuration"],
+  cli: ["package installation", "version verification", "protocol compatibility", "runtime promotion", "configuration"],
+  core: ["package installation", "version verification", "protocol compatibility", "state preflight", "runtime promotion", "controller readiness", "configuration"],
   plugin: ["runtime staging", "package installation", "runtime promotion", "controller readiness"]
 } as const;
 

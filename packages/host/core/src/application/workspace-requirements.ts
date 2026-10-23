@@ -6,7 +6,7 @@ import { Readable, Writable } from "node:stream";
 import { UserError, type AcquiredWorkspaceSource, type StreamingCommandRunner } from "../workspace.js";
 import { hostPluginHome } from "./host-plugins.js";
 
-import { exactPluginSpec, pluginSpecs, type RequiredPlugins } from "./protocol.js";
+import { exactPluginSpec, pluginSpecs, type RequiredPlugins } from "./workspace-plugin-specs.js";
 
 async function declaredPlugins(directory: string): Promise<string[]> {
   const dim = path.join(directory, ".dim");

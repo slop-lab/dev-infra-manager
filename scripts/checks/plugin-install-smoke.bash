@@ -41,7 +41,7 @@ cleanup() {
         controller_runtime_directory="${pid_file%/controller.pid}"
         expected_args=(
           "$(node -p 'process.execPath')"
-          "$plugin_home/node_modules/.bin/dim"
+          "$plugin_home/node_modules/.bin/dim-host"
           controller serve
           --socket "$controller_runtime_directory/workspace/controller.sock"
           --agent-socket "$controller_runtime_directory/agent/controller.sock"
@@ -135,10 +135,10 @@ mkdir -p "$(dirname "$config_path")" "$plugin_home"
 printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"sysbox"}' > "$config_path"
 printf '%s\n' '{"schemaVersion":1,"plugins":["@slop-lab/dim-host-plugin-mirrors"]}' > "$plugin_home/plugins.json"
 
-DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
+DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim-host" \
   installer install core --with-managed --local-packages "$package_bundle" --no-local-bin >/dev/null
 
-DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
+DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim-host" \
   installer install plugin \
   "$root/$plugin_tarball" \
   >/dev/null
@@ -149,7 +149,7 @@ test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smo
 # The installer owns a durable copy; replacing the CLI must not depend on the
 # caller's temporary tarball still existing.
 rm "$root/$plugin_tarball"
-DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
+DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim-host" \
   installer install core --with-managed --local-packages "$package_bundle" --no-local-bin >/dev/null
 result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node packages/cli/core/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
@@ -168,7 +168,7 @@ printf '%s\n' 'export default { name: "incompatible", apiVersion: 4, register() 
 incompatible_tarball="$(pnpm --dir "$incompatible_source" pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
 package_before="$(sha256sum "$plugin_home/package.json")"
 manifest_before="$(sha256sum "$plugin_home/plugins.json")"
-if DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
+if DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim-host" \
   installer install plugin "$root/$incompatible_tarball" >/dev/null 2>&1; then
   echo "incompatible plugin unexpectedly installed" >&2
   exit 1
@@ -176,15 +176,15 @@ fi
 test "$(sha256sum "$plugin_home/package.json")" = "$package_before"
 test "$(sha256sum "$plugin_home/plugins.json")" = "$manifest_before"
 
-DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
+DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim-host" \
   installer disable-plugin '@example/dim-plugin-smoke' >/dev/null
 test "$(jq '.plugins | length' "$plugin_home/plugins.json")" = 1
 
-DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
+DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim-host" \
   installer enable-plugin '@example/dim-plugin-smoke' >/dev/null
 test "$(jq -r '.plugins[0]' "$plugin_home/plugins.json")" = "@example/dim-plugin-smoke"
 
-DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
+DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim-host" \
   installer remove-plugin '@example/dim-plugin-smoke' >/dev/null
 test "$(jq -c '.plugins' "$plugin_home/plugins.json")" = '["@slop-lab/dim-host-plugin-mirrors"]'
 test "$(jq '.dependencies | has("@example/dim-plugin-smoke")' "$plugin_home/package.json")" = false

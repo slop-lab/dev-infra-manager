@@ -10,16 +10,18 @@ import {
   defaultControlPlanePluginHome,
   type PluginTarget,
   installDimCli,
+  installHostRuntime,
+  hostExecutable,
   installPlugins,
   isPluginEnabled,
   queryCliVersion,
-  readLocalPackageBundle,
+  readHostPackageBundle,
+  readCliPackageBundle,
   readControlPlanePackageBundle,
   readHostPluginPackageBundle,
   packageNameFromSpecifier,
   removePlugins,
-  setPluginsEnabled,
-  validateConfiguredCli
+  setPluginsEnabled
 } from "./install.js";
 import { localBinPrompt } from "./installMode.js";
 import { printFacadeHelp, printInstallCoreHelp, printInstallerHelp, printInstallPluginHelp } from "./installerHelp.js";
@@ -41,6 +43,7 @@ export async function installerCommand(input: readonly string[]): Promise<void> 
   if (command === "install") {
     const target = commandArgs[1];
     if (target === "core") return installCoreCommand(commandArgs.slice(2));
+    if (target === "cli") return installCliCommand(commandArgs.slice(2));
     if (target === "control-plane") {
       if (commandArgs[2] === "plugin") return installPluginCommand(commandArgs.slice(3), "control-plane");
       return installControlPlaneCommand(commandArgs.slice(2));
@@ -142,7 +145,7 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
   const enabledPlugins = localDirectory === undefined ? [] : (await readManifest(
     path.join(defaultDataHome(), "runtime/current/plugins.json")
   )).plugins;
-  const bundle = localDirectory === undefined ? undefined : await readLocalPackageBundle(
+  const bundle = localDirectory === undefined ? undefined : await readHostPackageBundle(
     localDirectory, [...packages.packageNames, ...enabledPlugins, ...profilePlugins.map(({ name }) => name)]
   );
   const plugins = bundle === undefined
@@ -153,16 +156,17 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
       return { name, specifier };
     });
   const installed = bundle === undefined
-    ? await withInstallerProgress("core", async (operation) => installDimCli({
-      ...packages, version, exposeOnPath, binDirectory, operation, plugins
+    ? await withInstallerProgress("core", async (operation) => installHostRuntime({
+      ...packages, version, operation, plugins,
+      prepareCli: () => bootstrapCli(exposeOnPath, binDirectory, localDirectory)
     }))
-    : await withInstallerProgress("core", (operation) => installDimCli({
-      ...bundle, exposeOnPath, binDirectory, operation, plugins,
+    : await withInstallerProgress("core", (operation) => installHostRuntime({
+      ...bundle, operation, plugins,
+      prepareCli: () => bootstrapCli(exposeOnPath, binDirectory, localDirectory),
       ...(parsed.values["defer-controller-restart"] ? { restartController: false } : {})
     }));
-  console.log(`${bundle ? "Installed local" : "Installed"} DIM CLI ${installed.version} at ${installed.executable}`);
-  if (installed.symlink) console.log(`Linked ${installed.symlink} -> ${installed.executable}`);
-  else console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
+  console.log(`${bundle ? "Installed local" : "Installed"} DIM host ${installed.version} at ${installed.executable}`);
+  console.log("The installed presentation CLI is retained; use 'dim installer install cli' to update it independently.");
 }
 
 async function installCore(
@@ -173,23 +177,45 @@ async function installCore(
   const plugins = await selectHostMirrorPlugin(version, undefined);
   const packages = await selectCorePackages(version, false);
   const installed = await withInstallerProgress("core", (operation) =>
-    installDimCli({ ...packages, version, exposeOnPath, binDirectory, operation, plugins }));
-  console.log(`Installed DIM CLI ${version} at ${installed.executable}`);
-  if (!installed.symlink) {
-    console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
+    installHostRuntime({ ...packages, version, operation, plugins, prepareCli: () => bootstrapCli(exposeOnPath, binDirectory) }));
+  console.log(`Installed DIM host ${installed.version} at ${installed.executable}`);
+}
+
+async function installCliCommand(args: readonly string[]): Promise<void> {
+  const parsed = parseArgs({ args, strict: true, allowPositionals: false, options: {
+    help: { type: "boolean", short: "h" }, "local-packages": { type: "string" },
+    "no-local-bin": { type: "boolean" }, "local-bin": { type: "boolean" }, prefix: { type: "string" }
+  } });
+  if (parsed.values.help) {
+    console.log("Usage: dim installer install cli [--local-packages DIRECTORY] [--no-local-bin | --local-bin] [--prefix PATH]");
     return;
   }
-  console.log(`Linked ${installed.symlink} -> ${installed.executable}`);
-  const pathEntries = (process.env.PATH ?? "").split(path.delimiter).map((entry) => path.resolve(entry));
-  const symlinkDirectory = path.dirname(installed.symlink);
-  if (!pathEntries.includes(path.resolve(symlinkDirectory))) {
-    console.warn(`Warning: ${symlinkDirectory} is not in PATH; add it, e.g. export PATH="${symlinkDirectory}:$PATH"`);
+  if (parsed.values["local-bin"] && parsed.values["no-local-bin"]) {
+    throw new Error("--no-local-bin and --local-bin cannot be used together");
   }
+  const bundle = parsed.values["local-packages"]
+    ? await readCliPackageBundle(parsed.values["local-packages"]) : undefined;
+  const version = await installerVersion();
+  const installed = await withInstallerProgress("cli", (operation) => installDimCli({
+    ...(bundle ?? { version }), operation,
+    exposeOnPath: parsed.values["local-bin"] ? true : parsed.values["no-local-bin"] ? false : !runningUnderMise(),
+    ...(parsed.values.prefix ? { binDirectory: path.join(path.resolve(parsed.values.prefix), "bin") } : {})
+  }));
+  console.log(`Installed DIM CLI ${installed.version} at ${installed.executable}`);
+}
+
+async function bootstrapCli(exposeOnPath: boolean, binDirectory: string, localDirectory?: string): Promise<void> {
+  const cli = await configuredCli();
+  const legacy = path.join(defaultDataHome(), "runtime", "current", "node_modules", ".bin", "dim");
+  if (cli !== undefined && path.resolve(cli.executable) !== legacy) return;
+  const bundle = localDirectory === undefined ? undefined : await readCliPackageBundle(localDirectory);
+  const version = await installerVersion();
+  await withInstallerProgress("cli", (operation) => installDimCli({ ...(bundle ?? { version }), exposeOnPath, binDirectory, operation }));
 }
 
 async function selectCorePackages(version: string, withManaged: boolean) {
   const previous = await readPackageJson(path.join(defaultDataHome(), "runtime/current/package.json"));
-  const names = ["@slop-lab/dim-cli"];
+  const names = ["@slop-lab/dim-host-core"];
   if (withManaged || Object.hasOwn(previous?.dependencies ?? {}, CONTROL_PLANE_ADMIN)) names.push(CONTROL_PLANE_ADMIN);
   return { packageNames: names, packageSpecifiers: names.map((name) => `${name}@${version}`) };
 }
@@ -229,24 +255,23 @@ async function installPluginPackages(specifiers: readonly string[], target: Plug
   if (specifiers.some((specifier) => packageNameFromSpecifier(specifier)?.startsWith("@slop-lab/dim-control-plane-plugin-"))) {
     throw new Error("control-plane packages use 'dim installer install control-plane plugin'; no host CLI installation is required");
   }
-  const cli = await configuredCli();
-  if (cli === undefined) {
-    throw new Error("DIM CLI must be installed before plugins so npm can validate the shared runtime");
-  }
-  const executable = await validateConfiguredCli(cli, process.argv[1]);
-  const installedVersion = await queryCliVersion(executable);
-  if (installedVersion !== cli.version) {
-    throw new Error(`configured version ${cli.version} does not match installed ${installedVersion}; run 'dim installer install core' to repair`);
+  const executable = hostExecutable();
+  const installedVersion = await queryCliVersion(executable).catch(() => { throw new Error("DIM host must be installed before host plugins; run 'dim installer install core'"); });
+  for (const specifier of specifiers) {
+    const name = packageNameFromSpecifier(specifier);
+    if (name?.startsWith("@slop-lab/dim-host-plugin-") && specifier !== `${name}@${installedVersion}`) {
+      throw new Error("host plugin version must match the installed DIM host version; install the matching core first");
+    }
   }
   const home = defaultPluginHome();
   const bundle = localDirectory === undefined ? undefined : await readHostPluginPackageBundle(localDirectory, specifiers,
     (await readManifest(path.join(home, "plugins.json"))).plugins);
   if (bundle !== undefined && bundle.version !== installedVersion) {
-    throw new Error("local plugin bundle must match the installed DIM CLI version; install the matching core first");
+    throw new Error("local plugin bundle must match the installed DIM host version; install the matching core first");
   }
   const selected = specifiers.map(packageNameFromSpecifier).filter((name): name is string => name !== undefined);
   const installed = await withInstallerProgress("plugin", (operation) =>
-    installPlugins(specifiers, { pluginHome: home, operation,
+    installPlugins(specifiers, { pluginHome: home, operation, expectedHostVersion: installedVersion,
       ...(bundle === undefined ? {} : { packageSpecifiers: bundle.packageSpecifiers, pluginNames: selected }) }));
   for (const name of installed) console.log(`Installed and enabled ${name}`);
   console.log(`Plugin home: ${home}`);
@@ -260,7 +285,7 @@ async function pluginLifecycleCommand(
   const parsed = parseArgs({ args: commandArgs, allowPositionals: true, strict: true, options: { help: { type: "boolean", short: "h" } } });
   if (parsed.values.help) return console.log(`Usage: dim installer ${target === "control-plane" ? "control-plane " : ""}${command} PACKAGE...`);
   if (parsed.positionals.length === 0) throw new Error(`${command} requires at least one package`);
-  if (target === "host" && await configuredCli() === undefined) throw new Error("DIM CLI is not installed");
+  if (target === "host") await queryCliVersion(hostExecutable()).catch(() => { throw new Error("DIM host is not installed"); });
   const options = { target, pluginHome: target === "host" ? defaultPluginHome() : defaultControlPlanePluginHome() };
   if (command === "remove-plugin") await removePlugins(parsed.positionals, options);
   else await setPluginsEnabled(parsed.positionals, command === "enable-plugin", options);

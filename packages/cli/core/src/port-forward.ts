@@ -1,7 +1,7 @@
 import { createServer, type Socket } from "node:net";
-import { UserError, type WorkspaceView } from "@slop-lab/dim-host-core/workspace";
+import { CliHostProtocolError, createHostRequest, parseWorkspaceEndpoint } from "@slop-lab/dim-contracts-cli-host";
 import { type HostTarget } from "./host-context.js";
-import { callHost, streamHost, type HostTransportOptions } from "./host-transport.js";
+import { callHost, negotiateHost, streamHost, type HostTransportOptions } from "./host-transport.js";
 
 export interface ForwardOptions extends HostTransportOptions {
   readonly onListening?: (port: number) => void;
@@ -15,9 +15,9 @@ export async function forwardWorkspace(
   remotePort: number,
   options: ForwardOptions = {}
 ): Promise<void> {
-  const record = await callHost<WorkspaceView>(target, { operation: "show", input: { name } }, options);
-  if (typeof record.id !== "string" || !record.id) throw new UserError("host returned an invalid workspace identity");
-  if (record.runtimeStatus !== "running") throw new UserError(`workspace '${name}' is ${record.runtimeStatus}; run dim start ${name}`);
+  await negotiateHost(target, options);
+  const record = parseWorkspaceEndpoint(await callHost(target, createHostRequest("workspace.endpoint", { name }), options));
+  if (record.runtimeStatus !== "running") throw new CliHostProtocolError(`workspace '${name}' is ${record.runtimeStatus}; run dim start ${name}`);
   options.signal?.throwIfAborted();
   const sessions = new Set<{ socket: Socket; abort: AbortController; done: Promise<void> }>();
   let stopping = false;
@@ -30,9 +30,7 @@ export async function forwardWorkspace(
     const signal = options.signal ? AbortSignal.any([options.signal, abort.signal]) : abort.signal;
     const session = { socket, abort, done: Promise.resolve() };
     sessions.add(session);
-    session.done = streamHost(target, {
-      operation: "connect", input: { name, port: remotePort, workspaceId: record.id }
-    }, { ...options, terminal: false, stdin: socket, stdout: socket, signal }).then((exitCode) => {
+    session.done = streamHost(target, createHostRequest("workspace.connect", { name, port: remotePort, workspaceId: record.workspaceId }), { ...options, terminal: false, stdin: socket, stdout: socket, signal }).then((exitCode) => {
       if (exitCode !== 0 && !signal.aborted) throw new Error(`host connection exited with status ${exitCode}`);
       if (!socket.destroyed) socket.end(() => socket.destroy());
     }).catch((error: unknown) => {

@@ -6,15 +6,15 @@ parser or QEMU package dependency. Its generic host controller supports
 explicitly selected integration capabilities.
 
 ```text
-CLI presentation + host context
-    -> local process or authenticated SSH stdio
-        -> host application
+CLI host context + terminal/forward transport
+    -> versioned CLI-host protocol over local process or authenticated SSH stdio
+        -> host application: command parsing, help and presentation
             -> workspace lifecycle service
                 -> workspace store
                 -> Git source acquisition
                 -> container runtime
 
-CLI -- selected feature command --> installed host plugin
+host application -- selected feature command --> installed host plugin
     -> Native Git acquisition, CI worker, guest tools, mirrors or exposure
     -> host core lifecycle, controller and execution interfaces
 
@@ -22,14 +22,16 @@ control-plane core --> explicitly installed service plugins
     -> Git authority, CI scheduling, workflow compiler or LLM routing
     -> neutral contracts
 
-installer facade --> exact base runtime
+installer facade --> independent compatible CLI and host runtimes
                  --> explicitly selected host or control-plane plugins
 ```
 
 The selected host owns state, filesystem paths, Git acquisition and runtime
 operations. The client never treats a remote source path as a local path and
-never exposes a public administration port. Commands carry structured payloads;
-SSH shell input contains fixed launcher code and base64url data.
+never exposes a public administration port. The retained
+[CLI-host v1 contract](../specs/cli-host-protocol-v1.md) carries opaque command
+arguments and streams; host domain objects stay inside the host. SSH shell input
+contains fixed launcher code and base64url data.
 
 `WorkspaceService` owns the lifecycle. `WorkspaceStore` parses complete records
 at the storage boundary and serializes mutations by workspace. Source acquisition

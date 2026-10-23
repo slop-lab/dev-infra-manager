@@ -32,7 +32,7 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
     await rm(options.adminControllerSocketPath, { force: true });
     const log = await open(path.join(runtimeDir, "controller.log"), "a", 0o600);
     const script = process.argv[1];
-    if (!script) throw new UserError("cannot locate the DIM CLI entrypoint");
+    if (!script) throw new UserError("cannot locate the DIM host entrypoint");
     const child = spawn(process.execPath, [
       ...process.execArgv,
       script,

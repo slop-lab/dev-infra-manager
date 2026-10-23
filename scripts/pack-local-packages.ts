@@ -8,6 +8,7 @@ export const packageDirectories = [
   "packages/host/core/dist",
   "packages/control-plane/core/dist",
   "packages/contracts/ci/dist",
+  "packages/contracts/cli-host/dist",
   "packages/contracts/execution/dist",
   "packages/contracts/git/dist",
   "packages/contracts/operations/dist",
