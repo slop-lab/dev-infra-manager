@@ -133,3 +133,33 @@ encoding exceeds 95 KiB, including unusually escape-heavy YAML. Imports are sequ
 source failure. Retry the same manifest to resume its original durable repository
 artifacts. The normalized import plan is immutable; changes are rejected rather
 than silently replacing a completed or pending import.
+
+## Pull requests
+
+When the selected repository service has the Git pull requests plugin, the host
+plugin exposes `dim project pull-request` (`dim project pr`). Supply the local
+project name and repository ID; the host resolves trusted repository scope and
+current service generation using its existing private connection.
+
+```bash
+dim project pr list acme public
+dim project pr create acme public --title 'Add feature' \
+  --source proposals/WORKSPACE/change
+# Target defaults to the repository's managed default branch.
+dim project pr show acme public PR_ID
+dim project pr edit acme public PR_ID --body 'Updated description'
+dim project pr comment acme public PR_ID --body 'Explain this line' \
+  --path src/index.ts --side head --line 12
+dim project pr refresh acme public PR_ID
+dim project pr review acme public PR_ID
+dim project pr close acme public PR_ID
+dim project pr reopen acme public PR_ID
+```
+
+Mutation commands read the current version before writing; `--expected-version`
+can instead require an earlier read version. Line comments default to the current
+immutable revision; `--revision` selects an older revision explicitly. General
+comments omit `--path`, `--side` and `--line`. Comments require the separate Git
+discussions plugin. `review` prepares exact review evidence and never approves or
+promotes it. After a new push, `refresh` records a new revision; previous comments
+retain their original anchors. All commands accept `--json` for agent use.

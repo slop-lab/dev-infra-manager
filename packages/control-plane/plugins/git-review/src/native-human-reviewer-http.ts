@@ -29,6 +29,7 @@ type Credential = { readonly username: string; readonly password: string };
 type HumanReviewer = CodeReviewConfig["humanReviewers"][number];
 type HumanReviewerHttpInput = {
   readonly config: CodeReviewConfig;
+  readonly features?: readonly string[];
   readonly hooks?: NativeHumanReviewerHooks;
   readonly knownCredentials: readonly Credential[];
   readonly runtime: AuthoritativeNativeCandidateRuntime;
@@ -75,6 +76,7 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
           serviceId: "native-main",
           role: "human-reviewer",
           reviewerId: reviewer.reviewerId,
+          ...((input.features?.length ?? 0) === 0 ? {} : { features: input.features }),
           generationId: input.runtime.expectedGenerationId
         });
         return true;

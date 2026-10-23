@@ -31,7 +31,9 @@
   "dependencies": {
     "@slop-lab/dim-contracts-operations": "workspace:0.10.0",
     "zod": "4.1.11",
-    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-git": "workspace:0.10.0",
+    "@slop-lab/git-diff": "workspace:0.10.0",
+    "@slop-lab/git-pull-requests": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

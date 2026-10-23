@@ -109,6 +109,7 @@ packages:
   - packages/control-plane/deployment
   - packages/control-plane/plugins/*
   - packages/contracts/*
+  - packages/git-tools/*
   - packages/git-review-tracing/engine
   - packages/git-review-tracing/runtimes/node
   - packages/cli/core

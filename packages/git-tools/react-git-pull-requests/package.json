@@ -1,0 +1,48 @@
+{
+  "name": "@slop-lab/react-git-pull-requests",
+  "version": "0.10.0",
+  "description": "Controlled React pull request, discussion and diff presentation",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": {
+      "source": "./src/styles.css",
+      "default": "./dist/styles.css"
+    }
+  },
+  "scripts": {
+    "build": "node ../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3",
+    "@types/node": "24.13.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  },
+  "dependencies": {
+    "@slop-lab/git-diff": "workspace:0.10.0",
+    "@slop-lab/react-git-diff": "workspace:0.10.0",
+    "@slop-lab/git-pull-requests": "workspace:0.10.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

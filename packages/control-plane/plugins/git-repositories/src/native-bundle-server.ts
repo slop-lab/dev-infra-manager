@@ -1,8 +1,10 @@
+import { repositoryOwnedRefs } from "./extension-refs.js";
 import { readNativeProposalRefs } from "./native-proposal-reconciler.js";
 import { readEffectiveRepositoryPolicy } from "./repository-policy-state.js";
 import { refUpdatePolicies, refUpdatePolicyRevision } from "./ref-update-policies.js";
 import { lstat, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { syncDirectory } from "./native-root-import-storage.js";
 import { once } from "node:events";
 import { parseNativeGitBundleConfig } from "./bundle-config.js";
 import { assertBundleToken, assertGenerationId } from "./native-bundle-http.js";
@@ -43,7 +45,7 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
   const secrets = [options.readinessToken, options.activationToken, ...knownCredentials.flatMap((entry) => [entry.username, entry.password])];
   if (new Set(secrets).size !== secrets.length) throw new Error("repository and extension credentials must be globally distinct");
   options.signal?.throwIfAborted();
-  const state = await initializeNativeGitBundleState(options.stateDirectory, options.expectedGenerationId);
+  const state = await initializeNativeGitBundleState(options.stateDirectory, options.expectedGenerationId, repositoryOwnedRefs(options.stateDirectory, factories));
   const shutdown = new AbortController();
   const abort = () => shutdown.abort(options.signal?.reason);
   options.signal?.addEventListener("abort", abort, { once: true });
@@ -118,4 +120,6 @@ async function privateExtensionDirectory(directory: string): Promise<void> {
   try { await mkdir(directory, { mode: 0o700 }); } catch (error) { if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error; }
   const metadata = await lstat(directory);
   if (!metadata.isDirectory() || metadata.isSymbolicLink() || metadata.uid !== process.getuid?.() || (metadata.mode & 0o777) !== 0o700) throw new Error("repository extension state must be a private owned directory");
+  await syncDirectory(directory);
+  await syncDirectory(dirname(directory));
 }

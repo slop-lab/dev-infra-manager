@@ -2,7 +2,8 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "customConditions": [
-      "dim-source"
+      "dim-source",
+      "source"
     ]
   }
 }

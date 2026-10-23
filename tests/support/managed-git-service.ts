@@ -1,3 +1,7 @@
+import { controlPlanePlugin as gitDiff } from "../../packages/control-plane/plugins/git-diff/src/index.js";
+import { controlPlanePlugin as pullRequests } from "../../packages/control-plane/plugins/git-pull-requests/src/index.js";
+import { controlPlanePlugin as discussions } from "../../packages/control-plane/plugins/git-discussions/src/index.js";
+import { controlPlanePlugin as blame } from "../../packages/control-plane/plugins/git-blame/src/index.js";
 import type { PreparedControlPlanePlugin } from "../../packages/control-plane/core/src/plugin-api.js";
 import { configuredNativeGitBundleServer, type NativeGitBundleServerOptions } from "../../packages/control-plane/plugins/git-repositories/src/native-bundle-server.js";
 import { parseManagedGitServiceConfig, repositoryConfiguration } from "../../packages/control-plane/admin/src/service-pair.js";
@@ -32,7 +36,8 @@ export async function configuredManagedGitFixture(options: ManagedGitFixtureOpti
       ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })
     }),
     await merge.configure({ hostPromoters: config.hostPromoters }),
-    await gitSync.configure(config.gitSync ?? { operators: [] })
+    await gitSync.configure(config.gitSync ?? { operators: [] }),
+    ...await Promise.all([gitDiff, pullRequests, discussions, blame].map(plugin => plugin.configure({})))
   ];
   const extensions = [workflowCompilerExtension(config.ci.compiler, options.workflowCompiler ?? dimWorkflowCompiler),
     ...prepared.flatMap((entry) => entry.extensions ?? []), ...(options.extensions ?? [])];

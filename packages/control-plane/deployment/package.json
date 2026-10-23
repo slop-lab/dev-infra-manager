@@ -40,7 +40,11 @@
     "@slop-lab/dim-control-plane-plugin-webhooks": "workspace:0.10.0",
     "@slop-lab/dim-control-plane-plugin-ci-workflows": "workspace:0.10.0",
     "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
-    "@slop-lab/dim-control-plane-admin": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-admin": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-diff": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-pull-requests": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-discussions": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-blame": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

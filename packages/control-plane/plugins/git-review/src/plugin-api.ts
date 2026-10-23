@@ -31,6 +31,8 @@ export function reviewPreparations(extensions: readonly ControlPlaneExtension[])
 }
 export type CodeReviewService = {
   readonly name: "code-review";
+  /** Trusted caller already holds the repository mutation queue. */
+  createInTransaction(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined }): Promise<AuthoritativeNativeReviewEnvelope>;
   create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined }): Promise<AuthoritativeNativeReviewEnvelope>;
 };
 export * from "./authoritative-native-review-schema.js";
@@ -42,3 +44,11 @@ export * from "./review-record-storage.js";
 export { AuthoritativeNativeReviewAdmissionBusyError } from "./authoritative-native-review-controller.js";
 
 export * from "./change-matchers.js";
+
+export function codeReviewService(extensions: readonly ControlPlaneExtension[]): CodeReviewService {
+  const entry = extensions.find((entry) => entry.kind === "dim.code-review.service" && entry.name === "default");
+  if (entry === undefined || !("createInTransaction" in entry.value) || typeof entry.value.createInTransaction !== "function" || !("create" in entry.value) || typeof entry.value.create !== "function") throw new Error("Git review service is required");
+  return entry.value as CodeReviewService;
+}
+
+export { readAuthoritativeNativeReviewRefs, assertAuthoritativeNativeReviewRefs } from "./authoritative-native-review-git.js";

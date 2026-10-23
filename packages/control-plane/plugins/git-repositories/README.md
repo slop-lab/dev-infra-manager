@@ -169,3 +169,16 @@ different policy digest cannot authorize promotion. The import proof's
 `importReceipt.policyDigest` remains the original import digest, while
 `currentHead.policyDigest` identifies the current effective policy. Updating policy
 does not recreate repositories or revoke existing scoped workspace credentials.
+
+Trusted repository extensions may implement `RepositoryExtensionFactory.ownedRefs`
+to retain immutable Git objects. The factory reads its own private extension state
+and returns exact `{ref,commit}` declarations for the selected repository before
+startup recovery and every live proof. Each ref must be under
+`refs/dim/extensions/<factory-name>/` with a canonical safe suffix. Existing refs
+must match their declared commit; undeclared refs remain foreign and fail proof.
+Missing declared refs are permitted so the installed owner can repair a write
+interrupted after its durable record was saved. Extensions must save owner records
+before writing refs. This capability does not modify protected branch authority,
+receive permissions or read visibility. Workspace credentials remain restricted
+to their own proposal namespace. Read services accept historical refs only through
+explicit repository-scoped read-history providers.

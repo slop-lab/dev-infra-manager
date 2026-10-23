@@ -24,7 +24,7 @@ export function mount(container, context) {
   const { ui } = context, element = ui.element;
   const current = () => !disposed && context.isCurrent();
   const status = element("p"); status.setAttribute("role", "status");
-  const managementRegion = element("div");
+  const managementRegion = element("div"), pullRequestRegion = element("section");
   const availability = element("div"), selectors = element("div"), guidance = element("section", "", "panel"), toolbar = element("div"), actions = element("div"), list = element("section"), detail = element("section"), syncStatus = element("section", "", "sync-result");
   toolbar.className = actions.className = "feature-actions";
   /** @param {string} label */
@@ -38,7 +38,7 @@ export function mount(container, context) {
     { value: "", label: "All states" }, { value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "revoked", label: "Revoked" }, { value: "stale", label: "Stale" }
   ]);
   reviewSearch.placeholder = "Proposal, protected ref or review ID";
-  container.append(element("p", "Select a controller, project and repository to inspect exact review evidence."), toolbar, availability, selectors, guidance, managementRegion, actions, status, form, syncStatus, filters, list, detail);
+  container.append(element("p", "Select a controller, project and repository to inspect exact review evidence."), toolbar, availability, selectors, guidance, managementRegion, actions, status, pullRequestRegion, form, syncStatus, filters, list, detail);
   /** @type {Array<{reviewId:string,proposalRef:string,protectedRef:string,status:string,createdAt:string}>} */ let loadedReviews = [];
   /** @returns {Scope} */ const scope = () => ({ controllerId: host.control.value, projectId: project.control.value, repositoryId: repository.control.value });
   /** @param {Scope} value */ const key = (value) => JSON.stringify([value.controllerId, value.projectId, value.repositoryId]);
@@ -48,6 +48,14 @@ export function mount(container, context) {
   /** @param {Scope} target @param {string} name @param {Record<string,unknown>} [input] */
   const invoke = (target, name, input = {}) => context.invoke(name, { ...target, ...input }, /^(?:reviews|merges|sync)\./.test(name) ? { timeoutMilliseconds: 125_000 } : undefined);
   const management = mountManagement(managementRegion, context, { scope, has, refresh: (preferred) => refreshCatalog(preferred) });
+  /** @type {ReturnType<import('../pull-requests.js').mountPullRequests>|undefined} */ let pullRequests;
+  const prAsset = new URL("./pull-requests.js", import.meta.url).href;
+  void import(prAsset).then((module) => {
+    if (!current()) return;
+    const adapter = /** @type {typeof import('../pull-requests.js')} */ (module);
+    pullRequests = adapter.mountPullRequests(pullRequestRegion, context, { scope, has, current: selected });
+    void pullRequests.refresh();
+  }).catch(() => { if (current()) pullRequestRegion.textContent = "Pull request UI could not load. Reopen Git review to retry."; });
   let draftKey = "";
   function saveDraft() { if (draftKey) drafts.set(draftKey, proposal.value); }
   function restoreDraft() { draftKey = key(scope()); proposal.value = drafts.get(draftKey) ?? ""; delete submit.dataset.accepted; submit.disabled = false; }
@@ -199,6 +207,7 @@ export function mount(container, context) {
   function switchScope() {
     const branchPolicy = metadata(), refs = branchPolicy?.branches ?? ["refs/heads/main"];
     options(targetBranch, refs.map((id) => ({ id, title: id.slice("refs/heads/".length) })), branchPolicy?.defaultRef ?? "refs/heads/main");
+    void pullRequests?.refresh();
     ++scopeRevision; ++listVersion; ++detailVersion; ++formVersion; loadedReviews = []; delete submit.dataset.pending; list.replaceChildren(); detail.replaceChildren(); syncStatus.replaceChildren(); status.textContent = ""; restoreDraft(); renderActions();
     const target = scope(); void refreshList(target).catch((error) => { if (selected(target)) status.textContent = `Could not load repository reviews: ${error instanceof Error ? error.message : "service unavailable"}.`; });
   }
@@ -260,5 +269,5 @@ export function mount(container, context) {
     }
   });
   void initialDiscovery.catch((error) => { if (current()) status.textContent = `Could not discover projects: ${error instanceof Error ? error.message : "service unavailable"}. Use Refresh projects to retry.`; });
-  return () => { disposeNavigation(); management.dispose(); disposed = true; ++catalogVersion; ++detailVersion; ++listVersion; container.replaceChildren(); };
+  return () => { pullRequests?.dispose(); disposeNavigation(); management.dispose(); disposed = true; ++catalogVersion; ++detailVersion; ++listVersion; container.replaceChildren(); };
 }

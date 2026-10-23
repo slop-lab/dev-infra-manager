@@ -46,6 +46,8 @@ jobs:
           const version = manifest.browsers.find(browser => browser.name === "chromium").browserVersion;
           appendFileSync(process.env.GITHUB_ENV, `DIM_CHROMIUM=${chromium.executablePath()}\nDIM_CHROMIUM_VERSION=${version}\n`);
           NODE
+      - name: Verify portable Git components without DIM
+        run: pnpm --dir tests run test:git-tools-web
       - name: Run disposable source Web journeys
         env:
           DIM_WEB_JOURNEY_ARTIFACTS: ${{ runner.temp }}/dim-web-journeys

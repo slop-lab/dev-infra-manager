@@ -1,0 +1,66 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile, rename } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { afterEach, expect, it } from "vitest";
+import { parseGitDiff, parseDiffSnapshot } from "@slop-lab/git-diff";
+import { assertGitVersion } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { assertAdvertisedCommits, gitBytes, readTreeFile, utf8 } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { validateDiffAnchor } from "../../../../packages/control-plane/plugins/git-diff/src/plugin-api.js";
+import { nativeBundleReviewFixture, createBundleReview } from "../git-review/reviewFixture.js";
+import { cleanupFinalizeFixtures, humanReviewerAuthorization, generationId, foreignHumanReviewer } from "../git-repositories/nativeRootImportFinalizeFixture.js";
+const execute = promisify(execFile);
+const roots: string[] = [];
+const foreignHumanReviewerAuthorization = `Basic ${Buffer.from(`${foreignHumanReviewer.username}:${foreignHumanReviewer.password}`).toString("base64")}`;
+afterEach(async () => { await cleanupFinalizeFixtures(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+async function localGit() {
+  const root = await mkdtemp(join(tmpdir(), "dim-diff-")); roots.push(root);
+  const git = async (...args: string[]) => (await execute("/usr/bin/git", ["-C", root, ...args])).stdout.trim();
+  await git("init", "--initial-branch=main"); await git("config", "user.name", "Diff test"); await git("config", "user.email", "diff@example.invalid");
+  await writeFile(join(root, "source.txt"), "one\ntwo\nthree\n"); await git("add", "."); await git("commit", "-m", "base");
+  const baseCommit = await git("rev-parse", "HEAD");
+  await rename(join(root, "source.txt"), join(root, "renamed.txt")); await writeFile(join(root, "renamed.txt"), "one\nTWO\nthree");
+  await writeFile(join(root, "binary.bin"), Buffer.from([0, 255, 1])); await git("add", "."); await git("commit", "-m", "change");
+  const headCommit = await git("rev-parse", "HEAD"); await git("update-ref", "refs/heads/proposals/workspace/change", headCommit); await git("update-ref", "refs/heads/main", baseCommit);
+  const version = (await execute("/usr/bin/git", ["--version"])).stdout.trim().replace("git version ", "");
+  const gitIdentity = await assertGitVersion({ gitExecutable: "/usr/bin/git", gitVersion: version });
+  return { root, git, baseCommit, headCommit, input: { gitExecutable: "/usr/bin/git", gitIdentity, repository: join(root, ".git"), signal: AbortSignal.timeout(30_000) } };
+}
+it("reads exact immutable rename, binary and no-newline bytes and rejects hidden history", async () => {
+  const fixture = await localGit();
+  await assertAdvertisedCommits(fixture.input, [fixture.baseCommit, fixture.headCommit], ["refs/heads/main"]);
+  const patch = utf8(await gitBytes(fixture.input, ["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--full-index", "--find-renames=20%", fixture.baseCommit, fixture.headCommit]));
+  const parsed = parseGitDiff(patch, fixture);
+  expect(parsed.files.find((file) => file.newPath === "binary.bin")?.binary).toBe(true);
+  const file = parsed.files.find((file) => file.newPath === "renamed.txt")!;
+  expect(file.status).toBe("renamed");
+  expect(file.hunks.flatMap((hunk) => hunk.lines).some((line) => line.noNewline)).toBe(true);
+  expect(await readTreeFile(fixture.input, fixture.headCommit, "renamed.txt")).toMatchObject({ byteLength: 13, lineCount: 3 });
+  expect(validateDiffAnchor(parsed, { ...fixture, path: "renamed.txt", side: "head", line: 2 })).toBe(true);
+  expect(validateDiffAnchor(parsed, { ...fixture, path: "source.txt", side: "head", line: 2 })).toBe(false);
+  expect(validateDiffAnchor(parsed, { ...fixture, path: "renamed.txt", side: "head", line: 300 })).toBe(false);
+  const tree = await fixture.git("rev-parse", "HEAD^{tree}");
+  await expect(assertAdvertisedCommits(fixture.input, [tree], ["refs/heads/main"])).rejects.toThrow(/not a commit/);
+  await fixture.git("update-ref", "-d", "refs/heads/proposals/workspace/change");
+  await expect(assertAdvertisedCommits(fixture.input, [fixture.headCommit], ["refs/heads/main"])).rejects.toThrow(/outside advertised/);
+  // A repository integration can advertise its durable revision pin after a source force push.
+  const revisionRef = "refs/dim/test-integration/revision-1";
+  await fixture.git("update-ref", revisionRef, fixture.headCommit);
+  await expect(assertAdvertisedCommits(fixture.input, [fixture.headCommit], ["refs/heads/main"])).rejects.toThrow(/outside advertised/);
+  await assertAdvertisedCommits(fixture.input, [fixture.headCommit], ["refs/heads/main"], [revisionRef]);
+  await expect(assertAdvertisedCommits(fixture.input, ["main"], ["refs/heads/main"])).rejects.toThrow(/immutable/);
+});
+it("authenticates and scopes the actual diff endpoint to repository members and current generation", { timeout: 30_000 }, async () => {
+  const fixture = await nativeBundleReviewFixture("git-diff-endpoint");
+  const envelope = await createBundleReview(fixture.service);
+  const origin = fixture.service.origin;
+  const call = (authorization = humanReviewerAuthorization, generation = generationId, repository = "root", baseCommit = envelope.review.expectedProtectedHead) => fetch(`${origin}/v1/projects/project-a/repositories/${repository}/diff`, { method: "POST", headers: { authorization, "x-dim-generation-id": generation, "content-type": "application/json" }, body: JSON.stringify({ baseCommit, headCommit: envelope.review.candidateCommit }) });
+  const response = await call(); expect(response.status).toBe(200);
+  const value = parseDiffSnapshot(await response.json()); expect(value.headCommit).toBe(envelope.review.candidateCommit); expect(value.files.some((file) => file.binary)).toBe(true);
+  expect((await call("Basic invalid")).status).toBe(401);
+  expect((await call(foreignHumanReviewerAuthorization)).status).toBe(403);
+  expect((await call(humanReviewerAuthorization, "stale")).status).toBe(409);
+  expect((await call(humanReviewerAuthorization, generationId, "unregistered")).status).toBe(404);
+  expect((await call(humanReviewerAuthorization, generationId, "root", "HEAD")).status).toBe(400);
+});

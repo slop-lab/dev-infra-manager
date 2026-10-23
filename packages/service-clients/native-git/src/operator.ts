@@ -1,3 +1,4 @@
+import { repositoryFeature, repositoryFeatureOperations } from "./repository-features.js";
 import { z } from "zod";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
 import { NativeGitClient, preparedBranchMergeSchema } from "./client.js";
@@ -18,6 +19,7 @@ const reviewResult = (value: unknown) => { const row = z.record(z.string(), z.un
 const summaries = z.array(z.object({ reviewId: z.string().regex(/^[a-f0-9]{64}$/), proposalRef: z.string().max(1024), protectedRef: z.string().max(1024), candidateCommit: z.string().regex(/^[a-f0-9]{40,64}$/), createdAt: z.string().datetime(), status: z.string().max(64) }).strict()).max(100);
 const promotion = z.object({ schemaVersion: z.literal(1), outcome: z.enum(["promoted", "already-current"]), reviewId: z.string(), protectedRef: z.string(), expectedProtectedHead: z.string(), candidateCommit: z.string(), candidateTree: z.string() }).strict();
 export const nativeGitOperations: readonly Operation[] = [
+  ...repositoryFeatureOperations,
   { name: "projects.list", description: "List projects and ready repositories on this controller", access: "read", parseInput: (v) => z.object({}).strict().default({}).parse(v), parseOutput: (v) => z.object({ reviewerId: identifier, projects: projectsSchema }).strict().parse(v) },
   ...(["fetch", "merge", "publish"] as const).map((action): Operation => ({ name: `sync.${action}`, description: action === "fetch" ? "Fetch upstream refs" : action === "merge" ? "Propose upstream merge for protected review" : "Publish protected head upstream", access: "operator", parseInput: (v) => scope.extend({ protectedRef: z.string().startsWith("refs/heads/").max(1024).optional() }).parse(v), parseOutput: (v) => syncResultSchema.parse(v) })),
   { name: "merges.prepare", description: "Create a branch merge proposal and exact target review", access: "operator", parseInput: (v) => scope.extend({ sourceRef: z.string().startsWith("refs/heads/").max(1024), targetRef: z.string().startsWith("refs/heads/").max(1024) }).parse(v), parseOutput: (v) => preparedBranchMergeSchema.parse(v) },
@@ -42,7 +44,7 @@ export async function createNativeGitOperator(config: {
   await client.attest();
   const hostId = selected?.hostId ?? promoter?.hostId;
   const sync = config.syncConnection ? await createSyncClient(config.syncConnection, { baseUrl: reviewer.baseUrl, generationId: reviewer.generationId, ...(hostId ? { hostId } : {}) }) : undefined;
-  const operations = nativeGitOperations.filter((operation) => (promoter || !["reviews.promote", "merges.prepare"].includes(operation.name)) && (sync || !operation.name.startsWith("sync.")));
+  const operations = nativeGitOperations.filter((operation) => (repositoryFeature(operation.name) === undefined || client.features.includes(repositoryFeature(operation.name)!)) && (promoter || !["reviews.promote", "merges.prepare"].includes(operation.name)) && (sync || !operation.name.startsWith("sync.")));
   return {
     get reviewerId() { return reviewer.reviewerId; },
     operations,
@@ -54,7 +56,8 @@ export async function createNativeGitOperator(config: {
       const { projectId, repositoryId } = scope.passthrough().parse(input);
       if (!projects.some((project) => project.projectId === projectId && project.repositoryIds.includes(repositoryId))) throw new Error("Repository is outside this controller's current project catalog");
       let result: unknown;
-      if (name === "sync.fetch" || name === "sync.merge" || name === "sync.publish") {
+      if (repositoryFeature(name) !== undefined) result = await client.invokeRepositoryFeature(name, input);
+      else if (name === "sync.fetch" || name === "sync.merge" || name === "sync.publish") {
         if (!sync) throw new Error("Git sync operator connection is not configured");
         result = await sync.invoke(projectId, repositoryId, name === "sync.fetch" ? "fetch" : name === "sync.merge" ? "merge" : "publish", scope.extend({ protectedRef: z.string().optional() }).parse(input).protectedRef);
       } else if (name === "merges.prepare") result = await client.prepareMerge(projectId, repositoryId, scope.extend({ sourceRef: z.string(), targetRef: z.string() }).parse(input));

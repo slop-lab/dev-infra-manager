@@ -9,6 +9,8 @@ import { generationId, hostPromoter, humanReviewer, workspaceWriteIssuer, runGit
  * Initial browser roles remain those produced by initializeOperationsWeb. */
 export async function createReviewEnvironment() {
   const fixture = await createNativeManagementBrowserFixture();
+  let checkout: string | undefined;
+  let proposalRef: string | undefined;
   try {
     await writeFile(join(fixture.managed.root, "promoter.json"), JSON.stringify({ schemaVersion: 1, serviceId: "native-main",
       endpoint: fixture.managed.service.origin, generationId, role: "host-promoter", hostId: hostPromoter.hostId,
@@ -28,14 +30,15 @@ export async function createReviewEnvironment() {
         assert(lease !== null && typeof lease === "object" && "username" in lease && typeof lease.username === "string"
           && "password" in lease && typeof lease.password === "string", "workspace lease is valid");
         const remote = new URL(base + ".git"); remote.username = lease.username; remote.password = lease.password;
-        const checkout = join(fixture.managed.root, "journey-checkout");
+        checkout = join(fixture.managed.root, "journey-checkout");
         await runGit("/usr/bin/git", ["clone", "--quiet", remote.toString(), checkout]);
+        const baseCommit = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", "HEAD"])).stdout.trim();
         await mkdir(join(checkout, ".dim"));
         await writeFile(join(checkout, ".dim", "review-boundary.json"), '{"requiresReview":true}\n');
         await runGit("/usr/bin/git", ["-C", checkout, "add", ".dim"]);
         await runGit("/usr/bin/git", ["-C", checkout, "-c", "user.name=DIM Journey", "-c", "user.email=journey@example.invalid", "commit", "--quiet", "-m", "change reviewed configuration"]);
         const candidate = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", "HEAD"])).stdout.trim();
-        const proposalRef = `refs/heads/proposals/${workspaceId}/review-boundary`;
+        proposalRef = `refs/heads/proposals/${workspaceId}/review-boundary`;
         await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", "origin", `HEAD:${proposalRef}`]);
         // Another reviewer has prepared pending evidence. The browser's initial
         // operator still cannot resolve/approve; it must discover and obtain that
@@ -45,6 +48,15 @@ export async function createReviewEnvironment() {
           "content-type": "application/json", "x-dim-generation-id": generationId
         }, body: JSON.stringify({ schemaVersion: 1, proposalRef, protectedRef: "refs/heads/main" }) });
         assert.equal(review.status, 200, "pending review fixture evidence must be prepared");
+        return { candidate, proposalRef, baseCommit };
+      },
+      async advanceProposal() {
+        assert(checkout && proposalRef, "a workspace proposal must exist before adding a revision");
+        await writeFile(join(checkout, ".dim", "review-boundary.json"), '{"requiresReview":true,"revision":2}\n');
+        await runGit("/usr/bin/git", ["-C", checkout, "add", ".dim/review-boundary.json"]);
+        await runGit("/usr/bin/git", ["-C", checkout, "-c", "user.name=DIM Journey", "-c", "user.email=journey@example.invalid", "commit", "--quiet", "-m", "update reviewed configuration"]);
+        const candidate = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", "HEAD"])).stdout.trim();
+        await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", "origin", `HEAD:${proposalRef}`]);
         return { candidate, proposalRef };
       },
       async assertProtectedHead(candidate: string) {

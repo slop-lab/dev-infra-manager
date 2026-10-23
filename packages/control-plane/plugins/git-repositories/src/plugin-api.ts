@@ -31,6 +31,8 @@ export type RepositoryAttachment = {
 export type RepositoryExtensionFactory = {
   readonly name: string;
   readonly policyName?: string;
+  /** Exact durable refs, under this extension's reserved namespace; no branch authority. */
+  readonly ownedRefs?: NonNullable<import("./extension-refs.js").RepositoryRefOwner["ownedRefs"]>;
   /** Integration configuration may declare that it adds no merge evidence. Ref-update policies and attached evidence still apply. */
   readonly requiresMergeQualityGuard?: boolean;
   readonly requiresRefUpdatePolicies?: readonly string[];
@@ -68,3 +70,22 @@ export * from "./native-project-root-import-transitions.js";
 export * from "./native-bundle-activation.js";
 
 export * from "./ref-update-policies.js";
+
+/** Trusted repository read/conversation identity. Does not grant approval or promotion. */
+export type RepositoryAccess = { readonly actorId: string; readonly target: import("./authoritative-native-root-target.js").AuthoritativeNativeRepositoryTarget };
+export type RepositoryAccessProvider = {
+  /** Called while the repository mutation queue is held. Must prove current generation, activation and repository scope. */
+  authorize(context: RepositoryExtensionContext, request: IncomingMessage, selector: { readonly projectId: string; readonly repositoryId: string; readonly protectedRef?: string }): Promise<RepositoryAccess>;
+};
+export class RepositoryAccessError extends Error {
+  constructor(readonly status: 401 | 403 | 404 | 409 | 503, message: string) { super(message); }
+}
+export function repositoryAccessProvider(extensions: readonly ControlPlaneExtension[]): RepositoryAccessProvider {
+  const entry = extensions.find((entry) => entry.kind === "dim.git-repositories.access" && entry.name === "default");
+  if (entry === undefined || !("authorize" in entry.value) || typeof entry.value.authorize !== "function") throw new Error("Repository access provider is required");
+  return entry.value as RepositoryAccessProvider;
+}
+
+export * from "./git-read.js";
+
+export * from "./extension-refs.js";

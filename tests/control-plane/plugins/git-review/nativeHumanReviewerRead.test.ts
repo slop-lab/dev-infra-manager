@@ -126,7 +126,8 @@ describe("installed imported-root human reviewer", () => {
       serviceId: "native-main",
       role: "human-reviewer",
       reviewerId: "owner",
-      generationId
+      generationId,
+      features: ["git-blame", "git-diff", "git-discussions", "git-pull-requests"]
     });
     expect(current.status).toBe(200);
     expect(await current.json()).toMatchObject({

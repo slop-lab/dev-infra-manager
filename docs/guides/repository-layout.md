@@ -13,6 +13,8 @@ Production packages are grouped by where they run and what they own:
 | `packages/git-review-tracing/runtimes/node` | `@slop-lab/dim-git-review-tracing-runtime-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
 | `packages/git-review-tracing/engine` | `@slop-lab/dim-git-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
+| `packages/git-tools/{diff,pull-requests}` | `@slop-lab/git-{diff,pull-requests}` | Portable Git models and pure operations, with no DIM dependency |
+| `packages/git-tools/{react-diff,react-git-pull-requests}` | `@slop-lab/react-git-{diff,pull-requests}` | Controlled React presentation, callbacks and optional external CSS, with no DIM dependency |
 | `packages/cli/core` | `@slop-lab/dim-cli` | Client host selection, terminal streams and transport |
 | `packages/service-clients/<name>` | `@slop-lab/dim-service-client-<name>` | Shared service calls and validated operations without running their authoritative service; LLM router, execution and Native Git clients |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
@@ -25,6 +27,12 @@ machine; they describe authority and installation, not physical topology.
 Host plugins own delivery of their workspace and agent helpers through the
 shared host integration mechanism. Repositories need no plugin configuration
 for capabilities selected by the operator.
+
+Reusable Git models and UI live in `git-tools`, outside DIM runtime packages.
+They use the generic `source` export condition for repository development and
+compiled exports in published artifacts. DIM control-plane plugins own private
+storage and authorization; host and Web adapters connect those services to the
+portable UI. See [Git pull requests](../specs/git-pull-requests.md).
 
 There is one CLI command transport, not a separate CLI plugin loader. Optional
 commands belong to the selected host plugin and are discovered from its command

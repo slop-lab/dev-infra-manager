@@ -15,7 +15,7 @@ interface LibraryMetadata {
 function exportPaths(value: unknown): unknown {
   if (typeof value === "string") return value.replace(/^\.\/src\/(.*)\.ts$/, "./$1.d.ts").replace(/^\.\/dist\//, "./");
   if (Array.isArray(value)) return value.map(exportPaths);
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([key]) => key !== "dim-source").map(([key, entry]) => [key, exportPaths(entry)]));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([key]) => key !== "dim-source" && key !== "source").map(([key, entry]) => [key, exportPaths(entry)]));
   return value;
 }
 /** Publish only declared entrypoints and exact workspace dependencies from a built library. */

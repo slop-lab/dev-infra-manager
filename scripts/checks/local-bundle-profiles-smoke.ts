@@ -2,7 +2,7 @@
 import { object, array, string, parseJson } from "./lib/json-values.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,9 +47,29 @@ function run(file: string, args: string[], allowFailure: boolean = false) {
   return result;
 }
 try {
+  const portable = path.join(scratch, "portable");
+  run("npm", ["install", "--prefix", portable, "--no-save", "--no-audit", "--no-fund",
+    ...["@slop-lab/git-diff", "@slop-lab/git-pull-requests", "@slop-lab/react-git-diff", "@slop-lab/react-git-pull-requests"].map(artifact), "react@19.3.1", "react-dom@19.3.1"]);
+  assert.ok(readdirSync(path.join(portable, "node_modules/@slop-lab")).every(name => !name.startsWith("dim-")), "portable Git artifacts must not install DIM");
+  const portablePatch = ["diff --git a/a.txt b/a.txt", "index 1111111..2222222 100644", "--- a/a.txt", "+++ b/a.txt", "@@ -1 +1 @@", "-before", "+after", ""].join("\n");
+  run(process.execPath, ["--conditions=source", "--input-type=module", "--eval", `
+    import {createRequire} from 'node:module'; import {pathToFileURL} from 'node:url';
+    const require=createRequire(${JSON.stringify(path.join(portable, "package.json"))});
+    const load=async name=>import(pathToFileURL(require.resolve(name)).href);
+    const {parseGitDiff}=await load('@slop-lab/git-diff');
+    const {parsePullRequestList}=await load('@slop-lab/git-pull-requests');
+    if(parsePullRequestList([]).length!==0) throw new Error('portable PR model import failed');
+    const {GitDiff}=await load('@slop-lab/react-git-diff');
+    const {PullRequestPanel}=await load('@slop-lab/react-git-pull-requests');
+    const {createElement:h}=await load('react'); const {renderToStaticMarkup}=await load('react-dom/server');
+    const snapshot=parseGitDiff(${JSON.stringify(portablePatch)},{baseCommit:'a'.repeat(40),headCommit:'b'.repeat(40)});
+    if(!renderToStaticMarkup(h(GitDiff,{snapshot})).includes('after')) throw new Error('portable diff render failed');
+    if(!renderToStaticMarkup(h(PullRequestPanel,{pullRequests:[],selected:null,snapshot:null})).includes('No pull requests')) throw new Error('portable PR render failed');
+  `]);
+  console.log("portable Git artifacts: diff and React PR UI install and render without DIM");
   run("npm", ["install", "--prefix", path.join(scratch, "facade"), "--no-save", "--no-audit", "--no-fund",
     artifact("@slop-lab/dim-installer")]);
-  const controlPlanePlugins = ["@slop-lab/dim-control-plane-plugin-git-repositories",
+  const controlPlanePlugins = ["@slop-lab/dim-control-plane-plugin-git-diff", "@slop-lab/dim-control-plane-plugin-git-pull-requests", "@slop-lab/dim-control-plane-plugin-git-discussions", "@slop-lab/dim-control-plane-plugin-git-blame", "@slop-lab/dim-control-plane-plugin-git-repositories",
     "@slop-lab/dim-control-plane-plugin-git-sync",
     "@slop-lab/dim-control-plane-plugin-git-review", "@slop-lab/dim-control-plane-plugin-git-merge-policy",
     "@slop-lab/dim-control-plane-plugin-git-ci", "@slop-lab/dim-control-plane-plugin-webhooks",

@@ -23,6 +23,7 @@ type NativeRootProofGitInput = {
   readonly gitIdentity: GitExecutableIdentity;
   readonly repository: string;
   readonly protectedRef: string;
+  readonly extensionRefs?: readonly import("./extension-refs.js").RepositoryOwnedRef[];
   readonly authoritativeHeads?: readonly { readonly protectedRef: string; readonly commit: string }[];
   readonly importedCommit: string;
   readonly importedTree: string;
@@ -85,16 +86,23 @@ export async function assertNativeRootSelectionFastForward(
 }
 
 async function inspectRefs(input: NativeRootProofGitInput): Promise<void> {
-  const refs = (await runPinned(input, ["for-each-ref", "--format=%(refname)"]))
-    .stdout.split("\n").filter((ref) => ref.length > 0);
+  const records = (await runPinned(input, ["for-each-ref", "--format=%(refname) %(objectname)"], 8 * 1024 * 1024))
+    .stdout.split("\n").filter((record) => record.length > 0);
+  const refs = new Map(records.map((record) => { const split = record.indexOf(" "); return [record.slice(0, split), record.slice(split + 1)] as const; }));
   const heads = input.authoritativeHeads ?? [{ protectedRef: input.protectedRef, commit: input.currentCommit }];
-  if (!heads.some((head) => head.protectedRef === input.protectedRef && head.commit === input.currentCommit) || heads.some((head) => !refs.includes(head.protectedRef)) || refs.some((ref) =>
-    !heads.some((head) => head.protectedRef === ref) && !isWorkspaceProposalRef(ref) && !isUpstreamTrackingRef(ref))) {
+  const protectedRefs = new Map(heads.map((head) => [head.protectedRef, head.commit]));
+  const ownedRefs = new Map((input.extensionRefs ?? []).map((owned) => [owned.ref, owned.commit]));
+  if (protectedRefs.get(input.protectedRef) !== input.currentCommit || heads.some((head) => !refs.has(head.protectedRef)) || [...refs.keys()].some((ref) =>
+    !protectedRefs.has(ref) && !isWorkspaceProposalRef(ref) && !isUpstreamTrackingRef(ref) && !ownedRefs.has(ref))) {
     throw new NativeRootImportBundleError("native root repository contains a foreign ref");
   }
+  // One bounded snapshot validates every exact pin. Missing declared pins can
+  // be repaired after interruption; existing pins must match their owner.
+  for (const [ref, expected] of ownedRefs) {
+    if (refs.has(ref) && refs.get(ref) !== expected) throw new NativeRootImportBundleError("repository extension ref conflicts with its durable owner");
+  }
   for (const head of heads) {
-    const commit = (await runPinned(input, ["show-ref", "--verify", "--hash", head.protectedRef])).stdout.trim();
-    if (commit !== head.commit) throw new NativeRootImportBundleError("native root protected ref conflicts");
+    if (refs.get(head.protectedRef) !== head.commit) throw new NativeRootImportBundleError("native root protected ref conflicts");
   }
 }
 
@@ -115,12 +123,13 @@ function isWorkspaceProposalRef(ref: string): boolean {
 
 async function runPinned(
   input: Pick<NativeRootProofGitInput, "gitExecutable" | "gitIdentity" | "repository" | "signal">,
-  arguments_: readonly string[]
+  arguments_: readonly string[],
+  maxBuffer: number = gitOptions.maxBuffer
 ): Promise<{ readonly stdout: string; readonly stderr: string }> {
   await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
   const result = await execute(input.gitExecutable,
     ["--no-replace-objects", "--git-dir", input.repository, ...arguments_],
-    { ...gitOptions, signal: input.signal });
+    { ...gitOptions, maxBuffer, signal: input.signal });
   await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
   return result;
 }

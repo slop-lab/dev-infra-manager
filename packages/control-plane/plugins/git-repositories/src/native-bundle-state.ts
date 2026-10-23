@@ -41,11 +41,13 @@ export type NativeGitBundleState = {
   readonly database: string;
   readonly stateFormat: 12;
   readonly owner: StorageOwner;
+  readonly ownedRefs?: import("./extension-refs.js").RepositoryOwnedRefs;
 };
 
 export async function initializeNativeGitBundleState(
   stateDirectory: string,
-  expectedGenerationId?: string
+  expectedGenerationId?: string,
+  ownedRefs?: import("./extension-refs.js").RepositoryOwnedRefs
 ): Promise<NativeGitBundleState> {
   await ensureStateDirectory(stateDirectory);
   const owner = await acquireStorageOwner(stateDirectory);
@@ -72,6 +74,7 @@ export async function initializeNativeGitBundleState(
     const state: NativeGitBundleState = {
       database,
       stateFormat: 12,
+      ...(ownedRefs === undefined ? {} : { ownedRefs }),
       owner: {
         async release() {
           if (!activeStates.delete(state)) return;

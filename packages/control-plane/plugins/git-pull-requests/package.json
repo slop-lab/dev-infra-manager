@@ -1,0 +1,56 @@
+{
+  "name": "@slop-lab/dim-control-plane-plugin-git-pull-requests",
+  "version": "0.10.0",
+  "description": "Repository pull requests and discussions for DIM Git",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "dim-source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./plugin-api": {
+      "dim-source": {
+        "types": "./src/plugin-api.ts",
+        "default": "./src/plugin-api.ts"
+      },
+      "types": "./dist/plugin-api.d.ts",
+      "import": "./dist/plugin-api.js",
+      "default": "./dist/plugin-api.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@slop-lab/git-pull-requests": "workspace:0.10.0",
+    "zod": "4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3",
+    "@slop-lab/dim-control-plane-core": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-review": "workspace:0.10.0"
+  },
+  "peerDependencies": {
+    "@slop-lab/dim-control-plane-core": "0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-repositories": "0.10.0",
+    "@slop-lab/dim-control-plane-plugin-git-review": "0.10.0"
+  }
+}

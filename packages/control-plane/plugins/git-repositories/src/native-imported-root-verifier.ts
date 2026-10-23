@@ -71,6 +71,7 @@ export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput)
     gitIdentity: input.gitIdentity,
     repository,
     protectedRef: currentHead.protectedRef,
+    extensionRefs: await input.state.ownedRefs?.({ projectId: input.projectId, repositoryId: input.repositoryId }) ?? [],
     authoritativeHeads: readNativeRepositoryHeadsFromDatabase(input.state.database, imported.projectId, imported.repositoryId),
     importedCommit: imported.expectedCommit,
     importedTree: imported.resolvedTree,

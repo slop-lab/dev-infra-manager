@@ -51,7 +51,8 @@
     "yaml": "2.8.3",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0",
     "@slop-lab/dim-service-client-native-git": "workspace:0.10.0",
-    "@slop-lab/dim-contracts-operations": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-operations": "workspace:0.10.0",
+    "@slop-lab/git-pull-requests": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-host-core": "0.10.0"

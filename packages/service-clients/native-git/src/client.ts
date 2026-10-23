@@ -1,3 +1,4 @@
+import { repositoryFeatureOperations, repositoryFeatureRequest } from "./repository-features.js";
 import { randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -11,28 +12,38 @@ import { reviewDto, type ReviewDto } from "./dto.js";
 const MAX_NATIVE_RESPONSE_BYTES = 8 * 1024 * 1024;
 const identitySchema = z.object({
   schemaVersion: z.literal(1), serviceId: z.literal("native-main"), role: z.literal("human-reviewer"),
-  reviewerId: z.string(), generationId: z.string().regex(/^[0-9a-f]{64}$/)
+  reviewerId: z.string(), generationId: z.string().regex(/^[0-9a-f]{64}$/), features: z.array(z.string().max(128)).max(64).optional()
 }).strict();
 export const preparedBranchMergeSchema = z.object({ schemaVersion: z.literal(1), outcome: z.enum(["proposed", "unchanged", "conflict"]),
   sourceRef: z.string().startsWith("refs/heads/"), targetRef: z.string().startsWith("refs/heads/"),
   sourceCommit: z.string().regex(/^[a-f0-9]{40,64}$/), expectedProtectedHead: z.string().regex(/^[a-f0-9]{40,64}$/),
   proposalRef: z.string().startsWith("refs/heads/proposals/").optional(), candidateCommit: z.string().regex(/^[a-f0-9]{40,64}$/).optional(), reviewId: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 
-type NativeRequest = { readonly method: "GET" | "POST"; readonly path: string; readonly body?: unknown };
+type NativeRequest = { readonly method: "GET" | "POST" | "PATCH"; readonly path: string; readonly body?: unknown };
 
 export class NativeGitClient {
   private generationId: string | undefined;
+  private availableFeatures: readonly string[] = [];
+  get features(): readonly string[] { return this.availableFeatures; }
   constructor(private readonly config: NativeConfig) {}
 
   async attest(): Promise<void> {
     const identity = identitySchema.parse(await this.request({ method: "GET", path: "/v1/human-reviewer-identity" }));
     if (identity.reviewerId !== this.config.reviewerId || identity.generationId !== this.config.generationId) throw new NativeGitClientError("native Git human reviewer identity or control-plane generation does not match connection");
     this.generationId = identity.generationId;
+    this.availableFeatures = identity.features ?? [];
     if (this.config.promoter !== undefined) {
       const promoter = z.object({ schemaVersion: z.literal(1), serviceId: z.literal("native-main"), role: z.literal("host-promoter"), hostId: z.string(), generationId: z.string() }).strict()
         .parse(await this.request({ method: "GET", path: "/v1/host-promoter-identity" }, this.config.promoter));
       if (promoter.generationId !== identity.generationId || promoter.hostId !== this.config.promoter.hostId) throw new NativeGitClientError("promoter identity or generation conflicts");
     }
+  }
+
+  async invokeRepositoryFeature(name: string, input: unknown): Promise<unknown> {
+    const operation = repositoryFeatureOperations.find(operation => operation.name === name);
+    if (!operation) throw new NativeGitClientError("Unknown Git repository operation");
+    const parsed = z.record(z.string(), z.unknown()).parse(operation.parseInput(input));
+    return operation.parseOutput(await this.request(repositoryFeatureRequest(name, parsed)));
   }
 
   async listReviews(projectId: string, repositoryId: string) {

@@ -191,6 +191,22 @@ results, never raw connection files. Feature panels own their interactions and
 presentation; the shared operation contract does not generate a universal form
 or turn CLI arguments into a Web API.
 
+## Reusable Git presentation
+
+The Native Git panel uses the DIM-independent `@slop-lab/react-git-diff` and
+`@slop-lab/react-git-pull-requests` packages. The Web adapter owns service calls,
+selection fencing, permission checks and approval confirmations. The components
+receive immutable snapshots and explicit callbacks, so another Git service can
+reuse them without installing DIM. Optional file-toolbar, line-gutter and
+below-line render slots support focused extensions without a general UI registry.
+Blame and discussion are separate server plugins and optional UI callbacks.
+
+A Web plugin can bundle React inside its browser asset and use the portable DOM
+mount helpers. It disposes the mounted root with its panel. This does not make
+React a requirement for the Web core or other plugins. Serve optional component
+styles as declared external assets; the Native Git adapter never enables inline
+styles or relaxes the console CSP. See [the model and flow](../specs/git-pull-requests.md).
+
 ## Controller discovery
 
 A reviewed plugin can implement `autoConnect(context: WebPluginContext)` in

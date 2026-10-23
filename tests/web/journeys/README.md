@@ -16,6 +16,12 @@ browser revision pinned by the existing `playwright-core` dependency and checks
 its version; `DIM_CHROMIUM_VERSION` enables that check locally too. A missing
 browser fails the command instead of silently skipping the journey.
 
+With the same browser selection, `pnpm --dir tests run test:git-tools-web`
+checks the portable React panel without a DIM adapter. It covers opaque service
+IDs, draft/anchor reset and inputs during a pending comment. The Web workflow
+runs it alongside the service journeys; its screen assertions are replaceable
+when the component interaction changes.
+
 ## Responsibilities
 
 - `review.ts` describes the user journey and its observable outcomes. It has no
@@ -82,3 +88,18 @@ artifacts even on failure.
 Timings are diagnostic samples, not a latency benchmark or a small fixed-time
 performance contract. Use bounded waits for observable results, not sleeps or
 blanket retries that hide failed user actions.
+
+## Pull requests and changing revisions
+
+`pull-requests.ts` exercises project creation and import, reviewer access, PR
+creation, structured diff, general and inline discussion, independent line
+attribution, approval, and merge. A second workspace push makes the old inline
+comment outdated and invalidates the earlier approval before the final merge.
+The journey verifies the actual protected `main` ref, including that the stale
+approval did not move it.
+
+Its replaceable screen adapter is `native-git/pull-request-ui.ts`. The scenario
+records user outcomes and uses the same disposable real-service environment as
+the review journey; it does not keep today's component tree or CSS as a contract.
+Both journeys run through `test:web-journeys` in normal CI. For a targeted local
+run, append `pull-requests` or `review` to that command.

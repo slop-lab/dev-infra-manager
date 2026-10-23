@@ -3,6 +3,7 @@ import { UserError } from "@slop-lab/dim-host-core";
 import { print, printList, type JsonFlags } from "@slop-lab/dim-host-core/controller/cli";
 import { nativePendingProjectView, selectNativeProject } from "./native-project-selector.js";
 import { registerNativeProjectBootstrapCommand } from "./native-project-bootstrap-command.js";
+import { registerPullRequestCommands } from "./pull-request-commands.js";
 import { registerProjectConsoleCommands } from "./project-console-commands.js";
 import { registerGitSyncCommands } from "./git-sync-commands.js";
 import { registerNativeProjectManifestCommand } from "./native-project-manifest-command.js";
@@ -11,6 +12,7 @@ import { registerRepositoryPolicyCommands } from "./repository-policy-commands.j
 export function registerProjectCommands(program: Command): void {
   const project = program.command("project").description("Manage native Projects and their independent repositories");
   registerProjectConsoleCommands(project);
+  registerPullRequestCommands(project);
   project.command("create").argument("<project>")
     .option("--project-id <id>", "stable native authority Project ID; defaults to its local name")
     .option("--json", "print machine-readable JSON")

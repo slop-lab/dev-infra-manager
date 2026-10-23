@@ -1,3 +1,7 @@
+import { controlPlanePlugin as gitDiff } from "@slop-lab/dim-control-plane-plugin-git-diff";
+import { controlPlanePlugin as pullRequests } from "@slop-lab/dim-control-plane-plugin-git-pull-requests";
+import { controlPlanePlugin as discussions } from "@slop-lab/dim-control-plane-plugin-git-discussions";
+import { controlPlanePlugin as blame } from "@slop-lab/dim-control-plane-plugin-git-blame";
 import { join } from "node:path";
 import type { ControlPlanePluginEntry } from "@slop-lab/dim-control-plane-core";
 import { controlPlanePlugin as repositories } from "@slop-lab/dim-control-plane-plugin-git-repositories";
@@ -20,6 +24,7 @@ export function managedGitPluginEntries(input: {
   const config = parseManagedGitServiceConfig(input.config);
   return [
     { plugin: workflows, config: {} },
+    ...[gitDiff, pullRequests, discussions, blame].map(plugin => ({plugin,config:{}})),
     { plugin: review, config: { humanReviewers: config.humanReviewers } },
     { plugin: gitCi, config: config.ci },
     { plugin: merge, config: { hostPromoters: config.hostPromoters } },

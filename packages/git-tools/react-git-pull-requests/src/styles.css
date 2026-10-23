@@ -1,0 +1,5 @@
+.git-pr { min-width: 0; }
+.git-pr__field { display: block; margin-bottom: 8px; }
+.git-pr__input { display: block; width: 100%; box-sizing: border-box; }
+.git-pr__comment { border-left: 2px solid #d0d7de; padding: 4px 12px; margin: 8px 0; }
+.git-pr__text { white-space: pre-wrap; overflow-wrap: anywhere; }

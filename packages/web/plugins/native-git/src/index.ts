@@ -74,13 +74,13 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
       const parsed = operation.parseInput(selected.value);
       const generation = generations.get(selected.controllerId);
       if (!generation) throw new Error("Controller serving generation has not been attested");
-      return operation.parseOutput(await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : /^(?:reviews|merges|sync)\./.test(name) ? { timeoutMilliseconds: 120_000 } : undefined));
+      return operation.parseOutput(await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : /^(?:reviews|merges|sync|pull-requests)\./.test(name) ? { timeoutMilliseconds: 120_000 } : undefined));
     }
   };
 }
 export const webPlugin: WebPlugin = {
   id: "native-git", title: "Git review", description: "Controller projects, repository proposals, review evidence and protected promotion", operations,
-  assets: { "panel.js": new URL("./assets/panel.js", import.meta.url), "navigation.js": new URL("./assets/navigation.js", import.meta.url), "management.js": new URL("./assets/management.js", import.meta.url), "manifest.js": new URL("./assets/manifest.js", import.meta.url) }, browserEntry: "panel.js",
+  assets: { "git-diff.css": new URL(import.meta.url.endsWith(".ts") ? "../dist/assets/git-diff.css" : "./assets/git-diff.css", import.meta.url), "pull-requests.css": new URL(import.meta.url.endsWith(".ts") ? "../dist/assets/pull-requests.css" : "./assets/pull-requests.css", import.meta.url), "panel.js": new URL("./assets/panel.js", import.meta.url), "navigation.js": new URL("./assets/navigation.js", import.meta.url), "management.js": new URL("./assets/management.js", import.meta.url), "manifest.js": new URL("./assets/manifest.js", import.meta.url), "pull-requests.js": new URL(import.meta.url.endsWith(".ts") ? "../dist/assets/pull-requests.js" : "./assets/pull-requests.js", import.meta.url) }, browserEntry: "panel.js",
   autoConnect: automatic,
   async create(input) {
     const config = configSchema.parse(input), projects = config.projects.map((project) => ({ ...project, name: project.name ?? project.projectId }));

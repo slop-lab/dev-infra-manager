@@ -1,0 +1,19 @@
+.git-diff { min-width: 0; }
+.git-diff__file { margin: 0 0 16px; border: 1px solid #d0d7de; border-radius: 6px; overflow: hidden; }
+.git-diff__file-header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px; background: #f6f8fa; color: #1f2328; }
+.git-diff__path { overflow-wrap: anywhere; }
+.git-diff__metadata { padding: 0 10px; }
+.git-diff__scroll { overflow-x: auto; }
+.git-diff__table { width: 100%; border-collapse: collapse; font: 13px/1.6 ui-monospace, monospace; }
+.git-diff__number-cell { width: 1%; text-align: right; user-select: none; color: #57606a; vertical-align: top; }
+.git-diff__line-number { border: 0; background: transparent; color: inherit; font: inherit; padding: 0 6px; }
+button.git-diff__line-number { cursor: pointer; }
+.git-diff__line { color: #1f2328; }
+.git-diff__line--addition { background: #dafbe1; }
+.git-diff__line--deletion { background: #ffebe9; }
+.git-diff__gutter { width: 1%; vertical-align: top; }
+.git-diff__source { white-space: pre; tab-size: 4; padding: 0 8px; vertical-align: top; }
+.git-diff__marker { user-select: none; }
+.git-diff__no-newline { display: block; color: #57606a; }
+.git-diff__below-line { padding: 8px; white-space: normal; font-family: system-ui, sans-serif; }
+.git-diff__hunk { background: #ddf4ff; color: #0969da; padding: 4px 8px; white-space: pre; }

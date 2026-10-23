@@ -1,0 +1,20 @@
+import { afterEach, expect, it } from "vitest";
+import { nativeBundleReviewFixture, createBundleReview } from "../git-review/reviewFixture.js";
+import { cleanupFinalizeFixtures, generationId, humanReviewerAuthorization, foreignHumanReviewer } from "../git-repositories/nativeRootImportFinalizeFixture.js";
+afterEach(cleanupFinalizeFixtures);
+it("attributes an exact committed line with independent repository authorization", { timeout: 30_000 }, async () => {
+  const fixture = await nativeBundleReviewFixture("git-blame-endpoint");
+  const envelope = await createBundleReview(fixture.service);
+  const origin = fixture.service.origin;
+  const call = (path = "README.md", line = 1, authorization = humanReviewerAuthorization, generation = generationId, commit = envelope.review.candidateCommit) => fetch(`${origin}/v1/projects/project-a/repositories/root/blame`, { method: "POST", headers: { authorization, "x-dim-generation-id": generation, "content-type": "application/json" }, body: JSON.stringify({ commit, path, line }) });
+  const response = await call(); expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ commit: envelope.review.expectedProtectedHead, path: "README.md", line: 1, author: expect.any(String), summary: expect.any(String) });
+  expect((await call("README.md", 1000)).status).toBe(422);
+  expect((await call("candidate.bin")).status).toBe(422);
+  expect((await call("../README.md")).status).toBe(400);
+  expect((await call("README.md", 1, "invalid")).status).toBe(401);
+  const foreign = `Basic ${Buffer.from(`${foreignHumanReviewer.username}:${foreignHumanReviewer.password}`).toString("base64")}`;
+  expect((await call("README.md", 1, foreign)).status).toBe(403);
+  expect((await call("README.md", 1, humanReviewerAuthorization, "old")).status).toBe(409);
+  expect((await call("README.md", 1, humanReviewerAuthorization, generationId, "HEAD")).status).toBe(400);
+});

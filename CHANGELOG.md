@@ -55,6 +55,15 @@ is implied by these source changes.
   repository policy file and the separate `dim-code-review` and
   `dim-merge-policy` operator clients.
 
+- Add pull requests with immutable revisions, structured diffs, general and
+  line comments, optional blame, approval and protected merge in Web and host
+  plugin commands. Keep diff, PR, discussion and blame services separately
+  composable. New source pushes retain old discussions while invalidating stale
+  approval. Publish portable Git models and controlled React components without
+  DIM dependencies; DIM adapters retain authentication, storage and promotion
+  authority. Verify the complete flow in a disposable browser journey and
+  standalone package installations.
+
 - Manage independent Git repositories in one Project with separate imports,
   proposal credentials, reviews and protected-ref promotion. Select workspace
   checkouts and their default directory; CI binds allowed repository inputs to

@@ -5,6 +5,14 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 export const packageDirectories = [
+  "packages/git-tools/diff/dist",
+  "packages/git-tools/react-diff/dist",
+  "packages/git-tools/pull-requests/dist",
+  "packages/git-tools/react-git-pull-requests/dist",
+  "packages/control-plane/plugins/git-diff/dist",
+  "packages/control-plane/plugins/git-pull-requests/dist",
+  "packages/control-plane/plugins/git-discussions/dist",
+  "packages/control-plane/plugins/git-blame/dist",
   "packages/host/core/dist",
   "packages/control-plane/core/dist",
   "packages/contracts/ci/dist",
@@ -93,7 +101,7 @@ export function packLocalPackages(workspaceRoot: string, outputDirectory: string
     for (const [name, version] of Object.entries(dependencies)) {
       const dependency = byName.get(name);
       if (!dependency) {
-        if (name.startsWith("@slop-lab/dim-")) throw new Error(`bundle is missing required DIM package '${name}' for '${metadata.name}'`);
+        if (name.startsWith("@slop-lab/")) throw new Error(`bundle is missing required DIM package '${name}' for '${metadata.name}'`);
         continue;
       }
       if (version !== dependency.version) throw new Error(`bundle dependency '${metadata.name}' requires '${name}@${version}', but contains '${dependency.version}'`);
