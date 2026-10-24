@@ -12,7 +12,7 @@ async function fixture() {
   const reviewer = join(f.root, "reviewer.json"), promoter = join(f.root, "promoter.json");
   await writeFile(reviewer, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", baseUrl: f.service.origin, generationId, ...humanReviewer }), { mode: 0o600 });
   await writeFile(promoter, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", endpoint: f.service.origin, generationId, role: "host-promoter", hostId: hostPromoter.hostId, credential: { username: hostPromoter.username, password: hostPromoter.password } }), { mode: 0o600 });
-  return { ...f, reviewer, promoter, env: { ...process.env, DIM_MANAGED_STATE_ROOT: f.state, DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: f.hostFile } };
+  return { ...f, reviewer, promoter, env: { ...process.env, DIM_MANAGED_STATE_ROOT: f.state, DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: f.hostFile, DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE: f.importerConnectionFile } };
 }
 it("discovers ready multi-repository projects dynamically through the CLI without exposing host role connections", async () => {
   const f = await fixture(); await f.importRepository("public");
@@ -29,7 +29,7 @@ it("discovers ready multi-repository projects dynamically through the CLI withou
   expect(description.operations.some((op) => op.name === "reviews.promote")).toBe(true);
   expect(description.operations.some((op) => op.name.startsWith("sync."))).toBe(false);
   for (const secret of [humanReviewer.password, hostPromoter.password, f.reviewer, f.promoter, "workspaceWriteIssuer", "credential"]) expect(JSON.stringify(description)).not.toContain(secret);
-  vi.stubEnv("DIM_MANAGED_STATE_ROOT", f.state); vi.stubEnv("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", f.hostFile);
+  vi.stubEnv("DIM_MANAGED_STATE_ROOT", f.state); vi.stubEnv("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", f.hostFile); vi.stubEnv("DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE", f.importerConnectionFile);
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   await runNativeGitCli(["project", "console", "describe", "--json"]);
   expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toEqual(description);

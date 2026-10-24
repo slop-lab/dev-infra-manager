@@ -10,7 +10,6 @@ if ! dim_is_runtime_backend "$backend"; then
   echo "usage: $0 [$(dim_runtime_backend_choices)]" >&2
   exit 2
 fi
-PNPM_VERSION="${PNPM_VERSION:-10.13.1}"
 JUST_BIN="${JUST_BIN:-}"
 DEV_INFRA_MISE_ACTIVE="${DEV_INFRA_MISE_ACTIVE:-0}"
 
@@ -21,35 +20,25 @@ if [[ "$DEV_INFRA_MISE_ACTIVE" != "1" ]] && command -v mise >/dev/null 2>&1; the
   exec mise exec -- env \
     DEV_INFRA_MISE_ACTIVE=1 \
     JUST_BIN="$JUST_BIN" \
-    PNPM_VERSION="$PNPM_VERSION" \
     bash "$0" "$backend"
 fi
 
-sudo apt-get update
-
 if [[ "$DEV_INFRA_MISE_ACTIVE" == "1" ]]; then
-  sudo apt-get install -y git
+  sudo apt-get update
+  sudo apt-get install -y git openssh-client
+  [[ -n "$JUST_BIN" ]] || JUST_BIN="$(command -v just)"
 else
-  sudo apt-get install -y git nodejs npm
-fi
-
-if [[ -z "$JUST_BIN" ]] && command -v just >/dev/null 2>&1; then
-  JUST_BIN="$(command -v just)"
-fi
-
-if [[ -z "$JUST_BIN" ]]; then
-  sudo apt-get install -y just
-  JUST_BIN="$(command -v just)"
+  # Ubuntu 24.04's distro Node.js is outside DIM's supported toolchain.
+  # Reuse the reviewed source-tool installer rather than a global npm install.
+  source "$script_dir/../lib/bootstrap-ubuntu-pins.bash"
+  sudo /usr/bin/bash "$script_dir/lib/install-source-tools-ubuntu.bash"
+  export PATH="$dim_source_tools_root/bin:$dim_node_root/bin:$PATH"
+  JUST_BIN="$dim_source_tools_root/bin/just"
 fi
 
 if [[ ! -x "$JUST_BIN" ]]; then
   echo "just executable is not available: $JUST_BIN" >&2
   exit 1
-fi
-
-if [[ "$DEV_INFRA_MISE_ACTIVE" != "1" ]] && \
-  { ! command -v pnpm >/dev/null 2>&1 || [[ "$(pnpm --version)" != "$PNPM_VERSION" ]]; }; then
-  sudo npm install -g "pnpm@${PNPM_VERSION}"
 fi
 
 bash "${script_dir}/install-host-ubuntu.bash" "$backend"

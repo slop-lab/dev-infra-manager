@@ -25,6 +25,50 @@ describe("Ubuntu VM role bootstrap", () => {
     expect(await readFile(value.log, "utf8")).toBe("");
   });
 
+  it("provisions dependencies without preparing, installing, or activating DIM", async () => {
+    const value = await fixture();
+
+    const result = run(value, [...executeArgs, "--dependencies-only"]);
+
+    expect(result, result.stderr).toMatchObject({ status: 0 });
+    const commands = await readFile(value.log, "utf8");
+    expect(commands).toContain("tools.bash");
+    expect(commands).toContain("host.bash sysbox docker-ce");
+    expect(commands).not.toContain("just ");
+    expect(commands).not.toContain("npm ");
+    expect(result.stdout).toContain("DIM has not been installed");
+    await expect(readFile(resolve(value.home, ".local/bin/dim"))).rejects.toMatchObject({ code: "ENOENT" });
+    const marker = await readFile(resolve(value.home, ".local/state/dim-bootstrap/ubuntu-vm.state"), "utf8");
+    expect(marker).toContain("phase=complete");
+    expect(marker).toContain("installation=dependencies-only");
+  });
+
+  it("binds dependency-only selection across the new-login boundary", async () => {
+    const value = await fixture("operator");
+    const args = [...executeArgs, "--dependencies-only"];
+    expect(run(value, args).status).toBe(3);
+
+    const changed = run(value, executeArgs, { DIM_TEST_GROUPS: "operator docker" });
+    expect(changed.status).toBe(2);
+    expect(changed.stderr).toContain("installation mode");
+    const resumed = run(value, args, { DIM_TEST_GROUPS: "operator docker" });
+    expect(resumed, resumed.stderr).toMatchObject({ status: 0 });
+    const commands = await readFile(value.log, "utf8");
+    expect(commands.match(/^host\.bash/gm)).toHaveLength(1);
+    expect(commands).not.toContain("just ");
+  });
+
+  it("reports the selected installation scope in a read-only plan", async () => {
+    const value = await fixture();
+    const full = run(value, ["--role", "ordinary", "--print-plan"]);
+    const dependencies = run(value, ["--role", "ordinary", "--dependencies-only", "--print-plan"]);
+
+    expect(full.stdout).toContain("created by install-local");
+    expect(dependencies.stdout).toContain("installation: dependencies-only");
+    expect(dependencies.stdout).toContain("DIM services and private configuration: not-created");
+    expect(await readFile(value.log, "utf8")).toBe("");
+  });
+
   it("rejects a dirty source before invoking privileged helpers", async () => {
     // Given
     const value = await fixture();

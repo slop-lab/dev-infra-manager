@@ -1,5 +1,27 @@
 # Verification profiles
 
+## Existing control-plane host installation
+
+The connection and lifecycle scenarios use temporary state and local HTTP
+services. To additionally exercise real SSH, run:
+
+```bash
+DIM_TEST_EXISTING_CP_SSH=1 pnpm --dir tests exec vitest run \
+  scenarios/harness/localExistingControlPlaneSsh.test.ts
+```
+
+This creates a disposable container running sshd and two HTTP services. It
+verifies authenticated forwarding, rejects an unrelated listener before the
+credential callback, and emulates user-systemd runtime-directory recreation
+after reboot and stale-socket cleanup after a killed SSH process. It uses a
+fake systemd manager to launch the actual unit command; it does not validate
+systemd boot ordering on a fresh VM or modify the operator's services.
+
+`DIM_TEST_INSTALLED_HOST_PLUGINS=/absolute/installed/runtime` additionally
+enables the installed-SDK case in `localExistingControlPlane.test.ts`. It loads
+that package read-only and writes selection and connection files only under
+the fixture's temporary HOME/state. It never reuses installed credentials.
+
 ## Examples in fresh VMs
 
 `.github/workflows/examples.yml` runs the `examples-vm` check on pull requests

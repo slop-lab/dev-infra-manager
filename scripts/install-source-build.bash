@@ -2,14 +2,20 @@
 set -euo pipefail
 
 check_only=0
-if [[ "$#" -eq 1 && "$1" == --check ]]; then
-  check_only=1
-elif [[ "$#" -eq 1 && "$1" == --with-managed ]]; then
-  : # The complete development profile is now the default.
-elif [[ "$#" -ne 0 ]]; then
-  echo "Usage: bash scripts/install-source-build.bash [--with-managed | --check]" >&2
-  exit 2
-fi
+connections=""
+control_plane_ssh=""
+while (($#)); do
+  case "$1" in
+    --check) check_only=1; shift ;;
+    --with-managed) shift ;; # The complete development profile is already the default.
+    --connections) [[ $# -ge 2 && -n "$2" && -z "$connections" ]] || { echo "--connections requires one absolute directory" >&2; exit 2; }; connections="$2"; shift 2 ;;
+    --control-plane-ssh) [[ $# -ge 2 && -n "$2" && -z "$control_plane_ssh" ]] || { echo "--control-plane-ssh requires one SSH target" >&2; exit 2; }; control_plane_ssh="$2"; shift 2 ;;
+    --help|-h) echo "Usage: just install-local [--check] [--connections ABSOLUTE_DIRECTORY [--control-plane-ssh SSH_TARGET]]"; exit 0 ;;
+    *) echo "Unknown install-local argument: $1" >&2; exit 2 ;;
+  esac
+done
+[[ -z "$connections" || "$connections" == /* ]] || { echo "--connections must be absolute" >&2; exit 2; }
+[[ -z "$control_plane_ssh" || -n "$connections" ]] || { echo "--control-plane-ssh requires --connections" >&2; exit 2; }
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 local_root="$repo_root/.local"
@@ -56,6 +62,19 @@ validate_preparation() {
 }
 
 validate_preparation
+connection_args=()
+saved_connection="${XDG_CONFIG_HOME:-$HOME/.config}/dim/existing-control-plane/selection.json"
+if [[ -n "$connections" ]]; then
+  connection_args=(--connections "$connections")
+  [[ -z "$control_plane_ssh" ]] || connection_args+=(--control-plane-ssh "$control_plane_ssh")
+elif [[ -e "$saved_connection" || -L "$saved_connection" ]]; then
+  connection_args=(--saved)
+fi
+if ((${#connection_args[@]})); then
+  # Attest the supplied private roles before changing the facade or installed runtimes.
+  node --import "$repo_root/tests/node_modules/tsx/dist/loader.mjs" --conditions=dim-source --conditions=source \
+    "$repo_root/scripts/install-local-existing-control-plane.ts" --check "${connection_args[@]}"
+fi
 if [[ "$check_only" -eq 1 ]]; then
   exit 0
 fi
@@ -154,16 +173,26 @@ else
   echo "Add $facade_root/node_modules/.bin to PATH to use this matching facade."
 fi
 validate_preparation
-node "$repo_root/scripts/install-local-profile.ts" "$package_root" "$facade"
-DIM_LOCAL_INSTALLER="$facade" node "$repo_root/scripts/install-local-control-plane.ts" "$package_root"
-# This invocation selected new local connections. Do not pin restarted services
-# to stale generation files inherited from an older operator env.sh.
+# Explicit installation selection takes precedence over connections inherited
+# from an older operator shell, including during workspace broker reconnection.
 unset DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE DIM_NATIVE_GIT_SYNC_CONNECTION_FILE
+if ((${#connection_args[@]})); then
+  node "$repo_root/scripts/install-local-profile.ts" "$package_root" "$facade" host
+  node --import "$repo_root/tests/node_modules/tsx/dist/loader.mjs" --conditions=dim-source --conditions=source \
+    "$repo_root/scripts/install-local-existing-control-plane.ts" "${connection_args[@]}"
+else
+  node "$repo_root/scripts/install-local-profile.ts" "$package_root" "$facade"
+  DIM_LOCAL_INSTALLER="$facade" node "$repo_root/scripts/install-local-control-plane.ts" "$package_root"
+fi
 echo "[host] install Web UI package bundle"
 node "$repo_root/scripts/install-local-web.ts" "$package_root"
-node "$repo_root/scripts/install-local-llm-operator.ts" "$package_root"
+if ((${#connection_args[@]} == 0)); then
+  node "$repo_root/scripts/install-local-llm-operator.ts" "$package_root"
+fi
 node "$repo_root/scripts/install-local-llm-gateway.ts" "$package_root"
-node "$repo_root/scripts/install-local-shared-ingress.ts" "$package_root"
+if ((${#connection_args[@]} == 0)); then
+  node "$repo_root/scripts/install-local-shared-ingress.ts" "$package_root"
+fi
 "${dim_command[@]}" controller restart
 node "$repo_root/scripts/configure-local-web.ts"
 echo "[host] local package bundle and matching installer installed"

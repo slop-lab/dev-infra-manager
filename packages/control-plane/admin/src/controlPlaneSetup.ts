@@ -91,7 +91,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
 
 /** Bind client credentials to the generation attested by the live deployed service. */
 export async function connectControlPlane(directoryInput: string, options: {
-  readonly endpoint?: string; readonly executionEndpoint?: string; readonly outputDirectory?: string; readonly executionWorkerStateDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
+  readonly hostId?: string; readonly endpoint?: string; readonly executionEndpoint?: string; readonly outputDirectory?: string; readonly executionWorkerStateDirectory?: string; readonly client?: NativeGitAdmissionHttpClient; readonly signal?: AbortSignal;
 } = {}): Promise<{ directory: string; generationId: string; hostId: string; executionWorkerCount: number; workerConfigFile?: string }> {
   const directory = path.resolve(directoryInput);
   const native = parseManagedGitServiceConfig(await privateJson(path.join(directory, "native-git.json")));
@@ -100,7 +100,7 @@ export async function connectControlPlane(directoryInput: string, options: {
   if (publish?.host !== "127.0.0.1" || typeof publish.port !== "number") throw new UserError("prepared control-plane loopback endpoint is invalid");
   const endpoint = options.endpoint ?? `http://127.0.0.1:${port(publish.port)}`;
   // Existing host clients deliberately permit only loopback HTTP; use SSH forwarding for a remote service.
-  const importer = native.projectRootImporters[0];
+  const importer = options.hostId === undefined ? native.projectRootImporters[0] : native.projectRootImporters.find(role => role.hostId === options.hostId);
   if (importer === undefined) throw new UserError("prepared service has no root importer");
   const hostId = importer.hostId;
   const selected = (roles: readonly (Credential & { hostId: string })[]) => {

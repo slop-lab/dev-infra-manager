@@ -24,6 +24,7 @@ fresh_acknowledged=0
 print_plan=0
 cache_catalog=""
 cache_catalog_sha256=absent
+installation_mode=complete
 
 usage() {
   cat <<'EOF'
@@ -38,13 +39,15 @@ Options:
   --source-sha SHA            Exact reviewed, clean source commit to build.
   --expected-version VERSION  Required package version (default: 0.10.0).
   --acknowledge-fresh-vm      Confirm this disposable VM has no workloads/state to adopt.
+  --dependencies-only         Provision and verify dependencies without installing DIM.
   --print-plan                Print a read-only preview; does not validate the candidate.
   --cache-catalog FILE        Root-owned public cache URL catalog for a disposable VM.
   --help                      Show this help without changing the host.
 
 Execution supports Ubuntu 24.04 amd64 only and must run as a normal sudo operator.
-It installs pinned Docker CE, Sysbox, Node.js, pnpm, Just, and the reviewed source.
-It never creates secrets, native service JSON, worker units, lingering, tags, or releases.
+It installs pinned Docker CE, Sysbox, Node.js, pnpm, Just, and SSH tools.
+By default it also builds and installs DIM, including a local control plane.
+Use --dependencies-only before connecting this host to an existing control plane.
 EOF
 }
 
@@ -56,6 +59,7 @@ while (($#)); do
     --acknowledge-fresh-vm) fresh_acknowledged=1; shift ;;
     --cache-catalog) [[ $# -ge 2 ]] || { echo "--cache-catalog requires a file" >&2; exit 2; }; cache_catalog="$2"; shift 2 ;;
     --print-plan) print_plan=1; shift ;;
+    --dependencies-only) installation_mode=dependencies-only; shift ;;
     --help|-h) usage; exit 0 ;;
     *) printf 'unknown bootstrap argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -76,9 +80,13 @@ source-preview-status: $preview_status
 candidate-validation: not-performed
 docker: 29.1.4 CE with containerd image store, Buildx, Compose v2, Sysbox 0.7.0
 source-tools: Node.js 24.19.0, pnpm 10.13.1, Just 1.43.1
-runtime-services: not-started
-secrets-and-native-config: not-created
+installation: $installation_mode
 EOF
+  if [[ "$installation_mode" == complete ]]; then
+    echo "DIM services and private configuration: created by install-local"
+  else
+    echo "DIM services and private configuration: not-created"
+  fi
   [[ "$role" == control-qemu ]] && echo "KVM acceleration: required; TCG fallback: forbidden"
   exit 0
 fi
@@ -182,6 +190,17 @@ fi
 
 export PATH="$dim_source_tools_root/bin:$dim_node_root/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export DIM_SOURCE_ROOT_COMMIT="$source_sha"
+if [[ "$installation_mode" == dependencies-only ]]; then
+  dim_write_marker complete "$(dim_docker_config_identity)"
+  cat <<EOF
+Dependencies verified for role $role; DIM has not been installed.
+For the next commands, add the pinned source tools to your shell PATH:
+  export PATH="$dim_source_tools_root/bin:$dim_node_root/bin:\$PATH"
+Then follow docs/development/bootstrap-ubuntu-vm.md to prepare and install DIM.
+Use install-local --connections for an existing control plane.
+EOF
+  exit 0
+fi
 cd "$repo_root"
 just prepare-local
 bundle_version="$(bash "$repo_root/scripts/local-package-version.bash" "$repo_root/.local/dim-packages")"
@@ -197,5 +216,6 @@ Bootstrap complete for role $role.
 Candidate facade: $HOME/.local/bin/dim
 Pinned Just: /usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin/just
 Pinned pnpm: /usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin/pnpm
-No secrets, native service configuration, worker units, or lingering were created.
+DIM and its local control-plane services were installed by install-local.
+For a host connected to an existing control plane, use --dependencies-only first.
 EOF

@@ -11,6 +11,7 @@ import { ownedWebUnit, webUnitPath } from "./web-unit.ts";
 import { ownedLlmGatewayUnit, llmGatewayUnitPath } from "./llm-gateway-unit.ts";
 import { ownedLlmOperatorUnit, llmOperatorUnitPath } from "./llm-operator-unit.ts";
 import { ownedSharedIngressUnit, sharedIngressUnitPath } from "./shared-ingress-unit.ts";
+import { ownedExistingControlPlaneUnit, existingControlPlaneUnitPath } from "./existing-control-plane-unit.ts";
 import { planProcesses, stopProcesses, type OwnedProcess } from "./processes.ts";
 import { inside, removalDirectories, validatePaths } from "./paths.ts";
 import { planMise, removeMise } from "./mise.ts";
@@ -33,6 +34,7 @@ export interface RemovalPlan {
   readonly llmOperatorUnit: boolean;
   readonly llmGatewayUnit: boolean;
   readonly sharedIngressUnit: boolean;
+  readonly existingControlPlaneUnit: boolean;
   readonly bin: boolean;
 }
 const journal = (paths: RemovalPaths) => join(paths.data, "local-uninstall.json");
@@ -74,7 +76,7 @@ export async function createRemovalPlan(paths: RemovalPaths, run: Command = comm
   await validatePaths(paths);
   const file = journal(paths), prior = await readJson(file);
   if (prior !== undefined && ((await metadata(file))!.mode & 0o777) !== 0o600) throw new Error("unsafe local uninstall journal permissions");
-  const active = await planProcesses(paths), unit = await ownedControllerUnit(paths), webUnit = await ownedWebUnit(paths), llmOperatorUnit = await ownedLlmOperatorUnit(paths), llmGatewayUnit = await ownedLlmGatewayUnit(paths), sharedIngressUnit = await ownedSharedIngressUnit(paths), bin = await managedBin(paths);
+  const active = await planProcesses(paths), unit = await ownedControllerUnit(paths), webUnit = await ownedWebUnit(paths), llmOperatorUnit = await ownedLlmOperatorUnit(paths), llmGatewayUnit = await ownedLlmGatewayUnit(paths), sharedIngressUnit = await ownedSharedIngressUnit(paths), existingControlPlaneUnit = await ownedExistingControlPlaneUnit(paths), bin = await managedBin(paths);
   if (prior !== undefined) {
     const previous = restoredPlan(prior, paths);
     if (previous.keepCacheData !== (options.keepCacheData === true)) throw new Error("retry uninstall with the same --keep-cache-data selection");
@@ -82,7 +84,7 @@ export async function createRemovalPlan(paths: RemovalPaths, run: Command = comm
     // IDs, labels and creation times are rechecked before any further deletion.
     for (const resource of previous.docker) await inspectDocker(run, resource.claim);
     for (const vm of previous.vms) await inspectVm(run, vm);
-    return { ...previous, processes: active.processes, unit, webUnit, llmOperatorUnit, llmGatewayUnit, sharedIngressUnit, bin, mise: await planMise(run, env) };
+    return { ...previous, processes: active.processes, unit, webUnit, llmOperatorUnit, llmGatewayUnit, sharedIngressUnit, existingControlPlaneUnit, bin, mise: await planMise(run, env) };
   }
   const serviceConfigs = active.processes.flatMap((process) => process.configFile === undefined ? [] : [process.configFile]);
   const preliminaryPersistence = await retainedPersistentData(paths, serviceConfigs);
@@ -94,17 +96,18 @@ export async function createRemovalPlan(paths: RemovalPaths, run: Command = comm
   const docker = await planDocker(run, claims), keepCacheData = options.keepCacheData === true;
   const persistent = await retainedPersistentData(paths, serviceConfigs, docker);
   const retainedCache = keepCacheData ? await retainedCacheData(paths, docker) : { volumes: [], files: [] };
-  return { schemaVersion: 1, paths, keepCacheData, retainedCache, persistent, docker, vms, mise: await planMise(run, env), processes: active.processes, unit, webUnit, llmOperatorUnit, llmGatewayUnit, sharedIngressUnit, bin };
+  return { schemaVersion: 1, paths, keepCacheData, retainedCache, persistent, docker, vms, mise: await planMise(run, env), processes: active.processes, unit, webUnit, llmOperatorUnit, llmGatewayUnit, sharedIngressUnit, existingControlPlaneUnit, bin };
 }
 export async function executeRemoval(plan: RemovalPlan, run: Command = command): Promise<void> {
   const paths = plan.paths;
   await validatePaths(paths);
-  if (plan.unit !== await ownedControllerUnit(paths) || plan.webUnit !== await ownedWebUnit(paths) || plan.llmOperatorUnit !== await ownedLlmOperatorUnit(paths) || plan.llmGatewayUnit !== await ownedLlmGatewayUnit(paths) || plan.sharedIngressUnit !== await ownedSharedIngressUnit(paths) || plan.bin !== await managedBin(paths)) throw new Error("installation changed after planning");
+  if (plan.unit !== await ownedControllerUnit(paths) || plan.webUnit !== await ownedWebUnit(paths) || plan.llmOperatorUnit !== await ownedLlmOperatorUnit(paths) || plan.llmGatewayUnit !== await ownedLlmGatewayUnit(paths) || plan.sharedIngressUnit !== await ownedSharedIngressUnit(paths) || plan.existingControlPlaneUnit !== await ownedExistingControlPlaneUnit(paths) || plan.bin !== await managedBin(paths)) throw new Error("installation changed after planning");
   await mkdir(paths.data, { recursive: true, mode: 0o700 });
   const file = journal(paths), stage = `${file}.tmp-${process.pid}`;
   await writeFile(stage, JSON.stringify(plan), { mode: 0o600, flag: "wx" });
   await rename(stage, file);
   await stopControllerUnit(run, plan.unit);
+  if (plan.existingControlPlaneUnit) await checked(run, "systemctl", ["--user", "disable", "--now", "dim-existing-control-plane-tunnel.service"]);
   if (plan.sharedIngressUnit) await checked(run, "systemctl", ["--user", "disable", "--now", "dim-shared-ingress.service"]);
   if (plan.webUnit) await checked(run, "systemctl", ["--user", "disable", "--now", "dim-web.service"]);
   if (plan.llmGatewayUnit) await checked(run, "systemctl", ["--user", "disable", "--now", "dim-llm-router-gateway.service"]);
@@ -117,11 +120,12 @@ export async function executeRemoval(plan: RemovalPlan, run: Command = command):
   // Retain runtime and its ownership records until all external cleanup succeeds.
   await removeMise(run, plan.mise);
   if (plan.unit) await rm(paths.unit);
+  if (plan.existingControlPlaneUnit) await rm(existingControlPlaneUnitPath(paths));
   if (plan.sharedIngressUnit) await rm(sharedIngressUnitPath(paths));
   if (plan.webUnit) await rm(webUnitPath(paths));
   if (plan.llmGatewayUnit) await rm(llmGatewayUnitPath(paths));
   if (plan.llmOperatorUnit) await rm(llmOperatorUnitPath(paths));
-  if (plan.unit || plan.webUnit || plan.llmOperatorUnit || plan.llmGatewayUnit || plan.sharedIngressUnit) await checked(run, "systemctl", ["--user", "daemon-reload"]);
+  if (plan.unit || plan.webUnit || plan.llmOperatorUnit || plan.llmGatewayUnit || plan.sharedIngressUnit || plan.existingControlPlaneUnit) await checked(run, "systemctl", ["--user", "daemon-reload"]);
   if (plan.bin) await rm(paths.bin);
   const retainedFiles = [...plan.retainedCache.files, ...plan.persistent.files];
   await removeExcept(paths.config, retainedFiles);

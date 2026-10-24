@@ -38,7 +38,7 @@ check-source-native:
 prepare-local:
     bash scripts/prepare-source-build.bash
 
-# Install the base workspace tools; --with-managed also selects managed integrations.
+# Install the complete local profile, or connect a host using --connections DIRECTORY.
 install-local *args:
     bash scripts/install-source-build.bash {{args}}
 

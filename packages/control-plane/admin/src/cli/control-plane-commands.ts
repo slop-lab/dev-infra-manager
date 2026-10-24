@@ -39,18 +39,20 @@ export function registerControlPlaneCommands(program: Command): void {
   command.command("connect")
     .description("Verify the live generation and write private host/bootstrap connections")
     .argument("<directory>")
+    .option("--host-id <id>", "existing configured host authority to export")
+    .option("--no-select", "export connections without changing this controller's selection")
     .option("--endpoint <loopback-origin>", "SSH-forwarded native Git endpoint")
     .option("--execution-endpoint <origin>", "Execution service endpoint, for a separate SSH loopback forward")
     .option("--output-directory <directory>", "new connection directory, useful after a service upgrade")
     .option("--execution-worker-state-directory <absolute-path>", "worker-owned state path on the host that will run the prepared worker")
-    .action(async (directory: string, flags: { endpoint?: string; executionEndpoint?: string; outputDirectory?: string; executionWorkerStateDirectory?: string }) => {
+    .action(async (directory: string, flags: { hostId?: string; select?: boolean; endpoint?: string; executionEndpoint?: string; outputDirectory?: string; executionWorkerStateDirectory?: string }) => {
       const connected = await connectControlPlane(directory, flags);
-      await saveControlPlaneSelection({ hostConnectionFile: path.join(connected.directory, "host.json"),
+      if (flags.select !== false) await saveControlPlaneSelection({ hostConnectionFile: path.join(connected.directory, "host.json"),
         importerConnectionFile: path.join(connected.directory, "importer.json") });
-      const reconnected = await reconnectNativeWorkspaces();
+      const reconnected = flags.select !== false ? await reconnectNativeWorkspaces() : 0;
       console.log(`Connected host ${connected.hostId} to generation ${connected.generationId}`);
       console.log(`Private connections: ${connected.directory}`);
-      console.log("Selected this control plane for native Project and workspace commands on this host.");
+      console.log(flags.select === false ? "Exported connections; this controller's selection was not changed." : "Selected this control plane for native Project and workspace commands on this host.");
       if (reconnected) console.log(`Reconnected ${reconnected} existing workspace Git brokers without restarting guests.`);
       if (connected.workerConfigFile !== undefined) {
         console.log("Execution capacity is configured but no worker was started. Run on the selected worker host:");

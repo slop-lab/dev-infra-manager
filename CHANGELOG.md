@@ -21,6 +21,11 @@ is implied by these source changes.
   accounts; checkpoint service data before local updates and reconnect the new
   generation automatically. Keep the writable development image registry separate
   from package mirrors and honor cache-data retention during clean reinstall.
+  Support host-only installation from existing control-plane role connections,
+  optional owned SSH forwarding, generation attestation and retained reconnect
+  settings without deploying services on the new host. Add a dependencies-only
+  fresh-VM bootstrap, ensure SSH prerequisites, and use the pinned supported
+  source toolchain when mise is unavailable.
 
 - Split managed Git into independent repository, code-review, merge-policy,
   Git CI and webhook control-plane plugins. Repository hosting no longer

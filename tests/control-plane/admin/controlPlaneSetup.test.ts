@@ -89,6 +89,9 @@ describe("optional control-plane setup", () => {
     const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
     const provider = { username: "github-sync", password: "private-github-provider-token" };
     native.gitSync.credential = provider;
+    for (const key of ["projectRegistrars", "projectRootImporters", "projectRootReadIssuers", "workspaceWriteIssuers", "hostPromoters"]) {
+      native[key].push({ hostId: "second-host", username: `second-${key}`, password: randomBytes(32).toString("base64url") });
+    }
     await writeFile(path.join(directory, "native-git.json"), `${JSON.stringify(native)}\n`, { mode: 0o600 });
     native.gitVersion = execFileSync("/usr/bin/git", ["--version"], { encoding: "utf8" }).trim().split(" ").at(-1);
     let service = await configuredManagedGitFixture({ workflowCompiler: dimWorkflowCompiler,
@@ -126,6 +129,13 @@ describe("optional control-plane setup", () => {
       expect(printed.mock.calls.flat().join("\n")).toContain("Selected this control plane");
       expect(printed.mock.calls.flat().join("\n")).toContain(`dim execution worker '${path.join(output, "worker.json")}'`);
       expect(printed.mock.calls.flat().join("\n")).not.toContain(worker.token);
+      const exported = path.join(root, "second-host-connections");
+      const exportProgram = new Command(); registerControlPlaneCommands(exportProgram);
+      await exportProgram.parseAsync(["control-plane", "connect", directory, "--endpoint", endpoint,
+        "--output-directory", exported, "--host-id", "second-host", "--no-select"], { from: "user" });
+      expect((await loadNativeControlPlaneConnection(path.join(exported, "host.json"))).hostId).toBe("second-host");
+      expect(await selectedControlPlaneHostFile()).toBe(path.join(output, "host.json"));
+      await expect(connectControlPlane(directory, { endpoint, hostId: "unknown-host", outputDirectory: path.join(root, "unknown-export") })).rejects.toThrow(/no root importer/);
       expect(JSON.parse(await readFile(path.join(output, "worker.json"), "utf8")))
         .toMatchObject({ stateDirectory: path.join(root, "worker-host", "state"), endpoint: "http://127.0.0.1:1" });
       printed.mockRestore();

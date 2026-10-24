@@ -18,7 +18,8 @@ Behavior:
 5. Select pinned SHA-256 for supported architectures:
    - `arm64`
    - `amd64`
-6. Install `apparmor`, `curl`, `docker.io`, and `jq`.
+6. Install the pinned Docker CE tuple by default, plus `apparmor`, `curl`,
+   `git`, `openssh-client`, `ca-certificates`, `xz-utils`, and `jq`.
    On Ubuntu hosts that restrict unprivileged user namespaces through
    AppArmor, install the path-scoped `/usr/local/bin/rootlesskit` profile via
    `scripts/checks/install-rootlesskit-apparmor-profile-ubuntu.bash`. The container
@@ -48,8 +49,9 @@ Unsupported Sysbox architectures fail. The base runtime uses Sysbox directly;
 host installation creates no unused backend-selection configuration. From a
 source checkout, run `just run-cli doctor` afterward.
 
-The optional second argument `docker-ce` selects the exact Docker CE package
-tuple used by the fresh-VM bootstrap instead of the Ubuntu Docker packages.
+The default second argument `docker-ce` selects the exact Docker CE package
+tuple used by the fresh-VM bootstrap. Explicit `ubuntu` retains the distribution
+package path for operator-managed environments; it is not the pinned installation gate.
 It verifies the signed repository key, refuses conflicting distro packages,
 requires the containerd image store, and never removes packages or Docker data
 to make an existing host fit. The bootstrap's explicit acknowledgement supplies
@@ -77,15 +79,22 @@ and requires a real readable/writable KVM device, without TCG substitution.
 Provisioning device access alone MUST NOT be reported as a functional KVM test.
 Group changes MUST stop with exit `3` for an explicit new login and identical
 rerun. An owner-only resume marker MUST bind the phase, role, source, version,
-operator, and bootstrap-created Docker configuration; foreign or changed state MUST
+operator, selected installation mode, and bootstrap-created Docker configuration; foreign or changed state MUST
 fail closed.
 
-After host prerequisites, the bootstrap MUST reuse reviewed `prepare-local`
-and `install-local` transactions. Its durable installer facade MUST use the
-exact prepared installer and pinned Node/tool paths, remain usable after a new
-login, and preserve foreign targets. Package/image registry publication, tags,
-TLS, secrets, native role JSON, lingering, and worker activation MUST remain
-outside bootstrap authority. See the
+The bootstrap MUST support `--dependencies-only`: provision and verify the host
+and source toolchain, then stop before source preparation, DIM installation,
+facade publication, or control-plane deployment. Its login-resume marker MUST
+prevent switching installation modes. Ordinary and control-qemu roles MUST both
+include the SSH client/key tools required for remote host/service connections.
+
+The default complete installation MUST reuse reviewed `prepare-local` and
+`install-local` transactions, including the latter's local control-plane setup.
+Its durable installer facade MUST use the exact prepared installer and pinned
+Node/tool paths, remain usable after a new login, and preserve foreign targets.
+Read-only plans and completion messages MUST describe whether DIM services and
+private connection configuration are created. Package/image registry publication
+and release tags remain outside bootstrap authority. See the
 [operator guide](../../development/bootstrap-ubuntu-vm.md) for commands,
 artifact checksums, and separate live-VM verification requirements.
 
@@ -182,11 +191,12 @@ Behavior:
 1. If `mise` is available, run `mise install` at the repository root and
    re-enter the script through `mise exec` so its Node.js, pnpm, and `just`
    versions are used.
-2. Otherwise install `git`, `nodejs`, and `npm` with APT.
-3. Without mise, use an existing `just` from `PATH` or install the Ubuntu
-   `just` package when the command is missing. The `justfile` also passes its
-   resolved executable path into the script.
-4. Without mise, install pinned pnpm if missing or wrong version.
+2. With mise active, install Git and the SSH client tools with APT.
+3. Without mise, reuse `install-source-tools-ubuntu.bash` for the pinned,
+   checksum-verified Node.js, pnpm, Just, Git and SSH toolchain. Do not use
+   Noble's unsupported distro Node.js or install pnpm globally through npm.
+4. Put those exact source-tool and Node directories first in `PATH`, and use
+   their Just executable for every subsequent step.
 5. Install the selected Ubuntu host backend (Sysbox by default).
 6. Install project dependencies with frozen lockfile.
 7. Run `just check-source`.
@@ -258,6 +268,15 @@ The release `build-workspace-image` path MUST remain distinct and delegate to
 the explicit CLI build with the exact release version. A published CLI MUST
 perform that same build from its shipped package assets without
 source-development tools. None of these paths uses `latest`.
+
+For an existing-control-plane installation, local removal MUST stop and remove
+only the private, installer-owned `dim-existing-control-plane-tunnel.service`
+unit. A foreign unit or unsafe ownership/permissions MUST fail before mutation.
+The private `existing-control-plane` directory, including role credentials and
+its saved selection, MUST survive removal independently of cache retention.
+Reinstallation MUST reuse that saved selection, recreate its SSH forwarding
+service when selected, and avoid deploying a replacement local control plane.
+Host active-selection state may be regenerated from the retained role files.
 
 ## Smoke Script
 

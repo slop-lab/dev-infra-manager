@@ -1,7 +1,8 @@
 # Bootstrap a fresh Ubuntu VM
 
 This bootstrap installs one DIM candidate from one reviewed source commit on a
-fresh Ubuntu 24.04 amd64 VM. Run it as the normal sudo-capable operator from a
+fresh Ubuntu 24.04 amd64 VM. `--dependencies-only` provisions the same host
+requirements without installing DIM or deploying a control plane. Run it as the normal sudo-capable operator from a
 clean checkout at the reviewed commit. Do not run it as root.
 
 The initial supported roles are:
@@ -67,6 +68,32 @@ daemon configuration, systemd Docker overrides, existing Docker or containerd
 data roots, and a foreign DIM facade. It never deletes Docker data, removes
 conflicting packages, or overrides daemon configuration.
 
+## Prepare a host for an existing control plane
+
+On a fresh VM, select dependencies only instead of deploying another control plane:
+
+```bash
+REVIEWED_SHA=REPLACE_WITH_FULL_REVIEWED_COMMIT
+bash scripts/bootstrap-ubuntu-vm.bash \
+  --role ordinary --dependencies-only \
+  --source-sha "$REVIEWED_SHA" --acknowledge-fresh-vm
+```
+
+If it exits with status `3`, refresh the login and rerun that identical command.
+The completed run prints the pinned toolchain PATH. Add it to your shell, then
+prepare this clean source candidate and use the existing-control-plane installation
+path described in [the usage guide](../guides/usage.md). Dependency-only mode never
+runs `prepare-local`, `install-local`, or facade installation. Do not place DIM
+connection configuration on the VM until this fresh-VM bootstrap is complete.
+
+This bootstrap intentionally refuses existing hosts with Docker/DIM data. On an
+existing Ubuntu host, inspect `scripts/checks/install-host-ubuntu.bash` for runtime
+prerequisites and `scripts/checks/lib/install-source-tools-ubuntu.bash` for the
+pinned toolchain, then install only what is missing. Both paths install SSH client
+and key tools; the runtime installer also configures the rootlesskit AppArmor
+profile when the host exposes the Ubuntu policy interface. Installing Docker or
+Sysbox can restart Docker, so finish provisioning before starting workloads.
+
 ## Refresh groups and resume
 
 The first run may add the operator to `docker` and, for `control-qemu`, `kvm`.
@@ -76,7 +103,7 @@ back in. Rerun the identical command. Do not use `sg`, a forged
 
 Before host mutation, the bootstrap writes an owner-only resume marker at
 `~/.local/state/dim-bootstrap/ubuntu-vm.state`. A resume accepts only an
-`awaiting-login` marker matching the exact role, reviewed source SHA, expected
+`awaiting-login` marker matching the installation mode, exact role, reviewed source SHA, expected
 version, operator UID, generated backend-config digest, and absent-or-exact
 bootstrap-produced Docker daemon-config digest. It then skips all host
 installers. A changed, foreign, incomplete, or completed marker fails closed
@@ -84,7 +111,8 @@ rather than adopting state.
 
 The resumed run verifies the local Docker context and socket, every exact
 Docker/Sysbox package pin, the daemon version, containerd image store, Sysbox
-runtime, source tool versions, and role-specific KVM access. It then invokes
+runtime, source tool versions, and role-specific KVM access. Dependency-only mode
+then finishes. The default complete mode invokes
 the existing source flow exactly as follows:
 
 ```bash
@@ -94,6 +122,7 @@ DIM_SOURCE_ROOT_COMMIT="$REVIEWED_SHA" just install-local
 
 ## Installed paths and pins
 
+- SSH client/key tools, Git, CA certificates, curl and xz from Ubuntu APT.
 - Node.js 24.19.0: `/usr/local/lib/dim-qemu-node-24.19.0`
 - pnpm 10.13.1 and Just 1.43.1:
   `/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1`
@@ -142,9 +171,10 @@ version --short` to report exactly `2.40.3`.
 
 ## Operator handoff
 
-The bootstrap does not create TLS material, secrets, native connection JSON,
-worker configuration, systemd worker units, user lingering, or native CI
-services. It does not publish packages, create tags, or start a release. After
+The default complete mode runs `install-local`, which installs the local
+control-plane services and creates their private connection configuration.
+Dependency-only mode installs no DIM packages, services, or connection configuration.
+Neither mode publishes packages, creates tags, or starts a release. After
 the candidate facade reports the expected version, continue with
 [host readiness](host-install-readiness.md) for ordinary remote development
 and optional operator-owned service setup.

@@ -21,8 +21,8 @@ dim_docker_config_identity() {
 
 dim_marker_content() {
   local phase="$1" docker_config_sha256="$2"
-  printf 'schema=3\nphase=%s\nrole=%s\nsource-sha=%s\nversion=%s\noperator-uid=%s\ndocker-config-sha256=%s\ncache-catalog-sha256=%s\n' \
-    "$phase" "$role" "$source_sha" "$expected_version" "$operator_uid" "$docker_config_sha256" "${cache_catalog_sha256:-absent}"
+  printf 'schema=4\nphase=%s\ninstallation=%s\nrole=%s\nsource-sha=%s\nversion=%s\noperator-uid=%s\ndocker-config-sha256=%s\ncache-catalog-sha256=%s\n' \
+    "$phase" "${installation_mode:-complete}" "$role" "$source_sha" "$expected_version" "$operator_uid" "$docker_config_sha256" "${cache_catalog_sha256:-absent}"
 }
 
 dim_write_marker() {
@@ -42,7 +42,7 @@ dim_open_bootstrap_state() {
     marker_docker_config_sha256="$(awk -F= '$1=="docker-config-sha256" {print $2}' "$resume_marker")"
     [[ ( "$marker_docker_config_sha256" == absent || "$marker_docker_config_sha256" =~ ^[0-9a-f]{64}$ ) &&
       "$(<"$resume_marker")" == "$(dim_marker_content awaiting-login "$marker_docker_config_sha256")" ]] || {
-      echo "bootstrap resume marker does not match this role, source, version, owner, or phase" >&2; return 2;
+      echo "bootstrap resume marker does not match this installation mode, role, source, version, owner, or phase" >&2; return 2;
     }
     resume=1
   elif [[ -e "$resume_marker_root" || -L "$resume_marker_root" ]]; then echo "refusing foreign bootstrap resume state" >&2; return 2; fi

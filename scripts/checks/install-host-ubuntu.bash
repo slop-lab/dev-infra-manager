@@ -12,7 +12,7 @@ if ! dim_is_runtime_backend "$backend"; then
   echo "usage: $0 <$(dim_runtime_backend_choices)> [ubuntu|docker-ce]" >&2
   exit 2
 fi
-docker_source="${2:-ubuntu}"
+docker_source="${2:-docker-ce}"
 case "$docker_source" in ubuntu|docker-ce) ;; *) echo "Docker source must be ubuntu or docker-ce" >&2; exit 2 ;; esac
 install_user="${SUDO_USER:-$(id -un)}"
 [[ "$install_user" != root ]] || install_user=""
@@ -43,7 +43,7 @@ EOF
     echo "  - require Docker's containerd image store without replacing daemon configuration"
   else
     cat <<'EOF'
-  - install common APT packages: apparmor, curl, docker.io, docker-buildx, docker-compose-v2, jq
+  - install common APT packages: apparmor, ca-certificates, curl, docker.io, docker-buildx, docker-compose-v2, git, jq, openssh-client, xz-utils
 EOF
   fi
   cat <<'EOF'
@@ -73,10 +73,10 @@ install_common_packages() {
   if [[ "$docker_source" == docker-ce ]]; then
     sudo /usr/bin/bash "$script_dir/lib/install-docker-ce-ubuntu.bash"
     sudo apt-get update
-    sudo apt-get install -y apparmor curl jq
+    sudo apt-get install -y apparmor ca-certificates curl git jq openssh-client xz-utils
   else
     sudo apt-get update
-    sudo apt-get install -y apparmor curl docker.io docker-buildx docker-compose-v2 jq
+    sudo apt-get install -y apparmor ca-certificates curl docker.io docker-buildx docker-compose-v2 git jq openssh-client xz-utils
   fi
 }
 

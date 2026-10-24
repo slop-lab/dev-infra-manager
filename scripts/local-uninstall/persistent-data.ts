@@ -81,6 +81,9 @@ export async function retainedPersistentData(paths: RemovalPaths, registeredConf
   }
   for (const root of new Set([paths.configuration, paths.state])) await retain(join(root, "shared-ingress"));
   await retain(join(paths.configuration, "external-urls.json"));
+  // Retain remote role credentials and the saved installation mode so reinstall
+  // reconnects to the existing control plane instead of deploying a local one.
+  await retain(join(paths.configuration, "existing-control-plane"));
   if (edge) await retain(edge.directory);
   // Only private service configuration, never workspace checkouts or arbitrary source trees.
   await scan(paths.configuration, 0);

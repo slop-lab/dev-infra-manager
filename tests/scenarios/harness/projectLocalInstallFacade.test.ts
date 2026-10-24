@@ -30,8 +30,11 @@ async function createFixture(): Promise<Fixture> {
       copyFile(resolve(workspaceRoot, "scripts", script), resolve(scripts, script))
     )
   );
-  for (const helper of ["install-local-control-plane.ts", "install-local-web.ts", "install-local-llm-operator.ts", "install-local-llm-gateway.ts", "install-local-shared-ingress.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
-    'import { appendFileSync } from "node:fs"; appendFileSync(process.env.DIM_INVOCATIONS!, `web-helper ${process.argv[1]} ${process.argv.slice(2).join(" ")}\\n`);\n');
+  for (const helper of ["install-local-existing-control-plane.ts", "install-local-control-plane.ts", "install-local-web.ts", "install-local-llm-operator.ts", "install-local-llm-gateway.ts", "install-local-shared-ingress.ts", "configure-local-web.ts"]) await writeFile(resolve(scripts, helper),
+    'import { appendFileSync } from "node:fs"; appendFileSync(process.env.DIM_INVOCATIONS!, `web-helper ${process.argv[1]} ${process.argv.slice(2).join(" ")}\\n`); if(process.env.DIM_EXISTING_PREFLIGHT_FAILURE && process.argv.includes("--check")) process.exit(39);\n');
+  const loaderDirectory = resolve(root, "tests/node_modules/tsx/dist");
+  await mkdir(loaderDirectory, { recursive: true });
+  await writeFile(resolve(loaderDirectory, "loader.mjs"), "// Disposable orchestration fixture; production helper is tested separately.\n");
   await writeFile(resolve(root, ".local/prepared-local.state"), "state=fresh\n");
   await writeFile(
     resolve(packageRoot, "packages.json"),
@@ -151,6 +154,48 @@ describe("Project local install facade", () => {
     expect(invocations).toContain(`installer install control-plane plugin --local-packages ${fixture.root}/.local/dim-packages @slop-lab/dim-control-plane-plugin-git-repositories@${packageVersion}`);
     expect(invocations).toContain("controller restart");
     expect(invocations).not.toContain("unrelated-plugin");
+  });
+
+  it("installs a host with existing service connections and never invokes local deployment helpers", async () => {
+    const fixture = await createFixture(), connections = resolve(fixture.root, "private-connections");
+    const result = runInstaller(fixture, {}, ["--connections", connections, "--control-plane-ssh", "control-host"]);
+    expect(result.status, result.stderr).toBe(0);
+    const invocations = await readFile(fixture.log, "utf8");
+    expect(invocations).toContain(`--check --connections ${connections} --control-plane-ssh control-host`);
+    expect(invocations.indexOf("--check --connections")).toBeLessThan(invocations.indexOf("target-dim installer install core"));
+    expect(invocations).toContain("installer install plugin");
+    expect(invocations).toContain("install-local-web.ts");
+    expect(invocations).toContain("controller restart");
+    expect(invocations).not.toContain("installer install control-plane");
+    for (const helper of ["install-local-control-plane.ts", "install-local-llm-operator.ts", "install-local-shared-ingress.ts"]) expect(invocations).not.toContain(helper);
+  });
+
+  it("refuses an empty existing-control-plane selection instead of falling back to local deployment", async () => {
+    const fixture = await createFixture();
+    for (const args of [["--connections", ""], ["--connections", resolve(fixture.root, "connections"), "--control-plane-ssh", ""]]) {
+      const result = runInstaller(fixture, {}, args);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain("requires one");
+    }
+    await expect(readFile(fixture.log)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("retains existing-control-plane mode on later bare install and stops before mutation when preflight fails", async () => {
+    const fixture = await createFixture(), configHome = resolve(fixture.root, "config");
+    await mkdir(resolve(configHome, "dim/existing-control-plane"), { recursive: true });
+    await writeFile(resolve(configHome, "dim/existing-control-plane/selection.json"), "{}");
+    const refused = runInstaller(fixture, { XDG_CONFIG_HOME: configHome, DIM_EXISTING_PREFLIGHT_FAILURE: "1" });
+    expect(refused.status).toBe(39);
+    let calls = await readFile(fixture.log, "utf8");
+    expect(calls).toContain("--check --saved");
+    expect(calls).not.toContain("npm");
+    expect(calls).not.toContain("target-dim");
+    const result = runInstaller(fixture, { XDG_CONFIG_HOME: configHome });
+    expect(result.status, result.stderr).toBe(0);
+    calls = await readFile(fixture.log, "utf8");
+    expect(calls).toContain("installer install plugin");
+    expect(calls).not.toContain("installer install control-plane");
+    expect(calls).not.toContain("install-local-control-plane.ts");
   });
 
   it("preserves prepared and installed bytes when target compatibility refuses", async () => {

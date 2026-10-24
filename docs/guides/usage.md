@@ -32,6 +32,74 @@ installer commands use the same implementation. Without mise, add the printed
 facade directory to PATH.
 Preparation rejects dirty source by default; use a reviewed clean commit.
 
+### Install another host using an existing control plane
+
+Prepare the new Linux host's Docker/Sysbox runtime and Node 24/26, pnpm and
+Just first. For a **fresh Ubuntu 24.04 amd64 VM only**, the reviewed
+[bootstrap](../development/bootstrap-ubuntu-vm.md) supports `--dependencies-only`;
+it stops before DIM or a local control plane is installed. For an existing host,
+review `scripts/checks/install-host-ubuntu.bash sysbox docker-ce` and
+`scripts/checks/lib/install-source-tools-ubuntu.bash` separately. These change
+system packages, AppArmor, groups and services; they do not adopt or remove
+conflicting Docker installations. The runtime installer defaults to the reviewed
+Docker CE tuple, rather than an unpinned distribution version.
+
+On the **control-plane host**, export caller connections from its existing
+private setup using the matching current admin tools:
+
+```bash
+dim control-plane connect "$HOME/.config/dim/local-control-plane" \
+  --no-select --output-directory "$HOME/new-host-connections"
+```
+
+This reads and attests the deployed service; it does not redeploy it or change
+that controller's selection. `--host-id ID` selects an already configured host
+authority instead of the first one. This does not enroll a new authority or
+mint credentials: the destination receives exactly the exported operator roles,
+including review/promotion access. Give each independently trusted operator its
+own reviewed service credentials. Transfer only this connection directory to
+the destination operator (for example with `scp -pr`); do not copy the private
+setup directory containing service configuration or readiness tokens.
+
+On the **new host**, configure and verify an SSH alias with key authentication
+and a known-host entry, then install the exact same source commit:
+
+```bash
+git clone --branch development https://github.com/slop-lab/dev-infra-manager.git
+cd dev-infra-manager
+# Check out the same reviewed commit used by the control-plane admin tools.
+pnpm install --frozen-lockfile
+just prepare-local
+just install-local --connections "$HOME/new-host-connections" \
+  --control-plane-ssh dim-control-plane
+```
+
+The installer validates the supplied role files and attests the available service identities and generation before changing
+the installed runtimes. It installs the CLI, host plugins and Web UI, selects a
+private copy of the connections, and creates an owned user SSH service forwarding
+the connection files' native-Git and execution ports to the same loopback ports
+on the control-plane host. It never deploys a local service pair or restores
+control-plane LLM/ingress services in this mode. A working user systemd manager
+is required for the automatic SSH service. To keep user services running after
+logout, choose `sudo loginctl enable-linger "$USER"` explicitly; the installer
+does not enable lingering. Ports must be free on the destination host.
+
+If you already maintain the required forwarding, omit `--control-plane-ssh`.
+Only the existing connection transport rules apply; HTTP is not exposed on a
+public interface. Existing host LLM gateway settings remain explicit and can be
+restored, while missing provider accounts and execution capacity are not created.
+An optional exported `worker.json` is retained but no worker is started; when
+exporting one, set `--execution-worker-state-directory` to a private path on the
+destination and start that worker separately.
+
+`just install-local --check --connections DIRECTORY --control-plane-ssh ALIAS`
+performs preparation and connection checks without installing. Later ordinary
+`just install-local` uses the saved existing-control-plane choice and reattests
+it; a stale generation fails with a request to regenerate connections instead
+of falling back to local deployment. Clean reinstall preserves these private
+connections and restores their SSH service. The choice and copied connections
+live under `~/.config/dim/existing-control-plane/` (following `XDG_CONFIG_HOME`).
+
 To update while preserving workspaces, run `just prepare-local` followed by
 `just install-local` again. Existing containers, checkout/home/nested-Docker data
 and guest processes remain in place. Existing containers keep their current image;

@@ -17,7 +17,7 @@ target="$dim_source_tools_root"
 }
 
 apt-get update
-apt-get install -y ca-certificates curl git xz-utils
+apt-get install -y ca-certificates curl git openssh-client xz-utils
 /usr/bin/bash "$node_installer" x64
 
 validate_target() {
