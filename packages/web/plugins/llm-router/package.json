@@ -28,7 +28,7 @@
   "dependencies": {
     "@slop-lab/dim-service-client-llm-router": "workspace:0.10.0",
     "@slop-lab/dim-contracts-operations": "workspace:0.10.0",
-    "zod": "4.1.11",
+    "zod": "4.6.6",
     "@slop-lab/dim-contracts-llm-router": "workspace:0.10.0"
   },
   "peerDependencies": {

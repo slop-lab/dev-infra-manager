@@ -9,8 +9,13 @@ await cp(new URL("../src/assets", import.meta.url), new URL("../dist/assets", im
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
 
-await build({ entryPoints: [new URL("../src/pull-requests.ts", import.meta.url).pathname],
-  outfile: new URL("../dist/assets/pull-requests.js", import.meta.url).pathname,
+// Give the model its own entry so shared validation stays separate from React.
+// Two entries yield one fixed-name shared module, keeping the asset map explicit.
+await build({ entryPoints: {
+  "pull-requests": new URL("../src/pull-requests.ts", import.meta.url).pathname,
+  "pr-model": new URL(import.meta.resolve("@slop-lab/git-pull-requests")).pathname
+}, outdir: new URL("../dist/assets/", import.meta.url).pathname,
+  splitting: true, chunkNames: "pr-model-shared",
   bundle: true, format: "esm", platform: "browser", target: "es2022", minify: true,
   define: { "process.env.NODE_ENV": '"production"' }, legalComments: "eof" });
 

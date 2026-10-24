@@ -7,6 +7,10 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
+- Pin production validation and service images to Zod 4.6.6 to reject oversized
+  constrained collections before walking their elements, addressing
+  [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
+
 - Retain a small versioned CLI–host wire contract with explicit capability
   negotiation. Move command parsing, help and workspace creation orchestration
   into the host; the CLI keeps host contexts, terminal transport and pinned

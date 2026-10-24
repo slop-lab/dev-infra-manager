@@ -41,7 +41,7 @@
     "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts"
   },
   "dependencies": {
-    "zod": "4.1.11",
+    "zod": "4.6.6",
     "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0",
     "@slop-lab/dim-contracts-execution": "workspace:0.10.0"

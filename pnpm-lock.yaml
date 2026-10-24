@@ -33,8 +33,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../execution
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -55,8 +55,8 @@ importers:
   packages/contracts/execution:
     dependencies:
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -80,8 +80,8 @@ importers:
   packages/contracts/git:
     dependencies:
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -96,8 +96,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../operations
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -157,8 +157,8 @@ importers:
         specifier: 14.0.0
         version: 14.0.0
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -237,8 +237,8 @@ importers:
         specifier: 2.8.3
         version: 2.8.3
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -262,8 +262,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -278,8 +278,8 @@ importers:
   packages/control-plane/plugins/external-urls:
     dependencies:
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -297,8 +297,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -325,8 +325,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -353,8 +353,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../git-tools/diff
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -375,8 +375,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../git-tools/pull-requests
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -403,8 +403,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -428,8 +428,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../git-tools/pull-requests
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -453,8 +453,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -475,8 +475,8 @@ importers:
         specifier: 3.3.1
         version: 3.3.1
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -554,8 +554,8 @@ importers:
   packages/control-plane/plugins/git-sync:
     dependencies:
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -592,8 +592,8 @@ importers:
   packages/control-plane/plugins/webhooks:
     dependencies:
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -639,8 +639,8 @@ importers:
   packages/git-tools/pull-requests:
     dependencies:
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -785,8 +785,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../service-clients/execution
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-host-core':
         specifier: workspace:0.10.0
@@ -1005,8 +1005,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../contracts/operations
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -1024,8 +1024,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../contracts/operations
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -1049,8 +1049,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../git-tools/pull-requests
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -1065,8 +1065,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../contracts/operations
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -1084,8 +1084,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../contracts/operations
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-web':
         specifier: workspace:0.10.0
@@ -1109,8 +1109,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../service-clients/execution
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-web':
         specifier: workspace:0.10.0
@@ -1128,8 +1128,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../contracts/operations
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-web':
         specifier: workspace:0.10.0
@@ -1153,8 +1153,8 @@ importers:
         specifier: workspace:0.10.0
         version: link:../../../service-clients/llm-router
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-web':
         specifier: workspace:0.10.0
@@ -1193,8 +1193,8 @@ importers:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
       zod:
-        specifier: 4.1.11
-        version: 4.1.11
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@slop-lab/dim-web':
         specifier: workspace:0.10.0
@@ -3304,8 +3304,8 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  zod@4.1.11:
-    resolution: {integrity: sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg==}
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
 
 snapshots:
 
@@ -5244,4 +5244,4 @@ snapshots:
 
   yaml@2.8.3: {}
 
-  zod@4.1.11: {}
+  zod@4.6.6: {}

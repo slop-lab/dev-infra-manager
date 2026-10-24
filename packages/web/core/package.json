@@ -47,7 +47,7 @@
     "access": "public"
   },
   "dependencies": {
-    "zod": "4.1.11",
+    "zod": "4.6.6",
     "@slop-lab/dim-contracts-operations": "workspace:0.10.0"
   },
   "devDependencies": {
