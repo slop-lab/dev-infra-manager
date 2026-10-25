@@ -17,7 +17,8 @@ export async function handleReviewCiStatus(context: RepositoryExtensionContext, 
   if (!projectId || !repositoryId || !reviewId) return false;
   try {
     await context.serialize(async () => {
-      const { target } = await repositoryAccessProvider(context.extensions).authorize(context, request, { projectId, repositoryId });
+      const requestRuntime = { ...runtime, authoritativeTargetProofs: new Map() };
+      const { target } = await repositoryAccessProvider(context.extensions).authorize({ ...context, runtime: requestRuntime }, request, { projectId, repositoryId });
       const envelope = await readAuthoritativeNativeReviewEnvelope(target.repository, reviewId);
       if (!envelope || envelope.review.projectId !== projectId || envelope.review.repositoryId !== repositoryId) {
         sendJson(response, 404, { error: "Review not found" }); return;
@@ -45,7 +46,7 @@ export async function handleReviewCiStatus(context: RepositoryExtensionContext, 
         const event = plan.events.find((event) => event.jobName === required.name && event.executionKind === required.kind);
         if (!event) { jobs.push({ name: required.name, kind: required.kind, status: "failed" }); continue; }
         try {
-          const { grant, result } = await currentExecutionEvidence(runtime, target.repository, event);
+          const { grant, result } = await currentExecutionEvidence(requestRuntime, target.repository, event);
           const succeeded = result.result === "success" && result.completion.kind === "exited"
             && "exitCode" in result.completion && result.completion.exitCode === 0;
           jobs.push({ name: required.name, kind: required.kind, executionId: grant.executionId, status: succeeded ? "succeeded" : "failed" });
