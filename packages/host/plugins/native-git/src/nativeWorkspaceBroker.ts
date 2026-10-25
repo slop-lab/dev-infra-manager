@@ -11,10 +11,23 @@ import { proveNativeProjectReadiness } from "./nativeProjectReadinessClient.js";
 import { createNativeGitWorkspaceWriteIssuerClient } from "./nativeGitWorkspaceWriteIssuerClient.js";
 import { nativeWorkspaceAttachmentFile, nativeWorkspaceBrokerHealth, readNativeWorkspaceAttachment, type NativeWorkspaceAttachment } from "./nativeWorkspaceAttachment.js";
 
+const brokerRequestTimeoutMilliseconds = 145_000;
+const readinessTimeoutMilliseconds = 40_000;
+const leaseTimeoutMilliseconds = 35_000;
+const upstreamTimeoutMilliseconds = 65_000;
+
 /** A scoped Git endpoint. It has no lifecycle, plugin, host-input or administrative routes. */
 export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachment): Server {
   const store = new WorkspaceStore(attachment.workspaceStateRoot);
   const server = createServer(async (request, response) => {
+    const disconnected = new AbortController();
+    const abortDisconnected = () => disconnected.abort(new NativeWorkspaceBrokerRequestError("native workspace Git request disconnected"));
+    request.once("aborted", abortDisconnected);
+    response.once("close", abortDisconnected);
+    const requestSignal = AbortSignal.any([
+      disconnected.signal,
+      AbortSignal.timeout(brokerRequestTimeoutMilliseconds)
+    ]);
     try {
       const url = new URL(request.url ?? "/", "http://dim.invalid");
       const match = /^\/v1\/projects\/([a-z0-9-]+)\/repositories\/([a-z0-9][a-z0-9-]*)\.git(?:\/|$)/.exec(url.pathname);
@@ -53,7 +66,10 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       const configuredRepository = project?.repositories[repositoryId];
       if (project?.phase !== "ready" || project.projectId !== attachment.projectId
         || !configuredRepository || !Object.hasOwn(nativeRepositoryBranches(configuredRepository.repositoryPolicy), repository.protectedRef)) { response.writeHead(409).end(); return; }
-      const proof = await proveNativeProjectReadiness(connection, project, repositoryId, AbortSignal.timeout(5000), {
+      const proof = await proveNativeProjectReadiness(connection, project, repositoryId, AbortSignal.any([
+        requestSignal,
+        AbortSignal.timeout(readinessTimeoutMilliseconds)
+      ]), {
         commit: repository.commit, tree: repository.tree, protectedRef: repository.protectedRef, allowFastForward: true
       });
       // Readiness authenticates the catalog's effective policy on every request.
@@ -61,30 +77,52 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       const lease = await createNativeGitWorkspaceWriteIssuerClient({ schemaVersion: 1, endpoint: connection.nativeGit.endpoint,
         serviceId: "native-main", role: "operator-workspace-write-issuer", hostId: connection.hostId,
         generationId: proof.generationId, credential: connection.nativeGit.workspaceWriteIssuer
-      }).issueWorkspaceWriteLease({ projectId: attachment.projectId, repositoryId, workspaceId: repository.nativeWorkspaceId }, AbortSignal.timeout(5000));
+      }).issueWorkspaceWriteLease({ projectId: attachment.projectId, repositoryId, workspaceId: repository.nativeWorkspaceId }, AbortSignal.any([
+        requestSignal,
+        AbortSignal.timeout(leaseTimeoutMilliseconds)
+      ]));
       const target = new URL(`${url.pathname}${url.search}`, connection.nativeGit.endpoint);
-      const upstream = (target.protocol === "https:" ? httpsRequest : httpRequest)(target, {
-        method: request.method, signal: AbortSignal.timeout(30_000), headers: {
-          authorization: `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}`,
-          ...(request.headers["content-type"] ? { "content-type": request.headers["content-type"] } : {}),
-          ...(request.headers["git-protocol"] ? { "git-protocol": request.headers["git-protocol"] } : {})
-        }
-      }, (incoming) => {
-        if ((incoming.statusCode ?? 500) >= 300 && (incoming.statusCode ?? 500) < 400) { incoming.destroy(); response.writeHead(502).end(); return; }
-        response.writeHead(incoming.statusCode ?? 502, {
-          ...(incoming.headers["content-type"] ? { "content-type": incoming.headers["content-type"] } : {}), "cache-control": "no-store"
-        }); incoming.pipe(response);
+      await new Promise<void>((resolve) => {
+        const upstream = (target.protocol === "https:" ? httpsRequest : httpRequest)(target, {
+          method: request.method, signal: AbortSignal.any([
+            requestSignal,
+            AbortSignal.timeout(upstreamTimeoutMilliseconds)
+          ]), headers: {
+            authorization: `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}`,
+            ...(request.headers["content-type"] ? { "content-type": request.headers["content-type"] } : {}),
+            ...(request.headers["git-protocol"] ? { "git-protocol": request.headers["git-protocol"] } : {})
+          }
+        }, (incoming) => {
+          if ((incoming.statusCode ?? 500) >= 300 && (incoming.statusCode ?? 500) < 400) {
+            incoming.destroy(); response.writeHead(502).end(); resolve(); return;
+          }
+          response.writeHead(incoming.statusCode ?? 502, {
+            ...(incoming.headers["content-type"] ? { "content-type": incoming.headers["content-type"] } : {}), "cache-control": "no-store"
+          });
+          incoming.once("end", resolve);
+          incoming.once("error", resolve);
+          incoming.pipe(response);
+        });
+        upstream.on("error", () => {
+          if (!response.destroyed) {
+            if (!response.headersSent) response.writeHead(502);
+            response.end();
+          }
+          resolve();
+        });
+        request.pipe(upstream);
       });
-      upstream.on("error", () => { if (!response.headersSent) response.writeHead(502); response.end(); });
-      request.on("aborted", () => upstream.destroy());
-      response.on("close", () => { if (!response.writableEnded) upstream.destroy(); });
-      request.pipe(upstream);
     } catch {
-      if (!response.headersSent) response.writeHead(502);
-      response.end();
+      if (!response.destroyed) {
+        if (!response.headersSent) response.writeHead(502);
+        response.end();
+      }
+    } finally {
+      request.off("aborted", abortDisconnected);
+      response.off("close", abortDisconnected);
     }
   });
-  server.requestTimeout = 35_000; server.headersTimeout = 10_000;
+  server.requestTimeout = 150_000; server.headersTimeout = 10_000;
   return server;
 }
 
@@ -96,4 +134,8 @@ function immutableAttachmentScope(attachment: NativeWorkspaceAttachment): unknow
   };
   return { ...attachment, connectionFile: "", configuration: withoutRevision(attachment.configuration),
     repositories: Object.fromEntries(Object.entries(attachment.repositories).map(([id, binding]) => [id, withoutRevision(binding)])) };
+}
+
+class NativeWorkspaceBrokerRequestError extends Error {
+  readonly name = "NativeWorkspaceBrokerRequestError";
 }
