@@ -50,6 +50,18 @@ export async function buildServiceImage(inputs: ServiceImageInputs, tag: string)
         child.once("close", (status, signal) => failure ? reject(failure) : status === 0 ? resolve()
           : reject(new Error(`service image build failed (${signal ?? status})`)));
       });
+      // Exercise the shipped entry point before publishing a prepared candidate.
+      // A successful Docker build alone cannot detect missing runtime imports.
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn("docker", ["run", "--rm", "--network", "none", "--read-only",
+          "--cap-drop", "ALL", "--security-opt", "no-new-privileges", tag, "compatibility", "--json"], {
+          stdio: "inherit", signal: AbortSignal.any([cancellation.signal, AbortSignal.timeout(30_000)])
+        });
+        let failure: Error | undefined;
+        child.once("error", (error) => { failure = error; });
+        child.once("close", (status, signal) => failure ? reject(failure) : status === 0 ? resolve()
+          : reject(new Error(`service image startup check failed (${signal ?? status})`)));
+      });
     } finally {
       process.removeListener("SIGINT", abort);
       process.removeListener("SIGTERM", abort);
