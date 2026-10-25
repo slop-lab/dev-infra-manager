@@ -5,7 +5,7 @@ set -euo pipefail
 # the trusted CLI exercised by tests; this job never starts a Docker daemon.
 if [[ "${1:-}" == --if-needed && $# == 1 ]]; then
   missing=false
-  for tool in gcc g++ make curl git jq python3 ssh pgrep flock xz openssl; do
+  for tool in gcc g++ make curl git jq python3 ssh pgrep flock xz openssl tini; do
     command -v "$tool" >/dev/null 2>&1 || missing=true
   done
   [[ -x /usr/local/bin/docker || -x /usr/bin/docker ]] || missing=true
@@ -27,5 +27,5 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install --yes --no-install-recommends \
   build-essential ca-certificates curl docker.io git jq libsqlite3-0 openssh-client \
-  openssl procps python3 util-linux xz-utils
+  openssl procps python3 tini util-linux xz-utils
 rm -rf /var/lib/apt/lists/*

@@ -24,12 +24,23 @@ if [[ "$*" == --version ]]; then printf '10.13.1\\n'; exit 0; fi
 test "$(just --version)" = 'just 1.43.1'
 git -C "$PWD" rev-parse --verify HEAD >/dev/null
 test "$(git config --get dim.fixture)" = preserved
+if [[ "\${DIM_SOURCE_PREFLIGHT_INIT:-}" == 1 && "$*" == 'run workspace:test' ]]; then
+  read -r init_process </proc/1/comm
+  test "$init_process" = tini
+  orphan=$(bash -c 'sleep 0.1 >/dev/null 2>&1 & printf "%s\\n" "$!"')
+  for ((attempt=0; attempt<100; attempt++)); do
+    [[ -e "/proc/$orphan" ]] || break
+    sleep 0.05
+  done
+  test ! -e "/proc/$orphan"
+fi
 if [[ -n "\${DIM_SOURCE_PREFLIGHT_FOREIGN:-}" ]]; then
   ! git -C "$DIM_SOURCE_PREFLIGHT_FOREIGN" rev-parse --git-dir 2>/dev/null
 fi
 printf '%s\\n' "$*" >>"$DIM_SOURCE_PREFLIGHT_LOG"
 `, { mode: 0o755 });
   await writeFile(join(tools, "just"), "#!/bin/sh\nprintf 'just 1.43.1\\n'\n", { mode: 0o755 });
+  await writeFile(join(tools, "tini"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
   return { root, source, tools, home, log, staged };
 }
 function run(f: Awaited<ReturnType<typeof fixture>>, environment: NodeJS.ProcessEnv = {}) {
@@ -110,4 +121,30 @@ test -n "$(git -c safe.directory=/workspace/main status --porcelain)"`
   ], { encoding: "utf8", timeout: 350_000, maxBuffer: 8 * 1024 * 1024 });
   expect(result.status, JSON.stringify({ error: result.error?.message, signal: result.signal, stderr: result.stderr })).toBe(0);
   expect(await readFile(f.log, "utf8")).toBe(commands.repeat(2));
+});
+
+it.skipIf(!process.env.DIM_TEST_SOURCE_CI_IMAGE)("reaps orphaned descendants when the real staged job entry is PID 1 without Docker init", { timeout: 360_000 }, async () => {
+  const f = await fixture(), image = process.env.DIM_TEST_SOURCE_CI_IMAGE!;
+  expect(image).toMatch(/@sha256:[0-9a-f]{64}$/);
+  await Promise.all([rm(join(f.tools, "just")), rm(join(f.tools, "tini"))]);
+  const result = spawnSync("docker", ["run", "--rm", "--pull", "never", "--user", "0:0",
+    "--mount", `type=bind,source=${f.root},target=/fixture,readonly`,
+    "--mount", `type=bind,source=${f.staged},target=/run/dim/job/script,readonly`,
+    "--env", "HOME=/tmp/job-home", "--env", "PATH=/fixture/tools:/usr/local/bin:/usr/bin:/bin",
+    "--env", "DIM_SOURCE_PREFLIGHT_LOG=/tmp/commands.log", "--env", "DIM_SOURCE_PREFLIGHT_INIT=1",
+    "--env", "GIT_CONFIG_COUNT=1", "--env", "GIT_CONFIG_KEY_0=dim.fixture", "--env", "GIT_CONFIG_VALUE_0=preserved",
+    "--entrypoint", "/bin/bash", image, "-eu", "-c", String.raw`
+mkdir -p /workspace "$HOME"
+cp -a /fixture/source /workspace/main
+cd /workspace/main
+test "$(id -u)" = 0
+test "$(stat -c %u .)" = 1000
+test "$BASHPID" = 1
+! test -w /run/dim/job/script
+test ! -e .git
+! command -v just
+! command -v tini
+exec /bin/bash --noprofile --norc /run/dim/job/script`
+  ], { encoding: "utf8", timeout: 350_000, maxBuffer: 8 * 1024 * 1024 });
+  expect(result.status, JSON.stringify({ error: result.error?.message, signal: result.signal, stderr: result.stderr })).toBe(0);
 });

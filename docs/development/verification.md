@@ -103,6 +103,8 @@ architecture-specific installer as the standalone source-gate image. The runner
 also uses their shared Debian tool bootstrap when system tools are missing,
 including jq and the trusted Docker CLI. Package installation requires the
 container's service-autostart denial policy; it never starts a Docker daemon.
+When this script is container PID 1, it re-executes under tini so cancelled
+test descendants are reaped, including jobs started without Docker `--init`.
 The runner
 executes scripts from `/run/dim/job/script` with the repository checkout as their
 working directory; this source job resolves repository files from that directory.
