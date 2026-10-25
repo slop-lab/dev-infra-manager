@@ -31,6 +31,11 @@ selects a host-local alias. No source is reimported and no protected ref or poli
 changes. Importer, registrar and reviewer roles are not attachment credentials.
 Repository evidence retains its original immutable import snapshot and receipt
 generation separately from the current effective policy and serving generation.
+The complete host attachment operation is bounded to 90 seconds. Its authority
+descriptor HTTP read has an 85-second ceiling over the service's 80-second
+aggregate full-proof deadline; repository readiness proofs share the same
+90-second operation signal and therefore consume only the remaining time. Slow
+or numerous repositories fail without publishing partial local Project state.
 
 The Git service owns repository membership, immutable import evidence and access
 scope; this plugin owns names and defaults on the selected host. An unchanged

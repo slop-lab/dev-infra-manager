@@ -18,6 +18,11 @@ generation-pinned, root-read-issuer-authenticated authority reads and strictly
 parses their bounded contract DTOs. Controller outputs expose only Project IDs,
 repository counts, managed refs and branches; immutable receipts and policies
 remain private inputs to host attachment and workspace readiness proof.
+Proof-bearing attachment reads have an 85-second HTTP deadline, outliving the
+repository service's 80-second aggregate proof deadline. The host attachment
+operation owns a 90-second total deadline, so subsequent per-repository readiness
+checks use only the time remaining after the descriptor read. Catalog listing
+remains read-only and callers may impose a shorter discovery deadline.
 
 Repository features expose `diff.read`, `blame.line`, PR conversation operations
 and `ci.status` only when their installed service advertises that capability.

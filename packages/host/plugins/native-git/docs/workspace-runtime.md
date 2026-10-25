@@ -22,6 +22,15 @@ Git leases using operator credentials kept outside the workspace. It exposes
 exact Git smart-HTTP requests for one Project, and validates the current core
 UUID and running, initialized state on each request. Discard or name reuse
 revokes the old attachment. A later start or exec restores a missing broker.
+Each workspace-local Git request has one 145-second broker deadline. Current
+readiness may use up to 40 seconds, lease-v2 issuance up to 35 seconds, and the
+final Git upstream up to 65 seconds; their 140-second sum fits under the outer
+deadline and leaves five seconds for local state reads and response setup. The
+upstream allowance covers a complete 30-second repository proof plus a separate
+30-second Git backend operation. This guest Git transport is not the 90-second
+CLI service-client request path. Client disconnect cancels whichever proof,
+lease or upstream operation is active. Every request still reloads attachment,
+Project and policy state before obtaining fresh proof and lease authority.
 
 A reviewed protected fast-forward keeps the workspace's Git access usable;
 it does not reset its persistent checkout. Policy changes require a fresh

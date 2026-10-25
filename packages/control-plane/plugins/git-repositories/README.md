@@ -49,6 +49,18 @@ change policy or refs, or grant any new authority. Local Project names and
 configuration/default working repository choices belong to the host plugin and
 are not part of this service catalog.
 
+Attachment proof remains sequential and performs the complete read-only Git
+inspection, including full `fsck`, for every repository. A repository proof has
+a 30-second ceiling, while the complete HTTP attachment request has an 80-second
+deadline. The request deadline is authoritative for sequential multi-repository
+Projects: it permits two proofs to consume their full ceilings with time for
+descriptor construction and the final check, but does not imply that all 64
+repositories can each consume 30 seconds. A larger or slower set fails as
+unavailable without returning a verified prefix. Successful responses still
+perform the final serialized repository-set/current-state check. The current
+implementation shares no proof result, never caches proof or authorization
+between requests, and cancels the active Git inspection on disconnect.
+
 `hostId` is a configured host authority. Exporting the same role bundle to
 multiple machines shares that authority; it does not create per-machine grants.
 Distinct authorities retain their existing isolation.
