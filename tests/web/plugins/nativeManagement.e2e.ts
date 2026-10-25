@@ -55,8 +55,15 @@ try {
   assert.equal(await attachment.getByLabel("Configuration repository", { exact: true }).inputValue(), "public");
   assert.equal(await attachment.getByLabel("Default working repository", { exact: true }).inputValue(), "private");
   await attachment.getByLabel("Local project name (optional)", { exact: true }).fill("attached-copy");
+  // Keep a valid attachment pending beyond the ordinary 35-second feature deadline.
+  await page.route("**/v1/extensions/native-git/operations/projects.attach", async (route) => {
+    const response = await route.fetch();
+    await new Promise((resolve) => setTimeout(resolve, 36_000));
+    await route.fulfill({ response });
+  });
   await attachment.getByRole("button", { name: "Attach project", exact: true }).click();
-  await page.waitForFunction(() => { const input = document.querySelector('select[aria-label="Project"]'); return input instanceof HTMLSelectElement && input.value === "project-a"; });
+  await page.waitForFunction(() => { const input = document.querySelector('select[aria-label="Project"]'); return input instanceof HTMLSelectElement && input.value === "project-a"; }, undefined, { timeout: 60_000 });
+  await page.unroute("**/v1/extensions/native-git/operations/projects.attach");
   assert.equal(await git.getByLabel("Repository", { exact: true }).inputValue(), "private");
   const attached = await fixture.store.read("attached-copy", fixture.managed.connection.hostId);
   assert(attached); assert.equal(attached.phase, "ready"); assert.equal(attached.configurationRepositoryId, "public"); assert.equal(attached.defaultWorkingRepositoryId, "private");

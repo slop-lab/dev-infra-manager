@@ -90,7 +90,7 @@ export function mountAttachment(container, context, navigation) {
     const configurationRepositoryId = value.configurationRepositoryId, defaultWorkingRepositoryId = value.defaultWorkingRepositoryId, localName = value.name.trim();
     value.pending = "attach"; value.message = `Attaching ${projectId} to this host…`; paint();
     try {
-      await context.invoke("projects.attach", { controllerId, projectId, ...(localName ? { name: localName } : {}), configurationRepositoryId, defaultWorkingRepositoryId });
+      await context.invoke("projects.attach", { controllerId, projectId, ...(localName ? { name: localName } : {}), configurationRepositoryId, defaultWorkingRepositoryId }, { timeoutMilliseconds: 125_000 });
       value.attached = true; value.message = `${projectId} attached. Refreshing the local Project selector…`;
       if (!current() || activeController !== controllerId) return;
       paint();
