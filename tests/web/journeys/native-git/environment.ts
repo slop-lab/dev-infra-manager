@@ -11,6 +11,7 @@ export async function createReviewEnvironment() {
   const fixture = await createNativeManagementBrowserFixture();
   let checkout: string | undefined;
   let proposalRef: string | undefined;
+  let proposalCommit: string | undefined;
   try {
     await writeFile(join(fixture.managed.root, "promoter.json"), JSON.stringify({ schemaVersion: 1, serviceId: "native-main",
       endpoint: fixture.managed.service.origin, generationId, role: "host-promoter", hostId: hostPromoter.hostId,
@@ -38,6 +39,7 @@ export async function createReviewEnvironment() {
         await runGit("/usr/bin/git", ["-C", checkout, "add", ".dim"]);
         await runGit("/usr/bin/git", ["-C", checkout, "-c", "user.name=DIM Journey", "-c", "user.email=journey@example.invalid", "commit", "--quiet", "-m", "change reviewed configuration"]);
         const candidate = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", "HEAD"])).stdout.trim();
+        proposalCommit = candidate;
         proposalRef = `refs/heads/review-boundary-${workspaceId}`;
         await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", "origin", `HEAD:${proposalRef}`]);
         // Another reviewer has prepared pending evidence. The browser's initial
@@ -51,13 +53,21 @@ export async function createReviewEnvironment() {
         return { candidate, proposalRef, baseCommit };
       },
       async advanceProposal() {
-        assert(checkout && proposalRef, "a workspace proposal must exist before adding a revision");
+        assert(checkout && proposalRef && proposalCommit, "a workspace proposal must exist before rewriting its revision");
+        const previousCandidate = proposalCommit;
+        const baseCommit = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", `${previousCandidate}^`])).stdout.trim();
+        await runGit("/usr/bin/git", ["-C", checkout, "reset", "--hard", baseCommit]);
+        await mkdir(join(checkout, ".dim"));
         await writeFile(join(checkout, ".dim", "review-boundary.json"), '{"requiresReview":true,"revision":2}\n');
         await runGit("/usr/bin/git", ["-C", checkout, "add", ".dim/review-boundary.json"]);
-        await runGit("/usr/bin/git", ["-C", checkout, "-c", "user.name=DIM Journey", "-c", "user.email=journey@example.invalid", "commit", "--quiet", "-m", "update reviewed configuration"]);
+        await runGit("/usr/bin/git", ["-C", checkout, "-c", "user.name=DIM Journey", "-c", "user.email=journey@example.invalid", "commit", "--quiet", "-m", "rewrite reviewed configuration"]);
         const candidate = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", "HEAD"])).stdout.trim();
-        await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", "origin", `HEAD:${proposalRef}`]);
-        return { candidate, proposalRef };
+        assert.notEqual(candidate, previousCandidate, "rewritten source must produce a different candidate commit");
+        assert.equal((await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", `${candidate}^`])).stdout.trim(), baseCommit,
+          "rewritten source must replace rather than descend from the reviewed candidate");
+        await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", `--force-with-lease=${proposalRef}:${previousCandidate}`, "origin", `HEAD:${proposalRef}`]);
+        proposalCommit = candidate;
+        return { candidate, previousCandidate, proposalRef };
       },
       async assertProtectedHead(candidate: string) {
         const actual = (await runGit("/usr/bin/git", ["--git-dir", join(fixture.managed.serviceRoot, "review-journey", "public.git"), "rev-parse", "refs/heads/main"])).stdout.trim();
