@@ -25,7 +25,7 @@ export async function restoreLocalLlmGateway(bundle: string, env: NodeJS.Process
   const artifacts = localArtifacts(JSON.parse(await readFile(join(bundle, "packages.json"), "utf8")), [packageName]);
   await install({ home: paths.hostPlugins, version: artifacts.find(({ name }) => name === packageName)!.version, files: artifacts.map(({ file }) => join(bundle, file)) });
   const executable = join(paths.hostPlugins, "node_modules/.bin/dim-host");
-  const args = [process.execPath, executable, "--host", "local", "llm", "serve", configuration];
+  const args = [process.execPath, executable, "llm", "serve", configuration];
   let systemd = false; try { systemd = (await run("systemctl", ["--user", "show-environment"])).status === 0; } catch { /* optional systemd */ }
   if (!systemd) { console.log(`[host] start retained LLM gateway with: ${args.map(quote).join(" ")}`); return; }
   const unit = llmGatewayUnitPath(paths), directory = dirname(unit), existing = await metadata(directory);

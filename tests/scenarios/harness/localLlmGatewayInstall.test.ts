@@ -28,7 +28,9 @@ it("restores the optional gateway plugin and owned service, then removes only ru
   await restoreLocalLlmGateway(f.bundle, f.env, f.run, f.install);
   expect(f.installations).toEqual([{ home: f.paths.hostPlugins, version: "0.10.0", files: [join(f.bundle, "gateway.tgz")] }]);
   expect(await ownedLlmGatewayUnit(f.paths)).toBe(true);
-  expect(await readFile(llmGatewayUnitPath(f.paths), "utf8")).toContain('"--host" "local" "llm" "serve"');
+  const unit = await readFile(llmGatewayUnitPath(f.paths), "utf8");
+  expect(unit).toContain(`"${join(f.paths.hostPlugins, "node_modules/.bin/dim-host")}" "llm" "serve"`);
+  expect(unit).not.toContain('"--host"');
   const plan = await createRemovalPlan(f.paths, f.run, f.env); expect(plan.llmGatewayUnit).toBe(true);
   await executeRemoval(plan, f.run);
   expect(f.calls).toContainEqual(["systemctl", "--user", "disable", "--now", "dim-llm-router-gateway.service"]);

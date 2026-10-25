@@ -20,9 +20,9 @@ export async function ownedLlmGatewayUnit(paths: RemovalPaths): Promise<boolean>
   const target = await realpath(executable).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return executable; });
   const runtime = await realpath(paths.hostPlugins).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return paths.hostPlugins; });
   const configuration = join(paths.configuration, "llm-host/gateway.json");
-  if (starts.length !== 1 || !unit.includes("Description=DIM LLM router host gateway\n") || tokens.length !== 7
-    || !tokens[0]?.startsWith("/") || tokens[1] !== executable || tokens[2] !== "--host" || tokens[3] !== "local" || tokens[4] !== "llm" || tokens[5] !== "serve"
-    || tokens[6] !== configuration || !inside(target, runtime)) {
+  if (starts.length !== 1 || !unit.includes("Description=DIM LLM router host gateway\n") || tokens.length !== 5
+    || !tokens[0]?.startsWith("/") || tokens[1] !== executable || tokens[2] !== "llm" || tokens[3] !== "serve"
+    || tokens[4] !== configuration || !inside(target, runtime)) {
     throw new Error("DIM LLM router gateway unit does not belong to the selected installation");
   }
   const configStat = await metadata(configuration);
