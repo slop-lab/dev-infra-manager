@@ -9,6 +9,8 @@ import {
   type NativeGitAdmissionHttpClient
 } from "@slop-lab/dim-contracts-git/http";
 
+const attachmentRequestTimeoutMilliseconds = 85_000;
+
 export type NativeGitProjectAttachmentClientConfig = {
   readonly endpoint: string;
   readonly generationId: string;
@@ -84,7 +86,7 @@ async function request(input: ProjectAttachmentRequest): Promise<unknown> {
       path: input.path,
       authorization: input.authorization,
       generationId: input.config.generationId,
-      signal: AbortSignal.any([input.signal, AbortSignal.timeout(10_000)])
+      signal: AbortSignal.any([input.signal, AbortSignal.timeout(attachmentRequestTimeoutMilliseconds)])
     });
   } catch (cause) {
     throw new NativeGitProjectAttachmentClientError("native Git Project attachment request failed", { cause });
