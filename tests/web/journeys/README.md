@@ -104,6 +104,19 @@ the review journey; it does not keep today's component tree or CSS as a contract
 Both journeys run through `test:web-journeys` in normal CI. For a targeted local
 run, append `pull-requests` or `review` to that command.
 
+The PR journey uses an ordinary source branch, inspects structured diff and line
+attribution, prepares review, approves/revokes, force-updates the source, checks
+stale approval/outdated discussion and merges the exact new revision. Preparation
+does not itself approve. DIM CI absence is displayed separately from human review.
+
+With the same Chromium selection, `pnpm --dir tests run test:web-git-sync`
+exercises repository switching, managed branch merge/review/promotion and Git-sync
+publication to a disposable local bare upstream. It verifies the actual protected
+and published refs. The Web workflow runs this check alongside PR/review and
+attachment journeys; no installed operator service or external GitHub repository
+is mutated. Failed admission/execution and missing CI policy are never converted
+into successful DIM CI evidence by these browser checks.
+
 ## Existing Projects on another host
 
 With the same `DIM_CHROMIUM` selection, run
