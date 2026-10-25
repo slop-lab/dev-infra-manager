@@ -38,7 +38,7 @@ export async function createReviewEnvironment() {
         await runGit("/usr/bin/git", ["-C", checkout, "add", ".dim"]);
         await runGit("/usr/bin/git", ["-C", checkout, "-c", "user.name=DIM Journey", "-c", "user.email=journey@example.invalid", "commit", "--quiet", "-m", "change reviewed configuration"]);
         const candidate = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", "HEAD"])).stdout.trim();
-        proposalRef = `refs/heads/proposals/${workspaceId}/review-boundary`;
+        proposalRef = `refs/heads/review-boundary-${workspaceId}`;
         await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", "origin", `HEAD:${proposalRef}`]);
         // Another reviewer has prepared pending evidence. The browser's initial
         // operator still cannot resolve/approve; it must discover and obtain that

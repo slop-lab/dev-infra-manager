@@ -1,14 +1,23 @@
 import { createElement as h } from "react";
 import { mountPullRequestPanel, type PullRequestPanelProps } from "@slop-lab/react-git-pull-requests";
+import type { GitLineAttribution } from "@slop-lab/git-blame";
 import { currentRevision, parsePullRequest, parsePullRequestList, type PullRequest } from "@slop-lab/git-pull-requests";
 import { parseDiffSnapshot, type DiffSnapshot } from "@slop-lab/git-diff";
 import type { ReviewDto } from "@slop-lab/dim-service-client-native-git";
 import type { WebPluginBrowserContext } from "@slop-lab/dim-web/plugin-api";
+import { reviewCiSummary } from "./review-ci.js";
 export interface PullRequestScope { readonly controllerId: string; readonly projectId: string; readonly repositoryId: string }
 export interface PullRequestHost {
   scope(): PullRequestScope;
   has(name: string): boolean;
   current(scope: PullRequestScope): boolean;
+  reviewerId(): string | undefined;
+}
+export function pullRequestMergeDisabled(pr: PullRequest, review: ReviewDto | null): boolean {
+  if (pr.state !== "open") return true;
+  if (!review) return false;
+  const ciReady = review.ci?.state === "not-configured" || review.ci?.state === "not-required" || review.ci?.state === "succeeded";
+  return review.status !== "approved" || !ciReady;
 }
 /** DIM adapter only: portable React packages receive controlled data/callbacks. */
 export function mountPullRequests(container: HTMLElement, context: WebPluginBrowserContext, host: PullRequestHost) {
@@ -60,21 +69,30 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
     const evidence = await invoke(scope, "reviews.detail", { reviewId: value.review.review.reviewId }) as ReviewDto;
     if (evidence.candidateCommit !== pinned.sourceCommit || evidence.expectedProtectedHead !== pinned.targetCommit || evidence.status === "stale") throw new Error("Review evidence is stale; refresh the pull request");
     if (!active(scope, expected) || selected?.id !== pr.id || currentRevision(selected).id !== pinned.id) throw new Error("The selected revision changed");
-    review = evidence; render(); return { scope, expected, evidence };
+    review = evidence; render();
   }
   function render() {
     if (disposed) return;
     const pr = selected, scope = host.scope(), expected = generation;
-    const canApprove = host.has("reviews.approve") && host.has("pull-requests.review");
+    const canPrepare = host.has("pull-requests.review");
+    const canApprove = host.has("pull-requests.approve");
+    const reviewerId = host.reviewerId();
+    const currentReview = review;
+    const activeApproval = currentReview?.approvals.find(approval => approval.reviewerId === reviewerId
+      && !currentReview.revocations.some(revocation => revocation.approvalId === approval.approvalId));
     const props: PullRequestPanelProps = {
       pullRequests: rows, selected: pr, snapshot, onSelect: select,
-      reviewStatus: feedback || (review ? `Review ${review.status} · required reviewers: ${review.requiredReviewerIds.join(", ") || "none"}` : "Review this revision before merging."),
-      reviewContent: !canApprove && context.operations.some(operation => operation.name === "pull-requests.list")
-        ? h("p", null, "Reviewer access is required to approve. ", h("button", { type: "button", onClick: () => window.dispatchEvent(new Event("dim-account-access")) }, "Configure review access")) : null,
+      reviewStatus: feedback || (review ? `Human review ${review.status} · required reviewers: ${review.requiredReviewerIds.join(", ") || "none"}` : "Prepare this revision to inspect human review and DIM CI requirements."),
+      reviewContent: h("div", null,
+        currentReview ? h("p", { className: "git-pr__ci-status", "data-ci-state": currentReview.ci?.state ?? "unavailable" }, reviewCiSummary(currentReview.ci)) : null,
+        currentReview?.requiredReviewerIds.length && !canApprove && context.operations.some(operation => operation.name === "pull-requests.list")
+          ? h("p", null, "Reviewer access is required to approve. ", h("button", { type: "button", onClick: () => window.dispatchEvent(new Event("dim-account-access")) }, "Configure review access")) : null),
       ...(host.has("pull-requests.create") ? { onCreate: async draft => {
         const ref = (value: string) => value.startsWith("refs/") ? value : `refs/heads/${value}`;
         await accept(scope, await invoke(scope, "pull-requests.create", { ...draft, sourceRef: ref(draft.sourceRef), targetRef: ref(draft.targetRef) }), expected);
       } } : {}),
+      ...(host.has("diff.read") ? { onInspectDiff: async input => parseDiffSnapshot(await invoke(scope, "diff.read", { ...input })) } : {}),
+      ...(host.has("blame.line") ? { onInspectBlame: async input => await invoke(scope, "blame.line", { ...input }) as GitLineAttribution } : {}),
       onRefresh: async () => {
         if (pr) await accept(scope, await invoke(scope, host.has("pull-requests.refresh") ? "pull-requests.refresh" : "pull-requests.detail", host.has("pull-requests.refresh") ? mutationInput(pr) : { pullRequestId: pr.id }), expected);
         else await refresh();
@@ -84,30 +102,38 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
         onSetState: async state => accept(scope, await invoke(scope, "pull-requests.update", { ...mutationInput(pr!), state }), expected)
       } : {}),
       ...(pr && host.has("pull-requests.comment") ? { onComment: async comment => accept(scope, await invoke(scope, "pull-requests.comment", { ...mutationInput(pr!), ...comment }), expected) } : {}),
+      ...(pr && canPrepare ? { onPrepareReview: prepareReview, prepareReviewDisabled: pr.state !== "open" } : {}),
       ...(pr && canApprove ? { onApprove: async () => {
-        const prepared = await prepareReview();
-        if (!window.confirm(`Approve candidate ${prepared.evidence.candidateCommit} for ${prepared.evidence.protectedRef}?`)) return;
-        const value = await invoke(scope, "reviews.approve", { reviewId: prepared.evidence.reviewId }) as ReviewDto;
+        const evidence = review;
+        if (!evidence) throw new Error("Prepare this revision for review before approving");
+        if (!window.confirm(`Approve candidate ${evidence.candidateCommit} for ${evidence.protectedRef}?`)) return;
+        const value = await invoke(scope, "pull-requests.approve", { ...mutationInput(pr), revisionId: currentRevision(pr).id }) as ReviewDto;
         if (active(scope, expected)) { review = value; render(); }
-      }, approveDisabled: pr.state !== "open" || review?.status === "approved" } : {}),
-      ...(pr && host.has("reviews.promote") ? { onMerge: async () => {
-        const inspected = review;
-        if (!inspected) throw new Error("Inspect an approved review before merging");
-        const latest = parsePullRequest(await invoke(scope, "pull-requests.detail", { pullRequestId: pr.id }));
+      }, approveDisabled: pr.state !== "open" || !review || review.status === "approved" } : {}),
+      ...(pr && activeApproval && host.has("pull-requests.revoke") ? { onRevoke: async () => {
+        if (!review) throw new Error("Refresh the prepared review before revoking approval");
+        if (!window.confirm(`Revoke approval for candidate ${review.candidateCommit}?`)) return;
+        const value = await invoke(scope, "pull-requests.revoke", { ...mutationInput(pr), revisionId: currentRevision(pr).id }) as ReviewDto;
+        if (active(scope, expected)) { review = value; render(); }
+      } } : {}),
+      ...(pr && host.has("pull-requests.merge") ? { onMerge: async () => {
         const pinned = currentRevision(pr);
-        if (latest.state !== "open" || currentRevision(latest).id !== pinned.id) throw new Error("Pull request changed; refresh before merging");
-        const evidence = await invoke(scope, "reviews.detail", { reviewId: inspected.reviewId }) as ReviewDto;
-        if (!active(scope, expected) || selected?.id !== pr.id || evidence.status !== "approved" || evidence.candidateCommit !== pinned.sourceCommit || evidence.expectedProtectedHead !== pinned.targetCommit) throw new Error("This exact revision is no longer approved; refresh before merging");
-        if (!window.confirm(`Merge candidate ${evidence.candidateCommit} into ${evidence.protectedRef}?`)) return;
-        const confirmed = parsePullRequest(await invoke(scope, "pull-requests.detail", { pullRequestId: pr.id }));
-        if (!active(scope, expected) || confirmed.state !== "open" || confirmed.version !== latest.version) throw new Error("Pull request changed during confirmation; refresh before merging");
-        await invoke(scope, "reviews.promote", { reviewId: evidence.reviewId });
-        // Promotion has been accepted; a subsequent read failure must not offer duplicate mutation.
-        review = null; feedback = "Merge accepted. Refresh to read the protected branch state."; render();
-        try { await accept(scope, await invoke(scope, "pull-requests.refresh", mutationInput()), expected); }
-        catch { if (active(scope, expected)) { feedback = "Merge accepted. Refresh the pull request to confirm its recorded state."; render(); } }
-      }, mergeDisabled: pr.state !== "open" || review?.status !== "approved" } : {}),
-      ...(host.has("blame.line") ? { onBlame: async anchor => await invoke(scope, "blame.line", { commit: anchor.side === "base" ? anchor.baseCommit : anchor.headCommit, path: anchor.path, line: anchor.line }) as { author: string; summary: string; commit: string } } : {})
+        if (!window.confirm(`Merge candidate ${pinned.sourceCommit} into ${pr.targetRef}?`)) return;
+        let result: { pullRequest: unknown; review: ReviewDto; refreshPending: boolean };
+        try {
+          result = await invoke(scope, "pull-requests.merge", { ...mutationInput(pr), revisionId: pinned.id }) as { pullRequest: unknown; review: ReviewDto; refreshPending: boolean };
+        } catch (error) {
+          await Promise.allSettled([inspect(scope, pr, expected)]);
+          throw error;
+        }
+        if (!active(scope, expected)) return;
+        if (result.refreshPending) {
+          selected = parsePullRequest(result.pullRequest); review = result.review;
+          feedback = "Merge accepted. Refresh the pull request to confirm its recorded state."; render(); return;
+        }
+        await accept(scope, result.pullRequest, expected);
+      }, mergeDisabled: pullRequestMergeDisabled(pr, currentReview) } : {}),
+      ...(host.has("blame.line") ? { onBlame: async anchor => await invoke(scope, "blame.line", { commit: anchor.side === "base" ? anchor.baseCommit : anchor.headCommit, path: anchor.path, line: anchor.line }) as GitLineAttribution } : {})
     };
     root.update(props);
   }
@@ -115,9 +141,11 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
     const scope = host.scope(), nextKey = JSON.stringify(scope);
     if (nextKey !== scopeKey) { scopeKey = nextKey; rows = []; selected = null; snapshot = null; review = null; feedback = ""; }
     const expected = ++generation;
-    container.hidden = !scope.repositoryId || !host.has("pull-requests.list");
+    const hasInspection = host.has("diff.read") || host.has("blame.line");
+    container.hidden = !scope.repositoryId || (!host.has("pull-requests.list") && !hasInspection);
     if (container.hidden) { root.update({ pullRequests: [], selected: null, snapshot: null }); return; }
     render();
+    if (!host.has("pull-requests.list")) return;
     try {
       const values = parsePullRequestList(await invoke(scope, "pull-requests.list"));
       if (!active(scope, expected)) return;

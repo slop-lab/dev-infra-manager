@@ -38,7 +38,7 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
     const discoveredControllers = await Promise.all(context.controllers.map(async (controller) => {
       try {
         const expected = expectedGenerations.get(controller.id);
-        const description = discoverySchema.parse(await controller.run(["project", "console", "describe", ...(expected ? ["--expected-generation", expected] : [])]));
+        const description = discoverySchema.parse(await controller.run(["project", "console", "describe", ...(expected ? ["--expected-generation", expected] : [])], { timeoutMilliseconds: 120_000 }));
         if (expected && description.generationId !== expected) throw new Error("Controller generation changed; reconnect this feature");
         for (const operation of description.operations) if (!controllerOperations.some((known) => known.name === operation.name && known.access === operation.access)) throw new Error("unknown controller operation");
         discoveredGenerations.set(controller.id, description.generationId);
@@ -87,7 +87,7 @@ export const webPlugin: WebPlugin = {
     "git-diff.css": builtAsset("git-diff.css"), "pull-requests.css": builtAsset("pull-requests.css"),
     "panel.js": new URL("./assets/panel.js", import.meta.url), "navigation.js": new URL("./assets/navigation.js", import.meta.url),
     "management.js": new URL("./assets/management.js", import.meta.url), "attachment.js": new URL("./assets/attachment.js", import.meta.url), "manifest.js": new URL("./assets/manifest.js", import.meta.url),
-    "pull-requests.js": builtAsset("pull-requests.js"), "pr-model.js": builtAsset("pr-model.js"),
+    "pull-requests.js": builtAsset("pull-requests.js"), "review-detail.js": builtAsset("review-detail.js"), "pr-model.js": builtAsset("pr-model.js"),
     "pr-model-shared.js": builtAsset("pr-model-shared.js")
   }, browserEntry: "panel.js",
   autoConnect: automatic,

@@ -1,21 +1,12 @@
 // @ts-check
 import { mountManagement } from "./management.js";
 import { appendNativeGitNavigationActions, registerNativeGitNavigation } from "./navigation.js";
+import { appendReviewCi, reviewApprovalAvailability } from "./review-detail.js";
 /** @typedef {{name:string,description:string,access:string}} Descriptor */
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
 /** @typedef {import('@slop-lab/dim-service-client-native-git').ReviewDto} Review */
 /** @typedef {{controllerId:string,projectId:string,repositoryId:string}} Scope */
 /** @typedef {{id:string,controllerKey?:string,title:string,status:'ready'|'unavailable',reviewerId?:string,projects:Array<{projectId:string,name:string,repositoryIds:string[],repositories?:Array<{repositoryId:string,defaultRef:string,branches:string[]}>}>,operations:Descriptor[]}} Controller */
-/** @param {Pick<Review,'status'|'requiredReviewerIds'|'approvals'|'revocations'>} review @param {{reviewerId?:string|undefined,browserCanApprove:boolean,controllerCanApprove:boolean}} access */
-export function reviewApprovalAvailability(review, access) {
-  if (review.status === "stale") return { state: "stale", message: "This review is stale. Resolve the proposal again to inspect current changes before approving." };
-  if (!review.requiredReviewerIds.length) return { state: "not-required", message: "No human approval is required for these changes. The candidate can be promoted when its other requirements are satisfied." };
-  if (!access.controllerCanApprove || !access.reviewerId) return { state: "connection-required", message: "This controller has no available approval connection. Ask its operator to connect the required reviewer, then reconnect Git review." };
-  if (!review.requiredReviewerIds.includes(access.reviewerId)) return { state: "identity-mismatch", message: `Approval is required from ${review.requiredReviewerIds.join(", ")}. This controller is connected as ${access.reviewerId}; use a controller connected to a required reviewer.` };
-  if (review.approvals.some((approval) => approval.reviewerId === access.reviewerId && !review.revocations.some((revocation) => revocation.approvalId === approval.approvalId))) return { state: "already-approved", message: "Your approval is already recorded for this exact candidate." };
-  if (!access.browserCanApprove) return { state: "role-required", message: "Your Web account does not have the reviewer role. Open Account & access, edit your account's roles, select Grant reviewer, enter your current password and save, then sign in again. If you cannot manage accounts, ask an account administrator." };
-  return { state: "available", message: `You can approve this exact candidate as ${access.reviewerId}.` };
-}
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
   let disposed = false, catalogVersion = 0, listVersion = 0, detailVersion = 0, formVersion = 0, scopeRevision = 0;
@@ -33,7 +24,7 @@ export function mount(container, context) {
   const metadata = () => controller()?.projects.find(({ projectId }) => projectId === project.control.value)?.repositories?.find(({ repositoryId }) => repositoryId === repository.control.value);
   const targetBranch = ui.select(selectors, "Target branch", [{value:"refs/heads/main",label:"main"}]);
   const form = document.createElement("form"), proposal = ui.input(form, "Proposal ref"), submit = ui.button("Resolve proposal review", "primary");
-  proposal.required = true; proposal.maxLength = 1024; proposal.placeholder = "refs/heads/proposals/…"; submit.type = "submit"; form.append(submit);
+  proposal.required = true; proposal.maxLength = 1024; proposal.placeholder = "refs/heads/feature or refs/tags/release-candidate"; submit.type = "submit"; form.append(submit);
   const filters = element("div", "", "workspace-filters"), reviewSearch = ui.input(filters, "Search reviews"), reviewState = ui.select(filters, "Review state", [
     { value: "", label: "All states" }, { value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "revoked", label: "Revoked" }, { value: "stale", label: "Stale" }
   ]);
@@ -53,7 +44,7 @@ export function mount(container, context) {
   void import(prAsset).then((module) => {
     if (!current()) return;
     const adapter = /** @type {typeof import('../pull-requests.js')} */ (module);
-    pullRequests = adapter.mountPullRequests(pullRequestRegion, context, { scope, has, current: selected });
+    pullRequests = adapter.mountPullRequests(pullRequestRegion, context, { scope, has, current: selected, reviewerId: () => controller()?.reviewerId });
     void pullRequests.refresh();
   }).catch(() => { if (current()) pullRequestRegion.textContent = "Pull request UI could not load. Reopen Git review to retry."; });
   let draftKey = "";
@@ -85,7 +76,9 @@ export function mount(container, context) {
     const reviewerId = controller()?.reviewerId;
     detail.replaceChildren(element("p", "Selected review evidence is retained independently of list filters.", "field-hint"), element("h3", `Review ${review.reviewId.slice(0, 12)} — ${review.status}`));
      const evidence = [["Project / repository", `${review.projectId}/${review.repositoryId}`], ["Proposal", review.proposalRef], ["Protected ref", review.protectedRef], ["Current protected commit", review.expectedProtectedHead], ["Candidate commit", review.candidateCommit], ["Candidate tree", review.candidateTree], ["Policy revision", review.policyRevision], ["Required reviewers", review.requiredReviewerIds.join(", ") || "None"], ["Stale reasons", review.staleReasons.join("; ") || "None"]];
-     detail.append(ui.table(["Evidence", "Exact value"], evidence), element("h4", "Changed files"));
+      detail.append(ui.table(["Evidence", "Exact value"], evidence));
+     appendReviewCi({ detail, review, ui, element });
+     detail.append(element("h4", "Changed files"));
     const changes = element("ul"); for (const change of review.changes) changes.append(element("li", `${change.status}: ${change.oldPath ?? ""}${change.oldPath && change.newPath && change.oldPath !== change.newPath ? " → " : ""}${change.newPath && change.newPath !== change.oldPath ? change.newPath : ""}`)); detail.append(changes);
     const diff = document.createElement("details"); diff.append(element("summary", `Patch (${review.patch.length.toLocaleString()} characters)`), element("pre", review.patch || "No textual changes.")); detail.append(diff, element("h4", "Approvals"));
     const approvals = element("ul");
@@ -218,7 +211,7 @@ export function mount(container, context) {
   /** @param {{controllerId:string,projectId:string,repositoryId?:string}} [preferred] */
   async function refreshCatalog(preferred) {
     const version = ++catalogVersion, before = scope(), previous = preferred ? { ...preferred, repositoryId: preferred.repositoryId ?? "" } : before; saveDraft();
-    const value = /** @type {{controllers:Controller[]}} */ (await context.invoke("projects.list", {})); if (!current() || version !== catalogVersion) return;
+    const value = /** @type {{controllers:Controller[]}} */ (await context.invoke("projects.list", {}, { timeoutMilliseconds: 125_000 })); if (!current() || version !== catalogVersion) return;
     controllers = value.controllers; availability.replaceChildren();
     for (const entry of controllers.filter(({ status }) => status === "unavailable")) availability.append(element("p", `${entry.title}: project discovery is unavailable. Install the Native Git host plugin and select its control plane on this controller, then reconnect this feature. Other controllers remain usable; refresh projects to retry temporary outages.`));
     options(host.control, controllers.map(({ id, title }) => ({ id, title })), previous.controllerId); host.field.hidden = controllers.length < 2;

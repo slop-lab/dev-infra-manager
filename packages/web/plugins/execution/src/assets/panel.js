@@ -8,6 +8,35 @@ import { registerExecutionNavigation } from "./navigation.js";
 /** @typedef {{id:string,state:string,executionKind:string,job?:Job|Task}} WorkerSlot */
 /** @typedef {{id:string,slots:WorkerSlot[]}} Worker */
 /** @typedef {{kind:'repository-jobs',controllerKey:string,projectId:string,repositoryId:string}|{kind:'job',controllerKey:string,jobId:string}} NavigationTarget */
+/** @typedef {import('@slop-lab/dim-contracts-ci/query').ExecutionSummary['admission']} Admission */
+/** @typedef {NonNullable<import('@slop-lab/dim-contracts-ci/query').ExecutionSummary['completion']>} Completion */
+
+/** @param {Admission} admission */
+export function admissionGuidance(admission) {
+  if (!admission) return "";
+  if (admission.phase === "authorize") {
+    if (admission.code === "timeout") return "Git authorization timed out. Check Git service load and reconnect this controller to the current generation before retrying.";
+    if (admission.code === "unavailable") return "Git authorization is unavailable. Check the Git service and reconnect this controller to the current generation before retrying.";
+    return "Git authorization evidence is stale. Reconnect this controller to the current generation before retrying.";
+  }
+  if (admission.code === "timeout") return "Reading the candidate Git proof timed out. Check Git proof load, then retry.";
+  if (admission.code === "unavailable") return "The candidate Git proof is unavailable. Check repository access and Git service load, then retry.";
+  return "The candidate Git proof is stale. Resolve a fresh review for the current candidate before retrying.";
+}
+/** @param {Completion} completion */
+export function completionGuidance(completion) {
+  if (completion.kind === "executor-failure" && "code" in completion) {
+    if (completion.code === "candidate-read-timeout") return "Execution infrastructure timed out reading the candidate. Check Git proof load, then retry.";
+    if (completion.code === "candidate-read-stale") return "Execution infrastructure found stale candidate evidence. Resolve a fresh review before retrying.";
+    return "Execution infrastructure failed before a guest result was available. Inspect worker capacity and retry.";
+  }
+  if (completion.kind === "exited" && "exitCode" in completion) return completion.exitCode === 0 ? "Guest command completed successfully." : `Guest command exited with code ${completion.exitCode}. Inspect the captured guest logs before retrying.`;
+  if (completion.kind === "signaled" && "signal" in completion) return `Guest command ended from signal ${completion.signal}. Inspect the captured guest logs before retrying.`;
+  if (completion.kind === "timed-out") return "Guest command exceeded its execution deadline.";
+  if (completion.kind === "output-limit-exceeded") return "Guest command exceeded the configured output limit.";
+  if (completion.kind === "lease-lost") return "Worker ownership was lost before completion. Inspect worker capacity and retry.";
+  return "Execution was cancelled.";
+}
 
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
@@ -89,6 +118,8 @@ export function mount(container, context) {
       activeDetail = value.job.id;
       const metadata = [["Job ID", value.job.id], ["Project / repository", `${value.job.projectId} / ${value.job.repositoryId}`], ["Worker / slot", `${value.job.workerId ?? "unassigned"} / ${value.job.slotId ?? "unassigned"}`], ["Outcome", value.job.outcome ?? "pending"], ["Publication", value.job.publication]];
       detail.replaceChildren(ui.element("p", "Selected job details are retained independently of list filters.", "field-hint"), ui.element("h3", `${value.job.jobName} — ${value.job.phase}`), ui.table(["Field", "Value"], metadata));
+      if (value.job.admission) detail.append(ui.element("h4", "Admission guidance"), ui.element("p", admissionGuidance(value.job.admission), "field-hint"));
+      if (value.job.completion) detail.append(ui.element("h4", "Completion"), ui.element("p", completionGuidance(value.job.completion), "field-hint"));
       if (value.result) {
         for (const stream of ["stdout", "stderr"]) {
           const log = stream === "stdout" ? value.result.logs.stdout : value.result.logs.stderr;
@@ -149,8 +180,8 @@ export function mount(container, context) {
           if (cell instanceof HTMLElement && job && "jobName" in job) actionButton(cell, "View worker job", () => open(job));
         });
         capacity.append(table, workerSetup());
-      } catch (error) {
-        if (scoped() && request === capacityVersion) { capacity.replaceChildren(ui.element("h3", "Worker capacity")); const message = ui.element("p"); ui.feedback(message, `Worker capacity is unavailable: ${error instanceof Error ? error.message : "service unavailable"}. Jobs remain available; retry capacity independently.`, "error"); capacity.append(message); }
+      } catch {
+        if (scoped() && request === capacityVersion) { capacity.replaceChildren(ui.element("h3", "Worker capacity")); const message = ui.element("p"); ui.feedback(message, "Worker capacity read is unavailable. The selected execution result above is unchanged. Retry capacity independently; configured slots and worker connectivity could not be confirmed.", "error"); capacity.append(message); }
       }
     }
     search.addEventListener("input", paintJobs); state.addEventListener("change", paintJobs);

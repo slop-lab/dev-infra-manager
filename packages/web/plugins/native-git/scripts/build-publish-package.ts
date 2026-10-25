@@ -9,8 +9,6 @@ await cp(new URL("../src/assets", import.meta.url), new URL("../dist/assets", im
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
 
-// Give the model its own entry so shared validation stays separate from React.
-// Two entries yield one fixed-name shared module, keeping the asset map explicit.
 await build({ entryPoints: {
   "pull-requests": new URL("../src/pull-requests.ts", import.meta.url).pathname,
   "pr-model": new URL(import.meta.resolve("@slop-lab/git-pull-requests")).pathname
@@ -18,6 +16,8 @@ await build({ entryPoints: {
   splitting: true, chunkNames: "pr-model-shared",
   bundle: true, format: "esm", platform: "browser", target: "es2022", minify: true,
   define: { "process.env.NODE_ENV": '"production"' }, legalComments: "eof" });
+await build({ entryPoints: [new URL("../src/review-detail.ts", import.meta.url).pathname], outfile: new URL("../dist/assets/review-detail.js", import.meta.url).pathname,
+  bundle: true, format: "esm", platform: "browser", target: "es2022", minify: true, legalComments: "eof" });
 
 for (const [source, target] of [["@slop-lab/react-git-diff/styles.css", "git-diff.css"], ["@slop-lab/react-git-pull-requests/styles.css", "pull-requests.css"]] as const) {
   await copyFile(new URL(import.meta.resolve(source)), new URL(`../dist/assets/${target}`, import.meta.url));

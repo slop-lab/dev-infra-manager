@@ -33,11 +33,24 @@ export class PullRequestUI extends ReviewUI {
   async inspectLineAttribution() {
     await this.detail.getByRole("button", { name: "Blame head line 1 of .dim/review-boundary.json", exact: true }).click();
     await this.detail.getByText(/DIM Journey · [a-f0-9]+ · change reviewed configuration/).waitFor();
+    await this.detail.getByText("Working…", { exact: true }).waitFor({ state: "hidden" });
   }
 
   async approveRevision() {
+    const prepare = this.detail.getByRole("button", { name: "Prepare review", exact: true });
+    await prepare.waitFor();
+    await this.browserPage.waitForFunction(() => {
+      const region = document.querySelector('[aria-label="Pull request details"]');
+      return [...(region?.querySelectorAll("button") ?? [])].some((button) => button.textContent === "Prepare review" && !button.disabled);
+    });
+    assert.equal(await prepare.isEnabled(), true, "review preparation must be a standalone reviewer-authorized action");
+    await prepare.click();
     const approve = this.detail.getByRole("button", { name: "Approve revision", exact: true });
     await approve.waitFor();
+    await this.browserPage.waitForFunction(() => {
+      const region = document.querySelector('[aria-label="Pull request details"]');
+      return [...(region?.querySelectorAll("button") ?? [])].some((button) => button.textContent === "Approve revision" && !button.disabled);
+    });
     assert.equal(await approve.isEnabled(), true, "the current revision must be available to the configured reviewer");
     const confirm = (dialog: Dialog) => dialog.accept();
     this.browserPage.on("dialog", confirm);
@@ -47,6 +60,22 @@ export class PullRequestUI extends ReviewUI {
         const region = document.querySelector('[aria-label="Pull request details"]');
         return [...(region?.querySelectorAll("button") ?? [])].some((button) => button.textContent === "Merge pull request" && !button.disabled);
       });
+    } finally { this.browserPage.off("dialog", confirm); }
+  }
+
+  async revokeApproval() {
+    const revoke = this.detail.getByRole("button", { name: "Revoke approval", exact: true });
+    await revoke.waitFor();
+    await this.browserPage.waitForFunction(() => {
+      const region = document.querySelector('[aria-label="Pull request details"]');
+      return [...(region?.querySelectorAll("button") ?? [])].some((button) => button.textContent === "Revoke approval" && !button.disabled);
+    });
+    assert.equal(await revoke.isEnabled(), true, "the current reviewer must be able to revoke its exact approval");
+    const confirm = (dialog: Dialog) => dialog.accept();
+    this.browserPage.on("dialog", confirm);
+    try {
+      await revoke.click();
+      await this.detail.getByRole("button", { name: "Approve revision", exact: true }).waitFor();
     } finally { this.browserPage.off("dialog", confirm); }
   }
 

@@ -16,6 +16,7 @@ export async function runPullRequestJourney(context: JourneyContext, createEnvir
     await environment.assertProjectImported();
   });
   const proposal = await context.step("push a workspace proposal requiring review", environment.prepareProposal);
+  await context.step("verify ordinary source push kept the protected ref", () => environment.assertProtectedHead(proposal.baseCommit));
   await context.step("discover and grant the browser reviewer role", async () => {
     await ui.openPendingProposal(proposal.proposalRef);
     await ui.expectReviewerAccessRequired();
@@ -28,14 +29,16 @@ export async function runPullRequestJourney(context: JourneyContext, createEnvir
   await context.step("discuss the pull request", () => ui.postComment("Check the configuration boundary before merge."));
   await context.step("comment on an exact changed line", () => ui.postComment("This field change needs the reviewer policy.", true));
   await context.step("inspect independent line attribution", () => ui.inspectLineAttribution());
-  await context.step("approve the first immutable revision", () => ui.approveRevision());
+  await context.step("prepare and approve the first immutable revision", () => ui.approveRevision());
+  await context.step("verify approval did not move the protected ref", () => environment.assertProtectedHead(proposal.baseCommit));
+  await context.step("revoke the first revision approval", () => ui.revokeApproval());
+  await context.step("verify revocation did not move the protected ref", () => environment.assertProtectedHead(proposal.baseCommit));
+  await context.step("approve the first immutable revision again", () => ui.approveRevision());
+  await context.step("verify renewed approval did not move the protected ref", () => environment.assertProtectedHead(proposal.baseCommit));
   const next = await context.step("push a new revision from the workspace", environment.advanceProposal);
-  await context.step("keep old discussion and reject stale approval", async () => {
-    await ui.refreshAfterPush();
-    await environment.assertProtectedHead(proposal.baseCommit);
-  });
-  await context.step("review and merge the current pull request revision", async () => {
-    await ui.approveRevision(); await ui.mergePullRequest(title);
-  });
+  await context.step("keep old discussion and reject stale approval", () => ui.refreshAfterPush());
+  await context.step("verify stale approval did not move the protected ref", () => environment.assertProtectedHead(proposal.baseCommit));
+  await context.step("prepare and approve the current pull request revision", () => ui.approveRevision());
+  await context.step("merge the current pull request revision", () => ui.mergePullRequest(title));
   await context.step("verify the exact merged commit on the real main ref", () => environment.assertProtectedHead(next.candidate));
 }

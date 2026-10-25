@@ -24,11 +24,14 @@ try {
   await page.route("**/v1/extensions/execution/operations/workers.list", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }), { times: 1 });
   await page.getByRole("button", { name: "Execution", exact: true }).click();
   const execution = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Execution", exact: true, level: 1 }) });
-  await execution.getByText(/^Worker capacity is unavailable:/).waitFor();
+  await execution.getByText("Worker capacity read is unavailable. The selected execution result above is unchanged. Retry capacity independently; configured slots and worker connectivity could not be confirmed.", { exact: true }).waitFor();
   await execution.getByRole("cell", { name: "queued", exact: true }).first().waitFor();
   await execution.getByLabel("Job state", { exact: true }).selectOption("finished");
   assert.equal(await execution.getByRole("cell", { name: "queued", exact: true }).count(), 0);
   await execution.getByRole("button", { name: "View job", exact: true }).click();
+  await execution.getByRole("heading", { name: "Admission guidance", exact: true }).waitFor();
+  await execution.getByText("Reading the candidate Git proof timed out. Check Git proof load, then retry.", { exact: true }).waitFor();
+  await execution.getByText("Guest command completed successfully.", { exact: true }).waitFor();
   await execution.getByText("browser-safe-diagnostic", { exact: false }).waitFor();
   await page.route("**/v1/extensions/execution/operations/jobs.retry", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }), { times: 1 });
   await execution.getByRole("button", { name: "Retry execution", exact: true }).click();
@@ -41,11 +44,19 @@ try {
   await execution.getByRole("heading", { name: "Worker capacity", exact: true }).waitFor();
   await page.screenshot({ path: `${evidence}/execution-desktop.png`, fullPage: true });
 
+  await page.route("**/v1/extensions/native-git/operations/projects.list", async (route) => {
+    await new Promise<void>((resolve) => setTimeout(resolve, 5_200));
+    await route.continue();
+  }, { times: 1 });
   await page.getByRole("button", { name: "Git review", exact: true }).click();
   const git = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Git review", exact: true, level: 1 }) });
+  assert.equal(await git.getByLabel("Proposal ref", { exact: true }).getAttribute("placeholder"), "refs/heads/feature or refs/tags/release-candidate");
   await git.getByLabel("Repository", { exact: true }).selectOption("root");
   await git.getByRole("button", { name: "Open review", exact: true }).click();
   await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
+  await git.getByRole("heading", { name: "DIM CI", exact: true }).waitFor();
+  const ciStatus = git.locator("[data-ci-state]"); await ciStatus.waitFor();
+  assert.match(await ciStatus.innerText(), /^DIM CI /);
   await git.getByLabel("Search reviews", { exact: true }).fill("does-not-match");
   await git.getByText("No reviews match the current search and state filter.", { exact: true }).waitFor();
   assert.equal(await git.getByRole("heading", { name: "Changed files", exact: true }).count(), 1);

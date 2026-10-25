@@ -1,8 +1,8 @@
 # @slop-lab/react-git-pull-requests
 
 Controlled React pull request presentation with no DIM, network or account
-integration. Uses the portable `@slop-lab/git-pull-requests` model and
-`@slop-lab/react-git-diff` component. React and React DOM are peers.
+integration. Uses the portable pull-request, discussion, blame, and diff models
+with `@slop-lab/react-git-diff`. React and React DOM are peers.
 
 `PullRequestPanel` receives `pullRequests`, `selected`, and `snapshot`. The diff
 must match the selected revision's exact base and head commits. Otherwise it
@@ -18,8 +18,12 @@ All mutation callbacks are optional; their absence hides unavailable actions:
 - `onSelect(id)`, `onRefresh()` and `onCreate({title,body,sourceRef,targetRef})`
 - `onEdit({title,body})`, `onSetState('open'|'closed')`
 - `onComment({revisionId,body,anchor?:{path,side,line}})`
-- `onApprove()`, `onMerge()` with optional `approveDisabled` / `mergeDisabled`
-- `onBlame(immutableDiffLineAnchor)` returning `{author,summary,commit}`
+- `onPrepareReview()`, `onApprove()`, `onRevoke()`, and `onMerge()` with
+  independently controlled disabled states
+- `onBlame(immutableDiffLineAnchor)` returning the validated
+  `@slop-lab/git-blame` line attribution
+- `onInspectDiff({baseCommit,headCommit})` and
+  `onInspectBlame({commit,path,line})` for direct inspection without a pull request
 
 Callbacks may return promises. Local pending feedback prevents repeated actions,
 errors remain visible, and failed forms retain their input. The application owns

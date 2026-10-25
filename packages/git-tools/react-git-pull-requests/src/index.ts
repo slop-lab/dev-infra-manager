@@ -1,11 +1,14 @@
 import { createElement as h, useState, useEffect, useRef, useMemo, type ReactNode, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import { GitDiff, type DiffSnapshot, type DiffLineAnchor, type DiffLineContext } from "@slop-lab/react-git-diff";
-import { currentRevision, commentIsOutdated, type PullRequest, type PullRequestComment, type DiffAnchor } from "@slop-lab/git-pull-requests";
+import type { GitLineAttribution } from "@slop-lab/git-blame";
+import { commentIsOutdated, type DiscussionAnchor, type DiscussionComment } from "@slop-lab/git-discussions";
+import { currentRevision, type PullRequest } from "@slop-lab/git-pull-requests";
 
 export interface PullRequestDraft { readonly title: string; readonly body: string; readonly sourceRef: string; readonly targetRef: string }
-export interface CommentDraft { readonly revisionId: string; readonly body: string; readonly anchor?: DiffAnchor }
-export interface BlameResult { readonly author: string; readonly summary: string; readonly commit: string }
+export interface CommentDraft { readonly revisionId: string; readonly body: string; readonly anchor?: DiscussionAnchor }
+export interface DiffInspection { readonly baseCommit: string; readonly headCommit: string }
+export interface BlameInspection { readonly commit: string; readonly path: string; readonly line: number }
 type Action<T = void> = (input: T) => void | Promise<void>;
 export interface PullRequestPanelProps {
   readonly pullRequests: readonly PullRequest[];
@@ -18,13 +21,19 @@ export interface PullRequestPanelProps {
   readonly onEdit?: Action<Pick<PullRequestDraft, "title" | "body">>;
   readonly onSetState?: Action<"open" | "closed">;
   readonly onComment?: Action<CommentDraft>;
+  readonly onPrepareReview?: () => void | Promise<void>;
   readonly onApprove?: () => void | Promise<void>;
+  readonly onRevoke?: () => void | Promise<void>;
   readonly onMerge?: () => void | Promise<void>;
+  readonly prepareReviewDisabled?: boolean;
   readonly approveDisabled?: boolean;
+  readonly revokeDisabled?: boolean;
   readonly mergeDisabled?: boolean;
   readonly reviewStatus?: string;
   readonly reviewContent?: ReactNode;
-  readonly onBlame?: (anchor: DiffLineAnchor) => Promise<BlameResult>;
+  readonly onBlame?: (anchor: DiffLineAnchor) => Promise<GitLineAttribution>;
+  readonly onInspectDiff?: (input: DiffInspection) => Promise<DiffSnapshot>;
+  readonly onInspectBlame?: (input: BlameInspection) => Promise<GitLineAttribution>;
 }
 function useAction() {
   const inFlight = useRef(false);
@@ -51,21 +60,42 @@ function CreateForm({ action }: { readonly action: NonNullable<PullRequestPanelP
   }); } }, inputField("Pull request title", title, setTitle, false, true, state.pending), inputField("Pull request description", body, setBody, true, false, state.pending),
   inputField("Source ref", sourceRef, setSource, false, true, state.pending), inputField("Target ref", targetRef, setTarget, false, true, state.pending), h("button", { type: "submit", disabled: state.pending }, "Create pull request"), state.feedback));
 }
-function Comment({ comment, outdated }: { readonly comment: PullRequestComment; readonly outdated: boolean }): ReactNode {
+function Comment({ comment, outdated }: { readonly comment: DiscussionComment; readonly outdated: boolean }): ReactNode {
   return h("article", { "aria-label": `Comment by ${comment.actorId}`, className: "git-pr__comment" },
     h("strong", null, comment.actorId), " · ", h("time", { dateTime: comment.createdAt }, comment.createdAt), outdated ? h("span", null, " · Outdated revision") : null,
     comment.anchor ? h("p", null, `${comment.anchor.path} · ${comment.anchor.side} line ${comment.anchor.line}`) : null,
     h("p", { className: "git-pr__text" }, comment.body));
 }
-function anchorKey(anchor: DiffAnchor): string { return JSON.stringify([anchor.path, anchor.side, anchor.line]); }
+function DirectInspection(props: Pick<PullRequestPanelProps, "onInspectDiff" | "onInspectBlame">): ReactNode {
+  const state = useAction();
+  const [baseCommit, setBaseCommit] = useState(""), [headCommit, setHeadCommit] = useState("");
+  const [commit, setCommit] = useState(""), [path, setPath] = useState(""), [line, setLine] = useState("1");
+  const [snapshot, setSnapshot] = useState<DiffSnapshot | null>(null), [blame, setBlame] = useState<GitLineAttribution | null>(null);
+  if (!props.onInspectDiff && !props.onInspectBlame) return null;
+  return h("details", { className: "git-pr__inspection" }, h("summary", null, "Inspect commits"),
+    props.onInspectDiff ? h("form", { "aria-label": "Inspect Git diff", onSubmit: (event: FormEvent) => { event.preventDefault(); void state.run(async () => {
+      const result = await props.onInspectDiff?.({ baseCommit: baseCommit.trim(), headCommit: headCommit.trim() });
+      if (result) setSnapshot(result);
+    }); } }, inputField("Base commit", baseCommit, setBaseCommit, false, true, state.pending), inputField("Head commit", headCommit, setHeadCommit, false, true, state.pending),
+    h("button", { type: "submit", disabled: state.pending }, "Inspect diff")) : null,
+    snapshot ? h(GitDiff, { snapshot }) : null,
+    props.onInspectBlame ? h("form", { "aria-label": "Inspect Git blame", onSubmit: (event: FormEvent) => { event.preventDefault(); void state.run(async () => {
+      const result = await props.onInspectBlame?.({ commit: commit.trim(), path: path.trim(), line: Number(line) });
+      if (result) setBlame(result);
+    }); } }, inputField("Blame commit", commit, setCommit, false, true, state.pending), inputField("File path", path, setPath, false, true, state.pending),
+    inputField("Line number", line, setLine, false, true, state.pending), h("button", { type: "submit", disabled: state.pending }, "Inspect blame")) : null,
+    blame ? h("p", { role: "status" }, `${blame.author} · ${blame.commit} · ${blame.summary}`) : null,
+    state.feedback);
+}
+function anchorKey(anchor: DiscussionAnchor): string { return JSON.stringify([anchor.path, anchor.side, anchor.line]); }
 function Detail(props: PullRequestPanelProps & { readonly selected: PullRequest }): ReactNode {
   const pr = props.selected, revision = currentRevision(pr), state = useAction();
   const [title, setTitle] = useState(pr.title), [body, setBody] = useState(pr.body), [comment, setComment] = useState("");
-  const [anchor, setAnchor] = useState<DiffAnchor | null>(null), [blames, setBlames] = useState<Record<string, BlameResult>>({});
+  const [anchor, setAnchor] = useState<DiscussionAnchor | null>(null), [blames, setBlames] = useState<Record<string, GitLineAttribution>>({});
   useEffect(() => { setTitle(pr.title); setBody(pr.body); }, [pr.title, pr.body]);
   const snapshot = props.snapshot?.baseCommit === revision.targetCommit && props.snapshot.headCommit === revision.sourceCommit ? props.snapshot : null;
   const commentsByAnchor = useMemo(() => {
-    const index = new Map<string, PullRequestComment[]>();
+    const index = new Map<string, DiscussionComment[]>();
     for (const item of pr.comments) {
       if (item.revisionId !== revision.id || !item.anchor) continue;
       const key = anchorKey(item.anchor), existing = index.get(key);
@@ -79,7 +109,7 @@ function Detail(props: PullRequestPanelProps & { readonly selected: PullRequest 
   function threads(context: DiffLineContext): ReactNode {
     const anchors = [context.baseAnchor, context.headAnchor].filter((value): value is DiffLineAnchor => value !== null);
     const comments = anchors.flatMap(candidate => commentsByAnchor.get(anchorKey(candidate)) ?? []);
-    const blame = anchors.map(item => blames[anchorKey(item)]).filter((item): item is BlameResult => !!item);
+    const blame = anchors.map(item => blames[anchorKey(item)]).filter((item): item is GitLineAttribution => !!item);
     if (!comments.length && !blame.length) return null;
     return h("div", null, comments.map(item => h(Comment, { key: item.id, comment: item, outdated: false })), blame.map((item, index) => h("p", { key: index }, `${item.author} · ${item.commit} · ${item.summary}`)));
   }
@@ -91,7 +121,9 @@ function Detail(props: PullRequestPanelProps & { readonly selected: PullRequest 
     h("div", { role: "group", "aria-label": "Pull request actions" },
       actionButton("Refresh pull request", props.onRefresh),
       pr.state !== "merged" && props.onSetState ? actionButton(pr.state === "open" ? "Close pull request" : "Reopen pull request", () => props.onSetState!(pr.state === "open" ? "closed" : "open")) : null,
+      pr.state === "open" ? actionButton("Prepare review", props.onPrepareReview, props.prepareReviewDisabled) : null,
       pr.state === "open" ? actionButton("Approve revision", props.onApprove, props.approveDisabled) : null,
+      pr.state === "open" ? actionButton("Revoke approval", props.onRevoke, props.revokeDisabled) : null,
       pr.state === "open" ? actionButton("Merge pull request", props.onMerge, props.mergeDisabled) : null),
     props.reviewStatus ? h("p", { role: "status" }, props.reviewStatus) : null, props.reviewContent, state.feedback,
     h("h4", null, "Changes"), snapshot ? h(GitDiff, { snapshot,
@@ -103,7 +135,7 @@ function Detail(props: PullRequestPanelProps & { readonly selected: PullRequest 
           onClick: () => { void state.run(async () => { const result = await props.onBlame!(selected); setBlames(previous => ({ ...previous, [anchorKey(selected)]: result })); }); } }, "Blame") : null;
       } } : {})
     }) : h("p", null, "Diff unavailable for this revision. Refresh to load its exact commits."),
-    h("h4", null, "Discussion"), pr.comments.filter(item => !item.anchor || commentIsOutdated(pr, item) || !snapshot).map(item => h(Comment, { key: item.id, comment: item, outdated: commentIsOutdated(pr, item) })),
+    h("h4", null, "Discussion"), pr.comments.filter(item => !item.anchor || commentIsOutdated(item, revision.id) || !snapshot).map(item => h(Comment, { key: item.id, comment: item, outdated: commentIsOutdated(item, revision.id) })),
     props.onComment ? h("form", { "aria-label": "Add comment", onSubmit: (event: FormEvent) => { event.preventDefault(); void state.run(async () => {
       await props.onComment!({ revisionId: revision.id, body: comment, ...(anchor ? { anchor } : {}) }); setComment(""); setAnchor(null);
     }); } }, anchor ? h("p", null, `Comment on ${anchor.path} · ${anchor.side} line ${anchor.line} `, h("button", { type: "button", disabled: state.pending, onClick: () => setAnchor(null) }, "Use general comment")) : null,
@@ -111,7 +143,12 @@ function Detail(props: PullRequestPanelProps & { readonly selected: PullRequest 
 }
 export function PullRequestPanel(props: PullRequestPanelProps): ReactNode {
   const state = useAction();
+  const inspectionProps: Pick<PullRequestPanelProps, "onInspectDiff" | "onInspectBlame"> = {
+    ...(props.onInspectDiff ? { onInspectDiff: props.onInspectDiff } : {}),
+    ...(props.onInspectBlame ? { onInspectBlame: props.onInspectBlame } : {})
+  };
   return h("div", { className: ["git-pr", props.className].filter(Boolean).join(" "), "data-git-pull-requests": "" }, props.onCreate ? h(CreateForm, { action: props.onCreate }) : null,
+    h(DirectInspection, inspectionProps),
     !props.selected && props.onRefresh ? h("button", { type: "button", disabled: state.pending, onClick: () => { void state.run(props.onRefresh!); } }, "Refresh pull requests") : null, state.feedback,
     h("nav", { "aria-label": "Pull requests" }, props.pullRequests.length ? h("ul", null, props.pullRequests.map(pr => h("li", { key: pr.id },
       props.onSelect ? h("button", { type: "button", disabled: state.pending, "aria-current": props.selected?.id === pr.id ? "page" : undefined, onClick: () => { void state.run(() => props.onSelect!(pr.id)); } }, `${pr.title} · ${pr.state}`) : h("span", null, `${pr.title} · ${pr.state}`)))) : h("p", null, "No pull requests.")),

@@ -49,6 +49,7 @@ export async function createServicePanelsFixture() {
     evidence.stdout = { bytes: String(output.length), sha256: `sha256:${hash(output.toString())}`, truncated: false };
     evidence.logs.stdout.base64 = output.toString("base64");
     ci.store.finish(authorized.id, "host-a", slot.id, authorized.leaseToken, evidence);
+    ci.store.recordAdmission(authorized.id, { phase: "candidate-read", code: "timeout" });
     const workerJob = ci.store.enqueue(event("worker-current"));
     ci.store.reserve("host-a", slot, randomUUID());
     const queued = ci.store.enqueue(event("queued"));

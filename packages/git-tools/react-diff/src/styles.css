@@ -6,8 +6,9 @@
 .git-diff__scroll { overflow-x: auto; }
 .git-diff__table { width: 100%; border-collapse: collapse; font: 13px/1.6 ui-monospace, monospace; }
 .git-diff__number-cell { width: 1%; text-align: right; user-select: none; color: #57606a; vertical-align: top; }
-.git-diff__line-number { border: 0; background: transparent; color: inherit; font: inherit; padding: 0 6px; }
+.git-diff__line-number { min-inline-size: 44px; border: 0; background: transparent; color: inherit; font: inherit; padding: 0 6px; }
 button.git-diff__line-number { cursor: pointer; }
+button.git-diff__line-number:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
 .git-diff__line { color: #1f2328; }
 .git-diff__line--addition { background: #dafbe1; }
 .git-diff__line--deletion { background: #ffebe9; }
@@ -17,3 +18,4 @@ button.git-diff__line-number { cursor: pointer; }
 .git-diff__no-newline { display: block; color: #57606a; }
 .git-diff__below-line { padding: 8px; white-space: normal; font-family: system-ui, sans-serif; }
 .git-diff__hunk { background: #ddf4ff; color: #0969da; padding: 4px 8px; white-space: pre; }
+@media (pointer: coarse) { button.git-diff__line-number { min-block-size: 44px; } }
