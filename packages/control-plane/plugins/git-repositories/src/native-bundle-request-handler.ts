@@ -21,19 +21,24 @@ import type { NativeProjectRootReadService } from "./native-project-root-read-ht
 import type { NativeProjectWorkspaceWriteService } from "./native-project-workspace-write-http.js";
 import { nativeGitRoute } from "./routing.js";
 import { handleNativeProjectReadinessHttp } from "./native-project-readiness-http.js";
+import { handleNativeProjectAttachmentHttp } from "./native-project-attachment-http.js";
+import type { GitExecutableIdentity } from "./repository.js";
 
 type RequestHandlerInput = {
   readonly activationTokenDigest: string;
   readonly config: NativeGitBundleConfig;
+  readonly gitIdentity: GitExecutableIdentity;
   readonly options: Pick<NativeGitBundleServerOptions,
     "activationToken" | "expectedGenerationId" | "readinessToken">;
   readonly registrars: readonly NativeGitProjectRegistrar[];
   readonly rootImportService: NativeProjectRootImportService;
   readonly rootReadService: NativeProjectRootReadService;
   readonly state: NativeGitBundleState;
+  readonly stateDirectory: string;
   readonly workspaceWriteService: NativeProjectWorkspaceWriteService;
   readonly attachments: readonly RepositoryAttachment[];
   readonly knownCredentials: readonly { readonly username: string; readonly password: string }[];
+  readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
   readonly deliveryHealthy: () => boolean;
   readonly activated: () => boolean;
   readonly activate: () => Promise<void>;
@@ -69,6 +74,18 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     for (const attachment of input.attachments) if (await attachment.handle?.(request, response, url)) return;
     if (await input.rootReadService.handleLeaseRequest(request, response, url)) return;
     if (await input.workspaceWriteService.handleLeaseRequest(request, response, url)) return;
+    if (await handleNativeProjectAttachmentHttp({
+      activated: input.activated(),
+      activationTokenDigest: input.activationTokenDigest,
+      expectedGenerationId: input.options.expectedGenerationId,
+      gitExecutable: input.config.gitExecutable,
+      gitIdentity: input.gitIdentity,
+      issuers: input.config.projectRootReadIssuers,
+      knownCredentials: input.knownCredentials,
+      serialize: input.serialize,
+      state: input.state,
+      stateDirectory: input.stateDirectory
+    }, { request, response, url })) return;
     if (await handleNativeProjectReadinessHttp(input.readiness, request, response, url)) return;
     if (/^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/repositories\/[^/]+\/import\/proof$/.test(url.pathname)
       && (request.method !== "POST" || url.search !== "")) return sendNotFound(response);
