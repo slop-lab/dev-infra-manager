@@ -90,8 +90,6 @@ function gitEnvironment(): NodeJS.ProcessEnv {
     ["transfer.fsckObjects", "true"],
     ["core.hooksPath", "/dev/null"],
     ["http.maxRequests", "1"],
-    ["http.lowSpeedLimit", "1"],
-    ["http.lowSpeedTime", "10"],
     ["protocol.version", "2"]
   ] as const;
   return {
