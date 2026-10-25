@@ -103,3 +103,17 @@ records user outcomes and uses the same disposable real-service environment as
 the review journey; it does not keep today's component tree or CSS as a contract.
 Both journeys run through `test:web-journeys` in normal CI. For a targeted local
 run, append `pull-requests` or `review` to that command.
+
+## Existing Projects on another host
+
+With the same `DIM_CHROMIUM` selection, run
+`pnpm --dir tests run test:web-native-management`. This standalone browser check
+uses real Git authority and host-console subprocesses with independent host
+state. It discovers a Project imported on the first host, inspects repositories,
+selects different configuration/default repositories and attaches it to the
+second host. It checks persisted selections independently of the screen, rejects
+local collisions without replacing choices, verifies managed workspace draft
+navigation and denies a read-only browser account's attachment request. The
+ordinary project-creation/import regressions run in the same check. The browser
+workflow runs it alongside the review and PR journeys; no live host installation
+or operator state is used.

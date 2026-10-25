@@ -52,6 +52,8 @@ jobs:
         env:
           DIM_WEB_JOURNEY_ARTIFACTS: ${{ runner.temp }}/dim-web-journeys
         run: pnpm --dir tests run test:web-journeys
+      - name: Verify cross-host Project attachment and management in browser
+        run: pnpm --dir tests run test:web-native-management
       - name: Upload sanitized timings and failure evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
