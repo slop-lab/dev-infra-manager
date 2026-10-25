@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { isTaskAssignment } from "../../../packages/host/plugins/execution-worker/src/client.js";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import * as rootProofGit from "../../../packages/control-plane/plugins/git-repositories/src/native-root-import-proof-git.js";
 import { StaleExecutionSourceError } from "../../../packages/control-plane/plugins/execution-scheduler/src/ci-source.js";
 import { runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { installedExecutionFixture, type InstalledExecutionFixture } from "./installedExecutionFixture.js";
@@ -44,8 +45,18 @@ it("replays claims and cleaned results while keeping raw diagnostics out of job 
   expect(JSON.stringify(published)).not.toContain(encoded);
 }, 30_000);
 
+it("performs one full imported-root proof for each Git-CI authority request", async () => {
+  const f = current();
+  const proofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
+  const claim = await f.claim();
+  expect(proofs).toHaveBeenCalledTimes(1);
+  await f.worker.candidate(claim);
+  expect(proofs).toHaveBeenCalledTimes(2);
+}, 30_000);
+
 it("durably retains cleaned results during a Git outage and gates promotion until publication recovers", async () => {
   const f = current(), claim = await f.claim();
+  expect(await f.ciStatus()).toMatchObject({ state: "pending", policy: "enabled", requiredJobs: [{ name: "source", status: "pending" }] });
   await f.worker.report(claim, result(claim.grant));
   expect(f.ci.store.get(claim.id)).toMatchObject({ phase: "finished", publication: "pending" });
   expect(f.ci.store.pendingResults()).toHaveLength(1);
@@ -53,8 +64,26 @@ it("durably retains cleaned results during a Git outage and gates promotion unti
   expect((await f.promote()).status).toBe(409);
   f.setPublicationAvailable(true); await f.accepted(claim.id);
   expect(await f.storedEvidence(claim.id)).not.toHaveProperty("logs");
+  expect(await f.ciStatus()).toMatchObject({ state: "succeeded", requiredJobs: [{ name: "source", status: "succeeded", executionId: claim.id }] });
   expect((await f.promote()).status).toBe(201);
   expect(await f.protectedHead()).toBe(f.envelope.review.candidateCommit);
+}, 30_000);
+
+it("reports a failed required DIM job separately from approval and blocks promotion", async () => {
+  // Given
+  const f = current();
+  f.setPublicationAvailable(true);
+  const claim = await f.claim();
+
+  // When
+  await f.worker.report(claim, { ...result(claim.grant), result: "failure", completion: { kind: "exited", exitCode: 1 } });
+  await f.accepted(claim.id);
+  await f.approve();
+
+  // Then
+  expect(await f.ciStatus()).toMatchObject({ state: "failed", requiredJobs: [{ name: "source", status: "failed", executionId: claim.id }] });
+  expect((await f.promote()).status).toBe(409);
+  expect(await f.protectedHead()).not.toBe(f.envelope.review.candidateCommit);
 }, 30_000);
 
 it("fences superseded execution evidence and promotes only after the new attempt succeeds", async () => {

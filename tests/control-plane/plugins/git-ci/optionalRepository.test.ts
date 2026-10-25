@@ -25,6 +25,11 @@ it("leaves a human-review-only repository free of CI even when Git CI is install
     expect(response.status).toBe(200);
     const envelope = parseAuthoritativeNativeReviewEnvelope(await response.json());
     expect(envelope.attachments).toEqual([]); expect(compiled).toBe(false);
+    const status = await fetch(`${f.origin}/v1/projects/project/repositories/main/reviews/${envelope.review.reviewId}/ci`, {
+      headers: { authorization: basic(reviewer), "x-dim-generation-id": generationId }
+    });
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ state: "not-configured", policy: "absent", requiredJobs: [] });
     const extension = prepared.extensions?.find(({ kind }) => kind === "dim.merge-policy.quality-guard");
     if (!extension) throw new Error("quality guard is missing");
     const guard = extension.value as { check(input: GitCiQualityInput): Promise<readonly unknown[]> };

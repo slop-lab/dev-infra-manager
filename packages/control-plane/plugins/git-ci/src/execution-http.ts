@@ -37,14 +37,15 @@ export function createExecutionHttpService(input: Input) {
       try {
         const body = await readBoundedJson(request);
         const result = await input.serialize(async () => {
-          if (grantRoute) return authorizeExecution(input.runtime, executionGrantRequestSchema.parse(body));
+          const runtime = { ...input.runtime, authoritativeTargetProofs: new Map() };
+          if (grantRoute) return authorizeExecution(runtime, executionGrantRequestSchema.parse(body));
           const projectId = match![1]!;
           const repositoryId = match![2]!;
           const grant = await readExecutionGrant(join(input.stateDirectory, projectId, `${repositoryId}.git`), match![3]!);
           if (grant === undefined || grant.event.projectId !== projectId || grant.event.repositoryId !== repositoryId) throw new ExecutionConflictError("execution was not found");
-          if (match![4] === "evidence") return recordExecutionEvidence(input.runtime, grant, body);
+          if (match![4] === "evidence") return recordExecutionEvidence(runtime, grant, body);
           z.object({}).strict().parse(body);
-          await assertCurrentExecution(input.runtime, grant);
+          await assertCurrentExecution(runtime, grant);
           prune();
           const username = `execution-${randomBytes(18).toString("hex")}`;
           const password = randomBytes(32).toString("base64url");
@@ -73,7 +74,7 @@ export function createExecutionHttpService(input: Input) {
       if (route.operation !== "read" || route.projectId !== lease.grant.event.projectId || !Object.hasOwn(lease.grant.descriptor.inputs, route.repositoryId)) {
         response.writeHead(403).end(); return true;
       }
-      try { await input.serialize(() => assertCurrentExecution(input.runtime, lease.grant)); }
+      try { await input.serialize(() => assertCurrentExecution({ ...input.runtime, authoritativeTargetProofs: new Map() }, lease.grant)); }
       catch { response.writeHead(409).end(); return true; }
       await serveGitBackend({ config: { gitExecutable: input.runtime.gitExecutable, storageRoot: input.stateDirectory },
         identity: { role: "reader", username: "execution-reader" }, route, request, response });

@@ -85,6 +85,14 @@ export async function installedExecutionFixture() {
         assert.equal(approved.status, 201, "human approval publication failed");
       },
       promote() { return post(promotionPath, hostPromoterAuthorization, { schemaVersion: 1 }); },
+      async ciStatus() {
+        const response = await fetch(`${native.service.origin}/v1/projects/project-a/repositories/root/reviews/${envelope.review.reviewId}/ci`, {
+          headers: { authorization: humanReviewerAuthorization, "x-dim-generation-id": generationId }
+        });
+        assert.equal(response.status, 200, "review CI inspection must be available");
+        const value: unknown = await response.json();
+        return value;
+      },
       retry(id: string) {
         const credential = config.credentials.operator;
         return fetch(`${endpoint}/v1/operator/jobs/${id}/retry`, { method: "POST", signal: AbortSignal.timeout(10_000), headers: {

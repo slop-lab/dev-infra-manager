@@ -102,10 +102,10 @@ export async function recordExecutionEvidence(runtime: GitCiRuntime,
 export async function currentExecutionEvidence(runtime: GitCiRuntime,
   repository: string, event: ExecutionGrant["event"]): Promise<{ grant: ExecutionGrant; result: ExecutionResult; digest: string }> {
   const grant = (await grants(repository)).filter((grant) => sameJob(grant, event)).sort((a, b) => b.attempt - a.attempt)[0];
-  if (grant === undefined) throw new ExecutionConflictError("execution evidence is missing");
+  if (grant === undefined) throw new ExecutionConflictError("execution evidence is missing", "evidence-missing");
   await assertCurrentExecution(runtime, grant);
   const value = await readOptional(join(repository, "dim-execution-evidence", `${grant.executionId}.json`));
-  if (value === undefined) throw new ExecutionConflictError("execution evidence is missing");
+  if (value === undefined) throw new ExecutionConflictError("execution evidence is missing", "evidence-missing");
   const result = executionResultSchema.parse(value);
   return { grant, result, digest: createHash("sha256").update(JSON.stringify({ grant, result })).digest("hex") };
 }
@@ -122,7 +122,9 @@ function sameJob(grant: ExecutionGrant, event: ExecutionGrant["event"]): boolean
   return grant.event.projectId === event.projectId && grant.event.repositoryId === event.repositoryId && grant.event.envelopeId === event.envelopeId
     && grant.event.executionKind === event.executionKind && grant.event.jobName === event.jobName;
 }
-export class ExecutionConflictError extends Error {}
+export class ExecutionConflictError extends Error {
+  constructor(message: string, readonly code: "conflict" | "evidence-missing" = "conflict") { super(message); }
+}
 
 async function readOptional(path: string): Promise<unknown> {
   try { return await readStoredJson(path, 512 * 1024); }

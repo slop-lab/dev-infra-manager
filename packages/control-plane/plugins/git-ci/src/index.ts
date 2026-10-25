@@ -12,6 +12,7 @@ import { createExecutionHttpService } from "./execution-http.js";
 import { createAuthoritativeNativeEventDispatcher } from "./authoritative-native-event-dispatcher.js";
 import { assertGitCiPromotable, type GitCiQualityInput } from "./quality.js";
 import type { GitCiRuntime } from "./runtime.js";
+import { handleReviewCiStatus } from "./review-status-http.js";
 
 export type GitCiOptions = {
   readonly httpClient?: NativeGitAdmissionHttpClient;
@@ -35,7 +36,11 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
           ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults }) });
         const execution = createExecutionHttpService({ config, runtime, stateDirectory: context.stateDirectory, serialize: context.serialize, ...(options.now === undefined ? {} : { now: options.now }) });
         context.signal.addEventListener("abort", () => { void dispatcher.close(); execution.close(); }, { once: true });
-        return { handle: execution.handle, serveGit: execution.serveGit,
+        const attachedRuntime = runtime;
+        return { async handle(request, response, url) {
+          if (await handleReviewCiStatus(context, attachedRuntime, { request, response, url })) return true;
+          return execution.handle(request, response, url);
+        }, serveGit: execution.serveGit,
           async onProposals() { dispatcher.wake(); },
           validatePolicy(policy, selector) {
             const selected = policy.extensions["git-ci"];
@@ -46,7 +51,7 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
         };
       }
     });
-    return { extensions: [feature, reviewPreparationExtension(preparation), {
+    return { extensions: [feature, { kind: "dim.git-repositories.feature", name: "git-ci", value: { version: 1 } }, reviewPreparationExtension(preparation), {
       kind: "dim.merge-policy.quality-guard", name: "git-ci", value: { name: "git-ci",
         async check(input: GitCiQualityInput) {
           if (!runtime) throw new Error("Git CI repository attachment is unavailable");
