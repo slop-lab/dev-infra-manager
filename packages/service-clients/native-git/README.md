@@ -11,3 +11,10 @@ or deploy the remote service.
 The host bridge passes its selected service endpoint, generation and host ID through `selectedService`; sibling role files must match those identities. Connection files must be absolute, owned mode-0600 regular files. Credentials remain on the trusted caller, never in operation descriptions, project lists or browser state. Review approval still names immutable review evidence; promotion remains separate host authority.
 
 `nativeGitManagementOperations` is a separate controller capability catalog: `projects.create` and `repositories.import` are implemented by the host plugin, never by a direct human-reviewer service connection. Import inputs contain only project/repository IDs, a public HTTPS URL and optional branch. Controller-local registrar/importer authority and immutable bootstrap artifacts handle the operation; browser input cannot supply paths, credentials or repository policy.
+
+The same catalog declares `projects.discover`, `projects.inspect` and
+`projects.attach`. `createNativeGitProjectAttachmentClient` performs the two
+generation-pinned, root-read-issuer-authenticated authority reads and strictly
+parses their bounded contract DTOs. Controller outputs expose only Project IDs,
+repository counts, managed refs and branches; immutable receipts and policies
+remain private inputs to host attachment and workspace readiness proof.

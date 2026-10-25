@@ -13,6 +13,39 @@ Only the enabled host-plugin manifest authorizes source acquisition, recovery
 and optional Project metadata; package presence alone does not activate them.
 Ordinary local and remote Git workspaces do not require this integration.
 
+## Discover and attach an existing Project
+
+```bash
+dim project discover --json
+dim project discover PROJECT --json
+dim project attach PROJECT --configuration-repository CONFIG_REPO \
+  --default-repository WORKING_REPO
+dim create dim://PROJECT dev
+```
+
+`discover` reads the authenticated Git service catalog without changing local
+state. `attach` fetches fresh authoritative repository evidence, proves readiness
+with the selected host's existing workspace authority, and atomically creates a
+local Project with explicit configuration/default repositories. `--name NAME`
+selects a host-local alias. No source is reimported and no protected ref or policy
+changes. Importer, registrar and reviewer roles are not attachment credentials.
+Repository evidence retains its original immutable import snapshot and receipt
+generation separately from the current effective policy and serving generation.
+
+The Git service owns repository membership, immutable import evidence and access
+scope; this plugin owns names and defaults on the selected host. An unchanged
+retry retains existing local bytes. Explicit reattachment after a service policy
+change refreshes only effective-policy metadata while preserving original import
+evidence, snapshots, timestamps and defaults. Conflicting names, aliases,
+configuring records, repository sets or defaults fail rather than implicitly
+replacing or merging them. Use the existing `project configure` operation for an
+intentional defaults change.
+
+Several physical hosts may share an exported `hostId` authority and role bundle.
+Discovery is limited to that authority's owned Projects. Attachment neither
+transfers ownership nor enables cross-authority access. See the
+[cross-host operator flow](../../../../docs/guides/project-workspaces.md#use-an-existing-project-on-another-host).
+
 The plugin exclusively owns `.dim/repos.yml` interpretation. Explicit
 `project repository import --repository-policy` and the reviewed-manifest bootstrap
 API read the selected commit's policy blob; ordinary workspace creation does not
@@ -48,7 +81,7 @@ on Native Git.
 
 ## Controller console operations
 
-`dim project console describe --json` discovers the selected control-plane generation, reviewer identity, local project catalog and available review/sync operations. Only repositories with ready import receipts for that generation are advertised. The host uses private `reviewer.json`, optional `promoter.json` and optional `git-sync.json` beside the selected host connection; each role must match its selected endpoint and generation, with host-bound roles also matching the selected host identity. No operator credentials or connection paths are returned.
+`dim project console describe --json` discovers the selected control-plane generation, optional reviewer identity, local project catalog and available operations. Only repositories whose readiness the current service proves are advertised; historical import receipts retain their original generation. Host attachment is available without reviewer credentials. Review operations use private `reviewer.json`, optional `promoter.json` and optional `git-sync.json` beside the selected host connection; each role must match its selected endpoint and generation, with host-bound roles also matching the selected host identity. No operator credentials or connection paths are returned.
 
 Existing repositories can explicitly refresh policy without another import:
 
