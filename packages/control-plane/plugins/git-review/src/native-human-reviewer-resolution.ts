@@ -58,10 +58,6 @@ export async function resolveCurrentEnvelope(
         && envelope.policyDigest === target.imported.policyDigest)
       .sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt));
     for (const envelope of envelopes) {
-      if (envelope.review.requiredReviewerIds.length > 0
-        && !envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
-        return sendJson(response, 403, { error: "reviewer is not required for this review" });
-      }
       const staleReasons = await nativeHumanReviewStaleReasons(runtime, target, envelope.review);
       if (staleReasons.includes("repository-inputs-changed")) {
         let refreshed;
@@ -85,6 +81,10 @@ export async function resolveCurrentEnvelope(
         return sendJson(response, 200, refreshed);
       }
       if (staleReasons.length !== 0) continue;
+      if (envelope.review.requiredReviewerIds.length > 0
+        && !envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
+        return sendJson(response, 403, { error: "reviewer is not required for this review" });
+      }
       return sendJson(response, 200, envelope);
     }
     try {
