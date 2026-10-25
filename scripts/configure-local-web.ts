@@ -28,8 +28,8 @@ export async function configureLocalWeb(env: NodeJS.ProcessEnv = process.env, ru
   const paths = removalPaths(env), directory = join(paths.configuration, "web"), config = join(directory, "config.json");
   const executable = join(paths.data, "web/runtime/current/node_modules/.bin/dim-web");
   await privateDirectory(directory);
+  const cli = object(object(await readJson(paths.config)).cli);
   if (!await privateFile(config)) {
-    const cli = object(object(await readJson(paths.config)).cli);
     const operations = join(directory, "operations.json"), login = join(directory, "login.txt");
     // Preserve partial setup for inspection rather than overwriting credentials.
     if (await metadata(operations) || await metadata(login)) throw new Error(`incomplete Web UI setup; inspect ${directory} before retrying`);
@@ -38,9 +38,22 @@ export async function configureLocalWeb(env: NodeJS.ProcessEnv = process.env, ru
     await writeFile(login, output, { flag: "wx", mode: 0o600 });
   }
   const saved = object(JSON.parse(await readFile(config, "utf8")));
+  let changed = false;
+  // Keep managed CLI paths current after host/presentation package separation.
+  // Explicit external executables remain operator-owned.
+  const managedExecutables = new Set([join(paths.data, "runtime/current/node_modules/.bin/dim"), join(paths.data, "cli/runtime/current/dim")]);
+  if (saved.operations !== undefined) {
+    const operations = object(saved.operations);
+    if (operations.hosts !== undefined && !Array.isArray(operations.hosts)) throw new Error("Web UI operation hosts must be an array");
+    for (const entry of operations.hosts as unknown[] | undefined ?? []) {
+      const host = object(entry);
+      if (typeof host.executable === "string" && managedExecutables.has(host.executable) && host.executable !== text(cli.executable)) {
+        host.executable = text(cli.executable); changed = true;
+      }
+    }
+  }
   if (saved.plugins !== undefined && !Array.isArray(saved.plugins)) throw new Error("Web UI plugins must be an array");
   const plugins: unknown[] = [...(saved.plugins as unknown[] | undefined ?? [])];
-  let changed = false;
   for (const packageName of defaultWebPluginPackages) {
     // Existing entries, including deliberately unconfigured entries, are operator owned.
     if (plugins.some((entry) => object(entry).package === packageName)) continue;

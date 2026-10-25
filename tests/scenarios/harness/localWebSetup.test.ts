@@ -49,6 +49,27 @@ it("disables and removes the owned Web service during local uninstall", async ()
   expect(f.calls).toContainEqual(["systemctl", "--user", "disable", "--now", "dim-web.service"]);
   await expect(readFile(webUnitPath(f.paths))).rejects.toMatchObject({ code: "ENOENT" });
 });
+it("refreshes managed CLI connections after package separation while preserving accounts and explicit executables", async () => {
+  const f = await fixture(); await configureLocalWeb(f.env, f.run);
+  const file = join(f.paths.configuration, "web/config.json"), saved = JSON.parse(await readFile(file, "utf8"));
+  saved.operations = { hosts: [
+    { id: "local", selector: "local", executable: join(f.paths.data, "runtime/current/node_modules/.bin/dim") },
+    { id: "remote", selector: "remote", executable: join(f.paths.data, "runtime/current/node_modules/.bin/dim") },
+    { id: "custom", selector: "custom", executable: "/operator/dim" }
+  ] };
+  await writeFile(file, JSON.stringify(saved), { mode: 0o600 });
+  const selected = join(f.paths.data, "cli/runtime/current/dim");
+  await writeFile(f.paths.config, JSON.stringify({ cli: { executable: selected } }), { mode: 0o600 });
+  const login = await readFile(join(f.paths.configuration, "web/login.txt"), "utf8");
+  await configureLocalWeb(f.env, f.run);
+  const updated = JSON.parse(await readFile(file, "utf8"));
+  expect(updated.accounts).toEqual(saved.accounts);
+  expect(updated.plugins).toEqual(saved.plugins);
+  expect(updated.operations.hosts).toEqual(saved.operations.hosts.map((host: { id: string; executable: string }) => host.id === "custom" ? host : { ...host, executable: selected }));
+  expect(await readFile(join(f.paths.configuration, "web/login.txt"), "utf8")).toBe(login);
+  await configureLocalWeb(f.env, f.run);
+  expect(await readFile(file, "utf8")).toBe(JSON.stringify(updated, null, 2) + "\n");
+});
 it("leaves a foreign service untouched", async () => {
   const f = await fixture();
   await mkdir(dirname(webUnitPath(f.paths)), { recursive: true, mode: 0o700 });

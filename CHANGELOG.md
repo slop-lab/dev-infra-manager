@@ -22,7 +22,7 @@ is implied by these source changes.
 - Make `install-local` install and update the complete development profile,
   including prepared Native Git/execution images and every bundled host and
   control-plane plugin. Preserve running workspaces, service credentials and Web
-  accounts; checkpoint service data before local updates and reconnect the new
+  accounts, refresh managed Web CLI connections, checkpoint service data before local updates and reconnect the new
   generation automatically. Keep the writable development image registry separate
   from package mirrors and honor cache-data retention during clean reinstall.
   Support host-only installation from existing control-plane role connections,
