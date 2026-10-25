@@ -5,13 +5,13 @@ it("refreshes only expiring trusted credentials and propagates changed-snapshot 
   const get = executionCandidateCredential(async () => {
     calls++;
     if (!current) throw new Error("dependency head changed");
-    return { username: `lease-${calls}`, password: "private", expiresAt: now + 30_000 };
+    return { username: `lease-${calls}`, password: "private", expiresAt: now + 120_000 };
   }, () => now);
   const signal = new AbortController().signal;
   expect((await get(signal)).username).toBe("lease-1");
-  now = 28_000; expect((await get(signal)).username).toBe("lease-1");
-  now = 29_500; expect((await get(signal)).username).toBe("lease-2");
-  now = 60_000; current = false;
+  now = 59_999; expect((await get(signal)).username).toBe("lease-1");
+  now = 60_000; expect((await get(signal)).username).toBe("lease-2");
+  now = 120_000; current = false;
   await expect(get(signal)).rejects.toThrow("dependency head changed");
   expect(calls).toBe(3);
 });
@@ -20,4 +20,20 @@ it("does not issue a new capability after cancellation", async () => {
   const get = executionCandidateCredential(async () => { calls++; return { username: "reader", password: "private", expiresAt: 30_000 }; }, () => 0);
   const stop = new AbortController(); stop.abort();
   await expect(get(stop.signal)).rejects.toThrow(); expect(calls).toBe(0);
+});
+
+it("rejects a newly issued capability with too little time for a complete Git operation", async () => {
+  const get = executionCandidateCredential(async () => ({ username: "reader", password: "private", expiresAt: 60_000 }), () => 0);
+  await expect(get(new AbortController().signal)).rejects.toThrow("insufficient remaining lifetime");
+});
+it("shares an in-flight refresh without extending the issued capability", async () => {
+  let calls = 0;
+  const get = executionCandidateCredential(async () => {
+    calls++;
+    await Promise.resolve();
+    return { username: "reader", password: "private", expiresAt: 120_000 };
+  }, () => 0);
+  const signal = new AbortController().signal;
+  const [first, second] = await Promise.all([get(signal), get(signal)]);
+  expect(calls).toBe(1); expect(first).toBe(second); expect(first.expiresAt).toBe(120_000);
 });

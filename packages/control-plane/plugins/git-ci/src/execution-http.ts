@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import type { GitCiConfig } from "./config.js";
 import { authorizeExecution, assertCurrentExecution, readExecutionGrant, recordExecutionEvidence, ExecutionConflictError } from "./execution-evidence.js";
-import { executionGrantRequestSchema, type ExecutionGrant } from "@slop-lab/dim-contracts-ci/execution";
+import { executionCandidateLeaseLifetimeMilliseconds, executionGrantRequestSchema, type ExecutionGrant } from "@slop-lab/dim-contracts-ci/execution";
 import { AuthoritativeRepositoryError, nativeBasicAuthorized, nativeBasicCredential } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { readBoundedJson, sendJson, sendNotFound, NativeGitBundleHttpError } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { serveGitBackend } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
@@ -49,7 +49,7 @@ export function createExecutionHttpService(input: Input) {
           prune();
           const username = `execution-${randomBytes(18).toString("hex")}`;
           const password = randomBytes(32).toString("base64url");
-          const expiresAt = now() + 30_000;
+          const expiresAt = now() + executionCandidateLeaseLifetimeMilliseconds;
           leases.set(username, { password, expiresAt, grant });
           return { username, password, expiresAt };
         });
@@ -76,6 +76,7 @@ export function createExecutionHttpService(input: Input) {
       }
       try { await input.serialize(() => assertCurrentExecution({ ...input.runtime, authoritativeTargetProofs: new Map() }, lease.grant)); }
       catch { response.writeHead(409).end(); return true; }
+      if (lease.expiresAt <= now()) { leases.delete(supplied.username); response.writeHead(401).end(); return true; }
       await serveGitBackend({ config: { gitExecutable: input.runtime.gitExecutable, storageRoot: input.stateDirectory },
         identity: { role: "reader", username: "execution-reader" }, route, request, response });
       return true;

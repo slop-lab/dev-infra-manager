@@ -4,6 +4,13 @@ import { candidateExecutionDescriptorSchema, executionProfileFields } from "./ca
 import { descriptorDigest } from "./candidate-execution.js";
 import { authoritativeNativeReviewEventSchema } from "./events.js";
 
+/** Ephemeral candidate reads allow a 30-second Git operation plus authority admission.
+ * Workers refresh before half the lifetime remains; every HTTP request still
+ * revalidates the live execution grant and repository inputs.
+ */
+export const executionCandidateLeaseLifetimeMilliseconds = 120_000;
+export const executionCandidateLeaseMinimumRemainingMilliseconds = 60_000;
+
 export const executionDescriptorSchema = candidateExecutionDescriptorSchema;
 export const executionDescriptorDigest = descriptorDigest;
 export type ExecutionDescriptor = z.infer<typeof executionDescriptorSchema>;

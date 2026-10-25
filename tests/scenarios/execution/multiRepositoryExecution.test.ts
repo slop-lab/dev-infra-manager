@@ -48,12 +48,12 @@ it("refreshes stable leases and requires a new review when an independently prom
   const jointCredential = executionCandidateCredential(() => f.source.candidate(joint), f.now);
   const publicCredential = executionCandidateCredential(() => f.source.candidate(publicOnly), f.now);
   const first = await jointCredential(signal); await publicCredential(signal);
-  f.advanceClock(29_500);
+  f.advanceClock(60_000);
   expect((await jointCredential(signal)).username).not.toBe(first.username);
   const publicHead = await f.publicHead();
   const privateReview = await f.promotePrivate();
   expect(await f.publicHead()).toBe(publicHead);
-  f.advanceClock(30_000);
+  f.advanceClock(60_000);
   await expect(jointCredential(signal)).rejects.toBeInstanceOf(StaleExecutionSourceError);
   await expect(publicCredential(signal)).rejects.toBeInstanceOf(StaleExecutionSourceError);
   const path = "/v1/projects/project-a/repositories/public/reviews";
@@ -78,4 +78,26 @@ it("rejects candidate workflow changes that request a repository outside importe
   await runGit("/usr/bin/git", ["-C", clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
   const denied = await createBundleReview(f.native.service, "private");
   expect(denied.planning.status).toBe("invalid"); expect(denied.events).toEqual([]);
+}, 30_000);
+
+it("keeps bounded read leases usable beyond one command and rejects revoked authority before expiry", async () => {
+  const f = fixture, joint = await f.authorize("joint"), lease = await f.source.candidate(joint);
+  expect(lease.expiresAt - f.now()).toBe(120_000);
+  const read = () => fetch(`${f.native.service.origin}/v1/projects/project-a/repositories/public.git/info/refs?service=git-upload-pack`, {
+    headers: { authorization: `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}` }
+  });
+  f.advanceClock(35_000);
+  expect((await read()).status).toBe(200);
+  await f.promotePrivate();
+  expect(f.now()).toBeLessThan(lease.expiresAt);
+  expect((await read()).status).toBe(409);
+}, 30_000);
+
+it("expires execution read credentials without extending their original lifetime", async () => {
+  const f = fixture, joint = await f.authorize("joint"), lease = await f.source.candidate(joint);
+  f.advanceClock(120_000);
+  const response = await fetch(`${f.native.service.origin}/v1/projects/project-a/repositories/public.git/info/refs?service=git-upload-pack`, {
+    headers: { authorization: `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}` }
+  });
+  expect(response.status).toBe(401);
 }, 30_000);

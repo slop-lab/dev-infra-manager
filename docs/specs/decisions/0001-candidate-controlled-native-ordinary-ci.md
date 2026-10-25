@@ -94,6 +94,14 @@ maintainers assess before protected promotion.
   decisions, then requests the repository engine's checked CAS. The shared execution scheduler coordinates
   authenticated workers, while host executors own isolated runtime creation and
   cleanup. Unavailable authority or unverifiable evidence fails closed.
+- Candidate Git read credentials live for at most 120 seconds. Workers require
+  more than 60 seconds remaining before starting each Git operation (whose
+  process deadline remains 30 seconds), refreshing through the execution
+  authority otherwise. This covers the HTTP exchange and live authority
+  admission without reusing a nearly expired credential. Each Git HTTP request
+  independently rechecks current grant, generation, repository inputs and
+  protected head; the credential lifetime never overrides revocation. Expiry
+  is checked again after authority admission, before serving repository bytes.
 - Service restart, generation rollover, lease expiry, and dependency outage
   must reconcile eligibility and retry durable queued work internally. They
   must not require another proposal push or operator readmission.
