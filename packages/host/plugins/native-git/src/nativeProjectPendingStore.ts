@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { acquireLifecycleLock, UserError } from "@slop-lab/dim-host-core";
 import { NativeProjectState } from "./nativeProjectState.js";
-import { parseNativeProjectPendingRecord, type NativeProjectRecord, type NativeProjectReadyRecord } from "./nativeProjectPendingCodec.js";
+import { NativeProjectPendingRecordError, parseNativeProjectPendingRecord, type NativeProjectRecord, type NativeProjectReadyRecord } from "./nativeProjectPendingCodec.js";
 import { NativeProjectDraftStore } from "./nativeProjectDraftStore.js";
 import { readNativeProjectPending, publishNativeProjectPending, recoverNativeProjectPendingPublication } from "./nativeProjectPendingFiles.js";
 import { replaceNativeProjectRecord } from "./nativeProjectReadyFiles.js";
@@ -53,6 +53,45 @@ export class NativeProjectPendingStore {
       if ((await this.list(input.ownerHostId)).some((entry) => entry.projectId === input.projectId)) throw new NativeProjectPendingStoreError("Project ID already belongs to another name");
       await publishNativeProjectPending(this.root, this.#state.projectPath(input.name), Buffer.from(`${JSON.stringify(record)}\n`));
       return record;
+    } finally { await release(); }
+  }
+  async attach(candidate: NativeProjectReadyRecord): Promise<NativeProjectReadyRecord> {
+    await mkdir(this.root, { recursive: true, mode: 0o700 });
+    const release = await acquireLifecycleLock({ root: this.root, name: "native-project-catalog", description: "Project attachment" });
+    try {
+      const bytes = Buffer.from(`${JSON.stringify(candidate)}\n`);
+      await recoverNativeProjectPendingPublication(this.root, this.#state.projectPath(candidate.name), (actualBytes) => {
+        try {
+          const value: unknown = JSON.parse(actualBytes.toString("utf8"));
+          const recovered = parseNativeProjectPendingRecord(value);
+          return recovered.phase === "ready" && recovered.name === candidate.name
+            && recovered.ownerHostId === candidate.ownerHostId && recovered.projectId === candidate.projectId
+            && recovered.configurationRepositoryId === candidate.configurationRepositoryId
+            && recovered.defaultWorkingRepositoryId === candidate.defaultWorkingRepositoryId
+            && sameAttachment(recovered, candidate);
+        } catch (error) {
+          if (error instanceof SyntaxError || error instanceof NativeProjectPendingRecordError) return false;
+          throw error;
+        }
+      });
+      const existing = await this.read(candidate.name, candidate.ownerHostId);
+      if (existing) {
+        const projectRelease = await this.#state.acquireProjectLock(candidate.name);
+        try {
+          const current = await this.read(candidate.name, candidate.ownerHostId);
+          if (!current) throw new NativeProjectPendingStoreError("Project attachment changed during reconciliation");
+          requireSameAttachmentIdentity(current, candidate);
+          const updated = reconcileAttachmentPolicies(current, candidate);
+          if (updated === current) return current;
+          await this.replace(current, updated);
+          return updated;
+        } finally { await projectRelease(); }
+      }
+      if ((await this.list(candidate.ownerHostId)).some((entry) => entry.projectId === candidate.projectId)) {
+        throw new NativeProjectPendingStoreError("Project ID already belongs to another local name");
+      }
+      await publishNativeProjectPending(this.root, this.#state.projectPath(candidate.name), bytes);
+      return candidate;
     } finally { await release(); }
   }
   async admitRepository(name: string, repositoryId: string, importer: NativeGitRootImporterClient,
@@ -124,3 +163,46 @@ export class NativeProjectPendingStore {
   }
 }
 function hasCode(error: unknown, code: string): boolean { return error instanceof Error && "code" in error && error.code === code; }
+function sameAttachment(existing: NativeProjectReadyRecord, candidate: NativeProjectReadyRecord): boolean {
+  const existingIds = Object.keys(existing.repositories).sort();
+  const candidateIds = Object.keys(candidate.repositories).sort();
+  if (!isDeepStrictEqual(existingIds, candidateIds)) return false;
+  return existingIds.every((repositoryId) => {
+    const left = existing.repositories[repositoryId];
+    const right = candidate.repositories[repositoryId];
+    if (!left || !right) return false;
+    return left.protectedRef === right.protectedRef && left.commit === right.commit && left.tree === right.tree
+      && left.bundleDigest === right.bundleDigest && left.bundleSize === right.bundleSize
+      && isDeepStrictEqual(left.importReceipt, right.importReceipt)
+      && isDeepStrictEqual(left.importedPolicy ?? left.repositoryPolicy, right.importedPolicy ?? right.repositoryPolicy);
+  });
+}
+function requireSameAttachmentIdentity(existing: NativeProjectRecord, candidate: NativeProjectReadyRecord): asserts existing is NativeProjectReadyRecord {
+  if (existing.phase !== "ready" || existing.projectId !== candidate.projectId
+    || existing.configurationRepositoryId !== candidate.configurationRepositoryId
+    || existing.defaultWorkingRepositoryId !== candidate.defaultWorkingRepositoryId
+    || !sameAttachment(existing, candidate)) {
+    throw new NativeProjectPendingStoreError("Project attachment conflicts with existing local state");
+  }
+}
+function reconcileAttachmentPolicies(existing: NativeProjectReadyRecord, candidate: NativeProjectReadyRecord): NativeProjectReadyRecord {
+  let changed = false;
+  const repositories = Object.fromEntries(Object.entries(existing.repositories).map(([repositoryId, repository]) => {
+    const authoritative = candidate.repositories[repositoryId];
+    if (!authoritative) throw new NativeProjectPendingStoreError("Project attachment repository set changed");
+    const originalPolicy = repository.importedPolicy ?? repository.repositoryPolicy;
+    const { importedPolicy: _importedPolicy, ...identity } = repository;
+    const reconciled = {
+      ...identity,
+      repositoryPolicy: authoritative.repositoryPolicy,
+      ...(isDeepStrictEqual(originalPolicy, authoritative.repositoryPolicy) ? {} : { importedPolicy: originalPolicy })
+    };
+    if (isDeepStrictEqual(repository, reconciled)) return [repositoryId, repository];
+    changed = true;
+    return [repositoryId, reconciled];
+  }));
+  if (!changed) return existing;
+  const updated = parseNativeProjectPendingRecord({ ...existing, repositories });
+  if (updated.phase !== "ready") throw new NativeProjectPendingStoreError("Project attachment policy reconciliation is invalid");
+  return updated;
+}

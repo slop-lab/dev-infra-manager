@@ -23,3 +23,4 @@ export * from "./nativeProjectState.js";
 export { createNativeProjectConsole, describeNativeProjectConsole, invokeNativeProjectConsole } from "./projectConsole.js";
 
 export { importNativeProjectPublicRepository, type PublicRepositoryImportDependencies, type PublicRepositoryImportInput } from "./publicRepositoryImport.js";
+export { createNativeProjectAttachmentManagement, nativeProjectAttachmentOperations } from "./projectAttachment.js";

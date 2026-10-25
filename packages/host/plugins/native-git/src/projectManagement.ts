@@ -27,8 +27,9 @@ export async function createNativeProjectManagement(input: { selected: NativeCon
   const importer = createNativeGitRootImporterClient(importerConnection), registrar = createNativeGitProjectRegistrarClient(registrarConnection, createNodeNativeGitAdmissionHttpClient());
   await Promise.all([importer.attest(AbortSignal.timeout(10_000)), registrar.attest(AbortSignal.timeout(10_000))]);
   const stateRoot = managedStateRoot(input.environment), store = new NativeProjectPendingStore(stateRoot);
-  return { operations: nativeGitManagementOperations, async invoke(name: string, raw: unknown): Promise<unknown> {
-    const operation = nativeGitManagementOperations.find((operation) => operation.name === name); if (!operation) throw new Error("Project management operation is unavailable");
+  const operations = nativeGitManagementOperations.filter((operation) => !operation.name.endsWith(".discover") && !operation.name.endsWith(".inspect") && !operation.name.endsWith(".attach"));
+  return { operations, async invoke(name: string, raw: unknown): Promise<unknown> {
+    const operation = operations.find((operation) => operation.name === name); if (!operation) throw new Error("Project management operation is unavailable");
     const parsed = operation.parseInput(raw);
     if (!parsed || typeof parsed !== "object" || !("projectId" in parsed) || typeof parsed.projectId !== "string") throw new Error("Invalid project management input");
     const projectId = parsed.projectId, catalog = await store.list(selected.hostId), existing = catalog.find((project) => project.projectId === projectId);

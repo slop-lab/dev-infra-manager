@@ -9,6 +9,7 @@ import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
 import { nativeProjectCatalogEntry } from "./nativeProjectCatalog.js";
+import { createNativeProjectAttachmentManagement, nativeProjectAttachmentOperations } from "./projectAttachment.js";
 
 async function optionalFile(path: string): Promise<string | undefined> {
   try { await lstat(path); return path; }
@@ -28,19 +29,38 @@ async function prepareNativeProjectOperator(environment: NodeJS.ProcessEnv, expe
   return { file, selected, operator };
 }
 export async function createNativeProjectConsole(environment: NodeJS.ProcessEnv = process.env, expectedGeneration?: string, dependencies: PublicRepositoryImportDependencies = {}) {
-  const { file, selected, operator } = await prepareNativeProjectOperator(environment, expectedGeneration);
+  const file = await selectedControlPlaneHostFile(environment), selected = await loadNativeControlPlaneConnection(file);
+  if (expectedGeneration !== undefined && (!/^[a-f0-9]{64}$/.test(expectedGeneration) || expectedGeneration !== selected.nativeGit.generationId)) throw new Error("Selected Native Git control-plane generation changed; reconnect before continuing");
+  const attachment = createNativeProjectAttachmentManagement(selected, environment);
+  if (!await optionalFile(join(dirname(file), "reviewer.json"))) {
+    return { generationId: selected.nativeGit.generationId, operations: attachment.operations, invoke: attachment.invoke,
+      async catalog() {
+        await attachment.invoke("projects.discover", {});
+        const store = new NativeProjectPendingStore(managedStateRoot(environment));
+        return { projects: await Promise.all((await store.list(selected.hostId)).map((project) => nativeProjectCatalogEntry(project, selected))) };
+      } };
+  }
+  const { operator } = await prepareNativeProjectOperator(environment, expectedGeneration);
   const management = await createNativeProjectManagement({ selected, hostConnectionFile: file, reviewerId: operator.reviewerId, environment }, dependencies);
-  return { generationId: selected.nativeGit.generationId, operations: [...operator.operations, ...(management?.operations ?? [])],
-    invoke: (name: string, input: unknown) => management?.operations.some((operation) => operation.name === name) ? management.invoke(name, input) : operator.invoke(name, input) };
+  return { generationId: selected.nativeGit.generationId, operations: [...operator.operations, ...attachment.operations, ...(management?.operations ?? [])],
+    catalog: () => operator.invoke("projects.list", {}),
+    invoke: (name: string, input: unknown) => attachment.operations.some((operation) => operation.name === name) ? attachment.invoke(name, input)
+      : management?.operations.some((operation) => operation.name === name) ? management.invoke(name, input) : operator.invoke(name, input) };
 }
 export async function describeNativeProjectConsole(environment: NodeJS.ProcessEnv = process.env, expectedGeneration?: string) {
   const console = await createNativeProjectConsole(environment, expectedGeneration);
-  const catalog = await console.invoke("projects.list", {});
-  if (!catalog || typeof catalog !== "object" || !("reviewerId" in catalog) || !("projects" in catalog)) throw new Error("Native Git returned an invalid project catalog");
-  return { schemaVersion: 1, generationId: console.generationId, reviewerId: catalog.reviewerId, projects: catalog.projects, operations: operationDescriptors(console.operations) };
+  const catalog = await console.catalog();
+  if (!catalog || typeof catalog !== "object" || !("projects" in catalog)) throw new Error("Native Git returned an invalid project catalog");
+  return { schemaVersion: 1, generationId: console.generationId, ...("reviewerId" in catalog ? { reviewerId: catalog.reviewerId } : {}),
+    projects: catalog.projects, operations: operationDescriptors(console.operations) };
 }
 export async function invokeNativeProjectConsole(name: string, input: unknown, expectedGeneration: string, environment: NodeJS.ProcessEnv = process.env, dependencies: PublicRepositoryImportDependencies = {}): Promise<unknown> {
   if (typeof expectedGeneration !== "string") throw new Error("Native Git console invocation requires an expected generation");
+  if (nativeProjectAttachmentOperations.some((operation) => operation.name === name)) {
+    const file = await selectedControlPlaneHostFile(environment), selected = await loadNativeControlPlaneConnection(file);
+    if (expectedGeneration !== selected.nativeGit.generationId) throw new Error("Selected Native Git control-plane generation changed; reconnect before continuing");
+    return createNativeProjectAttachmentManagement(selected, environment).invoke(name, input);
+  }
   // Review/sync requests need current repository scope and their own role proofs,
   // without preparing unrelated repository import/registration capabilities.
   if (nativeGitOperations.some((operation) => operation.name === name)) {

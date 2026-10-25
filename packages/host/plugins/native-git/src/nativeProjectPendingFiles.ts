@@ -67,7 +67,7 @@ export async function readNativeProjectPending(
 export async function recoverNativeProjectPendingPublication(
   stateRoot: string,
   path: string,
-  expectedBytes: Buffer
+  expectation: Buffer | ((actualBytes: Buffer) => boolean)
 ): Promise<void> {
   await assertPrivateDirectory(stateRoot, "lifecycle state root");
   const directory = dirname(path);
@@ -95,13 +95,14 @@ export async function recoverNativeProjectPendingPublication(
   try {
     const targetBefore = await targetHandle.stat({ bigint: true });
     const stagingBefore = await stagingHandle.stat({ bigint: true });
-    assertRecoveryFile(targetBefore, expectedBytes.length);
-    assertRecoveryFile(stagingBefore, expectedBytes.length);
+    const expectedSize = Buffer.isBuffer(expectation) ? expectation.length : Number(targetBefore.size);
+    assertRecoveryFile(targetBefore, expectedSize);
+    assertRecoveryFile(stagingBefore, expectedSize);
     if (targetBefore.dev !== stagingBefore.dev || targetBefore.ino !== stagingBefore.ino) {
       throw new NativeProjectPendingFileError("canonical Project staging does not match its published record");
     }
-    const actualBytes = await readExact(targetHandle, expectedBytes.length);
-    if (!actualBytes.equals(expectedBytes)) {
+    const actualBytes = await readExact(targetHandle, expectedSize);
+    if (Buffer.isBuffer(expectation) ? !actualBytes.equals(expectation) : !expectation(actualBytes)) {
       throw new NativeProjectPendingFileError("canonical Project staging conflicts with admission intent");
     }
     await assertStablePath(path, targetBefore, await targetHandle.stat({ bigint: true }));

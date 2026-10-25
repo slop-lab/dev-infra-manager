@@ -92,7 +92,8 @@ async function request(input: ProjectAttachmentRequest): Promise<unknown> {
   if (response.statusCode !== 200) throw new NativeGitProjectAttachmentHttpError(response.statusCode);
   if (response.contentType !== "application/json" || response.cacheControl !== "no-store") invalid();
   try {
-    return JSON.parse(response.body.toString("utf8")) as unknown;
+    const value: unknown = JSON.parse(response.body.toString("utf8"));
+    return value;
   } catch (cause) {
     if (cause instanceof SyntaxError) {
       throw new NativeGitProjectAttachmentClientError("native Git Project attachment response is not valid JSON", { cause });
