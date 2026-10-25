@@ -112,7 +112,9 @@ a sibling PR, and injects an unavailable review-detail read. The receipt and mer
 lock must survive every same-revision response; only an authoritative merged read
 or a new revision clears the lock. Close/reopen is absent while the receipt is
 pending, its callback remains guarded against stale invocation, and the journey
-asserts that no state-changing update request was sent.
+asserts that no state-changing update request was sent. The same action guards
+are checked before releasing the delayed response, so navigation cannot expose
+a second merge or close action during the in-flight interval.
 
 Its replaceable screen adapter is `native-git/pull-request-ui.ts`. The scenario
 records user outcomes and uses the same disposable real-service environment as

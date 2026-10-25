@@ -79,7 +79,9 @@ flight. If the user already returned to that PR before the accepted response
 arrives, the stored receipt is projected onto the current view without replacing
 it with the response's stale DTO. Close/reopen is omitted during that interval and
 stale state-change callbacks are ignored, while metadata edits and comments remain
-available.
+available. Merge and close/reopen are also locked from submission while the
+request is still in flight, including after navigating away and back; a rejected
+request releases that in-flight lock without inventing an accepted receipt.
 
 The selected controller and repository target remain visible beside capability
 guidance. The panel distinguishes review-only inspection, reviewer decisions,
