@@ -244,6 +244,10 @@ Managed administration also follows the selected host:
 ```bash
 dim --host devbox control-plane connect /srv/dim/deployment
 dim --host devbox project list --json
+dim --host devbox project discover --json
+dim --host devbox project discover PROJECT --json
+dim --host devbox project attach PROJECT \
+  --configuration-repository CONFIG_REPO --default-repository WORKING_REPO
 dim --host devbox create dim://PROJECT dev
 ```
 
@@ -252,3 +256,9 @@ only the base CLI; optional code is loaded on the host that executes the
 operation. `dim host use devbox` selects that host for subsequent commands.
 Bare `dim controller ...` stays local for installer activation. An explicit
 `dim --host devbox controller ...` administers that remote controller.
+
+Discovery lists existing Projects accessible through the selected host's private
+connection. Attachment explicitly saves this host's repository defaults without
+reimporting source or changing protected refs; it does not grant access to other
+authorities' Projects. The same flow is available in Web **Git review**. See
+[using an existing Project on another host](docs/guides/project-workspaces.md#use-an-existing-project-on-another-host).

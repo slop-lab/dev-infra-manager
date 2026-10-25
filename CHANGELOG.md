@@ -29,7 +29,11 @@ is implied by these source changes.
   optional owned SSH forwarding, generation attestation and retained reconnect
   settings without deploying services on the new host. Add a dependencies-only
   fresh-VM bootstrap, ensure SSH prerequisites, and use the pinned supported
-  source toolchain when mise is unavailable.
+  source toolchain when mise is unavailable. Discover accessible existing managed
+  Projects from the authenticated Git service and explicitly attach them through
+  CLI or Web with independent host-local repository defaults. Preserve existing
+  selections, workspaces and immutable import evidence without reimporting source,
+  changing protected refs or granting cross-authority access.
 
 - Split managed Git into independent repository, code-review, merge-policy,
   Git CI and webhook control-plane plugins. Repository hosting no longer

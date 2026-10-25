@@ -35,9 +35,65 @@ clones. Import never publishes code to an upstream Git host. Saved control-plane
 connections provide registrar/importer roles; explicit connection options can
 select other private connection files.
 
-The host holding the Project registration and private connection creates the
-workspace. With SSH, select that host with `--host`; client-side paths and
-credentials are not implicitly transferred.
+The selected host holds its own Project selection and private connection. With
+SSH, select that host with `--host`; client-side paths and credentials are not
+implicitly transferred.
+
+## Use an existing Project on another host
+
+Connecting a new host to an existing control plane does not select Projects or
+copy another host's defaults. After the host has been connected, discover the
+repositories its existing authority can access, then explicitly attach one:
+
+```bash
+dim --host remote-sub-1 project discover --json
+dim --host remote-sub-1 project discover codyssey --json
+dim --host remote-sub-1 project attach codyssey \
+  --configuration-repository private --default-repository public
+dim --host remote-sub-1 create dim://codyssey dev
+```
+
+The selected Git service must provide the discovery endpoints. A successful host
+connection check alone does not establish this capability or validate the
+protected-source reader used by discovery; `project discover` performs that live
+authenticated check. An unavailable or stale service fails explicitly rather
+than falling back to imported state files.
+
+Both repository selections are required. `--name LOCAL_NAME` chooses another
+host-local Project name; use that name in `dim://LOCAL_NAME`. Configuration and
+default working repositories can differ and do not change any other host's
+choices. Later explicit `project configure LOCAL_NAME` changes only these local
+defaults, not existing workspace checkouts.
+
+In Web **Git review**, select the new host's controller, discover available
+Projects, inspect its repositories, choose both defaults and explicitly attach.
+The attached Project becomes available in the ordinary Project selector and can
+open a managed workspace creation draft. Attachment itself creates no workspace.
+Web attachment requires the `operator` role and a controller connection; a direct
+reviewer-service connection cannot configure a workspace host.
+
+Discovery uses the Git service's authenticated catalog, not local JSON files or
+an upstream Git URL. Attachment rechecks live repository readiness and writes
+one host-local selection atomically. It does not register or reimport source,
+update policy, move protected refs, grant access, or copy workspace credentials.
+Registrar/importer roles are unnecessary for discovery and attachment. Existing
+workspace data and local choices remain intact. Repeating the same attachment
+is safe; a conflicting name, alias, repository set or defaults fails instead of
+overwriting local choices. If the authority's effective policy changed, an
+explicit repeat attachment refreshes only that policy metadata, preserving the
+original receipts, snapshots and local defaults. An unchanged retry preserves
+the record bytes. Use explicit configuration to change defaults rather than
+repeating attachment with different selections.
+
+The connection's `hostId` identifies a **host authority**, not necessarily one
+physical machine. Hosts connected with the same exported role bundle share its
+existing Project scope and credentials. A separately credentialed authority sees
+only its own Projects; connecting to the same service does not grant another
+authority's Projects. Per-machine delegation and cross-authority Project grants
+are not provided by this flow. Discovery and attachment require the selected
+active service generation; reconnect explicitly after a generation change.
+
+## Workspace repository selection
 
 Each selected repository lives at `/workspace/<repositoryId>` with its own Git
 origin and proposal grant. Without `--repository`, only the default working
