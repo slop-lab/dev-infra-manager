@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { appendComment, appendRevision, commentIsOutdated, currentRevision, markMerged, parsePullRequest, PullRequestConflict, updatePullRequest } from "@slop-lab/git-pull-requests";
+import { commentIsOutdated } from "@slop-lab/git-discussions";
+import { appendComment, appendRevision, currentRevision, markMerged, parsePullRequest, PullRequestConflict, updatePullRequest } from "@slop-lab/git-pull-requests";
 const now = "2026-10-23T00:00:00.000Z";
 function fixture() { return parsePullRequest({ schemaVersion: 1, id: randomUUID(), version: 1, title: "First PR", body: "", sourceRef: "refs/heads/change", targetRef: "refs/heads/main", state: "open", actorId: "alice", createdAt: now, updatedAt: now, revisions: [{ id: randomUUID(), sourceCommit: "a".repeat(40), targetCommit: "b".repeat(40), createdAt: now }], comments: [] }); }
 describe("portable pull requests", () => {
@@ -10,7 +11,7 @@ describe("portable pull requests", () => {
     const discussed = appendComment(pr, 1, comment);
     const pushed = appendRevision(discussed, 2, { id: randomUUID(), sourceCommit: "c".repeat(40), targetCommit: "b".repeat(40), createdAt: now });
     expect(pushed.id).toBe(pr.id); expect(pushed.revisions[0]).toEqual(pr.revisions[0]);
-    expect(pushed.comments[0]).toEqual(comment); expect(commentIsOutdated(pushed, comment)).toBe(true);
+    expect(pushed.comments[0]).toEqual(comment); expect(commentIsOutdated(comment, currentRevision(pushed).id)).toBe(true);
     expect(pr.version).toBe(1); expect(pr.comments).toEqual([]);
   });
   it("rejects stale writes, foreign revisions and edits after merge", () => {
@@ -25,6 +26,14 @@ describe("portable pull requests", () => {
     const pr = fixture();
     expect(() => parsePullRequest({ ...pr, approved: true })).toThrow();
     expect(() => appendComment(pr, 1, { id: randomUUID(), revisionId: currentRevision(pr).id, actorId: "bob", body: "No", createdAt: now, anchor: { path: "../secret", side: "head", line: 1 } })).toThrow();
+    expect(() => parsePullRequest({ ...pr, sourceRef: "refs/remotes/origin/change" })).toThrow();
+  });
+  it("accepts ordinary branch, tag and legacy proposal sources", () => {
+    const pr = fixture();
+    const workspaceId = Buffer.alloc(32, 9).toString("base64url");
+    for (const sourceRef of ["refs/heads/feature/review", "refs/tags/v1.0.0", `refs/heads/proposals/${workspaceId}/change`]) {
+      expect(parsePullRequest({ ...pr, sourceRef }).sourceRef).toBe(sourceRef);
+    }
   });
 });
 

@@ -18,8 +18,8 @@ Routes below are relative to `/v1/projects/:project/repositories/:repository`:
 
 - `GET /pull-requests`: list repository PRs.
 - `POST /pull-requests`: `{title, body?, sourceRef, targetRef?}` creates a PR
-  and pins both commits. Source must be an existing workspace proposal ref;
-  target must be managed by the repository policy.
+  and pins both commits. Source may be an ordinary branch, lightweight/annotated
+  commit tag or existing workspace proposal; target must be managed by policy.
 - `GET /pull-requests/:id`: read history and comments, with immutable revision anchors. `commentIsOutdated` in the portable model
   compares a comment with the current revision.
 - `PATCH /pull-requests/:id`: `{expectedVersion,title?,body?,state?}`;
@@ -34,6 +34,10 @@ Routes below are relative to `/v1/projects/:project/repositories/:repository`:
 Approve and promote through the existing Git review and protected ref APIs.
 Promotion retains its separate credential and exact-review authority checks. A
 closed PR has no review action. Changing PR state never changes a Git ref.
+The Native Git client/CLI/Web adapters compose exact PR-version/revision checks
+with those APIs for approve, revoke and merge; the PR service does not gain
+human-decision or promoter credentials. Zero-human-policy merge never fabricates
+approval and still requires successful current DIM CI when policy selects it.
 
 The plugin declares exact immutable revision refs under
 `refs/dim/extensions/git-pull-requests/`. It saves a durable owner record before

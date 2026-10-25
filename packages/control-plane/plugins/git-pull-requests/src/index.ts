@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
-import { repositoryExtension, repositoryAccessProvider, RepositoryAccessError, readNativeProjectRegistrations, readBoundedJson, NativeGitBundleHttpError, sendJson, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { isNativeGitCandidateRef, repositoryExtension, repositoryAccessProvider, RepositoryAccessError, readNativeProjectRegistrations, readBoundedJson, NativeGitBundleHttpError, sendJson, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { codeReviewService, readAuthoritativeNativeReviewRefs } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { appendRevision, assertVersion, currentRevision, markMerged, pullRequestSchema, PullRequestConflict, updatePullRequest } from "@slop-lab/git-pull-requests";
 import { PullRequestStore } from "./store.js";
@@ -10,7 +10,9 @@ import { ownedRevisionRefs, pinRevision, revisionRef } from "./revision-pins.js"
 import { pullRequestServiceKind } from "./plugin-api.js";
 
 const version = z.object({ expectedVersion: z.number().int().positive() }).strict();
-const create = z.object({ title: z.string().trim().min(1).max(240), body: z.string().max(3000).default(""), sourceRef: z.string().regex(/^refs\/heads\/proposals\/[A-Za-z0-9_-]{43}\/[A-Za-z0-9._/-]+$/).max(1024), targetRef: z.string().startsWith("refs/heads/").max(1024).optional() }).strict();
+const create = z.object({ title: z.string().trim().min(1).max(240), body: z.string().max(3000).default(""),
+  sourceRef: z.string().max(1024).refine(isNativeGitCandidateRef),
+  targetRef: z.string().startsWith("refs/heads/").max(1024).optional() }).strict();
 const edit = version.extend({ title: z.string().trim().min(1).max(240).optional(), body: z.string().max(3000).optional(), state: z.enum(["open", "closed"]).optional() }).strict();
 const selector = "([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)";
 const route = new RegExp(`^/v1/projects/${selector}/repositories/${selector}/pull-requests(?:/([0-9a-f-]{36})(?:/(refresh|review))?)?$`);
@@ -33,7 +35,7 @@ export const controlPlanePlugin: ControlPlanePlugin = {
           if (store === undefined || !context.available()) throw new Error("Pull request service unavailable");
           return store.read(scope.projectId, scope.repositoryId, id);
         },
-        async appendComment(context: RepositoryExtensionContext, scope: { projectId: string; repositoryId: string }, id: string, expectedVersion: number, comment: import("@slop-lab/git-pull-requests").PullRequestComment) {
+        async appendComment(context: RepositoryExtensionContext, scope: { projectId: string; repositoryId: string }, id: string, expectedVersion: number, comment: import("@slop-lab/git-discussions").DiscussionComment) {
           if (store === undefined || !context.available()) throw new Error("Pull request service unavailable");
           const record = await store.read(scope.projectId, scope.repositoryId, id);
           if (record === undefined) throw new PullRequestConflict("Pull request not found");
@@ -67,7 +69,8 @@ export const controlPlanePlugin: ControlPlanePlugin = {
                   sendJson(response, 200, records.slice(0, 100)); return;
                 }
                 const input = create.parse(body);
-                const scoped = await repositoryAccessProvider(context.extensions).authorize(context, request, { projectId, repositoryId, ...(input.targetRef === undefined ? {} : { protectedRef: input.targetRef }) });
+                 const scoped = await repositoryAccessProvider(context.extensions).authorize(context, request, { projectId, repositoryId, ...(input.targetRef === undefined ? {} : { protectedRef: input.targetRef }) });
+                 if (input.sourceRef === scoped.target.currentHead.protectedRef) throw new PullRequestConflict("Source and target refs must differ");
                 const existing = (await ownedStore.list(projectId, repositoryId)).find((entry) => entry.state === "open" && entry.sourceRef === input.sourceRef && entry.targetRef === scoped.target.currentHead.protectedRef);
                 if (existing !== undefined) {
                   if (existing.title !== input.title || existing.body !== input.body) throw new PullRequestConflict(`An open pull request already exists: ${existing.id}`);
@@ -125,10 +128,10 @@ export const controlPlanePlugin: ControlPlanePlugin = {
   }
 };
 async function snapshot(context: RepositoryExtensionContext, target: Awaited<ReturnType<ReturnType<typeof repositoryAccessProvider>["authorize"]>>["target"], sourceRef: string) {
-  if (!/^refs\/heads\/proposals\/[A-Za-z0-9_-]{43}\/[A-Za-z0-9._/-]+$/.test(sourceRef) || sourceRef.includes("..") || sourceRef.includes("//") || sourceRef.includes("/.") || sourceRef.endsWith(".lock") || sourceRef.endsWith("/")) throw new PullRequestConflict("Invalid proposal ref");
+  if (!isNativeGitCandidateRef(sourceRef)) throw new PullRequestConflict("Invalid candidate ref");
   let refs;
   try { refs = await readAuthoritativeNativeReviewRefs({ gitExecutable: context.runtime.gitExecutable, gitIdentity: context.runtime.gitIdentity, repository: target.repository, protectedRef: target.currentHead.protectedRef, proposalRef: sourceRef, signal: context.signal }); }
-  catch { throw new PullRequestConflict("Proposal snapshot is unavailable"); }
+  catch { throw new PullRequestConflict("Candidate snapshot is unavailable"); }
   if (refs.protectedHead !== target.currentHead.commit) throw new PullRequestConflict("Target changed while resolving pull request");
   return refs;
 }

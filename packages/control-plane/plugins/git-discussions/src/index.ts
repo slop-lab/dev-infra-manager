@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { anchorSchema, assertVersion, PullRequestConflict } from "@slop-lab/git-pull-requests";
+import { discussionAnchorSchema } from "@slop-lab/git-discussions";
+import { assertVersion, PullRequestConflict } from "@slop-lab/git-pull-requests";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { repositoryExtension, repositoryAccessProvider, RepositoryAccessError, readBoundedJson, NativeGitBundleHttpError, sendJson } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { pullRequestService } from "@slop-lab/dim-control-plane-plugin-git-pull-requests/plugin-api";
 import { gitDiffService, validateDiffAnchor } from "@slop-lab/dim-control-plane-plugin-git-diff/plugin-api";
-const comment = z.object({ expectedVersion: z.number().int().positive(), revisionId: z.string().uuid(), body: z.string().trim().min(1).max(3000), anchor: anchorSchema.optional() }).strict();
+const comment = z.object({ expectedVersion: z.number().int().positive(), revisionId: z.string().uuid(), body: z.string().trim().min(1).max(3000), anchor: discussionAnchorSchema.optional() }).strict();
 const scope = "([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)";
 const route = new RegExp(`^/v1/projects/${scope}/repositories/${scope}/pull-requests/([0-9a-f-]{36})/comments$`);
 export const controlPlanePlugin: ControlPlanePlugin = { apiVersion: 1, name: "git-discussions", configure(raw) {
