@@ -34,6 +34,15 @@ async function abortCommittedMutation(route: Route) {
 try {
   await signIn(page);
   const development = page.locator(".workspace-row").filter({ has: page.getByRole("heading", { name: "development", exact: true }) });
+  await fixture.stopRuntime();
+  await page.getByRole("button", { name: "Refresh workspaces on devbox", exact: true }).click();
+  await development.getByRole("button", { name: "start development", exact: true }).waitFor();
+  await page.getByLabel("Filter workspaces by state on devbox", { exact: true }).selectOption("stopped");
+  assert.equal(await development.isVisible(), true);
+  await development.getByRole("button", { name: "start development", exact: true }).click();
+  await development.getByRole("button", { name: "stop development", exact: true }).waitFor({state:"hidden"});
+  await page.getByLabel("Filter workspaces by state on devbox", { exact: true }).selectOption("all");
+  await development.getByRole("button", { name: "stop development", exact: true }).waitFor();
   await development.getByText("Settings for development", { exact: true }).click();
   await development.getByLabel("CPUs for development", { exact: true }).fill("0.75");
   await development.getByRole("button", { name: "Reset resource changes for development", exact: true }).click();

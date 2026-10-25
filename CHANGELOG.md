@@ -22,8 +22,8 @@ is implied by these source changes.
 - Make `install-local` install and update the complete development profile,
   including prepared Native Git/execution images and every bundled host and
   control-plane plugin. Preserve running workspaces, service credentials and Web
-  accounts, refresh managed Web CLI connections, checkpoint service data before local updates and reconnect the new
-  generation automatically. Keep the writable development image registry separate
+  accounts, refresh managed Web CLI connections, checkpoint service data before
+  local updates and reconnect the new generation automatically. Keep the writable development image registry separate
   from package mirrors and honor cache-data retention during clean reinstall.
   Support host-only installation from existing control-plane role connections,
   optional owned SSH forwarding, generation attestation and retained reconnect
@@ -182,7 +182,9 @@ is implied by these source changes.
   independent service status separately, preserve policy drafts across in-flight
   navigation, and reconcile uncertain workspace tool or route changes before
   allowing another write. Open External routes directly from workspace tools
-  and confirm route revocation explicitly.
+  and confirm route revocation explicitly. Show actual container state after an
+  external stop, offer Start, and explain stopped workspace tool availability
+  without issuing failing guest status reads.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
   repositories through the Native Git plugin, with explicit controller, Project

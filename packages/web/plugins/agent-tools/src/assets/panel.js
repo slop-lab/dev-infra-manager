@@ -165,7 +165,7 @@ export function mount(container, context) {
         retryDiscovery.hidden = false;
         notice.textContent = 'Workspace tools are unavailable for this workspace identity. Refresh workspaces or ask the operator to install the agent-tools host plugin.'; return;
       }
-      show(controller, { ...workspace, phase: context.workspace.phase });
+      show(controller, workspace);
     } catch { if (current() && selected === discoveryVersion) { retryDiscovery.hidden = false; notice.textContent = 'Could not discover workspace tools. Use Retry workspace tools to retry.'; } }
     finally { if (current() && selected === discoveryVersion) retryDiscovery.disabled = false; }
   }

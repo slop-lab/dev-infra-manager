@@ -47,6 +47,11 @@ fs.writeFileSync(path,JSON.stringify(rows));console.log(JSON.stringify(args[2]==
       failNextCreate: async () => writeFile(failures, JSON.stringify({ create: "Docker run failed: pull access denied PRIVATE_SECRET /private/host/path" })),
       failNextList: async () => writeFile(failures, JSON.stringify({ ls: true })),
       clearWorkspaces: async () => writeFile(state, "[]"),
+      stopRuntime: async () => {
+        const rows = JSON.parse(await readFile(state, "utf8")) as Array<{ name: string; runtimeStatus: string }>;
+        rows.find((row) => row.name === "development")!.runtimeStatus = "stopped";
+        await writeFile(state, JSON.stringify(rows));
+      },
       actions: async () => JSON.parse(await readFile(actions, "utf8")) as string[],
       workspace: async () => (JSON.parse(await readFile(state, "utf8")) as Array<{ id: string; name: string; phase: string; resources: { cpuCount: string; memory: string; pidsLimit: string } }>).find((row) => row.name === "development")!,
       createdWorkspace: async () => (JSON.parse(await readFile(state, "utf8")) as Array<{ name: string; source: string; runtime: string; image: string; resources: { cpuCount: string } }>).find((row) => row.name === "browser-created"),

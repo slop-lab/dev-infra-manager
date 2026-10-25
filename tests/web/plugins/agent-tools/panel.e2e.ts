@@ -50,7 +50,8 @@ async function mount(operator: boolean, stopped = false) {
       openFeature: () => false,
       operations: ${JSON.stringify(["controllers.list", "tools.status", "server.status", ...(operator ? ["tools.setup", "server.start", "server.stop", "server.credentials", "server.password"] : [])].map((name) => ({ name })))},
       isCurrent: () => window.sessionCurrent,
-      workspace: ${JSON.stringify({hostId:"local",name:stopped ? "offline":"development",id:stopped ? stoppedId:workspaceId,phase:stopped ? "stopped":"running"})},
+      // Persisted lifecycle intent can still say running after the container exits.
+      workspace: ${JSON.stringify({hostId:"local",name:stopped ? "offline":"development",id:stopped ? stoppedId:workspaceId,phase:"running"})},
       async invoke(name, input) { const response = await fetch('/invoke', {method:'POST',body:JSON.stringify({name,input})}); if(!response.ok) throw Object.assign(new Error('outcome unknown'),{outcome:'unknown'}); return response.json(); }
     });` });
 }

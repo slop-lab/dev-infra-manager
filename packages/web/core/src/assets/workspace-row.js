@@ -5,6 +5,12 @@ import { button, disclosure, feedback, input, node, recovery, requiresReconcilia
 
 /** @typedef {(path:string, body?:unknown, timeout?:number)=>Promise<unknown>} Request */
 
+/** @param {Record<string,unknown>} workspace */
+function displayPhase(workspace) {
+  const phase = text(workspace.phase) ?? "unknown", runtime = text(workspace.runtimeStatus);
+  return ["running", "stopped"].includes(phase) && ["running", "stopped"].includes(runtime ?? "") ? runtime : phase;
+}
+
 /** @param {{host:string,initial:Record<string,unknown>,canOperate:boolean,request:Request,refresh:()=>Promise<boolean>,active:()=>boolean}} options */
 export function createWorkspace(options) {
   const { host, initial, canOperate, request, refresh, active } = options;
@@ -107,7 +113,7 @@ export function createWorkspace(options) {
   /** @param {Record<string,unknown>} next */
   function update(next) {
     workspace = next;
-    const phase = text(next.phase) ?? "unknown", runtimeStatus = text(next.runtimeStatus) ?? "unknown", resources = record(next.resources);
+    const phase = displayPhase(next) ?? "unknown", runtimeStatus = text(next.runtimeStatus) ?? "unknown", resources = record(next.resources);
     if (featurePhase !== phase) { featurePhase = phase; disposeFeatures?.(); if (expectedId) disposeFeatures = mountWorkspaceFeatures(features, { hostId: host, name, id: expectedId, phase }, current, refresh); }
     badge.textContent = phase;
     badge.className = `badge ${phase === "running" ? "badge-approved" : phase === "error" ? "badge-error" : phase === "stopped" ? "badge-neutral" : "badge-pending"}`;
@@ -129,5 +135,5 @@ export function createWorkspace(options) {
     row.setAttribute("aria-busy", String(busy));
   }
   update(initial); updateUnsaved();
-  return { row, name, get phase() { return text(workspace.phase) ?? "unknown"; }, update, dispose() { disposed = true; disposeFeatures?.(); } };
+  return { row, name, get phase() { return displayPhase(workspace) ?? "unknown"; }, update, dispose() { disposed = true; disposeFeatures?.(); } };
 }
