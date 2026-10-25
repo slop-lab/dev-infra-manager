@@ -127,8 +127,18 @@ export class PullRequestUI extends ReviewUI {
       if (!updateEndpoint.test(request.url())) return;
       const body = request.postDataJSON(); if (body !== null && typeof body === "object" && "state" in body) stateChangeRequests += 1;
     };
-    const expectLocked = async () => {
-      await this.detail.getByText("Merge accepted. Refresh the pull request to confirm its recorded state.", { exact: true }).waitFor();
+    const captureState = async (prefix: string) => {
+      if (!evidenceDirectory) return;
+      await this.browserPage.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+      for (const width of [375, 768, 1280]) {
+        await this.browserPage.setViewportSize({ width, height: 1000 });
+        await this.detail.screenshot({ path: join(evidenceDirectory, `${prefix}-${width}.png`), animations: "disabled" });
+      }
+      await this.browserPage.setViewportSize({ width: 1440, height: 1000 });
+    };
+    const expectLocked = async (accepted = true) => {
+      await this.detail.getByText(accepted ? "Merge accepted. Refresh the pull request to confirm its recorded state."
+        : "Merge in progress. Wait for the current request before changing pull request state.", { exact: true }).waitFor();
       const action = this.detail.getByRole("button", { name: "Merge pull request", exact: true });
       assert.equal(await action.isDisabled(), true, "an accepted merge awaiting refresh must remain disabled");
       assert.equal(await this.detail.getByRole("button", { name: /^(?:Close|Reopen) pull request$/ }).count(), 0,
@@ -145,7 +155,7 @@ export class PullRequestUI extends ReviewUI {
     const confirm = (dialog: Dialog) => dialog.accept();
     this.browserPage.on("dialog", confirm);
     try {
-      const mergeResponse = this.browserPage.waitForResponse(mergeEndpoint);
+      const mergeResponse = Promise.allSettled([this.browserPage.waitForResponse(mergeEndpoint)]);
       await merge.click();
       await this.browserPage.route(reviewDetailEndpoint, (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporary review detail failure"}' }));
       await refreshFailure.reached;
@@ -153,9 +163,12 @@ export class PullRequestUI extends ReviewUI {
       await this.detail.getByRole("heading", { name: siblingTitle, exact: true }).waitFor();
       await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · open`, exact: true }).click();
       await this.detail.getByRole("heading", { name: title, exact: true }).waitFor();
-      await this.detail.getByText("Some revision details could not load. Refresh before taking a decision.", { exact: true }).waitFor();
+      await expectLocked(false);
+      await captureState("merge-in-flight");
       refreshFailure.release();
-      assert.equal((await mergeResponse).ok(), true, "merge workflow response must retain the accepted refresh-pending result");
+      const [received] = await mergeResponse;
+      assert(received?.status === "fulfilled", "merge workflow response must be available");
+      assert.equal(received.value.ok(), true, "merge workflow response must retain the accepted refresh-pending result");
       await expectLocked();
       assert.equal(await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · merged`, exact: true }).count(), 0,
         "the accepted receipt must not falsely present an unconfirmed refreshed state");
@@ -179,14 +192,7 @@ export class PullRequestUI extends ReviewUI {
       await this.detail.getByRole("heading", { name: title, exact: true }).waitFor();
       await this.detail.getByText(pendingComment, { exact: true }).waitFor();
       await expectLocked();
-      if (evidenceDirectory) {
-        await this.browserPage.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
-        for (const width of [375, 768, 1280]) {
-          await this.browserPage.setViewportSize({ width, height: 1000 });
-          await this.detail.screenshot({ path: join(evidenceDirectory, `refresh-pending-${width}.png`), animations: "disabled" });
-        }
-        await this.browserPage.setViewportSize({ width: 1440, height: 1000 });
-      }
+      await captureState("refresh-pending");
       await this.detail.getByRole("button", { name: "Refresh pull request", exact: true }).click();
       await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · merged`, exact: true }).waitFor();
     } finally {

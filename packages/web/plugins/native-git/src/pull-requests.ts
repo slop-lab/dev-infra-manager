@@ -37,6 +37,7 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
   let rows: readonly PullRequest[] = [], selected: PullRequest | null = null, snapshot: DiffSnapshot | null = null;
   let review: ReviewDto | null = null, feedback = "";
   const acceptedMerges = new Map<string, AcceptedMergePending>();
+  const mergesInFlight = new Set<string>();
   const root = mountPullRequestPanel(container, { pullRequests: [], selected: null, snapshot: null });
   const scopeIdentity = (scope: PullRequestScope) => JSON.stringify([scope.controllerId, scope.projectId, scope.repositoryId]);
   const acceptedMergeKey = (scope: PullRequestScope, pr: PullRequest) => JSON.stringify([scopeIdentity(scope), pr.id, currentRevision(pr).id]);
@@ -100,12 +101,14 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
     const canApprove = host.has("pull-requests.approve");
     const reviewerId = host.reviewerId();
     const pending = pr ? acceptedMerge(scope, pr) : undefined;
+    const merging = pr ? mergesInFlight.has(acceptedMergeKey(scope, pr)) : false;
     const currentReview = pending?.review ?? review;
     const activeApproval = currentReview?.approvals.find(approval => approval.reviewerId === reviewerId
       && !currentReview.revocations.some(revocation => revocation.approvalId === approval.approvalId));
     const props: PullRequestPanelProps = {
       pullRequests: rows, selected: pr, snapshot, onSelect: select,
-      reviewStatus: pending?.receipt ?? (feedback || (currentReview ? `Human review ${currentReview.status} · required reviewers: ${currentReview.requiredReviewerIds.join(", ") || "none"}` : "Prepare this revision to inspect human review and DIM CI requirements.")),
+      reviewStatus: pending?.receipt ?? (merging ? "Merge in progress. Wait for the current request before changing pull request state."
+        : feedback || (currentReview ? `Human review ${currentReview.status} · required reviewers: ${currentReview.requiredReviewerIds.join(", ") || "none"}` : "Prepare this revision to inspect human review and DIM CI requirements.")),
       reviewContent: h("div", null,
         currentReview ? h("p", { className: "git-pr__ci-status", "data-ci-state": currentReview.ci?.state ?? "unavailable" }, reviewCiSummary(currentReview.ci)) : null,
         currentReview?.requiredReviewerIds.length && !canApprove && context.operations.some(operation => operation.name === "pull-requests.list")
@@ -122,8 +125,8 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
       },
       ...(pr && host.has("pull-requests.update") ? {
         onEdit: async patch => accept(scope, await invoke(scope, "pull-requests.update", { ...mutationInput(pr!), ...patch }), expected),
-        ...(pending ? {} : { onSetState: async state => {
-          if (acceptedMerge(scope, pr)) return;
+        ...(pending || merging ? {} : { onSetState: async state => {
+          if (acceptedMerge(scope, pr) || mergesInFlight.has(acceptedMergeKey(scope, pr))) return;
           await accept(scope, await invoke(scope, "pull-requests.update", { ...mutationInput(pr), state }), expected);
         } })
       } : {}),
@@ -143,27 +146,31 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
         if (active(scope, expected)) { review = value; render(); }
       } } : {}),
       ...(pr && host.has("pull-requests.merge") ? { onMerge: async () => {
-        if (acceptedMerge(scope, pr)) return;
+        const key = acceptedMergeKey(scope, pr);
+        if (acceptedMerge(scope, pr) || mergesInFlight.has(key)) return;
         const pinned = currentRevision(pr);
         if (!window.confirm(`Merge candidate ${pinned.sourceCommit} into ${pr.targetRef}?`)) return;
-        let result: { pullRequest: unknown; review: ReviewDto; refreshPending: boolean };
+        mergesInFlight.add(key); render();
         try {
-          result = await invoke(scope, "pull-requests.merge", { ...mutationInput(pr), revisionId: pinned.id }) as { pullRequest: unknown; review: ReviewDto; refreshPending: boolean };
+          const result = await invoke(scope, "pull-requests.merge", { ...mutationInput(pr), revisionId: pinned.id }) as { pullRequest: unknown; review: ReviewDto; refreshPending: boolean };
+          if (result.refreshPending) {
+            const accepted = parsePullRequest(result.pullRequest), revision = currentRevision(accepted);
+            if (accepted.id !== pr.id || revision.id !== pinned.id) throw new Error("Accepted merge result does not match the submitted pull request revision");
+            const pending: AcceptedMergePending = { scopeIdentity: scopeIdentity(scope), pullRequestId: accepted.id, revisionId: revision.id, review: result.review, receipt: acceptedMergeReceipt };
+            acceptedMerges.set(acceptedMergeKey(scope, accepted), pending);
+            if (!active(scope, expected)) return;
+            rows = [accepted, ...rows.filter(row => row.id !== accepted.id)]; selected = accepted; review = result.review; feedback = acceptedMergeReceipt; return;
+          }
+          if (!active(scope, expected)) return;
+          await accept(scope, result.pullRequest, expected);
         } catch (error) {
           await Promise.allSettled([inspect(scope, pr, expected)]);
           throw error;
+        } finally {
+          mergesInFlight.delete(key);
+          if (currentScope(scope)) render();
         }
-        if (result.refreshPending) {
-          const accepted = parsePullRequest(result.pullRequest), revision = currentRevision(accepted);
-          if (accepted.id !== pr.id || revision.id !== pinned.id) throw new Error("Accepted merge result does not match the submitted pull request revision");
-          const pending: AcceptedMergePending = { scopeIdentity: scopeIdentity(scope), pullRequestId: accepted.id, revisionId: revision.id, review: result.review, receipt: acceptedMergeReceipt };
-          acceptedMerges.set(acceptedMergeKey(scope, accepted), pending);
-          if (!active(scope, expected)) { if (currentScope(scope)) render(); return; }
-          rows = [accepted, ...rows.filter(row => row.id !== accepted.id)]; selected = accepted; review = result.review; feedback = acceptedMergeReceipt; render(); return;
-        }
-        if (!active(scope, expected)) return;
-        await accept(scope, result.pullRequest, expected);
-      }, mergeDisabled: pending !== undefined || pullRequestMergeDisabled(pr, currentReview) } : {}),
+      }, mergeDisabled: merging || pending !== undefined || pullRequestMergeDisabled(pr, currentReview) } : {}),
       ...(host.has("blame.line") ? { onBlame: async anchor => await invoke(scope, "blame.line", { commit: anchor.side === "base" ? anchor.baseCommit : anchor.headCommit, path: anchor.path, line: anchor.line }) as GitLineAttribution } : {})
     };
     root.update(props);
