@@ -33,9 +33,17 @@ export function utf8(bytes: Buffer): string {
 /** Only history advertised through managed branches, proposals or trusted integration pins is readable. */
 export async function assertAdvertisedCommits(input: RepositoryReadGit, commits: readonly string[], protectedRefs: readonly string[], advertisedRefs: readonly string[] = []): Promise<void> {
   commits.forEach(assertCommit);
-  const refs = utf8(await gitBytes(input, ["for-each-ref", "--format=%(refname)"])).trim().split("\n")
-    .filter((ref) => protectedRefs.includes(ref) || advertisedRefs.includes(ref)
-      || isNativeGitOrdinaryCandidateRef(ref) || /^refs\/heads\/proposals\/[A-Za-z0-9_-]+\/.+/.test(ref));
+  const refs: string[] = [];
+  for (const entry of utf8(await gitBytes(input, ["for-each-ref", "--format=%(refname)%09%(objectname)"])).trim().split("\n").filter(Boolean)) {
+    const match = /^(refs\/[^\t]+)\t([0-9a-f]{40}|[0-9a-f]{64})$/.exec(entry);
+    const ref = match?.[1], objectId = match?.[2];
+    if (!ref || !objectId) throw new RepositoryReadError("repository ref identity is invalid");
+    if (!protectedRefs.includes(ref) && !advertisedRefs.includes(ref)
+      && !isNativeGitOrdinaryCandidateRef(ref) && !/^refs\/heads\/proposals\/[A-Za-z0-9_-]+\/.+/.test(ref)) continue;
+    const type = utf8(await gitBytes(input, ["cat-file", "-t", `${objectId}^{}`])).trim();
+    if (type === "commit") refs.push(objectId);
+    else if (type !== "blob" && type !== "tree") throw new RepositoryReadError("repository ref object is invalid");
+  }
   if (refs.length === 0) throw new RepositoryReadError("repository has no advertised commits");
   for (const commit of commits) {
     const type = utf8(await gitBytes(input, ["cat-file", "-t", commit])).trim();
