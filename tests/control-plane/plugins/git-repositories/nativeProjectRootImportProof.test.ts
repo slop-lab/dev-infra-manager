@@ -184,7 +184,7 @@ describe("native Project imported root proof", () => {
     expect(response.status).not.toBe(200);
   });
 
-  it.each(["moved ref", "foreign ref", "corrupt bundle", "corrupt graph",
+  it.each(["moved ref", "reserved ref", "corrupt bundle", "corrupt graph",
     "repository symlink", "missing owner marker"] as const)(
     "does not prove a %s",
     async (failure) => {
@@ -197,8 +197,8 @@ describe("native Project imported root proof", () => {
           "commit-tree", fixture.bundle.tree, "-m", "moved root"])).stdout.trim();
         await runGit("/usr/bin/git", ["--git-dir", repository, "update-ref", "refs/heads/main",
           movedCommit, fixture.bundle.commit]);
-      } else if (failure === "foreign ref") {
-        await runGit("/usr/bin/git", ["--git-dir", repository, "update-ref", "refs/heads/foreign",
+      } else if (failure === "reserved ref") {
+        await runGit("/usr/bin/git", ["--git-dir", repository, "update-ref", "refs/dim/unowned",
           fixture.bundle.commit, "0".repeat(40)]);
       } else if (failure === "corrupt bundle") {
         const path = bundlePath(fixture.root, fixture.receipt);

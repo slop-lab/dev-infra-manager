@@ -95,6 +95,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
         return true;
       }
       let generationId: string;
+      const handlerEntry = performance.now();
       try {
         try {
           generationId = parseLeaseRequest(await readBoundedJson(request));
@@ -119,6 +120,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
           return sendVerificationFailure(response, error);
         }
         if (!operations.isOpen()) return true;
+        const preIssueMilliseconds = Math.floor(performance.now() - handlerEntry);
         const lease = leases.issue({
           generationId: input.expectedGenerationId,
           ownerHostId: issuer.hostId,
@@ -130,7 +132,7 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
           return true;
         }
         sendJson(response, 201, {
-          schemaVersion: 1,
+          schemaVersion: 2,
           serviceId: "native-main",
           projectId,
           repositoryId,
@@ -138,7 +140,8 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
           username: lease.username,
           password: lease.password,
           issuedAt: lease.issuedAt,
-          expiresAt: lease.expiresAt
+          expiresAt: lease.expiresAt,
+          preIssueMilliseconds
         });
         return true;
       } finally {

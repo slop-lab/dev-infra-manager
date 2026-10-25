@@ -2,6 +2,7 @@ import type { RepositoryExtensionContext } from "./plugin-api.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { assertGitExecutableIdentity, type GitExecutableIdentity } from "./repository.js";
+import { isNativeGitOrdinaryCandidateRef } from "@slop-lab/dim-contracts-git";
 
 const execute = promisify(execFile);
 const maximumBytes = 4 * 1024 * 1024;
@@ -33,7 +34,8 @@ export function utf8(bytes: Buffer): string {
 export async function assertAdvertisedCommits(input: RepositoryReadGit, commits: readonly string[], protectedRefs: readonly string[], advertisedRefs: readonly string[] = []): Promise<void> {
   commits.forEach(assertCommit);
   const refs = utf8(await gitBytes(input, ["for-each-ref", "--format=%(refname)"])).trim().split("\n")
-    .filter((ref) => protectedRefs.includes(ref) || advertisedRefs.includes(ref) || /^refs\/heads\/proposals\/[A-Za-z0-9_-]+\/.+/.test(ref));
+    .filter((ref) => protectedRefs.includes(ref) || advertisedRefs.includes(ref)
+      || isNativeGitOrdinaryCandidateRef(ref) || /^refs\/heads\/proposals\/[A-Za-z0-9_-]+\/.+/.test(ref));
   if (refs.length === 0) throw new RepositoryReadError("repository has no advertised commits");
   for (const commit of commits) {
     const type = utf8(await gitBytes(input, ["cat-file", "-t", commit])).trim();

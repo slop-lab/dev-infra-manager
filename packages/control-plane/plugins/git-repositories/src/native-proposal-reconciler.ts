@@ -4,11 +4,11 @@ import { promisify } from "node:util";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import { readNativeProjectRegistrations } from "./native-bundle-state.js";
 import { assertGitExecutableIdentity } from "./repository.js";
+import { isNativeGitLegacyProposalRef } from "@slop-lab/dim-contracts-git";
 
 const execute = promisify(execFile);
 const maximumProposalRefs = 10_000;
 const maximumRefOutputBytes = 4 * 1024 * 1024;
-const proposalRefPattern = /^refs\/heads\/proposals\/([A-Za-z0-9_-]{43})\/(.+)$/;
 
 export type NativeProposalRefSnapshot = ReadonlyMap<string, string>;
 
@@ -40,7 +40,7 @@ export async function readNativeProposalRefs(
     const separator = line.indexOf("\0");
     const ref = separator < 0 ? "" : line.slice(0, separator);
     const objectId = separator < 0 ? "" : line.slice(separator + 1);
-    if (!validProposalRef(ref) || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(objectId)) {
+    if (!isNativeGitLegacyProposalRef(ref) || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(objectId)) {
       throw new NativeProposalReconcilerError("native proposal ref enumeration is invalid");
     }
     refs.set(ref, objectId);
@@ -57,19 +57,6 @@ export function changedNativeProposalRefs(
 ): readonly string[] {
   return [...after].filter(([ref, objectId]) => before.get(ref) !== objectId)
     .map(([ref]) => ref).sort();
-}
-
-function validProposalRef(ref: string): boolean {
-  const match = proposalRefPattern.exec(ref);
-  if (match === null) return false;
-  const workspaceId = match[1];
-  const proposal = match[2];
-  return workspaceId !== undefined && Buffer.from(workspaceId, "base64url").length === 32
-    && Buffer.from(workspaceId, "base64url").toString("base64url") === workspaceId
-    && proposal !== undefined && proposal.length <= 1024 && !proposal.startsWith(".")
-    && !proposal.includes("/.") && !proposal.includes("..") && !proposal.includes("//")
-    && !proposal.endsWith("/") && !proposal.endsWith(".") && !proposal.endsWith(".lock")
-    && /^[A-Za-z0-9._/-]+$/.test(proposal);
 }
 
 export class NativeProposalReconcilerError extends Error {

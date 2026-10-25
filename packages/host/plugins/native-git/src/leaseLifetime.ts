@@ -1,18 +1,25 @@
-/** Issuer wall time bounds its TTL; whole-request monotonic time bounds local reuse.
- * The service remains authoritative for actual credential expiry on every Git request.
+/** The issuer starts the TTL after proof completion, so proof latency is not lease age.
+ * Local reuse keeps a fixed transport margin; the service enforces actual expiry on every Git request.
  */
-export function localLeaseExpiry(
-  issuedAt: unknown,
-  expiresAt: unknown,
-  elapsed: number,
-  receivedAt: number
-): number | undefined {
-  if (typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt)
-    || typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt)
-    || !Number.isFinite(elapsed) || elapsed < 0) return;
-  const duration = expiresAt - issuedAt;
+export type LeaseTiming = {
+  readonly issuedAt: unknown;
+  readonly expiresAt: unknown;
+  readonly elapsed: number;
+  readonly preIssueMilliseconds: unknown;
+  readonly receivedAt: number;
+};
+
+export function localLeaseExpiry(input: LeaseTiming): number | undefined {
+  if (typeof input.issuedAt !== "number" || !Number.isSafeInteger(input.issuedAt)
+    || typeof input.expiresAt !== "number" || !Number.isSafeInteger(input.expiresAt)
+    || !Number.isFinite(input.elapsed) || input.elapsed < 0
+    || typeof input.preIssueMilliseconds !== "number" || !Number.isSafeInteger(input.preIssueMilliseconds)
+    || input.preIssueMilliseconds < 0) return;
+  const duration = input.expiresAt - input.issuedAt;
   if (duration <= 0 || duration > 30_000) return;
-  const remaining = duration - Math.ceil(elapsed);
+  const totalElapsed = Math.ceil(input.elapsed);
+  if (!Number.isSafeInteger(totalElapsed) || input.preIssueMilliseconds > totalElapsed) return;
+  const remaining = duration - (totalElapsed - input.preIssueMilliseconds) - 1_000;
   if (remaining <= 0) return;
-  return receivedAt + remaining;
+  return input.receivedAt + remaining;
 }

@@ -85,8 +85,8 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
       const syncFetch = Object.hasOwn(project.repositories[repositoryId]!.repositoryPolicy.extensions, "git-sync")
         ? [["config", "--local", "--add", "remote.origin.fetch", "+refs/remotes/upstream/*:refs/remotes/upstream/*"]] : [];
       for (const args of [["remote", "set-url", "origin", remote], ["config", "--local", "credential.helper", helper],
-        ["config", "--local", "credential.useHttpPath", "true"], ["config", "--local", "remote.origin.push",
-          `HEAD:refs/heads/proposals/${repository.nativeWorkspaceId}/${repository.protectedRef.slice("refs/heads/".length)}`], ...syncFetch]) {
+        ["config", "--local", "credential.useHttpPath", "true"], ["config", "--local", "push.default", "current"],
+        ...syncFetch]) {
         if (await runtime.exec(record, ["git", "-C", `/workspace/${repositoryId}`, ...args], { signal }) !== 0) throw new UserError(`cannot configure scoped Git origin for '${repositoryId}'`);
       }
     }

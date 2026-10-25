@@ -69,15 +69,15 @@ describe("native root import serving-generation rollover", () => {
     expect(await importArtifacts(fixture.root, fixture.receipt)).toEqual(before);
   });
 
-  it.each(["foreign ref", "corrupt graph"] as const)(
+  it.each(["reserved ref", "corrupt graph"] as const)(
     "rejects a generation-B startup with a %s without changing import artifacts",
     async (failure) => {
       // Given
       const fixture = await finalizedGenerationA(`rollover-${failure.replace(" ", "-")}`);
       await closeFinalizeService(fixture.service);
-      if (failure === "foreign ref") {
+      if (failure === "reserved ref") {
         await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root), "update-ref",
-          "refs/heads/foreign", fixture.bundle.commit, "0".repeat(40)]);
+          "refs/dim/unowned", fixture.bundle.commit, "0".repeat(40)]);
       } else {
         const packDirectory = join(rootRepository(fixture.root), "objects", "pack");
         const pack = (await readdir(packDirectory)).find((name) => name.endsWith(".pack"));

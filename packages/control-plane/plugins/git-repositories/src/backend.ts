@@ -128,6 +128,7 @@ type GitBackendRequest = {
   readonly route: NativeGitRoute;
   readonly request: IncomingMessage;
   readonly response: ServerResponse;
+  readonly protectedRefs?: readonly string[];
   readonly afterSuccessfulWrite?: () => Promise<void>;
 };
 
@@ -140,7 +141,7 @@ function backendEnvironment(input: GitBackendRequest): NodeJS.ProcessEnv {
     GIT_CONFIG_KEY_0: "core.hooksPath",
     GIT_CONFIG_VALUE_0: join(input.config.storageRoot, input.route.projectId, `${input.route.repositoryId}.git`, "hooks"),
     GIT_CONFIG_KEY_1: "receive.denyNonFastForwards",
-    GIT_CONFIG_VALUE_1: "true",
+    GIT_CONFIG_VALUE_1: input.identity.role === "writer" ? "false" : "true",
     GIT_CONFIG_KEY_2: "http.receivepack",
     GIT_CONFIG_VALUE_2: input.identity.role === "writer" ? "true" : "false",
     GIT_CONFIG_KEY_3: "receive.fsckObjects",
@@ -161,7 +162,10 @@ function backendEnvironment(input: GitBackendRequest): NodeJS.ProcessEnv {
     REMOTE_USER: input.identity.username,
     DIM_NATIVE_GIT_PROJECT_ID: input.route.projectId,
     DIM_NATIVE_GIT_REPOSITORY_ID: input.route.repositoryId,
-    ...(input.identity.role === "writer" ? { DIM_NATIVE_GIT_WORKSPACE_ID: input.identity.workspaceId } : {}),
+    ...(input.identity.role === "writer" ? {
+      DIM_NATIVE_GIT_WORKSPACE_ID: input.identity.workspaceId,
+      DIM_NATIVE_GIT_PROTECTED_REFS: input.protectedRefs?.join("\n") ?? ""
+    } : {}),
     ...(protocol === "version=1" || protocol === "version=2" ? { HTTP_GIT_PROTOCOL: protocol } : {})
   };
 }

@@ -7,6 +7,8 @@ import type { NativeProjectRecord } from "./nativeProjectPendingCodec.js";
 const responseFields = ["schemaVersion", "serviceId", "ownerHostId", "projectId", "repositoryId",
   "generationId", "protectedRef", "commit", "tree", "policyRevision"] as const;
 const issuerIdentityFields = ["schemaVersion", "serviceId", "role", "hostId", "generationId"] as const;
+const identityTimeoutMilliseconds = 5_000;
+const proofTimeoutMilliseconds = 35_000;
 
 export type NativeProjectReadinessProof = {
   readonly schemaVersion: 1;
@@ -43,7 +45,7 @@ export async function attestNativeWorkspaceWriteIssuer(
     method: "GET",
     path: "/v1/operator-workspace-write-issuer-identity",
     authorization: issuerAuthorization(connection),
-    signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)])
+    signal: AbortSignal.any([signal, AbortSignal.timeout(identityTimeoutMilliseconds)])
   });
   const identity = exactRecord(parseResponse(response), issuerIdentityFields);
   if (identity.schemaVersion !== 1 || identity.serviceId !== connection.nativeGit.serviceId
@@ -81,7 +83,7 @@ export async function proveNativeProjectReadiness(
       tree: selected.tree,
       policyRevision: repository.repositoryPolicy.policyRevision
     }),
-    signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)])
+    signal: AbortSignal.any([signal, AbortSignal.timeout(proofTimeoutMilliseconds)])
   });
   const proof = exactRecord(parseResponse(response), responseFields);
   if (proof.schemaVersion !== 1 || proof.serviceId !== connection.nativeGit.serviceId

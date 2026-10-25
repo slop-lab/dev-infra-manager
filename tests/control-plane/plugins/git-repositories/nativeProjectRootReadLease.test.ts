@@ -214,9 +214,11 @@ async function issueLease(origin: string): Promise<RootReadLease> {
   const username = Reflect.get(value, "username");
   const password = Reflect.get(value, "password");
   const expiresAt = Reflect.get(value, "expiresAt");
-  if (typeof username !== "string" || typeof password !== "string" || typeof expiresAt !== "number") {
+  const preIssueMilliseconds = Reflect.get(value, "preIssueMilliseconds");
+  if (typeof username !== "string" || typeof password !== "string" || typeof expiresAt !== "number" || typeof preIssueMilliseconds !== "number") {
     throw new Error("invalid lease response");
   }
+  expect(Reflect.get(value, "schemaVersion")).toBe(2);
   return { username, password, expiresAt };
 }
 

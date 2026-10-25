@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { assertGitExecutableIdentity, type GitExecutableIdentity } from "./repository.js";
 import { NativeRootImportBundleError } from "./native-root-import-storage.js";
+import { conventionalProtectedRefs } from "./candidate-ref-policy.js";
+import { isNativeGitLegacyProposalRef, isNativeGitOrdinaryCandidateRef } from "@slop-lab/dim-contracts-git";
 
 const execute = promisify(execFile);
 const gitOptions = {
@@ -93,7 +95,10 @@ async function inspectRefs(input: NativeRootProofGitInput): Promise<void> {
   const protectedRefs = new Map(heads.map((head) => [head.protectedRef, head.commit]));
   const ownedRefs = new Map((input.extensionRefs ?? []).map((owned) => [owned.ref, owned.commit]));
   if (protectedRefs.get(input.protectedRef) !== input.currentCommit || heads.some((head) => !refs.has(head.protectedRef)) || [...refs.keys()].some((ref) =>
-    !protectedRefs.has(ref) && !isWorkspaceProposalRef(ref) && !isUpstreamTrackingRef(ref) && !ownedRefs.has(ref))) {
+    !protectedRefs.has(ref)
+      && !(isNativeGitOrdinaryCandidateRef(ref) && !conventionalProtectedRefs.some((protectedRef) => ref === protectedRef))
+      && !isNativeGitLegacyProposalRef(ref)
+      && !isUpstreamTrackingRef(ref) && !ownedRefs.has(ref))) {
     throw new NativeRootImportBundleError("native root repository contains a foreign ref");
   }
   // One bounded snapshot validates every exact pin. Missing declared pins can
@@ -112,13 +117,6 @@ function isUpstreamTrackingRef(ref: string): boolean {
   return suffix.length > 0 && suffix.length <= 512 && !/[\x00-\x20\x7f~^:?*[\\\]]/.test(suffix)
     && suffix.split("/").every((part) => part.length > 0 && !part.startsWith(".") && !part.endsWith(".") && !part.endsWith(".lock"))
     && !suffix.includes("..") && !suffix.includes("@{");
-}
-
-function isWorkspaceProposalRef(ref: string): boolean {
-  const proposal = /^refs\/heads\/proposals\/[A-Za-z0-9_-]{43}\/([A-Za-z0-9._/-]+)$/.exec(ref)?.[1];
-  return proposal !== undefined && !proposal.startsWith(".") && !proposal.includes("/.")
-    && !proposal.includes("..") && !proposal.includes("//") && !proposal.endsWith("/")
-    && !proposal.endsWith(".") && !proposal.endsWith(".lock");
 }
 
 async function runPinned(

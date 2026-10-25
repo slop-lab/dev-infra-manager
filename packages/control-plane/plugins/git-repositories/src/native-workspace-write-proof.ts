@@ -1,5 +1,5 @@
 import type { NativeGitBundleState } from "./native-bundle-state.js";
-import { verifyLiveImportedRepository } from "./native-imported-root-verifier.js";
+import { verifyLiveImportedRepository, type LiveImportedRoot } from "./native-imported-root-verifier.js";
 import { NativeProjectRootImportStateError } from "./native-project-root-import-codec.js";
 import type { WorkspaceWriteLeaseScope } from "./native-workspace-write-lifecycle.js";
 import type { GitExecutableIdentity } from "./repository.js";
@@ -58,8 +58,8 @@ export async function verifyAuthoritativeWorkspaceRoot(
   projectId: string,
   repositoryId: string,
   ownerHostId: string
-): Promise<void> {
-  await verifyLiveImportedRepository({
+): Promise<LiveImportedRoot> {
+  return verifyLiveImportedRepository({
     activated: input.activated(),
     activationTokenDigest: input.activationTokenDigest,
     expectedGenerationId: input.expectedGenerationId,
@@ -71,5 +71,4 @@ export async function verifyAuthoritativeWorkspaceRoot(
     state: input.state,
     stateDirectory: input.stateDirectory
   });
-
 }

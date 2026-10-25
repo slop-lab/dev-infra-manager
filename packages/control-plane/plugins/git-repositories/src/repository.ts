@@ -26,11 +26,29 @@ case "$workspace" in
   ""|*[!A-Za-z0-9_-]*) printf '%s\\n' 'DIM proposal identity is invalid' >&2; exit 1 ;;
 esac
 allowed="refs/heads/proposals/$workspace/"
+protected="\${DIM_NATIVE_GIT_PROTECTED_REFS-}"
+case "$protected" in "") printf '%s\\n' 'DIM protected ref policy is unavailable' >&2; exit 1 ;; esac
 while IFS=' ' read -r old new ref; do
-  case "$ref" in "$allowed"*) ;; *) printf '%s\\n' 'DIM permits only the authenticated workspace proposal namespace' >&2; exit 1 ;; esac
-  proposal=\${ref#"$allowed"}
-  case "$proposal" in ""|*[!A-Za-z0-9._/-]*|.*|*/.*|*..*|*//*|*.lock|*/|*.) printf '%s\\n' 'DIM proposal ref is unsafe' >&2; exit 1 ;; esac
-  case "$new" in *[!0]*) ;; *) printf '%s\\n' 'DIM proposal deletion is denied' >&2; exit 1 ;; esac
+  git check-ref-format "$ref" >/dev/null 2>&1 || { printf '%s\\n' 'DIM candidate ref is unsafe' >&2; exit 1; }
+  prior_ifs=$IFS
+  IFS='
+'
+  for candidate in $protected; do
+    git check-ref-format "$candidate" >/dev/null 2>&1 || { printf '%s\\n' 'DIM protected ref policy is invalid' >&2; exit 1; }
+    if [ "$candidate" = "$ref" ]; then printf '%s\\n' 'DIM protected ref writes are denied' >&2; exit 1; fi
+  done
+  IFS=$prior_ifs
+  case "$ref" in
+    "$allowed"*)
+      proposal=\${ref#"$allowed"}
+      case "$proposal" in ""|*[!A-Za-z0-9._/-]*|.*|*/.*|*..*|*//*|*.lock|*/|*.) printf '%s\\n' 'DIM proposal ref is unsafe' >&2; exit 1 ;; esac
+      case "$new" in *[!0]*) ;; *) printf '%s\\n' 'DIM proposal deletion is denied' >&2; exit 1 ;; esac
+      case "$old" in *[!0]*) git merge-base --is-ancestor "$old" "$new" || { printf '%s\\n' 'DIM proposal force update is denied' >&2; exit 1; } ;; esac
+      ;;
+    refs/heads/proposals/*|refs/heads/proposals) printf '%s\\n' 'DIM foreign proposal writes are denied' >&2; exit 1 ;;
+    refs/heads/*|refs/tags/*) ;;
+    *) printf '%s\\n' 'DIM reserved ref writes are denied' >&2; exit 1 ;;
+  esac
 done
 `;
 
@@ -142,6 +160,11 @@ export async function assertRegisteredRepository(
     ...gitMetadataProcessOptions
   });
   if (fsck.stdout.trim() !== "true") throw new NativeGitRepositoryError("registered repository receive fsck policy is invalid");
+  const denyNonFastForwards = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--bool", "--get", "receive.denyNonFastForwards"], {
+    env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
+    ...gitMetadataProcessOptions
+  });
+  if (denyNonFastForwards.stdout.trim() !== "true") throw new NativeGitRepositoryError("registered repository force-update policy is invalid");
   const fullPathname = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--get", "receive.fsck.fullPathname"], {
     env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
     ...gitMetadataProcessOptions

@@ -11,14 +11,14 @@ import {
 } from "./nativeGitRootReadIssuerConnection.js";
 
 const maximumResponseBytes = 64 * 1024;
-const requestTimeoutMilliseconds = 5_000;
+const requestTimeoutMilliseconds = 35_000;
 const leaseFields = [
   "schemaVersion", "serviceId", "projectId", "repositoryId", "generationId",
-  "username", "password", "issuedAt", "expiresAt"
+  "username", "password", "issuedAt", "expiresAt", "preIssueMilliseconds"
 ] as const;
 
 export type NativeGitRootReadLease = {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly serviceId: "native-main";
   readonly projectId: string;
   readonly repositoryId: string;
@@ -86,9 +86,9 @@ export function createNativeGitRootReadIssuerClient(
       } catch {
         throw new NativeGitRootReadIssuerClientError("native Git root read lease request failed");
       }
-      const receivedAt = Date.now();
       const value = parseResponse(response);
-      return parseLease(value, connection, projectId, repositoryId, receivedAt, performance.now() - started);
+      const receivedAt = Date.now(), elapsed = performance.now() - started;
+      return parseLease(value, connection, projectId, repositoryId, receivedAt, elapsed);
     }
   };
 }
@@ -114,13 +114,14 @@ function parseLease(
   elapsed: number
 ): NativeGitRootReadLease {
   const lease = exactRecord(value, leaseFields);
-  if (lease.schemaVersion !== 1 || lease.serviceId !== connection.serviceId
+  if (lease.schemaVersion !== 2 || lease.serviceId !== connection.serviceId
     || lease.projectId !== projectId || lease.repositoryId !== repositoryId
     || lease.generationId !== connection.generationId) invalid();
-  const expiresAt = localLeaseExpiry(lease.issuedAt, lease.expiresAt, elapsed, receivedAt);
+  const expiresAt = localLeaseExpiry({ issuedAt: lease.issuedAt, expiresAt: lease.expiresAt, elapsed,
+    preIssueMilliseconds: lease.preIssueMilliseconds, receivedAt });
   if (expiresAt === undefined) throw new NativeGitRootReadIssuerClientError("native Git lease lifetime is invalid or exhausted in transit");
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     serviceId: "native-main",
     projectId,
     repositoryId,

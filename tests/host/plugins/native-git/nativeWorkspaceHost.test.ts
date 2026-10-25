@@ -2,7 +2,7 @@ import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceStore, type WorkspaceRecord, type WorkspaceRuntime, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
-import { createManagedWorkspace } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceHost.js";
+import { createManagedWorkspace, ensureManagedWorkspace } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceHost.js";
 import { nativeWorkspaceAttachmentFile, readNativeWorkspaceAttachment } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
 import { cleanupFinalizeFixtures, generationId } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { managedProjectFixture } from "./nativeProjectIntegrationFixture.js";
@@ -66,6 +66,12 @@ it("seeds selected independent repositories with separate grants and never mutat
   expect(attachment.repositories.public?.grant).not.toBe(attachment.repositories.private?.grant);
   expect(fixture.runtime.commands.filter(({ argv }) => argv.includes("set-url")).map(({ argv }) => argv.at(-1))).toEqual([
     "http://172.20.0.1:19419/v1/projects/project-a/repositories/public.git", "http://172.20.0.1:19419/v1/projects/project-a/repositories/private.git"]);
+  expect(fixture.runtime.commands.filter(({ argv }) => argv.includes("push.default")).map(({ argv }) => argv.at(-1)))
+    .toEqual(["current", "current"]);
+  expect(fixture.runtime.commands.some(({ argv }) => argv.includes("remote.origin.push"))).toBe(false);
+  const configuredCommands = fixture.runtime.commands.length;
+  await ensureManagedWorkspace(record, fixture.context);
+  expect(fixture.runtime.commands).toHaveLength(configuredCommands);
   await createManagedWorkspace({ name: "second", source: { url: "dim://acme" }, repositories: ["private"] }, fixture.context);
   expect(fixture.runtime.seed).toBe(originalSeed);
   expect(fixture.runtime.commands.filter(({ workspace }) => workspace === "second")).toHaveLength(4);
@@ -91,7 +97,7 @@ it("keeps default-branch configuration separate from a development working check
   const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(fixture.state, record.id));
   expect(attachment.configuration.protectedRef).toBe("refs/heads/main");
   expect(attachment.repositories.public?.protectedRef).toBe("refs/heads/development");
-  expect(fixture.runtime.commands.some(({ argv }) => argv.at(-1)?.endsWith("/development"))).toBe(true);
+  expect(fixture.runtime.commands.some(({ argv }) => argv.includes("push.default") && argv.at(-1) === "current")).toBe(true);
 });
 
 it("refreshes authority-owned policy on explicit reattach and acquires a dotted and underscored local alias", async () => {

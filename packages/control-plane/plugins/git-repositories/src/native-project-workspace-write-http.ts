@@ -19,6 +19,8 @@ import { RepositoryRefStateError } from "./repository-ref-state.js";
 import { NativeProjectStorageError } from "./native-project-storage.js";
 import { NativeRootImportBundleError } from "./native-root-import-storage.js";
 import type { RootReadOperationGate } from "./native-root-read-lifecycle.js";
+import { workspaceProtectedRefs } from "./candidate-ref-policy.js";
+import type { LiveImportedRoot } from "./native-imported-root-verifier.js";
 import {
   assertGitExecutableIdentity,
   assertRegisteredRepository,
@@ -121,6 +123,7 @@ export function createNativeProjectWorkspaceWriteService(
         if (input.operations.isOpen()) sendJson(response, 503, { error: "native Git transport service is busy" });
         return true;
       }
+      const handlerEntry = performance.now();
       try {
         let leaseRequest: WorkspaceWriteLeaseRequest;
         try {
@@ -148,6 +151,7 @@ export function createNativeProjectWorkspaceWriteService(
           return true;
         }
         if (!input.operations.isOpen()) return true;
+        const preIssueMilliseconds = Math.floor(performance.now() - handlerEntry);
         const lease = leases.issue({
           generationId: input.expectedGenerationId,
           ownerHostId: issuer.hostId,
@@ -160,7 +164,7 @@ export function createNativeProjectWorkspaceWriteService(
           return true;
         }
         sendJson(response, 201, {
-          schemaVersion: 1,
+          schemaVersion: 2,
           serviceId: "native-main",
           projectId,
           repositoryId: lease.repositoryId,
@@ -169,7 +173,8 @@ export function createNativeProjectWorkspaceWriteService(
           username: lease.username,
           password: lease.password,
           issuedAt: lease.issuedAt,
-          expiresAt: lease.expiresAt
+          expiresAt: lease.expiresAt,
+          preIssueMilliseconds
         });
         return true;
       } finally {
@@ -187,8 +192,9 @@ export function createNativeProjectWorkspaceWriteService(
       await input.serializeReceive(async () => {
         await input.hooks?.beforeVerification?.();
         if (!input.operations.isOpen()) return true;
+        let verified: LiveImportedRoot;
         try {
-          await verifyAuthoritativeWorkspaceRoot(input, route.projectId, route.repositoryId, lease.ownerHostId);
+          verified = await verifyAuthoritativeWorkspaceRoot(input, route.projectId, route.repositoryId, lease.ownerHostId);
           await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
           await assertRegisteredRepository({
             gitExecutable: input.gitExecutable,
@@ -215,6 +221,7 @@ export function createNativeProjectWorkspaceWriteService(
           route,
           request,
           response,
+          protectedRefs: workspaceProtectedRefs(verified.imported.policy),
           ...(before === undefined ? {} : { afterSuccessfulWrite: async () => {
             const after = await readNativeProposalRefs(input, route.projectId, route.repositoryId, lease.workspaceId);
             await input.reconcileProposalRefs(route.projectId, route.repositoryId, changedNativeProposalRefs(before, after));

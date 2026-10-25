@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { appendFile, chmod, copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   activateFinalizeService,
@@ -21,6 +23,7 @@ import {
 } from "./nativeRootImportFinalizeFixture.js";
 
 const workspaceId = Buffer.alloc(32, 60).toString("base64url");
+const execute = promisify(execFile);
 
 afterEach(cleanupFinalizeFixtures);
 
@@ -58,6 +61,42 @@ describe("native Project workspace write backend integrity", () => {
 
     // Then
     expect(response.status).not.toBe(200);
+  });
+
+  it("rejects transport after the stored force-update policy changes", async () => {
+    // Given
+    const fixture = await finalizedFixture("workspace-write-force-policy-integrity");
+    const lease = await issueLease(fixture.service.origin);
+    await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root), "config", "receive.denyNonFastForwards", "false"]);
+
+    // When
+    const response = await uploadPackDiscovery(fixture.service.origin, lease);
+
+    // Then
+    expect(response.status).not.toBe(200);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["malformed", "not-a-ref"]
+  ] as const)("fails closed when the protected-ref environment is %s", async (_label, protectedRefs) => {
+    // Given
+    const fixture = await finalizedFixture("workspace-write-protected-env");
+    const repository = rootRepository(fixture.root);
+    const commit = (await runGit("/usr/bin/git", ["--git-dir", repository, "rev-parse", "refs/heads/main"])).stdout.trim();
+    const hook = join(repository, "hooks", "pre-receive");
+    const update = `${"0".repeat(40)} ${commit} refs/heads/topic\\n`;
+    const environment = {
+      ...process.env,
+      DIM_NATIVE_GIT_WORKSPACE_ID: workspaceId,
+      ...(protectedRefs === undefined ? {} : { DIM_NATIVE_GIT_PROTECTED_REFS: protectedRefs })
+    };
+
+    // When / Then
+    await expect(execute("/bin/sh", ["-c", "printf '%b' \"$1\" | \"$2\"", "sh", update, hook], {
+      cwd: repository,
+      env: environment
+    })).rejects.toMatchObject({ code: 1 });
   });
 });
 

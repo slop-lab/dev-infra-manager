@@ -64,7 +64,7 @@ describe("native Git root read issuer host client", () => {
 
     const lease = await client.issueRepositoryReadLease("project-a", "root", AbortSignal.timeout(5_000));
 
-    expect(lease).toMatchObject({ schemaVersion: 1, serviceId: "native-main", projectId: "project-a",
+    expect(lease).toMatchObject({ schemaVersion: 2, serviceId: "native-main", projectId: "project-a",
       repositoryId: "root", generationId });
     expect(lease.expiresAt).toBeGreaterThan(Date.now());
     expect(lease.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000);
@@ -97,14 +97,14 @@ describe("native Git root read issuer host client", () => {
       "for-each-ref", "--format=%(refname)"])).stdout).toBe("refs/heads/development\nrefs/heads/main\n");
   });
 
-  it.each([-86_400_000, 86_400_000])("uses issuer duration and conservative local RTT deadline with clock offset %s", async (offset) => {
+  it.each([-86_400_000, 86_400_000])("uses issuer duration and a fixed transport margin with clock offset %s", async (offset) => {
     vi.spyOn(Date, "now").mockReturnValue(leaseNow);
     vi.spyOn(performance, "now").mockReturnValueOnce(100).mockReturnValueOnce(350);
     const issuedAt = leaseNow + offset;
     const httpClient: NativeGitAdmissionHttpClient = {
       async request() {
         const response = {
-          schemaVersion: 1,
+          schemaVersion: 2,
           serviceId: "native-main",
           projectId: "project-a",
           repositoryId: "root",
@@ -112,7 +112,8 @@ describe("native Git root read issuer host client", () => {
           username: `root-read-${Buffer.alloc(18, 1).toString("base64url")}`,
           password: Buffer.alloc(32, 2).toString("base64url"),
           issuedAt,
-          expiresAt: issuedAt + 30_000
+          expiresAt: issuedAt + 30_000,
+          preIssueMilliseconds: 0
         };
         return {
           statusCode: 201,
@@ -124,7 +125,7 @@ describe("native Git root read issuer host client", () => {
     };
     const client = createNativeGitRootReadIssuerClient(issuerConnection("http://127.0.0.1:1"), httpClient);
     const lease = await client.issueRepositoryReadLease("project-a", "root", AbortSignal.timeout(5_000));
-    expect(lease.expiresAt).toBe(leaseNow + 29_750);
+    expect(lease.expiresAt).toBe(leaseNow + 28_750);
   });
 
   it.each([
@@ -139,12 +140,16 @@ describe("native Git root read issuer host client", () => {
     ["oversized body", { bodyChange: { username: `root-read-${"a".repeat(65 * 1024)}` } }],
     ["expired lease", { bodyChange: { expiresAt: leaseNow } }],
     ["overlong lease", { bodyChange: { expiresAt: leaseNow + 31_000 } }]
+    ,["version 1 lease without pre-issue timing", { bodyChange: { schemaVersion: 1, preIssueMilliseconds: undefined } }]
+    ,["negative pre-issue duration", { bodyChange: { preIssueMilliseconds: -1 } }]
+    ,["fractional pre-issue duration", { bodyChange: { preIssueMilliseconds: 0.5 } }]
+    ,["pre-issue duration beyond elapsed time", { bodyChange: { preIssueMilliseconds: 10_000 } }]
   ] as const)("rejects a %s lease response", async (_label, change) => {
     vi.spyOn(Date, "now").mockReturnValue(leaseNow);
     const responseBody = {
-      schemaVersion: 1, serviceId: "native-main", projectId: "project-a", repositoryId: "root",
+      schemaVersion: 2, serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       generationId, username: `root-read-${Buffer.alloc(18, 1).toString("base64url")}`,
-      password: Buffer.alloc(32, 2).toString("base64url"), issuedAt: leaseNow, expiresAt: Date.now() + 25_000,
+      password: Buffer.alloc(32, 2).toString("base64url"), issuedAt: leaseNow, expiresAt: Date.now() + 25_000, preIssueMilliseconds: 0,
       ...("bodyChange" in change ? change.bodyChange : {})
     };
     const httpClient: NativeGitAdmissionHttpClient = {
