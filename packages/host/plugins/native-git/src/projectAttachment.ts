@@ -16,6 +16,7 @@ import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
 import { proveNativeProjectReadiness } from "./nativeProjectReadinessClient.js";
 
 const operationNames = new Set(["projects.discover", "projects.inspect", "projects.attach"]);
+const attachmentOperationTimeoutMilliseconds = 90_000;
 export const nativeProjectAttachmentOperations = nativeGitManagementOperations.filter((operation) => operationNames.has(operation.name));
 
 export function createNativeProjectAttachmentManagement(
@@ -41,7 +42,8 @@ export function createNativeProjectAttachmentManagement(
       if (!parsed || typeof parsed !== "object" || !("projectId" in parsed) || typeof parsed.projectId !== "string") {
         throw new Error("Project attachment input is invalid");
       }
-      const descriptor = await client.inspect(parsed.projectId, AbortSignal.timeout(10_000));
+      const operationSignal = AbortSignal.timeout(attachmentOperationTimeoutMilliseconds);
+      const descriptor = await client.inspect(parsed.projectId, operationSignal);
       if (name === "projects.inspect") return operation.parseOutput(inspect(descriptor));
       if (!("configurationRepositoryId" in parsed) || typeof parsed.configurationRepositoryId !== "string"
         || !("defaultWorkingRepositoryId" in parsed) || typeof parsed.defaultWorkingRepositoryId !== "string") {
@@ -52,9 +54,8 @@ export function createNativeProjectAttachmentManagement(
         configurationRepositoryId: parsed.configurationRepositoryId,
         defaultWorkingRepositoryId: parsed.defaultWorkingRepositoryId
       });
-      const signal = AbortSignal.timeout(30_000);
       for (const repository of Object.values(record.repositories)) {
-        await proveNativeProjectReadiness(selected, record, repository.repositoryId, signal, {
+        await proveNativeProjectReadiness(selected, record, repository.repositoryId, operationSignal, {
           commit: repository.commit,
           tree: repository.tree,
           protectedRef: repository.protectedRef,
