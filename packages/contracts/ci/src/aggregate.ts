@@ -38,6 +38,7 @@ export const executionSchema = z.object({ id: z.string().uuid(), event: executio
   profile: executionProfileSchema.optional(), grant: executionGrantSchema.optional(), result: executionResultSchema.optional(),
   retryOf: z.string().uuid().optional(), retryRequestId: z.string().uuid().optional(),
   cancelRequestedAt: z.number().int().nonnegative().optional(),
+  admission: z.object({ phase: z.enum(["authorize", "candidate-read"]), code: z.enum(["timeout", "unavailable", "stale"]) }).strict().optional(),
   publication: z.enum(["pending", "accepted", "stale"])
 }).strict().superRefine((job, context) => {
   if ((job.retryOf === undefined) !== (job.retryRequestId === undefined) || job.retryOf === job.id

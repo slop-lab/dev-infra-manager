@@ -3,7 +3,7 @@ import { executionEventSchema, executionGrantSchema } from "@slop-lab/dim-contra
 import { executionResultSchema, parseExecution, type Execution, type ExecutionAssignment, type ExecutionEvent,
   type ExecutionGrant, type ExecutionResult, type ExecutionProfile, type WorkerSlot } from "@slop-lab/dim-contracts-ci/aggregate";
 import { TaskStore, assertSchedulingIndexes } from "./task-store.js";
-import { taskEventSchema, taskGrantSchema, taskResultSchema, taskJobSchema,
+import { isTaskExecution, taskEventSchema, taskGrantSchema, taskResultSchema, taskJobSchema,
   type TaskEvent, type TaskProfile, type TaskGrant, type TaskResult, type TaskExecution, type TaskAssignment, type ScheduledSlot } from "@slop-lab/dim-contracts-execution";
 
 export type ScheduledExecution = Execution | TaskExecution;
@@ -40,6 +40,22 @@ export class ExecutionStore extends TaskStore<ExecutionEvent | TaskEvent, Execut
   override attachGrant(id: string, grant: TaskGrant): TaskAssignment;
   override attachGrant(id: string, grant: ExecutionGrant | TaskGrant): ScheduledExecutionAssignment;
   override attachGrant(id: string, grant: ExecutionGrant | TaskGrant): ScheduledExecutionAssignment { return super.attachGrant(id, grant); }
+  releaseAdmission(id: string, admission: { readonly phase: "authorize"; readonly code: "timeout" | "unavailable" }): Execution {
+    const selected = this.get(id);
+    if (isTaskExecution(selected) || selected.grant !== undefined || selected.phase !== "assigned") throw new Error("execution admission cannot be released");
+    const { workerId: _workerId, slotId: _slotId, requestId: _requestId, leaseToken: _leaseToken,
+      leaseExpiresAt: _leaseExpiresAt, profile: _profile, ...unowned } = selected;
+    const saved = parseExecution({ ...unowned, phase: "queued", admission });
+    this.database.prepare("UPDATE executions SET phase='queued',worker_id=NULL,slot_id=NULL,request_id=NULL,lease_expires_at=NULL,body=? WHERE id=?")
+      .run(JSON.stringify(saved), id);
+    return saved;
+  }
+  recordAdmission(id: string, admission: { readonly phase: "authorize" | "candidate-read"; readonly code: "timeout" | "unavailable" | "stale" }): Execution {
+    const selected = this.get(id);
+    if (isTaskExecution(selected)) throw new Error("task execution has no Git admission");
+    const saved = parseExecution({ ...selected, admission });
+    this.database.prepare("UPDATE executions SET body=? WHERE id=?").run(JSON.stringify(saved), id); return saved;
+  }
   recentSummaries(): ExecutionSummary[] {
     // Drop task records and large diagnostics in SQLite before decoding CI summaries.
     return this.database.prepare("SELECT id,event_id,generation_id,phase,worker_id,slot_id,request_id,created_at,retry_of,execution_kind,publication,lease_expires_at,json_remove(body,'$.result.logs','$.grant','$.leaseToken','$.profile') AS body FROM executions WHERE execution_kind NOT LIKE 'task/%' ORDER BY created_at DESC,rowid DESC LIMIT 100")

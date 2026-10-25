@@ -31,7 +31,7 @@ export class TaskStore<E extends SchedulingEvent, P extends object, G extends Sc
     }
     this.database = new DatabaseSync(path);
     const version = Number(this.database.prepare("PRAGMA user_version").get()?.user_version);
-    if (version !== 102 && (version !== 0 || this.database.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get() !== undefined)) {
+    if (![102, 103].includes(version) && (version !== 0 || this.database.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get() !== undefined)) {
       this.database.close(); throw new Error("task state format is unsupported; use a fresh task state directory");
     }
     chmodSync(path, 0o600);
@@ -48,7 +48,11 @@ export class TaskStore<E extends SchedulingEvent, P extends object, G extends Sc
       CREATE INDEX pending_results ON executions(created_at) WHERE phase='finished' AND publication='pending';
       CREATE INDEX lease_expiry ON executions(lease_expires_at) WHERE phase IN ('assigned','running');
       CREATE TABLE metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      PRAGMA user_version=102; COMMIT;`);
+      CREATE TABLE enrolled_workers (worker_id TEXT NOT NULL, generation_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(worker_id,generation_id));
+      PRAGMA user_version=103; COMMIT;`);
+    if (version === 102) this.database.exec(`BEGIN IMMEDIATE;
+      CREATE TABLE enrolled_workers (worker_id TEXT NOT NULL, generation_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(worker_id,generation_id));
+      PRAGMA user_version=103; COMMIT;`);
     for (const row of this.database.prepare("SELECT * FROM executions").iterate()) this.decode(row);
     this.transaction(() => {
       for (const row of this.database.prepare("SELECT * FROM executions WHERE phase IN ('queued','assigned','running')").all()) {
@@ -84,8 +88,8 @@ export class TaskStore<E extends SchedulingEvent, P extends object, G extends Sc
     });
   }
   reserve(workerId: string, slot: ScheduledSlot<P>, requestId: string): (J & AssignmentOwnership<P>) | undefined {
+    this.expire();
     return this.transaction(() => {
-      this.expire();
       const replay = this.database.prepare("SELECT * FROM executions WHERE worker_id=? AND slot_id=? AND request_id=?")
         .get(workerId, slot.id, requestId);
       if (replay !== undefined) return this.decode(replay) as (J & AssignmentOwnership<P>);
@@ -106,18 +110,33 @@ export class TaskStore<E extends SchedulingEvent, P extends object, G extends Sc
     });
   }
   attachGrant(id: string, grant: G): (J & AssignmentOwnership<P>) {
-    const selected = this.get(id);
-    if (selected.grant !== undefined) {
-      if (!isDeepStrictEqual(selected.grant, grant)) throw new ExecutionConflictError("execution authorization conflicts");
-      return selected as (J & AssignmentOwnership<P>);
-    }
-    if (selected.phase !== "assigned" || grant.executionId !== id) throw new ExecutionConflictError("execution authorization conflicts");
-    const saved = { ...selected, grant: this.codec.parseGrant(grant) } as (J & AssignmentOwnership<P>);
-    this.save(saved); return saved;
+    this.expire();
+    return this.transaction(() => {
+      const selected = this.get(id);
+      if (selected.grant !== undefined) {
+        if (!isDeepStrictEqual(selected.grant, grant)) throw new ExecutionConflictError("execution authorization conflicts");
+        return selected as (J & AssignmentOwnership<P>);
+      }
+      if (selected.phase !== "assigned" || selected.generationId !== this.generationId || selected.cancelRequestedAt !== undefined
+        || (selected.leaseExpiresAt ?? 0) <= this.now() || grant.executionId !== id) throw new ExecutionConflictError("execution authorization conflicts");
+      const saved = { ...selected, grant: this.codec.parseGrant(grant) } as (J & AssignmentOwnership<P>);
+      this.save(saved); return saved;
+    });
+  }
+  renewAdmission(id: string, workerId: string, slotId: string, token: string): (J & AssignmentOwnership<P>) {
+    this.expire();
+    return this.transaction(() => {
+      const execution = this.owned(id, workerId, slotId, token);
+      if (execution.grant !== undefined || execution.generationId !== this.generationId || execution.cancelRequestedAt !== undefined || execution.phase !== "assigned") {
+        throw new ExecutionConflictError("execution admission is no longer current");
+      }
+      const saved = { ...execution, leaseExpiresAt: this.now() + this.leaseMilliseconds } as (J & AssignmentOwnership<P>);
+      this.save(saved); return saved;
+    });
   }
   renew(id: string, workerId: string, slotId: string, token: string): (J & AssignmentOwnership<P>) {
+    this.expire();
     return this.transaction(() => {
-      this.expire();
       const execution = this.owned(id, workerId, slotId, token);
       if (execution.grant === undefined || execution.generationId !== this.generationId || !["assigned", "running"].includes(execution.phase)) {
         throw new ExecutionConflictError("execution lease is no longer current");

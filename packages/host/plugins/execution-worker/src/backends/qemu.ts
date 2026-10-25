@@ -5,6 +5,7 @@ import { NativeOutputCollector, executionDiagnostics } from "../output.js";
 import { cleanupNativeContainer, containerName, ownershipLabels, prepareExecutionImage, jobEnvironmentScript, validateJobConfigTargets } from "./containers.js";
 import type { BackendInput, ExecutionBackend } from "../backend.js";
 import type { ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
+import { candidateFailureCode } from "../candidate-failure.js";
 
 export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBackend { return {
   kind: "qemu",
@@ -58,7 +59,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       const exitCode = /^(?:0|[1-9][0-9]{0,2})\n?$/.test(waited.stdout) ? Number(waited.stdout.trim()) : -1;
       completion = waited.exitCode === 0 && logs === 0 && exitCode >= 0 && exitCode <= 255
         ? { kind: "exited", exitCode } : { kind: "executor-failure", code: "supervisor-observer-failed" };
-    } catch { completion = { kind: "executor-failure", code: "qemu-execution-failed" }; }
+    } catch (error) { completion = { kind: "executor-failure", code: candidateFailureCode(error) ?? "qemu-execution-failed" }; }
     finally { if (!await cleanupQemu(input.runner, input.grant)) throw new Error("owned QEMU cleanup is uncertain"); }
     if (input.signal.aborted) completion = { kind: "cancelled" };
     else if (output.exceeded) completion = { kind: "output-limit-exceeded" };

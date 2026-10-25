@@ -40,5 +40,5 @@ export const controlPlanePlugin: ControlPlanePlugin = {
 export { configuredExecutionServer } from "./service.js";
 export { ExecutionStore } from "./store.js";
 export { inspectExecutionState } from "./state.js";
-export { nativeGitExecutionSource, StaleExecutionSourceError } from "./ci-source.js";
+export { GitExecutionAuthorityError, nativeGitExecutionSource, StaleExecutionSourceError } from "./ci-source.js";
 export type { ExecutionSource } from "./ci-source.js";

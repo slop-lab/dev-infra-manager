@@ -9,9 +9,11 @@ import type { ExecutionServiceConfig } from "./config.js";
 import { ExecutionStore } from "./store.js";
 import { createTaskBroker } from "./task-broker.js";
 import { isTaskExecution, taskDescriptorDigest, taskGrantSchema, taskProfileSchema, type TaskProfile, type ScheduledSlot } from "@slop-lab/dim-contracts-execution";
-import { parseExecution, type ExecutionAssignment, type ExecutionProfile } from "@slop-lab/dim-contracts-ci/aggregate";
+import type { ExecutionProfile } from "@slop-lab/dim-contracts-ci/aggregate";
 import { ExecutionConflictError } from "@slop-lab/dim-contracts-execution";
 import { nativeGitExecutionSource, StaleExecutionSourceError, type ExecutionSource } from "./ci-source.js";
+import { WorkerRegistry } from "./worker-registry.js";
+import { createAdmissionController, sendAdmissionFailure } from "./admission.js";
 
 const identity = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const ownership = z.object({ slotId: identity, leaseToken: z.string().min(32).max(128) });
@@ -24,19 +26,22 @@ export function configuredExecutionServer(input: {
   const config = input.config;
   const generation = input.expectedGenerationId;
   const activation = createHash("sha256").update(input.activationToken).digest("hex");
-  const workers = config.workers.map((worker) => ({ id: worker.id, token: worker.token,
+  const store = new ExecutionStore(join(input.stateDirectory, "executions.sqlite3"), generation,
+    config.claimLeaseMilliseconds, input.now);
+  const registry = new WorkerRegistry(store.database, generation, config, store.now);
+  const workers = () => registry.workers().map((worker) => ({ id: worker.workerId, token: worker.token,
     slots: worker.slots.map((slot): ScheduledSlot<ExecutionProfile | TaskProfile> => "taskType" in slot
       ? { id: slot.id, kind: `task/${slot.taskType}`, profile: { taskType: slot.taskType, handlerRevision: slot.handlerRevision } }
       : { id: slot.id, kind: slot.runtime === "container" ? "ordinary-sysbox" : "qemu", profile: slot.profile }) }));
-  const store = new ExecutionStore(join(input.stateDirectory, "executions.sqlite3"), generation,
-    config.claimLeaseMilliseconds, input.now);
   const source = input.source ?? (config.nativeGit === undefined ? undefined : nativeGitExecutionSource(config.nativeGit, generation));
   const tasks = createTaskBroker(store);
   const shutdown = new AbortController();
+  const admission = createAdmissionController(store, shutdown.signal);
   const publisher = publishResults();
   const server = createServer((request, response) => {
     void handle(request, response).catch((error: unknown) => {
       if (response.headersSent) { response.destroy(); return; }
+      if (sendAdmissionFailure(response, error)) return;
       send(response, error instanceof z.ZodError ? 400 : error instanceof ExecutionConflictError ? 409 : 503,
         { error: error instanceof z.ZodError ? "invalid execution request" : "execution operation is unavailable" });
     });
@@ -94,22 +99,29 @@ export function configuredExecutionServer(input: {
       const execution = store.enqueue(body.event);
       return send(response, 202, { executionId: execution.id, eventId: execution.event.eventId, generationId: generation });
     }
-    const operatorRoute = /^\/v1\/operator\/(workers|jobs\/([0-9a-f-]{36})\/(cancel|retry))$/.exec(url.pathname);
+    const operatorRoute = /^\/v1\/operator\/(workers(?:\/enroll|\/([a-z0-9][a-z0-9._-]{0,127})\/export)?|jobs\/([0-9a-f-]{36})\/(cancel|retry))$/.exec(url.pathname);
     if (operatorRoute !== null) {
       if (!basic(request, config.credentials.operator.username, config.credentials.operator.password)) return unauthorized(response);
       if (request.headers["x-dim-generation-id"] !== generation) return send(response, 409, { error: "Execution operator generation is stale" });
+      if (request.method === "POST" && operatorRoute[1] === "workers/enroll") return send(response, 200, registry.enroll(await read(request)));
+      if (request.method === "POST" && operatorRoute[2] !== undefined) {
+        z.object({}).strict().parse(await read(request)); return send(response, 200, registry.export(operatorRoute[2]));
+      }
       if (request.method === "GET" && operatorRoute[1] === "workers") {
         const occupied = store.occupiedSlots();
-        return send(response, 200, workers.map((worker) => ({ id: worker.id, slots: worker.slots.map((slot) => {
-          const job = occupied.find((job) => job.workerId === worker.id && job.slotId === slot.id);
-          return { id: slot.id, executionKind: slot.kind, state: job === undefined ? "idle" : job.phase === "recovering" ? "cleanup-required" : "busy",
-            ...(job === undefined ? {} : { job: isTaskExecution(job) ? taskSummary(job) : executionSummary(job), leaseExpiresAt: job.leaseExpiresAt }) };
-        }) })));
+        return send(response, 200, workers().map((worker) => ({ id: worker.id, observedConnected: registry.observed(worker.id),
+          ...(registry.lastSeenAt(worker.id) === undefined ? {} : { lastSeenAt: registry.lastSeenAt(worker.id) }), slots: worker.slots.map((slot) => {
+           const job = occupied.find((job) => job.workerId === worker.id && job.slotId === slot.id);
+           return { id: slot.id, executionKind: slot.kind, state: job === undefined ? "idle" : job.phase === "recovering" ? "cleanup-required" : "busy",
+             available: registry.observed(worker.id) && job === undefined,
+             ...(job === undefined ? {} : { job: isTaskExecution(job) ? taskSummary(job) : executionSummary(job), leaseExpiresAt: job.leaseExpiresAt }) };
+         }) })));
       }
-      const id = operatorRoute[2], action = operatorRoute[3];
+      const id = operatorRoute[3], action = operatorRoute[4];
       if (request.method !== "POST" || id === undefined || action === undefined) return send(response, 404, {});
       if (action === "cancel") {
         z.object({}).strict().parse(await read(request));
+        admission.cancel(id);
         const job = store.get(id);
         return send(response, 200, summary(isTaskExecution(job) ? tasks.cancel(id) : store.cancel(id)));
       }
@@ -127,9 +139,11 @@ export function configuredExecutionServer(input: {
       if (!job || isTaskExecution(job)) return send(response, 404, { error: "CI execution was not found" });
       return send(response, 200, { job: summary(job), ...(job.result === undefined ? {} : { result: job.result }) });
     }
-    const worker = workers.find((worker) => basic(request, worker.id, worker.token));
+    const registration = registry.authenticateAuthorization(request.headers.authorization);
+    const worker = registration === undefined ? undefined : workers().find((candidate) => candidate.id === registration.workerId);
     if (worker === undefined) return unauthorized(response);
     if (request.headers["x-dim-generation-id"] !== generation) return send(response, 409, { error: "Execution worker generation is stale" });
+    registry.observe(worker.id);
     if (request.method === "GET" && url.pathname === "/v1/worker") {
       return send(response, 200, { generationId: generation, workerId: worker.id, slots: worker.slots });
     }
@@ -149,11 +163,11 @@ export function configuredExecutionServer(input: {
             descriptorDigest: taskDescriptorDigest(assignment.event, profile) }));
         } else {
           if (source === undefined) throw new StaleExecutionSourceError();
-          assignment = store.attachGrant(assignment.id, await source.authorize(assignment as ExecutionAssignment));
+          assignment = await admission.authorize(assignment, source, response);
         }
       }
       catch (error) {
-        if (error instanceof StaleExecutionSourceError) { store.reject(assignment.id); return send(response, 204); }
+        if (error instanceof StaleExecutionSourceError) return send(response, 204);
         throw error;
       }
       return send(response, 200, assignment);
@@ -178,9 +192,7 @@ export function configuredExecutionServer(input: {
     if (action === "candidate") {
       if (isTaskExecution(assignment) || source === undefined) return send(response, 404, {});
       ownership.strict().parse(raw);
-      store.renew(id, worker.id, body.slotId, body.leaseToken);
-      if (assignment.grant === undefined) throw new ExecutionConflictError("execution has no grant");
-      return send(response, 200, await source.candidate((parseExecution(assignment)).grant!));
+      return send(response, 200, await admission.candidate(assignment, source, response));
     }
     if (action === "recover") {
       ownership.extend({ cleanupComplete: z.literal(true) }).strict().parse(raw);

@@ -4,6 +4,7 @@ import { open } from "node:fs/promises";
 import { z } from "zod";
 import { executionOperatorConnectionSchema } from "@slop-lab/dim-contracts-execution/connections";
 import { scheduledSummarySchema, executionWorkersSchema } from "@slop-lab/dim-contracts-ci/query";
+import { executionWorkerEnrollmentSchema, executionWorkerEnrollmentSecretSchema } from "@slop-lab/dim-contracts-ci/worker";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 
 export async function createExecutionOperatorClient(file: string) {
@@ -26,7 +27,10 @@ export async function createExecutionOperatorClient(file: string) {
   }
   const id = (value: string) => z.string().uuid().parse(value);
   return {
+    endpoint: connection.endpoint,
     async workers() { return executionWorkersSchema.parse(await request("/v1/operator/workers")); },
+    async enroll(input: unknown) { return executionWorkerEnrollmentSecretSchema.parse(await request("/v1/operator/workers/enroll", executionWorkerEnrollmentSchema.parse(input))); },
+    async exportWorker(workerId: string) { return executionWorkerEnrollmentSecretSchema.parse(await request(`/v1/operator/workers/${z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/).parse(workerId)}/export`, {})); },
     async cancel(executionId: string) { return scheduledSummarySchema.parse(await request(`/v1/operator/jobs/${id(executionId)}/cancel`, {})); },
     async retry(executionId: string, requestId: string) { return scheduledSummarySchema.parse(await request(`/v1/operator/jobs/${id(executionId)}/retry`, { requestId: id(requestId) })); }
   };

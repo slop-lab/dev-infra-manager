@@ -7,6 +7,7 @@ import { executionDescriptorDigest } from "../../../../packages/contracts/ci/src
 import { verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from "../../../../packages/host/plugins/execution-worker/src/candidate.js";
 import { assignment, grant, hash } from "../../../contracts/ci/executionFixture.js";
 import { ExecutorRunner } from "./sysboxFixture.js";
+import { ExecutionLeaseLostError, ExecutionServiceUnavailableError } from "../../../../packages/host/plugins/execution-worker/src/client.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 async function input() {
@@ -40,6 +41,12 @@ it("bounds captured output and reports failure after cleanup", async () => {
   const completed = await sysboxBackend.run(options);
   expect(completed.completion.kind).toBe("output-limit-exceeded"); expect(completed.stdout.truncated).toBe(true);
   expect(completed.result).toBe("failure"); expect(completed.cleanupComplete).toBe(true);
+});
+it("reports typed candidate admission failures distinctly from guest execution", async () => {
+  const timeout = await input(); timeout.acquireCandidate = async () => { throw new ExecutionServiceUnavailableError("private", "timeout"); };
+  expect((await sysboxBackend.run(timeout)).completion).toEqual({ kind: "executor-failure", code: "candidate-read-timeout" });
+  const stale = await input(); stale.acquireCandidate = async () => { throw new ExecutionLeaseLostError("private"); };
+  expect((await sysboxBackend.run(stale)).completion).toEqual({ kind: "executor-failure", code: "candidate-read-stale" });
 });
 it("delivers host plugin configuration read-only to networked jobs without placing package-manager policy in the backend", async () => {
   const options = await input(), contents = "Acquire::http::Proxy \"http://172.18.0.3:3142\";\n";

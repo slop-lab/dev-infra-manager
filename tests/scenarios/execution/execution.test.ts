@@ -9,6 +9,8 @@ import type { ExecutionWorkerClient } from "../../../packages/host/plugins/execu
 import type { ExecutionBackend } from "../../../packages/host/plugins/execution-worker/src/backend.js";
 import { ProcessRunner } from "../../../packages/host/core/src/runner.js";
 import { generation, event, grant, result, slot, assignment } from "../../contracts/ci/executionFixture.js";
+import { runAdmission } from "../../../packages/control-plane/plugins/execution-scheduler/src/admission.js";
+import { setTimeout as delay } from "node:timers/promises";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 async function root() { const path = await mkdtemp(join(tmpdir(), "dim-execution-")); roots.push(path); return path; }
@@ -30,6 +32,64 @@ it("shares slots across instances and fences expired execution until owned clean
     second.recover(claim.id, "worker-a", slot.id, claim.leaseToken);
     expect(first.reserve("worker-a", slot, randomUUID())?.event.jobName).toBe("next");
   } finally { first.close(); second.close(); }
+});
+it("rejects a late grant after admission lease expiry", async () => {
+  let now = 0; const store = new ExecutionStore(join(await root(), "executions.sqlite3"), generation, 100, () => now);
+  try {
+    store.enqueue(event()); const claim = store.reserve("worker-a", slot, randomUUID())!; now = 101;
+    expect(() => store.attachGrant(claim.id, grant(claim))).toThrow("authorization conflicts");
+    expect(store.get(claim.id).phase).toBe("recovering");
+  } finally { store.close(); }
+});
+it("requeues transient authorization failure with bounded diagnostics", async () => {
+  const store = new ExecutionStore(join(await root(), "executions.sqlite3"), generation, 1_000);
+  try {
+    store.enqueue(event()); const claim = store.reserve("worker-a", slot, randomUUID())!;
+    const released = store.releaseAdmission(claim.id, { phase: "authorize", code: "timeout" });
+    expect(released).toMatchObject({ phase: "queued", admission: { phase: "authorize", code: "timeout" } });
+    expect(released).not.toHaveProperty("workerId");
+    expect(store.reserve("worker-b", slot, randomUUID())?.id).toBe(claim.id);
+  } finally { store.close(); }
+});
+it("renews a pre-grant reservation only while delayed admission is connected", async () => {
+  const store = new ExecutionStore(join(await root(), "executions.sqlite3"), generation, 30);
+  try {
+    store.enqueue(event()); const claim = store.reserve("worker-a", slot, randomUUID())!;
+    const authorized = await runAdmission({ store, assignment: claim, granted: false, signal: new AbortController().signal,
+      async operation(signal) { await delay(80, undefined, { signal }); return grant(claim); } });
+    expect(store.attachGrant(claim.id, authorized).grant).toEqual(authorized);
+  } finally { store.close(); }
+});
+it("keeps authorize and candidate ownership current through a 34 second fake-clock authority delay", async () => {
+  let now = 0; const store = new ExecutionStore(join(await root(), "executions.sqlite3"), generation, 30_000, () => now);
+  try {
+    store.enqueue(event()); const claim = store.reserve("worker-a", slot, randomUUID())!;
+    async function delayed<T>(value: T, granted: boolean): Promise<T> {
+      let complete!: (selected: T) => void, renewals = 0; const target = now + 34_000;
+      const operation = new Promise<T>((resolve) => { complete = resolve; });
+      return runAdmission({ store, assignment: claim, granted, signal: new AbortController().signal,
+        operation: () => operation, async wait(milliseconds) {
+          now += milliseconds; renewals++;
+          if (renewals === 3) { now = target; complete(value); }
+        } });
+    }
+    const authorized = await delayed(grant(claim), false);
+    const assigned = store.attachGrant(claim.id, authorized);
+    const credential = await delayed({ username: "candidate", password: "a".repeat(43), expiresAt: 60_000 }, true);
+    expect(credential.username).toBe("candidate"); expect(now).toBeGreaterThanOrEqual(34_000);
+    expect(store.get(assigned.id)).toMatchObject({ phase: "running", leaseExpiresAt: expect.any(Number) });
+  } finally { store.close(); }
+});
+it("aborts delayed admission without attaching a grant or fabricating a result", async () => {
+  const store = new ExecutionStore(join(await root(), "executions.sqlite3"), generation, 1_000);
+  try {
+    store.enqueue(event()); const claim = store.reserve("worker-a", slot, randomUUID())!, disconnected = new AbortController();
+    const pending = runAdmission({ store, assignment: claim, granted: false, signal: disconnected.signal,
+      async operation(signal) { await delay(1_000, undefined, { signal }); return grant(claim); } });
+    disconnected.abort(); await expect(pending).rejects.toThrow();
+    const retained = store.get(claim.id);
+    expect(retained.phase).toBe("assigned"); expect(retained).not.toHaveProperty("grant"); expect(retained).not.toHaveProperty("result");
+  } finally { store.close(); }
 });
 it("replays claims/results and releases capacity before evidence publication", async () => {
   const store = new ExecutionStore(join(await root(), "executions.sqlite3"), generation, 1_000);

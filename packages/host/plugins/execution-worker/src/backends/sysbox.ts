@@ -5,6 +5,7 @@ import type { ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
 import { cleanupNativeContainer, nativeContainerArgs, nativeRunnerScript, prepareNativeImages } from "./containers.js";
 import type { ExecutionBackend } from "../backend.js";
 import { NativeOutputCollector, executionDiagnostics } from "../output.js";
+import { candidateFailureCode } from "../candidate-failure.js";
 
 export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBackend {
   return {
@@ -48,8 +49,8 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
       const exitCode = /^(?:0|[1-9][0-9]{0,2})\n?$/.test(waited.stdout) ? Number(waited.stdout.trim()) : -1;
       completion = waited.exitCode === 0 && logs === 0 && exitCode >= 0 && exitCode <= 255
         ? { kind: "exited", exitCode } : { kind: "executor-failure", code: "container-observer-failed" };
-    } catch {
-      completion = { kind: "executor-failure", code: "execution-failed" };
+    } catch (error) {
+      completion = { kind: "executor-failure", code: candidateFailureCode(error) ?? "execution-failed" };
     } finally {
       if (!await cleanupNativeContainer(input.runner, claim)) throw new Error("owned Sysbox cleanup is uncertain");
     }
