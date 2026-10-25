@@ -70,7 +70,10 @@ complete role and setup boundaries.
 If protected promotion is accepted but the following pull-request refresh fails,
 the accepted receipt remains visible and merge stays disabled. The operator must
 use the explicit pull-request refresh action before the UI presents the recorded
-merged state; the unchanged accepted action cannot be submitted twice.
+merged state; the unchanged accepted action cannot be submitted twice. That lock
+is scoped to the controller, repository, pull request and immutable revision. It
+survives metadata edits, comments, reselection and temporary review-detail failures;
+an authoritative merged record or a newly recorded revision clears it.
 
 The selected controller and repository target remain visible beside capability
 guidance. The panel distinguishes review-only inspection, reviewer decisions,
