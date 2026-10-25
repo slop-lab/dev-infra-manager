@@ -12,6 +12,7 @@ export type RepositoryReadGit = {
   readonly gitIdentity: GitExecutableIdentity;
   readonly repository: string;
   readonly signal: AbortSignal;
+  readonly standardInput?: Buffer;
 };
 export class RepositoryReadError extends Error { readonly name = "RepositoryReadError"; }
 export function assertCommit(commit: string): void {
@@ -19,11 +20,16 @@ export function assertCommit(commit: string): void {
 }
 export async function gitBytes(input: RepositoryReadGit, args: readonly string[], limit = maximumBytes): Promise<Buffer> {
   await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
-  const { stdout } = await execute(input.gitExecutable, ["--no-replace-objects", "--git-dir", input.repository,
+  const execution = execute(input.gitExecutable, ["--no-replace-objects", "--git-dir", input.repository,
     "-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "diff.renames=false", ...args], {
     env: { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", HOME: "/dev/null", LC_ALL: "C" },
     encoding: "buffer", maxBuffer: limit, timeout: 15_000, signal: input.signal
   });
+  if (input.standardInput !== undefined) {
+    execution.child.stdin?.on("error", () => execution.child.kill());
+    execution.child.stdin?.end(input.standardInput);
+  }
+  const { stdout } = await execution;
   await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
   return stdout;
 }
@@ -33,18 +39,27 @@ export function utf8(bytes: Buffer): string {
 /** Only history advertised through managed branches, proposals or trusted integration pins is readable. */
 export async function assertAdvertisedCommits(input: RepositoryReadGit, commits: readonly string[], protectedRefs: readonly string[], advertisedRefs: readonly string[] = []): Promise<void> {
   commits.forEach(assertCommit);
-  const refs: string[] = [];
+  const objects = new Set<string>();
   for (const entry of utf8(await gitBytes(input, ["for-each-ref", "--format=%(refname)%09%(objectname)"])).trim().split("\n").filter(Boolean)) {
     const match = /^(refs\/[^\t]+)\t([0-9a-f]{40}|[0-9a-f]{64})$/.exec(entry);
     const ref = match?.[1], objectId = match?.[2];
     if (!ref || !objectId) throw new RepositoryReadError("repository ref identity is invalid");
     if (!protectedRefs.includes(ref) && !advertisedRefs.includes(ref)
       && !isNativeGitOrdinaryCandidateRef(ref) && !/^refs\/heads\/proposals\/[A-Za-z0-9_-]+\/.+/.test(ref)) continue;
-    const type = utf8(await gitBytes(input, ["cat-file", "-t", `${objectId}^{}`])).trim();
-    if (type === "commit") refs.push(objectId);
-    else if (type !== "blob" && type !== "tree") throw new RepositoryReadError("repository ref object is invalid");
+    objects.add(objectId);
   }
-  if (refs.length === 0) throw new RepositoryReadError("repository has no advertised commits");
+  if (objects.size === 0) throw new RepositoryReadError("repository has no advertised commits");
+  const records = utf8(await gitBytes({ ...input, standardInput: Buffer.from([...objects].map(objectId => `${objectId}^{}\n`).join("")) },
+    ["cat-file", "--batch-check=%(objectname) %(objecttype)"])).trim().split("\n");
+  if (records.length !== objects.size) throw new RepositoryReadError("repository ref inspection is incomplete");
+  const refs = new Set<string>();
+  for (const record of records) {
+    const match = /^([0-9a-f]{40}|[0-9a-f]{64}) (commit|blob|tree)$/.exec(record);
+    const objectId = match?.[1], type = match?.[2];
+    if (!objectId || !type) throw new RepositoryReadError("repository ref object is invalid");
+    if (type === "commit") refs.add(objectId);
+  }
+  if (refs.size === 0) throw new RepositoryReadError("repository has no advertised commits");
   for (const commit of commits) {
     const type = utf8(await gitBytes(input, ["cat-file", "-t", commit])).trim();
     if (type !== "commit") throw new RepositoryReadError("diff identity is not a commit");
