@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -99,6 +100,18 @@ describe("native Project attachment discovery", () => {
       repositories: [{
         ...repository,
         effectivePolicy: { ...repository.effectivePolicy, protectedRef: "refs/heads/other" }
+      }]
+    })).toThrow();
+    const wrongRevisionPolicy = { ...repository.effectivePolicy, policyRevision: "f".repeat(64) };
+    expect(() => parseNativeGitProjectAttachment({
+      ...descriptor,
+      repositories: [{
+        ...repository,
+        effectivePolicy: wrongRevisionPolicy,
+        currentHead: {
+          ...repository.currentHead,
+          policyDigest: createHash("sha256").update(JSON.stringify(wrongRevisionPolicy)).digest("hex")
+        }
       }]
     })).toThrow();
     expect(await readFile(databasePath)).toEqual(databaseBefore);

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { nativeImportedRootPolicySchema } from "./policy.js";
+import { nativeImportedRootPolicySchema, nativeRepositoryPolicyRevision } from "./policy.js";
 
 export const nativeGitProjectCatalogMaximumProjects = 1_024;
 export const nativeGitProjectAttachmentMaximumRepositories = 64;
@@ -90,6 +90,10 @@ export const nativeGitProjectAttachmentSchema = z.object({
     const effectiveDigest = createHash("sha256").update(JSON.stringify(repository.effectivePolicy), "utf8").digest("hex");
     if (receipt.policyDigest !== importedDigest || head.policyDigest !== effectiveDigest) {
       context.addIssue({ code: "custom", message: "native Git Project attachment policy digest is inconsistent" });
+    }
+    if (repository.importedPolicy.policyRevision !== nativeRepositoryPolicyRevision(repository.importedPolicy)
+      || repository.effectivePolicy.policyRevision !== nativeRepositoryPolicyRevision(repository.effectivePolicy)) {
+      context.addIssue({ code: "custom", message: "native Git Project attachment policy revision is inconsistent" });
     }
   }
 }).readonly();
