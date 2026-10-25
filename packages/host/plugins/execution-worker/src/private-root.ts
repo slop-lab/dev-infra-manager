@@ -1,6 +1,7 @@
 import { constants, type BigIntStats } from "node:fs";
 import { chmod, lstat, mkdir, open, readdir, rename, rm, rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { removeOwnedPrivateRootContents, type NativeHostPrivateRootCleanup } from "./private-root-cleanup.js";
 
 const rootIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const markerName = ".dim-native-ordinary-owner.json";
@@ -15,6 +16,7 @@ export type NativeHostPrivateRootCreationFaults = {
   readonly afterPartialStagingMarker?: () => Promise<void>;
   readonly afterStagingMarkerSync?: () => Promise<void>;
 };
+export type NativeHostPrivateRootCleanupFaults = { readonly beforeStagingRemoval?: () => Promise<void> };
 
 export class NativeHostPrivateRoot {
   readonly path: string;
@@ -80,14 +82,15 @@ export class NativeHostPrivateRoot {
     return this.path;
   }
 
-  async cleanup(claimId: string): Promise<boolean> {
+  async cleanup(claimId: string, cleanup?: NativeHostPrivateRootCleanup, faults: NativeHostPrivateRootCleanupFaults = {}): Promise<boolean> {
+    if (cleanup !== undefined && cleanup.grant.executionId !== claimId) return false;
     const parent = await safeLstat(this.#parent);
     if (parent === undefined || !isPrivateDirectory(parent)) return false;
     const stagingExists = await pathExists(this.stagingPath);
     const finalExists = await pathExists(this.path);
     if (stagingExists && finalExists) return false;
     if (stagingExists) return cleanupStaging(this.stagingPath, parent,
-      JSON.stringify({ schemaVersion: 1, rootId: this.#identity.rootId, claimId }));
+      JSON.stringify({ schemaVersion: 1, rootId: this.#identity.rootId, claimId }), this.#identity, faults);
     if (!finalExists) return true;
     const metadata = await safeLstat(this.path);
     if (metadata === undefined) return false;
@@ -98,9 +101,29 @@ export class NativeHostPrivateRoot {
     if (current === undefined || currentParent === undefined) return false;
     if (!sameDirectory(metadata, current) || !sameDirectory(parent, currentParent)) return false;
     try {
-      await rm(this.path, { recursive: true });
+      try {
+        for (const name of await readdir(this.path)) {
+          if (name !== markerName) await rm(join(this.path, name), { recursive: true });
+        }
+      } catch (error) {
+        if (!(error instanceof Error) || !["EACCES", "EPERM"].includes(String(Reflect.get(error, "code")))
+          || cleanup === undefined || this.#identity.state !== "created") return false;
+        const beforeHelper = await safeLstat(this.path), helperParent = await safeLstat(this.#parent);
+        if (beforeHelper === undefined || helperParent === undefined || !sameDirectory(metadata, beforeHelper)
+          || !sameDirectory(parent, helperParent) || !await markerMatches(this.path, this.#identity.rootId, claimId)) return false;
+        if (!await removeOwnedPrivateRootContents({ ...cleanup, path: this.path,
+          device: metadata.dev.toString(), inode: metadata.ino.toString(),
+          marker: JSON.stringify({ schemaVersion: 1, rootId: this.#identity.rootId, claimId }) })) return false;
+      }
+      const remaining = await readdir(this.path);
+      const after = await safeLstat(this.path), afterParent = await safeLstat(this.#parent);
+      if (remaining.length !== 1 || remaining[0] !== markerName || after === undefined || afterParent === undefined
+        || !sameDirectory(metadata, after) || !sameDirectory(parent, afterParent)
+        || !await markerMatches(this.path, this.#identity.rootId, claimId)) return false;
+      await rename(this.path, this.stagingPath);
       await syncDirectory(this.#parent);
-      return true;
+      return cleanupStaging(this.stagingPath, parent,
+        JSON.stringify({ schemaVersion: 1, rootId: this.#identity.rootId, claimId }), this.#identity, faults);
     } catch (error) {
       if (error instanceof Error) return false;
       throw error;
@@ -108,10 +131,11 @@ export class NativeHostPrivateRoot {
   }
 }
 
-async function cleanupStaging(path: string, parent: BigIntStats, expectedMarker: string): Promise<boolean> {
+async function cleanupStaging(path: string, parent: BigIntStats, expectedMarker: string,
+  identity: NativeHostPrivateRootIdentity, faults: NativeHostPrivateRootCleanupFaults): Promise<boolean> {
   try {
     const metadata = await lstat(path, { bigint: true });
-    if (!isPrivateDirectory(metadata)) return false;
+    if (!isPrivateDirectory(metadata) || !matchesCreatedIdentity(metadata, identity)) return false;
     const entries = await readdir(path);
     if (entries.length > 1 || (entries.length === 1 && entries[0] !== markerName)) return false;
     if (entries.length === 1 && !await removableStagingMarker(path, expectedMarker)) return false;
@@ -119,6 +143,7 @@ async function cleanupStaging(path: string, parent: BigIntStats, expectedMarker:
     const currentParent = await lstat(dirname(path), { bigint: true });
     if (!sameDirectory(metadata, current) || !sameDirectory(parent, currentParent)) return false;
     if (entries.length === 1) await unlink(join(path, markerName));
+    await faults.beforeStagingRemoval?.();
     await rmdir(path);
     await syncDirectory(dirname(path));
     return true;

@@ -74,7 +74,7 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
         paths.signal, (authority) => verifyAndMaterializeCandidate({ ...paths, authority,
           descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })) });
     });
-    if (!await root.cleanup(assignment.id)) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
+    if (!await root.cleanup(assignment.id, { runner, grant })) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
     journal.result = result;
     await writeJournal(journalPath, journal);
     await retry(() => options.client.report(assignment, result, options.signal));
@@ -129,7 +129,9 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
         journal.root === undefined ? options.directory : new NativeHostPrivateRoot(options.directory, journal.root).path)) {
         throw new Error("CI resource cleanup is uncertain; slot remains fenced");
       }
-      if (journal.root !== undefined && !await new NativeHostPrivateRoot(options.directory, journal.root).cleanup(assignment.id)) {
+      if (journal.root !== undefined && !await new NativeHostPrivateRoot(options.directory, journal.root).cleanup(assignment.id,
+        !isTaskAssignment(assignment) && assignment.grant !== undefined && options.runner !== undefined
+          ? { runner: options.runner, grant: assignment.grant } : undefined)) {
         throw new Error("CI private root cleanup is uncertain; slot remains fenced");
       }
       await retry(() => options.client.recover(assignment, options.signal));

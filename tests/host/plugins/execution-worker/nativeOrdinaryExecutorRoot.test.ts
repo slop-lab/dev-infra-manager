@@ -1,16 +1,100 @@
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NativeHostPrivateRoot, type NativeHostPrivateRootIdentity } from "../../../../packages/host/plugins/execution-worker/src/private-root.js";
+import { ProcessRunner } from "@slop-lab/dim-host-core";
+import { assignment, grant } from "../../../contracts/ci/executionFixture.js";
+import { ExecutorRunner } from "./sysboxFixture.js";
 
 const roots: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe("native ordinary private work root", () => {
+  it.skipIf(process.geteuid?.() === 0)("retains the ownership marker when child removal fails and permits a safe retry", async () => {
+    const journal = await temporaryPrivateRoots();
+    const root = journal.privateRoot({ schemaVersion: 1, state: "planned", rootId: "96000000-0000-4000-8000-000000000001" });
+    const claimId = "20000000-0000-4000-8000-000000000001";
+    await root.create(claimId);
+    const blocked = join(root.path, "blocked"), marker = join(root.path, ".dim-native-ordinary-owner.json");
+    await mkdir(blocked); await writeFile(join(blocked, "retain"), "retain"); await chmod(blocked, 0o500);
+    const markerBytes = await readFile(marker);
+    try {
+      expect(await root.cleanup(claimId)).toBe(false);
+      expect(await readFile(marker)).toEqual(markerBytes);
+    } finally { await chmod(blocked, 0o700); }
+    expect(await root.cleanup(claimId)).toBe(true);
+  });
+
+  it("never invokes privileged cleanup for an unmarked root or another claim", async () => {
+    const journal = await temporaryPrivateRoots(), claim = grant(assignment()), runner = new ExecutorRunner();
+    const root = journal.privateRoot({ schemaVersion: 1, state: "planned", rootId: "97000000-0000-4000-8000-000000000001" });
+    await root.create(claim.executionId);
+    expect(await root.cleanup("different-claim", { runner, grant: claim })).toBe(false);
+    await rm(join(root.path, ".dim-native-ordinary-owner.json"));
+    expect(await root.cleanup(claim.executionId, { runner, grant: claim })).toBe(false);
+    expect(runner.calls).toEqual([]);
+  });
+
+  it("recovers empty identity-bound staging after marker removal is interrupted", async () => {
+    const journal = await temporaryPrivateRoots();
+    const root = journal.privateRoot({ schemaVersion: 1, state: "planned", rootId: "99000000-0000-4000-8000-000000000001" });
+    const claimId = "20000000-0000-4000-8000-000000000001";
+    await root.create(claimId); await writeFile(join(root.path, "candidate"), "data");
+    expect(await root.cleanup(claimId, undefined, { async beforeStagingRemoval() { throw new Error("rmdir interrupted"); } })).toBe(false);
+    await expect(lstat(root.path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(root.stagingPath)).toEqual([]);
+    expect(await journal.privateRoot(root.identity).cleanup(claimId)).toBe(true);
+    await expect(lstat(root.stagingPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.skipIf(!process.env.DIM_TEST_EXECUTION_ROOT_CLEANUP_IMAGE)("cleans real root-owned guest files through only the verified root without following a symlink", { timeout: 30_000 }, async () => {
+    const image = process.env.DIM_TEST_EXECUTION_ROOT_CLEANUP_IMAGE!;
+    const selected = assignment(), claim = grant({ ...selected, profile: { ...selected.profile, runnerBaseImage: image } });
+    const journal = await temporaryPrivateRoots(), runner = new ProcessRunner();
+    const commands = vi.spyOn(runner, "run");
+    const root = journal.privateRoot({ schemaVersion: 1, state: "planned", rootId: "98000000-0000-4000-8000-000000000001" });
+    await root.create(claim.executionId);
+    const outside = join(dirname(root.path), "outside"); await mkdir(outside); await writeFile(join(outside, "retain"), "foreign");
+    await symlink(outside, join(root.path, "escape"));
+    const created = await runner.run("docker", ["run", "--rm", "--pull", "never", "--network", "none", "--read-only",
+      "--userns", "host", "--user", "0:0", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE",
+      "--mount", `type=bind,source=${root.path},target=/work`, "--entrypoint", "/bin/sh", image, "-eu", "-c",
+      "mkdir /work/guest; printf root-owned > /work/guest/file; chmod 700 /work/guest; chmod 600 /work/guest/file"
+    ], { signal: AbortSignal.timeout(15_000) });
+    expect(created.exitCode).toBe(0);
+    try {
+      expect((await lstat(join(root.path, "guest"))).uid).toBe(0);
+      expect(await root.cleanup(claim.executionId, { runner, grant: claim })).toBe(true);
+      const helper = commands.mock.calls.find(([, args]) => args.includes("dim-private-root-cleanup"))?.[1];
+      expect(helper).toBeDefined();
+      expect(helper?.filter((arg) => arg === "--mount")).toHaveLength(1);
+      expect(helper).toContain(`type=bind,source=${root.path},target=/work`);
+      expect(helper).toContain(image);
+      expect(helper).not.toContain(claim.descriptor.jobImage);
+      expect(helper).not.toContain("--privileged");
+      expect(helper?.some((arg) => arg.includes("docker.sock"))).toBe(false);
+      await expect(lstat(root.path)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readFile(join(outside, "retain"), "utf8")).toBe("foreign");
+    } finally { await root.cleanup(claim.executionId, { runner, grant: claim }); }
+  });
+
+  it("rejects replaced empty staging even after an interrupted final removal", async () => {
+    const journal = await temporaryPrivateRoots();
+    const root = journal.privateRoot({ schemaVersion: 1, state: "planned", rootId: "9a000000-0000-4000-8000-000000000001" });
+    const claimId = "20000000-0000-4000-8000-000000000001";
+    await root.create(claimId);
+    expect(await root.cleanup(claimId, undefined, { async beforeStagingRemoval() { throw new Error("rmdir interrupted"); } })).toBe(false);
+    await rename(root.stagingPath, `${root.stagingPath}.retained`);
+    await mkdir(root.stagingPath, { mode: 0o700 });
+    expect(await journal.privateRoot(root.identity).cleanup(claimId)).toBe(false);
+    expect((await lstat(root.stagingPath)).isDirectory()).toBe(true);
+  });
+
   it("removes only the exact identity-bound owned root", async () => {
     // Given
     const journal = await temporaryPrivateRoots();

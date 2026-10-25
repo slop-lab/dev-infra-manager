@@ -264,6 +264,21 @@ reviewed mirror provider supplies owned cache/network routing and read-only job
 configuration to the selected backend;
 explicit provider failure is reported rather than silently changing routing.
 Workers retain their own capacity journal independently of mirror resources.
+CI cleanup removes children before removing the private root's ownership marker.
+If guest-created files require host root permissions, the worker first stops its
+owned job resources, then uses the exact grant's pinned **runner** image for a
+bounded cleanup container. It mounts only the already verified disposable root,
+with no network, host parent or Docker socket, a read-only image filesystem and
+only `DAC_OVERRIDE`/`FOWNER` capabilities in the host user namespace. Both helper
+and host recheck filesystem/marker identity; the host removes the marker/root
+only after the contents are gone. Helper resources have exact ownership labels.
+The emptied, still marked root is renamed to its private staging path before
+final removal, so an interruption after unlinking the marker can recover an
+empty staging directory with the exact journal inode. It does not permit
+adopting an unmarked final root.
+Missing markers, changed inodes, unsafe parents or uncertain cleanup keep the
+slot fenced. An old incomplete root with a missing marker requires explicit
+operator inspection and recovery; workers never adopt it automatically.
 
 Ordinary jobs have outbound access through a private container bridge or QEMU
 user networking, so job scripts can install their own dependencies. The mirror
