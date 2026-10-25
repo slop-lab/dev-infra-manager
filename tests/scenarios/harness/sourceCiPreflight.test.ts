@@ -12,6 +12,9 @@ async function fixture() {
   const source = join(root, "source"), tools = join(root, "tools"), home = join(root, "home"), log = join(root, "commands.log");
   await Promise.all([mkdir(join(source, "scripts/ci"), { recursive: true }), mkdir(join(source, "scripts/checks/source-gate"), { recursive: true }), mkdir(tools), mkdir(home)]);
   for (const file of ["scripts/ci/source.bash", "scripts/checks/source-gate/install-just.bash"]) await copyFile(join(repository, file), join(source, file));
+  const staged = join(root, "run/dim/job/script");
+  await mkdir(join(root, "run/dim/job"), { recursive: true });
+  await copyFile(join(repository, "scripts/ci/source.bash"), staged);
   await writeFile(join(source, "reviewed.txt"), "exact candidate bytes\n");
   await writeFile(join(source, ".gitignore"), "ignored.txt\n");
   await writeFile(join(source, "ignored.txt"), "tracked upstream input\n");
@@ -21,13 +24,16 @@ if [[ "$*" == --version ]]; then printf '10.13.1\\n'; exit 0; fi
 test "$(just --version)" = 'just 1.43.1'
 git -C "$PWD" rev-parse --verify HEAD >/dev/null
 test "$(git config --get dim.fixture)" = preserved
+if [[ -n "\${DIM_SOURCE_PREFLIGHT_FOREIGN:-}" ]]; then
+  ! git -C "$DIM_SOURCE_PREFLIGHT_FOREIGN" rev-parse --git-dir 2>/dev/null
+fi
 printf '%s\\n' "$*" >>"$DIM_SOURCE_PREFLIGHT_LOG"
 `, { mode: 0o755 });
   await writeFile(join(tools, "just"), "#!/bin/sh\nprintf 'just 1.43.1\\n'\n", { mode: 0o755 });
-  return { root, source, tools, home, log };
+  return { root, source, tools, home, log, staged };
 }
 function run(f: Awaited<ReturnType<typeof fixture>>, environment: NodeJS.ProcessEnv = {}) {
-  return spawnSync("/bin/bash", [join(f.source, "scripts/ci/source.bash")], { cwd: f.source, encoding: "utf8", env: {
+  return spawnSync("/bin/bash", [f.staged], { cwd: f.source, encoding: "utf8", env: {
     PATH: `${f.tools}:/usr/local/bin:/usr/bin:/bin`, HOME: f.home, DIM_SOURCE_PREFLIGHT_LOG: f.log,
     GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "dim.fixture", GIT_CONFIG_VALUE_0: "preserved", ...environment
   } });
@@ -72,11 +78,29 @@ it.skipIf(!process.env.DIM_TEST_SOURCE_CI_IMAGE)("bootstraps real pinned Just an
   const foreign = join(f.root, "foreign"); await mkdir(foreign);
   expect(spawnSync("git", ["-C", foreign, "init", "--quiet"], { encoding: "utf8" }).status).toBe(0);
   const result = spawnSync("docker", ["run", "--rm", "--pull", "never", "--read-only", "--user", "0:0",
-    "--tmpfs", "/tmp:rw,exec,mode=1777", "--mount", `type=bind,source=${f.root},target=/fixture`, "--workdir", "/fixture/source",
+    "--tmpfs", "/tmp:rw,exec,mode=1777", "--mount", `type=bind,source=${f.root},target=/fixture`,
+    "--mount", `type=bind,source=${f.source},target=/workspace/main`,
+    "--mount", `type=bind,source=${f.staged},target=/run/dim/job/script,readonly`, "--workdir", "/workspace/main",
     "--env", "HOME=/tmp/job-home", "--env", "PATH=/fixture/tools:/usr/local/bin:/usr/bin:/bin", "--env", "DIM_SOURCE_PREFLIGHT_LOG=/fixture/commands.log",
+    "--env", "DIM_SOURCE_PREFLIGHT_FOREIGN=/fixture/foreign",
     "--env", "GIT_CONFIG_COUNT=1", "--env", "GIT_CONFIG_KEY_0=dim.fixture", "--env", "GIT_CONFIG_VALUE_0=preserved",
     "--entrypoint", "/bin/bash", image, "-eu", "-c",
-    "[[ $(node --version) == v26.* ]]; test \"$(id -u)\" = 0; test \"$(stat -c %u .)\" != 0; ! command -v just; test ! -e .git; trap 'rm -rf /fixture/source/.git' EXIT; mkdir -p \"$HOME\"; source scripts/ci/source.bash; test \"$(just --version)\" = 'just 1.43.1'; before=$(git rev-parse HEAD); ! git -C /fixture/foreign rev-parse --git-dir 2>/dev/null; printf modified > reviewed.txt; source scripts/ci/source.bash; test \"$(git rev-parse HEAD)\" = \"$before\"; test -n \"$(git status --porcelain)\""
+    String.raw`[[ $(node --version) == v26.* ]]
+test "$(pwd -P)" = /workspace/main
+test "$(id -u)" = 0
+test "$(stat -c %u .)" = 1000
+! test -w /run/dim/job/script
+! command -v just
+test ! -e .git
+trap 'rm -rf /workspace/main/.git' EXIT
+mkdir -p "$HOME"
+bash --noprofile --norc /run/dim/job/script
+test "$("$HOME/.local/dim-ci-tools/bin/just" --version)" = 'just 1.43.1'
+before=$(git -c safe.directory=/workspace/main rev-parse HEAD)
+printf modified > reviewed.txt
+bash --noprofile --norc /run/dim/job/script
+test "$(git -c safe.directory=/workspace/main rev-parse HEAD)" = "$before"
+test -n "$(git -c safe.directory=/workspace/main status --porcelain)"`
   ], { encoding: "utf8", timeout: 170_000 });
   expect(result.status, JSON.stringify({ error: result.error?.message, signal: result.signal, stderr: result.stderr })).toBe(0);
   expect(await readFile(f.log, "utf8")).toBe(commands.repeat(2));

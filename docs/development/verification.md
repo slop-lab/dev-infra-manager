@@ -99,8 +99,10 @@ toolchain; it does not run privileged fixtures or VM example stages.
 
 The repository's DIM source job, `scripts/ci/source.bash`, prepares pinned pnpm
 10.13.1 and Just 1.43.1 inside the disposable job. Just uses the same verified
-architecture-specific installer as the standalone source-gate image. Verified
-candidate trees arrive without `.git`; the job creates a local snapshot before
+architecture-specific installer as the standalone source-gate image. The runner
+executes scripts from `/run/dim/job/script` with the repository checkout as their
+working directory; this source job resolves repository files from that directory.
+Verified candidate trees arrive without `.git`; the job creates a local snapshot before
 dependency installation or builds, with hooks/signing disabled and command-local
 author identity. Existing Git worktrees and their HEAD remain unchanged. This
 metadata supports source-tool tests; it does not alter candidate acquisition or

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$repository_root"
+# The runner starts the verified script copy in its repository checkout.
+repository_root="$(pwd -P)"
 # Tools belong to this disposable job, not the host or a Project runner image.
 export PATH="$HOME/.local/dim-ci-tools/bin:$PATH"
 if ! command -v pnpm >/dev/null 2>&1 || [[ "$(pnpm --version)" != 10.13.1 ]]; then
