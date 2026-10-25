@@ -46,17 +46,17 @@ export function registerNativeGitNavigation(context, destination) {
   });
 }
 
-/** @param {HTMLElement} parent @param {HTMLElement} status @param {Context} context @param {{controllerKey?:string,projectId:string,repositoryId:string,repositoryIds?:readonly string[]}} target @param {()=>boolean} isCurrent */
+/** @param {HTMLElement} parent @param {HTMLElement} status @param {Context} context @param {{controllerKey?:string,projectId:string,projectName?:string,repositoryId:string,repositoryIds?:readonly string[]}} target @param {()=>boolean} isCurrent */
 export function appendNativeGitNavigationActions(parent, status, context, target, isCurrent) {
   if (!target.controllerKey) return;
-  const controllerKey = target.controllerKey;
+  const controllerKey = target.controllerKey, localProjectName = target.projectName ?? target.projectId;
   if (context.navigation.canCreateWorkspace) context.ui.navigationAction(parent, {
     label: "Create managed workspace", status, isCurrent,
-    open: () => context.navigation.openWorkspaceCreate({ hostId: controllerKey, projectId: target.projectId, repositoryIds: [target.repositoryId], workingRepositoryId: target.repositoryId })
+    open: () => context.navigation.openWorkspaceCreate({ hostId: controllerKey, projectId: localProjectName, repositoryIds: [target.repositoryId], workingRepositoryId: target.repositoryId })
   });
   if (context.navigation.canCreateWorkspace && target.repositoryIds && target.repositoryIds.length > 1) context.ui.navigationAction(parent, {
     label: "Create workspace with all repositories", status, isCurrent,
-    open: () => context.navigation.openWorkspaceCreate({ hostId: controllerKey, projectId: target.projectId, repositoryIds: target.repositoryIds ?? [target.repositoryId], workingRepositoryId: target.repositoryId })
+    open: () => context.navigation.openWorkspaceCreate({ hostId: controllerKey, projectId: localProjectName, repositoryIds: target.repositoryIds ?? [target.repositoryId], workingRepositoryId: target.repositoryId })
   });
   if (context.navigation.hasFeature("execution")) context.ui.navigationAction(parent, {
     label: "View execution jobs", status, isCurrent,

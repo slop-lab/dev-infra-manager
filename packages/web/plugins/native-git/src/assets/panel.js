@@ -47,7 +47,7 @@ export function mount(container, context) {
   /** @param {string} name */ const has = (name) => context.operations.some((operation) => operation.name === name) && Boolean(controller()?.operations.some((operation) => operation.name === name));
   /** @param {Scope} target @param {string} name @param {Record<string,unknown>} [input] */
   const invoke = (target, name, input = {}) => context.invoke(name, { ...target, ...input }, /^(?:reviews|merges|sync)\./.test(name) ? { timeoutMilliseconds: 125_000 } : undefined);
-  const management = mountManagement(managementRegion, context, { scope, has, refresh: (preferred) => refreshCatalog(preferred) });
+  const management = mountManagement(managementRegion, context, { scope, has, hostAuthority: () => Boolean(controller()?.controllerKey), refresh: (preferred) => refreshCatalog(preferred) });
   /** @type {ReturnType<import('../pull-requests.js').mountPullRequests>|undefined} */ let pullRequests;
   const prAsset = new URL("./pull-requests.js", import.meta.url).href;
   void import(prAsset).then((module) => {
@@ -201,8 +201,8 @@ export function mount(container, context) {
       });
     }
     const target = scope(), controllerKey = controller()?.controllerKey;
-    const projectRepositories = controller()?.projects.find(({ projectId }) => projectId === target.projectId)?.repositoryIds;
-    appendNativeGitNavigationActions(actions, status, context, { ...(controllerKey ? { controllerKey } : {}), projectId: target.projectId, repositoryId: target.repositoryId, ...(projectRepositories ? { repositoryIds: projectRepositories } : {}) }, () => selected(target));
+    const selectedProject = controller()?.projects.find(({ projectId }) => projectId === target.projectId), projectRepositories = selectedProject?.repositoryIds;
+    appendNativeGitNavigationActions(actions, status, context, { ...(controllerKey ? { controllerKey } : {}), projectId: target.projectId, ...(selectedProject ? { projectName: selectedProject.name } : {}), repositoryId: target.repositoryId, ...(projectRepositories ? { repositoryIds: projectRepositories } : {}) }, () => selected(target));
   }
   function switchScope() {
     const branchPolicy = metadata(), refs = branchPolicy?.branches ?? ["refs/heads/main"];

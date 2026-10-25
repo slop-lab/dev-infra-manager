@@ -1,8 +1,9 @@
 // @ts-check
 import { mountManifestImport } from "./manifest.js";
-/** @typedef {{controllerId:string,projectId:string}} Target */
+import { mountAttachment } from "./attachment.js";
+/** @typedef {{controllerId:string,projectId:string,repositoryId:string}} Target */
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
-/** @typedef {{scope():Target,has(name:string):boolean,refresh(preferred:{controllerId:string,projectId:string,repositoryId?:string}):Promise<void>}} Navigation */
+/** @typedef {{scope():Target,has(name:string):boolean,hostAuthority():boolean,refresh(preferred:{controllerId:string,projectId:string,repositoryId?:string}):Promise<void>}} Navigation */
 /** @param {string} tag @param {string} [text] */
 function element(tag, text = "") { const node = document.createElement(tag); node.textContent = text; return node; }
 /** @param {HTMLFormElement} form @param {string} label @param {boolean} [required] */
@@ -12,6 +13,7 @@ function field(form, label, required = true) {
 }
 /** @param {HTMLElement} container @param {Context} context @param {Navigation} navigation */
 export function mountManagement(container, context, navigation) {
+  const attachment = mountAttachment(container, context, navigation);
   const manifest = mountManifestImport(container, context, navigation);
   let disposed = false, activeController = "", activeProject = "";
   const current = () => !disposed && context.isCurrent();
@@ -78,7 +80,7 @@ export function mountManagement(container, context, navigation) {
     finally { draft.pending = false; if (selected(target)) paint(); }
   });
   return {
-    update() { const target = navigation.scope(); activeController = target.controllerId; activeProject = target.projectId; paint(); manifest.update(); },
-    dispose() { disposed = true; manifest.dispose(); }
+    update() { const target = navigation.scope(); activeController = target.controllerId; activeProject = target.projectId; attachment.update(); paint(); manifest.update(); },
+    dispose() { disposed = true; attachment.dispose(); manifest.dispose(); }
   };
 }

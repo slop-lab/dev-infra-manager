@@ -130,6 +130,30 @@ it("pins controller discovery generation across refresh and sends it before dele
   expect(writes[1]).toContain(generationId);
 });
 
+it("keeps the newest automatic discovery catalog and generation when an older refresh finishes last", async () => {
+  let describeCalls = 0, releaseOlder = () => {}, markOlderStarted = () => {};
+  const olderGate = new Promise<void>((resolve) => { releaseOlder = resolve; });
+  const olderStarted = new Promise<void>((resolve) => { markOlderStarted = resolve; });
+  const writes: string[][] = [];
+  const descriptors = operations.filter(({ name }) => name === "projects.list" || name === "reviews.list").map(({ name, description, access }) => ({ name, description, access }));
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "devbox", async run(args) {
+    if (args[2] === "describe") {
+      describeCalls++;
+      if (describeCalls === 1) throw new Error("initially unavailable");
+      if (describeCalls === 2) { markOlderStarted(); await olderGate; return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [], operations: descriptors }; }
+      return { schemaVersion: 1, generationId: "b".repeat(64), reviewerId: "owner", projects: [{ projectId: "project-a", name: "Project A", repositoryIds: ["public"] }], operations: descriptors };
+    }
+    writes.push([...args]); return [];
+  } }] });
+  const older = runtime.invoke("projects.list", {}); await olderStarted;
+  const newer = await runtime.invoke("projects.list", {});
+  expect(newer).toMatchObject({ controllers: [{ status: "ready", projects: [{ projectId: "project-a" }] }] });
+  releaseOlder();
+  expect(await older).toMatchObject({ controllers: [{ status: "ready", projects: [] }] });
+  expect(await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "public" })).toEqual([]);
+  expect(writes[0]).toContain("b".repeat(64));
+});
+
 it("forwards a bounded controller deadline for repository review and merge work", async () => {
   const deadlines: Array<number | undefined> = [];
   const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "devbox", async run(args, options) {
@@ -148,6 +172,26 @@ it("keeps an empty registered-project catalog available but reports wholly unava
   expect(await offline.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "offline", controllerKey: "offline", status: "unavailable", projects: [] }] });
   const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "empty", async run() { return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [], operations: [] }; } }] });
   expect(await runtime.invoke("projects.list", {})).toMatchObject({ controllers: [{ id: "empty", status: "ready", projects: [] }] });
+});
+
+it("delegates controller-only discovery, inspection and attachment outside the local catalog", async () => {
+  const calls: Array<{ args: readonly string[]; timeout?: number }> = [];
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "devbox", async run(args, options) {
+    if (args[2] === "describe") return { schemaVersion: 1, generationId: "a".repeat(64), projects: [],
+      operations: operations.filter(({ name }) => name === "projects.list" || name === "projects.discover" || name === "projects.inspect" || name === "projects.attach").map(({ name, description, access }) => ({ name, description, access })) };
+    calls.push({ args, ...(options ? { timeout: options.timeoutMilliseconds } : {}) });
+    if (args[3] === "projects.discover") return { projects: [{ projectId: "project-a", repositoryCount: 2 }] };
+    if (args[3] === "projects.inspect") return { projectId: "project-a", repositories: [
+      { repositoryId: "public", defaultRef: "refs/heads/main", branches: ["refs/heads/main"] },
+      { repositoryId: "private", defaultRef: "refs/heads/development", branches: ["refs/heads/main", "refs/heads/development"] }
+    ] };
+    return { projectId: "project-a", repositoryCount: 2 };
+  } }] });
+  expect(await runtime.invoke("projects.discover", { controllerId: "devbox" })).toEqual({ projects: [{ projectId: "project-a", repositoryCount: 2 }] });
+  expect(await runtime.invoke("projects.inspect", { controllerId: "devbox", projectId: "project-a" })).toMatchObject({ repositories: [{ repositoryId: "public" }, { repositoryId: "private" }] });
+  expect(await runtime.invoke("projects.attach", { controllerId: "devbox", projectId: "project-a", name: "attached-copy", configurationRepositoryId: "public", defaultWorkingRepositoryId: "private" })).toEqual({ projectId: "project-a", repositoryCount: 2 });
+  expect(calls.map(({ args }) => args[3])).toEqual(["projects.discover", "projects.inspect", "projects.attach"]);
+  expect(calls.at(-1)?.timeout).toBe(120_000);
 });
 
 it("delegates controller-only project creation and public imports with exact scope and import deadline", async () => {

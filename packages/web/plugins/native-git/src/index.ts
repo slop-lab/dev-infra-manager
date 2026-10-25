@@ -10,7 +10,7 @@ const projectsSchema = z.array(nativeGitProjectSchema).max(1000).refine((project
 const descriptor = z.object({ name: z.string(), description: z.string().max(2000), access: z.enum(["read", "operator", "reviewer"]) }).strict();
 const controllerSchema = z.object({ id: controllerId, controllerKey: controllerId.optional(), title: z.string().min(1).max(256), status: z.enum(["ready", "unavailable"]), reviewerId: identifier.optional(),
   projects: projectsSchema, operations: z.array(descriptor).max(128) }).strict();
-const discoverySchema = z.object({ schemaVersion: z.literal(1), generationId: z.string().regex(/^[a-f0-9]{64}$/), reviewerId: identifier,
+const discoverySchema = z.object({ schemaVersion: z.literal(1), generationId: z.string().regex(/^[a-f0-9]{64}$/), reviewerId: identifier.optional(),
   projects: projectsSchema, operations: z.array(descriptor).max(128) }).strict();
 const file = z.string().refine(isAbsolute);
 const configSchema = z.object({ reviewerConnection: file, promoterConnection: file.optional(), syncConnection: file.optional(),
@@ -32,20 +32,21 @@ function selectedInput(input: unknown) {
   return { controllerId: controllerId.parse(selected), value };
 }
 async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
-  let controllers: Array<z.infer<typeof controllerSchema>> = [];
-  const generations = new Map<string, string>();
+  let controllers: Array<z.infer<typeof controllerSchema>> = [], generations = new Map<string, string>(), discoveryVersion = 0;
   async function discover() {
-    controllers = await Promise.all(context.controllers.map(async (controller) => {
+    const version = ++discoveryVersion, expectedGenerations = new Map(generations), discoveredGenerations = new Map(generations);
+    const discoveredControllers = await Promise.all(context.controllers.map(async (controller) => {
       try {
-        const expected = generations.get(controller.id);
+        const expected = expectedGenerations.get(controller.id);
         const description = discoverySchema.parse(await controller.run(["project", "console", "describe", ...(expected ? ["--expected-generation", expected] : [])]));
         if (expected && description.generationId !== expected) throw new Error("Controller generation changed; reconnect this feature");
         for (const operation of description.operations) if (!controllerOperations.some((known) => known.name === operation.name && known.access === operation.access)) throw new Error("unknown controller operation");
-        generations.set(controller.id, description.generationId);
+        discoveredGenerations.set(controller.id, description.generationId);
         return { id: controller.id, controllerKey: controller.id, title: controller.id, status: "ready" as const, reviewerId: description.reviewerId, projects: description.projects, operations: description.operations };
       } catch { return { id: controller.id, controllerKey: controller.id, title: controller.id, status: "unavailable" as const, projects: [], operations: [] }; }
     }));
-    return { controllers };
+    if (version === discoveryVersion) { controllers = discoveredControllers; generations = discoveredGenerations; }
+    return { controllers: discoveredControllers };
   }
   await discover();
   return {
@@ -54,18 +55,19 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
       if (name === "projects.list") return discover();
       const selected = selectedInput(input), controller = context.controllers.find(({ id }) => id === selected.controllerId);
       if (!controller || !controllers.some(({ id, status, operations }) => id === selected.controllerId && status === "ready" && operations.some((operation) => operation.name === name))) throw new Error("Controller operation is unavailable");
-      const catalog = controllers.find(({ id }) => id === selected.controllerId)?.projects ?? [];
-      const project = z.object({ projectId: identifier }).passthrough().parse(selected.value);
-      const existing = catalog.find(({ projectId }) => projectId === project.projectId);
-      if (name === "projects.create") {
-        if (existing) throw new Error("Project already exists on this controller");
-      } else if (name === "repositories.preview-manifest" || name === "repositories.import-manifest") {
-        if (!existing) throw new Error("Project is outside this controller scope");
-      } else if (name === "repositories.import") {
-        const scoped = z.object({ repositoryId: identifier }).passthrough().parse(selected.value);
-        if (!existing) throw new Error("Project is outside this controller scope");
-        if (existing.repositoryIds.includes(scoped.repositoryId)) throw new Error("Repository already exists in this project");
-      } else {
+       const catalog = controllers.find(({ id }) => id === selected.controllerId)?.projects ?? [];
+       const project = name === "projects.discover" ? undefined : z.object({ projectId: identifier }).passthrough().parse(selected.value);
+       const existing = project ? catalog.find(({ projectId }) => projectId === project.projectId) : undefined;
+       const externalProjectOperation = name === "projects.discover" || name === "projects.inspect" || name === "projects.attach";
+       if (!externalProjectOperation && name === "projects.create") {
+         if (existing) throw new Error("Project already exists on this controller");
+       } else if (!externalProjectOperation && (name === "repositories.preview-manifest" || name === "repositories.import-manifest")) {
+         if (!existing) throw new Error("Project is outside this controller scope");
+       } else if (!externalProjectOperation && name === "repositories.import") {
+         const scoped = z.object({ repositoryId: identifier }).passthrough().parse(selected.value);
+         if (!existing) throw new Error("Project is outside this controller scope");
+         if (existing.repositoryIds.includes(scoped.repositoryId)) throw new Error("Repository already exists in this project");
+       } else if (!externalProjectOperation) {
         const scoped = z.object({ repositoryId: identifier }).passthrough().parse(selected.value);
         if (!existing?.repositoryIds.includes(scoped.repositoryId)) throw new Error("Project repository is outside this controller scope");
       }
@@ -74,7 +76,7 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
       const parsed = operation.parseInput(selected.value);
       const generation = generations.get(selected.controllerId);
       if (!generation) throw new Error("Controller serving generation has not been attested");
-      return operation.parseOutput(await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : /^(?:reviews|merges|sync|pull-requests)\./.test(name) ? { timeoutMilliseconds: 120_000 } : undefined));
+       return operation.parseOutput(await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : name === "projects.attach" || /^(?:reviews|merges|sync|pull-requests)\./.test(name) ? { timeoutMilliseconds: 120_000 } : undefined));
     }
   };
 }
@@ -84,7 +86,7 @@ export const webPlugin: WebPlugin = {
   assets: {
     "git-diff.css": builtAsset("git-diff.css"), "pull-requests.css": builtAsset("pull-requests.css"),
     "panel.js": new URL("./assets/panel.js", import.meta.url), "navigation.js": new URL("./assets/navigation.js", import.meta.url),
-    "management.js": new URL("./assets/management.js", import.meta.url), "manifest.js": new URL("./assets/manifest.js", import.meta.url),
+    "management.js": new URL("./assets/management.js", import.meta.url), "attachment.js": new URL("./assets/attachment.js", import.meta.url), "manifest.js": new URL("./assets/manifest.js", import.meta.url),
     "pull-requests.js": builtAsset("pull-requests.js"), "pr-model.js": builtAsset("pr-model.js"),
     "pr-model-shared.js": builtAsset("pr-model-shared.js")
   }, browserEntry: "panel.js",
