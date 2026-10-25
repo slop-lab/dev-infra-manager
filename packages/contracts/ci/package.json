@@ -26,6 +26,15 @@
       "import": "./dist/execution-protocol.js",
       "default": "./dist/execution-protocol.js"
     },
+    "./review-status": {
+      "dim-source": {
+        "types": "./src/review-status.ts",
+        "default": "./src/review-status.ts"
+      },
+      "types": "./dist/review-status.d.ts",
+      "import": "./dist/review-status.js",
+      "default": "./dist/review-status.js"
+    },
     "./aggregate": {
       "dim-source": {
         "types": "./src/aggregate.ts",
