@@ -2,7 +2,7 @@
 
 `@slop-lab/dim-control-plane-plugin-git-repositories` is the optional repository
 service. It owns Project/repository registration, initial snapshot import,
-protected-source reads, workspace proposal transport and durable protected-ref
+protected-source reads, repository-scoped workspace ref transport and durable protected-ref
 compare-and-swap. Ordinary Git workspaces need none of these services.
 
 The service runs under `@slop-lab/dim-control-plane-core` without host core, a
@@ -22,11 +22,14 @@ protected ref; they cannot replace an existing protected head.
 
 Registrar, importer, protected-source reader and workspace writer credentials
 are separate. The writer receives a short-lived lease for one immutable
-workspace identity and its proposal-ref namespace. Git transport rejects
-protected writes, tags, deletion, force and foreign repository access. A
-repository-only service accepts proposal pushes without producing reviews or
-reading workflow files. No workspace credential can invoke the protected-ref
-CAS API.
+workspace identity and exact Project/repository. Ordinary unprotected branches
+and tags allow create/update/delete and force. Git transport still rejects every
+direct protected write, reserved internal refs and foreign repository access.
+Existing workspace proposal namespaces remain owner-only, fast-forward-only and
+non-deletable. A repository-only service accepts ordinary Git writes without
+producing reviews or reading workflows. No workspace credential can invoke the
+protected-ref CAS API. The effective managed refs, import anchor, `main` and
+`development` remain protected regardless of the requested Git force flag.
 
 ### Authenticated Project discovery
 
@@ -201,6 +204,6 @@ must match their declared commit; undeclared refs remain foreign and fail proof.
 Missing declared refs are permitted so the installed owner can repair a write
 interrupted after its durable record was saved. Extensions must save owner records
 before writing refs. This capability does not modify protected branch authority,
-receive permissions or read visibility. Workspace credentials remain restricted
-to their own proposal namespace. Read services accept historical refs only through
-explicit repository-scoped read-history providers.
+receive permissions or read visibility. Workspace credentials cannot write those
+reserved pins. Read services admit current ordinary refs; otherwise unreachable
+historical objects require explicit repository-scoped read-history providers.

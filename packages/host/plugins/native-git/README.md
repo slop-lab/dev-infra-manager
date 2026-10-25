@@ -177,7 +177,7 @@ current service generation using its existing private connection.
 ```bash
 dim project pr list acme public
 dim project pr create acme public --title 'Add feature' \
-  --source proposals/WORKSPACE/change
+  --source feature/change
 # Target defaults to the repository's managed default branch.
 dim project pr show acme public PR_ID
 dim project pr edit acme public PR_ID --body 'Updated description'
@@ -185,6 +185,11 @@ dim project pr comment acme public PR_ID --body 'Explain this line' \
   --path src/index.ts --side head --line 12
 dim project pr refresh acme public PR_ID
 dim project pr review acme public PR_ID
+dim project pr diff acme public PR_ID --json
+dim project pr blame acme public PR_ID --path src/index.ts --side head --line 12
+dim project pr approve acme public PR_ID
+dim project pr revoke acme public PR_ID
+dim project pr merge acme public PR_ID
 dim project pr close acme public PR_ID
 dim project pr reopen acme public PR_ID
 ```
@@ -196,3 +201,26 @@ comments omit `--path`, `--side` and `--line`. Comments require the separate Git
 discussions plugin. `review` prepares exact review evidence and never approves or
 promotes it. After a new push, `refresh` records a new revision; previous comments
 retain their original anchors. All commands accept `--json` for agent use.
+
+Ordinary branch/tag source refs are not workspace identity claims. Legacy
+proposal refs retain their separate owner/fast-forward restrictions. New
+workspace checkouts use `push.default=current`; create a feature branch rather
+than pushing directly to managed `main` or `development`. Existing checkout Git
+configuration and sessions are not rewritten.
+
+`project diff` and `project blame` inspect exact immutable commits without a PR.
+`project review list|resolve|inspect|approve|revoke|promote` exposes the exact
+review workflow directly. `project repository merge --source BRANCH --target
+BRANCH` prepares a managed branch merge through review/CI. PR decision commands
+accept `--expected-version` and `--revision` fences for previously inspected
+evidence. Merge never approves on the operator's behalf and requires the private
+promoter role; publish remains a separate Git-sync operation.
+
+Review inspection includes required DIM CI state and job evidence. Missing policy
+is explicitly absent, not a green gate. Human approval and external GitHub status
+do not satisfy required DIM CI. Repository access/source/policy remain rechecked
+by their authoritative services on each operation. The host reloads local
+repository selection without repeating unrelated workspace-readiness proofs
+before review/sync calls; catalog availability and workspace acquisition retain
+their explicit live readiness checks. See the
+[complete capability and ownership map](../../../../docs/guides/git-capabilities.md).

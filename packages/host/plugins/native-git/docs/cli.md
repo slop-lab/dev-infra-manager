@@ -215,9 +215,12 @@ repository is used. The configuration repository is attested independently. If
 unselected, it is read on the host for workspace configuration/plugin requirements
 and is absent from guest storage and grants.
 
-Each checkout receives a distinct repository-bound broker credential and proposal
-namespace. Direct protected updates, deletes, forced updates, tags and foreign
-repository/workspace scopes are denied. A repository named `public` does not
+Each checkout receives a distinct repository-bound broker credential. Ordinary
+unprotected branch/tag updates, deletion and force are allowed; protected and
+reserved internal writes and foreign repository grants remain denied. Its own
+legacy proposal namespace stays fast-forward-only and non-deletable. New
+workspaces use `push.default=current`; existing local Git settings are preserved.
+A repository named `public` does not
 implicitly allow anonymous native Git reads. Operator credentials remain on the
 host. Recreate preserves mutable checkouts and grants; reconnect requires fresh
 proof of every attached repository's original authority, ref and review policy.
@@ -230,12 +233,17 @@ configuration rather than copying service credentials into browser code:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-web@0.10.0'
-dim-web init "$HOME/dim-control-plane/connections/reviewer.json" \
-  --project demo-root --output "$HOME/dim-reviewer.json" --port 8789
+dim-web init-features /absolute/operator/features.json \
+  --roles read,operator,reviewer --output "$HOME/dim-reviewer.json"
 dim-web serve "$HOME/dim-reviewer.json"
 ```
 
-Review approval and protected-ref promotion remain separate authority roles.
+The private feature specification selects the Native Git Web plugin and trusted
+controllers or explicit service connections. See the
+[Web plugin guide](../../../../../docs/guides/web-plugins.md) for its complete
+configuration. Review approval and protected-ref promotion remain separate roles;
+human approval is not successful DIM CI. The review inspection shows required
+job evidence or plainly reports that a CI policy is absent.
 
 ## Host state
 

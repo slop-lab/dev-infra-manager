@@ -52,6 +52,21 @@ required for resolve/approve/revoke, and `operator` for promotion/synchronizatio
 The controller and underlying service still enforce catalog scope and protection
 policies for every invocation.
 
+PR sources can be ordinary branches or commit tags, not only legacy workspace
+proposal refs. Direct immutable diff/blame inspection remains usable without an
+open PR. Prepare review, approve/revoke and merge are explicit separate actions.
+Operator-only merge can prepare policy/CI evidence for a zero-human-review
+change, but never auto-approves. Raw review and PR inspection both show the
+actual required DIM CI state/jobs; missing policy is plainly absent and a human
+approval is not a green CI check. Rejected preparation/admission keeps evidence
+and drafts available for inspection and recovery.
+
+The browser workflow checks ordinary source rewrites, old discussion/stale
+approval, multi-repository isolation and protected-head publication to a
+disposable upstream. See the [capability map](../../../../docs/guides/git-capabilities.md)
+and [CI enrollment/diagnostics](../../../../docs/guides/ci-runners.md) for the
+complete role and setup boundaries.
+
 The selected controller and repository target remain visible beside capability
 guidance. The panel distinguishes review-only inspection, reviewer decisions,
 upstream operator actions and promoter-backed protected promotion without claiming

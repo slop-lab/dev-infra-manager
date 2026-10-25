@@ -24,8 +24,9 @@ not in guest storage or Git grants. Required-plugin approval pins that
 configuration commit, independently of the working directory.
 
 Every selected checkout gets a distinct broker credential, repository-bound
-short-lived write leases and its own proposal namespace. Direct protected
-updates, deletion, forced updates, tags and foreign scopes are denied. Naming a
+short-lived write leases for ordinary unprotected branch/tag operations and its
+own restricted legacy proposal namespace. Ordinary refs allow force and deletion;
+direct protected writes, reserved internal refs and foreign scopes remain denied. Naming a
 repository `public` does not enable anonymous Git access. Host operator credentials
 never enter the checkout. There is one core lifecycle; managed Git owns source
 acquisition and its scoped attachment, not a separate workspace runtime.

@@ -4,7 +4,7 @@
 by host plugins, Web plugins or trusted services. It does not register a plugin
 or deploy the remote service.
 
-`@slop-lab/dim-service-client-native-git` owns review evidence decoding, role attestation, bounded Git HTTP calls, sync results and shared CLI/Web operations. It depends on the operation and Git contracts, without a host, Web runtime or control-plane implementation.
+`@slop-lab/dim-service-client-native-git` owns review evidence decoding, role attestation, bounded Git HTTP calls, sync results and shared CLI/Web operations. It consumes neutral operation/Git/CI contracts and portable diff/PR/discussion/blame models, without a host, Web runtime or control-plane implementation.
 
 `createNativeGitOperator({ reviewerConnection, promoterConnection?, syncConnection?, projects, selectedService? })` loads private role files, attests the reviewer and optional promoter/sync roles and returns `{ operations, invoke }`. Each invocation validates its input and output and reads the dynamic project catalog before accessing a repository. `projects.list` returns `{ reviewerId, projects: [{ projectId, name, repositoryIds }] }`; all review/sync operations require explicit `projectId` and `repositoryId`. Optional roles remove unavailable mutation operations from the catalog.
 
@@ -18,3 +18,18 @@ generation-pinned, root-read-issuer-authenticated authority reads and strictly
 parses their bounded contract DTOs. Controller outputs expose only Project IDs,
 repository counts, managed refs and branches; immutable receipts and policies
 remain private inputs to host attachment and workspace readiness proof.
+
+Repository features expose `diff.read`, `blame.line`, PR conversation operations
+and `ci.status` only when their installed service advertises that capability.
+The shared client composes `pull-requests.approve`, `pull-requests.revoke` and
+`pull-requests.merge` from exact PR-version/revision evidence and existing
+decision/promotion APIs. It never records an approval during merge. Missing
+promoter authority removes protected merge from the catalog; missing plugins
+produce capability-specific setup guidance.
+
+Review DTOs include explicit DIM CI state. An absent CI policy is not a success
+claim, and stale/unavailable evidence blocks the composite merge path. An
+accepted promotion with a failed PR refresh returns `refreshPending: true` and
+retains the promotion receipt. Credentials, profiles and raw host diagnostics do
+not become browser inputs/results. Identity checks retain short deadlines;
+proof-bearing review requests use bounded longer deadlines, not unbounded retry.
