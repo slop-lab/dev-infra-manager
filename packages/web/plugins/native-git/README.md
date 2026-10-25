@@ -73,7 +73,13 @@ use the explicit pull-request refresh action before the UI presents the recorded
 merged state; the unchanged accepted action cannot be submitted twice. That lock
 is scoped to the controller, repository, pull request and immutable revision. It
 survives metadata edits, comments, reselection and temporary review-detail failures;
-an authoritative merged record or a newly recorded revision clears it.
+an authoritative merged record or a newly recorded revision clears it. The pending
+receipt is recorded even if navigation changed while the merge request was in
+flight. If the user already returned to that PR before the accepted response
+arrives, the stored receipt is projected onto the current view without replacing
+it with the response's stale DTO. Close/reopen is omitted during that interval and
+stale state-change callbacks are ignored, while metadata edits and comments remain
+available.
 
 The selected controller and repository target remain visible beside capability
 guidance. The panel distinguishes review-only inspection, reviewer decisions,

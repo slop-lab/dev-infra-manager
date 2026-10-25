@@ -60,13 +60,17 @@ implementations and disposable real state. A subprocess bridge invokes the
 production host console. Only the public upstream HTTPS transport is redirected
 to a local smart-HTTP Git server. The review-access journey does not replace
 browser responses. The PR journey routes its disposable Native Git connection
-through a loopback proxy that rejects exactly the post-promotion PR refresh once.
-Promotion, metadata edits, comments, detail reads and the later explicit refresh
-still reach the real service. This exercises the service client's documented
-`refreshPending` contract without fabricating approval or CI evidence. This is a
-source component integration check, not an installer or VM acceptance test. The
-environment never uses the operator's installed DIM state, accounts, repositories
-or credentials.
+through a loopback proxy that delays and then rejects exactly the post-promotion
+PR refresh once. While that request is in flight, the browser selects an existing
+sibling PR, returns to the original PR and finishes its detail inspection before
+the accepted result arrives. The result must still be recorded for the original
+scope, PR and revision, then projected onto the already-current selection without
+assigning its stale DTO. Promotion, metadata edits, comments, detail reads and the
+later explicit refresh still reach the real service.
+This exercises the service client's documented `refreshPending` contract without
+fabricating approval or CI evidence. This is a source component integration check,
+not an installer or VM acceptance test. The environment never uses the operator's
+installed DIM state, accounts, repositories or credentials.
 
 `runReviewJourney` accepts an environment factory so an installed environment
 can reuse the same user outcomes and UI adapter. An installed VM adapter is not
@@ -106,7 +110,9 @@ the accepted-merge `refreshPending` receipt/refresh sequence. While that refresh
 is pending, it edits metadata, posts a real comment, reselects the PR after opening
 a sibling PR, and injects an unavailable review-detail read. The receipt and merge
 lock must survive every same-revision response; only an authoritative merged read
-or a new revision clears the lock.
+or a new revision clears the lock. Close/reopen is absent while the receipt is
+pending, its callback remains guarded against stale invocation, and the journey
+asserts that no state-changing update request was sent.
 
 Its replaceable screen adapter is `native-git/pull-request-ui.ts`. The scenario
 records user outcomes and uses the same disposable real-service environment as
