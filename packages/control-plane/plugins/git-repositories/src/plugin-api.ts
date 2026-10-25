@@ -23,6 +23,7 @@ export type RepositoryAttachment = {
   readonly handle?: (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<boolean>;
   readonly serveGit?: (request: IncomingMessage, response: ServerResponse, route: NativeGitRoute) => Promise<boolean>;
   readonly onProposals?: (projectId: string, repositoryId: string, refs: readonly string[]) => Promise<void>;
+  readonly onPolicyChanged?: (projectId: string, repositoryId: string) => void | Promise<void>;
   readonly validatePolicy?: (policy: NativeImportedRootPolicy, selector: { readonly projectId: string; readonly repositoryId: string }) => void | Promise<void>;
   readonly activate?: () => Promise<void>;
   readonly healthy?: () => boolean;

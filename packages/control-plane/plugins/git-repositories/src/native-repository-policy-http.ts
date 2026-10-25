@@ -6,7 +6,7 @@ import { exactActivationIsBound } from "./native-bundle-activation.js";
 import { NativeGitBundleHttpError, readBoundedJson, sendJson, sendNotFound } from "./native-bundle-http.js";
 import type { RootImportHttpContext } from "./native-project-root-import-http.js";
 import { parseAuthoritativeImportedRootPolicy } from "./native-imported-root-policy.js";
-import { verifyLiveImportedRepository, NativeImportedRootNotFoundError, NativeImportedRootInactiveError } from "./native-imported-root-verifier.js";
+import { assertImportedRepositorySnapshotCurrent, verifyLiveImportedRepository, NativeImportedRootNotFoundError, NativeImportedRootInactiveError } from "./native-imported-root-verifier.js";
 import { NativeProjectRootImportStateError } from "./native-project-root-import-codec.js";
 import { RepositoryRefStateError } from "./repository-ref-state.js";
 import { NativeProjectStorageError } from "./native-project-storage.js";
@@ -45,7 +45,9 @@ export async function handleNativeRepositoryPolicyHttp(context: RootImportHttpCo
       if (update !== undefined && policy !== undefined) {
         if (live.currentHead.commit !== update.expectedProtectedHead || live.imported.policyDigest !== update.expectedPolicyDigest || policy.protectedRef !== live.currentHead.protectedRef) throw new RepositoryRefStateError("repository policy compare-and-swap conflicts");
         await context.validatePolicy(policy, { projectId, repositoryId });
-        await verify();
+        await assertImportedRepositorySnapshotCurrent({ gitExecutable: context.gitExecutable, gitIdentity: context.gitIdentity,
+          ownerHostId: importer.hostId, projectId, repositoryId, state: context.state,
+          stateDirectory: context.stateDirectory, expected: live });
         updateRepositoryPolicy(context.state.database, { projectId, repositoryId, ownerHostId: importer.hostId, generationId: context.expectedGenerationId, expectedPolicyDigest: update.expectedPolicyDigest, expectedProtectedHead: update.expectedProtectedHead, policy });
         await ensureConfiguredRepositoryBranches({ database: context.state.database, stateDirectory: context.stateDirectory, gitExecutable: context.gitExecutable, gitIdentity: context.gitIdentity }, projectId, repositoryId);
         await context.reconcilePolicy(projectId, repositoryId);

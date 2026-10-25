@@ -6,6 +6,7 @@ import { codeReviewPolicy } from "./policy.js";
 import type { CodeReviewRuntime } from "./plugin-api.js";
 import { reviewRequirementsForChanges } from "./authoritative-native-review.js";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { nativeGitCandidateWorkspaceId } from "@slop-lab/dim-contracts-git";
 
 function policyStaleReasons(runtime: CodeReviewRuntime, target: AuthoritativeNativeRepositoryTarget, review: AuthoritativeNativeReview): string[] {
   const reasons: string[] = [];
@@ -61,8 +62,7 @@ export async function nativeHumanReviewStaleReasons(
     if (reasons.length > 0) return [...new Set(reasons)];
     const evidence = await inspectAuthoritativeNativeReviewGit({ ...git,
       expectedProtectedHead: target.currentHead.commit });
-    const workspaceId = /^refs\/heads\/proposals\/([A-Za-z0-9_-]{43})\//.exec(review.proposalRef)?.[1];
-    if (workspaceId === undefined) return ["review-identity-changed"];
+    const workspaceId = nativeGitCandidateWorkspaceId(review.proposalRef);
     const requirements = await reviewRequirementsForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead, review.protectedRef);
     if (review.projectId !== target.imported.projectId || review.repositoryId !== target.imported.repositoryId
       || review.protectedRef !== target.currentHead.protectedRef || review.workspaceId !== workspaceId

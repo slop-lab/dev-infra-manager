@@ -18,6 +18,7 @@ import { assertOwnedNativeProjectStorage } from "./native-project-storage.js";
 import { inspectImportedNativeRootReadOnly } from "./native-root-import-proof-git.js";
 import { assertDurableNativeRootBundle, assertPrivateDirectory } from "./native-root-import-storage.js";
 import type { GitExecutableIdentity } from "./repository.js";
+import { isDeepStrictEqual } from "node:util";
 
 export type LiveImportedRoot = {
   readonly imported: NativeProjectRootImportInstalled;
@@ -99,6 +100,34 @@ export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput)
   const effective = readEffectiveRepositoryPolicy(input.state.database, imported.projectId, imported.repositoryId);
   if (effective.policyDigest !== currentHead.policyDigest) throw new NativeProjectRootImportStateError("repository policy changed during proof");
   return { imported: { ...imported, ...effective }, importReceipt: imported, currentHead, repository };
+}
+
+/** Rechecks the durable authority tuple after a full proof without repeating repository-wide fsck. */
+export async function assertImportedRepositorySnapshotCurrent(
+  input: ImportedRootInput & { readonly expected: Pick<LiveImportedRoot, "imported" | "currentHead" | "repository"> }
+): Promise<void> {
+  input.signal?.throwIfAborted();
+  const registration = readNativeProjectRegistrationsFromDatabase(input.state.database)
+    .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
+  if (registration === undefined || registration.ownerHostId !== input.ownerHostId) throw new NativeImportedRootNotFoundError();
+  const imported = requireImportedRoot(input);
+  const effective = readEffectiveRepositoryPolicy(input.state.database, imported.projectId, imported.repositoryId);
+  nativeRepositoryBranchPolicy(effective.policy, input.protectedRef ?? imported.protectedRef);
+  const currentHead = readNativeProjectRootCurrentHeadFromDatabase(
+    input.state.database, imported.projectId, imported.repositoryId, input.protectedRef
+  );
+  const repository = join(input.stateDirectory, input.projectId, `${input.repositoryId}.git`);
+  await assertStableStorage(input, registration, imported, repository);
+  input.signal?.throwIfAborted();
+  const currentRegistration = readNativeProjectRegistrationsFromDatabase(input.state.database)
+    .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
+  if (!isDeepStrictEqual(currentRegistration, registration)
+    || !isDeepStrictEqual(input.expected.imported, { ...imported, ...effective })
+    || !isDeepStrictEqual(input.expected.currentHead, currentHead)
+    || input.expected.repository !== repository
+    || effective.policyDigest !== currentHead.policyDigest) {
+    throw new NativeProjectRootImportStateError("native Project imported root changed during proof");
+  }
 }
 
 function assertActive(input: LiveImportedRootInput): void {

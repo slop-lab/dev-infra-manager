@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { repositorySnapshotsSchema as executionInputsSchema } from "@slop-lab/dim-contracts-git";
+import { isNativeGitCandidateRef, nativeGitCandidateWorkspaceId, repositorySnapshotsSchema as executionInputsSchema } from "@slop-lab/dim-contracts-git";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
@@ -23,7 +23,7 @@ const identityObjectSchema = z.object({
   schemaVersion: z.literal(2), serviceId: z.literal("native-main"), projectId: identifier,
   repositoryId: identifier, inputs: executionInputsSchema, protectedRef: z.string(), proposalRef: z.string(),
   expectedProtectedHead: objectId, candidateCommit: objectId, candidateTree: objectId,
-  policyRevision: digest, requiredReviewRevision: digest, workspaceId: stableWorkspaceId,
+  policyRevision: digest, requiredReviewRevision: digest, workspaceId: stableWorkspaceId.optional(),
   requiredReviewerIds: z.array(identifier).readonly(),
   changeRuleEvidence: z.array(z.object({ rule: z.number().int().nonnegative(), digest }).strict().readonly()).readonly().optional(),
   changes: z.array(authoritativeNativeChangedPathSchema).readonly(), patch: z.string(), patchBytes: base64
@@ -69,7 +69,8 @@ export function parseAuthoritativeNativeReviewEnvelope(input: unknown): Authorit
   assertSortedUnique(identity.requiredReviewerIds);
   const primary = { commit: identity.candidateCommit, tree: identity.candidateTree };
   if (!Object.hasOwn(identity.inputs, identity.repositoryId) || !isDeepStrictEqual(identity.inputs[identity.repositoryId], primary)) invalid("primary repository snapshot");
-  if (!identity.proposalRef.startsWith(`refs/heads/proposals/${identity.workspaceId}/`)
+  if (!isNativeGitCandidateRef(identity.proposalRef)
+    || nativeGitCandidateWorkspaceId(identity.proposalRef) !== identity.workspaceId
     || authoritativeNativeReviewDigest(identity) !== reviewId) invalid("review identity");
   assertSortedUnique(envelope.attachments.map((attachment) => `${attachment.kind}\0${attachment.id}`));
   if (envelope.envelopeId !== domainDigest("dim-code-review-envelope-v3\0", { reviewId, policyDigest: envelope.policyDigest, attachments: envelope.attachments })) invalid("envelope identity");

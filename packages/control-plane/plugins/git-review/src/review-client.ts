@@ -2,7 +2,7 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 
 const MAX_RESPONSE_BYTES = 96 * 1024 * 1024;
-const REQUEST_TIMEOUT_MILLISECONDS = 30_000;
+const REQUEST_TIMEOUT_MILLISECONDS = 90_000;
 
 export type ReviewClientCredentials = {
   readonly username: string;
@@ -31,6 +31,7 @@ export async function requestReviewApi(input: ReviewClientRequest): Promise<stri
     const transport = target.protocol === "https:" ? httpsRequest : httpRequest;
     const request = transport(target, {
       method: input.method,
+      signal: AbortSignal.timeout(input.path.endsWith("-identity") ? 5_000 : REQUEST_TIMEOUT_MILLISECONDS),
       headers: {
         Authorization: `Basic ${Buffer.from(`${input.credentials.username}:${input.credentials.password}`, "utf8").toString("base64")}`,
         ...(input.generationId === undefined ? {} : { "x-dim-generation-id": input.generationId }),
@@ -50,12 +51,14 @@ export async function requestReviewApi(input: ReviewClientRequest): Promise<stri
       incoming.on("end", () => resolve({ status: incoming.statusCode ?? 500, body: Buffer.concat(chunks).toString("utf8") }));
       incoming.on("error", reject);
     });
-    request.setTimeout(REQUEST_TIMEOUT_MILLISECONDS, () => request.destroy(new ReviewClientError("review API request timed out")));
-    request.on("error", reject);
+    request.on("error", (cause) => reject(new ReviewClientError("review authority is unavailable or timed out; inspect current state before retrying", { cause })));
     request.end(body);
   });
   if (response.status < 200 || response.status > 299) {
-    throw new ReviewClientError(`review API returned HTTP ${response.status}: ${response.body.trim()}`);
+    const guidance = response.status === 409 ? "refresh the current source, policy and review before retrying"
+      : response.status === 401 || response.status === 403 ? "check the selected role and generation"
+      : "check Git authority availability and proof/admission load";
+    throw new ReviewClientError(`review API returned HTTP ${response.status}; ${guidance}`);
   }
   return response.body;
 }

@@ -6,21 +6,23 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { atomicPromote, candidateDescendsFrom } from "./promotion-git.js";
 import { resolveAuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
-import { assertGitExecutableIdentity } from "./repository.js";
+import { assertGitExecutableIdentity, NativeGitRepositoryError } from "./repository.js";
 import { saveRepositoryRefIntent, finalizeRepositoryRef, readRepositoryRefTransitions, assertRepositoryRefTransitions, cancelRepositoryRefIntent, type RepositoryRefTransition } from "./repository-ref-state.js";
 import type { RepositoryExtensionContext, RepositoryRuntime } from "./plugin-api.js";
+import { isNativeGitCandidateRef } from "@slop-lab/dim-contracts-git";
 const execute = promisify(execFile);
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const protectedRefChangeSchema = z.object({ projectId: identifier, repositoryId: identifier, protectedRef: z.string().startsWith("refs/heads/").optional(),
-  proposalRef: z.string().regex(/^refs\/heads\/proposals\/[A-Za-z0-9_-]{43}\/[A-Za-z0-9._/-]+$/).refine((value) => !value.includes("..") && !value.includes("//") && !value.includes("/.") && !value.endsWith("/") && !value.endsWith(".") && !value.endsWith(".lock")),
+  proposalRef: z.string().refine(isNativeGitCandidateRef),
   expectedCommit: objectId, candidateCommit: objectId, candidateTree: objectId, authorizationId: digest, evidenceDigest: digest
 }).strict().readonly();
 export type ProtectedRefChange = z.infer<typeof protectedRefChangeSchema>;
 export async function compareAndSwapProtectedRef(context: RepositoryExtensionContext, input: ProtectedRefChange): Promise<{ readonly outcome: "promoted" | "already-current"; readonly sequence: number }> {
   input = protectedRefChangeSchema.parse(input);
   const target = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: input.projectId, repositoryId: input.repositoryId, ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }) });
+  if (input.proposalRef === target.currentHead.protectedRef) throw new NativeGitRepositoryError("protected ref source and target must differ");
   const config = { gitExecutable: context.runtime.gitExecutable, storageRoot: context.stateDirectory };
   if (target.currentHead.commit !== input.expectedCommit) {
     const database = new DatabaseSync(context.runtime.state.database, { readOnly: true });

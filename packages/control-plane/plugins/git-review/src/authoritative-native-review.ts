@@ -4,6 +4,7 @@ import type { CodeReviewRuntime, ReviewAttachment } from "./plugin-api.js";
 import { assertReviewInputsCurrent } from "./review-inputs.js";
 import { z } from "zod";
 import {
+  assertAuthoritativeNativeRepositoryTargetCurrent,
   resolveAuthoritativeNativeRepositoryTarget,
 } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import {
@@ -20,27 +21,20 @@ import {
 } from "./authoritative-native-review-schema.js";
 import { saveAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
 import type { NativeImportedRootPolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { repositorySnapshotsSchema as executionInputsSchema } from "@slop-lab/dim-contracts-git";
+import { isNativeGitCandidateRef, nativeGitCandidateWorkspaceId, repositorySnapshotsSchema as executionInputsSchema } from "@slop-lab/dim-contracts-git";
 
-const workspaceId = z.string().regex(/^[A-Za-z0-9_-]{43}$/).refine((value) =>
-  Buffer.from(value, "base64url").length === 32 && Buffer.from(value, "base64url").toString("base64url") === value);
-const proposalName = z.string().min(1).max(1024).refine((value) => !value.startsWith(".")
-  && !value.includes("/.") && !value.includes("..") && !value.includes("//") && !value.endsWith("/")
-  && !value.endsWith(".") && !value.endsWith(".lock") && /^[A-Za-z0-9._/-]+$/.test(value));
 const selectorSchema = z.object({
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   protectedRef: z.string().startsWith("refs/heads/").optional(),
-  proposalRef: z.string()
+  proposalRef: z.string().refine(isNativeGitCandidateRef)
 }).strict().readonly().transform((selector, context) => {
-  const match = /^refs\/heads\/proposals\/([^/]+)\/(.+)$/.exec(selector.proposalRef);
-  const workspace = workspaceId.safeParse(match?.[1]);
-  const proposal = proposalName.safeParse(match?.[2]);
-  if (!workspace.success || !proposal.success) {
-    context.addIssue({ code: "custom", message: "proposal namespace is invalid" });
+  if (!isNativeGitCandidateRef(selector.proposalRef)) {
+    context.addIssue({ code: "custom", message: "candidate ref is invalid" });
     return z.NEVER;
   }
-  return { ...selector, workspaceId: workspace.data };
+  const candidateWorkspaceId = nativeGitCandidateWorkspaceId(selector.proposalRef);
+  return { ...selector, ...(candidateWorkspaceId === undefined ? {} : { workspaceId: candidateWorkspaceId }) };
 });
 
 export type AuthoritativeNativeReviewHooks = {
@@ -83,7 +77,7 @@ export async function createAuthoritativeNativeReview(
       ...evidence,
       policyRevision: policy.policyRevision,
       requiredReviewRevision: codeReviewPolicy(policy, runtime.reviewChangeMatchers, target.currentHead.protectedRef).requiredReviewRevision,
-      workspaceId: selector.data.workspaceId,
+       ...(selector.data.workspaceId === undefined ? {} : { workspaceId: selector.data.workspaceId }),
       requiredReviewerIds: requirements.reviewerIds,
       ...(requirements.evidence.length === 0 ? {} : { changeRuleEvidence: requirements.evidence })
     };
@@ -102,12 +96,9 @@ export async function createAuthoritativeNativeReview(
     const envelope = createAuthoritativeNativeReviewEnvelope({ identity,
       policyDigest: target.imported.policyDigest, attachments, createdAt: new Date().toISOString() });
     await hooks.beforeFinalVerification?.();
-    const current = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId, ...(selector.data.protectedRef === undefined ? {} : { protectedRef: selector.data.protectedRef }) });
-    if (current.repository !== target.repository
-      || JSON.stringify(current.imported) !== JSON.stringify(target.imported)
-      || JSON.stringify(current.currentHead) !== JSON.stringify(target.currentHead)) {
-      throw new AuthoritativeNativeReviewError("authoritative imported repository changed during review creation");
-    }
+    await assertAuthoritativeNativeRepositoryTargetCurrent({ runtime,
+      selector: { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId, ...(selector.data.protectedRef === undefined ? {} : { protectedRef: selector.data.protectedRef }) }, target });
+    const current = target;
     const currentRequirements = await reviewRequirementsForChanges(runtime, current.imported.policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead, target.currentHead.protectedRef);
     if (codeReviewPolicy(current.imported.policy, runtime.reviewChangeMatchers, current.currentHead.protectedRef).requiredReviewRevision !== identity.requiredReviewRevision
       || JSON.stringify(currentRequirements.reviewerIds) !== JSON.stringify(identity.requiredReviewerIds)

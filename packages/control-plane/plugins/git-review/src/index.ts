@@ -20,7 +20,7 @@ export * from "./policy.js";
 export const controlPlanePlugin: ControlPlanePlugin = { apiVersion: 1, name: "code-review", configure(raw) { return prepareCodeReview(parseCodeReviewConfig(raw)); } };
 export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly review?: AuthoritativeNativeReviewHooks; readonly humanReviewer?: NativeHumanReviewerHooks } = {}): PreparedControlPlanePlugin {
     let attached: RepositoryExtensionContext | undefined;
-    const createInTransaction = (context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined }) => createAuthoritativeNativeReview({ ...context.runtime, reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) }, input, hooks.review);
+    const createInTransaction = (context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined }) => createAuthoritativeNativeReview({ ...context.runtime, authoritativeTargetProofs: new Map(), reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) }, input, hooks.review);
     const service = {
       name: "code-review" as const,
       createInTransaction,
@@ -81,6 +81,7 @@ export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly re
               validatePolicy(policy) { if (Object.hasOwn(policy.extensions, "code-review")) assertConfiguredHumanReviewers(config, policy, runtime.reviewChangeMatchers); },
               async activate() { await reconcile(); },
               async onProposals(projectId, repositoryId, refs) { try { await reconcileNativeProposalRefs(runtime, projectId, repositoryId, refs, hooks.review); } catch (error) { retry.wake(); throw error; } },
+              onPolicyChanged() { retry.wake(); },
               healthy: () => healthy,
               async close() { attached = undefined; await retry.close(); }
             };

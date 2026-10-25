@@ -6,6 +6,7 @@ import { authoritativeNativeReviewEventSchema } from "@slop-lab/dim-contracts-ci
 export { authoritativeNativeReviewEventSchema } from "@slop-lab/dim-contracts-ci/events";
 import { authoritativeNativeReviewSchema, authoritativeNativeReviewDigest, type AuthoritativeNativeReview, type AuthoritativeNativeReviewIdentity } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { isCandidatePath, isCandidateArgv } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
+import { isNativeGitCandidateRef, nativeGitCandidateWorkspaceId } from "@slop-lab/dim-contracts-git";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
@@ -79,7 +80,8 @@ export function parseAuthoritativeNativeReviewEnvelope(input: unknown): Authorit
   }
   if (!isDeepStrictEqual(plannedInputs, identity.inputs)) invalid("review repository snapshot");
   assertSortedUnique(envelope.requiredJobs.map(jobKey));
-  if (!identity.proposalRef.startsWith(`refs/heads/proposals/${identity.workspaceId}/`)
+  if (!isNativeGitCandidateRef(identity.proposalRef)
+    || nativeGitCandidateWorkspaceId(identity.proposalRef) !== identity.workspaceId
     || authoritativeNativeReviewDigest(identity) !== reviewId) invalid("review identity");
   if (envelope.planning.status === "valid") assertSortedUnique(envelope.planning.jobs.map(jobKey));
   const expectedEnvelopeId = domainDigest("dim-native-authoritative-envelope-v2\0", {

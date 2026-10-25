@@ -3,7 +3,7 @@ import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workf
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import * as repositoryTargets from "../../../../packages/control-plane/plugins/git-repositories/src/authoritative-native-root-target.js";
+import * as rootProofGit from "../../../../packages/control-plane/plugins/git-repositories/src/native-root-import-proof-git.js";
 import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
 import { configuredManagedGitFixture } from "../../../support/managed-git-service.js";
 import { bundleSecrets, idleNativeConfig } from "../git-repositories/bundleConfigFixture.js";
@@ -100,7 +100,10 @@ describe("installed imported-root human reviewer", () => {
   it("serves only the required reviewer the exact immutable review and preserves stale inspection across restart", { timeout: 15_000 }, async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("human-reviewer-read");
+    const creationProofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
     const created = await createBundleReview(fixture.service);
+    expect(creationProofs).toHaveBeenCalledTimes(1);
+    creationProofs.mockRestore();
     const path = `/v1/projects/project-a/repositories/root/reviews/${created.review.reviewId}`;
     const headers = { authorization: humanReviewerAuthorization, "x-dim-generation-id": generationId };
 
@@ -108,9 +111,9 @@ describe("installed imported-root human reviewer", () => {
     const identity = await fetch(`${fixture.service.origin}/v1/human-reviewer-identity`, {
       headers: { authorization: humanReviewerAuthorization }
     });
-    const proofs = vi.spyOn(repositoryTargets, "resolveAuthoritativeNativeRepositoryTarget");
+    const proofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
     const current = await fetch(`${fixture.service.origin}${path}`, { headers });
-    expect(proofs).toHaveBeenCalledTimes(2);
+    expect(proofs).toHaveBeenCalledTimes(1);
     proofs.mockRestore();
     await addCandidateCommit(fixture.clone, "review-drift.txt", Buffer.from("drift\n"));
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
@@ -127,7 +130,7 @@ describe("installed imported-root human reviewer", () => {
       role: "human-reviewer",
       reviewerId: "owner",
       generationId,
-      features: ["git-blame", "git-diff", "git-discussions", "git-pull-requests"]
+      features: ["git-blame", "git-ci", "git-diff", "git-discussions", "git-pull-requests"]
     });
     expect(current.status).toBe(200);
     expect(await current.json()).toMatchObject({

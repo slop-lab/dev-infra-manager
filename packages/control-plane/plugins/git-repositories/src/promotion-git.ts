@@ -38,10 +38,12 @@ export async function atomicPromote(
   candidateCommit: string
 ): Promise<boolean> {
   const repositoryPath = join(config.storageRoot, target.projectId, `${target.repositoryId}.git`);
+  const candidateRef = await candidateRefState(config.gitExecutable, repositoryPath, target.proposalRef, candidateCommit);
+  if (candidateRef === undefined) return false;
   const commands = [
     "start",
     `update ${target.protectedRef} ${candidateCommit} ${expectedHead}`,
-    `verify ${target.proposalRef} ${candidateCommit}`,
+    `verify ${target.proposalRef} ${candidateRef}`,
     "prepare",
     "commit",
     ""
@@ -76,6 +78,26 @@ export async function atomicPromote(
     });
     child.stdin.end(commands);
   });
+}
+
+async function candidateRefState(
+  gitExecutable: string,
+  repositoryPath: string,
+  candidateRef: string,
+  candidateCommit: string
+): Promise<string | undefined> {
+  try {
+    const raw = (await execute(gitExecutable, ["--git-dir", repositoryPath, "rev-parse", "--verify", candidateRef], {
+      env: gitEnvironment()
+    })).stdout.trim();
+    const peeled = (await execute(gitExecutable, ["--git-dir", repositoryPath, "rev-parse", "--verify", `${raw}^{commit}`], {
+      env: gitEnvironment()
+    })).stdout.trim();
+    return peeled === candidateCommit ? raw : undefined;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error.code === 1 || error.code === 128)) return undefined;
+    throw error;
+  }
 }
 
 function gitEnvironment(): NodeJS.ProcessEnv {
