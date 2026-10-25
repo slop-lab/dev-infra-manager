@@ -1,11 +1,16 @@
-import { cp, readFile, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceStore, type WorkspaceRecord, type WorkspaceRuntime, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import { createManagedWorkspace } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceHost.js";
 import { nativeWorkspaceAttachmentFile, readNativeWorkspaceAttachment } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
-import { cleanupFinalizeFixtures } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures, generationId } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { managedProjectFixture } from "./nativeProjectIntegrationFixture.js";
+import { createNativeProjectConsole } from "../../../../packages/host/plugins/native-git/src/projectConsole.js";
+import { createNativeRepositoryPolicyClient } from "../../../../packages/host/plugins/native-git/src/nativeRepositoryPolicyClient.js";
+import { loadNativeGitRootImporterConnection } from "../../../../packages/host/plugins/native-git/src/nativeGitRootImporterConnection.js";
+import { NativeProjectPendingStore } from "../../../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js";
+import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
 
 vi.mock("../../../../packages/host/plugins/native-git/src/nativeWorkspaceBrokerProcess.js", () => ({ ensureNativeWorkspaceBroker: vi.fn(async () => {}) }));
 const roots: string[] = [];
@@ -87,4 +92,87 @@ it("keeps default-branch configuration separate from a development working check
   expect(attachment.configuration.protectedRef).toBe("refs/heads/main");
   expect(attachment.repositories.public?.protectedRef).toBe("refs/heads/development");
   expect(fixture.runtime.commands.some(({ argv }) => argv.at(-1)?.endsWith("/development"))).toBe(true);
+});
+
+it("refreshes authority-owned policy on explicit reattach and acquires a dotted and underscored local alias", async () => {
+  // Given
+  const fixture = await workspaceFixture();
+  const attachedState = path.join(fixture.root, "attached-managed");
+  await mkdir(attachedState, { mode: 0o700 });
+  const environment = {
+    ...process.env,
+    DIM_MANAGED_STATE_ROOT: attachedState,
+    DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: fixture.hostFile,
+    DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE: undefined
+  };
+  const controller = await createNativeProjectConsole(environment, generationId);
+  await controller.invoke("projects.attach", {
+    projectId: "project-a",
+    name: "team.project_one",
+    configurationRepositoryId: "private",
+    defaultWorkingRepositoryId: "public"
+  });
+  const attachedStore = new NativeProjectPendingStore(attachedState);
+  const before = await attachedStore.read("team.project_one", fixture.connection.hostId);
+  const publicRepository = before?.repositories.public;
+  if (before?.phase !== "ready" || !publicRepository) throw new Error("attached fixture repository is unavailable");
+  const extensions = {
+    ...publicRepository.repositoryPolicy.extensions,
+    "code-review": { requiredReviewerIds: [], pathReviewerRules: [] }
+  };
+  const policyInput = {
+    protectedRef: publicRepository.repositoryPolicy.protectedRef,
+    extensions,
+    ...(publicRepository.repositoryPolicy.defaultRef === undefined ? {} : { defaultRef: publicRepository.repositoryPolicy.defaultRef }),
+    ...(publicRepository.repositoryPolicy.branches === undefined ? {} : { branches: publicRepository.repositoryPolicy.branches })
+  };
+  const effectivePolicy = { schemaVersion: 1 as const, ...policyInput, policyRevision: nativeRepositoryPolicyRevision(policyInput) };
+  const policyClient = createNativeRepositoryPolicyClient(
+    await loadNativeGitRootImporterConnection(fixture.importerConnectionFile),
+    fixture.connection
+  );
+  const authorityPolicy = await policyClient.read("project-a", "public", AbortSignal.timeout(5_000));
+  await policyClient.update(authorityPolicy, effectivePolicy, AbortSignal.timeout(5_000));
+  await controller.invoke("projects.attach", {
+    projectId: "project-a",
+    name: "team.project_one",
+    configurationRepositoryId: "private",
+    defaultWorkingRepositoryId: "public"
+  });
+  const refreshed = await attachedStore.read("team.project_one", fixture.connection.hostId);
+  expect(refreshed).toMatchObject({
+    readyAt: before.readyAt,
+    configurationRepositoryId: before.configurationRepositoryId,
+    defaultWorkingRepositoryId: before.defaultWorkingRepositoryId,
+    repositories: {
+      public: {
+        readyAt: publicRepository.readyAt,
+        commit: publicRepository.commit,
+        tree: publicRepository.tree,
+        importReceipt: publicRepository.importReceipt,
+        repositoryPolicy: { policyRevision: effectivePolicy.policyRevision },
+        importedPolicy: { policyRevision: publicRepository.repositoryPolicy.policyRevision }
+      }
+    }
+  });
+  vi.stubEnv("DIM_MANAGED_STATE_ROOT", attachedState);
+  vi.stubEnv("DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", fixture.hostFile);
+  const runtime = new Runtime(fixture.root);
+  const context = {
+    store: new WorkspaceStore(path.join(fixture.root, "attached-workspaces")),
+    runner: new ProcessRunner(),
+    runtime,
+    signal: AbortSignal.timeout(30_000)
+  };
+
+  // When
+  const record = await createManagedWorkspace({
+    name: "attached-source",
+    source: { url: "dim://team.project_one" }
+  }, context);
+
+  // Then
+  expect(record.source.workingDirectory).toBe("public");
+  expect(await readFile(path.join(fixture.root, "attached-source/public/README.md"), "utf8"))
+    .toBe("public checkout\n");
 });

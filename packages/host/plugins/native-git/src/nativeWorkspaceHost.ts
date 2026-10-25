@@ -15,6 +15,7 @@ import { createNativeGitRootReadIssuerClient } from "./nativeGitRootReadIssuerCl
 import { ensureNativeWorkspaceBroker } from "./nativeWorkspaceBrokerProcess.js";
 import { nativeWorkspaceAttachmentFile, readNativeWorkspaceAttachment, writeNativeWorkspaceAttachment,
   type NativeWorkspaceAttachment, type NativeWorkspaceRepositoryAttachment, type NativeWorkspaceRepositoryProof } from "./nativeWorkspaceAttachment.js";
+import { validateLifecycleName } from "@slop-lab/dim-host-core";
 
 export interface ManagedWorkspaceHostContext {
   readonly store: WorkspaceStore;
@@ -26,9 +27,10 @@ export interface ManagedWorkspaceHostContext {
 }
 /** Core owns lifecycle/storage; managed Git only acquires selected repositories and grants. */
 export async function createManagedWorkspace(input: CreateWorkspaceInput & { readonly repositories?: readonly string[]; readonly workingDirectory?: string }, context: ManagedWorkspaceHostContext): Promise<WorkspaceRecord> {
-  const match = /^dim:\/\/([a-z0-9][a-z0-9-]*)\/?$/.exec(input.source.url);
-  if (!match) throw new UserError("managed source must be dim://PROJECT");
-  const projectName = match[1]!, connectionFile = await selectedControlPlaneHostFile(), stateRoot = managedStateRoot(process.env);
+  const match = /^dim:\/\/([^/]+)\/?$/.exec(input.source.url);
+  const matchedName = match?.[1];
+  if (matchedName === undefined) throw new UserError("managed source must be dim://PROJECT");
+  const projectName = validateLifecycleName(matchedName, "project"), connectionFile = await selectedControlPlaneHostFile(), stateRoot = managedStateRoot(process.env);
   const connection = await loadNativeControlPlaneConnection(connectionFile);
   const project = await new NativeProjectPendingStore(stateRoot).read(projectName, connection.hostId);
   if (project?.phase !== "ready") throw new UserError(`native Project '${projectName}' has no configured repository defaults`);
