@@ -12,6 +12,16 @@ bridge. No private connection paths, service credentials or executables reach th
 browser. Adding projects or repositories appears on **Refresh projects**; one
 unavailable controller does not disable other controllers.
 
+Newly connected controllers can discover accessible existing Projects and
+explicitly attach them with configuration and default working repository choices.
+Discovery reads the authenticated Git service; attachment saves only this host's
+selection after fresh authority checks. It needs no registrar/importer role and
+does not import source, change policy or move refs. Existing local selections
+are preserved rather than silently replaced. Attachment requires Web `operator`
+authority and an automatic controller connection; direct reviewer connections do
+not gain host configuration authority. After attachment, the ordinary selector
+and managed workspace creation draft use the attached Project.
+
 Controllers with dedicated registrar and importer connections also expose **New
 project** and **Import repository**. Create a project, then import a public HTTPS
 Git URL; an optional branch overrides the remote default branch. Import additional
@@ -20,6 +30,16 @@ checkout. Source acquisition is bounded, rejects credentials/private addresses,
 and does not execute or automatically trust repository `.dim` code or policy.
 These operations require Web `operator` authority and remain unavailable for a
 direct reviewer-service connection.
+
+Automatically connected controllers also expose **Attach existing project** for
+Projects already owned by the selected host authority but not present in its local
+catalog. Discovery and repository inspection are read-only. The operator explicitly
+selects both the configuration repository and default working repository before
+attachment; an optional local name never replaces a collision. Attachment reuses
+authoritative import evidence without fetching or reimporting source, then refreshes
+the normal Project and repository selectors so managed workspace creation continues
+through the existing flow. Direct reviewer connections omit this host-authorized
+operation. Refreshes and failures keep the selected Project, defaults and local name.
 
 Creation/import receipts are retained if the following catalog read fails;
 accepted operations cannot accidentally be resubmitted by the same unchanged
