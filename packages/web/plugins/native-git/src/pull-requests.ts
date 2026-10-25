@@ -27,7 +27,7 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
   });
   let disposed = false, generation = 0, scopeKey = "";
   let rows: readonly PullRequest[] = [], selected: PullRequest | null = null, snapshot: DiffSnapshot | null = null;
-  let review: ReviewDto | null = null, feedback = "";
+  let review: ReviewDto | null = null, feedback = "", mergeRefreshPending = false;
   const root = mountPullRequestPanel(container, { pullRequests: [], selected: null, snapshot: null });
   const active = (scope: PullRequestScope, expected: number) => !disposed && context.isCurrent() && host.current(scope) && generation === expected;
   async function invoke(scope: PullRequestScope, name: string, input: Record<string, unknown> = {}) {
@@ -55,7 +55,7 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
   async function accept(scope: PullRequestScope, value: unknown, expected: number) {
     const pr = parsePullRequest(value);
     if (!active(scope, expected)) return;
-    rows = [pr, ...rows.filter(row => row.id !== pr.id)]; selected = pr; snapshot = null; review = null; feedback = ""; render();
+    rows = [pr, ...rows.filter(row => row.id !== pr.id)]; selected = pr; snapshot = null; review = null; feedback = ""; mergeRefreshPending = false; render();
     await inspect(scope, pr, expected);
   }
   async function select(id: string) {
@@ -129,17 +129,18 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
         if (!active(scope, expected)) return;
         if (result.refreshPending) {
           selected = parsePullRequest(result.pullRequest); review = result.review;
+          mergeRefreshPending = true;
           feedback = "Merge accepted. Refresh the pull request to confirm its recorded state."; render(); return;
         }
         await accept(scope, result.pullRequest, expected);
-      }, mergeDisabled: pullRequestMergeDisabled(pr, currentReview) } : {}),
+      }, mergeDisabled: mergeRefreshPending || pullRequestMergeDisabled(pr, currentReview) } : {}),
       ...(host.has("blame.line") ? { onBlame: async anchor => await invoke(scope, "blame.line", { commit: anchor.side === "base" ? anchor.baseCommit : anchor.headCommit, path: anchor.path, line: anchor.line }) as GitLineAttribution } : {})
     };
     root.update(props);
   }
   async function refresh() {
     const scope = host.scope(), nextKey = JSON.stringify(scope);
-    if (nextKey !== scopeKey) { scopeKey = nextKey; rows = []; selected = null; snapshot = null; review = null; feedback = ""; }
+    if (nextKey !== scopeKey) { scopeKey = nextKey; rows = []; selected = null; snapshot = null; review = null; feedback = ""; mergeRefreshPending = false; }
     const expected = ++generation;
     const hasInspection = host.has("diff.read") || host.has("blame.line");
     container.hidden = !scope.repositoryId || (!host.has("pull-requests.list") && !hasInspection);
