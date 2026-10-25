@@ -48,7 +48,8 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
     }
     return acceptedMerge(scope, pr);
   }
-  const active = (scope: PullRequestScope, expected: number) => !disposed && context.isCurrent() && host.current(scope) && generation === expected;
+  const currentScope = (scope: PullRequestScope) => !disposed && context.isCurrent() && host.current(scope);
+  const active = (scope: PullRequestScope, expected: number) => currentScope(scope) && generation === expected;
   async function invoke(scope: PullRequestScope, name: string, input: Record<string, unknown> = {}) {
     if (disposed || !context.isCurrent() || !host.current(scope)) throw new Error("Repository selection changed");
     return context.invoke(name, { ...scope, ...input }, { timeoutMilliseconds: 125_000 });
@@ -121,7 +122,10 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
       },
       ...(pr && host.has("pull-requests.update") ? {
         onEdit: async patch => accept(scope, await invoke(scope, "pull-requests.update", { ...mutationInput(pr!), ...patch }), expected),
-        onSetState: async state => accept(scope, await invoke(scope, "pull-requests.update", { ...mutationInput(pr!), state }), expected)
+        ...(pending ? {} : { onSetState: async state => {
+          if (acceptedMerge(scope, pr)) return;
+          await accept(scope, await invoke(scope, "pull-requests.update", { ...mutationInput(pr), state }), expected);
+        } })
       } : {}),
       ...(pr && host.has("pull-requests.comment") ? { onComment: async comment => accept(scope, await invoke(scope, "pull-requests.comment", { ...mutationInput(pr!), ...comment }), expected) } : {}),
       ...(pr && canPrepare ? { onPrepareReview: prepareReview, prepareReviewDisabled: pr.state !== "open" } : {}),
@@ -149,13 +153,15 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
           await Promise.allSettled([inspect(scope, pr, expected)]);
           throw error;
         }
-        if (!active(scope, expected)) return;
         if (result.refreshPending) {
           const accepted = parsePullRequest(result.pullRequest), revision = currentRevision(accepted);
+          if (accepted.id !== pr.id || revision.id !== pinned.id) throw new Error("Accepted merge result does not match the submitted pull request revision");
           const pending: AcceptedMergePending = { scopeIdentity: scopeIdentity(scope), pullRequestId: accepted.id, revisionId: revision.id, review: result.review, receipt: acceptedMergeReceipt };
           acceptedMerges.set(acceptedMergeKey(scope, accepted), pending);
+          if (!active(scope, expected)) { if (currentScope(scope)) render(); return; }
           rows = [accepted, ...rows.filter(row => row.id !== accepted.id)]; selected = accepted; review = result.review; feedback = acceptedMergeReceipt; render(); return;
         }
+        if (!active(scope, expected)) return;
         await accept(scope, result.pullRequest, expected);
       }, mergeDisabled: pending !== undefined || pullRequestMergeDisabled(pr, currentReview) } : {}),
       ...(host.has("blame.line") ? { onBlame: async anchor => await invoke(scope, "blame.line", { commit: anchor.side === "base" ? anchor.baseCommit : anchor.headCommit, path: anchor.path, line: anchor.line }) as GitLineAttribution } : {})

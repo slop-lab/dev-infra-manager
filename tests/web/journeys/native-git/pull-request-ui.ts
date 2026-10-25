@@ -3,6 +3,13 @@ import { join } from "node:path";
 import type { Page, Dialog } from "playwright-core";
 import { ReviewUI } from "./ui.js";
 
+type PendingMergeJourney = {
+  readonly title: string;
+  readonly siblingRef: string;
+  readonly refreshFailure: { readonly reached: Promise<void>; release(): void };
+  readonly evidenceDirectory?: string;
+};
+
 /** Screen-specific details stay here so a redesigned PR screen changes one adapter. */
 export class PullRequestUI extends ReviewUI {
   constructor(private readonly browserPage: Page) { super(browserPage); }
@@ -102,29 +109,53 @@ export class PullRequestUI extends ReviewUI {
     } finally { this.browserPage.off("dialog", confirm); }
   }
 
-  async mergePullRequest(title: string, siblingRef: string, evidenceDirectory?: string) {
+  async mergePullRequest(options: PendingMergeJourney) {
+    const { title, siblingRef, refreshFailure, evidenceDirectory } = options;
+    const siblingTitle = "Review sibling configuration";
+    await this.createPullRequest(siblingRef, siblingTitle);
+    await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · open`, exact: true }).click();
+    await this.detail.getByRole("heading", { name: title, exact: true }).waitFor();
     const merge = this.detail.getByRole("button", { name: "Merge pull request", exact: true });
     assert.equal(await merge.isEnabled(), true, "the reviewed current revision must be mergeable");
-    let mergeRequests = 0;
+    assert.equal(await this.detail.getByRole("button", { name: "Close pull request", exact: true }).count(), 1, "an ordinary open pull request must expose its close action");
+    let mergeRequests = 0, stateChangeRequests = 0;
     const mergeEndpoint = /\/v1\/extensions\/native-git\/operations\/pull-requests\.merge$/;
+    const updateEndpoint = /\/v1\/extensions\/native-git\/operations\/pull-requests\.update$/;
     const reviewDetailEndpoint = /\/v1\/extensions\/native-git\/operations\/reviews\.detail$/;
     const countMerge = (request: { url(): string }) => { if (mergeEndpoint.test(request.url())) mergeRequests += 1; };
+    const countStateChange = (request: { url(): string; postDataJSON(): unknown }) => {
+      if (!updateEndpoint.test(request.url())) return;
+      const body = request.postDataJSON(); if (body !== null && typeof body === "object" && "state" in body) stateChangeRequests += 1;
+    };
     const expectLocked = async () => {
       await this.detail.getByText("Merge accepted. Refresh the pull request to confirm its recorded state.", { exact: true }).waitFor();
       const action = this.detail.getByRole("button", { name: "Merge pull request", exact: true });
       assert.equal(await action.isDisabled(), true, "an accepted merge awaiting refresh must remain disabled");
+      assert.equal(await this.detail.getByRole("button", { name: /^(?:Close|Reopen) pull request$/ }).count(), 0,
+        "an accepted merge awaiting refresh must not expose close or reopen state changes");
       await action.evaluate((button) => {
         if (!(button instanceof HTMLButtonElement)) throw new Error("merge action must be a button");
         button.disabled = false; button.click(); button.disabled = true;
       });
       assert.equal(mergeRequests, 1, "the accepted merge callback must reject duplicate submission even if the DOM disabled state is bypassed");
+      assert.equal(stateChangeRequests, 0, "accepted merge pending state must not submit close or reopen mutations");
     };
     this.browserPage.on("request", countMerge);
+    this.browserPage.on("request", countStateChange);
     const confirm = (dialog: Dialog) => dialog.accept();
     this.browserPage.on("dialog", confirm);
     try {
+      const mergeResponse = this.browserPage.waitForResponse(mergeEndpoint);
       await merge.click();
       await this.browserPage.route(reviewDetailEndpoint, (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporary review detail failure"}' }));
+      await refreshFailure.reached;
+      await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${siblingTitle} · open`, exact: true }).click();
+      await this.detail.getByRole("heading", { name: siblingTitle, exact: true }).waitFor();
+      await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · open`, exact: true }).click();
+      await this.detail.getByRole("heading", { name: title, exact: true }).waitFor();
+      await this.detail.getByText("Some revision details could not load. Refresh before taking a decision.", { exact: true }).waitFor();
+      refreshFailure.release();
+      assert.equal((await mergeResponse).ok(), true, "merge workflow response must retain the accepted refresh-pending result");
       await expectLocked();
       assert.equal(await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · merged`, exact: true }).count(), 0,
         "the accepted receipt must not falsely present an unconfirmed refreshed state");
@@ -140,8 +171,8 @@ export class PullRequestUI extends ReviewUI {
       await commentForm.getByRole("button", { name: "Post comment", exact: true }).click();
       await this.detail.getByText(pendingComment, { exact: true }).waitFor();
       await expectLocked();
-      const siblingTitle = "Review sibling configuration";
-      await this.createPullRequest(siblingRef, siblingTitle);
+      await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${siblingTitle} · open`, exact: true }).click();
+      await this.detail.getByRole("heading", { name: siblingTitle, exact: true }).waitFor();
       assert.equal(await this.detail.getByText("Merge accepted. Refresh the pull request to confirm its recorded state.", { exact: true }).count(), 0,
         "accepted merge receipt must stay scoped to its pull request revision");
       await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · open`, exact: true }).click();
@@ -159,8 +190,10 @@ export class PullRequestUI extends ReviewUI {
       await this.detail.getByRole("button", { name: "Refresh pull request", exact: true }).click();
       await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · merged`, exact: true }).waitFor();
     } finally {
+      refreshFailure.release();
       this.browserPage.off("dialog", confirm);
       this.browserPage.off("request", countMerge);
+      this.browserPage.off("request", countStateChange);
       await this.browserPage.unroute(reviewDetailEndpoint);
     }
   }

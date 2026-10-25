@@ -13,12 +13,12 @@ export async function createReviewEnvironment() {
   let checkout: string | undefined;
   let proposalRef: string | undefined;
   let proposalCommit: string | undefined;
-  let rejectPullRequestRefresh = false;
+  let delayedRefresh: { readonly reached: () => void; readonly release: Promise<void>; readonly releaseNow: () => void } | undefined;
   const proxy = createServer(async (request, response) => {
     try {
       const path = request.url ?? "/";
-      if (rejectPullRequestRefresh && request.method === "POST" && /\/pull-requests\/[^/]+\/refresh$/.test(path)) {
-        rejectPullRequestRefresh = false;
+      if (delayedRefresh && request.method === "POST" && /\/pull-requests\/[^/]+\/refresh$/.test(path)) {
+        const refresh = delayedRefresh; delayedRefresh = undefined; refresh.reached(); await refresh.release;
         response.writeHead(503, { "content-type": "application/json" }); response.end('{"error":"temporary pull request refresh failure"}'); return;
       }
       const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -35,7 +35,7 @@ export async function createReviewEnvironment() {
       response.writeHead(502, { "content-type": "application/json" }); response.end(JSON.stringify({ error: error instanceof Error ? error.name : "ProxyError" }));
     }
   });
-  const closeProxy = async () => { if (proxy.listening) await new Promise<void>((resolve, reject) => proxy.close(error => error ? reject(error) : resolve())); };
+  const closeProxy = async () => { delayedRefresh?.releaseNow(); if (proxy.listening) await new Promise<void>((resolve, reject) => proxy.close(error => error ? reject(error) : resolve())); };
   try {
     await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
     const address = proxy.address(); if (!address || typeof address === "string") throw new Error("review proxy port unavailable");
@@ -55,7 +55,12 @@ export async function createReviewEnvironment() {
     return {
       origin: fixture.origin, username: fixture.username, password: fixture.password,
       projectId: "review-journey", repositoryId: "public", upstreamUrl: "https://github.com/mjy9088/codyssey-public.git",
-      async failNextPullRequestRefresh() { rejectPullRequestRefresh = true; },
+      async delayNextPullRequestRefresh() {
+        assert.equal(delayedRefresh, undefined, "only one pull request refresh may be delayed");
+        const reached = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+        delayedRefresh = { reached: reached.resolve, release: release.promise, releaseNow: release.resolve };
+        return { reached: reached.promise, release: release.resolve };
+      },
       async prepareProposal() {
         const base = `${fixture.managed.service.origin}/v1/projects/review-journey/repositories/public`;
         const workspaceId = Buffer.alloc(32, 91).toString("base64url");
