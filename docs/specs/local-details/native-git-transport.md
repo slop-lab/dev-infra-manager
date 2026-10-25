@@ -23,6 +23,42 @@ repository imports, protected heads, proposal namespaces and transition
 sequences. Every transport lease selects its repository explicitly, including
 when several repositories have the same owner.
 
+### Existing Project discovery and host attachment
+
+The repository plugin owns the authenticated catalog. `GET /v1/projects` and
+`GET /v1/projects/:project/attachment` require an existing protected-source read
+issuer and exact active `X-Dim-Generation-Id`. Scope comes only from the
+credential's configured host-authority ID. Other known roles are forbidden;
+foreign Projects are not found. A catalog summary advertises completed imports,
+not an entitlement to register or change repositories. An attachment descriptor
+contains live-proven completed repositories, their original immutable import
+receipts and policies, effective policies and current heads. It fails as a whole
+on unavailable evidence or response limits, without truncating a Project.
+
+Native Git's host plugin explicitly attaches a discovered Project by choosing a
+local name, configuration repository and default working repository. It fetches
+evidence itself; CLI/Web input cannot supply policies, receipts, ownership or
+service addresses. Every repository must also pass workspace-readiness with the
+host's existing writer authority before atomic local publication. Selected
+snapshots retain the original receipt commit/tree and generation; current
+fast-forward heads do not replace immutable import evidence. Effective policy
+updates retain the original imported policy. Defaults stay host-local.
+
+Attachment never replaces local identity or selections. An unchanged retry
+preserves the existing record; name, alias, repository-set, defaults or
+immutable-evidence conflicts fail without replacing data. On an explicit repeat
+attachment with matching identity and selections, a changed authoritative
+effective policy is reconciled locally, preserving the original import evidence,
+snapshots and timestamps. Configuring drafts are not silently adopted. Changes
+to existing defaults use explicit local configuration. Discovery and attachment
+never register/import repositories, update service policies or refs, mint broader
+grants, or alter existing workspaces. Importer/registrar roles are not prerequisites.
+
+The configured `hostId` denotes an authority, not a unique physical host. Existing
+connection export can share one authority across machines; local selections
+remain independent. Distinct authorities remain isolated. This flow creates no
+cross-authority grants or per-machine revocation boundary.
+
 Workspace leases permit only reads and create/fast-forward operations in that
 immutable workspace's proposal namespace. Protected writes, tags, deletion,
 force and foreign access are denied by Git transport. Without a review plugin,

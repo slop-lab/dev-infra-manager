@@ -228,7 +228,22 @@ the controller; the Web server receives public metadata and validated results.
 Every invocation supplies the attested generation and the controller rejects
 selection changes before dispatch. Catalog refresh cannot adopt a replacement
 generation; explicit reconnect is required. Each request rechecks current catalog
-membership, including import-receipt generation, before service access.
+membership and live readiness before service access; immutable historical import
+generations remain intact across a valid serving-generation update.
+
+The Native Git plugin also exposes authenticated existing-Project discovery and
+explicit host attachment through `projects.discover`, `projects.inspect` and
+`projects.attach`. The first two return only Project/repository IDs, counts and
+managed branch metadata. Attachment requires the browser operator role and
+selects both configuration and default working repositories. The controller
+fetches its own authoritative evidence and rechecks current workspace authority;
+the browser cannot supply receipts, policies, owners, endpoints or credentials.
+Attachment writes host-local selections, never repositories, protected refs or
+workspace data. Existing choices are not implicitly replaced. A successful
+attachment refreshes the local selector; subsequent workspace navigation remains
+an explicit draft, not automatic creation. These operations require automatic
+controller provenance and are unavailable to direct reviewer-only connections.
+
 Controller-owned project creation and public repository import require the
 browser operator role and distinct attested registrar/importer credentials.
 These operations are absent from a direct reviewer-only connection. Import
