@@ -33,6 +33,7 @@ type ImportedRootInput = {
   readonly projectId: string;
   readonly repositoryId: string;
   readonly protectedRef?: string;
+  readonly signal?: AbortSignal;
   readonly state: NativeGitBundleState;
   readonly stateDirectory: string;
 };
@@ -44,13 +45,16 @@ type LiveImportedRootInput = ImportedRootInput & {
 };
 
 export async function verifyLiveImportedRepository(input: LiveImportedRootInput): Promise<LiveImportedRoot> {
+  input.signal?.throwIfAborted();
   assertActive(input);
   const result = await verifyImportedRepositoryReadOnly(input);
+  input.signal?.throwIfAborted();
   assertActive(input);
   return result;
 }
 
 export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput): Promise<LiveImportedRoot> {
+  input.signal?.throwIfAborted();
   const registration = readNativeProjectRegistrationsFromDatabase(input.state.database)
     .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
   if (registration === undefined || registration.ownerHostId !== input.ownerHostId) {
@@ -77,8 +81,11 @@ export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput)
     importedTree: imported.resolvedTree,
     currentCommit: currentHead.commit,
     currentTree: currentHead.tree,
-    signal: AbortSignal.timeout(30_000)
+    signal: input.signal === undefined
+      ? AbortSignal.timeout(30_000)
+      : AbortSignal.any([input.signal, AbortSignal.timeout(30_000)])
   });
+  input.signal?.throwIfAborted();
   await assertStableStorage(input, registration, imported, repository);
   const current = requireImportedRoot(input);
   const currentRegistration = readNativeProjectRegistrationsFromDatabase(input.state.database)

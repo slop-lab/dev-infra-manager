@@ -19,11 +19,19 @@ import { NativeProjectRootImportStateError } from "./native-project-root-import-
 import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-import-transitions.js";
 import { NativeProjectStorageError } from "./native-project-storage.js";
 import { NativeRootImportBundleError } from "./native-root-import-storage.js";
+import type { RootReadOperationGate } from "./native-root-read-lifecycle.js";
 import { RepositoryRefStateError } from "./repository-ref-state.js";
 import type { GitExecutableIdentity } from "./repository.js";
+import { assertCurrentNativeProjectAttachmentSnapshot } from "./native-project-attachment-snapshot.js";
+
+const attachmentTimeoutMilliseconds = 8_000;
 
 type Issuer = { readonly hostId: string; readonly username: string; readonly password: string };
 type Credential = { readonly username: string; readonly password: string };
+export type NativeProjectAttachmentHooks = {
+  readonly beforeVerification?: (signal: AbortSignal) => Promise<void>;
+  readonly afterVerification?: (signal: AbortSignal) => Promise<void>;
+};
 type AttachmentHttpContext = {
   readonly activated: boolean;
   readonly activationTokenDigest: string;
@@ -31,8 +39,11 @@ type AttachmentHttpContext = {
   readonly gitExecutable: string;
   readonly gitIdentity: GitExecutableIdentity;
   readonly issuers: readonly Issuer[];
+  readonly hooks?: NativeProjectAttachmentHooks;
   readonly knownCredentials: readonly Credential[];
+  readonly operations: RootReadOperationGate;
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
+  readonly signal: AbortSignal;
   readonly state: NativeGitBundleState;
   readonly stateDirectory: string;
 };
@@ -45,6 +56,7 @@ type VerificationSelector = {
   readonly ownerHostId: string;
   readonly projectId: string;
   readonly repositoryId: string;
+  readonly signal: AbortSignal;
 };
 
 export async function handleNativeProjectAttachmentHttp(
@@ -91,11 +103,27 @@ export async function handleNativeProjectAttachmentHttp(
     }
     const projectId = projectMatch[1];
     if (projectId === undefined) return false;
-    const attachment = await context.serialize(async () => {
+    const release = context.operations.acquire();
+    if (release === undefined) {
+      if (context.operations.isOpen()) return sendHandledJson(response, 503, "native Git Project attachment service is busy");
+      return true;
+    }
+    const disconnected = new AbortController();
+    const abortDisconnected = () => disconnected.abort(new NativeProjectAttachmentRequestError("native Git Project attachment client disconnected"));
+    request.once("aborted", abortDisconnected);
+    response.once("close", abortDisconnected);
+    const signal = AbortSignal.any([
+      context.signal,
+      disconnected.signal,
+      AbortSignal.timeout(attachmentTimeoutMilliseconds)
+    ]);
+    let snapshotCheck: Promise<void> | undefined;
+    try {
+      await abortable(context.hooks?.beforeVerification?.(signal) ?? Promise.resolve(), signal);
       const repositories = readNativeProjectRootImportsFromDatabase(context.state.database)
         .filter((entry) => entry.ownerHostId === issuer.hostId && entry.projectId === projectId
           && entry.phase === "repository-imported");
-      if (repositories.length === 0) return undefined;
+      if (repositories.length === 0) return sendHandledNotFound(response);
       if (repositories.length > nativeGitProjectAttachmentMaximumRepositories) {
         throw new NativeGitProjectAttachmentContractError("native Git Project attachment exceeds limit");
       }
@@ -103,9 +131,12 @@ export async function handleNativeProjectAttachmentHttp(
       for (const entry of repositories) verified.push(await verify(context, {
         ownerHostId: issuer.hostId,
         projectId,
-        repositoryId: entry.repositoryId
+        repositoryId: entry.repositoryId,
+        signal
       }));
-      return parseNativeGitProjectAttachment({
+      await abortable(context.hooks?.afterVerification?.(signal) ?? Promise.resolve(), signal);
+      signal.throwIfAborted();
+      const attachment = parseNativeGitProjectAttachment({
         schemaVersion: 1,
         serviceId: "native-main",
         generationId: context.expectedGenerationId,
@@ -133,10 +164,28 @@ export async function handleNativeProjectAttachmentHttp(
           currentHead
         }))
       });
-    });
-    if (attachment === undefined) return sendHandledNotFound(response);
-    sendJson(response, 200, attachment);
-    return true;
+      snapshotCheck = context.serialize(async () => {
+        signal.throwIfAborted();
+        assertCurrentNativeProjectAttachmentSnapshot({ database: context.state.database, verified });
+      });
+      await abortable(snapshotCheck, signal);
+      signal.throwIfAborted();
+      sendJson(response, 200, attachment);
+      return true;
+    } catch (error) {
+      if (signal.aborted) {
+        if (!response.destroyed && !context.signal.aborted && !disconnected.signal.aborted) {
+          return sendHandledJson(response, 503, "native Git Project attachment request timed out");
+        }
+        return true;
+      }
+      throw error;
+    } finally {
+      request.off("aborted", abortDisconnected);
+      response.off("close", abortDisconnected);
+      if (snapshotCheck === undefined) release();
+      else void snapshotCheck.then(release, release);
+    }
   } catch (error) {
     if (error instanceof NativeImportedRootNotFoundError) return sendHandledNotFound(response);
     if (error instanceof NativeGitProjectAttachmentContractError || error instanceof NativeImportedRootInactiveError
@@ -161,8 +210,18 @@ function verify(
     ownerHostId: selector.ownerHostId,
     projectId: selector.projectId,
     repositoryId: selector.repositoryId,
+    signal: selector.signal,
     state: context.state,
     stateDirectory: context.stateDirectory
+  });
+}
+
+function abortable<Result>(operation: Promise<Result>, signal: AbortSignal): Promise<Result> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    operation.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    if (signal.aborted) abort();
   });
 }
 
@@ -174,4 +233,8 @@ function sendHandledJson(response: ServerResponse, status: number, error: string
 function sendHandledNotFound(response: ServerResponse): true {
   sendNotFound(response);
   return true;
+}
+
+class NativeProjectAttachmentRequestError extends Error {
+  readonly name = "NativeProjectAttachmentRequestError";
 }

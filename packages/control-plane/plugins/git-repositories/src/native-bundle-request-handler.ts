@@ -23,6 +23,8 @@ import { nativeGitRoute } from "./routing.js";
 import { handleNativeProjectReadinessHttp } from "./native-project-readiness-http.js";
 import { handleNativeProjectAttachmentHttp } from "./native-project-attachment-http.js";
 import type { GitExecutableIdentity } from "./repository.js";
+import type { RootReadOperationGate } from "./native-root-read-lifecycle.js";
+import type { NativeProjectAttachmentHooks } from "./native-project-attachment-http.js";
 
 type RequestHandlerInput = {
   readonly activationTokenDigest: string;
@@ -38,7 +40,10 @@ type RequestHandlerInput = {
   readonly workspaceWriteService: NativeProjectWorkspaceWriteService;
   readonly attachments: readonly RepositoryAttachment[];
   readonly knownCredentials: readonly { readonly username: string; readonly password: string }[];
+  readonly projectAttachmentHooks?: NativeProjectAttachmentHooks;
+  readonly operations: RootReadOperationGate;
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
+  readonly signal: AbortSignal;
   readonly deliveryHealthy: () => boolean;
   readonly activated: () => boolean;
   readonly activate: () => Promise<void>;
@@ -80,9 +85,12 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
       expectedGenerationId: input.options.expectedGenerationId,
       gitExecutable: input.config.gitExecutable,
       gitIdentity: input.gitIdentity,
+      ...(input.projectAttachmentHooks === undefined ? {} : { hooks: input.projectAttachmentHooks }),
       issuers: input.config.projectRootReadIssuers,
       knownCredentials: input.knownCredentials,
+      operations: input.operations,
       serialize: input.serialize,
+      signal: input.signal,
       state: input.state,
       stateDirectory: input.stateDirectory
     }, { request, response, url })) return;

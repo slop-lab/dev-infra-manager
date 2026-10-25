@@ -91,7 +91,8 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
       if (!businessReady || generationId !== options.expectedGenerationId) throw new NativeGitBundleServerError("repository preparation requires exact activation");
       return executeNativeProjectPreparation({ database: state.database, stateDirectory: options.stateDirectory, runtimeConfig, generationId, ownerHostId, input });
     });
-    const handle = createNativeBundleRequestHandler({ activationTokenDigest, config, gitIdentity, options, registrars, rootImportService, rootReadService, serialize, state, stateDirectory: options.stateDirectory, workspaceWriteService, attachments, knownCredentials,
+    const handle = createNativeBundleRequestHandler({ activationTokenDigest, config, gitIdentity, operations, options, registrars, rootImportService, rootReadService, serialize, signal: shutdown.signal, state, stateDirectory: options.stateDirectory, workspaceWriteService, attachments, knownCredentials,
+      ...(options.projectAttachmentHooks === undefined ? {} : { projectAttachmentHooks: options.projectAttachmentHooks }),
       readiness: { activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.workspaceWriteIssuers, state, stateDirectory: options.stateDirectory },
       deliveryHealthy: () => attachments.every((entry) => entry.healthy?.() !== false), activated: () => businessReady, activate: () => serialize(activate), prepareProject });
     const server = createNativeBundleHttpServer({ closed: () => closed, handle, onListening() {} });
