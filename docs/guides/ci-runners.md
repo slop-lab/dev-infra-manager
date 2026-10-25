@@ -181,6 +181,11 @@ bounded recent authenticated contact (`observedConnected`, `lastSeenAt`), not
 tokens or a permanent claim that a process is healthy. Availability expires
 without contact; an idle slot alone is not running capacity.
 
+Enrollment records are generation-bound metadata in scheduler state. A later
+generation does not delete earlier enrollment identities, so rollback can read
+the matching generation without changing the format-102 execution bodies or
+database tables.
+
 If enrollment was accepted but the private output could not be published or its
 response was lost, inspect current worker state and export the enrolled identity
 to a fresh path using the same exact trusted capacity spec:
@@ -237,6 +242,8 @@ Public diagnostics use fixed phase/code metadata, not raw host exceptions,
 private paths, credentials or authorization headers. Keep guest stdout/stderr in
 the explicit private log view; it is not the primary admission diagnosis. A
 timeout, stale acquisition or executor failure is never a successful CI check.
+The scheduler persists these bounded diagnostics separately from execution JSON
+and joins them into summaries, preserving strict format-102 execution readers.
 
 The worker validates Docker and required Sysbox/KVM access before reserving
 jobs. Multiple Projects share configured slots; there is no per-Project runner

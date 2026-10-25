@@ -12,6 +12,14 @@ The package exports `controlPlanePlugin` for `dim-control-plane`. Its private pl
 
 The `dim-execution-scheduler` executable is the installed service-image entrypoint. It provides configuration/state checks, generation activation, readiness and serving with the installer's fixed secret/state paths. Deployment remains the installer's atomic service-pair operation; installing this package alone does not deploy it.
 
+Scheduler SQLite state remains format 102 with exactly the `executions` and
+`metadata` tables. Execution bodies retain the format-102 aggregate shape.
+Generation-bound worker enrollments and bounded admission diagnostics use
+validated `execution-scheduler/...` metadata keys, so they survive restart and
+rollback without adding fields that strict format-102 execution readers reject.
+Rows from previous generations remain available to the matching generation;
+unrecognized metadata namespaces are preserved.
+
 Trusted host execution is supplied separately by `@slop-lab/dim-host-plugin-execution-worker`. Generic transport, configuration and task plugin interfaces belong to `@slop-lab/dim-contracts-execution`; CI-specific grants/results belong to `@slop-lab/dim-contracts-ci`; the coordinator does not import a host worker or backend.
 
 General task slots specify `{id, taskType, handlerRevision}` instead of a CI
