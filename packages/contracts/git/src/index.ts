@@ -3,6 +3,16 @@ import { z } from "zod";
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 
 export {
+  classifyNativeGitCandidateRef,
+  isNativeGitCandidateRef,
+  isNativeGitLegacyProposalRef,
+  isNativeGitLegacyWorkspaceProposalRef,
+  isNativeGitOrdinaryCandidateRef,
+  nativeGitCandidateWorkspaceId,
+  type NativeGitCandidateRef
+} from "./candidate-ref.js";
+
+export {
   nativeImportedRootPolicySchema,
   nativeRepositoryBranchPolicy,
   nativeRepositoryBranchPolicySchema,
