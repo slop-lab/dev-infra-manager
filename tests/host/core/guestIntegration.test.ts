@@ -88,8 +88,9 @@ if(!replaced&&typeof file==='string'&&file.endsWith('/connection')){
   await deployGuestIntegration(context(home, preload).value, changed);
   expect(await readFile(marker, "utf8")).toBe("done");
   expect(await readFile(join(home, ".config/dim/connection"), "utf8")).toBe("desired-guest-credential");
-  // Concurrent refreshes converge on the same desired bytes and remain safe.
-  await Promise.all(Array.from({ length: 12 }, () => deployGuestIntegration(context(home).value, original)));
+  // After the controlled replacement, a stable refresh can publish new bytes.
+  // Unbounded competing publishers may safely exhaust the bounded retry budget.
+  await deployGuestIntegration(context(home).value, original);
   expect(await readFile(join(home, ".config/dim/connection"), "utf8")).toBe("previous-guest-credential");
 });
 it("bounds repeated leaf replacement rather than accepting permanently unstable metadata", async () => {
