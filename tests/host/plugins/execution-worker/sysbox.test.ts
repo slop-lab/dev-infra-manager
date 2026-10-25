@@ -8,6 +8,7 @@ import { verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from
 import { assignment, grant, hash } from "../../../contracts/ci/executionFixture.js";
 import { ExecutorRunner } from "./sysboxFixture.js";
 import { ExecutionLeaseLostError, ExecutionServiceUnavailableError } from "../../../../packages/host/plugins/execution-worker/src/client.js";
+import { CandidateObjectError } from "../../../../packages/host/plugins/execution-worker/src/nativeGitCandidateObjects.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 async function input() {
@@ -47,6 +48,28 @@ it("reports typed candidate admission failures distinctly from guest execution",
   expect((await sysboxBackend.run(timeout)).completion).toEqual({ kind: "executor-failure", code: "candidate-read-timeout" });
   const stale = await input(); stale.acquireCandidate = async () => { throw new ExecutionLeaseLostError("private"); };
   expect((await sysboxBackend.run(stale)).completion).toEqual({ kind: "executor-failure", code: "candidate-read-stale" });
+  const rejected = await input(); rejected.acquireCandidate = async () => { throw new CandidateObjectError("private object/path"); };
+  expect((await sysboxBackend.run(rejected)).completion).toEqual({ kind: "executor-failure", code: "candidate-read-rejected" });
+});
+it.each(["candidate", "configuration", "image", "launch"] as const)("identifies %s preparation failure without publishing raw host diagnostics", async (stage) => {
+  const options = await input(), privateDetail = "https://private-user:private-password@private-host/private-path";
+  let code = "candidate-acquisition-failed";
+  if (stage === "candidate") options.acquireCandidate = async () => { throw new Error(privateDetail); };
+  if (stage === "configuration") {
+    code = "job-configuration-failed";
+    await writeFile(join(options.root, "runner.bash"), privateDetail);
+  }
+  if (stage === "image") { code = "image-preparation-failed"; options.runner.imageMismatch = true; }
+  if (stage === "launch") {
+    code = "container-launch-failed";
+    options.runner.beforeLaunch = async () => { throw new Error(privateDetail); };
+  }
+  const completed = await sysboxBackend.run(options);
+  expect(completed.completion).toEqual({ kind: "executor-failure", code });
+  expect(completed.cleanupComplete).toBe(true);
+  expect(completed.result).toBe("failure");
+  expect(JSON.stringify(completed)).not.toContain(privateDetail);
+  expect(options.runner.calls.some(({ args }) => args[0] === "wait")).toBe(false);
 });
 it("delivers host plugin configuration read-only to networked jobs without placing package-manager policy in the backend", async () => {
   const options = await input(), contents = "Acquire::http::Proxy \"http://172.18.0.3:3142\";\n";

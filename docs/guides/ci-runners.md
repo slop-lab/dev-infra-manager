@@ -245,6 +245,15 @@ timeout, stale acquisition or executor failure is never a successful CI check.
 The scheduler persists these bounded diagnostics separately from execution JSON
 and joins them into summaries, preserving strict format-102 execution readers.
 
+Before a Sysbox guest starts, fixed executor-failure codes distinguish
+`candidate-acquisition-failed`, `job-configuration-failed`,
+`image-preparation-failed` and `container-launch-failed`. Typed candidate errors
+retain `candidate-read-timeout`, `candidate-read-unavailable`,
+`candidate-read-stale` or `candidate-read-rejected`; rejected Git objects use the
+last code. After launch, Docker wait/log observation failures use
+`container-observer-failed`. These codes identify the failed stage even when
+guest logs are empty and never include raw command output or host exceptions.
+
 The worker validates Docker and required Sysbox/KVM access before reserving
 jobs. Multiple Projects share configured slots; there is no per-Project runner
 registration or separate QEMU scheduler. Only select QEMU slots on hosts with

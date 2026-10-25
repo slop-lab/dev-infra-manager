@@ -22,8 +22,10 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
     const signal = AbortSignal.any([input.signal, stop.signal, timeout]);
     const output = new NativeOutputCollector(bound(descriptor.bounds.outputBytes), () => stop.abort());
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
+    let failureCode = "candidate-acquisition-failed";
     try {
       await input.acquireCandidate({ workspace, scriptFile: script, signal });
+      failureCode = "job-configuration-failed";
       const files = routing?.jobFiles ?? [];
       if (files.length > 16 || new Set(files.map(({ target }) => target)).size !== files.length) throw new Error("invalid host job configuration files");
       const launchScript = nativeRunnerScript(descriptor.repositoryId, files.map(({ target }) => target), routing?.jobEnvironmentDefaults);
@@ -35,12 +37,15 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
       }));
       await writeFile(launcher, launchScript, { mode: 0o500, flag: "wx" });
       await writeFile(daemonConfig, routing?.dockerDaemonConfig ?? "{}\n", { mode: 0o400, flag: "wx" });
+      failureCode = "image-preparation-failed";
       await prepareNativeImages(input.runner, claim, signal);
       signal.throwIfAborted();
+      failureCode = "container-launch-failed";
       const launched = await input.runner.run("docker", nativeContainerArgs(claim,
         { workspace, script, launcher, daemonConfig, jobFiles }, routing), { signal });
       if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) throw new Error("container launch failed");
       const id = launched.stdout.trim();
+      failureCode = "container-observer-failed";
       const [waited, logs] = await Promise.all([
         input.runner.run("docker", ["wait", id], { signal }),
         input.runner.runStreaming("docker", ["logs", "--follow", id], { signal,
@@ -50,7 +55,8 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
       completion = waited.exitCode === 0 && logs === 0 && exitCode >= 0 && exitCode <= 255
         ? { kind: "exited", exitCode } : { kind: "executor-failure", code: "container-observer-failed" };
     } catch (error) {
-      completion = { kind: "executor-failure", code: candidateFailureCode(error) ?? "execution-failed" };
+      completion = { kind: "executor-failure", code: failureCode === "candidate-acquisition-failed"
+        ? candidateFailureCode(error) ?? failureCode : failureCode };
     } finally {
       if (!await cleanupNativeContainer(input.runner, claim)) throw new Error("owned Sysbox cleanup is uncertain");
     }
