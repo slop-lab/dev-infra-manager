@@ -126,6 +126,7 @@ export async function listReviewSummaries(
   const { input, request, response, reviewer } = context;
   const { projectId, repositoryId } = route;
   await input.serialize(async () => {
+    const runtime = { ...input.runtime, authoritativeTargetProofs: new Map() };
     if (request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId) {
       return sendJson(response, 409, { error: "review generation is stale" });
     }
@@ -134,7 +135,7 @@ export async function listReviewSummaries(
     )) return sendJson(response, 503, { error: "human review is unavailable" });
     let target: Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;
     try {
-      target = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, { projectId, repositoryId });
+      target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId, repositoryId });
     } catch {
       return sendNotFound(response);
     }
@@ -152,7 +153,7 @@ export async function listReviewSummaries(
       let branchTarget = branchTargets.get(review.protectedRef);
       if (branchTarget === undefined && Object.hasOwn(managedBranches, review.protectedRef)) {
         try {
-          branchTarget = await resolveAuthoritativeNativeRepositoryTarget(input.runtime, {
+          branchTarget = await resolveAuthoritativeNativeRepositoryTarget(runtime, {
             projectId,
             repositoryId,
             protectedRef: review.protectedRef
@@ -165,7 +166,7 @@ export async function listReviewSummaries(
       const staleReasons = branchTarget === undefined ? ["protected-branch-unmanaged"]
         : review.expectedProtectedHead !== branchTarget.currentHead.commit ? ["protected-head-changed"]
         : review.policyRevision !== branchTarget.imported.policy.policyRevision ? ["policy-changed"]
-        : await nativeHumanReviewSummaryStaleReasons(input.runtime, branchTarget, review, () => {
+        : await nativeHumanReviewSummaryStaleReasons(runtime, branchTarget, review, () => {
           const key = JSON.stringify([
             branchTarget.repository,
             branchTarget.currentHead.protectedRef,

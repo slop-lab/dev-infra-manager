@@ -27,7 +27,7 @@ export async function reconnectNativeWorkspaces(environment: NodeJS.ProcessEnv =
     try {
       const workspace = await new WorkspaceStore(attachment.workspaceStateRoot).read(attachment.workspaceName);
       if (workspace.id !== attachment.workspaceId || workspace.phase === "discarding") continue;
-      const updated = await refreshNativeWorkspaceConnection(attachment, AbortSignal.timeout(10_000), selected);
+      const updated = await refreshNativeWorkspaceConnection(attachment, AbortSignal.timeout(40_000), selected);
       if (workspace.phase === "running") await ensureNativeWorkspaceBroker(updated, AbortSignal.timeout(15_000));
       if (updated.connectionFile !== attachment.connectionFile) refreshed++;
     } catch (error) {

@@ -131,7 +131,7 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
 export async function ensureManagedWorkspace(record: WorkspaceRecord, context: ManagedWorkspaceHostContext): Promise<void> {
   const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managedStateRoot(process.env), record.id));
   if (attachment.workspaceName !== record.name || attachment.workspaceStateRoot !== context.store.root) throw new UserError("managed workspace attachment conflicts with the selected host");
-  await ensureNativeWorkspaceBroker(await refreshNativeWorkspaceConnection(attachment, context.signal ?? AbortSignal.timeout(10_000)), context.signal);
+  await ensureNativeWorkspaceBroker(await refreshNativeWorkspaceConnection(attachment, context.signal ?? AbortSignal.timeout(40_000)), context.signal);
 }
 function binding(proof: NativeProjectReadinessProof): NativeWorkspaceRepositoryProof {
   return { repositoryId: proof.repositoryId, protectedRef: proof.protectedRef, commit: proof.commit, tree: proof.tree,

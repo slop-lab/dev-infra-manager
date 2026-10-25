@@ -4,13 +4,14 @@ import { createAuthoritativeNativeReview, type AuthoritativeNativeReviewHooks } 
 import type { AuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-schema.js";
 import { readNativeProposalRefs, readNativeProjectRegistrations, type AuthoritativeNativeCandidateRuntime } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 export async function reconcileNativeProposalRefs(
-  runtime: AuthoritativeNativeCandidateRuntime,
+  baseRuntime: AuthoritativeNativeCandidateRuntime,
   projectId: string,
   repositoryId: string,
   proposalRefs: readonly string[],
   hooks: AuthoritativeNativeReviewHooks = {}
 ): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
   if (proposalRefs.length === 0) return [];
+  const runtime = { ...baseRuntime, authoritativeTargetProofs: new Map() };
   const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId, repositoryId });
   if (!Object.hasOwn(target.imported.policy.extensions, "code-review")) return [];
   const envelopes: AuthoritativeNativeReviewEnvelope[] = [];
