@@ -39,6 +39,7 @@ export async function runPullRequestJourney(context: JourneyContext, createEnvir
   await context.step("show the rewritten source and keep old discussion while rejecting stale approval", () => ui.refreshAfterPush(next.candidate));
   await context.step("verify stale approval did not move the protected ref", () => environment.assertProtectedHead(proposal.baseCommit));
   await context.step("prepare and approve the current pull request revision", () => ui.approveRevision());
-  await context.step("merge the current pull request revision", () => ui.mergePullRequest(title, process.env.DIM_WEB_JOURNEY_CAPTURE_UI === "1" ? context.artifactDirectory : undefined));
+  await context.step("interrupt the accepted merge detail refresh", environment.failNextPullRequestRefresh);
+  await context.step("merge the current pull request revision", () => ui.mergePullRequest(title, next.siblingRef, process.env.DIM_WEB_JOURNEY_CAPTURE_UI === "1" ? context.artifactDirectory : undefined));
   await context.step("verify the exact merged commit on the real main ref", () => environment.assertProtectedHead(next.candidate));
 }

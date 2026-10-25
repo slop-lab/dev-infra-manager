@@ -13,6 +13,14 @@ export interface PullRequestHost {
   current(scope: PullRequestScope): boolean;
   reviewerId(): string | undefined;
 }
+type AcceptedMergePending = {
+  readonly scopeIdentity: string;
+  readonly pullRequestId: string;
+  readonly revisionId: string;
+  readonly review: ReviewDto;
+  readonly receipt: string;
+};
+const acceptedMergeReceipt = "Merge accepted. Refresh the pull request to confirm its recorded state.";
 export function pullRequestMergeDisabled(pr: PullRequest, review: ReviewDto | null): boolean {
   if (pr.state !== "open") return true;
   if (!review) return false;
@@ -27,8 +35,19 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
   });
   let disposed = false, generation = 0, scopeKey = "";
   let rows: readonly PullRequest[] = [], selected: PullRequest | null = null, snapshot: DiffSnapshot | null = null;
-  let review: ReviewDto | null = null, feedback = "", mergeRefreshPending = false;
+  let review: ReviewDto | null = null, feedback = "";
+  const acceptedMerges = new Map<string, AcceptedMergePending>();
   const root = mountPullRequestPanel(container, { pullRequests: [], selected: null, snapshot: null });
+  const scopeIdentity = (scope: PullRequestScope) => JSON.stringify([scope.controllerId, scope.projectId, scope.repositoryId]);
+  const acceptedMergeKey = (scope: PullRequestScope, pr: PullRequest) => JSON.stringify([scopeIdentity(scope), pr.id, currentRevision(pr).id]);
+  const acceptedMerge = (scope: PullRequestScope, pr: PullRequest) => acceptedMerges.get(acceptedMergeKey(scope, pr));
+  function reconcileAcceptedMerge(scope: PullRequestScope, pr: PullRequest): AcceptedMergePending | undefined {
+    const identity = scopeIdentity(scope), revisionId = currentRevision(pr).id;
+    for (const [key, pending] of acceptedMerges) {
+      if (pending.scopeIdentity === identity && pending.pullRequestId === pr.id && (pr.state === "merged" || pending.revisionId !== revisionId)) acceptedMerges.delete(key);
+    }
+    return acceptedMerge(scope, pr);
+  }
   const active = (scope: PullRequestScope, expected: number) => !disposed && context.isCurrent() && host.current(scope) && generation === expected;
   async function invoke(scope: PullRequestScope, name: string, input: Record<string, unknown> = {}) {
     if (disposed || !context.isCurrent() || !host.current(scope)) throw new Error("Repository selection changed");
@@ -48,14 +67,16 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
     ]);
     if (!active(scope, expected) || selected?.id !== pr.id || currentRevision(selected).id !== pinned.id) return;
     snapshot = results[0].status === "fulfilled" ? results[0].value : null;
-    review = results[1].status === "fulfilled" ? results[1].value : null;
-    feedback = results.some(result => result.status === "rejected") ? "Some revision details could not load. Refresh before taking a decision." : "";
+    const pending = acceptedMerge(scope, pr);
+    review = pending?.review ?? (results[1].status === "fulfilled" ? results[1].value : null);
+    feedback = pending?.receipt ?? (results.some(result => result.status === "rejected") ? "Some revision details could not load. Refresh before taking a decision." : "");
     render();
   }
   async function accept(scope: PullRequestScope, value: unknown, expected: number) {
     const pr = parsePullRequest(value);
     if (!active(scope, expected)) return;
-    rows = [pr, ...rows.filter(row => row.id !== pr.id)]; selected = pr; snapshot = null; review = null; feedback = ""; mergeRefreshPending = false; render();
+    const pending = reconcileAcceptedMerge(scope, pr);
+    rows = [pr, ...rows.filter(row => row.id !== pr.id)]; selected = pr; snapshot = null; review = pending?.review ?? null; feedback = pending?.receipt ?? ""; render();
     await inspect(scope, pr, expected);
   }
   async function select(id: string) {
@@ -77,12 +98,13 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
     const canPrepare = host.has("pull-requests.review");
     const canApprove = host.has("pull-requests.approve");
     const reviewerId = host.reviewerId();
-    const currentReview = review;
+    const pending = pr ? acceptedMerge(scope, pr) : undefined;
+    const currentReview = pending?.review ?? review;
     const activeApproval = currentReview?.approvals.find(approval => approval.reviewerId === reviewerId
       && !currentReview.revocations.some(revocation => revocation.approvalId === approval.approvalId));
     const props: PullRequestPanelProps = {
       pullRequests: rows, selected: pr, snapshot, onSelect: select,
-      reviewStatus: feedback || (review ? `Human review ${review.status} · required reviewers: ${review.requiredReviewerIds.join(", ") || "none"}` : "Prepare this revision to inspect human review and DIM CI requirements."),
+      reviewStatus: pending?.receipt ?? (feedback || (currentReview ? `Human review ${currentReview.status} · required reviewers: ${currentReview.requiredReviewerIds.join(", ") || "none"}` : "Prepare this revision to inspect human review and DIM CI requirements.")),
       reviewContent: h("div", null,
         currentReview ? h("p", { className: "git-pr__ci-status", "data-ci-state": currentReview.ci?.state ?? "unavailable" }, reviewCiSummary(currentReview.ci)) : null,
         currentReview?.requiredReviewerIds.length && !canApprove && context.operations.some(operation => operation.name === "pull-requests.list")
@@ -117,6 +139,7 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
         if (active(scope, expected)) { review = value; render(); }
       } } : {}),
       ...(pr && host.has("pull-requests.merge") ? { onMerge: async () => {
+        if (acceptedMerge(scope, pr)) return;
         const pinned = currentRevision(pr);
         if (!window.confirm(`Merge candidate ${pinned.sourceCommit} into ${pr.targetRef}?`)) return;
         let result: { pullRequest: unknown; review: ReviewDto; refreshPending: boolean };
@@ -128,19 +151,20 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
         }
         if (!active(scope, expected)) return;
         if (result.refreshPending) {
-          selected = parsePullRequest(result.pullRequest); review = result.review;
-          mergeRefreshPending = true;
-          feedback = "Merge accepted. Refresh the pull request to confirm its recorded state."; render(); return;
+          const accepted = parsePullRequest(result.pullRequest), revision = currentRevision(accepted);
+          const pending: AcceptedMergePending = { scopeIdentity: scopeIdentity(scope), pullRequestId: accepted.id, revisionId: revision.id, review: result.review, receipt: acceptedMergeReceipt };
+          acceptedMerges.set(acceptedMergeKey(scope, accepted), pending);
+          rows = [accepted, ...rows.filter(row => row.id !== accepted.id)]; selected = accepted; review = result.review; feedback = acceptedMergeReceipt; render(); return;
         }
         await accept(scope, result.pullRequest, expected);
-      }, mergeDisabled: mergeRefreshPending || pullRequestMergeDisabled(pr, currentReview) } : {}),
+      }, mergeDisabled: pending !== undefined || pullRequestMergeDisabled(pr, currentReview) } : {}),
       ...(host.has("blame.line") ? { onBlame: async anchor => await invoke(scope, "blame.line", { commit: anchor.side === "base" ? anchor.baseCommit : anchor.headCommit, path: anchor.path, line: anchor.line }) as GitLineAttribution } : {})
     };
     root.update(props);
   }
   async function refresh() {
     const scope = host.scope(), nextKey = JSON.stringify(scope);
-    if (nextKey !== scopeKey) { scopeKey = nextKey; rows = []; selected = null; snapshot = null; review = null; feedback = ""; mergeRefreshPending = false; }
+    if (nextKey !== scopeKey) { scopeKey = nextKey; rows = []; selected = null; snapshot = null; review = null; feedback = ""; }
     const expected = ++generation;
     const hasInspection = host.has("diff.read") || host.has("blame.line");
     container.hidden = !scope.repositoryId || (!host.has("pull-requests.list") && !hasInspection);
@@ -150,7 +174,7 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
     try {
       const values = parsePullRequestList(await invoke(scope, "pull-requests.list"));
       if (!active(scope, expected)) return;
-      rows = values; if (selected) selected = rows.find(row => row.id === selected?.id) ?? null;
+      rows = values; if (selected) { selected = rows.find(row => row.id === selected?.id) ?? null; if (selected) reconcileAcceptedMerge(scope, selected); }
       render(); if (selected) await inspect(scope, selected, expected);
     } catch { if (active(scope, expected)) { feedback = "Pull requests could not load. Refresh to retry."; render(); } }
   }

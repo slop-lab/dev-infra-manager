@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import { createNativeManagementBrowserFixture } from "../../plugins/nativeManagementBrowserFixture.js";
 import { generationId, hostPromoter, humanReviewer, workspaceWriteIssuer, runGit } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
@@ -12,13 +13,49 @@ export async function createReviewEnvironment() {
   let checkout: string | undefined;
   let proposalRef: string | undefined;
   let proposalCommit: string | undefined;
+  let rejectPullRequestRefresh = false;
+  const proxy = createServer(async (request, response) => {
+    try {
+      const path = request.url ?? "/";
+      if (rejectPullRequestRefresh && request.method === "POST" && /\/pull-requests\/[^/]+\/refresh$/.test(path)) {
+        rejectPullRequestRefresh = false;
+        response.writeHead(503, { "content-type": "application/json" }); response.end('{"error":"temporary pull request refresh failure"}'); return;
+      }
+      const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(request.headers)) {
+        if (value === undefined || ["connection", "content-length", "host"].includes(name)) continue;
+        if (Array.isArray(value)) for (const item of value) headers.append(name, item); else headers.set(name, value);
+      }
+      const body = chunks.length === 0 ? undefined : Buffer.concat(chunks);
+      const upstream = await fetch(new URL(path, fixture.managed.service.origin), { method: request.method ?? "GET", headers, ...(body ? { body } : {}), redirect: "manual" });
+      response.statusCode = upstream.status; upstream.headers.forEach((value, name) => response.setHeader(name, value));
+      response.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (error) {
+      response.writeHead(502, { "content-type": "application/json" }); response.end(JSON.stringify({ error: error instanceof Error ? error.name : "ProxyError" }));
+    }
+  });
+  const closeProxy = async () => { if (proxy.listening) await new Promise<void>((resolve, reject) => proxy.close(error => error ? reject(error) : resolve())); };
   try {
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    const address = proxy.address(); if (!address || typeof address === "string") throw new Error("review proxy port unavailable");
+    const proxyOrigin = `http://127.0.0.1:${address.port}`;
+    const rewriteEndpoint = async (path: string, field: "baseUrl" | "endpoint") => {
+      const value: unknown = JSON.parse(await readFile(path, "utf8"));
+      assert(value !== null && typeof value === "object", "connection fixture must be an object");
+      await writeFile(path, JSON.stringify({ ...value, [field]: proxyOrigin }), { mode: 0o600 });
+    };
+    await rewriteEndpoint(join(fixture.managed.root, "reviewer.json"), "baseUrl");
+    await rewriteEndpoint(fixture.managed.registrarConnectionFile, "endpoint");
+    await rewriteEndpoint(fixture.managed.importerConnectionFile, "endpoint");
+    await writeFile(fixture.managed.hostFile, JSON.stringify({ ...fixture.managed.connection, nativeGit: { ...fixture.managed.connection.nativeGit, endpoint: proxyOrigin } }), { mode: 0o600 });
     await writeFile(join(fixture.managed.root, "promoter.json"), JSON.stringify({ schemaVersion: 1, serviceId: "native-main",
-      endpoint: fixture.managed.service.origin, generationId, role: "host-promoter", hostId: hostPromoter.hostId,
+      endpoint: proxyOrigin, generationId, role: "host-promoter", hostId: hostPromoter.hostId,
       credential: { username: hostPromoter.username, password: hostPromoter.password } }), { mode: 0o600 });
     return {
       origin: fixture.origin, username: fixture.username, password: fixture.password,
       projectId: "review-journey", repositoryId: "public", upstreamUrl: "https://github.com/mjy9088/codyssey-public.git",
+      async failNextPullRequestRefresh() { rejectPullRequestRefresh = true; },
       async prepareProposal() {
         const base = `${fixture.managed.service.origin}/v1/projects/review-journey/repositories/public`;
         const workspaceId = Buffer.alloc(32, 91).toString("base64url");
@@ -65,9 +102,11 @@ export async function createReviewEnvironment() {
         assert.notEqual(candidate, previousCandidate, "rewritten source must produce a different candidate commit");
         assert.equal((await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", `${candidate}^`])).stdout.trim(), baseCommit,
           "rewritten source must replace rather than descend from the reviewed candidate");
+        const siblingRef = proposalRef.replace("review-boundary-", "review-sibling-");
+        await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", "origin", `${previousCandidate}:${siblingRef}`]);
         await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", `--force-with-lease=${proposalRef}:${previousCandidate}`, "origin", `HEAD:${proposalRef}`]);
         proposalCommit = candidate;
-        return { candidate, previousCandidate, proposalRef };
+        return { candidate, previousCandidate, proposalRef, siblingRef };
       },
       async assertProtectedHead(candidate: string) {
         const actual = (await runGit("/usr/bin/git", ["--git-dir", join(fixture.managed.serviceRoot, "review-journey", "public.git"), "rev-parse", "refs/heads/main"])).stdout.trim();
@@ -78,9 +117,9 @@ export async function createReviewEnvironment() {
         assert.equal(project?.phase, "ready");
         assert(project.repositories.public, "UI import must persist the selected repository");
       },
-      close: () => fixture.close()
+      async close() { await closeProxy(); await fixture.close(); }
     };
-  } catch (error) { await fixture.close(); throw error; }
+  } catch (error) { await closeProxy(); await fixture.close(); throw error; }
 }
 
 export type ReviewEnvironment = Awaited<ReturnType<typeof createReviewEnvironment>>;
