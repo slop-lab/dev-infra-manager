@@ -46,7 +46,8 @@ it("requeues transient authorization failure with bounded diagnostics", async ()
   try {
     store.enqueue(event()); const claim = store.reserve("worker-a", slot, randomUUID())!;
     const released = store.releaseAdmission(claim.id, { phase: "authorize", code: "timeout" });
-    expect(released).toMatchObject({ phase: "queued", admission: { phase: "authorize", code: "timeout" } });
+    expect(released.phase).toBe("queued");
+    expect(store.executionSummary(released)).toMatchObject({ admission: { phase: "authorize", code: "timeout" } });
     expect(released).not.toHaveProperty("workerId");
     expect(store.reserve("worker-b", slot, randomUUID())?.id).toBe(claim.id);
   } finally { store.close(); }
