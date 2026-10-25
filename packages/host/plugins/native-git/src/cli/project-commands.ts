@@ -4,6 +4,7 @@ import { print, printList, type JsonFlags } from "@slop-lab/dim-host-core/contro
 import { nativePendingProjectView, selectNativeProject } from "./native-project-selector.js";
 import { registerNativeProjectBootstrapCommand } from "./native-project-bootstrap-command.js";
 import { registerPullRequestCommands } from "./pull-request-commands.js";
+import { registerRepositoryOperationCommands, registerRepositoryMergeCommand } from "./repository-operation-commands.js";
 import { registerProjectConsoleCommands } from "./project-console-commands.js";
 import { registerGitSyncCommands } from "./git-sync-commands.js";
 import { registerNativeProjectManifestCommand } from "./native-project-manifest-command.js";
@@ -14,6 +15,7 @@ export function registerProjectCommands(program: Command): void {
   const project = program.command("project").description("Manage native Projects and their independent repositories");
   registerProjectConsoleCommands(project);
   registerPullRequestCommands(project);
+  registerRepositoryOperationCommands(project);
   project.command("discover").argument("[project]").option("--json", "print machine-readable JSON")
     .action(async (projectId: string | undefined, flags: JsonFlags) => {
       const native = await selectNativeProject();
@@ -40,6 +42,7 @@ export function registerProjectCommands(program: Command): void {
       print(nativePendingProjectView(await native.store.create({ name, projectId: flags.projectId ?? name, ownerHostId: native.connection.hostId })), flags);
     });
   const repository = project.command("repository").description("Import and inspect independently reviewed repositories");
+  registerRepositoryMergeCommand(repository);
   registerNativeProjectBootstrapCommand(repository);
   registerNativeProjectManifestCommand(repository);
   registerGitSyncCommands(repository);

@@ -2,6 +2,7 @@ import { UserError } from "@slop-lab/dim-host-core";
 import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 import { selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../controlPlaneSelection.js";
 import path from "node:path";
+import { invokeNativeProjectConsole } from "../projectConsole.js";
 import {
   createNativeGitRootImporterClient,
   loadNativeControlPlaneConnection,
@@ -20,6 +21,17 @@ export type NativeProjectSelection = {
 };
 
 export type NativeProjectView = NativeProjectRecord & { readonly runnable: boolean };
+
+export async function selectNativeRepository(projectName: string, repositoryId: string) {
+  const native = await selectNativeProject();
+  const project = await native.store.read(projectName, native.connection.hostId);
+  if (project?.repositories[repositoryId]?.phase !== "ready") {
+    throw new UserError(`Project '${projectName}' has no ready repository '${repositoryId}'`);
+  }
+  const scope = { projectId: project.projectId, repositoryId };
+  return { scope, invoke: (operation: string, input: Readonly<Record<string, unknown>>) =>
+    invokeNativeProjectConsole(operation, { ...scope, ...input }, native.connection.nativeGit.generationId, native.environment) };
+}
 
 export async function selectNativeProject(
   environment: NodeJS.ProcessEnv = process.env

@@ -1,10 +1,11 @@
 import { repositoryFeature, repositoryFeatureOperations } from "./repository-features.js";
 import { z } from "zod";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
-import { NativeGitClient, preparedBranchMergeSchema } from "./client.js";
+import { NativeGitClient, NativeGitClientError, preparedBranchMergeSchema } from "./client.js";
 import { createSyncClient, syncResultSchema } from "./sync.js";
 import { reviewDto } from "./dto.js";
 import { loadPrivateJson } from "./private-file.js";
+import { isPullRequestWorkflow, invokePullRequestWorkflow, pullRequestWorkflowInputSchema, pullRequestWorkflowOperations } from "./pull-request-workflow.js";
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const actor = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const origin = z.string().url().refine((value) => { const u = new URL(value); return u.origin === value && !u.username && !u.password && (u.protocol === "https:" || u.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(u.hostname)); });
@@ -20,6 +21,7 @@ const summaries = z.array(z.object({ reviewId: z.string().regex(/^[a-f0-9]{64}$/
 const promotion = z.object({ schemaVersion: z.literal(1), outcome: z.enum(["promoted", "already-current"]), reviewId: z.string(), protectedRef: z.string(), expectedProtectedHead: z.string(), candidateCommit: z.string(), candidateTree: z.string() }).strict();
 export const nativeGitOperations: readonly Operation[] = [
   ...repositoryFeatureOperations,
+  ...pullRequestWorkflowOperations,
   { name: "projects.list", description: "List projects and ready repositories on this controller", access: "read", parseInput: (v) => z.object({}).strict().default({}).parse(v), parseOutput: (v) => z.object({ reviewerId: identifier, projects: projectsSchema }).strict().parse(v) },
   ...(["fetch", "merge", "publish"] as const).map((action): Operation => ({ name: `sync.${action}`, description: action === "fetch" ? "Fetch upstream refs" : action === "merge" ? "Propose upstream merge for protected review" : "Publish protected head upstream", access: "operator", parseInput: (v) => scope.extend({ protectedRef: z.string().startsWith("refs/heads/").max(1024).optional() }).parse(v), parseOutput: (v) => syncResultSchema.parse(v) })),
   { name: "merges.prepare", description: "Create a branch merge proposal and exact target review", access: "operator", parseInput: (v) => scope.extend({ sourceRef: z.string().startsWith("refs/heads/").max(1024), targetRef: z.string().startsWith("refs/heads/").max(1024) }).parse(v), parseOutput: (v) => preparedBranchMergeSchema.parse(v) },
@@ -44,19 +46,29 @@ export async function createNativeGitOperator(config: {
   await client.attest();
   const hostId = selected?.hostId ?? promoter?.hostId;
   const sync = config.syncConnection ? await createSyncClient(config.syncConnection, { baseUrl: reviewer.baseUrl, generationId: reviewer.generationId, ...(hostId ? { hostId } : {}) }) : undefined;
-  const operations = nativeGitOperations.filter((operation) => (repositoryFeature(operation.name) === undefined || client.features.includes(repositoryFeature(operation.name)!)) && (promoter || !["reviews.promote", "merges.prepare"].includes(operation.name)) && (sync || !operation.name.startsWith("sync.")));
+  const operations = nativeGitOperations.filter((operation) => (repositoryFeature(operation.name) === undefined || client.features.includes(repositoryFeature(operation.name)!)) && (promoter || !["reviews.promote", "merges.prepare", "pull-requests.merge"].includes(operation.name)) && (sync || !operation.name.startsWith("sync.")));
   return {
     get reviewerId() { return reviewer.reviewerId; },
     operations,
     async invoke(name: string, raw: unknown): Promise<unknown> {
       const operation = operations.find((operation) => operation.name === name);
-      if (!operation) throw new Error("Native Git operation is unavailable");
+      if (!operation) {
+        if (!promoter && ["reviews.promote", "merges.prepare", "pull-requests.merge"].includes(name)) {
+          throw new NativeGitClientError("Protected merge is unavailable: configure a separate host-promoter connection on the selected host");
+        }
+        const feature = repositoryFeature(name);
+        if (feature !== undefined && !client.features.includes(feature)) {
+          throw new NativeGitClientError(`Git capability '${feature}' is unavailable; install and select its control-plane plugin, then reconnect`);
+        }
+        throw new NativeGitClientError("Native Git operation is unavailable");
+      }
       const input = operation.parseInput(raw), projects = projectsSchema.parse(await config.projects());
       if (name === "projects.list") return operation.parseOutput({ reviewerId: reviewer.reviewerId, projects });
       const { projectId, repositoryId } = scope.passthrough().parse(input);
       if (!projects.some((project) => project.projectId === projectId && project.repositoryIds.includes(repositoryId))) throw new Error("Repository is outside this controller's current project catalog");
       let result: unknown;
-      if (repositoryFeature(name) !== undefined) result = await client.invokeRepositoryFeature(name, input);
+      if (isPullRequestWorkflow(name)) result = await invokePullRequestWorkflow(client, { name, input: pullRequestWorkflowInputSchema.parse(input), reviewerId: reviewer.reviewerId });
+      else if (repositoryFeature(name) !== undefined) result = await client.invokeRepositoryFeature(name, input);
       else if (name === "sync.fetch" || name === "sync.merge" || name === "sync.publish") {
         if (!sync) throw new Error("Git sync operator connection is not configured");
         result = await sync.invoke(projectId, repositoryId, name === "sync.fetch" ? "fetch" : name === "sync.merge" ? "merge" : "publish", scope.extend({ protectedRef: z.string().optional() }).parse(input).protectedRef);

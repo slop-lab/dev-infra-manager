@@ -8,7 +8,7 @@ import { createNativeGitOperator, nativeGitOperations } from "@slop-lab/dim-serv
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
-import { nativeProjectCatalogEntry } from "./nativeProjectCatalog.js";
+import { nativeProjectCatalogEntry, nativeProjectSelectionEntry } from "./nativeProjectCatalog.js";
 import { createNativeProjectAttachmentManagement, nativeProjectAttachmentOperations } from "./projectAttachment.js";
 
 async function optionalFile(path: string): Promise<string | undefined> {
@@ -24,9 +24,14 @@ async function prepareNativeProjectOperator(environment: NodeJS.ProcessEnv, expe
   const operator = await createNativeGitOperator({ reviewerConnection: join(directory, "reviewer.json"),
     ...(promoterConnection ? { promoterConnection } : {}), ...(syncConnection ? { syncConnection } : {}),
     selectedService: { endpoint: selected.nativeGit.endpoint, generationId: selected.nativeGit.generationId, hostId: selected.hostId },
-    projects: async () => Promise.all((await store.list(selected.hostId)).map((project) => nativeProjectCatalogEntry(project, selected)))
+    projects: async () => (await store.list(selected.hostId)).map(nativeProjectSelectionEntry)
   });
-  return { file, selected, operator };
+  const catalog = async (input: unknown = {}) => {
+    await operator.invoke("projects.list", input);
+    return { reviewerId: operator.reviewerId,
+      projects: await Promise.all((await store.list(selected.hostId)).map((project) => nativeProjectCatalogEntry(project, selected))) };
+  };
+  return { file, selected, operator, catalog };
 }
 export async function createNativeProjectConsole(environment: NodeJS.ProcessEnv = process.env, expectedGeneration?: string, dependencies: PublicRepositoryImportDependencies = {}) {
   const file = await selectedControlPlaneHostFile(environment), selected = await loadNativeControlPlaneConnection(file);
@@ -40,11 +45,12 @@ export async function createNativeProjectConsole(environment: NodeJS.ProcessEnv 
         return { projects: await Promise.all((await store.list(selected.hostId)).map((project) => nativeProjectCatalogEntry(project, selected))) };
       } };
   }
-  const { operator } = await prepareNativeProjectOperator(environment, expectedGeneration);
+  const { operator, catalog } = await prepareNativeProjectOperator(environment, expectedGeneration);
   const management = await createNativeProjectManagement({ selected, hostConnectionFile: file, reviewerId: operator.reviewerId, environment }, dependencies);
   return { generationId: selected.nativeGit.generationId, operations: [...operator.operations, ...attachment.operations, ...(management?.operations ?? [])],
-    catalog: () => operator.invoke("projects.list", {}),
-    invoke: (name: string, input: unknown) => attachment.operations.some((operation) => operation.name === name) ? attachment.invoke(name, input)
+    catalog,
+    invoke: (name: string, input: unknown) => name === "projects.list" ? catalog(input)
+      : attachment.operations.some((operation) => operation.name === name) ? attachment.invoke(name, input)
       : management?.operations.some((operation) => operation.name === name) ? management.invoke(name, input) : operator.invoke(name, input) };
 }
 export async function describeNativeProjectConsole(environment: NodeJS.ProcessEnv = process.env, expectedGeneration?: string) {
@@ -64,7 +70,8 @@ export async function invokeNativeProjectConsole(name: string, input: unknown, e
   // Review/sync requests need current repository scope and their own role proofs,
   // without preparing unrelated repository import/registration capabilities.
   if (nativeGitOperations.some((operation) => operation.name === name)) {
-    return (await prepareNativeProjectOperator(environment, expectedGeneration)).operator.invoke(name, input);
+    const prepared = await prepareNativeProjectOperator(environment, expectedGeneration);
+    return name === "projects.list" ? prepared.catalog(input) : prepared.operator.invoke(name, input);
   }
   return (await createNativeProjectConsole(environment, expectedGeneration, dependencies)).invoke(name, input);
 }

@@ -8,6 +8,7 @@ export type NativeConfig = {
   promoter?: { hostId: string; username: string; password: string };
 };
 import { reviewDto, type ReviewDto } from "./dto.js";
+import { reviewCiStatusSchema } from "@slop-lab/dim-contracts-ci/review-status";
 
 const MAX_NATIVE_RESPONSE_BYTES = 8 * 1024 * 1024;
 const identitySchema = z.object({
@@ -63,10 +64,25 @@ export class NativeGitClient {
   }
 
   async getReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
-    return this.decodeReview(await this.request({
+    const review = this.decodeReview(await this.request({
       method: "GET",
       path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`
     }));
+    const common = { schemaVersion: 1 as const, reviewId, generationId: this.config.generationId,
+      candidateCommit: review.candidateCommit, expectedProtectedHead: review.expectedProtectedHead };
+    if (!this.features.includes("git-ci")) {
+      return { ...review, ci: reviewCiStatusSchema.parse({ ...common, state: "not-configured", policy: "absent", requiredJobs: [] }) };
+    }
+    try {
+      const ci = reviewCiStatusSchema.parse(await this.request({ method: "GET",
+        path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}/ci` }));
+      if (ci.reviewId !== reviewId || ci.generationId !== this.config.generationId || ci.candidateCommit !== review.candidateCommit
+        || ci.expectedProtectedHead !== review.expectedProtectedHead) throw new NativeGitClientError("DIM CI evidence does not match the selected review");
+      return { ...review, ci };
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      return { ...review, ci: reviewCiStatusSchema.parse({ ...common, state: "unavailable", policy: "unknown", requiredJobs: [], reason: "inspection-unavailable" }) };
+    }
   }
 
   async resolveReview(projectId: string, repositoryId: string, body: { proposalRef: string; protectedRef?: string | undefined }): Promise<ReviewDto> {
@@ -80,7 +96,7 @@ export class NativeGitClient {
   async approveReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
     const path = `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`;
     await this.request({ method: "POST", path: `${path}/approvals`, body: { requestId: randomUUID() } });
-    return this.decodeReview(await this.request({ method: "GET", path }));
+    return this.getReview(projectId, repositoryId, reviewId);
   }
 
   async revokeApproval(
@@ -91,7 +107,7 @@ export class NativeGitClient {
   ): Promise<ReviewDto> {
     const path = `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`;
     await this.request({ method: "POST", path: `${path}/revocations`, body: { approvalId } });
-    return this.decodeReview(await this.request({ method: "GET", path }));
+    return this.getReview(projectId, repositoryId, reviewId);
   }
 
   private decodeReview(input: unknown): ReviewDto {
@@ -112,7 +128,7 @@ export class NativeGitClient {
           ...(this.generationId === undefined ? {} : { "X-Dim-Generation-Id": this.generationId }),
           ...(body === undefined ? {} : { "Content-Type": "application/json", "Content-Length": String(body.length) })
         },
-        signal: AbortSignal.timeout(input.path.endsWith("-identity") ? 5_000 : input.method === "POST" ? 60_000 : 30_000)
+        signal: AbortSignal.timeout(input.path.endsWith("-identity") ? 5_000 : 90_000)
       }, (incoming) => {
         const chunks: Buffer[] = [];
         let size = 0;

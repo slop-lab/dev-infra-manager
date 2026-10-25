@@ -86,12 +86,17 @@ it("fences cached console generations before a review mutation or refreshed disc
 
 it("keeps review reads independent of unrelated repository-management credentials", async () => {
   const f = await fixture(); await f.importRepository("public");
+  let sourceProofs = 0;
+  f.service.server.on("request", (request) => { if (request.url?.endsWith("/workspace-readiness")) sourceProofs += 1; });
   await chmod(f.importerConnectionFile, 0o644);
   expect(await invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).toEqual([]);
+  expect(sourceProofs).toBe(0);
   await expect(invokeNativeProjectConsole("projects.create", { projectId: "new-project" }, generationId, f.env)).rejects.toThrow();
-  // Every new review invocation still checks authoritative workspace readiness.
   const selected = JSON.parse(await readFile(f.hostFile, "utf8"));
   selected.nativeGit.workspaceWriteIssuer.password = Buffer.alloc(32, 99).toString("base64url");
   await writeFile(f.hostFile, JSON.stringify(selected));
-  await expect(invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).rejects.toThrow("current project catalog");
+  expect(await invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).toEqual([]);
+  await writeFile(f.reviewer, JSON.stringify({ schemaVersion: 1, serviceId: "native-main", baseUrl: f.service.origin, generationId,
+    ...humanReviewer, password: Buffer.alloc(32, 99).toString("base64url") }));
+  await expect(invokeNativeProjectConsole("reviews.list", { projectId: "project-a", repositoryId: "public" }, generationId, f.env)).rejects.toMatchObject({ status: 401 });
 });
