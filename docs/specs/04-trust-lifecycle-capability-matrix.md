@@ -8,7 +8,7 @@ and retired runtime layouts are not compatibility requirements.
 | Host operator | Install components, configure hosts/services, choose runtime images and capacity | Explicit operator input; candidate files grant no host authority |
 | Core workspace application | Create, observe, execute, stop/recreate/discard owned workspace resources | Immutable UUID, parsed record, per-workspace lock, exact ownership labels |
 | Workspace | Modify checkout/home/private Docker and run development services | No host Docker socket, host checkout bind or reusable host role credentials |
-| Managed Git broker | Read registered source and push one workspace proposal namespace | Scoped attachment and grant, live core UUID/state validation, private host listener |
+| Managed Git broker | Read registered source and write ordinary unprotected branch/tag refs; maintain its own restricted legacy proposals | Exact repository attachment/grant, protected/internal ref exclusion, live core UUID/state validation, private host listener |
 | Git repositories | Own registered repositories, imports, scoped transport and protected-ref CAS | Guest credentials cannot mutate protected refs; trusted extensions request exact authorized CAS |
 | Code review | Publish immutable candidate evidence and human decisions | Exact candidate, repository inputs and complete trusted policy bind approvals |
 | Merge policy | Authorize protected promotion and retain decision evidence | Current approvals and required quality guards checked under repository serialization |

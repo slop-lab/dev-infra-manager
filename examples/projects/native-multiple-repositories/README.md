@@ -140,6 +140,40 @@ dim exec public-dev -- bash .dim/ci/jobs/source.bash
 and its Git grant. The configuration repository is inspected on the host even
 when it is not selected; private source is not copied into `public-dev`.
 
+## Ordinary Git to exact review and publication
+
+Inside a selected checkout, work on an ordinary feature branch. Its grant is
+still limited to that one Project/repository, but is not proposal-namespace-only:
+
+```bash
+dim exec full-dev -- git -C /workspace/public switch -c feature/public-change
+# Make and commit the public change inside that checkout, then:
+dim exec full-dev -- git -C /workspace/public push -u origin feature/public-change
+dim project pr create codyssey public --title 'Public change' \
+  --source feature/public-change --target main
+dim project pr diff codyssey public PR_ID --json
+dim project pr review codyssey public PR_ID --json
+dim project review inspect codyssey public REVIEW_ID --json
+# Approve only if human policy requires it; wait for every required DIM CI job.
+dim project pr approve codyssey public PR_ID
+dim project pr merge codyssey public PR_ID
+```
+
+Repeat with repository `private` for an independent change; the private policy's
+integration input still pins both histories exactly. A new push or changed
+dependency invalidates stale evidence. Ordinary unprotected branch/tag force and
+deletion are allowed, but never direct protected/main/development or internal
+pin writes. Existing legacy proposal refs remain supported with their original
+owner/fast-forward restrictions.
+
+Publication is a further explicit `dim project repository publish PROJECT
+REPOSITORY` action only after installing/configuring Git-sync and a reviewed
+publish mapping. It sends the protected commit, not the feature checkout. The
+[complete Git flow](../../../docs/guides/git-capabilities.md) and
+[CI capacity/gate guide](../../../docs/guides/ci-runners.md) describe role and
+operator prerequisites. A workflow file or approved human review alone is not
+successful DIM CI.
+
 ## Apply the pattern to existing repositories
 
 Instead of copying these templates, clone your reviewed sources on that host:

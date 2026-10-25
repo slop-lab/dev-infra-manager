@@ -13,7 +13,7 @@ Production packages are grouped by where they run and what they own:
 | `packages/git-review-tracing/runtimes/node` | `@slop-lab/dim-git-review-tracing-runtime-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
 | `packages/git-review-tracing/engine` | `@slop-lab/dim-git-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
-| `packages/git-tools/{diff,pull-requests}` | `@slop-lab/git-{diff,pull-requests}` | Portable Git models and pure operations, with no DIM dependency |
+| `packages/git-tools/{diff,discussions,pull-requests,blame}` | `@slop-lab/git-{diff,discussions,pull-requests,blame}` | Portable Git models, parsers and pure transitions, with no DIM dependency |
 | `packages/git-tools/{react-diff,react-git-pull-requests}` | `@slop-lab/react-git-{diff,pull-requests}` | Controlled React presentation, callbacks and optional external CSS, with no DIM dependency |
 | `packages/cli/core` | `@slop-lab/dim-cli` | Client host selection, terminal streams and transport |
 | `packages/service-clients/<name>` | `@slop-lab/dim-service-client-<name>` | Shared service calls and validated operations without running their authoritative service; LLM router, execution and Native Git clients |
@@ -33,6 +33,10 @@ They use the generic `source` export condition for repository development and
 compiled exports in published artifacts. DIM control-plane plugins own private
 storage and authorization; host and Web adapters connect those services to the
 portable UI. See [Git pull requests](../specs/git-pull-requests.md).
+The [Git capability map](git-capabilities.md) records the complete library,
+authority, transport, policy and CLI/Web responsibility boundaries and practical
+operator flows. Source manifests stay private; generated `dist` manifests are
+the publishable artifacts.
 
 There is one CLI command transport, not a separate CLI plugin loader. Optional
 commands belong to the selected host plugin and are discovered from its command

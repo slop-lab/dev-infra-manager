@@ -262,3 +262,11 @@ connection. Attachment explicitly saves this host's repository defaults without
 reimporting source or changing protected refs; it does not grant access to other
 authorities' Projects. The same flow is available in Web **Git review**. See
 [using an existing Project on another host](docs/guides/project-workspaces.md#use-an-existing-project-on-another-host).
+
+Managed workspaces can push ordinary unprotected branches/tags without granting
+protected-ref or cross-repository authority. CLI/Web expose immutable diff and
+blame, exact PR review/approval/revocation/merge, and separate mapped publication.
+The [Git capability and ownership map](docs/guides/git-capabilities.md) describes
+the reusable libraries and DIM adapters. [CI setup](docs/guides/ci-runners.md)
+documents explicit existing-plane worker enrollment and repository CI policy;
+human approval, installed capacity and GitHub status are not successful DIM CI.

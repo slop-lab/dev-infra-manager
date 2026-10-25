@@ -74,11 +74,20 @@ is implied by these source changes.
   composable. New source pushes retain old discussions while invalidating stale
   approval. Publish portable Git models and controlled React components without
   DIM dependencies; DIM adapters retain authentication, storage and promotion
-  authority. Verify the complete flow in a disposable browser journey and
-  standalone package installations.
+  authority. Extract real discussion and blame models/parsers into standalone
+  libraries. Connect ordinary branch/tag PRs to CLI diff, blame, exact-revision
+  approval/revocation and protected merge; keep Web preparation, human decisions
+  and merge separate. Show required DIM CI evidence or explicitly absent policy,
+  never infer CI success from human approval or GitHub status. Verify ordinary
+  source rewrites, multi-repository scope and mapped publication in disposable
+  CLI/browser workflows and standalone package installations.
 
 - Manage independent Git repositories in one Project with separate imports,
-  proposal credentials, reviews and protected-ref promotion. Select workspace
+  repository-scoped credentials, reviews and protected-ref promotion. Allow
+  authenticated ordinary unprotected branch/tag create/update/delete and force,
+  while retaining managed/main/development protection, reserved ref ownership
+  and legacy proposal restrictions. New checkouts use ordinary current-branch
+  pushes; existing checkout configuration and sessions remain intact. Select workspace
   checkouts and their default directory; CI binds allowed repository inputs to
   exact commit/tree snapshots without granting unselected repository access.
   Default to `main` and manage multiple branches per repository through
@@ -90,7 +99,13 @@ is implied by these source changes.
   workspace runtime verification; example recipes identify required optional
   plugins and services.
   Scoped Git credentials account for request latency without requiring exactly
-  synchronized clocks between the control plane and workspace host.
+  synchronized clocks between the control plane and workspace host. Separate
+  pre-issuance proof time from network transit in versioned lease responses.
+  Reuse full Git proofs only within a request while retaining final authority
+  checks, avoid duplicate host source-readiness work before authoritative review
+  operations, and reconcile policy changes without delaying their committed
+  response on historical proposals. Bound CI admission coherently and expose
+  safe timeout/stale-acquisition diagnostics instead of generic guest failures.
   Examples own executable recipes, repository templates and development/check
   scripts. Both lightweight integration and fresh-VM workspace acceptance use
   those declarations. Run heavy VM acceptance before merging to main or
@@ -123,7 +138,12 @@ is implied by these source changes.
   selected. Keep the `@slop-lab/dim-installer` facade, exact component graphs
   and transactional install/activation recovery. Prepare initial CI capacity
   and connect generation-bound worker configuration without hand-writing
-  credentials. Source installs retain the
+  credentials. Explicitly enroll additional trusted workers into an existing
+  generation, export private worker configuration and discover recent contact
+  without redeploying the control plane or interrupting unrelated workspaces.
+  Keep runtime images and bounds operator-owned and require explicit repository
+  CI policy before successful DIM execution becomes a promotion gate.
+  Source installs retain the
   matching installer and select it through mise for subsequent operations.
   Local source installation also configures the authenticated Web UI in a
   separate runtime, starts a loopback user service when available, and retains

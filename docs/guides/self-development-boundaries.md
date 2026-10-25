@@ -14,8 +14,9 @@ contain cross-component and physical runtime checks. Package builds select their
 Directory layout does not grant separate deployment or protected-ref authority.
 
 Workspace processes receive neither the host Docker socket nor reusable host
-control-plane roles. A native Project source uses a scoped broker for repository reads
-and its proposal namespace. Review decisions, protected-ref updates, installer
+control-plane roles. A native Project source uses a scoped broker for repository
+reads and ordinary unprotected ref writes; its legacy proposal namespace retains
+separate owner/fast-forward restrictions. Review decisions, protected-ref updates, installer
 activation, registry publication and public release remain outside candidate
 code. A green candidate-controlled test run does not approve its own source.
 

@@ -1,7 +1,7 @@
 # Git repository transport and optional authority features
 
 `@slop-lab/dim-control-plane-plugin-git-repositories` owns registered bare
-repositories, initial snapshot import, scoped smart-HTTP reads/proposals and
+repositories, initial snapshot import, scoped smart-HTTP reads/ref writes and
 recoverable protected-ref compare-and-swap. Review, merge policy, Git-CI,
 workflow compilation and external webhook delivery are independently selected
 control-plane plugins. Repository-only operation requires none of them.
@@ -59,17 +59,39 @@ connection export can share one authority across machines; local selections
 remain independent. Distinct authorities remain isolated. This flow creates no
 cross-authority grants or per-machine revocation boundary.
 
-Workspace leases permit only reads and create/fast-forward operations in that
-immutable workspace's proposal namespace. Protected writes, tags, deletion,
-force and foreign access are denied by Git transport. Without a review plugin,
-a successful proposal push performs no review publication or workflow read.
+Workspace leases permit reads and ordinary unprotected branch/tag creation,
+updates, force updates and deletion in their exact repository. The import anchor,
+all effective managed branches, `main` and `development` remain protected from
+every direct workspace write. The static integrity-checked receive hook gets
+that exact protected set from current authority inside the receive serialization
+gate; only the authenticated receive process overrides Git's repository-wide
+non-fast-forward setting. Stored repository safety settings stay enabled.
 
-Repository read and workspace-write leases carry issuer timestamps for a
-positive lifetime of at most 30 seconds. The host validates that interval and
-subtracts the complete request round-trip time before caching credentials against
-its own local deadline. It does not compare absolute clocks across hosts. The
-repository server independently enforces expiry and generation on every use;
-expired or delayed responses cannot extend authority.
+Reserved internal, replacement, remote-tracking and extension refs are not
+ordinary refs. Existing workspace proposal namespaces remain owner-scoped and
+create/fast-forward-only; deletion and force are denied there. Foreign repository
+and foreign proposal authority remain denied. Ordinary ref pushes do not
+automatically resolve reviews or read workflows. Legacy proposal reconciliation
+is separately bounded. Live proofs admit ordinary refs while validating every
+protected head and durable extension pin exactly; initial import proof remains
+strict. New workspaces use `push.default=current`; lifecycle/reconnect does not
+rewrite existing checkout Git choices.
+
+Repository read and workspace-write lease requests remain version 1; responses
+are version 2 and require `preIssueMilliseconds`. The issuer measures that
+duration with a monotonic clock from handler entry to immediately before
+issuance, after completing proof. Credentials still live at most 30 seconds from
+issuance, and the server enforces generation/expiry on every use.
+
+For local reuse, let `D = expiresAt - issuedAt`, `E = ceil(client monotonic
+elapsed after complete response parsing)` and `P = preIssueMilliseconds`. The
+host rejects invalid integers, `D <= 0`, `D > 30000`, `P < 0`, `P > E` and exhausted
+responses. Its local deadline is `clientWallCompleted + D - (E - P) - 1000`.
+Only proven pre-issuance processing is excluded; the remaining whole round trip
+plus a safety margin bounds transit age conservatively, without comparing server
+and host wall clocks. Long proof computation therefore does not consume a newly
+issued lease, while delayed responses cannot extend reuse. Missing/v1/extra-field
+responses fail rather than using a fixed-margin or obsolete-format fallback.
 
 Host source acquisition is a host-plugin capability over the core workspace
 lifecycle. Its private broker retains host role credentials and checks the live
