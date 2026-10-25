@@ -67,6 +67,11 @@ disposable upstream. See the [capability map](../../../../docs/guides/git-capabi
 and [CI enrollment/diagnostics](../../../../docs/guides/ci-runners.md) for the
 complete role and setup boundaries.
 
+If protected promotion is accepted but the following pull-request refresh fails,
+the accepted receipt remains visible and merge stays disabled. The operator must
+use the explicit pull-request refresh action before the UI presents the recorded
+merged state; the unchanged accepted action cannot be submitted twice.
+
 The selected controller and repository target remain visible beside capability
 guidance. The panel distinguishes review-only inspection, reviewer decisions,
 upstream operator actions and promoter-backed protected promotion without claiming

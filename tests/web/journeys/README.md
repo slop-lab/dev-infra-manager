@@ -58,10 +58,13 @@ this journey fail.
 Web, host project management, Native Git and review/merge policy use production
 implementations and disposable real state. A subprocess bridge invokes the
 production host console. Only the public upstream HTTPS transport is redirected
-to a local smart-HTTP Git server; no browser response or operation result is
-mocked. This is a source component integration check, not an installer or VM
-acceptance test. The environment never uses the operator's installed DIM state,
-accounts, repositories or provider credentials.
+to a local smart-HTTP Git server. The review-access journey does not replace
+browser responses. The PR journey performs a real accepted merge, then narrowly
+rewrites that response to the service client's documented `refreshPending`
+contract so the browser must retain the receipt, block duplicate merge and wait
+for explicit refresh before showing merged state. This is a source component
+integration check, not an installer or VM acceptance test. The environment never
+uses the operator's installed DIM state, accounts, repositories or credentials.
 
 `runReviewJourney` accepts an environment factory so an installed environment
 can reuse the same user outcomes and UI adapter. An installed VM adapter is not
@@ -93,10 +96,11 @@ blanket retries that hide failed user actions.
 
 `pull-requests.ts` exercises project creation and import, reviewer access, PR
 creation, structured diff, general and inline discussion, independent line
-attribution, approval, and merge. A second workspace push makes the old inline
-comment outdated and invalidates the earlier approval before the final merge.
-The journey verifies the actual protected `main` ref, including that the stale
-approval did not move it.
+attribution, approval, and merge. The workspace then resets to the original base,
+creates a different candidate and force-pushes it with an exact lease. The old
+inline comment remains outdated and the earlier approval cannot merge that
+rewritten candidate. The journey verifies the actual protected `main` ref and
+the accepted-merge `refreshPending` receipt/refresh sequence.
 
 Its replaceable screen adapter is `native-git/pull-request-ui.ts`. The scenario
 records user outcomes and uses the same disposable real-service environment as
@@ -110,12 +114,13 @@ stale approval/outdated discussion and merges the exact new revision. Preparatio
 does not itself approve. DIM CI absence is displayed separately from human review.
 
 With the same Chromium selection, `pnpm --dir tests run test:web-git-sync`
-exercises repository switching, managed branch merge/review/promotion and Git-sync
-publication to a disposable local bare upstream. It verifies the actual protected
-and published refs. The Web workflow runs this check alongside PR/review and
-attachment journeys; no installed operator service or external GitHub repository
-is mutated. Failed admission/execution and missing CI policy are never converted
-into successful DIM CI evidence by these browser checks.
+switches between two repositories in one Project, verifies review/promotion
+receipts clear at the scope boundary, and publishes each protected head only to
+its own disposable bare upstream. The primary repository also exercises managed
+branch merge/review/promotion. The Web workflow runs this check alongside
+PR/review and attachment journeys; no installed operator service or external
+GitHub repository is mutated. Failed admission/execution and missing CI policy
+are never converted into successful DIM CI evidence by these browser checks.
 
 ## Existing Projects on another host
 
