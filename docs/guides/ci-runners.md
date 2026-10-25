@@ -20,6 +20,27 @@ remain candidate-controlled and do not approve or promote their own source.
 
 ## Repository inputs
 
+CI is enabled only by trusted repository policy. A checked-in
+`.dim/ci/runner.yml` does not enable planning or a merge gate by itself:
+
+```yaml
+policy:
+  git-ci:
+    ciRepositoryIds: [main]
+    requiredJobs:
+      - name: source
+        kind: ordinary-sysbox
+        evidenceClass: candidate-controlled
+```
+
+Use the actual repository ID, workflow job name and execution kind. Apply the
+reviewed policy explicitly with `dim project repository policy update PROJECT
+REPOSITORY --file /absolute/reviewed/repos.yml`; changing a source file alone
+does not change running authority. Resolve a fresh exact review afterward.
+Human approval, healthy workers and external GitHub checks are not successful
+DIM execution evidence. Review inspection exposes policy absence, no required
+jobs, pending, failed, stale/unavailable and successful required evidence.
+
 A workflow job may request `repositories: [public, private]`. Its own repository
 is always selected, even when the field is omitted. The source repository's
 trusted imported `extensions["git-ci"].ciRepositoryIds` allowlist bounds these requests. A candidate
@@ -72,8 +93,9 @@ slot IDs and endpoints. `--execution-worker-state-directory` selects an absolute
 on the worker host. Starting capacity remains explicit with
 `dim execution worker FILE`. A copied worker file needs authenticated SSH
 forwards for its loopback endpoints; deployment master role files stay on the
-control-plane host. Setup does not mutate an existing deployment, enroll a
-remote worker or automatically start capacity.
+control-plane host. These prepare/connect operations do not mutate an existing
+deployment or automatically enroll/start remote capacity; use the explicit
+existing-plane enrollment below.
 
 Each slot selects `runtime: "container"` or `"vm"` and a profile containing
 `runnerBaseImage`, `jobBaseImage` and positive string bounds `cpu`,
@@ -97,6 +119,124 @@ is running. When a job remains queued with an idle matching slot, check the
 worker process and its service connection on the selected host. Generic plugin
 tasks share worker capacity; their task-specific controls belong to the owning
 plugin.
+
+### Add capacity to an existing control plane
+
+Use the existing generation-bound private execution-operator connection on the
+selected host. Enrollment is an explicit operator API, not a candidate workflow,
+an installer deployment, a repository policy edit or a guest capability. It
+adds a new identity/profile without replacing existing workers, leases, tokens,
+workspaces or sessions. Slot IDs are local to each worker: several hosts may
+each have `build-1` and `build-2`.
+
+Prepare an absolute operator-owned mode-0600 capacity specification. For example,
+replace both image placeholders with actual reviewed digest references:
+
+```json
+{
+  "schemaVersion": 1,
+  "workerId": "ci-build-host",
+  "stateDirectory": "/srv/dim/ci-build-host",
+  "gitExecutable": "/usr/bin/git",
+  "nativeGitEndpoint": "http://127.0.0.1:18080",
+  "slots": [{
+    "id": "build-1",
+    "runtime": "container",
+    "profile": {
+      "runnerBaseImage": "REVIEWED_RUNNER@sha256:REVIEWED_DIGEST",
+      "jobBaseImage": "REVIEWED_JOB@sha256:REVIEWED_DIGEST",
+      "bounds": {
+        "cpu": "4", "memoryBytes": "8589934592", "pids": "2048",
+        "wallClockSeconds": "900", "outputBytes": "1048576"
+      }
+    }
+  }]
+}
+```
+
+For two slots, add a second independently named slot with the same reviewed
+profile. Use the actual accessible private endpoint/SSH forward on the worker
+host, not an arbitrary candidate-supplied URL. Candidate YAML still selects only
+scripts/arguments and trusted repository inputs, never images, bounds, mounts or
+operator credentials.
+
+```bash
+chmod 0600 /absolute/operator/capacity.json
+dim --host build-host execution worker enroll \
+  --connection /absolute/private/execution-operator.json \
+  --spec /absolute/operator/capacity.json \
+  --output /absolute/private/worker.json
+dim --host build-host execution worker discover \
+  --connection /absolute/private/execution-operator.json --json
+dim --host build-host execution worker /absolute/private/worker.json
+```
+
+The last command runs the worker in the foreground; operator-selected
+supervision is explicit. Installing the plugin or enrollment alone starts no
+worker and enables no system service. Runtime prerequisite validation occurs
+before claims. Enrollment persists across scheduler restart. Wrong roles/stale
+generations, conflicting worker IDs and duplicate slots within a worker fail
+before replacing existing authority. Discovery returns configured capacity and
+bounded recent authenticated contact (`observedConnected`, `lastSeenAt`), not
+tokens or a permanent claim that a process is healthy. Availability expires
+without contact; an idle slot alone is not running capacity.
+
+If enrollment was accepted but the private output could not be published or its
+response was lost, inspect current worker state and export the enrolled identity
+to a fresh path using the same exact trusted capacity spec:
+
+```bash
+dim --host build-host execution worker export \
+  --connection /absolute/private/execution-operator.json \
+  --spec /absolute/operator/capacity.json \
+  --output /absolute/private/recovered-worker.json
+```
+
+Export does not rotate credentials or widen slots. Existing output files are
+never overwritten; no worker token is printed to stdout. Bootstrap workers from
+the original deployment retain their existing `control-plane connect` path.
+
+### Enable and verify a DIM merge gate
+
+1. Deploy matching reviewed service/host artifacts through the separate operator
+   deployment process. Source development and disposable tests do not do this.
+2. Enroll/start trusted capacity, inspect recent contact, and run a tiny
+   disposable capacity job before enabling a large repository's CI policy.
+3. Apply explicit reviewed `git-ci` policy naming every required job. Do not
+   infer enablement from a workflow file or from a previous experiment.
+4. Resolve/prepare a fresh review and inspect its DIM CI state. Follow the
+   repository's execution jobs until each required current attempt succeeds and
+   its result is published/accepted by Git authority.
+5. Approve when human policy requires it, then merge/promote using the separate
+   promoter role. Failed historical jobs remain history, not green evidence.
+
+The DIM merge-quality guard, not GitHub CI, decides whether required current
+execution evidence is acceptable. A Git outage after result acceptance leaves
+publication pending and still blocks the DIM gate until authority accepts it.
+
+### Admission and proof latency diagnostics
+
+Capacity, admission, guest execution and evidence publication are different
+phases. If tiny capacity jobs pass but a large repository fails before scripts
+start, inspect admission/source-proof diagnostics rather than increasing guest
+CPU/memory blindly. Check current generation/policy, protected/source refs,
+review inputs and Git proof/reconciliation load. A stale source needs a fresh
+review; repeated retries of old immutable input do not refresh it.
+
+Large repositories still receive strict full Git integrity verification. Proofs
+are reused only within one request and followed by current authority/ref/input
+checks, never a cross-request stale authorization cache. Policy reconciliation
+uses its bounded retry mechanism rather than delaying the committed policy
+response on historical proposals. Git admission deadlines are nested beneath
+the scheduler/worker deadlines; reservation ownership and cancellation are
+rechecked while admission is pending. Short-lived credentials are issued after
+proof, not lengthened to hide slow verification. Lease responses separate
+pre-issuance processing from transit while retaining conservative expiry.
+
+Public diagnostics use fixed phase/code metadata, not raw host exceptions,
+private paths, credentials or authorization headers. Keep guest stdout/stderr in
+the explicit private log view; it is not the primary admission diagnosis. A
+timeout, stale acquisition or executor failure is never a successful CI check.
 
 The worker validates Docker and required Sysbox/KVM access before reserving
 jobs. Multiple Projects share configured slots; there is no per-Project runner

@@ -18,3 +18,9 @@ policy:
       - pathPrefix: .dim/
         reviewerIds: [mjy]
   merge-policy: {}
+  git-ci:
+    ciRepositoryIds: [main]
+    requiredJobs:
+      - name: source
+        kind: ordinary-sysbox
+        evidenceClass: candidate-controlled

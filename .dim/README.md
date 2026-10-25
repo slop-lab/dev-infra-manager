@@ -19,9 +19,21 @@ documents the schemas, activation rules, plugin boundaries and project-owned
 review/script files. The host core interprets none of the plugin-specific YAML.
 `repos.yml` here declares repository `main` with managed `development`, GitHub
 `development` as its upstream and publication target, and `mjy` review for `.dim/` changes. Other changes
-need no human approval. The declaration takes effect only after reviewed
+need no human approval. The explicit `git-ci` policy requires successful DIM CI
+for the candidate-controlled `source` job before either managed branch can be
+promoted. Merely having `ci/runner.yml`, an approved review, a configured worker,
+or successful GitHub CI does not satisfy that gate. The declaration takes effect only after reviewed
 import or an explicit policy update; fetch, sync and publish are explicit plugin commands. Credentials remain
 in private operator/service configuration. See [Git synchronization](../docs/guides/git-sync.md).
+
+This source declaration does not change a running control plane. Enable it with
+an explicit reviewed repository policy update only after matching Git/execution
+services and trusted worker capacity are ready. Existing jobs from a prior
+generation or changed policy are historical evidence, not a successful check for
+a new candidate. Keep admission failures and stale attempts visible and resolve
+a fresh review after enabling policy. The operator owns worker images, resource
+bounds and credentials; candidate workflow files select only bounded job scripts
+and arguments. See [DIM CI capacity and merge gates](../docs/guides/ci-runners.md).
 
 Developer commands live in [`scripts/development.md`](../scripts/development.md) and `scripts/dev.bash`.
 Host-run QEMU verification mechanics live in [`tests/scenarios/qemu`](../tests/scenarios/qemu).
