@@ -3,7 +3,7 @@ import { createReviewEnvironment, type ReviewEnvironment } from "./native-git/en
 import { PullRequestUI } from "./native-git/pull-request-ui.js";
 
 /** Assert user outcomes against disposable production services. DOM details live in the UI adapter. */
-export async function runPullRequestJourney(context: JourneyContext, createEnvironment: () => Promise<ReviewEnvironment> = createReviewEnvironment) {
+export async function runPullRequestJourney(context: JourneyContext, createEnvironment: () => Promise<ReviewEnvironment> = createReviewEnvironment, refreshBeforeResponse = false) {
   const environment = await context.step("prepare disposable pull request services", createEnvironment);
   context.cleanup(environment.close);
   const ui = new PullRequestUI(context.page);
@@ -40,7 +40,7 @@ export async function runPullRequestJourney(context: JourneyContext, createEnvir
   await context.step("verify stale approval did not move the protected ref", () => environment.assertProtectedHead(proposal.baseCommit));
   await context.step("prepare and approve the current pull request revision", () => ui.approveRevision());
   const refreshFailure = await context.step("delay the accepted merge detail refresh", environment.delayNextPullRequestRefresh);
-  await context.step("merge while navigating away and preserve the accepted pending state", () => ui.mergePullRequest({ title, siblingRef: next.siblingRef, refreshFailure,
+  await context.step("merge while navigating away and preserve the accepted pending state", () => ui.mergePullRequest({ title, siblingRef: next.siblingRef, refreshFailure, refreshBeforeResponse,
     ...(process.env.DIM_WEB_JOURNEY_CAPTURE_UI === "1" ? { evidenceDirectory: context.artifactDirectory } : {}) }));
   await context.step("verify the exact merged commit on the real main ref", () => environment.assertProtectedHead(next.candidate));
 }

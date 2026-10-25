@@ -168,7 +168,10 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
           throw error;
         } finally {
           mergesInFlight.delete(key);
-          if (currentScope(scope)) render();
+          if (currentScope(scope)) {
+            if (selected) reconcileAcceptedMerge(scope, selected);
+            render();
+          }
         }
       }, mergeDisabled: merging || pending !== undefined || pullRequestMergeDisabled(pr, currentReview) } : {}),
       ...(host.has("blame.line") ? { onBlame: async anchor => await invoke(scope, "blame.line", { commit: anchor.side === "base" ? anchor.baseCommit : anchor.headCommit, path: anchor.path, line: anchor.line }) as GitLineAttribution } : {})

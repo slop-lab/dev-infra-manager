@@ -8,6 +8,7 @@ type PendingMergeJourney = {
   readonly siblingRef: string;
   readonly refreshFailure: { readonly reached: Promise<void>; release(): void };
   readonly evidenceDirectory?: string;
+  readonly refreshBeforeResponse?: boolean;
 };
 
 /** Screen-specific details stay here so a redesigned PR screen changes one adapter. */
@@ -155,7 +156,7 @@ export class PullRequestUI extends ReviewUI {
     const confirm = (dialog: Dialog) => dialog.accept();
     this.browserPage.on("dialog", confirm);
     try {
-      const mergeResponse = Promise.allSettled([this.browserPage.waitForResponse(mergeEndpoint)]);
+      const mergeResponse = Promise.allSettled([this.browserPage.waitForResponse(mergeEndpoint, { timeout: 60_000 })]);
       await merge.click();
       await this.browserPage.route(reviewDetailEndpoint, (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporary review detail failure"}' }));
       await refreshFailure.reached;
@@ -165,10 +166,23 @@ export class PullRequestUI extends ReviewUI {
       await this.detail.getByRole("heading", { name: title, exact: true }).waitFor();
       await expectLocked(false);
       await captureState("merge-in-flight");
+      if (options.refreshBeforeResponse) {
+        await this.detail.getByRole("button", { name: "Refresh pull request", exact: true }).click();
+        await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · merged`, exact: true }).waitFor();
+      }
       refreshFailure.release();
       const [received] = await mergeResponse;
       assert(received?.status === "fulfilled", "merge workflow response must be available");
       assert.equal(received.value.ok(), true, "merge workflow response must retain the accepted refresh-pending result");
+      if (options.refreshBeforeResponse) {
+        await this.detail.getByText("Merge in progress. Wait for the current request before changing pull request state.", { exact: true }).waitFor({ state: "hidden" });
+        await this.detail.getByText("Working…", { exact: true }).waitFor({ state: "hidden" });
+        assert.equal(await this.detail.getByText("Merge accepted. Refresh the pull request to confirm its recorded state.", { exact: true }).count(), 0,
+          "a late pending response must not replace an authoritative merged record");
+        assert.equal(mergeRequests, 1);
+        await captureState("refresh-confirmed");
+        return;
+      }
       await expectLocked();
       assert.equal(await this.browserPage.getByRole("navigation", { name: "Pull requests", exact: true }).getByRole("button", { name: `${title} · merged`, exact: true }).count(), 0,
         "the accepted receipt must not falsely present an unconfirmed refreshed state");
