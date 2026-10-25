@@ -55,6 +55,7 @@ function remoteHostCommand(encoded: string): string {
   // Keep this bootstrap fixed; only the encoded request varies between calls.
   const arguments_ = `__host ${encoded}`;
   return `if command -v dim >/dev/null 2>&1; then exec dim ${arguments_}; `
+    + `elif [ -x "$HOME/.local/bin/dim" ]; then exec "$HOME/.local/bin/dim" ${arguments_}; `
     + `elif command -v mise >/dev/null 2>&1; then exec mise exec -- dim ${arguments_}; `
     + `elif [ -x "$HOME/.local/bin/mise" ]; then exec "$HOME/.local/bin/mise" exec -- dim ${arguments_}; `
     + `else printf '%s\\n' 'DIM was not found on this SSH host. Install @slop-lab/dim-installer with mise and run dim installer install core.' >&2; exit 127; fi`;

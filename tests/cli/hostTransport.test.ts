@@ -85,7 +85,7 @@ test("exec transport streams stdin, stdout and stderr without JSON conversion an
   assert.match(stderr, /exec stderr/);
 });
 
-test("SSH bootstraps mise in non-interactive PATH and reports a missing installation", async () => {
+test("SSH discovers a user facade or mise outside non-interactive PATH and reports a missing installation", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "dim-host-mise-"));
   const bin = path.join(directory, "bin");
   const home = path.join(directory, "home");
@@ -100,6 +100,10 @@ shift 3
 exec ${shellArgument(process.execPath)} ${shellArgument(peer)} "$@"
 `;
   try {
+    await writeFile(path.join(userBin, "dim"), `#!/bin/sh\nexec ${shellArgument(process.execPath)} ${shellArgument(peer)} "$@"\n`, { mode: 0o700 });
+    const fromUserFacade = await execFileAsync("/bin/sh", ["-c", command], { env: { PATH: bin, HOME: home } });
+    assert.deepEqual(JSON.parse(fromUserFacade.stdout), { request });
+    await rm(path.join(userBin, "dim"));
     await writeFile(path.join(bin, "mise"), mise, { mode: 0o700 });
     const fromPath = await execFileAsync("/bin/sh", ["-c", command], { env: { PATH: bin, HOME: home } });
     assert.deepEqual(JSON.parse(fromPath.stdout), { request });
