@@ -82,6 +82,8 @@ stale state-change callbacks are ignored, while metadata edits and comments rema
 available. Merge and close/reopen are also locked from submission while the
 request is still in flight, including after navigating away and back; a rejected
 request releases that in-flight lock without inventing an accepted receipt.
+If an explicit refresh already confirmed the merge, a later pending response is
+reconciled against that current record rather than reinstating a pending receipt.
 
 The selected controller and repository target remain visible beside capability
 guidance. The panel distinguishes review-only inspection, reviewer decisions,

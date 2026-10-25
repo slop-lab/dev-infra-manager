@@ -114,13 +114,16 @@ or a new revision clears the lock. Close/reopen is absent while the receipt is
 pending, its callback remains guarded against stale invocation, and the journey
 asserts that no state-changing update request was sent. The same action guards
 are checked before releasing the delayed response, so navigation cannot expose
-a second merge or close action during the in-flight interval.
+a second merge or close action during the in-flight interval. The default runner
+also runs `pull-requests-early-refresh`: it confirms the merge before releasing
+the delayed response and verifies that response cannot reinstate pending state.
 
 Its replaceable screen adapter is `native-git/pull-request-ui.ts`. The scenario
 records user outcomes and uses the same disposable real-service environment as
 the review journey; it does not keep today's component tree or CSS as a contract.
-Both journeys run through `test:web-journeys` in normal CI. For a targeted local
-run, append `pull-requests` or `review` to that command.
+The review journey and both PR variants run through `test:web-journeys` in normal
+CI. For a targeted local run, append `review`, `pull-requests`, or
+`pull-requests-early-refresh` to that command.
 
 The PR journey uses an ordinary source branch, inspects structured diff and line
 attribution, prepares review, approves/revokes, force-updates the source, checks
