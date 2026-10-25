@@ -47,7 +47,10 @@ export async function readExistingConnections(directory: string): Promise<Existi
     || query.generationId !== generationId || operator.generationId !== generationId || operator.endpoint !== query.endpoint
     || query.credential.username === operator.credential.username || query.credential.password === operator.credential.password) throw new Error("private connections must select one host and control-plane generation with distinct execution roles");
   const identity = (role: string, credential: { username: string; password: string }, scope: Record<string, unknown> = { hostId }) => ({
-    endpoint, path: `/v1/${role}-identity`, ...credential, expected: { schemaVersion: 1, serviceId: "native-main", role, generationId, ...scope }
+    // Registrar identity attests its host authority; the importer on this same
+    // endpoint attests the generation. Registrar preparation checks it on write.
+    endpoint, path: `/v1/${role}-identity`, ...credential, expected: { schemaVersion: 1, serviceId: "native-main", role,
+      ...(role === "operator-project-registrar" ? {} : { generationId }), ...scope }
   });
   const identities: ExistingConnections["identities"][number][] = [
     identity("operator-root-importer", importer.credential), identity("operator-project-registrar", registrar.credential),

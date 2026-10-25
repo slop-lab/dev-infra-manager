@@ -24,7 +24,9 @@ async function fixture() {
     const role = roles.get(request.url!);
     if (!role || request.method !== "GET" || request.headers.authorization !== `Basic ${Buffer.from(`${role.username}:${role.password}`).toString("base64")}`) { response.writeHead(401).end(); return; }
     response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
-    response.end(JSON.stringify(role.role ? { schemaVersion: 1, serviceId: "native-main", generationId: liveGeneration, role: role.role, ...(role.reviewerId ? { reviewerId: role.reviewerId } : { hostId: role.hostId }) } : []));
+    response.end(JSON.stringify(role.role ? { schemaVersion: 1, serviceId: "native-main",
+      ...(role.role === "operator-project-registrar" ? {} : { generationId: liveGeneration }),
+      role: role.role, ...(role.reviewerId ? { reviewerId: role.reviewerId } : { hostId: role.hostId }) } : []));
   }); servers.push(server);
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const address = server.address(); if (!address || typeof address === "string") throw new Error("missing test address");
