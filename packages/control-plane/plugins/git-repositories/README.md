@@ -28,6 +28,28 @@ repository-only service accepts proposal pushes without producing reviews or
 reading workflow files. No workspace credential can invoke the protected-ref
 CAS API.
 
+### Authenticated Project discovery
+
+The repository plugin serves `GET /v1/projects` and
+`GET /v1/projects/:project/attachment` to the existing protected-source read
+issuer. Both require Basic authentication and the exact active
+`X-Dim-Generation-Id`. The credential's configured `hostId` is the only access
+filter: callers cannot supply another owner. Unknown credentials are rejected,
+other known roles are forbidden, and foreign Projects remain not found.
+
+The catalog lists completed imports in that authority's scope. The attachment
+descriptor proves every returned repository against live owned storage and
+includes its immutable import receipt, original import policy, current effective
+policy and current head. Unavailable proofs and oversized responses fail rather
+than returning partial evidence. These reads do not register/import repositories,
+change policy or refs, or grant any new authority. Local Project names and
+configuration/default working repository choices belong to the host plugin and
+are not part of this service catalog.
+
+`hostId` is a configured host authority. Exporting the same role bundle to
+multiple machines shares that authority; it does not create per-machine grants.
+Distinct authorities retain their existing isolation.
+
 The host native-Git plugin owns workspace source acquisition and its private
 broker. Host role credentials stay outside guests. The broker checks the live
 workspace UUID and lifecycle state on each request; recreation keeps that UUID,
