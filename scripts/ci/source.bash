@@ -5,6 +5,7 @@ set -euo pipefail
 repository_root="$(pwd -P)"
 # Tools belong to this disposable job, not the host or a Project runner image.
 export PATH="$HOME/.local/dim-ci-tools/bin:$PATH"
+bash "$repository_root/scripts/checks/source-gate/install-system-tools.bash" --if-needed
 if ! command -v pnpm >/dev/null 2>&1 || [[ "$(pnpm --version)" != 10.13.1 ]]; then
   npm install --global --prefix "$HOME/.local/dim-ci-tools" --ignore-scripts --no-audit --no-fund pnpm@10.13.1
 fi

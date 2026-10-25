@@ -11,7 +11,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "dim-source-ci-preflight-")); roots.push(root);
   const source = join(root, "source"), tools = join(root, "tools"), home = join(root, "home"), log = join(root, "commands.log");
   await Promise.all([mkdir(join(source, "scripts/ci"), { recursive: true }), mkdir(join(source, "scripts/checks/source-gate"), { recursive: true }), mkdir(tools), mkdir(home)]);
-  for (const file of ["scripts/ci/source.bash", "scripts/checks/source-gate/install-just.bash"]) await copyFile(join(repository, file), join(source, file));
+  for (const file of ["scripts/ci/source.bash", "scripts/checks/source-gate/install-just.bash", "scripts/checks/source-gate/install-system-tools.bash"]) await copyFile(join(repository, file), join(source, file));
   const staged = join(root, "run/dim/job/script");
   await mkdir(join(root, "run/dim/job"), { recursive: true });
   await copyFile(join(repository, "scripts/ci/source.bash"), staged);
@@ -71,13 +71,13 @@ it("rejects unsupported Just architecture and bad downloaded bytes before changi
   expect(await readFile(join(destination, "just"), "utf8")).toBe("preserve");
 });
 
-it.skipIf(!process.env.DIM_TEST_SOURCE_CI_IMAGE)("bootstraps real pinned Just and Git metadata in a fresh Node26 container", { timeout: 180_000 }, async () => {
+it.skipIf(!process.env.DIM_TEST_SOURCE_CI_IMAGE)("bootstraps source tools and Git metadata in a fresh Node26 container without starting services", { timeout: 360_000 }, async () => {
   const f = await fixture(), image = process.env.DIM_TEST_SOURCE_CI_IMAGE!;
   expect(image).toMatch(/@sha256:[0-9a-f]{64}$/);
   await rm(join(f.tools, "just"));
   const foreign = join(f.root, "foreign"); await mkdir(foreign);
   expect(spawnSync("git", ["-C", foreign, "init", "--quiet"], { encoding: "utf8" }).status).toBe(0);
-  const result = spawnSync("docker", ["run", "--rm", "--pull", "never", "--read-only", "--user", "0:0",
+  const result = spawnSync("docker", ["run", "--rm", "--pull", "never", "--user", "0:0",
     "--tmpfs", "/tmp:rw,exec,mode=1777", "--mount", `type=bind,source=${f.root},target=/fixture`,
     "--mount", `type=bind,source=${f.source},target=/workspace/main`,
     "--mount", `type=bind,source=${f.staged},target=/run/dim/job/script,readonly`, "--workdir", "/workspace/main",
@@ -91,17 +91,23 @@ test "$(id -u)" = 0
 test "$(stat -c %u .)" = 1000
 ! test -w /run/dim/job/script
 ! command -v just
+! command -v docker
+! command -v jq
 test ! -e .git
 trap 'rm -rf /workspace/main/.git' EXIT
 mkdir -p "$HOME"
 bash --noprofile --norc /run/dim/job/script
 test "$("$HOME/.local/dim-ci-tools/bin/just" --version)" = 'just 1.43.1'
+docker --version
+jq --version
+! pgrep -x dockerd
+! pgrep -x containerd
 before=$(git -c safe.directory=/workspace/main rev-parse HEAD)
 printf modified > reviewed.txt
 bash --noprofile --norc /run/dim/job/script
 test "$(git -c safe.directory=/workspace/main rev-parse HEAD)" = "$before"
 test -n "$(git -c safe.directory=/workspace/main status --porcelain)"`
-  ], { encoding: "utf8", timeout: 170_000 });
+  ], { encoding: "utf8", timeout: 350_000, maxBuffer: 8 * 1024 * 1024 });
   expect(result.status, JSON.stringify({ error: result.error?.message, signal: result.signal, stderr: result.stderr })).toBe(0);
   expect(await readFile(f.log, "utf8")).toBe(commands.repeat(2));
 });

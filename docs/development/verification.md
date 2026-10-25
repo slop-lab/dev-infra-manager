@@ -100,6 +100,10 @@ toolchain; it does not run privileged fixtures or VM example stages.
 The repository's DIM source job, `scripts/ci/source.bash`, prepares pinned pnpm
 10.13.1 and Just 1.43.1 inside the disposable job. Just uses the same verified
 architecture-specific installer as the standalone source-gate image. The runner
+also uses their shared Debian tool bootstrap when system tools are missing,
+including jq and the trusted Docker CLI. Package installation requires the
+container's service-autostart denial policy; it never starts a Docker daemon.
+The runner
 executes scripts from `/run/dim/job/script` with the repository checkout as their
 working directory; this source job resolves repository files from that directory.
 Verified candidate trees arrive without `.git`; the job creates a local snapshot before
@@ -113,7 +117,8 @@ root read a verified checkout owned by the worker UID without writing global
 Git configuration or trusting unrelated repositories.
 The focused disposable smoke can be run with
 `DIM_TEST_SOURCE_CI_IMAGE=node@sha256:REVIEWED_DIGEST pnpm --dir tests exec vitest run scenarios/harness/sourceCiPreflight.test.ts`.
-It checks the real Just download and local Git initialization with stand-ins for
+It checks the real system-tool installation, absence of running Docker services,
+Just download and local Git initialization with stand-ins for
 the subsequent full build/check/test commands.
 
 The terminal shows the current stage and a heartbeat every 30 seconds. Passing

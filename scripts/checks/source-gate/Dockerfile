@@ -6,10 +6,8 @@ COPY --from=python /usr/local /usr/local
 
 ARG TARGETARCH=amd64
 
-RUN apt-get update \
-  && apt-get install --yes --no-install-recommends \
-    build-essential ca-certificates curl docker.io git jq libsqlite3-0 openssh-client procps util-linux xz-utils \
-  && rm -rf /var/lib/apt/lists/*
+COPY install-system-tools.bash /usr/local/libexec/dim-install-source-system-tools.bash
+RUN bash /usr/local/libexec/dim-install-source-system-tools.bash
 
 COPY install-just.bash /usr/local/libexec/dim-install-pinned-just.bash
 RUN bash /usr/local/libexec/dim-install-pinned-just.bash /usr/local/bin "$TARGETARCH"
