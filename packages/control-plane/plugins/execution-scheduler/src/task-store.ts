@@ -31,7 +31,7 @@ export class TaskStore<E extends SchedulingEvent, P extends object, G extends Sc
     }
     this.database = new DatabaseSync(path);
     const version = Number(this.database.prepare("PRAGMA user_version").get()?.user_version);
-    if (![102, 103].includes(version) && (version !== 0 || this.database.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get() !== undefined)) {
+    if (version !== 102 && (version !== 0 || this.database.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get() !== undefined)) {
       this.database.close(); throw new Error("task state format is unsupported; use a fresh task state directory");
     }
     chmodSync(path, 0o600);
@@ -48,11 +48,7 @@ export class TaskStore<E extends SchedulingEvent, P extends object, G extends Sc
       CREATE INDEX pending_results ON executions(created_at) WHERE phase='finished' AND publication='pending';
       CREATE INDEX lease_expiry ON executions(lease_expires_at) WHERE phase IN ('assigned','running');
       CREATE TABLE metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      CREATE TABLE enrolled_workers (worker_id TEXT NOT NULL, generation_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(worker_id,generation_id));
-      PRAGMA user_version=103; COMMIT;`);
-    if (version === 102) this.database.exec(`BEGIN IMMEDIATE;
-      CREATE TABLE enrolled_workers (worker_id TEXT NOT NULL, generation_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(worker_id,generation_id));
-      PRAGMA user_version=103; COMMIT;`);
+      PRAGMA user_version=102; COMMIT;`);
     for (const row of this.database.prepare("SELECT * FROM executions").iterate()) this.decode(row);
     this.transaction(() => {
       for (const row of this.database.prepare("SELECT * FROM executions WHERE phase IN ('queued','assigned','running')").all()) {

@@ -3,17 +3,20 @@ import type { DatabaseSync } from "node:sqlite";
 import { executionWorkerEnrollmentSchema, executionWorkerEnrollmentSecretSchema } from "@slop-lab/dim-contracts-ci/worker";
 import { ExecutionConflictError } from "@slop-lab/dim-contracts-execution";
 import type { ExecutionServiceConfig } from "./config.js";
+import { readWorkerEnrollments, workerEnrollmentMetadataKey, type WorkerEnrollment } from "./persistence-metadata.js";
 
-export type WorkerEnrollment = ReturnType<typeof executionWorkerEnrollmentSecretSchema.parse>;
+export type { WorkerEnrollment } from "./persistence-metadata.js";
 
 export class WorkerRegistry {
   readonly #lastSeen = new Map<string, number>();
   constructor(private readonly database: DatabaseSync, private readonly generationId: string,
-    private readonly config: ExecutionServiceConfig, private readonly now: () => number) { this.assertAuthority(); }
+    private readonly config: ExecutionServiceConfig, private readonly now: () => number) {
+    readWorkerEnrollments(this.database);
+    this.assertAuthority();
+  }
 
   workers(): readonly WorkerEnrollment[] {
-    const enrolled = this.database.prepare("SELECT body FROM enrolled_workers WHERE generation_id=? ORDER BY worker_id")
-      .all(this.generationId).map((row) => executionWorkerEnrollmentSecretSchema.parse(JSON.parse(String(row.body))));
+    const enrolled = readWorkerEnrollments(this.database).filter((worker) => worker.generationId === this.generationId);
     return [...this.config.workers.map((worker) => executionWorkerEnrollmentSecretSchema.parse({
       schemaVersion: 1, workerId: worker.id, generationId: this.generationId, token: worker.token, slots: worker.slots
     })), ...enrolled];
@@ -41,15 +44,16 @@ export class WorkerRegistry {
     while (serviceCredentials.some((credential) => credential.password === token)
       || this.workers().some((worker) => worker.token === token)) token = randomBytes(32).toString("base64url");
     const enrolled = executionWorkerEnrollmentSecretSchema.parse({ ...registration, generationId: this.generationId, token });
-    this.database.prepare("INSERT INTO enrolled_workers(worker_id,generation_id,body) VALUES (?,?,?)")
-      .run(enrolled.workerId, this.generationId, JSON.stringify(enrolled));
+    this.database.prepare("INSERT INTO metadata(key,value) VALUES (?,?)")
+      .run(workerEnrollmentMetadataKey(this.generationId, enrolled.workerId), JSON.stringify(enrolled));
     return enrolled;
   }
 
   export(workerId: string): WorkerEnrollment {
-    const row = this.database.prepare("SELECT body FROM enrolled_workers WHERE worker_id=? AND generation_id=?").get(workerId, this.generationId);
-    if (row === undefined) throw new ExecutionConflictError("worker is not enrolled");
-    return executionWorkerEnrollmentSecretSchema.parse(JSON.parse(String(row.body)));
+    const enrolled = readWorkerEnrollments(this.database)
+      .find((worker) => worker.workerId === workerId && worker.generationId === this.generationId);
+    if (enrolled === undefined) throw new ExecutionConflictError("worker is not enrolled");
+    return enrolled;
   }
 
   authenticate(workerId: string, token: string): WorkerEnrollment | undefined {

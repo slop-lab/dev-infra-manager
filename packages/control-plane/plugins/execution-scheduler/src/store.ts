@@ -5,6 +5,7 @@ import { executionResultSchema, parseExecution, type Execution, type ExecutionAs
 import { TaskStore, assertSchedulingIndexes } from "./task-store.js";
 import { isTaskExecution, taskEventSchema, taskGrantSchema, taskResultSchema, taskJobSchema,
   type TaskEvent, type TaskProfile, type TaskGrant, type TaskResult, type TaskExecution, type TaskAssignment, type ScheduledSlot } from "@slop-lab/dim-contracts-execution";
+import { readAdmissionDiagnostic, validateAdmissionDiagnostics, writeAdmissionDiagnostic, type AdmissionDiagnostic } from "./persistence-metadata.js";
 
 export type ScheduledExecution = Execution | TaskExecution;
 export type ScheduledExecutionAssignment = ExecutionAssignment | TaskAssignment;
@@ -27,6 +28,7 @@ export class ExecutionStore extends TaskStore<ExecutionEvent | TaskEvent, Execut
       matchesProfile(event, profile) { return !taskValue(event) || Reflect.get(event, "handlerRevision") === Reflect.get(profile, "handlerRevision") && Reflect.get(event, "taskType") === Reflect.get(profile, "taskType"); },
       parseJob: parseScheduledJob
     }, now);
+    validateAdmissionDiagnostics(this.database);
   }
   override enqueue(input: ExecutionEvent): Execution;
   override enqueue(input: TaskEvent): TaskExecution;
@@ -44,24 +46,38 @@ export class ExecutionStore extends TaskStore<ExecutionEvent | TaskEvent, Execut
     const selected = this.get(id);
     if (isTaskExecution(selected) || selected.grant !== undefined || selected.phase !== "assigned") throw new Error("execution admission cannot be released");
     const { workerId: _workerId, slotId: _slotId, requestId: _requestId, leaseToken: _leaseToken,
-      leaseExpiresAt: _leaseExpiresAt, profile: _profile, ...unowned } = selected;
-    const saved = parseExecution({ ...unowned, phase: "queued", admission });
-    this.database.prepare("UPDATE executions SET phase='queued',worker_id=NULL,slot_id=NULL,request_id=NULL,lease_expires_at=NULL,body=? WHERE id=?")
-      .run(JSON.stringify(saved), id);
-    return saved;
+      leaseExpiresAt: _leaseExpiresAt, profile: _profile, admission: _admission, ...unowned } = selected;
+    const saved = parseExecution({ ...unowned, phase: "queued" });
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare("UPDATE executions SET phase='queued',worker_id=NULL,slot_id=NULL,request_id=NULL,lease_expires_at=NULL,body=? WHERE id=?")
+        .run(JSON.stringify(saved), id);
+      this.writeAdmission(saved, admission);
+      this.database.exec("COMMIT");
+      return saved;
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
-  recordAdmission(id: string, admission: { readonly phase: "authorize" | "candidate-read"; readonly code: "timeout" | "unavailable" | "stale" }): Execution {
+  recordAdmission(id: string, admission: AdmissionDiagnostic): Execution {
     const selected = this.get(id);
     if (isTaskExecution(selected)) throw new Error("task execution has no Git admission");
-    const saved = parseExecution({ ...selected, admission });
-    this.database.prepare("UPDATE executions SET body=? WHERE id=?").run(JSON.stringify(saved), id); return saved;
+    this.writeAdmission(selected, admission);
+    return selected;
+  }
+  executionSummary(job: Parameters<typeof executionSummary>[0]): ExecutionSummary {
+    const admission = readAdmissionDiagnostic(this.database, { generationId: job.generationId,
+      eventId: job.event.eventId, executionId: job.id });
+    return executionSummary({ ...job, ...(admission === undefined ? {} : { admission }) });
   }
   recentSummaries(): ExecutionSummary[] {
     // Drop task records and large diagnostics in SQLite before decoding CI summaries.
     return this.database.prepare("SELECT id,event_id,generation_id,phase,worker_id,slot_id,request_id,created_at,retry_of,execution_kind,publication,lease_expires_at,json_remove(body,'$.result.logs','$.grant','$.leaseToken','$.profile') AS body FROM executions WHERE execution_kind NOT LIKE 'task/%' ORDER BY created_at DESC,rowid DESC LIMIT 100")
       .all().map((row) => {
         const value = executionSummaryRowSchema.parse(JSON.parse(String(row.body)));
-        assertSchedulingIndexes(row, value); return executionSummary(value);
+        assertSchedulingIndexes(row, value); return this.executionSummary(value);
       });
+  }
+  private writeAdmission(execution: Execution, admission: AdmissionDiagnostic): void {
+    writeAdmissionDiagnostic(this.database, { generationId: execution.generationId,
+      eventId: execution.event.eventId, executionId: execution.id }, admission);
   }
 }

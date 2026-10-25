@@ -5,9 +5,10 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { configuredExecutionServer } from "../../../../packages/control-plane/plugins/execution-scheduler/src/service.js";
 import { enrollExecutionWorker, exportExecutionWorker } from "../../../../packages/host/plugins/execution-worker/src/enrollment.js";
-import { executionWorkerConfigSchema } from "@slop-lab/dim-contracts-ci/worker";
+import { executionWorkerConfigSchema, executionWorkerEnrollmentSecretSchema } from "@slop-lab/dim-contracts-ci/worker";
 import { executionWorkerClient } from "../../../../packages/host/plugins/execution-worker/src/client.js";
 import { runExecutionWorker } from "../../../../packages/host/plugins/execution-worker/src/worker.js";
+import { DatabaseSync } from "node:sqlite";
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -28,12 +29,12 @@ const capacity = {
   } }]
 } as const;
 
-async function fixture(root: string, now?: () => number) {
+async function fixture(root: string, now?: () => number, selectedGeneration = generationId) {
   const activationToken = randomBytes(32).toString("base64url");
   const service = configuredExecutionServer({ config: { schemaVersion: 1, claimLeaseMilliseconds: 30_000,
     nativeGit: { endpoint: "http://127.0.0.1:9", grantIssuer: credential("grants", 5), candidateReader: credential("reader", 6), resultReporter: credential("results", 7) },
     credentials: { operator, query, tasks, webhook }, workers: [] }, stateDirectory: root,
-    readinessToken: randomBytes(32).toString("base64url"), activationToken, expectedGenerationId: generationId,
+    readinessToken: randomBytes(32).toString("base64url"), activationToken, expectedGenerationId: selectedGeneration,
     ...(now === undefined ? {} : { now }) });
   await new Promise<void>((resolve) => service.server.listen(0, "127.0.0.1", resolve));
   const address = service.server.address();
@@ -41,7 +42,7 @@ async function fixture(root: string, now?: () => number) {
   const endpoint = `http://127.0.0.1:${address.port}`;
   const activated = await fetch(`${endpoint}/v1/activation`, { method: "POST", headers: {
     authorization: `Bearer ${activationToken}`, "content-type": "application/json"
-  }, body: JSON.stringify({ schemaVersion: 1, generationId }) });
+  }, body: JSON.stringify({ schemaVersion: 1, generationId: selectedGeneration }) });
   expect(activated.status).toBe(200);
   return { endpoint, service };
 }
@@ -75,6 +76,40 @@ it("enrolls operator-reviewed capacity and persists it across scheduler restart"
     const repeated = await fetch(`${second.endpoint}/v1/operator/workers/ci-added/export`, { method: "POST", headers: headers(), body: "{}" });
     expect(await repeated.json()).toEqual(exportedBody);
   } finally { await second.service.close(); }
+});
+
+it("retains enrollment identities for previous generations without changing the format-102 schema", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-worker-enrollment-generations-")); roots.push(root);
+  const first = await fixture(root);
+  const enrolled = await fetch(`${first.endpoint}/v1/operator/workers/enroll`, {
+    method: "POST", headers: headers(), body: JSON.stringify(capacity)
+  });
+  const firstSecret = executionWorkerEnrollmentSecretSchema.parse(await enrolled.json());
+  await first.service.close();
+
+  const nextGeneration = "b".repeat(64);
+  const second = await fixture(root, undefined, nextGeneration);
+  const reenrolled = await fetch(`${second.endpoint}/v1/operator/workers/enroll`, {
+    method: "POST", headers: headers(operator, nextGeneration), body: JSON.stringify(capacity)
+  });
+  expect(reenrolled.status).toBe(200);
+  await second.service.close();
+
+  const database = new DatabaseSync(join(root, "executions.sqlite3"), { readOnly: true });
+  try {
+    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 102 });
+    expect(database.prepare("SELECT key FROM metadata WHERE key LIKE 'execution-scheduler/enrollment/%' ORDER BY key").all())
+      .toEqual([
+        { key: `execution-scheduler/enrollment/${generationId}/ci-added` },
+        { key: `execution-scheduler/enrollment/${nextGeneration}/ci-added` }
+      ]);
+  } finally { database.close(); }
+
+  const rollback = await fixture(root);
+  try {
+    const exported = await fetch(`${rollback.endpoint}/v1/operator/workers/ci-added/export`, { method: "POST", headers: headers(), body: "{}" });
+    expect(await exported.json()).toMatchObject({ generationId, token: firstSecret.token });
+  } finally { await rollback.service.close(); }
 });
 
 it("rejects non-operator, stale, duplicate and changed enrollment requests", async () => {
@@ -155,14 +190,14 @@ it("writes an enrolled worker config only to a new private absolute output", asy
   } finally { await running.service.close(); }
 });
 
-it("fails startup when durable worker authority conflicts with a service role", async () => {
+it.each([["query", "service role"], ["different", "identity"]] as const)("rejects durable worker authority with invalid %s binding", async (key, reason) => {
   const root = await mkdtemp(join(tmpdir(), "dim-worker-enrollment-conflict-")); roots.push(root);
   const running = await fixture(root);
-  running.service.store.database.prepare("INSERT INTO enrolled_workers(worker_id,generation_id,body) VALUES (?,?,?)").run(
-    "query", generationId, JSON.stringify({ schemaVersion: 1, workerId: "query", generationId,
+  running.service.store.database.prepare("INSERT INTO metadata(key,value) VALUES (?,?)").run(
+    `execution-scheduler/enrollment/${generationId}/${key}`, JSON.stringify({ schemaVersion: 1, workerId: "query", generationId,
       token: randomBytes(32).toString("base64url"), slots: [{ id: "shared", taskType: "fixture", handlerRevision: "e".repeat(64) }] }));
   await running.service.close();
-  await expect(fixture(root)).rejects.toThrow("service role");
+  await expect(fixture(root)).rejects.toThrow(reason);
 });
 
 it("lets an enrolled task worker claim, run and report through the real worker loop", async () => {

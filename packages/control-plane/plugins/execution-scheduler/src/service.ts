@@ -1,4 +1,3 @@
-import { executionSummary } from "@slop-lab/dim-contracts-ci/query";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
@@ -114,7 +113,7 @@ export function configuredExecutionServer(input: {
            const job = occupied.find((job) => job.workerId === worker.id && job.slotId === slot.id);
            return { id: slot.id, executionKind: slot.kind, state: job === undefined ? "idle" : job.phase === "recovering" ? "cleanup-required" : "busy",
              available: registry.observed(worker.id) && job === undefined,
-             ...(job === undefined ? {} : { job: isTaskExecution(job) ? taskSummary(job) : executionSummary(job), leaseExpiresAt: job.leaseExpiresAt }) };
+             ...(job === undefined ? {} : { job: isTaskExecution(job) ? taskSummary(job) : store.executionSummary(job), leaseExpiresAt: job.leaseExpiresAt }) };
          }) })));
       }
       const id = operatorRoute[3], action = operatorRoute[4];
@@ -123,11 +122,11 @@ export function configuredExecutionServer(input: {
         z.object({}).strict().parse(await read(request));
         admission.cancel(id);
         const job = store.get(id);
-        return send(response, 200, summary(isTaskExecution(job) ? tasks.cancel(id) : store.cancel(id)));
+        return send(response, 200, summary(store, isTaskExecution(job) ? tasks.cancel(id) : store.cancel(id)));
       }
       const body = z.object({ requestId: z.string().uuid() }).strict().parse(await read(request));
       if (isTaskExecution(store.get(id))) throw new ExecutionConflictError("interactive tasks require a fresh issuer session");
-      return send(response, 200, summary(store.retry(id, body.requestId)));
+      return send(response, 200, summary(store, store.retry(id, body.requestId)));
     }
     const query = /^\/v1\/jobs(?:\/([0-9a-f-]{36}))?$/.exec(url.pathname);
     if (request.method === "GET" && query) {
@@ -137,7 +136,7 @@ export function configuredExecutionServer(input: {
       if (query[1] === undefined) return send(response, 200, store.recentSummaries());
       const job = store.find(query[1]);
       if (!job || isTaskExecution(job)) return send(response, 404, { error: "CI execution was not found" });
-      return send(response, 200, { job: summary(job), ...(job.result === undefined ? {} : { result: job.result }) });
+      return send(response, 200, { job: summary(store, job), ...(job.result === undefined ? {} : { result: job.result }) });
     }
     const registration = registry.authenticateAuthorization(request.headers.authorization);
     const worker = registration === undefined ? undefined : workers().find((candidate) => candidate.id === registration.workerId);
@@ -240,7 +239,9 @@ function taskSummary(job: import("@slop-lab/dim-contracts-execution").TaskExecut
   return { id: job.id, taskType: job.event.taskType, executionKind: job.event.executionKind, phase: job.phase,
     generationId: job.generationId, createdAt: job.createdAt, publication: job.publication };
 }
-function summary(job: import("./store.js").ScheduledExecution) { return isTaskExecution(job) ? taskSummary(job) : executionSummary(job); }
+function summary(store: ExecutionStore, job: import("./store.js").ScheduledExecution) {
+  return isTaskExecution(job) ? taskSummary(job) : store.executionSummary(job);
+}
 async function read(request: IncomingMessage): Promise<unknown> {
   let size = 0; const chunks: Buffer[] = [];
   for await (const chunk of request) {

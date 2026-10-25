@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-export const executionStateFormat = 103;
+export const executionStateFormat = 102;
 export const executionDatabaseName = "executions.sqlite3";
 const entries = new Set([executionDatabaseName, `${executionDatabaseName}-wal`, `${executionDatabaseName}-shm`]);
-export async function inspectExecutionState(directory: string): Promise<{ readonly stateFormat: 103 }> {
+export async function inspectExecutionState(directory: string): Promise<{ readonly stateFormat: 102 }> {
   const metadata = await lstat(directory);
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) throw new Error("Execution state path must be a directory");
   const names = await readdir(directory);
@@ -32,5 +32,5 @@ export function assertExecutionDatabase(database: DatabaseSync): void {
   database.prepare("SELECT id,event_id,generation_id,phase,retry_of,worker_id,slot_id,request_id,created_at,execution_kind,publication,lease_expires_at,body FROM executions LIMIT 0").all();
   const names = database.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()
     .map((row) => row.name);
-  if (names.join(",") !== "enrolled_workers,executions,metadata") throw new Error("Execution database schema is unsupported");
+  if (names.join(",") !== "executions,metadata") throw new Error("Execution database schema is unsupported");
 }

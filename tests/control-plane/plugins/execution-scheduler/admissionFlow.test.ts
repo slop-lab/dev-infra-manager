@@ -57,7 +57,8 @@ it("requeues typed authorization timeout and exposes only bounded diagnostics", 
       body: JSON.stringify({ requestId: randomUUID(), slotId: slot.id }) });
     expect(response.status).toBe(503); expect(await response.json()).toEqual({ error: "execution admission failed",
       admission: { phase: "authorize", code: "timeout" } });
-    expect(running.service.store.get(queued.id)).toMatchObject({ phase: "queued", admission: { phase: "authorize", code: "timeout" } });
+    expect(running.service.store.get(queued.id)).toMatchObject({ phase: "queued" });
+    expect(running.service.store.get(queued.id)).not.toHaveProperty("admission");
     const summaries = running.service.store.recentSummaries();
     expect(summaries[0]).toMatchObject({ id: queued.id, admission: { phase: "authorize", code: "timeout" } });
     expect(JSON.stringify(summaries)).not.toContain("private detail");
