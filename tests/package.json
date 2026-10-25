@@ -68,6 +68,8 @@
     "@slop-lab/dim-contracts-llm-router": "workspace:*",
     "@slop-lab/dim-contracts-cli-host": "workspace:*",
     "@slop-lab/git-diff": "workspace:*",
+    "@slop-lab/git-discussions": "workspace:*",
+    "@slop-lab/git-blame": "workspace:*",
     "@slop-lab/git-pull-requests": "workspace:*",
     "@slop-lab/react-git-diff": "workspace:*",
     "react": "19.3.1",

@@ -38,6 +38,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@slop-lab/git-discussions": "workspace:0.10.0",
     "@slop-lab/git-pull-requests": "workspace:0.10.0",
     "zod": "4.6.6"
   },

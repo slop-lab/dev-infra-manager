@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/git-pull-requests",
   "version": "0.10.0",
-  "description": "Portable pull request revisions and discussion model",
+  "description": "Portable pull request revisions and lifecycle transitions",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -26,6 +26,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@slop-lab/git-discussions": "workspace:0.10.0",
     "zod": "4.6.6"
   },
   "devDependencies": {

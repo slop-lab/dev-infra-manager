@@ -49,7 +49,7 @@ function run(file: string, args: string[], allowFailure: boolean = false) {
 try {
   const portable = path.join(scratch, "portable");
   run("npm", ["install", "--prefix", portable, "--no-save", "--no-audit", "--no-fund",
-    ...["@slop-lab/git-diff", "@slop-lab/git-pull-requests", "@slop-lab/react-git-diff", "@slop-lab/react-git-pull-requests"].map(artifact), "react@19.3.1", "react-dom@19.3.1"]);
+    ...["@slop-lab/git-diff", "@slop-lab/git-discussions", "@slop-lab/git-blame", "@slop-lab/git-pull-requests", "@slop-lab/react-git-diff", "@slop-lab/react-git-pull-requests"].map(artifact), "react@19.3.1", "react-dom@19.3.1"]);
   assert.ok(readdirSync(path.join(portable, "node_modules/@slop-lab")).every(name => !name.startsWith("dim-")), "portable Git artifacts must not install DIM");
   const portablePatch = ["diff --git a/a.txt b/a.txt", "index 1111111..2222222 100644", "--- a/a.txt", "+++ b/a.txt", "@@ -1 +1 @@", "-before", "+after", ""].join("\n");
   run(process.execPath, ["--conditions=source", "--input-type=module", "--eval", `
@@ -57,7 +57,11 @@ try {
     const require=createRequire(${JSON.stringify(path.join(portable, "package.json"))});
     const load=async name=>import(pathToFileURL(require.resolve(name)).href);
     const {parseGitDiff}=await load('@slop-lab/git-diff');
+    const {parseDiscussionList}=await load('@slop-lab/git-discussions');
+    const {parseGitBlameRequest}=await load('@slop-lab/git-blame');
     const {parsePullRequestList}=await load('@slop-lab/git-pull-requests');
+    if(parseDiscussionList([]).length!==0) throw new Error('portable discussion model import failed');
+    parseGitBlameRequest({commit:'a'.repeat(40),path:'src/index.ts',line:1});
     if(parsePullRequestList([]).length!==0) throw new Error('portable PR model import failed');
     const {GitDiff}=await load('@slop-lab/react-git-diff');
     const {PullRequestPanel}=await load('@slop-lab/react-git-pull-requests');

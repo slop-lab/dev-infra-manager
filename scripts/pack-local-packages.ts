@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 
 export const packageDirectories = [
   "packages/git-tools/diff/dist",
+  "packages/git-tools/discussions/dist",
+  "packages/git-tools/blame/dist",
   "packages/git-tools/react-diff/dist",
   "packages/git-tools/pull-requests/dist",
   "packages/git-tools/react-git-pull-requests/dist",

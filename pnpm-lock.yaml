@@ -296,6 +296,9 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      '@slop-lab/git-blame':
+        specifier: workspace:0.10.0
+        version: link:../../../git-tools/blame
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -371,6 +374,9 @@ importers:
 
   packages/control-plane/plugins/git-discussions:
     dependencies:
+      '@slop-lab/git-discussions':
+        specifier: workspace:0.10.0
+        version: link:../../../git-tools/discussions
       '@slop-lab/git-pull-requests':
         specifier: workspace:0.10.0
         version: link:../../../git-tools/pull-requests
@@ -424,6 +430,9 @@ importers:
 
   packages/control-plane/plugins/git-pull-requests:
     dependencies:
+      '@slop-lab/git-discussions':
+        specifier: workspace:0.10.0
+        version: link:../../../git-tools/discussions
       '@slop-lab/git-pull-requests':
         specifier: workspace:0.10.0
         version: link:../../../git-tools/pull-requests
@@ -627,7 +636,33 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/git-tools/blame:
+    dependencies:
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/git-tools/diff:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/git-tools/discussions:
+    dependencies:
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -638,6 +673,9 @@ importers:
 
   packages/git-tools/pull-requests:
     dependencies:
+      '@slop-lab/git-discussions':
+        specifier: workspace:0.10.0
+        version: link:../discussions
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -676,9 +714,15 @@ importers:
 
   packages/git-tools/react-git-pull-requests:
     dependencies:
+      '@slop-lab/git-blame':
+        specifier: workspace:0.10.0
+        version: link:../blame
       '@slop-lab/git-diff':
         specifier: workspace:0.10.0
         version: link:../diff
+      '@slop-lab/git-discussions':
+        specifier: workspace:0.10.0
+        version: link:../discussions
       '@slop-lab/git-pull-requests':
         specifier: workspace:0.10.0
         version: link:../pull-requests
@@ -1036,15 +1080,24 @@ importers:
 
   packages/service-clients/native-git:
     dependencies:
+      '@slop-lab/dim-contracts-ci':
+        specifier: workspace:0.10.0
+        version: link:../../contracts/ci
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../contracts/git
       '@slop-lab/dim-contracts-operations':
         specifier: workspace:0.10.0
         version: link:../../contracts/operations
+      '@slop-lab/git-blame':
+        specifier: workspace:0.10.0
+        version: link:../../git-tools/blame
       '@slop-lab/git-diff':
         specifier: workspace:0.10.0
         version: link:../../git-tools/diff
+      '@slop-lab/git-discussions':
+        specifier: workspace:0.10.0
+        version: link:../../git-tools/discussions
       '@slop-lab/git-pull-requests':
         specifier: workspace:0.10.0
         version: link:../../git-tools/pull-requests
@@ -1174,6 +1227,9 @@ importers:
       '@slop-lab/dim-service-client-native-git':
         specifier: workspace:0.10.0
         version: link:../../../service-clients/native-git
+      '@slop-lab/git-blame':
+        specifier: workspace:0.10.0
+        version: link:../../../git-tools/blame
       '@slop-lab/git-diff':
         specifier: workspace:0.10.0
         version: link:../../../git-tools/diff
@@ -1337,9 +1393,15 @@ importers:
       '@slop-lab/dim-web-plugin-native-git':
         specifier: workspace:*
         version: link:../packages/web/plugins/native-git
+      '@slop-lab/git-blame':
+        specifier: workspace:*
+        version: link:../packages/git-tools/blame
       '@slop-lab/git-diff':
         specifier: workspace:*
         version: link:../packages/git-tools/diff
+      '@slop-lab/git-discussions':
+        specifier: workspace:*
+        version: link:../packages/git-tools/discussions
       '@slop-lab/git-pull-requests':
         specifier: workspace:*
         version: link:../packages/git-tools/pull-requests
