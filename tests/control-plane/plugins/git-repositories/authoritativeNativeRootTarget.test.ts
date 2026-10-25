@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthoritativeRepositoryError } from "../../../../packages/control-plane/plugins/git-repositories/src/authoritative-native-root-target.js";
-import { resolveAuthoritativeNativeRepositoryTarget } from "../../../../packages/control-plane/plugins/git-repositories/src/authoritative-native-root-target.js";
+import { assertAuthoritativeNativeRepositoryTargetCurrent, resolveAuthoritativeNativeRepositoryTarget } from "../../../../packages/control-plane/plugins/git-repositories/src/authoritative-native-root-target.js";
+import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
 import {
   authoritativePolicy,
   candidateContext,
@@ -16,6 +17,31 @@ import { cleanupFinalizeFixtures, rootRepository, runGit } from "./nativeRootImp
 afterEach(cleanupFinalizeFixtures);
 
 describe("authoritative imported-root target", () => {
+  it("rechecks the resolved default branch when it differs from the imported branch", async () => {
+    // Given
+    const policyInput = { ...authoritativePolicy(), defaultRef: "refs/heads/development", branches: {
+      "refs/heads/main": { review: true }, "refs/heads/development": { review: false }
+    } };
+    const policy = { ...policyInput, policyRevision: nativeRepositoryPolicyRevision(policyInput) };
+    const fixture = await finalizedCandidateRoot("default-target-current", matchingRunner(), policy);
+    const selector = { projectId: "project-a", repositoryId: "root" };
+    const before = await proofBytes(fixture.root);
+    try {
+      // When
+      const target = await resolveAuthoritativeNativeRepositoryTarget(fixture.context, selector);
+
+      // Then
+      expect(target.imported.protectedRef).toBe("refs/heads/main");
+      expect(target.currentHead.protectedRef).toBe("refs/heads/development");
+      await expect(assertAuthoritativeNativeRepositoryTargetCurrent({ runtime: fixture.context, selector, target }))
+        .resolves.toBeUndefined();
+      await expect(assertAuthoritativeNativeRepositoryTargetCurrent({ runtime: fixture.context,
+        selector: { ...selector, protectedRef: "refs/heads/main" }, target }))
+        .rejects.toBeInstanceOf(AuthoritativeRepositoryError);
+      expect(await proofBytes(fixture.root)).toEqual(before);
+    } finally { await fixture.close(); }
+  });
+
   it("resolves only the live owned repository and complete kind-bound policy without changing proof", async () => {
     // Given
     const fixture = await finalizedCandidateRoot("target", matchingRunner(), authoritativePolicy());

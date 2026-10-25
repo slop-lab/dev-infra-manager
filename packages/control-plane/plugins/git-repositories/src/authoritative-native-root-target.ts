@@ -98,13 +98,16 @@ export async function assertAuthoritativeNativeRepositoryTargetCurrent(input: {
     input.runtime.state, input.runtime.expectedGenerationId, input.runtime.activationTokenDigest
   )) throw new AuthoritativeRepositoryError("authoritative native root target is inactive");
   const selector = selectorSchema.parse(input.selector);
+  if (selector.protectedRef !== undefined && selector.protectedRef !== input.target.currentHead.protectedRef) {
+    throw new AuthoritativeRepositoryError("authoritative native root target branch conflicts with its selector");
+  }
   await assertImportedRepositorySnapshotCurrent({
     gitExecutable: input.runtime.gitExecutable,
     gitIdentity: input.runtime.gitIdentity,
     ownerHostId: input.target.imported.ownerHostId,
     projectId: selector.projectId,
     repositoryId: selector.repositoryId,
-    ...(selector.protectedRef === undefined ? {} : { protectedRef: selector.protectedRef }),
+    protectedRef: input.target.currentHead.protectedRef,
     state: input.runtime.state,
     stateDirectory: dirname(input.runtime.state.database),
     expected: {
