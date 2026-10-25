@@ -20,9 +20,11 @@ const synchronizer = { hostId: "host-a", username: "synchronizer", password: tok
 const merge = await mergePlugin.configure({ hostPromoters: [promoter] });
 const sync = await syncPlugin.configure({ operators: [synchronizer], allowLocalRemotes: true });
 const reviewPolicy = { requiredReviewerIds: [], pathReviewerRules: [{ pathPrefix: "README.md", reviewerIds: ["owner"] }] };
-const upstreamRoot = await mkdtemp(join(tmpdir(), "dim-web-publish-")), upstream = join(upstreamRoot, "upstream.git");
+const upstreamRoot = await mkdtemp(join(tmpdir(), "dim-web-publish-")), upstream = join(upstreamRoot, "upstream.git"), secondaryUpstream = join(upstreamRoot, "secondary.git");
 await git("/usr/bin/git", ["init", "--bare", upstream]);
+await git("/usr/bin/git", ["init", "--bare", secondaryUpstream]);
 const syncPolicy = { upstream: { url: pathToFileURL(upstream).href, branch: "development" }, publish: { main: "development" } };
+const secondarySyncPolicy = { upstream: { url: pathToFileURL(secondaryUpstream).href, branch: "development" }, publish: { main: "development" } };
 const f = await fixture(true, [...(merge.extensions ?? []), ...(sync.extensions ?? [])], reviewPolicy, [reviewer], {
   "merge-policy": {}, "git-sync": syncPolicy
 });
@@ -33,6 +35,20 @@ let web: Awaited<ReturnType<typeof createWebServerFromConfigFile>> | undefined;
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 try {
   const importer = { username: "importer", password: token(1) };
+  await f.service.prepareProject(generationId, "host-a", { serviceId: "native-main", projectId: "project", repositoryId: "secondary" });
+  const secondaryBundle = join(f.root, "secondary.bundle");
+  await git("/usr/bin/git", ["-C", f.source, "bundle", "create", secondaryBundle, "refs/heads/main"]);
+  const secondaryExtensions = { "code-review": reviewPolicy, "merge-policy": {}, "git-sync": secondarySyncPolicy };
+  const secondaryPolicy = { schemaVersion: 1, protectedRef: "refs/heads/main", defaultRef: "refs/heads/main", branches: { "refs/heads/main": { review: true }, "refs/heads/development": { review: false } }, extensions: secondaryExtensions };
+  const secondaryPrelude = { schemaVersion: 1, serviceId: "native-main", generationId, projectId: "project", repositoryId: "secondary", protectedRef: "refs/heads/main", expectedCommit: f.initial,
+    policy: { ...secondaryPolicy, policyRevision: nativeRepositoryPolicyRevision(secondaryPolicy) } };
+  const secondaryImport = await fetch(f.origin + "/v1/projects/project/repositories/secondary/import", { method: "POST", headers: { authorization: basic(importer), "content-type": "application/octet-stream" },
+    body: Buffer.concat([Buffer.from(`${JSON.stringify(secondaryPrelude)}\n`), await readFile(secondaryBundle)]) });
+  assert.equal(secondaryImport.status, 200, await secondaryImport.clone().text());
+  const secondaryReceipt = record(await secondaryImport.json());
+  const secondaryFinalize = await fetch(f.origin + "/v1/projects/project/repositories/secondary/import/finalize", { method: "POST", headers: headers(importer), body: JSON.stringify({ schemaVersion: 1, generationId,
+    importNonce: text(secondaryReceipt, "importNonce"), bundleDigest: text(secondaryReceipt, "bundleDigest") }) });
+  assert.equal(secondaryFinalize.status, 200, await secondaryFinalize.clone().text());
   const previous = record(await (await fetch(repositoryPath + "/policy", { headers: headers(importer) })).json());
   const body = { protectedRef: "refs/heads/main", defaultRef: "refs/heads/main", branches: { "refs/heads/main": { review: true }, "refs/heads/development": { review: false } }, extensions: { "code-review": reviewPolicy, "merge-policy": {}, "git-sync": syncPolicy } };
   assert.equal((await post("/policy", { schemaVersion: 1, expectedPolicyDigest: previous.policyDigest, expectedProtectedHead: record(previous.currentHead).commit, policy: { schemaVersion: 1, ...body, policyRevision: nativeRepositoryPolicyRevision(body) } }, importer)).status, 200);
@@ -56,7 +72,7 @@ try {
   await new Promise<void>((resolve) => listener.close(() => resolve()));
   const login = await initializeOperationsWeb({ operations, output: config, port: address.port });
   const saved = parseWebConfig(JSON.parse(await readFile(config, "utf8")));
-  await writeFile(config, JSON.stringify({ ...saved, accounts: saved.accounts.map((account) => ({ ...account, roles: ["read", "operator", "reviewer"] })), pluginHome: fileURLToPath(new URL("../../", import.meta.url)), plugins: [{ package: "@slop-lab/dim-web-plugin-native-git", config: { reviewerConnection, promoterConnection, syncConnection, projects: [{ projectId: "project", repositoryIds: ["main"] }] } }] }), { mode: 0o600 });
+  await writeFile(config, JSON.stringify({ ...saved, accounts: saved.accounts.map((account) => ({ ...account, roles: ["read", "operator", "reviewer"] })), pluginHome: fileURLToPath(new URL("../../", import.meta.url)), plugins: [{ package: "@slop-lab/dim-web-plugin-native-git", config: { reviewerConnection, promoterConnection, syncConnection, projects: [{ projectId: "project", repositoryIds: ["main", "secondary"] }] } }] }), { mode: 0o600 });
   web = await createWebServerFromConfigFile(config);
   const origin = await web.listen();
   browser = await chromium.launch({ executablePath, headless: true });
@@ -72,6 +88,13 @@ try {
   await page.getByRole("button", { name: "Create branch merge review", exact: true }).click();
   await page.getByText(/Branch merge review created\..*Latest review details could not refresh/).waitFor();
   assert.equal(await page.getByRole("button", { name: "Create branch merge review", exact: true }).isDisabled(), true);
+  const repository = page.getByLabel("Repository", { exact: true });
+  await repository.selectOption("secondary");
+  await page.getByText(/Current repository target: .* · project\/secondary\./).waitFor();
+  assert.equal(await page.locator("tr").filter({ hasText: "/merge/" }).count(), 0, "main repository review rows must not leak into secondary scope");
+  assert.equal(await page.getByText(/Branch merge review created/).count(), 0, "accepted review receipt must clear when repository scope changes");
+  await repository.selectOption("main");
+  await page.getByText(/Current repository target: .* · project\/main\./).waitFor();
   const mergeRow = page.locator("tr").filter({ hasText: "/merge/" });
   await mergeRow.getByRole("button", { name: "Open review", exact: true }).click();
   try { await page.getByRole("button", { name: "Approve exact candidate", exact: true }).waitFor(); }
@@ -86,6 +109,16 @@ try {
   page.once("dialog", (dialog) => dialog.accept()); await publish.click();
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => button.textContent === "Publish protected head" && !button.disabled));
   assert.equal((await git("/usr/bin/git", ["--git-dir", upstream, "rev-parse", "refs/heads/development"])).stdout.trim(), candidate, await page.locator("body").innerText());
+  await repository.selectOption("secondary");
+  await page.getByText(/Current repository target: .* · project\/secondary\./).waitFor();
+  assert.equal(await page.getByText("Protected ref promotion accepted.", { exact: true }).count(), 0, "main promotion receipt must not leak into secondary scope");
+  const secondaryPublish = page.getByRole("button", { name: "Publish protected head", exact: true });
+  page.once("dialog", (dialog) => dialog.accept()); await secondaryPublish.click();
+  await page.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => button.textContent === "Publish protected head" && !button.disabled));
+  assert.equal((await git("/usr/bin/git", ["--git-dir", secondaryUpstream, "rev-parse", "refs/heads/development"])).stdout.trim(), f.initial,
+    "publishing from secondary scope must publish only the secondary protected head");
+  assert.equal((await git("/usr/bin/git", ["--git-dir", upstream, "rev-parse", "refs/heads/development"])).stdout.trim(), candidate,
+    "publishing the secondary repository must not alter the main repository upstream");
   assert.deepEqual(errors, []);
   process.stdout.write("Native Git branch merge, review, promotion and protected-head publish browser workflow passed.\n");
 } finally { await browser?.close(); await web?.close(); await f.service.close(); await rm(f.root, { recursive: true, force: true }); await rm(upstreamRoot, { recursive: true, force: true }); }
