@@ -423,7 +423,7 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
         DIM_TEST_REAL_PNPM: actualPnpm.stdout.trim()
       }
     });
-    expect(result.status, result.stderr).toBe(0);
+    expect(result.status, JSON.stringify({ error: result.error?.message, code: result.error && Reflect.get(result.error, "code"), signal: result.signal, stderr: result.stderr })).toBe(0);
     const invocations = await readFile(log, "utf8");
 
     // Then

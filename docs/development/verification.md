@@ -97,6 +97,23 @@ a fixed two-CPU container limit on local hosts and GitHub runners.
 examples' lightweight `verify` stages with the installed supported
 toolchain; it does not run privileged fixtures or VM example stages.
 
+The repository's DIM source job, `scripts/ci/source.bash`, prepares pinned pnpm
+10.13.1 and Just 1.43.1 inside the disposable job. Just uses the same verified
+architecture-specific installer as the standalone source-gate image. Verified
+candidate trees arrive without `.git`; the job creates a local snapshot before
+dependency installation or builds, with hooks/signing disabled and command-local
+author identity. Existing Git worktrees and their HEAD remain unchanged. This
+metadata supports source-tool tests; it does not alter candidate acquisition or
+the descriptor's exact commit/tree authority.
+The job appends an exact-checkout `safe.directory` setting only to its process
+environment, retaining existing Git environment entries. This lets container
+root read a verified checkout owned by the worker UID without writing global
+Git configuration or trusting unrelated repositories.
+The focused disposable smoke can be run with
+`DIM_TEST_SOURCE_CI_IMAGE=node@sha256:REVIEWED_DIGEST pnpm --dir tests exec vitest run scenarios/harness/sourceCiPreflight.test.ts`.
+It checks the real Just download and local Git initialization with stand-ins for
+the subsequent full build/check/test commands.
+
 The terminal shows the current stage and a heartbeat every 30 seconds. Passing
 command output stays in private per-stage logs under `.local/checks/run.*`.
 Failures print the command's exit status, log path and last 160 lines; the

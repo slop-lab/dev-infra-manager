@@ -11,18 +11,8 @@ RUN apt-get update \
     build-essential ca-certificates curl docker.io git jq libsqlite3-0 openssh-client procps util-linux xz-utils \
   && rm -rf /var/lib/apt/lists/*
 
-RUN set -eux; \
-    case "$TARGETARCH" in \
-      amd64) just_target=x86_64; just_sha=6a3003f68fa4d86ada8afe33830a88ffdb6c2fcaff4e5a840b1cb90eaf6f46fc ;; \
-      arm64) just_target=aarch64; just_sha=e28e1f18cecd45d35f9fb39ef3651dd79c0623cb29a2f375ea7a1a185ac32dc9 ;; \
-      *) printf 'unsupported architecture: %s\n' "$TARGETARCH" >&2; exit 1 ;; \
-    esac; \
-    curl --fail --silent --show-error --location \
-      --output /tmp/just.tar.gz \
-      "https://github.com/casey/just/releases/download/1.43.1/just-1.43.1-${just_target}-unknown-linux-musl.tar.gz"; \
-    printf '%s  %s\n' "$just_sha" /tmp/just.tar.gz | sha256sum --check; \
-    tar --extract --gzip --file /tmp/just.tar.gz --directory /usr/local/bin just; \
-    rm /tmp/just.tar.gz
+COPY install-just.bash /usr/local/libexec/dim-install-pinned-just.bash
+RUN bash /usr/local/libexec/dim-install-pinned-just.bash /usr/local/bin "$TARGETARCH"
 
 RUN npm install --global pnpm@10.13.1 \
   && npm cache clean --force \
