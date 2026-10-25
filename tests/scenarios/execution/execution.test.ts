@@ -1,3 +1,4 @@
+import { executionCandidateLeaseLifetimeMilliseconds } from "@slop-lab/dim-contracts-ci/execution";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -76,7 +77,7 @@ it("keeps authorize and candidate ownership current through a 34 second fake-clo
     }
     const authorized = await delayed(grant(claim), false);
     const assigned = store.attachGrant(claim.id, authorized);
-    const credential = await delayed({ username: "candidate", password: "a".repeat(43), expiresAt: 60_000 }, true);
+    const credential = await delayed({ username: "candidate", password: "a".repeat(43), expiresAt: now + executionCandidateLeaseLifetimeMilliseconds }, true);
     expect(credential.username).toBe("candidate"); expect(now).toBeGreaterThanOrEqual(34_000);
     expect(store.get(assigned.id)).toMatchObject({ phase: "running", leaseExpiresAt: expect.any(Number) });
   } finally { store.close(); }
@@ -134,7 +135,7 @@ it("replays a durable result after restart without launching candidate code twic
   const backend: ExecutionBackend = { kind: "ordinary-sysbox", async run() { launches++; return result(authorized.grant); }, async cleanup() { return true; } };
   const client: ExecutionWorkerClient = {
     async claim(requestId) { return { ...authorized, requestId }; }, async renew() { return 60_000; },
-    async candidate() { return { username: "candidate", password: "a".repeat(43), expiresAt: Date.now() + 30_000 }; },
+    async candidate() { return { username: "candidate", password: "a".repeat(43), expiresAt: Date.now() + executionCandidateLeaseLifetimeMilliseconds }; },
     async exchange() { throw new Error("CI execution does not exchange task messages"); },
     async recover() { throw new Error("completed work must be reported"); },
     async report() { reports++; if (reports === 1) throw new Error("lost result response"); stop.abort(); }
