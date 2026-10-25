@@ -24,7 +24,8 @@ import { RepositoryRefStateError } from "./repository-ref-state.js";
 import type { GitExecutableIdentity } from "./repository.js";
 import { assertCurrentNativeProjectAttachmentSnapshot } from "./native-project-attachment-snapshot.js";
 
-const attachmentTimeoutMilliseconds = 8_000;
+const attachmentTimeoutMilliseconds = 80_000;
+const repositoryProofTimeoutMilliseconds = 30_000;
 
 type Issuer = { readonly hostId: string; readonly username: string; readonly password: string };
 type Credential = { readonly username: string; readonly password: string };
@@ -128,12 +129,25 @@ export async function handleNativeProjectAttachmentHttp(
         throw new NativeGitProjectAttachmentContractError("native Git Project attachment exceeds limit");
       }
       const verified: LiveImportedRoot[] = [];
-      for (const entry of repositories) verified.push(await verify(context, {
-        ownerHostId: issuer.hostId,
-        projectId,
-        repositoryId: entry.repositoryId,
-        signal
-      }));
+      for (const entry of repositories) {
+        const repositorySignal = AbortSignal.any([
+          signal,
+          AbortSignal.timeout(repositoryProofTimeoutMilliseconds)
+        ]);
+        try {
+          verified.push(await verify(context, {
+            ownerHostId: issuer.hostId,
+            projectId,
+            repositoryId: entry.repositoryId,
+            signal: repositorySignal
+          }));
+        } catch (error) {
+          if (repositorySignal.aborted && !signal.aborted) {
+            throw new NativeProjectAttachmentProofTimeoutError("native Git Project repository proof timed out", { cause: error });
+          }
+          throw error;
+        }
+      }
       await abortable(context.hooks?.afterVerification?.(signal) ?? Promise.resolve(), signal);
       signal.throwIfAborted();
       const attachment = parseNativeGitProjectAttachment({
@@ -178,6 +192,9 @@ export async function handleNativeProjectAttachmentHttp(
           return sendHandledJson(response, 503, "native Git Project attachment request timed out");
         }
         return true;
+      }
+      if (error instanceof NativeProjectAttachmentProofTimeoutError) {
+        return sendHandledJson(response, 503, "native Git Project attachment repository proof timed out");
       }
       throw error;
     } finally {
@@ -237,4 +254,8 @@ function sendHandledNotFound(response: ServerResponse): true {
 
 class NativeProjectAttachmentRequestError extends Error {
   readonly name = "NativeProjectAttachmentRequestError";
+}
+
+class NativeProjectAttachmentProofTimeoutError extends Error {
+  readonly name = "NativeProjectAttachmentProofTimeoutError";
 }

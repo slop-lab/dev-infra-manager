@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
+import { parseNativeGitProjectAttachment } from "@slop-lab/dim-contracts-git";
 import { afterEach, describe, expect, it } from "vitest";
 import type { NativeProjectAttachmentHooks } from "../../../../packages/control-plane/plugins/git-repositories/src/native-project-attachment-http.js";
 import { configuredManagedGitFixture, type ManagedGitFixture } from "../../../support/managed-git-service.js";
@@ -132,6 +133,34 @@ describe("native Project attachment operation lifecycle", () => {
     // Then
     expect(response.status).toBe(409);
   });
+
+  it("allows a delayed complete proof beyond thirty seconds for a multi-repository attachment", async () => {
+    // Given
+    let verificationStarted = false;
+    const root = await createFinalizeRoot("attachment-delayed-proof");
+    const service = await startHookedService(root, {
+      async beforeVerification(signal) {
+        verificationStarted = true;
+        await delay(30_200, undefined, { signal });
+      }
+    });
+    await activateFinalizeService(service.origin);
+    await importRepository(service);
+    await importRepository(service, "other");
+
+    // When
+    const started = performance.now();
+    const response = await discovery(service.origin);
+    const elapsed = performance.now() - started;
+
+    // Then
+    expect(verificationStarted).toBe(true);
+    expect(response.status).toBe(200);
+    const attachment = parseNativeGitProjectAttachment(await response.json());
+    expect(attachment.repositories.map(({ repositoryId }) => repositoryId).sort()).toEqual(["other", "root"]);
+    expect(elapsed).toBeGreaterThanOrEqual(30_000);
+    expect(elapsed).toBeLessThan(35_000);
+  }, 40_000);
 
   it("retains read capacity for aborted snapshot checks until the mutation queue drains", async () => {
     // Given
