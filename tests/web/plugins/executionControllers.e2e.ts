@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright-core";
-import {assertBrowserRoleExecutionAuthority,assertReadOnlyExecutionAuthority,assertWorkerOnlyExecutionAccess} from './executionPermissions.js';
+import {assertBrowserRoleExecutionAuthority,assertDirectExecutionAuthority,assertReadOnlyExecutionAuthority,assertWorkerOnlyExecutionAccess} from './executionPermissions.js';
 import {loadExecutionBrowserAssets} from './executionBrowserAssets.js';
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
@@ -49,12 +49,12 @@ try {
       if (holdStaleRefresh) { holdStaleRefresh = false; const snapshot = [{ ...job, jobName: `${input.controllerId} job` }]; markStaleRefresh(); await staleRefreshGate; return snapshot; }
       if (heldJobs === "manual") { heldJobs = undefined; markManualJobs(); await manualJobsGate; }
       if (heldJobs === "discovery") { heldJobs = undefined; markDiscoveryJobs(); await discoveryJobsGate; }
-      return [{ ...job, jobName: `${input.controllerId} job` }, ...(includeNavigationJob ? [{ ...navigationJob, jobName: `${input.controllerId} navigation job` }] : [])];
+      return [{ ...job, jobName: `${input.controllerId ?? 'direct'} job` }, ...(includeNavigationJob ? [{ ...navigationJob, jobName: `${input.controllerId ?? 'direct'} navigation job` }] : [])];
     }
     if (name === "jobs.detail") {
       if (holdDetail) { holdDetail = false; markDetail(); await detailGate; }
       const selectedJob = input.id === navigationJob.id ? navigationJob : job;
-      return { job: { ...selectedJob, jobName: `${input.controllerId} detail`, ...(queuedDetail ? { phase: "queued" } : {}) }, result: null };
+      return { job: { ...selectedJob, jobName: `${input.controllerId ?? 'direct'} detail`, ...(queuedDetail ? { phase: "queued" } : {}) }, result: null };
     }
     if (name === "jobs.retry") { if (failRetry) { failRetry = false; throw new Error("response lost"); } return {}; }
     if (name === "workers.list") return emptyWorkers ? [] : [{ id: "worker-a", slots: [
@@ -213,6 +213,15 @@ try {
   await page.evaluate(`window.remountExecution(["controllers", "first", "jobs", ${JSON.stringify(job.id)}], ["controllers.list", "jobs.list", "jobs.detail"])`);
   await page.getByRole("heading", { name: "first detail — finished", exact: true }).waitFor();
   await assertBrowserRoleExecutionAuthority(page);
+  assert(calls.filter((call) => call.name !== "controllers.list").every((call) => typeof call.input.controllerId === "string"));
+  const directMutationCount = calls.filter(({name}) => name === 'jobs.cancel' || name === 'jobs.retry').length;
+  await page.evaluate(`window.remountExecution(["jobs", ${JSON.stringify(job.id)}], ["jobs.list", "jobs.detail"])`);
+  await page.getByRole('heading',{name:'direct detail — finished',exact:true}).waitFor();
+  await assertDirectExecutionAuthority(page,'retry','Retry execution');
+  queuedDetail = true; await page.getByRole('row',{name:/direct job sample\/root/}).getByRole('button',{name:'View job',exact:true}).click();
+  await page.getByRole('heading',{name:'direct detail — queued',exact:true}).waitFor();
+  await assertDirectExecutionAuthority(page,'cancel','Cancel execution'); queuedDetail = false;
+  assert.equal(calls.filter(({name}) => name === 'jobs.cancel' || name === 'jobs.retry').length,directMutationCount);
   await page.evaluate('window.remountExecution(["controllers", "operator-only", "jobs"])');
   await page.getByLabel('Controller',{exact:true}).waitFor();
   await page.getByLabel("Controller", { exact: true }).selectOption("offline");
@@ -221,7 +230,6 @@ try {
   await page.getByRole("button", { name: "Refresh controllers", exact: true }).click();
   await page.getByText(/^Execution is unavailable on this controller/).waitFor();
   assert.equal(await page.getByLabel("Controller", { exact: true }).inputValue(), "offline");
-  assert(calls.filter((call) => call.name !== "controllers.list").every((call) => typeof call.input.controllerId === "string"));
   await page.evaluate(`window.remountExecution(["controllers", "second", "jobs", ${JSON.stringify(job.id)}])`);
   await page.getByLabel("Controller", { exact: true }).waitFor();
   assert.equal(await page.getByLabel("Controller", { exact: true }).inputValue(), "second");

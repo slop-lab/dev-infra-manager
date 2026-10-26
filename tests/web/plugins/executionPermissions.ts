@@ -23,6 +23,18 @@ export async function assertBrowserRoleExecutionAuthority(page: Page): Promise<v
   assert.equal(await page.getByRole('button',{name:'Retry execution',exact:true}).count(),0);
 }
 
+export async function assertDirectExecutionAuthority(page: Page, authority: 'cancel'|'retry', action: 'Cancel execution'|'Retry execution'): Promise<void> {
+  const guidance = page.locator(`[data-execution-authority="${authority}"]`);
+  await guidance.waitFor();
+  const copy = await guidance.innerText();
+  assert.match(copy,/requires both the browser operator role and an operator-enabled service connection/i);
+  assert.match(copy,/direct connection/i);
+  assert.match(copy,/cannot identify which authority is missing/i);
+  assert.doesNotMatch(copy,/browser account has the operator role/i);
+  assert.doesNotMatch(copy,/selected service connection is operator-enabled/i);
+  assert.equal(await page.getByRole('button',{name:action,exact:true}).count(),0);
+}
+
 export async function assertWorkerOnlyExecutionAccess(page: Page): Promise<void> {
   await page.getByLabel('Controller',{exact:true}).selectOption('operator-only');
   await page.getByRole('heading',{name:'Job query access required',exact:true}).waitFor();
