@@ -37,6 +37,11 @@ checks remain mandatory. Installing a panel never grants a service credential. A
 its connection through trusted host controllers selected by the private Web
 configuration; discovery schemas and domain interpretation stay in that plugin.
 The core supplies only fixed controller execution with bounded JSON responses.
+Host command stdout and stderr each have a finite 32 MiB budget, including JSON
+formatting overhead for service responses containing large diffs. A lost,
+oversized or invalid command response does not prove a mutation was rejected:
+return a sanitized transport failure with unknown outcome and require a state
+refresh before retrying, rather than a conflict response.
 Explicit manual configuration takes precedence and never silently falls back to
 another source of authority.
 

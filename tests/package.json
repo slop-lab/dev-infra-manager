@@ -9,6 +9,7 @@
     "test:unit": "vitest run host control-plane contracts installer web git-review-tracing git-tools cli/host --exclude 'scenarios/**' --maxWorkers=2",
     "test:cli": "tsx --conditions=dim-source --test --test-reporter=./support/node-failure-reporter.ts cli/*.test.ts",
     "test:web-journeys": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/journeys/run.ts",
+    "test:web-controller-output": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/controllerOutput.e2e.ts",
     "test:web-native-management": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/plugins/nativeManagement.e2e.ts",
     "test:web-git-sync": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/plugins/nativeBranchMerge.e2e.ts",
     "test:web-opencode-workspace-link": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/plugins/agent-tools/opencodeWorkspaceOpen.e2e.ts",

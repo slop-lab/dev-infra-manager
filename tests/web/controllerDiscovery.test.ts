@@ -13,7 +13,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "dim-controller-discovery-")); roots.push(root);
   const calls = join(root, "calls.json"), state = join(root, "state.json"), executable = join(root, "dim");
   await writeFile(calls, "[]"); await writeFile(state, "true");
-  await writeFile(executable, `#!${process.execPath}\nimport fs from 'node:fs';const args=process.argv.slice(2),path=${JSON.stringify(calls)},calls=JSON.parse(fs.readFileSync(path));calls.push(args);fs.writeFileSync(path,JSON.stringify(calls));if(!JSON.parse(fs.readFileSync(${JSON.stringify(state)}))){console.error('PRIVATE_SECRET /private/controller/path');process.exit(1);}if(args.includes('stdin')){let input='';for await(const chunk of process.stdin)input+=chunk;console.log(JSON.stringify({args,input}));process.exit(0);}if(args.includes('slow'))await new Promise(resolve=>setTimeout(resolve,1000));if(args.includes('oversized'))console.log('x'.repeat(3*1024*1024));else console.log(JSON.stringify({args}));`, { mode: 0o700 });
+  await writeFile(executable, `#!${process.execPath}\nimport fs from 'node:fs';const args=process.argv.slice(2),path=${JSON.stringify(calls)},calls=JSON.parse(fs.readFileSync(path));calls.push(args);fs.writeFileSync(path,JSON.stringify(calls));if(!JSON.parse(fs.readFileSync(${JSON.stringify(state)}))){console.error('PRIVATE_SECRET /private/controller/path');process.exit(1);}if(args.includes('stdin')){let input='';for await(const chunk of process.stdin)input+=chunk;console.log(JSON.stringify({args,input}));process.exit(0);}if(args.includes('slow'))await new Promise(resolve=>setTimeout(resolve,1000));if(args.includes('oversized'))console.log('x'.repeat(33*1024*1024));else console.log(JSON.stringify({args}));`, { mode: 0o700 });
   const directory = join(root, "node_modules/fixture-feature"); await mkdir(directory, { recursive: true });
   await writeFile(join(directory, "package.json"), JSON.stringify({ name: "fixture-feature", type: "module", main: "index.js" }));
   await writeFile(join(directory, "index.js"), `const operation={name:'change',description:'Trusted fixture',access:'operator',parseInput(v){if(v && typeof v==='object'&&(Object.keys(v).length===0||Object.keys(v).length===1&&typeof v.manifest==='string'))return v;throw new Error('invalid');},parseOutput(v){return v;}};export const webPlugin={id:'fixture',title:'Fixture',description:'Controller discovery',operations:[operation],assets:{'panel.js':new URL('./panel.js',import.meta.url)},browserEntry:'panel.js',async create(config){if(config.reject)throw new Error("manual connection denied");return {invoke:async()=>({manual:config})};},async autoConnect(context){const controller=context.controllers[0];await controller.run(['fixture','discover']);return {invoke:(_name,input)=>controller.run(['fixture','change',...(input.manifest?[JSON.stringify(input)]:[])])};}};`);
@@ -96,4 +96,19 @@ it("delivers bounded private input over stdin without placing it in argv", async
   expect(JSON.parse(await readFile(f.calls, "utf8"))).toEqual([["--host", "selected-host", "stdin", "--json"]]);
   await expect(controller.run(["stdin"], { timeoutMilliseconds: 1000, input: "한".repeat(44 * 1024) })).rejects.toThrow("invalid controller command input");
   expect(JSON.parse(await readFile(f.calls, "utf8"))).toHaveLength(1);
+});
+
+it("carries a multi-megabyte review and reports an oversized completed mutation as unknown, not rejected", async () => {
+  const f = await fixture(), receipt = join(f.root, "mutation.json");
+  await writeFile(join(f.root, "dim"), `#!${process.execPath}\n// @ts-check\nimport fs from 'node:fs';const args=process.argv.slice(2);if(args.includes('discover')){console.log('{}');}else{const input=JSON.parse(args.find(arg=>arg.startsWith('{'))??'{}');fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({completed:true,mode:input.manifest}));console.log(JSON.stringify({reviewId:'exact-review',patch:input.manifest==='overflow'?'x'.repeat(33*1024*1024):'+line\\n'.repeat(500000)}));}`, { mode: 0o700 });
+  const [plugin] = await loadWebPlugins([{ package: "fixture-feature" }], f.root, f.context);
+  const review = await invokeWebPlugin(plugin!, "change", { manifest: "review" }, ["operator"]) as { reviewId: string; patch: string };
+  expect(review.reviewId).toBe("exact-review");
+  expect(review.patch).toBe("+line\n".repeat(500000));
+  expect(Buffer.byteLength(JSON.stringify(review))).toBeGreaterThan(2 * 1024 * 1024);
+  expect(JSON.parse(await readFile(receipt, "utf8"))).toEqual({ completed: true, mode: "review" });
+  await expect(invokeWebPlugin(plugin!, "change", { manifest: "overflow" }, ["operator"])).rejects.toMatchObject({
+    status: 502, code: "host_result_unavailable", publicMessage: expect.stringContaining("It may have completed")
+  });
+  expect(JSON.parse(await readFile(receipt, "utf8"))).toEqual({ completed: true, mode: "overflow" });
 });

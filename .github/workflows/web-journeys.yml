@@ -48,6 +48,8 @@ jobs:
           NODE
       - name: Verify portable Git components without DIM
         run: pnpm --dir tests run test:git-tools-web
+      - name: Verify large host responses and uncertain mutation outcomes
+        run: pnpm --dir tests run test:web-controller-output
       - name: Run disposable source Web journeys
         env:
           DIM_WEB_JOURNEY_ARTIFACTS: ${{ runner.temp }}/dim-web-journeys

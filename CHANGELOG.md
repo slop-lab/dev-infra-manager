@@ -87,6 +87,8 @@ is implied by these source changes.
   the primary Web merge flow, identify host authority as a Git connection, retain
   repository-specific creation drafts, and use actual target metadata without
   assuming a source branch. Keep exact reviews and upstream sync under Advanced.
+  Carry large review results through a bounded 32 MiB host response budget;
+  distinguish an unavailable mutation result from an authoritative rejection.
 
 - Manage independent Git repositories in one Project with separate imports,
   repository-scoped credentials, reviews and protected-ref promotion. Allow
