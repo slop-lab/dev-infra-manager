@@ -3,8 +3,8 @@ import { mkdir, open, rename, unlink, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { createLlmRouterClient, privateOperatorFile } from "@slop-lab/dim-service-client-llm-router";
-import { llmOperation, llmOperations } from "@slop-lab/dim-contracts-llm-router";
+import { createLlmRouterClient, LlmRouterRejectedError, privateOperatorFile } from "@slop-lab/dim-service-client-llm-router";
+import { llmOperation, llmOperations, type LlmRouterControllerResult } from "@slop-lab/dim-contracts-llm-router";
 
 const selectionFile = (environment: NodeJS.ProcessEnv) => resolve(environment.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "dim/llm/operator-selection.json");
 const defaultConnection = (environment: NodeJS.ProcessEnv) => resolve(environment.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "dim/llm/operator.json");
@@ -91,5 +91,12 @@ export async function runLlmRouterConsole(args: readonly string[], signal?: Abor
   }
   let payload: unknown;
   try { payload = JSON.parse(serialized) as unknown; } catch { throw new Error("LLM router console input must be valid JSON"); }
-  process.stdout.write(`${JSON.stringify(await (await createControllerLlmRouterConsole(process.env, expectedSelection, signal)).invoke(operation, payload))}\n`);
+  let result: LlmRouterControllerResult;
+  try {
+    result = { schemaVersion: 1, outcome: "success", output: await (await createControllerLlmRouterConsole(process.env, expectedSelection, signal)).invoke(operation, payload) };
+  } catch (error) {
+    if (!(error instanceof LlmRouterRejectedError)) throw error;
+    result = { schemaVersion: 1, outcome: "rejected", status: error.status, errorCode: error.errorCode };
+  }
+  process.stdout.write(`${JSON.stringify(result)}\n`);
 }
