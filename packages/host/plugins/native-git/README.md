@@ -78,7 +78,17 @@ ordinary `git fetch origin` and `git merge upstream/development` before submitti
 a proposal. See [Git synchronization](../../../../docs/guides/git-sync.md).
 
 Repository read and proposal-write grants remain private to the host. Workspace
-checkouts receive narrow local broker access. Review, registrar, importer and
+checkouts receive narrow local broker access through the shared guest service
+endpoint at `127.0.0.1:19420/services/native-git`; the host plugin alone resolves
+that name to the workspace's deterministic loopback broker on port 19419.
+Recovery rewrites only the exact previously owned HTTP origin. The attachment
+retains that prior endpoint until every selected checkout is repaired, so an
+interrupted migration is retry-safe and arbitrary user-modified remotes survive.
+Inside a managed workspace, `dim-workspace plugins` reports Native Git ready and
+advertises ordinary `git` fetch/push against those scoped origins. Ordinary Git
+workspaces report the installed integration as unconfigured. Guest discovery
+does not expose Project registration, policy or other operator operations.
+Review, registrar, importer and
 promoter credentials are never mounted into workspaces. Workspace identity checks
 fence name reuse and discard. Optional Project metadata is supplied to generic
 host controllers through an injected resolver, rather than a host-core dependency

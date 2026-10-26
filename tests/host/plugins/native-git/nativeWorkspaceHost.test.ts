@@ -1,9 +1,9 @@
 import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { ProcessRunner, WorkspaceStore, type WorkspaceRecord, type WorkspaceRuntime, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
+import { ProcessRunner, WorkspaceService, WorkspaceStore, workspaceServiceEndpoint, type WorkspaceRecord, type WorkspaceRuntime, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import { createManagedWorkspace, ensureManagedWorkspace } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceHost.js";
-import { nativeWorkspaceAttachmentFile, readNativeWorkspaceAttachment } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
+import { nativeWorkspaceAttachmentFile, readNativeWorkspaceAttachment, writeNativeWorkspaceAttachment } from "../../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
 import { cleanupFinalizeFixtures, generationId } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { managedProjectFixture } from "./nativeProjectIntegrationFixture.js";
 import { createNativeProjectConsole } from "../../../../packages/host/plugins/native-git/src/projectConsole.js";
@@ -11,14 +11,18 @@ import { createNativeRepositoryPolicyClient } from "../../../../packages/host/pl
 import { loadNativeGitRootImporterConnection } from "../../../../packages/host/plugins/native-git/src/nativeGitRootImporterConnection.js";
 import { NativeProjectPendingStore } from "../../../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js";
 import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { hostPlugin } from "../../../../packages/host/plugins/native-git/src/plugin.js";
 
 vi.mock("../../../../packages/host/plugins/native-git/src/nativeWorkspaceBrokerProcess.js", () => ({ ensureNativeWorkspaceBroker: vi.fn(async () => {}) }));
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await cleanupFinalizeFixtures(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 class Runtime implements WorkspaceRuntime {
   readonly commands: Array<{ workspace: string; argv: string[] }> = [];
+  readonly origins = new Map<string, string>();
   readonly seeds: string[] = [];
   creates = 0;
+  repairFailureAt: number | undefined;
+  private repairAttempts = 0;
   constructor(readonly root: string) {}
   async inspect() { return { running: true }; }
   async create() { this.creates++; }
@@ -27,7 +31,18 @@ class Runtime implements WorkspaceRuntime {
   async remove() {}
   async updateResources(_record: WorkspaceRecord, _resources: WorkspaceResources) { return { recreated: false }; }
   async seed(record: WorkspaceRecord, directory: string) { const target = path.join(this.root, record.name); await cp(directory, target, { recursive: true }); this.seeds.push(target); }
-  async exec(record: WorkspaceRecord, argv: string[]) { this.commands.push({ workspace: record.name, argv }); return 0; }
+  async exec(record: WorkspaceRecord, argv: string[]) {
+    this.commands.push({ workspace: record.name, argv });
+    if (argv[0] === "git" && argv.includes("set-url")) this.origins.set(argv[2]!, argv.at(-1)!);
+    if (argv[0] === "node") {
+      this.repairAttempts++;
+      if (this.repairAttempts === this.repairFailureAt) return 1;
+      const [directory, before, after] = argv.slice(-3);
+      if (directory !== undefined && before !== undefined && after !== undefined && this.origins.get(directory) === before) this.origins.set(directory, after);
+    }
+    return 0;
+  }
+  allowRepairs() { this.repairFailureAt = undefined; this.repairAttempts = 0; }
   async connect(): Promise<number> { throw new Error("unexpected raw connection"); }
   async hostGateway() { return "172.20.0.1"; }
 }
@@ -65,17 +80,94 @@ it("seeds selected independent repositories with separate grants and never mutat
   const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(fixture.state, record.id));
   expect(attachment.repositories.public?.grant).not.toBe(attachment.repositories.private?.grant);
   expect(fixture.runtime.commands.filter(({ argv }) => argv.includes("set-url")).map(({ argv }) => argv.at(-1))).toEqual([
-    "http://172.20.0.1:19419/v1/projects/project-a/repositories/public.git", "http://172.20.0.1:19419/v1/projects/project-a/repositories/private.git"]);
+    `${workspaceServiceEndpoint("native-git")}/v1/projects/project-a/repositories/public.git`,
+    `${workspaceServiceEndpoint("native-git")}/v1/projects/project-a/repositories/private.git`]);
   expect(fixture.runtime.commands.filter(({ argv }) => argv.includes("push.default")).map(({ argv }) => argv.at(-1)))
     .toEqual(["current", "current"]);
   expect(fixture.runtime.commands.some(({ argv }) => argv.includes("remote.origin.push"))).toBe(false);
   const configuredCommands = fixture.runtime.commands.length;
   await ensureManagedWorkspace(record, fixture.context);
-  expect(fixture.runtime.commands).toHaveLength(configuredCommands);
+  expect(fixture.runtime.commands).toHaveLength(configuredCommands + 2);
   await createManagedWorkspace({ name: "second", source: { url: "dim://acme" }, repositories: ["private"] }, fixture.context);
   expect(fixture.runtime.seed).toBe(originalSeed);
   expect(fixture.runtime.commands.filter(({ workspace }) => workspace === "second")).toHaveLength(4);
   expect(fixture.runtime.seeds).toHaveLength(2);
+});
+it("keeps the previous broker endpoint durable until every owned origin is repaired", async () => {
+  const fixture = await workspaceFixture();
+  const record = await createManagedWorkspace({ name: "migration", source: { url: "dim://acme" }, repositories: ["public", "private"] }, fixture.context);
+  const file = nativeWorkspaceAttachmentFile(fixture.state, record.id);
+  const attachment = await readNativeWorkspaceAttachment(file);
+  const legacy = { ...attachment, gateway: "172.20.0.1" };
+  await writeNativeWorkspaceAttachment(legacy);
+  for (const repositoryId of Object.keys(legacy.repositories)) {
+    fixture.runtime.origins.set(`/workspace/${repositoryId}`, `http://${legacy.gateway}:${legacy.port}/v1/projects/${legacy.projectId}/repositories/${repositoryId}.git`);
+  }
+  fixture.runtime.repairFailureAt = 2;
+
+  await expect(ensureManagedWorkspace(record, fixture.context)).rejects.toThrow(/cannot refresh the owned Native Git workspace origin/);
+
+  const failed = await readNativeWorkspaceAttachment(file);
+  expect(failed.gateway).toBe(legacy.gateway);
+  expect(failed.configuration).toEqual(legacy.configuration);
+  expect(failed.repositories).toEqual(legacy.repositories);
+  expect(fixture.runtime.origins.get("/workspace/public")).toBe(`${workspaceServiceEndpoint("native-git")}/v1/projects/project-a/repositories/public.git`);
+  expect(fixture.runtime.origins.get("/workspace/private")).toBe(`http://${legacy.gateway}:${legacy.port}/v1/projects/project-a/repositories/private.git`);
+
+  fixture.runtime.allowRepairs();
+  await ensureManagedWorkspace(record, fixture.context);
+  const completed = await readNativeWorkspaceAttachment(file);
+  expect(completed.gateway).toMatch(/^127\./);
+  expect(completed.configuration).toEqual(legacy.configuration);
+  expect(completed.repositories).toEqual(legacy.repositories);
+  expect(fixture.runtime.origins.get("/workspace/private")).toBe(`${workspaceServiceEndpoint("native-git")}/v1/projects/project-a/repositories/private.git`);
+});
+it("preserves a user-modified origin while migrating other owned origins", async () => {
+  const fixture = await workspaceFixture();
+  const record = await createManagedWorkspace({ name: "custom-origin", source: { url: "dim://acme" }, repositories: ["public", "private"] }, fixture.context);
+  const file = nativeWorkspaceAttachmentFile(fixture.state, record.id);
+  const attachment = { ...await readNativeWorkspaceAttachment(file), gateway: "172.20.0.1" };
+  await writeNativeWorkspaceAttachment(attachment);
+  fixture.runtime.origins.set("/workspace/public", `http://${attachment.gateway}:${attachment.port}/v1/projects/${attachment.projectId}/repositories/public.git`);
+  fixture.runtime.origins.set("/workspace/private", "ssh://developer@example.invalid/private.git");
+
+  await ensureManagedWorkspace(record, fixture.context);
+
+  expect(fixture.runtime.origins.get("/workspace/public")).toBe(`${workspaceServiceEndpoint("native-git")}/v1/projects/project-a/repositories/public.git`);
+  expect(fixture.runtime.origins.get("/workspace/private")).toBe("ssh://developer@example.invalid/private.git");
+});
+it("advertises only its owned service name and resolves it from fenced attachment state", async () => {
+  const fixture = await workspaceFixture();
+  const record = await createManagedWorkspace({ name: "service-owner", source: { url: "dim://acme" } }, fixture.context);
+  const services = hostPlugin.workspaceServices;
+  if (!services) throw new Error("Native Git service ownership is missing");
+  const service = new WorkspaceService(fixture.context.store, fixture.runtime, async () => { throw new Error("source acquisition is not expected"); });
+  const context = { ...fixture.context, cleanupRunner: fixture.context.runner, stateRoot: fixture.context.store.root, service };
+
+  expect(services.names).toEqual(["native-git"]);
+  await expect(services.resolve("other", record, context)).resolves.toBeUndefined();
+  await expect(services.resolve("native-git", record, context)).resolves.toMatch(/^http:\/\/127\.[0-9]+\.[0-9]+\.[0-9]+:19419$/);
+});
+it("advertises scoped Git only to managed Project workspaces without guest operator operations", async () => {
+  const fixture = await workspaceFixture();
+  const managed = await createManagedWorkspace({ name: "guest-discovery", source: { url: "dim://acme" } }, fixture.context);
+  const guest = hostPlugin.guest;
+  if (!guest?.inspect) throw new Error("Native Git guest discovery is missing");
+
+  await expect(guest.inspect(managed, {
+    ...fixture.context,
+    cleanupRunner: fixture.context.runner,
+    stateRoot: fixture.context.store.root,
+    service: new WorkspaceService(fixture.context.store, fixture.runtime, async () => { throw new Error("source acquisition is not expected"); })
+  })).resolves.toEqual({ state: "ready" });
+  await expect(guest.inspect({ ...managed, source: { ...managed.source, url: "https://example.invalid/repository.git" } }, {
+    ...fixture.context,
+    cleanupRunner: fixture.context.runner,
+    stateRoot: fixture.context.store.root,
+    service: new WorkspaceService(fixture.context.store, fixture.runtime, async () => { throw new Error("source acquisition is not expected"); })
+  })).resolves.toMatchObject({ state: "unconfigured" });
+  expect(guest.commands).toEqual([{ name: "git", description: expect.stringContaining("scoped managed repositories") }]);
+  expect(guest.operations).toBeUndefined();
 });
 it("rejects invalid repository selections before creating a runtime", async () => {
   const fixture = await workspaceFixture();

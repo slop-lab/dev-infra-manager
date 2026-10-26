@@ -2,10 +2,10 @@ import { refreshNativeWorkspaceConnection } from "./nativeWorkspaceConnection.js
 import { nativeRepositoryDefaultRef, nativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
-import { ContainerWorkspaceRuntime, WorkspaceService, UserError, type CommandRunner, type CreateWorkspaceInput,
+import { ContainerWorkspaceRuntime, WorkspaceService, UserError, workspaceServiceEndpoint, type CommandRunner, type CreateWorkspaceInput,
   type StreamingCommandRunner, type WorkspaceRecord, type WorkspaceStore, type WorkspaceRuntime, type AcquiredWorkspaceSource } from "@slop-lab/dim-host-core/workspace";
 import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
@@ -69,8 +69,7 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
     ...(hostGateway ? { hostGateway } : {}),
     seed: async (record, directory) => {
     await baseRuntime.seed(record, directory);
-    const gateway = await runtime.hostGateway?.(record);
-    if (!privateAddress(gateway)) throw new UserError("managed workspace Git requires a private IPv4 host service gateway");
+    const gateway = nativeBrokerAddress(record.id);
     const repositories: Record<string, NativeWorkspaceRepositoryAttachment> = {};
     for (const repositoryId of selected) repositories[repositoryId] = { ...binding(proofs.get(repositoryId)!),
       nativeWorkspaceId: randomBytes(32).toString("base64url"), grant: randomBytes(32).toString("base64url") };
@@ -80,7 +79,7 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
     await writeNativeWorkspaceAttachment(attachment);
     await ensureNativeWorkspaceBroker(attachment, context.signal);
     for (const [repositoryId, repository] of Object.entries(repositories)) {
-      const remote = `http://${gateway}:${attachment.port}/v1/projects/${project.projectId}/repositories/${repositoryId}.git`;
+      const remote = `${workspaceServiceEndpoint("native-git")}/v1/projects/${project.projectId}/repositories/${repositoryId}.git`;
       const helper = `!f() { if [ "$1" = get ]; then printf 'username=dim\\npassword=${repository.grant}\\n'; fi; }; f`;
       const syncFetch = Object.hasOwn(project.repositories[repositoryId]!.repositoryPolicy.extensions, "git-sync")
         ? [["config", "--local", "--add", "remote.origin.fetch", "+refs/remotes/upstream/*:refs/remotes/upstream/*"]] : [];
@@ -131,16 +130,32 @@ export async function createManagedWorkspace(input: CreateWorkspaceInput & { rea
 export async function ensureManagedWorkspace(record: WorkspaceRecord, context: ManagedWorkspaceHostContext): Promise<void> {
   const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managedStateRoot(process.env), record.id));
   if (attachment.workspaceName !== record.name || attachment.workspaceStateRoot !== context.store.root) throw new UserError("managed workspace attachment conflicts with the selected host");
-  await ensureNativeWorkspaceBroker(await refreshNativeWorkspaceConnection(attachment, context.signal ?? AbortSignal.timeout(40_000)), context.signal);
+  const refreshed = await refreshNativeWorkspaceConnection(attachment, context.signal ?? AbortSignal.timeout(40_000));
+  await ensureNativeWorkspaceBroker(refreshed, context.signal);
+  const updated = { ...refreshed, gateway: nativeBrokerAddress(record.id) };
+  const runtime = context.runtime ?? new ContainerWorkspaceRuntime(context.runner, context.cleanupRunner);
+  for (const repositoryId of Object.keys(refreshed.repositories)) {
+    const before = `http://${refreshed.gateway}:${refreshed.port}/v1/projects/${refreshed.projectId}/repositories/${repositoryId}.git`;
+    const after = `${workspaceServiceEndpoint("native-git")}/v1/projects/${refreshed.projectId}/repositories/${repositoryId}.git`;
+    const code = await runtime.exec(record, ["node", "-e", repairOrigin, `/workspace/${repositoryId}`, before, after], context.signal ? { signal: context.signal } : {});
+    if (code !== 0) throw new UserError("cannot refresh the owned Native Git workspace origin");
+  }
+  await writeNativeWorkspaceAttachment(updated);
+  await ensureNativeWorkspaceBroker(updated, context.signal);
 }
 function binding(proof: NativeProjectReadinessProof): NativeWorkspaceRepositoryProof {
   return { repositoryId: proof.repositoryId, protectedRef: proof.protectedRef, commit: proof.commit, tree: proof.tree,
     policyRevision: proof.policyRevision };
 }
-function privateAddress(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d+\.\d+\.\d+\.\d+$/.test(value)) return false;
-  const parts = value.split(".").map(Number);
-  return parts.every((part) => part >= 0 && part <= 255) && (parts[0] === 10 || parts[0] === 192 && parts[1] === 168 || parts[0] === 172 && parts[1]! >= 16 && parts[1]! <= 31);
+function nativeBrokerAddress(id: string): string {
+  const bytes = createHash("sha256").update(id).digest();
+  return `127.${bytes[0]}.${bytes[1]}.${bytes[2]}`;
 }
+const repairOrigin = String.raw`
+const {execFileSync}=require('node:child_process');
+const [directory,before,after]=process.argv.slice(1);
+const origin=execFileSync('git',['-C',directory,'remote','get-url','origin'],{encoding:'utf8'}).trim();
+if(origin===before)execFileSync('git',['-C',directory,'remote','set-url','origin',after]);
+`;
 
 export { nativeWorkspaceMetadata } from "./nativeWorkspaceMetadata.js";

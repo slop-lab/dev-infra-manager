@@ -7,6 +7,7 @@ import { ProcessRunner } from "../../../packages/host/core/src/runner.js";
 import { ContainerWorkspaceRuntime } from "../../../packages/host/core/src/workspace/runtime.js";
 import { WorkspaceStore } from "../../../packages/host/core/src/workspace/store.js";
 import { WorkspaceService } from "../../../packages/host/core/src/workspace/service.js";
+import { workspaceServiceEndpoint } from "../../../packages/host/core/src/workspace/serviceEndpoint.js";
 import type { WorkspaceRecord } from "../../../packages/host/core/src/workspace/models.js";
 import { bootstrapNativeProjectRepository } from "../../../packages/host/plugins/native-git/src/nativeProjectBootstrap.js";
 import { NativeProjectPendingStore } from "../../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js";
@@ -96,7 +97,8 @@ describe("disposable multi-repository workspace runtime", () => {
         expect(await guest(all, ["git", "-C", `/workspace/${repositoryId}`, "rev-parse", "--show-toplevel"])).toBe(`/workspace/${repositoryId}`);
         expect(await guest(all, ["git", "-C", `/workspace/${repositoryId}`, "config", "--local", "user.name"])).toBe("Workspace Developer");
         expect(await guest(all, ["git", "-C", `/workspace/${repositoryId}`, "config", "--local", "user.email"])).toBe("workspace@example.invalid");
-        expect(await guest(all, ["git", "-C", `/workspace/${repositoryId}`, "remote", "get-url", "origin"])).toContain(`/repositories/${repositoryId}.git`);
+        expect(await guest(all, ["git", "-C", `/workspace/${repositoryId}`, "remote", "get-url", "origin"]))
+          .toBe(`${workspaceServiceEndpoint("native-git")}/v1/projects/example/repositories/${repositoryId}.git`);
         await guest(all, ["git", "-C", `/workspace/${repositoryId}`, "fetch", "origin"]);
         await guest(all, ["sh", "-ceu", `cd /workspace/${repositoryId}; printf 'proposal\\n' >> README.md; git add README.md; git commit -m proposal; git push origin`]);
         const expected = await runGit("/usr/bin/git", ["-C", checkoutSources.get(repositoryId)!, "rev-parse", "HEAD"]);
