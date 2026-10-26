@@ -97,9 +97,9 @@ drafts, results or action authority.
 `#/settings` inventories installed Web capabilities, their observed connection
 state, and account access. Host-owned VM/KVM, cache/mirror, tailnet/tunnel and
 image/shell capabilities have explicit owner guidance, not invented Web setup
-controls. `#/settings/access` opens the single sensitive Account & access dialog
-for the existing role/password-confirmed account-management flow. Browser roles
-and service authority remain independent.
+controls. `#/settings/access` offers **Manage account & access**, which opens the
+single sensitive dialog for the existing role/password-confirmed account-management
+flow. Browser roles and service authority remain independent.
 
 Each host also has a scoped refresh, name search and state filter. Filters retain
 mounted rows, open settings, focus and drafts, and distinguish no matches from an
