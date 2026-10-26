@@ -6,7 +6,9 @@ row, using that row's exact identity without a separate tab or selector. It chec
 OpenCode and Codex tools, explicitly installs them, and starts, inspects or stops
 the workspace's managed OpenCode server.
 
-The plugin never accepts executable paths, shell commands, arbitrary server
+The workspace Tools URL is `#/workspaces/HOST/UUID/tools`. Browser Back,
+Forward and reload keep the selected workspace task without storing credentials
+or repeating a lifecycle action. The plugin never accepts executable paths, shell commands, arbitrary server
 options or private connection files from the browser. Every action is scoped to
 a selected controller and the current workspace identity. Read-only sessions can
 inspect tools and server status; setup and server changes require operator access.
