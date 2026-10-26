@@ -4,6 +4,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { gzipSync } from "node:zlib";
 import { afterEach, expect, it, vi } from "vitest";
 import { WorkspaceStore, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import { NativeProjectPendingStore } from "../../../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js";
@@ -81,6 +82,18 @@ it("cancels a pending readiness proof when the workspace request disconnects", a
   expect(mocks.issueLease).not.toHaveBeenCalled();
 });
 
+it("retains gzip and protocol-v2 metadata while replacing only the scoped upstream credential", async () => {
+  const fixture = await brokerFixture();
+  mocks.readiness.mockResolvedValue({ generationId: "a".repeat(64) });
+  mocks.issueLease.mockResolvedValue({ username: "workspace-write-test", password: "secret" });
+  const path = fixture.gitPath.replace("/info/refs?service=git-upload-pack", "/git-upload-pack");
+  const response = await fetch(`${fixture.endpoint}${path}`, { method: "POST", headers: {
+    ...fixture.headers, "content-type": "application/x-git-upload-pack-request", "git-protocol": "version=2", "content-encoding": "gzip",
+  }, body: gzipSync("0014command=ls-refs\n00010000") });
+  expect(response.status).toBe(200); await response.body?.cancel();
+  expect(fixture.received).toEqual([{ protocol: "version=2", encoding: "gzip" }]);
+});
+
 it("allows the upstream proof and Git backend to run beyond the former thirty-second proxy limit", async () => {
   // Given
   const fixture = await brokerFixture(30_200);
@@ -103,10 +116,14 @@ async function brokerFixture(upstreamDelayMilliseconds = 0): Promise<{
   readonly endpoint: string;
   readonly gitPath: string;
   readonly headers: Readonly<Record<string, string>>;
+  readonly received: { readonly protocol: string | undefined; readonly encoding: string | undefined }[];
 }> {
   const root = await mkdtemp(path.join(os.tmpdir(), "dim-native-broker-deadline-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const received: { protocol: string | undefined; encoding: string | undefined }[] = [];
   const upstream = createServer(async (_request, response) => {
+    received.push({ protocol: typeof _request.headers["git-protocol"] === "string" ? _request.headers["git-protocol"] : undefined,
+      encoding: typeof _request.headers["content-encoding"] === "string" ? _request.headers["content-encoding"] : undefined });
     await delay(upstreamDelayMilliseconds);
     response.writeHead(200, { "content-type": "application/x-git-upload-pack-advertisement" }).end("ready");
   });
@@ -158,6 +175,6 @@ async function brokerFixture(upstreamDelayMilliseconds = 0): Promise<{
   return {
     endpoint: `http://127.0.0.1:${String(brokerAddress.port)}`,
     gitPath: "/v1/projects/project-a/repositories/public.git/info/refs?service=git-upload-pack",
-    headers: { authorization: `Basic ${Buffer.from(`dim:${attachment.repositories.public?.grant ?? ""}`).toString("base64")}` }
+    headers: { authorization: `Basic ${Buffer.from(`dim:${attachment.repositories.public?.grant ?? ""}`).toString("base64")}` }, received
   };
 }

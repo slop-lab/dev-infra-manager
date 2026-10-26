@@ -90,6 +90,7 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
           ]), headers: {
             authorization: `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}`,
             ...(request.headers["content-type"] ? { "content-type": request.headers["content-type"] } : {}),
+            ...(request.headers["content-encoding"] === "gzip" ? { "content-encoding": "gzip" } : {}),
             ...(request.headers["git-protocol"] ? { "git-protocol": request.headers["git-protocol"] } : {})
           }
         }, (incoming) => {

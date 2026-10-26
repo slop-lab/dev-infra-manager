@@ -158,6 +158,7 @@ function backendEnvironment(input: GitBackendRequest): NodeJS.ProcessEnv {
     REQUEST_METHOD: input.request.method ?? "GET",
     CONTENT_LENGTH: input.request.headers["content-length"] ?? "",
     CONTENT_TYPE: input.request.headers["content-type"] ?? "",
+    ...(input.request.headers["content-encoding"] === "gzip" ? { HTTP_CONTENT_ENCODING: "gzip" } : {}),
     REMOTE_ADDR: input.request.socket.remoteAddress ?? "",
     REMOTE_USER: input.identity.username,
     DIM_NATIVE_GIT_PROJECT_ID: input.route.projectId,
