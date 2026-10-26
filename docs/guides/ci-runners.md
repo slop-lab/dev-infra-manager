@@ -250,7 +250,16 @@ Before a Sysbox guest starts, fixed executor-failure codes distinguish
 `image-preparation-failed` and `container-launch-failed`. Typed candidate errors
 retain `candidate-read-timeout`, `candidate-read-unavailable`,
 `candidate-read-stale` or `candidate-read-rejected`; rejected Git objects use the
-last code. After launch, Docker wait/log observation failures use
+last code. Git process failures additionally identify `candidate-read-auth-denied`
+(HTTP authentication/authorization denial), `candidate-read-transport-failed`
+(connection failure or HTTP service error), `candidate-read-aborted`,
+`candidate-read-output-limit`, `candidate-read-process-unavailable`, or
+`candidate-read-failed` for an unclassified Git exit. The existing per-process
+Git deadline produces `candidate-read-timeout`. Authentication denial alone does
+not prove stale authority; only the authority client's explicit lease rejection
+produces `candidate-read-stale`. These categories do not automatically retry a
+job or change its required-check result. Git stderr is bounded and inspected only
+in worker memory, never attached to completion evidence. After launch, Docker wait/log observation failures use
 `container-observer-failed`. These codes identify the failed stage even when
 guest logs are empty and never include raw command output or host exceptions.
 

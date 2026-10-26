@@ -37,6 +37,7 @@ type GitInvocation = {
   readonly maximumOutputBytes: number;
   readonly timeoutMilliseconds: number;
   readonly signal: AbortSignal;
+  readonly authenticated?: boolean;
 };
 
 export async function openDisposableGit(options: GitProcessOptions, signal: AbortSignal): Promise<DisposableGit> {
@@ -63,7 +64,7 @@ export async function openDisposableGit(options: GitProcessOptions, signal: Abor
       return runGit({ executable: options.executable, args,
         environment: { ...environment, GIT_ASKPASS: askpass, DIM_NATIVE_GIT_READER_USERNAME: credential.username,
           DIM_NATIVE_GIT_READER_PASSWORD: credential.password }, maximumOutputBytes,
-        timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal });
+        timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal, authenticated: true });
     },
     close: () => rm(root, { recursive: true, force: true })
   } satisfies DisposableGit;
@@ -110,7 +111,7 @@ function gitEnvironment(): NodeJS.ProcessEnv {
 function runGit(input: GitInvocation): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     if (input.signal.aborted) {
-      reject(new NativeGitProcessError("native Git operation was aborted"));
+      reject(new NativeGitProcessError("native Git operation was aborted", "aborted"));
       return;
     }
     const child = spawn(input.executable, input.args, {
@@ -120,7 +121,8 @@ function runGit(input: GitInvocation): Promise<Buffer> {
     let outputBytes = 0;
     let errorBytes = 0;
     let settled = false;
-    let failure: string | undefined;
+    let failure: NativeGitProcessError | undefined;
+    const errors: Buffer[] = [];
     const stop = (): void => {
       if (child.pid !== undefined) {
         try {
@@ -130,33 +132,35 @@ function runGit(input: GitInvocation): Promise<Buffer> {
         }
       }
     };
-    const terminate = (message: string): void => {
+    const terminate = (message: string, code: NativeGitProcessFailure): void => {
       if (settled || failure !== undefined) return;
-      failure = message;
+      failure = new NativeGitProcessError(message, code);
       stop();
     };
-    const aborted = (): void => terminate("native Git operation was aborted");
-    const timer = setTimeout(() => terminate("native Git operation timed out"), input.timeoutMilliseconds);
+    const aborted = (): void => terminate("native Git operation was aborted", "aborted");
+    const timer = setTimeout(() => terminate("native Git operation timed out", "timeout"), input.timeoutMilliseconds);
     timer.unref();
     input.signal.addEventListener("abort", aborted, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
       outputBytes += chunk.length;
-      if (outputBytes > input.maximumOutputBytes) terminate("native Git output exceeded its limit");
+      if (outputBytes > input.maximumOutputBytes) terminate("native Git output exceeded its limit", "output-limit");
       else output.push(chunk);
     });
     child.stderr.on("data", (chunk: Buffer) => {
       errorBytes += chunk.length;
-      if (errorBytes > 64 * 1024) terminate("native Git error output exceeded its limit");
+      if (errorBytes > 64 * 1024) terminate("native Git error output exceeded its limit", "output-limit");
+      else if (input.authenticated === true) errors.push(chunk);
     });
-    child.on("error", () => terminate("native Git process could not start"));
+    child.on("error", () => terminate("native Git process could not start", "process-unavailable"));
     child.on("close", (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       input.signal.removeEventListener("abort", aborted);
-      if (failure !== undefined) reject(new NativeGitProcessError(failure));
+      if (failure !== undefined) reject(failure);
       else if (code === 0) resolve(Buffer.concat(output));
-      else reject(new NativeGitProcessError("native Git operation failed"));
+      else reject(new NativeGitProcessError("native Git operation failed",
+        input.authenticated === true ? authenticatedFailure(Buffer.concat(errors).toString("utf8")) : "failed"));
     });
   });
 }
@@ -167,6 +171,18 @@ export function effectiveUserId(): number {
   return userId;
 }
 
+// Inspect bounded stderr in memory only. Neither the error nor its cause retains it.
+// These indicate what Git observed, not whether a request is safe to retry.
+function authenticatedFailure(stderr: string): NativeGitProcessFailure {
+  if (/Authentication failed|The requested URL returned error: (?:401|403)\b|could not read (?:Username|Password)/.test(stderr)) return "auth-denied";
+  if (/Could not resolve (?:host|proxy):|Failed to connect to |Couldn.t connect to server|Connection (?:reset by peer|refused)|Empty reply from server|The requested URL returned error: (?:408|429|5[0-9]{2})\b|HTTP\/2 stream .* was not closed cleanly|Recv failure:|Send failure:/.test(stderr)) return "transport";
+  return "failed";
+}
+
+export type NativeGitProcessFailure = "auth-denied" | "transport" | "timeout" | "aborted"
+  | "output-limit" | "process-unavailable" | "failed";
+
 export class NativeGitProcessError extends Error {
   readonly name = "NativeGitProcessError";
+  constructor(message: string, readonly code: NativeGitProcessFailure = "failed") { super(message); }
 }

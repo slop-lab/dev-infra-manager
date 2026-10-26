@@ -8,6 +8,7 @@ import { verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from
 import { assignment, grant, hash } from "../../../contracts/ci/executionFixture.js";
 import { ExecutorRunner } from "./sysboxFixture.js";
 import { ExecutionLeaseLostError, ExecutionServiceUnavailableError } from "../../../../packages/host/plugins/execution-worker/src/client.js";
+import { NativeGitProcessError } from "../../../../packages/host/plugins/execution-worker/src/nativeGitCandidateProcess.js";
 import { CandidateObjectError } from "../../../../packages/host/plugins/execution-worker/src/nativeGitCandidateObjects.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
@@ -50,6 +51,16 @@ it("reports typed candidate admission failures distinctly from guest execution",
   expect((await sysboxBackend.run(stale)).completion).toEqual({ kind: "executor-failure", code: "candidate-read-stale" });
   const rejected = await input(); rejected.acquireCandidate = async () => { throw new CandidateObjectError("private object/path"); };
   expect((await sysboxBackend.run(rejected)).completion).toEqual({ kind: "executor-failure", code: "candidate-read-rejected" });
+});
+it("keeps Git authentication failure as failed CI evidence without launching a guest", async () => {
+  const options = await input();
+  options.acquireCandidate = async () => { throw new NativeGitProcessError("private credential/path", "auth-denied"); };
+  const completed = await sysboxBackend.run(options);
+  expect(completed.completion).toEqual({ kind: "executor-failure", code: "candidate-read-auth-denied" });
+  expect(completed.result).toBe("failure");
+  expect(completed.cleanupComplete).toBe(true);
+  expect(JSON.stringify(completed)).not.toContain("private credential/path");
+  expect(options.runner.calls.some(({ args }) => args[0] === "run" || args[0] === "wait")).toBe(false);
 });
 it.each(["candidate", "configuration", "image", "launch"] as const)("identifies %s preparation failure without publishing raw host diagnostics", async (stage) => {
   const options = await input(), privateDetail = "https://private-user:private-password@private-host/private-path";

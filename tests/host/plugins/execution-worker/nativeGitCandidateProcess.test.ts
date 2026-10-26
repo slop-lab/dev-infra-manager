@@ -2,7 +2,8 @@ import { mkdir, readdir } from "node:fs/promises";
 import { createServer, request as httpRequest, type Server } from "node:http";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { openDisposableGit } from "../../../../packages/host/plugins/execution-worker/src/nativeGitCandidateProcess.js";
+import { candidateFailureCode } from "../../../../packages/host/plugins/execution-worker/src/candidate-failure.js";
+import { NativeGitProcessError, openDisposableGit } from "../../../../packages/host/plugins/execution-worker/src/nativeGitCandidateProcess.js";
 import { gitHttpFixture } from "../../../support/gitHttpFixture.js";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -65,11 +66,51 @@ it.each(["deadline", "cancel"] as const)("stops a stalled real Git request on %s
   const server = createServer((_request, response) => { response.once("close", disconnected); started(); });
   const endpoint = await listening(server);
   const pending = f.git.runAuthenticated(["ls-remote", "--refs", `${endpoint}/repo.git`, "refs/heads/main"], 4096, f.controller.signal);
-  const rejected = expect(pending).rejects.toThrow(mode === "deadline" ? "operation timed out" : "operation was aborted");
+  const rejected = pending.catch((error: unknown) => error);
+  // Attach the rejection handler before waiting for the stalled server.
   await requested;
   if (mode === "cancel") f.controller.abort();
-  await rejected;
+  const error: unknown = await rejected;
+  expect(error).toBeInstanceOf(NativeGitProcessError);
+  expect(candidateFailureCode(error)).toBe(mode === "deadline" ? "candidate-read-timeout" : "candidate-read-aborted");
   await closed;
   await f.git.close();
   expect(await readdir(f.temporaryRoot)).toEqual([]);
+});
+
+
+it.each([
+  [401, "candidate-read-auth-denied"],
+  [403, "candidate-read-auth-denied"],
+  [503, "candidate-read-transport-failed"],
+  [404, "candidate-read-failed"]
+] as const)("publishes a bounded diagnosis for real Git HTTP %i without retaining stderr", async (status, code) => {
+  const f = await fixture();
+  const endpoint = await listening(createServer((_request, response) => {
+    response.writeHead(status, { "www-authenticate": 'Basic realm="private-realm"' }).end("private-response-body");
+  }));
+  const error: unknown = await f.git.runAuthenticated(["ls-remote", "--refs",
+    `${endpoint}/private-repository-name.git`, "refs/heads/main"], 4096, f.controller.signal)
+    .catch((failure: unknown) => failure);
+  expect(error).toBeInstanceOf(NativeGitProcessError);
+  expect(candidateFailureCode(error)).toBe(code);
+  expect(error).toMatchObject({ message: "native Git operation failed" });
+  const serialized = JSON.stringify(error);
+  for (const secret of ["private-realm", "private-response-body", "private-repository-name", endpoint,
+    "fixture-reader", "fixture-reader-password"]) expect(serialized).not.toContain(secret);
+  expect(error).not.toHaveProperty("cause");
+});
+
+it("distinguishes a real Git transport disconnect from authentication denial", async () => {
+  const f = await fixture();
+  const endpoint = await listening(createServer((request) => { request.socket.destroy(); }));
+  const error: unknown = await f.git.runAuthenticated(["ls-remote", "--refs",
+    `${endpoint}/repo.git`, "refs/heads/main"], 4096, f.controller.signal).catch((failure: unknown) => failure);
+  expect(candidateFailureCode(error)).toBe("candidate-read-transport-failed");
+});
+
+it("keeps Git output-limit failures distinct from network timeouts", async () => {
+  const f = await fixture();
+  const error: unknown = await f.git.run(["--version"], 1, f.controller.signal).catch((failure: unknown) => failure);
+  expect(candidateFailureCode(error)).toBe("candidate-read-output-limit");
 });
