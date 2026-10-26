@@ -233,11 +233,14 @@ is implied by these source changes.
   owner-state reconciliation before repeating unknown LLM writes. Establish a
   current account-catalog baseline before generated account creation, retain
   unknown provider-login ownership across controller rediscovery, and require a
-   freshly loaded policy revision before editing a reconciled lost-response save.
-   Fence prior tabs and delayed credential actions when browser identity changes,
-   retain exact-job cancellation receipts through stale or failed reads, and
-   reconnect workspace-only capabilities without clearing healthy sibling drafts.
-   Run the disposable non-Git browser journeys in the Web CI lane.
+  freshly loaded policy revision before editing a reconciled lost-response save.
+  Preserve newer same-form edits across late project creation and account rename,
+  and keep direct-router and controller result loss indeterminate after dispatch
+  instead of presenting it as a known service rejection.
+  Fence prior tabs and delayed credential actions when browser identity changes,
+  retain exact-job cancellation receipts through stale or failed reads, and
+  reconnect workspace-only capabilities without clearing healthy sibling drafts.
+  Run the disposable non-Git browser journeys in the Web CI lane.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
   repositories through the Native Git plugin, with explicit controller, Project
