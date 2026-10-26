@@ -53,6 +53,18 @@ it("keeps provider credentials out of process arguments and preserves the device
   expect(calls.at(-1)?.options?.timeoutMilliseconds).toBe(60_000);
 });
 
+it("marks malformed controller operation output as unavailable after dispatch", async () => {
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "remote", async run(args) {
+    if (args[2] === "describe") return { schemaVersion: 1, selectionId, operations: capabilities };
+    return { invalid: "operation output" };
+  } }] });
+
+  await expect(runtime.invoke("projects", { controllerId: "remote" })).rejects.toMatchObject({
+    status: 502,
+    code: "llm_controller_result_unavailable",
+  });
+});
+
 it("discovers and invokes through the actual Web controller transport without overriding reserved flags", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-router-web-transport-"));
   try {

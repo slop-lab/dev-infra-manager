@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { llmOperations } from "@slop-lab/dim-contracts-llm-router";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
-import type { WebPluginContext, WebPluginRuntime } from "@slop-lab/dim-web/plugin-api";
+import { HttpResponseError, type WebPluginContext, type WebPluginRuntime } from "@slop-lab/dim-web/plugin-api";
 const controllerId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const descriptor = z.strictObject({ name: z.string(), description: z.string().max(2000), access: z.enum(["read", "operator", "reviewer"]) });
 const controllerSchema = z.strictObject({ id: controllerId, controllerKey: controllerId, title: z.string().min(1).max(256), status: z.enum(["ready", "unavailable"]), operations: z.array(descriptor).max(1000) });
@@ -38,6 +38,8 @@ export async function automaticRouterConnections(context: WebPluginContext): Pro
     const operation = llmOperations.find((value) => value.name === name);
     if (!controller || !operation || !controllers.some((value) => value.id === id && value.status === "ready" && value.operations.some((available) => available.name === name))) throw new Error("Controller router operation is unavailable");
     const selection = selections.get(id); if (!selection) throw new Error("Router connection has not been attested");
-    return operation.parseOutput(await controller.run(["llm-router", "console", "invoke", name, "--expected-selection", selection, "--input", "-"], { input: JSON.stringify(operation.parseInput(input)), timeoutMilliseconds: name === "account.login.start" ? 60_000 : 30_000 }));
+    const output = await controller.run(["llm-router", "console", "invoke", name, "--expected-selection", selection, "--input", "-"], { input: JSON.stringify(operation.parseInput(input)), timeoutMilliseconds: name === "account.login.start" ? 60_000 : 30_000 });
+    try { return operation.parseOutput(output); }
+    catch { throw new HttpResponseError(502, "The selected router controller returned an invalid operation result. It may have completed; refresh router state before retrying.", "llm_controller_result_unavailable"); }
   } };
 }
