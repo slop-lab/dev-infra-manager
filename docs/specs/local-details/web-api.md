@@ -184,6 +184,49 @@ Finished requests with unresolved accounting can subsequently record both observ
 counts, without re-resolving execution or inventing zero usage. Navigation itself
 grants none of these mutation roles.
 
+### Browser task locations
+
+Native hash links encode task/object identity without changing accepted HTTP
+paths or adding server query parameters. Core owns `#/workspaces`,
+`#/workspaces/HOST/UUID[/TASK]`, `#/workspaces/HOST/new` and `#/settings`.
+Plugin task locations live below `#/features/FEATURE`. `WebPluginLocation` is an
+optional session-scoped browser capability exposing the owner's tail, native
+link creation, navigation and a disposable subscription. It carries no operation
+authority. URLs never contain service credentials, form bodies or mutation
+receipts. Scope changes and session disposal fence URL callbacks just as they
+fence operation results.
+Its `revision` identifies newer browser navigation intent. Owners fence delayed
+related-object reads against that revision before changing selection or location;
+accepted background writes must not replace a newer user destination.
+
+Login/session restoration retain the requested task location. The shell must not
+fall back from an explicit missing destination to another host or service.
+Discovered service object links retain controller provenance independently of
+availability. Plugins validate owner-specific tails; hidden lazy mounts may read
+their catalog but do not rewrite the visible location before a navigation target
+is accepted. Navigation and reload never submit or retry domain writes. Forms
+remain mounted through same-session navigation; no secret-bearing drafts are
+serialized into browser storage, and session end clears mounted content.
+
+Workspace feature mounts belong to the immutable workspace UUID and session,
+not to its mutable runtime phase. The optional `onWorkspaceChange` subscription
+notifies the owner when the current `workspace.phase` changes without discarding
+drafts or unknown-write locks. A phase transition fences in-flight operation
+results; owners reconcile fresh state explicitly before re-enabling stale runtime
+controls. Replacing the UUID or ending the session still disposes the entire mount.
+Reconnect suspends the feature transport and advances its connection generation.
+Replies from an earlier generation cannot populate the reconnected view or unlock
+uncertain writes. Failed workspace mounts may retry without disposing healthy
+sibling mounts or their drafts.
+
+Same-origin browser tabs coordinate identity changes through the non-secret
+`dim.browser-session.epoch` local-storage marker, never serialized credentials or
+drafts. A cookie-changing login fences prior views even if its response body is
+lost or malformed. Delayed credential actions recheck identity before publishing
+their result. A self-account update may retain its one-time receipt only until
+the user continues or a later identity change supersedes it. Server handlers
+recheck session currency after awaited work before returning protected results.
+
 ## Workspace operations
 
 Authenticated status exposes only configured host IDs and credential-free
