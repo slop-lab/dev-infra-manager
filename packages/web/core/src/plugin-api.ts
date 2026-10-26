@@ -93,6 +93,7 @@ export interface WebPluginLocation {
 }
 export interface WebPluginWorkspaceBrowserContext extends WebPluginBrowserContext {
   readonly workspace: WebPluginWorkspace;
+  onWorkspaceChange?(handler: () => void): () => void;
   refreshWorkspace(): Promise<boolean>;
   openFeature(featureId: string): boolean;
 }
