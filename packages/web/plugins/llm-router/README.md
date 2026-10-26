@@ -51,6 +51,9 @@ owns admission state, usage allowance and revision-fenced policy editing. Traffi
 principal revocation. All three sections remain mounted while navigating so safe
 drafts and accepted/unknown-outcome locks survive browser history changes. A
 blocked dirty-policy navigation restores the prior canonical Project URL.
+Late project creation and account rename results preserve newer edits to the
+same form. Reconciliation of an older rename also retains the newer display-name
+draft rather than replacing it with the previously submitted value.
 
 After reconciling a lost policy response, **Reload project** reads the current
 project revision before a separate edit. Editing the retained form does not unlock
