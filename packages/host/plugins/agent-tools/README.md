@@ -129,6 +129,14 @@ unchanged. Run `dim tools server WORKSPACE` again after attachment/token rotatio
 to refresh an existing server. `DIM_LLM_ROUTER_OPENCODE_MODE=providers` explicitly
 retains independent model/provider choices.
 
+An attached router may supply a guest-side readiness hook. Explicit server
+startup/reuse validates the loaded provider routing and configured primary agent
+against the real OpenCode API, rather than treating HTTP health as sufficient.
+Only an owned stale server is restarted; role/model configuration, Web credentials
+and sessions are retained. Read-only tools console status and credential reads
+do not deploy helpers, evaluate launch hooks or install tools, so optional task
+monitoring cannot overwrite an existing guest adapter merely by inspecting it.
+
 OpenCode's runtime npm installs use the same private, user-owned npm cache as
 setup, including TUI/run/server and saved continuation. This avoids older images'
 root-owned `~/.npm` cache without changing its ownership or contents. An explicit

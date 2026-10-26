@@ -7,11 +7,16 @@ dim installer install plugin @slop-lab/dim-host-plugin-llm-router@0.10.0
 dim llm prepare /home/operator/.config/dim/llm-host \
   --control-plane https://llm.example.test \
   --issuer development-host --issuer-key-file /home/operator/.config/dim/host-issuer.key \
-  --endpoint http://172.17.0.1:8319 --listen-host 172.17.0.1 --port 8319
+  --endpoint http://127.0.0.1:8319 --listen-host 127.0.0.1 --port 8319
 dim llm serve /home/operator/.config/dim/llm-host/gateway.json
 ```
 
-Use an actual private host address reachable from the workspace; the example address is not discovered automatically. Run `serve` under a persistent service manager on that selected host. Install alone enables no gateway. Provision its private issuer key explicitly; its CP policy must allow the selected project and route.
+Run `serve` under a persistent service manager on that selected host. The gateway
+can stay on host loopback: the shared workspace exec/stdio channel carries guest
+requests to its named service, with no guest-to-host bridge firewall rule.
+`--endpoint` describes the host gateway, not the endpoint delivered to guests.
+Install alone enables no gateway. Provision its private issuer key explicitly;
+its CP policy must allow the selected project and route.
 
 ```sh
 dim llm attach development --config /home/operator/.config/dim/llm-host/gateway.json \
@@ -22,6 +27,14 @@ Attach checks that the actual workspace is initialized and running and fences de
 is governed by the control-plane policy. All six service/project limits default
 to `null` (unlimited); no extra gateway upload-size or request-duration cap is applied.
 The gateway cannot call CP issuer/operator endpoints and forwards only application protocol routes with rewritten authentication. A successful reattachment atomically selects one current binding for that workspace across all projects/routes and fences old tokens and streams before remote principal cleanup. Failed helper delivery preserves the previous working binding. A fresh attachment UUID prevents provisional issuance from rotating an existing credential; project accounting history remains stable.
+
+One workspace-global attachment lock serializes reattachment across configuration
+paths. The host pins the selected gateway's configuration identity; changing
+gateway identity or configuration path is rejected until the prior attachment
+is explicitly retired. Failed preparation or credential delivery retains or
+restores the previous private guest connection. Recovery of a legacy direct
+connection without a host selection requires explicit reattachment through the
+same gateway; host-private binding evidence is checked before adoption.
 
 Attach installs a
 private connection at `~/.config/dim/llm-router.json` and a self-contained
@@ -60,6 +73,19 @@ selection. Existing DIM-owned provider ID conflicts are rejected.
 The guest launch hook preserves `~/.omo/omo.jsonc`, including comments and model
 chains. It removes only the previously generated `profiles.dim-router` when its
 exact saved ownership metadata matches; user edits and other profiles survive.
+Before each launch it also removes only OMO's generated connected-provider and
+provider-model inventory files, forcing the pinned plugin to rebuild them from
+the current OpenCode provider catalog instead of retaining a failed or stale
+route snapshot. OMO configuration, OpenCode authentication and session storage
+are not changed. A configured routed model that is absent from the recovered
+route fails with its provider/model name and an explicit configuration or route
+remediation instead of a generic availability error.
+The launch hook validates the attached route before starting OpenCode; a failed
+discovery cannot silently start a process without its routing adapter. Owned
+server startup/reuse also checks the actual configured routing and primary-agent
+inventory. A stale process whose adapter did not load is restarted only after
+the route recovers; an unavailable configured agent fails without renaming roles
+or changing models. Explicit `providers` mode keeps direct OpenAI routing intact.
 No upstream key or host plugin is installed in the guest. To retain direct OpenAI
 provider connections too, set `DIM_LLM_ROUTER_OPENCODE_MODE=providers` when
 launching OpenCode/helpers. This registers the DIM providers without redirecting
@@ -101,6 +127,16 @@ model catalogue and an environment allowlist. It never loads live credentials,
 OMO configuration or user sessions. Its private server and temporary files are
 removed on success and failure. The check does not load OMO or establish real
 provider inference, tool execution, guest connectivity or multi-host readiness.
+
+To additionally exercise pinned OMO 4.19.4's generated inventory refresh and
+actual configured-agent discovery, supply its reviewed local `dist/index.js`:
+
+```sh
+pnpm --dir tests exec tsx scenarios/llm-router/opencodeConsumer.e2e.ts \
+  /absolute/opencode-1.18.31 /absolute/oh-my-openagent/dist/index.js
+```
+
+This mode still uses a synthetic model catalogue and requests no inference.
 
 Codex may use an explicitly configured custom Responses provider with this same
 scoped bearer token. No TLS interception or copying of ChatGPT authentication is

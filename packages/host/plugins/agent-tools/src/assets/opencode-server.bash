@@ -245,6 +245,13 @@ authenticated_health() {
   jq -e '.healthy == true' >/dev/null 2>&1 <<<"$response"
 }
 
+routing_ready() {
+  local hook="$HOME/.config/dim/opencode-ready.js"
+  [[ -e "$hook" ]] || return 0
+  [[ -f "$hook" && ! -L "$hook" && -O "$hook" ]] || return 1
+  node "$hook" "$credentials_file" "$port"
+}
+
 # Only this explicit operation discloses a credential; status and logs never do.
 if [[ "$operation" = credentials ]]; then
   [[ -n "$password" ]] || fail 'OpenCode credentials have not been configured'
@@ -409,7 +416,7 @@ if [[ -f "$pid_file" && ! -L "$pid_file" ]]; then
     owned_pid="$recorded_pid"
     if [[ "${recorded_port:-}" = "$port" ]] && process_cors_matches "$owned_pid" "$cors_origins_json" && \
       process_configuration_matches "$owned_pid" DIM_OPENCODE_WEB_CONFIGURATION_FINGERPRINT "$configuration_fingerprint" && \
-      authenticated_health && \
+      authenticated_health && routing_ready && \
       process_owns_listener "$owned_pid" "$port"; then
       server_pid="$owned_pid"
     else
@@ -455,7 +462,7 @@ if [[ -z "${server_pid:-}" ]]; then
   readiness_deadline=$((SECONDS + 12))
   server_ready=false
   while ((SECONDS < readiness_deadline)); do
-    if authenticated_health && process_owns_listener "$server_pid" "$port"; then
+    if authenticated_health && routing_ready && process_owns_listener "$server_pid" "$port"; then
       kill -0 "$server_pid" 2>/dev/null || \
         fail "OpenCode Web exited before becoming ready; inspect $log_file"
       server_ready=true

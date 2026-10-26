@@ -4,20 +4,61 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { parse } from "jsonc-parser";
+import DimLlmRouter from "../../../packages/host/plugins/llm-router/src/opencode.js";
 import { prepareOpenCode } from "../../../packages/host/plugins/llm-router/src/opencode-launch.js";
 const roots: string[] = [];
-afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "dim-opencode-profile-")); roots.push(home);
   vi.stubEnv("HOME", home); vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "router");
+  vi.stubEnv("XDG_CACHE_HOME", join(home, ".cache"));
   vi.stubEnv("OPENCODE_CONFIG_CONTENT", '{"permission":{"bash":"ask"},"model":"explicit/original"}');
   const connection = join(home, "connection.json"); vi.stubEnv("DIM_LLM_ROUTER_CONNECTION_FILE", connection);
-  await writeFile(connection, JSON.stringify({ schemaVersion: 1 }), { mode: 0o600 });
+  await writeFile(connection, JSON.stringify({ schemaVersion: 1, endpoint: "http://127.0.0.1:8319", token: "x".repeat(43) }), { mode: 0o600 });
   await mkdir(join(home, ".omo")); await mkdir(join(home, ".local/lib/node_modules"), { recursive: true });
   const require = createRequire(import.meta.url);
   await symlink(dirname(require.resolve("jsonc-parser/package.json")), join(home, ".local/lib/node_modules/jsonc-parser"));
+  const adapter = join(home, ".config/opencode/plugins/dim-llm-router.js"); await mkdir(dirname(adapter), { recursive: true });
+  await writeFile(adapter, await readFile(new URL("../../../packages/host/plugins/llm-router/dist/opencode.js", import.meta.url)));
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models: [{ id: "reviewed", name: "Reviewed", api: "responses" }] })));
   return { home, connection, omo: join(home, ".omo/omo.jsonc") };
 }
+it("invalidates only generated OMO provider inventory across failed discovery and recovery", async () => {
+  const fx = await fixture();
+  const inventory = join(fx.home, ".cache/oh-my-opencode");
+  const authentication = join(fx.home, ".local/share/opencode/auth.json");
+  const session = join(fx.home, ".local/share/opencode/storage/session/user-session.json");
+  const original = '{"agents":{"oracle":{"model":"openai/reviewed","variant":"high"}},"categories":{"quick":{"model":"anthropic/fast"}}}';
+  await mkdir(inventory, { recursive: true });
+  await mkdir(dirname(authentication), { recursive: true });
+  await mkdir(dirname(session), { recursive: true });
+  await writeFile(join(inventory, "connected-providers.json"), '{"connected":["openai"],"updatedAt":"stale"}');
+  await writeFile(join(inventory, "provider-models.json"), '{"models":{"openai":[{"id":"removed"}]},"connected":["openai"],"updatedAt":"stale"}');
+  await writeFile(join(inventory, "model-capabilities.json"), '{"user":"preserved"}');
+  await writeFile(authentication, '{"openai":{"type":"oauth"}}', { mode: 0o600 });
+  await writeFile(session, '{"id":"user-session"}', { mode: 0o600 });
+  await writeFile(fx.omo, original, { mode: 0o600 });
+  const fetcher = vi.fn<typeof fetch>().mockRejectedValueOnce(new Error("route unavailable"));
+  vi.stubGlobal("fetch", fetcher);
+
+  await expect(prepareOpenCode()).rejects.toThrow("DIM router model discovery failed; check the workspace router connection");
+
+  await expect(readFile(join(inventory, "connected-providers.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(readFile(join(inventory, "provider-models.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(inventory, "model-capabilities.json"), "utf8")).toBe('{"user":"preserved"}');
+  expect(await readFile(authentication, "utf8")).toBe('{"openai":{"type":"oauth"}}');
+  expect(await readFile(session, "utf8")).toBe('{"id":"user-session"}');
+  expect(await readFile(fx.omo, "utf8")).toBe(original);
+
+  fetcher.mockImplementation(async () => Response.json({ models: [
+    { id: "reviewed", name: "Reviewed", api: "responses", context: 128000, output: 16000 },
+  ] }));
+  await prepareOpenCode();
+  const recovered = await DimLlmRouter();
+  await expect(recovered["chat.params"]({ model: { providerID: "openai", id: "reviewed" } })).resolves.toBeUndefined();
+  await expect(recovered["chat.params"]({ model: { providerID: "openai", id: "removed" } })).rejects.toThrow(/openai\/removed/);
+  expect(await readFile(fx.omo, "utf8")).toBe(original);
+});
 it("preserves role model chains, variants, profiles and explicit launch options", async () => {
   const fx = await fixture();
   vi.stubEnv("OMO_PROFILE", "personal");
@@ -79,4 +120,16 @@ it("does not follow a symlink when reading ownership evidence", async () => {
   await mkdir(dirname(metadata), { recursive: true });
   await symlink(fx.connection, metadata);
   await expect(prepareOpenCode()).rejects.toMatchObject({ code: "ELOOP" });
+});
+it("refuses to remove generated inventory through a symlink", async () => {
+  const fx = await fixture();
+  const inventory = join(fx.home, ".cache/oh-my-opencode");
+  const authentication = join(fx.home, "authentication.json");
+  await mkdir(inventory, { recursive: true });
+  await writeFile(authentication, '{"preserve":true}', { mode: 0o600 });
+  await symlink(authentication, join(inventory, "connected-providers.json"));
+
+  await expect(prepareOpenCode()).rejects.toThrow("OMO generated inventory must be user-owned regular files");
+
+  expect(await readFile(authentication, "utf8")).toBe('{"preserve":true}');
 });

@@ -9,7 +9,8 @@ export async function deployRouterHelpers(workspace: WorkspaceRecord, context: W
   await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
     name: "llm-router-assets", files: [
       { path: adapterPath, contents: await readFile(new URL("./opencode.js", import.meta.url)), mode: 0o600 },
-      { path: ".config/dim/opencode-launch.js", contents: await readFile(new URL("./opencode-launch.js", import.meta.url)), mode: 0o600 }
+      { path: ".config/dim/opencode-launch.js", contents: await readFile(new URL("./opencode-launch.js", import.meta.url)), mode: 0o600 },
+      { path: ".config/dim/opencode-ready.js", contents: await readFile(new URL("./opencode-ready.js", import.meta.url)), mode: 0o600 }
     ]
   });
 }
