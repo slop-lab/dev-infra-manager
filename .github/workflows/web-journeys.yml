@@ -16,7 +16,7 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out exact candidate
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -46,6 +46,10 @@ jobs:
           const version = manifest.browsers.find(browser => browser.name === "chromium").browserVersion;
           appendFileSync(process.env.GITHUB_ENV, `DIM_CHROMIUM=${chromium.executablePath()}\nDIM_CHROMIUM_VERSION=${version}\n`);
           NODE
+      - name: Verify disposable non-Git workbench tasks and recovery
+        env:
+          DIM_WEB_EVIDENCE: ${{ runner.temp }}/dim-web-non-git
+        run: pnpm --dir tests run test:web-non-git
       - name: Verify portable Git components without DIM
         run: pnpm --dir tests run test:git-tools-web
       - name: Verify large host responses and uncertain mutation outcomes
@@ -63,6 +67,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-journeys-${{ github.sha }}
-          path: ${{ runner.temp }}/dim-web-journeys
+          path: |
+            ${{ runner.temp }}/dim-web-journeys
+            ${{ runner.temp }}/dim-web-non-git
           if-no-files-found: warn
           retention-days: 7
