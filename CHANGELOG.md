@@ -59,7 +59,15 @@ is implied by these source changes.
   review identity and is rechecked before promotion. Support TypeScript detectors
   with original-source dependency hashes and optional dispatch through the existing
   scheduler to a host task handler. CI and detector tasks share durable scheduling,
-  lease fencing and worker recovery. General execution uses the named scheduler
+  lease fencing and worker recovery. Managed workspaces discover `dim-ci` to
+  request and inspect exact ordinary-branch candidates through their current
+  repository grant, without reviewer or promotion credentials. Requests pin the
+  current policy and immutable plan, deduplicate exact retries, and expose every
+  planned job without treating absent or failed evidence as success. Preserve
+  recorded delivery history across generation updates and skip absorbed proposal
+  refs during automatic startup, while freshly proved explicit requests retain
+  current-generation delivery intent and execution authority.
+  General execution uses the named scheduler
   and worker plugins and `dim execution worker`; CI contracts retain CI-specific
   messages, while execution contracts own shared scheduling data. Plugin author
   APIs use explicit `/plugin-api` entrypoints. Execution hosts receive bounded file reads
@@ -104,6 +112,12 @@ is implied by these source changes.
   Scoped Git credentials account for request latency without requiring exactly
   synchronized clocks between the control plane and workspace host. Separate
   pre-issuance proof time from network transit in versioned lease responses.
+  Route workspace Git read/proposal traffic through the shared guest service
+  endpoint while retaining plugin-owned deterministic loopback brokers. Endpoint
+  adoption is retry-safe across partial origin repair and preserves user-modified
+  remotes, existing grants and policy evidence. Preserve gzip request metadata
+  through the broker and CGI backend so protocol-v2 fetch acknowledgments remain
+  valid when negotiation expands beyond small histories.
   Reuse full Git proofs only within a request while retaining final authority
   checks, avoid duplicate host source-readiness work before authoritative review
   operations, and reconcile policy changes without delaying their committed
@@ -127,7 +141,15 @@ is implied by these source changes.
   and a private temporary volume across recreation, with explicit resource
   limits, tool-neutral SSH and scoped in-guest lifecycle/session helpers.
   Select the optional `container-kvm` host runtime to run QEMU inside a
-  workspace through an explicit operator-owned device grant.
+  workspace through an explicit operator-owned device grant. Controller-backed
+  workspace routes resolve through the runtime recorded on the workspace, so
+  KVM routes retain the selected runtime's exact device and cgroup inspection
+  instead of falling back to an ordinary container runtime.
+  Carry internal helper, Git and attached LLM requests over one host-initiated
+  streaming runtime channel with named plugin-owned targets, immutable identity
+  fencing and reconnection across self-restart/recreation. Ordinary internal
+  use needs no per-workspace bridge/IP/port firewall rule; external ingress still
+  retains its explicit operator reachability requirements.
   Concurrent service resume keeps one supervisor and workload across atomic
   owner-record replacement.
   Installed host plugins prepare their guest clients without repository
@@ -181,6 +203,10 @@ is implied by these source changes.
   read, operator and reviewer roles. Organize workspaces by host, disclose
   creation and advanced settings on demand, preserve drafts across refresh and
   failed operations, and provide scoped recovery and explicit discard cancellation.
+  Forward confirmed discard consent with the immutable workspace fence, allow
+  bounded long lifecycle/resource operations to finish, retain unmatched resource
+  drafts after unknown outcomes, and disclose interruptions when recreation is
+  needed while preserving persistent workspace data.
   Explain ordinary Git URLs and managed project sources, suggest workspace names
   and report actionable image, runtime and repository failures without exposing
   private host diagnostics. Distinguish incomplete setup from a stopped workspace.
@@ -263,9 +289,16 @@ is implied by these source changes.
   label, detect completion automatically and use the authenticated email as the
   default display name. API labels are optional, and renaming preserves identity
   and usage. Keep each account's credentials and backend partition private and separate
-  from its model routes. Routes can allow the account’s whole discovered model
-  catalog or an explicit list; Web and CLI offer both choices. OpenCode loads
-  current route models through its scoped gateway at startup. Account and route
+  from its model routes. Routes can allow an explicitly registered account model
+  inventory or an explicit list; Web and CLI offer both choices. Keep this
+  authorization inventory separate from transient live availability so provider
+  cooldown omissions and service restarts do not become false principal denials.
+  Atomically adopt existing account catalogs without changing accounts or routes;
+  explicit routes continue immediately, while legacy all-model routes require an
+  explicit inventory registration instead of inferring authority from availability.
+  Guest catalogs and OpenCode load that configured supported inventory through
+  the scoped gateway; operator account discovery remains the separate live
+  availability view. Account and route
   changes apply to new requests without restarting the router. All six router admission/capture limits
   default to unlimited (`null`), including request/response sizes and deadlines.
   Web operators leave fields blank or set explicit service/project caps; gateway,
@@ -276,6 +309,11 @@ is implied by these source changes.
   while preserving role-specific models, variants, fallback chains and other
   provider connections. Model selection, including main/background defaults,
   belongs entirely to OpenCode and OMO; attachment supplies only routing.
+  Generate timeout settings accepted by pinned OpenCode and recover only OMO's
+  generated provider inventories after discovery failure. Verify owned server
+  routing and configured-agent inventory before reuse without rewriting roles,
+  model chains, authentication or sessions. Read-only server inspection no longer
+  materializes guest helpers.
   Preserve OpenCode's native context, input and output metadata when the account
   catalog omits token limits, including native OpenAI model aliases.
   When an OpenAI `-fast` model is absent, route it to its available unsuffixed
