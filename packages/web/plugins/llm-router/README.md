@@ -32,13 +32,46 @@ operator to the router account creation API, never returned in account metadata,
 and cleared from the password field after a successful write. Stored provider
 tokens never reach the browser.
 
+The workbench uses native hash links for its task and object state. A private
+direct connection uses `#/features/llm-router/accounts`,
+`accounts/ACCOUNT`, `projects`, `projects/PROJECT`, and `traffic`. Discovered
+connections always insert the controller key after the task name, for
+example `projects/CONTROLLER/PROJECT`. This keeps reload, Back/Forward and new-tab
+behavior bound to the exact discovered authority instead of guessing from a
+matching account or Project ID, even when only one controller is ready. Missing,
+unknown or unavailable explicit controllers never fall back to another service.
+Invalid task paths explain the problem without rewriting the URL; a missing
+object stays missing and explains the unavailable target rather than selecting a
+different account, Project or controller.
+
+Accounts & routes owns provider discovery, Codex device authorization, compatible
+API credentials, model inspection and explicit route mapping. Projects & policy
+owns admission state, usage allowance and revision-fenced policy editing. Traffic
+& access owns request outcomes, observed-usage reconciliation and workspace
+principal revocation. All three sections remain mounted while navigating so safe
+drafts and accepted/unknown-outcome locks survive browser history changes. A
+blocked dirty-policy navigation restores the prior canonical Project URL.
+
+After reconciling a lost policy response, **Reload project** reads the current
+project revision before a separate edit. Editing the retained form does not unlock
+another save against its older compare-and-swap revision; unsaved policy replacement
+still requires confirmation. A reconciled generated Codex account creation offers **Connect another
+Codex account** as an explicit new intent, not a retry of the interrupted request.
+
 Switching controllers asks before discarding unsaved policy, route or account
 forms. Cancelling preserves the selected controller and fields. A policy save
 must finish before switching; late responses from a previous controller cannot
 replace the new controller's panel. Request and workspace links carry the exact
-router controller and project identity. With several available routers, an
-external routing-project navigation target must include `controllerKey`; matching
+router controller and project identity. Every discovered-router
+navigation target must include `controllerKey`; matching
 project IDs do not establish a connection between those routers.
+
+Controller switching and controller rediscovery are blocked while any owner write
+has an unknown outcome. **Refresh router** reconciles writes covered by current
+owner metadata. An unknown provider sign-in start cannot be recovered from the
+account catalog until the account becomes connected, so the mounted session keeps
+that lock and directs the user to the router operator; ending the Web session may
+clear the UI lock without claiming that the backend login was cancelled.
 
 The UI connects multiple independent Codex accounts through device authorization
 and accepts separate OpenAI-compatible or Anthropic-compatible API base URLs and
@@ -92,3 +125,23 @@ accounting reconciliation. The finished request then offers **Record observed
 usage**, requiring both nonnegative counts and calling the same audited
 `request.resolve` operation without replaying inference. Read-only sessions show
 request metadata without resolution fields or mutation controls.
+
+All other router-owner mutations use the same transport distinction. A known
+service rejection keeps the relevant draft editable. An accepted write remains
+accepted when a following read fails. A transport-unknown create, rename, route,
+project, policy, state, cancellation or principal write keeps its draft and locks
+repeat submission until a successful authoritative owner read that started after
+the unknown outcome. Reads already in flight before the failure cannot release a
+newer lock. The later read either shows the intended state and keeps the mutation
+accepted, or shows that it was not applied and permits an explicit retry.
+
+Generated account creation is reconciled from the account catalog by comparing
+the post-lock account identities with the catalog observed before submission. If
+a new identity is present, Web does not submit the create again. Because the owner
+API has no device-session listing operation, an unknown `account.login.start`
+cannot be proven absent while the account remains unconnected; that sign-in action
+stays locked for the mounted session rather than starting another backend login.
+Account creation remains unavailable until a successful current account-catalog
+read establishes that comparison baseline. Out-of-order account reads cannot
+replace a newer catalog, and an account returned by a successful create is included
+in later baselines even when its immediate follow-up list read fails.
