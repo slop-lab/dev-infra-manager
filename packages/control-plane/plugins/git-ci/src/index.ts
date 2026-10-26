@@ -32,7 +32,7 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
       if (!compiler) throw new Error("Git CI repository attachment is not ready"); return compiler;
     }, async ({ runtime: base, envelope, ownerRequestId }) => {
       if (!runtime) throw new Error("Git CI repository attachment is unavailable");
-      const requestRuntime = { ...base, authoritativeTargetProofs: new Map() };
+      const requestRuntime = { ...base, authoritativeTargetProofs: base.authoritativeTargetProofs ?? new Map() };
       const target = await resolveAuthoritativeNativeRepositoryTarget(requestRuntime, { projectId: envelope.review.projectId,
         repositoryId: envelope.review.repositoryId, protectedRef: envelope.review.protectedRef });
       const planned = await gitCiEnvelope(target.repository, envelope);
