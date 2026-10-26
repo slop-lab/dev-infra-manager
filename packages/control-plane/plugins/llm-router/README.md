@@ -192,6 +192,15 @@ Add this field to the router configuration; omitting it disables operator HTTP a
 
 The host plugin `@slop-lab/dim-host-plugin-llm-router` supplies the `llm` and `llm-router` commands through ordinary host command discovery. Its operator commands and the Web plugin use `@slop-lab/dim-service-client-llm-router` for transport and `@slop-lab/dim-contracts-llm-router` for shared operation definitions. They need a separate mode-0600 connection file `{ "schemaVersion":1, "endpoint":"http://127.0.0.1:8318", "actorId":"operator", "keyFile":"/absolute/operator.key" }`. They require no local database access. The authenticated `POST /v1/operator/operations/NAME` interface enforces read/operator roles on the service, validates input/output and records the operator actor in its audit log. Only bounded metadata is exposed; provider secrets, token hashes, local paths and prompt/response capture contents remain private. Local backup, restore and capture export remain local operator commands.
 
+Operator reads and writes share a bounded cross-process operation guard across
+the inference listener, independent operator listener and shared local operation
+implementation. A reconciliation read waits for an already-dispatched owner write
+through publication, output validation and audit; a busy read fails rather than
+claiming absence while that write is still running. Inference requests do not
+acquire this operator guard. Only typed pre-effect rejections return HTTP 409.
+Unexpected operation, post-publication or audit failures return HTTP 503 because
+the mutation may already have taken effect; clients must reconcile, not replay.
+
 ### Independent operator listener
 
 `dim-control-plane-llm-router operator-serve /absolute/operator-service.json` starts an operator-only listener. Give it a separate loopback listen port and the same private state directory, accounts, routes and service limits as the inference service, plus dedicated `operators`. It attaches to an existing SQLite WAL only after checking the complete table/index/trigger schema against the canonical operation schema, and holds its own `operator-service.guard`. The inference service retains ownership of its database format marker: attachment never initializes a database, migrates it, or changes `user_version`. Extra triggers, columns, indexes or missing objects are rejected even when the format marker is recognized. It never performs inference recovery, takes the inference service lock, issues workspace principals, or accepts inference requests. This allows operator API deployment to run separately from inference lifecycle and workspace admission checks. Stop both listeners before a consistent backup; backup checks both ownership locks.
