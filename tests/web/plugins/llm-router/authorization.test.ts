@@ -31,6 +31,9 @@ it("loads installed feature packages with role-filtered discovery, exact Origin/
     for (const secret of [fixture.operatorKey, fixture.connectionFile, fixture.keyFile, "keyFile", "token_hash"]) expect(metadata).not.toContain(secret);
     expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/panel.js", { headers: observer })).status).toBe(200);
     expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/traffic.js", { headers: observer })).status).toBe(200);
+    expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/routes.js", { headers: observer })).status).toBe(200);
+    expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/mutation-reconciliation.js", { headers: observer })).status).toBe(200);
+    expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/router.css", { headers: observer })).status).toBe(200);
     expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/config.json", { headers: observer })).status).toBe(404);
     expect(fixture.inferenceRequests()).toBe(0);
   } finally { await fixture.close(); }
