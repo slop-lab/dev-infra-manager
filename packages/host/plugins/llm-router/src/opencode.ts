@@ -64,7 +64,8 @@ async function DimLlmRouter() {
   if (connection.schemaVersion !== 1 || typeof connection.endpoint !== "string" || typeof connection.token !== "string"
     || !/^[A-Za-z0-9_-]{43}$/.test(connection.token)) throw new Error("invalid DIM LLM connection");
   const url = new URL(connection.endpoint);
-  if (url.origin !== connection.endpoint || !["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("invalid DIM LLM endpoint");
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash
+    || url.origin !== connection.endpoint && connection.endpoint !== "http://127.0.0.1:19420/services/llm-router") throw new Error("invalid DIM LLM endpoint");
   const mode = process.env.DIM_LLM_ROUTER_OPENCODE_MODE ?? "router";
   if (mode !== "router" && mode !== "providers") throw new Error("DIM_LLM_ROUTER_OPENCODE_MODE must be router or providers");
   // The route owns the current catalogue; OpenCode and OMO own model choices.
@@ -81,7 +82,7 @@ async function DimLlmRouter() {
     const target = exact ?? (model.providerID === "openai" && typeof requestedId === "string" && requestedId.endsWith("-fast")
       ? modelsById.get(requestedId.slice(0, -5)) : undefined);
     const allowed = target && (model.providerID === `dim-${target.api}` || model.providerID === "openai" && target.api === "responses") ? target : undefined;
-    if (!allowed) throw new Error("DIM router rejects a model unavailable in the attached route");
+    if (!allowed) throw new Error(`DIM router model ${String(model.providerID)}/${String(requestedId)} is unavailable in the attached route; update the configured OpenCode or OMO model, or attach a route that offers it`);
     if (allowed.api === "responses" && output !== undefined) {
       const parameters = record(output);
       const options = parameters.options === undefined ? {} : record(parameters.options);
@@ -117,7 +118,7 @@ async function DimLlmRouter() {
       const token = connection.token;
       const transport: typeof fetch = async (input, init) => {
         const requestUrl = new URL(input instanceof Request ? input.url : String(input));
-        if (requestUrl.origin !== endpoint || requestUrl.pathname !== "/v1/responses") throw new Error("DIM OpenAI transport requires the attached Responses endpoint");
+        if (requestUrl.href !== `${endpoint}/v1/responses`) throw new Error("DIM OpenAI transport requires the attached Responses endpoint");
         const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
         headers.set("authorization", `Bearer ${token}`);
         return fetch(input, { ...init, headers, redirect: "error" });

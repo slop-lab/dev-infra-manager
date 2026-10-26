@@ -2,12 +2,14 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { join, resolve } from "node:path";
-import { deployGuestIntegration } from "@slop-lab/dim-host-core/workspace";
+import { deployGuestIntegration, workspaceServiceEndpoint } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 import { issuePrincipal, revokePrincipal } from "./client.js";
 import { loadHostConfig, parseHostConfig } from "./config.js";
 import { deployRouterHelpers } from "./integration.js";
-import { createAttachment, createHostGateway, lockWorkspaceAttachment } from "./gateway.js";
+import { createAttachment, createHostGateway } from "./gateway.js";
+import { lockWorkspaceGateway, selectWorkspaceGateway, validateGatewayAdoption } from "./workspaceService.js";
+import { snapshotRouterConnection, restoreRouterConnection } from "./connectionSnapshot.js";
 
 const usage = `dim llm prepare DIRECTORY --control-plane ORIGIN --issuer ID --issuer-key-file FILE --endpoint GUEST_REACHABLE_ORIGIN [--listen-host IP] [--port PORT]
   dim llm serve|status CONFIG
@@ -28,7 +30,8 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     await mkdir(directory, { mode: 0o700 }); await writeFile(join(directory, "gateway.json"), JSON.stringify(config, null, 2) + "\n", { mode: 0o600, flag: "wx" });
     console.log(`Prepared ${join(directory, "gateway.json")}. Run its persistent gateway before attaching workspaces.`); return;
   }
-  const config = await loadHostConfig(resolve(action === "attach" ? required("--config") : positional));
+  const configFile = resolve(action === "attach" ? required("--config") : positional);
+  const config = await loadHostConfig(configFile);
   if (config.workspaceStateRoot !== context.store.root) throw new Error("gateway and selected host must use the same workspace state root");
   if (action === "status") { console.log(JSON.stringify({ controlPlane: config.connection.endpoint, gateway: config.publicEndpoint, workspaceStateRoot: config.workspaceStateRoot })); return; }
   if (action === "serve") {
@@ -42,27 +45,41 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
   const workspace = await context.store.read(positional);
   if (!workspace.initialized || workspace.phase !== "running") throw new Error("LLM attachment requires a running initialized workspace");
   const scope = { bindingId: randomUUID(), workspaceId: workspace.id, workspaceName: workspace.name, projectId: required("--project"), routeId: flags.get("--route") ?? "default" };
-  const guard = await lockWorkspaceAttachment(config, workspace.id);
+  const guard = await lockWorkspaceGateway(workspace, context);
   if (!guard) throw new Error("another LLM attachment is running for this workspace; retry after it finishes");
   try {
+  const previousConnection = await snapshotRouterConnection(workspace, context);
   const issued = await issuePrincipal(config.connection, scope, context.signal);
   let attachment: Awaited<ReturnType<typeof createAttachment>> | undefined;
+  let selected: Awaited<ReturnType<typeof selectWorkspaceGateway>> | undefined;
+  let deliveryAttempted = false;
   try {
     attachment = await createAttachment(config, scope, issued);
     const connection = { schemaVersion: 1, workspaceId: workspace.id, projectId: scope.projectId, principalId: issued.principalId,
-      endpoint: config.publicEndpoint, token: attachment.token };
+      endpoint: workspaceServiceEndpoint("llm-router"), token: attachment.token };
+    selected = await selectWorkspaceGateway(workspace, context, configFile);
+    await validateGatewayAdoption(config, workspace, previousConnection);
     await deployRouterHelpers(workspace, context);
     // Credentials are committed only after every public helper asset succeeds.
+    deliveryAttempted = true;
     await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
       name: "llm-router-connection", files: [{ path: ".config/dim/llm-router.json", contents: JSON.stringify(connection), mode: 0o600 }]
     });
     const previous = await attachment.activate();
+    selected = undefined;
     const cleanup = await Promise.allSettled(previous.map((old) => revokePrincipal(config.connection, old, AbortSignal.timeout(5000))));
     const failed = cleanup.filter((result) => result.status === "rejected").length;
     if (failed) console.warn(`Replaced attachment locally; ${failed} obsolete CP principal revocation(s) need operator cleanup.`);
   } catch (error) {
-    await attachment?.remove();
-    await revokePrincipal(config.connection, scope, AbortSignal.timeout(5000)); throw error;
+    const rollback = await Promise.allSettled([
+      ...(selected === undefined ? [] : [selected.rollback()]),
+      ...(!deliveryAttempted || attachment === undefined ? [] : [restoreRouterConnection({ workspace, context, previous: previousConnection, token: attachment.token })]),
+      ...(attachment === undefined ? [] : [attachment.remove()]),
+      revokePrincipal(config.connection, scope, AbortSignal.timeout(5000)),
+    ]);
+    const failures = rollback.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
+    if (failures.length) throw new AggregateError([error, ...failures], "LLM attachment failed and rollback was incomplete");
+    throw error;
   }
   console.log(`Attached project '${scope.projectId}' route '${scope.routeId}' to ${workspace.name}; OpenCode and OMO keep their own model choices. Rerun dim tools server to refresh an existing server.`);
   } finally { await guard.release(); }

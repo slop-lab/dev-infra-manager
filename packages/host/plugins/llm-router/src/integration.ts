@@ -1,7 +1,8 @@
 import { Writable } from "node:stream";
 import { readFile } from "node:fs/promises";
-import { deployGuestIntegration, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
+import { deployGuestIntegration, workspaceServiceEndpoint, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
+import { workspaceRouterServices } from "./workspaceService.js";
 
 export async function deployRouterHelpers(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void> {
   const adapterPath = await routerAdapterPath(workspace, context);
@@ -11,6 +12,12 @@ export async function deployRouterHelpers(workspace: WorkspaceRecord, context: W
       { path: ".config/dim/opencode-launch.js", contents: await readFile(new URL("./opencode-launch.js", import.meta.url)), mode: 0o600 }
     ]
   });
+}
+export async function repairRouterConnectionEndpoint(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void> {
+  if (await workspaceRouterServices.resolve("llm-router", workspace, context)) {
+    const code = await context.service.exec(workspace.name, ["node", "-e", repairEndpoint, workspace.id, workspaceServiceEndpoint("llm-router")], { workspaceId: workspace.id, signal: context.signal });
+    if (code !== 0) throw new Error("cannot refresh the workspace LLM service endpoint");
+  }
 }
 const adapterLocationProbe = String.raw`
 const path=require("node:path"),os=require("node:os");
@@ -44,7 +51,7 @@ const home=process.env.HOME,config=process.env.XDG_CONFIG_HOME||path.join(home,"
 if(!path.isAbsolute(config)||relative===".."||relative.startsWith(".."+path.sep)||path.isAbsolute(relative))throw Error("unsupported config location");
 const adapter=fs.openSync(path.join(config,"opencode/plugins/dim-llm-router.js"),fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
 try{const info=fs.fstatSync(adapter);if(!info.isFile()||info.uid!==process.getuid()||info.nlink!==1||!info.size)throw Error("adapter unavailable")}finally{fs.closeSync(adapter)}
-const url=new URL(connection.endpoint);if(url.origin!==connection.endpoint||!["http:","https:"].includes(url.protocol))throw Error("invalid endpoint");const response=await fetch(connection.endpoint+"/v1/models",{redirect:"error",signal:AbortSignal.timeout(2000),headers:{authorization:"Bearer "+connection.token}});await response.body?.cancel();if(response.status!==200)process.exitCode=3}catch{process.exitCode=3}}
+const url=new URL(connection.endpoint);if((url.origin!==connection.endpoint&&connection.endpoint!=="http://127.0.0.1:19420/services/llm-router")||!["http:","https:"].includes(url.protocol))throw Error("invalid endpoint");const response=await fetch(connection.endpoint+"/v1/models",{redirect:"error",signal:AbortSignal.timeout(2000),headers:{authorization:"Bearer "+connection.token}});await response.body?.cancel();if(response.status!==200)process.exitCode=3}catch{process.exitCode=3}}
 })().catch(()=>{process.exitCode=3});`;
 export async function hasRouterConnection(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext, live = false): Promise<boolean> {
   if (!workspace.initialized || workspace.phase !== "running") return false;
@@ -53,3 +60,11 @@ export async function hasRouterConnection(workspace: WorkspaceRecord, context: W
   });
   return result === 0;
 }
+const repairEndpoint = String.raw`
+const fs=require('node:fs'),path=require('node:path');
+const file=path.join(process.env.HOME,'.config/dim/llm-router.json');
+let fd;try{fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK)}catch(error){if(error.code==='ENOENT')process.exit(0);throw error}
+let value;try{const stat=fs.fstatSync(fd);if(!stat.isFile()||stat.nlink!==1||stat.uid!==process.getuid()||(stat.mode&511)!==384||stat.size>65536)throw Error('unsafe connection');value=JSON.parse(fs.readFileSync(fd,'utf8'))}finally{fs.closeSync(fd)}
+if(value.workspaceId!==process.argv[1])throw Error('workspace identity changed');
+if(value.endpoint!==process.argv[2]){value.endpoint=process.argv[2];const temporary=file+'.'+require('node:crypto').randomUUID();fs.writeFileSync(temporary,JSON.stringify(value),{mode:384,flag:'wx'});fs.renameSync(temporary,file)}
+`;
