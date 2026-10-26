@@ -12,7 +12,7 @@ export function mount(container, context) {
   form.className = 'feature-form'; form.setAttribute('aria-label', `Create route for ${context.workspace.name}`);
   const ingressField = node('label'), ingress = document.createElement('select'); ingressField.className = 'field'; ingress.setAttribute('aria-label','Ingress'); ingressField.append(node('span','Ingress'),ingress); form.append(ingressField);
   const name = field(form,'Route name','opencode'), port = field(form,'Service port','4096'), nested = field(form,'Nested container (optional)','');
-  name.required = true; name.pattern = '[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?'; name.maxLength = 32; port.type = 'number'; port.required = true; port.min = '1'; port.max = '65535';
+  name.required = true; name.pattern = '[a-z0-9](?:[a-z0-9\\-]{0,30}[a-z0-9])?'; name.maxLength = 32; port.type = 'number'; port.required = true; port.min = '1'; port.max = '65535';
   const protocolField = node('label'), protocol = document.createElement('select'); protocolField.className = 'field'; protocol.setAttribute('aria-label','Protocol');
   for (const value of ['http','https','tcp']) { const option = document.createElement('option'); option.value = value; option.textContent = value; protocol.append(option); }
   protocolField.append(node('span','Protocol'),protocol); form.append(protocolField);
@@ -59,10 +59,16 @@ export function mount(container, context) {
         }
       } else item.append(node('p',route.approval === 'pending' ? 'Awaiting operator approval. This route is not available yet.' : 'This route has been revoked.'));
       if (route.approval === 'pending' && allowed.has('routes.approve')) action(item,'Approve route',()=>run('routes.approve',{id:route.id}));
-      if (route.approval !== 'revoked' && allowed.has('routes.revoke')) action(item,'Revoke route',async () => {
-        if (!window.confirm(`Revoke ${route.ingress} route for ${context.workspace.name} port ${route.port}? Its external URL will stop serving this workspace.`)) { context.ui.feedback(status, 'Route revocation dismissed.'); return; }
-        await run('routes.revoke',{id:route.id});
-      });
+      if (route.approval !== 'revoked' && allowed.has('routes.revoke')) {
+        const revoke = context.ui.button('Revoke route', 'danger'), confirmation = node('div');
+        confirmation.className = 'workspace-confirmation'; confirmation.hidden = true; confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', `Revoke ${route.ingress} route`);
+        confirmation.append(node('p', `Revoke ${route.ingress} for port ${route.port}? Its external URL will stop serving this workspace.`));
+        const confirm = context.ui.button('Revoke route now', 'danger'), keep = context.ui.button('Keep route'); confirmation.append(confirm, keep);
+        revoke.addEventListener('click', () => { confirmation.hidden = false; keep.focus(); });
+        keep.addEventListener('click', () => { confirmation.hidden = true; revoke.focus(); context.ui.feedback(status, 'Route revocation dismissed.'); });
+        confirm.addEventListener('click', () => { void run('routes.revoke',{id:route.id}); });
+        item.append(revoke, confirmation);
+      }
       routes.append(item);
     }
   }
