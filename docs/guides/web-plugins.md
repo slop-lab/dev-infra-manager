@@ -53,6 +53,8 @@ configured feature connections before writing a fresh account. At service
 startup, an unavailable backend disables its feature while other features remain
 usable. Reconnect retries the same server configuration and attests it again;
 it cannot change connection paths or grant account authority.
+Reconnect requires the browser `operator` role because it replaces shared server
+connection state; read-only accounts cannot interrupt another user's operations.
 Reconnect is also available for an active feature after service replacement.
 Mounted forms retain drafts; refresh the feature's data after reconnecting.
 

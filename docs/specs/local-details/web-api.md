@@ -140,7 +140,9 @@ receive the same post-await generation fence. Each operation has a
 unique declared name, access role, strict input parser and bounded public output
 parser. `POST /v1/extensions/ID/operations/NAME` requires an authenticated session,
 exact Origin, CSRF and the declared role before invoking a configured handler.
-`POST /v1/extensions/ID/reconnect` also requires exact Origin and CSRF. It accepts
+`POST /v1/extensions/ID/reconnect` additionally requires browser `operator`
+authority, exact Origin and CSRF. Readers cannot replace the shared runtime or
+interrupt pending operator calls. It accepts
 only an empty body, never a new connection or credential path, and grants no
 operation authority. Undeclared methods and operations cannot dispatch. A plugin runtime may expose
 a subset of declared operations, for example when no promoter is configured.

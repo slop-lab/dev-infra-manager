@@ -155,6 +155,8 @@ Native Git, workspace tools and External routes Web packages in a separate runti
 installing a feature does not grant service authority. An unavailable backend
 leaves its feature unavailable while workspaces and other features keep working.
 Reconnect retries the same private configuration and verifies its identity again.
+Because reconnect replaces a shared server runtime, it requires the browser
+`operator` role. Read-only users are directed to a browser operator instead.
 Settings also offers reconnect for workspace-only features. Successful connection
 attestation is distinct from a successful workspace read: failed mounts can retry
 without remounting healthy siblings or clearing their drafts. Replies crossing a
