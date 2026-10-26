@@ -9,7 +9,7 @@ export async function stagePages(source: string, pagesWorktree: string) {
 
   const metadata: unknown = JSON.parse(await readFile(path.join(source, "build-info.json"), "utf8"));
   if (!object(metadata) || metadata.version !== pin.version || metadata.commit !== pin.commit || metadata.pagesBase !== pin.pagesBase
-    || metadata.implicitServer !== false || metadata.router !== "hash") throw new Error("Rebuild the pinned Pages client before staging");
+    || metadata.implicitServer !== false || metadata.router !== "hash" || metadata.workspaceLinks !== 1) throw new Error("Rebuild the pinned Pages client before staging");
   await readFile(path.join(source, "index.html"));
   const target = path.join(pagesWorktree, "opencode-web"), versionDirectory = path.join(target, "v", pin.version);
 

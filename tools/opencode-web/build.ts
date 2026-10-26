@@ -20,16 +20,26 @@ if (!await access(source).then(() => true, () => false)) {
 }
 const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" }).trim();
 if (commit !== pin.commit) throw new Error("OpenCode source does not match the reviewed commit");
-run("git", ["diff", "--exit-code", "--", "packages/app/src/entry.tsx", "packages/app/src/app.tsx"]);
+const patchedPaths = ["packages/app/src/entry.tsx", "packages/app/src/app.tsx", "packages/app/src/components/dialog-select-server.tsx", "packages/app/src/dim-workspace-open.tsx", "packages/app/src/dim-workspace-link.js"];
+if (execFileSync("git", ["status", "--porcelain", "--", ...patchedPaths], { cwd: source, encoding: "utf8" }).trim()) throw new Error("Pinned OpenCode adapter sources must be clean before building");
 run("bun", ["install", "--frozen-lockfile", "--ignore-scripts"]);
 const appDirectory = path.join(source, "packages/app");
 const entryFile = path.join(appDirectory, "src/entry.tsx"), appFile = path.join(appDirectory, "src/app.tsx");
-const entry = await readFile(entryFile, "utf8"), app = await readFile(appFile, "utf8");
-const patched = patchPages(entry, app);
+const dialogFile = path.join(appDirectory, "src/components/dialog-select-server.tsx");
+const bridgeFile = path.join(appDirectory, "src/dim-workspace-open.tsx"), helperFile = path.join(appDirectory, "src/dim-workspace-link.js");
+const entry = await readFile(entryFile, "utf8"), app = await readFile(appFile, "utf8"), serverDialog = await readFile(dialogFile, "utf8");
+const patched = patchPages(entry, app, serverDialog);
 try {
-  await writeFile(entryFile, patched.entry); await writeFile(appFile, patched.app);
+  await writeFile(entryFile, patched.entry); await writeFile(appFile, patched.app); await writeFile(dialogFile, patched.serverDialog);
+  await cp(new URL("./dim-workspace-open.tsx", import.meta.url), bridgeFile);
+  await cp(new URL("../../packages/web/plugins/agent-tools/src/assets/workspace-link.js", import.meta.url), helperFile);
+  run("bun", ["run", "typecheck"], appDirectory);
   run("bun", ["run", "build", `--base=${pin.pagesBase}`], appDirectory);
-} finally { await writeFile(entryFile, entry); await writeFile(appFile, app); }
+} finally {
+  await writeFile(entryFile, entry); await writeFile(appFile, app); await writeFile(dialogFile, serverDialog);
+  await rm(bridgeFile, { force: true }); await rm(helperFile, { force: true });
+}
+if (execFileSync("git", ["status", "--porcelain", "--", ...patchedPaths], { cwd: source, encoding: "utf8" }).trim()) throw new Error("Pinned OpenCode adapter sources were not restored after building");
 await rm(output, { recursive: true, force: true });
 await cp(path.join(appDirectory, "dist"), output, { recursive: true, filter: (file) => !file.endsWith(".map") });
 const indexFile = path.join(output, "index.html");
@@ -43,5 +53,5 @@ for (const icon of icons) if (typeof icon === "object" && icon !== null && "src"
 await writeFile(manifestFile, `${JSON.stringify({ ...manifest, id: pin.pagesBase, scope: pin.pagesBase, start_url: pin.pagesBase }, null, 2)}\n`);
 await cp(path.join(source, "LICENSE"), path.join(output, "OPENCODE-LICENSE.txt"));
 await cp(new URL("./REFERENCE-LICENSE.txt", import.meta.url), path.join(output, "PAGES-ADAPTER-LICENSE.txt"));
-await writeFile(path.join(output, "build-info.json"), `${JSON.stringify({ ...pin, router: "hash", implicitServer: false }, null, 2)}\n`);
+await writeFile(path.join(output, "build-info.json"), `${JSON.stringify({ ...pin, router: "hash", implicitServer: false, workspaceLinks: 1 }, null, 2)}\n`);
 console.log(`Built OpenCode ${pin.version} at ${output}`);

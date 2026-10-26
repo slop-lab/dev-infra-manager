@@ -13,7 +13,7 @@ it("stages only the pinned UI version while retaining other versions and unrelat
     await writeFile(path.join(target, "opencode-web/v/1.0.0/index.html"), "preserved older UI");
     await writeFile(path.join(target, "opencode-web/versions.json"), JSON.stringify({ default: "1.0.0", versions: ["1.0.0"] }));
     await writeFile(path.join(source, "index.html"), "new UI");
-    const metadata = { version: "1.18.31", commit: "014614d35b397775e5d397a490fc72368c894ec2", pagesBase: "/dev-infra-manager/opencode-web/v/1.18.31/", router: "hash", implicitServer: false };
+    const metadata = { version: "1.18.31", commit: "014614d35b397775e5d397a490fc72368c894ec2", pagesBase: "/dev-infra-manager/opencode-web/v/1.18.31/", router: "hash", implicitServer: false, workspaceLinks: 1 };
     await writeFile(path.join(source, "build-info.json"), JSON.stringify(metadata));
     const staged = await stagePages(source, target);
     expect(await readFile(path.join(staged, "index.html"), "utf8")).toBe("new UI");
@@ -24,5 +24,8 @@ it("stages only the pinned UI version while retaining other versions and unrelat
     await writeFile(path.join(source, "build-info.json"), JSON.stringify({ ...metadata, commit: "unreviewed" }));
     await expect(stagePages(source, target)).rejects.toThrow(/pinned Pages client/);
     expect(await readFile(path.join(staged, "index.html"), "utf8")).toBe("new UI");
+    const { workspaceLinks: _, ...oldMetadata } = metadata;
+    await writeFile(path.join(source, "build-info.json"), JSON.stringify(oldMetadata));
+    await expect(stagePages(source, target)).rejects.toThrow(/pinned Pages client/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
