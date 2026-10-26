@@ -18,7 +18,7 @@ it.each(["restart", "recreate"] as const)("reconnects after guest-initiated %s w
   const store = new WorkspaceStore(root), runner = new ProcessRunner(), events = new EventEmitter(), controller = new AbortController();
   const record = workspaceRecord(), token = randomBytes(32).toString("base64url");
   let running = true, recreated = 0;
-  const kill = async () => { expect(await runner.runStreaming("node", ["-e", workspaceServiceCleanup, token])).toBe(0); running = false; };
+  const kill = async () => { expect(await runner.runStreaming("node", ["-e", workspaceServiceCleanup, "--", token])).toBe(0); running = false; };
   const runtime: WorkspaceRuntime = {
     inspect: async () => ({ running }), create: async () => { recreated++; }, start: async () => { running = true; },
     stop: kill, remove: kill, updateResources: async () => ({ recreated: false }), seed: async () => {}, connect: async () => 0,

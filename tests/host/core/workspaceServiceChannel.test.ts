@@ -11,7 +11,7 @@ import { workspaceServiceCleanup } from "../../../packages/host/core/src/workspa
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 
-async function fixture(handler?: RequestListener) {
+async function fixture(handler?: RequestListener, token = randomBytes(32).toString("base64url")) {
   let current = true;
   const received: Buffer[] = [];
   const server = createServer(handler ?? ((request, response) => {
@@ -23,7 +23,6 @@ async function fixture(handler?: RequestListener) {
   if (!address || typeof address === "string") throw new Error("listener missing");
   cleanup.push(async () => { server.closeAllConnections(); await new Promise<void>((done) => server.close(() => done())); });
   const runner = new ProcessRunner();
-  const token = randomBytes(32).toString("base64url");
   const open = (signal: AbortSignal) => openWorkspaceServiceChannel({
     exec: (command, options) => runner.runStreaming(command[0] ?? "node", command.slice(1), options),
     current: async () => current, resolve: async (name) => name === "fixture" ? `http://127.0.0.1:${address.port}` : undefined,
@@ -33,7 +32,7 @@ async function fixture(handler?: RequestListener) {
   cleanup.push(() => channel.close());
   const port = await channel.ready;
   return { endpoint: `http://127.0.0.1:${port}`, received, expire() { current = false; }, channel, open,
-    kill: () => runner.runStreaming("node", ["--input-type=commonjs", "-e", workspaceServiceCleanup, token]),
+    kill: () => runner.runStreaming("node", ["--input-type=commonjs", "-e", workspaceServiceCleanup, "--", token]),
   };
 }
 
@@ -63,6 +62,11 @@ it("rejects streams after immutable workspace liveness expires", async () => {
 it("closes the owned guest listener when the stdio channel ends", async () => {
   const fx = await fixture(); await fx.channel.close();
   await expect(fetch(`${fx.endpoint}/services/fixture/read`)).rejects.toThrow();
+});
+
+it("cleans an owned channel whose random token begins with an option prefix", async () => {
+  const fx = await fixture(undefined, "-".repeat(43));
+  await expect(fx.channel.close()).resolves.toBeUndefined();
 });
 
 it("delivers SSE before completion and cancels the upstream when the guest caller aborts", async () => {

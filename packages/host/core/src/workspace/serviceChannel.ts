@@ -74,13 +74,13 @@ export function openWorkspaceServiceChannel(options: WorkspaceServiceChannelOpti
   controller.signal.addEventListener("abort", () => { for (const session of sessions) session.destroy(); wire.destroy(); toGuest.destroy(); fromGuest.destroy(); }, { once: true });
   const closed = (async () => {
     try {
-      await options.exec(["node", "--input-type=commonjs", "-e", workspaceServiceGuest, String(options.port), workspaceServiceMarker, options.token], {
+      await options.exec(["node", "--input-type=commonjs", "-e", workspaceServiceGuest, "--", String(options.port), workspaceServiceMarker, options.token], {
         stdin: toGuest, stdout: fromGuest, stderr: new Writable({ write(_chunk, _encoding, done) { done(); } }), signal: controller.signal,
       });
     } finally {
       rejectReady(new UserError("workspace internal service channel disconnected"));
       controller.abort(); options.signal.removeEventListener("abort", abort);
-      const code = await options.exec(["node", "--input-type=commonjs", "-e", workspaceServiceCleanup, options.token], {
+      const code = await options.exec(["node", "--input-type=commonjs", "-e", workspaceServiceCleanup, "--", options.token], {
         signal: AbortSignal.timeout(3000), stdout: new Writable({ write(_chunk, _encoding, done) { done(); } }),
         stderr: new Writable({ write(_chunk, _encoding, done) { done(); } }),
       });
