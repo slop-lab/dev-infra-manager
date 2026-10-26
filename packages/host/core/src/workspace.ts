@@ -23,3 +23,4 @@ export type { GuestIntegrationContext, GuestIntegrationTarget, GuestIntegration 
 export { resolveHostPluginModule } from "./pluginModule.js";
 
 export type { WorkspaceRuntimeDevice, ContainerWorkspaceRuntimeOptions } from "./workspace/runtime.js";
+export { workspaceServiceEndpoint, workspaceServicePort } from "./workspace/serviceEndpoint.js";

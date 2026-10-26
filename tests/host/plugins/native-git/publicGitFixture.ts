@@ -48,7 +48,7 @@ export async function publicGitFixture() {
     const local: RequestOptions = { hostname: "127.0.0.1", port: address.port, path: options.path!, method: options.method!, headers: options.headers!, signal: options.signal!, agent: false };
     return request(local, callback);
   } };
-  return { root, source, scratch, commit, paths, network, git, dependencies, mode: (next: typeof mode) => { mode = next; },
+  return { root, source, scratch, commit, paths, network, git, dependencies, endpoint: `http://127.0.0.1:${address.port}`, mode: (next: typeof mode) => { mode = next; },
     input: { url: "https://public.example.org/upstream.git", scratchRoot: scratch, gitExecutable: "/usr/bin/git" },
     async close() { server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
   };
