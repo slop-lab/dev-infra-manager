@@ -87,8 +87,11 @@ try {
   assert.equal(await page.getByLabel('API key', { exact: true }).inputValue(), '');
   const apiAccountIds = new Map<string, string>();
   for (const [provider, label] of [['openai', 'OpenAI key'], ['anthropic', 'Anthropic key']]) {
+    await page.waitForFunction(() => !document.querySelector('button[data-pending="true"]'));
     await page.getByLabel('Provider type', { exact: true }).selectOption(provider!); await page.getByLabel('Account label (optional)', { exact: true }).fill(label!); await page.getByLabel('API base URL', { exact: true }).fill(provider === 'openai' ? 'https://api.openai.com' : 'https://api.anthropic.com'); await page.getByLabel('API key', { exact: true }).fill(secret);
-    failAccounts = true; await page.getByRole('button', { name: 'Add provider account', exact: true }).click(); const id = String(writes.filter((value) => value.name === 'account.create').at(-1)?.input.accountId); apiAccountIds.set(provider!, id); await page.getByText(`${id} added. The account list could not refresh; use Refresh router. The account was accepted.`, { exact: true }).waitFor();
+    const created = page.waitForRequest((request) => request.url().endsWith('/operations/account.create') && request.postDataJSON().provider === provider);
+    failAccounts = true; await page.getByRole('button', { name: 'Add provider account', exact: true }).click(); const id = String((await created).postDataJSON().accountId); apiAccountIds.set(provider!, id);
+    await page.getByText(`${id} added. The account list could not refresh; use Refresh router. The account was accepted.`, { exact: true }).waitFor();
     assert.equal(await page.getByLabel('API key', { exact: true }).inputValue(), ''); await page.getByRole('button', { name: 'Add provider account', exact: true }).waitFor({ state: 'visible' }); await page.waitForFunction(() => [...document.querySelectorAll('button')].some((button) => button.textContent === 'Add provider account' && button.disabled));
     assert.equal(await page.locator('body').innerText().then((value) => value.includes(secret)), false);
     await page.getByRole('button', { name: 'Refresh router', exact: true }).click(); await page.getByRole('heading', { name: label!, exact: true }).waitFor();
