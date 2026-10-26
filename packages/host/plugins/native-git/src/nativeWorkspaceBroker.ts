@@ -31,9 +31,10 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
     try {
       const url = new URL(request.url ?? "/", "http://dim.invalid");
       const match = /^\/v1\/projects\/([a-z0-9-]+)\/repositories\/([a-z0-9][a-z0-9-]*)\.git(?:\/|$)/.exec(url.pathname);
+      const ci = /^\/v1\/projects\/([a-z0-9-]+)\/repositories\/([a-z0-9][a-z0-9-]*)\/workspace-ci\/requests(?:\/[0-9a-f-]{36})?$/.exec(url.pathname);
       const health = request.method === "GET" && url.pathname === "/health" && url.search === "";
-      const repositoryId = match?.[2], repository = repositoryId === undefined ? undefined : attachment.repositories[repositoryId];
-      if (!health && (match?.[1] !== attachment.projectId || !repository)) { response.writeHead(404).end(); return; }
+      const repositoryId = match?.[2] ?? ci?.[2], repository = repositoryId === undefined ? undefined : attachment.repositories[repositoryId];
+      if (!health && ((match?.[1] ?? ci?.[1]) !== attachment.projectId || !repository)) { response.writeHead(404).end(); return; }
       const grant = health ? Object.values(attachment.repositories)[0]?.grant : repository?.grant;
       if (!grant) { response.writeHead(404).end(); return; }
       const expected = Buffer.from(`Basic ${Buffer.from(`dim:${grant}`).toString("base64")}`), actual = Buffer.from(request.headers.authorization ?? "");
@@ -54,7 +55,9 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       const protocol = request.method === "POST" && url.search === "" && url.pathname.startsWith(base)
         && ((endpoint === "/git-upload-pack" && request.headers["content-type"] === "application/x-git-upload-pack-request")
           || (endpoint === "/git-receive-pack" && request.headers["content-type"] === "application/x-git-receive-pack-request"));
-      if (!discovery && !protocol) { response.writeHead(404).end(); return; }
+      const workspaceCi = ci !== null && url.search === "" && (request.method === "POST" && !ci[0].match(/\/[0-9a-f-]{36}$/)
+        || request.method === "GET" && /\/[0-9a-f-]{36}$/.test(ci[0]));
+      if (!discovery && !protocol && !workspaceCi) { response.writeHead(404).end(); return; }
       // A verified reconnect updates only this private host-side reference. The running
       // broker retains its original UUID, scope and workspace credential.
       const current = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(attachment.managedStateRoot, attachment.workspaceId));
@@ -86,7 +89,7 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
         const upstream = (target.protocol === "https:" ? httpsRequest : httpRequest)(target, {
           method: request.method, signal: AbortSignal.any([
             requestSignal,
-            AbortSignal.timeout(upstreamTimeoutMilliseconds)
+            AbortSignal.timeout(workspaceCi ? 140_000 : upstreamTimeoutMilliseconds)
           ]), headers: {
             authorization: `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}`,
             ...(request.headers["content-type"] ? { "content-type": request.headers["content-type"] } : {}),

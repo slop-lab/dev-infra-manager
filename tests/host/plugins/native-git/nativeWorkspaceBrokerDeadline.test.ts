@@ -94,6 +94,24 @@ it("retains gzip and protocol-v2 metadata while replacing only the scoped upstre
   expect(fixture.received).toEqual([{ protocol: "version=2", encoding: "gzip" }]);
 });
 
+it("forwards own candidate CI request and status with fresh scoped leases but denies foreign and promotion routes", async () => {
+  const fixture = await brokerFixture(), requestId = randomUUID();
+  mocks.readiness.mockResolvedValue({ generationId: "a".repeat(64) });
+  mocks.issueLease.mockResolvedValue({ username: "workspace-write-test", password: "secret" });
+  const root = "/v1/projects/project-a/repositories/public/workspace-ci/requests";
+  for (const [method, path] of [["POST", root], ["GET", `${root}/${requestId}`]] as const) {
+    const response = await fetch(`${fixture.endpoint}${path}`, { method, headers: { ...fixture.headers, "content-type": "application/json" }, ...(method === "POST" ? { body: JSON.stringify({ schemaVersion: 1, requestId }) } : {}) });
+    expect(response.status).toBe(200); await response.body?.cancel();
+  }
+  expect(fixture.ciTransport).toEqual([{ path: root, lease: true }, { path: `${root}/${requestId}`, lease: true }]);
+  expect(mocks.issueLease).toHaveBeenCalledTimes(2);
+  for (const [input] of mocks.issueLease.mock.calls) expect(input).toEqual({ projectId: "project-a", repositoryId: "public", workspaceId: fixture.nativeWorkspaceId });
+  for (const path of [root.replace("/public/", "/foreign/"), "/v1/projects/project-a/repositories/public/reviews/" + "a".repeat(64) + "/promotions"]) {
+    const response = await fetch(`${fixture.endpoint}${path}`, { method: "POST", headers: fixture.headers, body: "{}" }); expect(response.status).toBe(404); await response.body?.cancel();
+  }
+  expect(mocks.issueLease).toHaveBeenCalledTimes(2);
+});
+
 it("allows the upstream proof and Git backend to run beyond the former thirty-second proxy limit", async () => {
   // Given
   const fixture = await brokerFixture(30_200);
@@ -117,13 +135,17 @@ async function brokerFixture(upstreamDelayMilliseconds = 0): Promise<{
   readonly gitPath: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly received: { readonly protocol: string | undefined; readonly encoding: string | undefined }[];
+  readonly ciTransport: { readonly path: string; readonly lease: boolean }[];
+  readonly nativeWorkspaceId: string;
 }> {
   const root = await mkdtemp(path.join(os.tmpdir(), "dim-native-broker-deadline-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const received: { protocol: string | undefined; encoding: string | undefined }[] = [];
+  const ciTransport: { path: string; lease: boolean }[] = [];
   const upstream = createServer(async (_request, response) => {
     received.push({ protocol: typeof _request.headers["git-protocol"] === "string" ? _request.headers["git-protocol"] : undefined,
       encoding: typeof _request.headers["content-encoding"] === "string" ? _request.headers["content-encoding"] : undefined });
+    if (_request.url?.includes("/workspace-ci/")) ciTransport.push({ path: _request.url, lease: _request.headers.authorization === `Basic ${Buffer.from("workspace-write-test:secret").toString("base64")}` });
     await delay(upstreamDelayMilliseconds);
     response.writeHead(200, { "content-type": "application/x-git-upload-pack-advertisement" }).end("ready");
   });
@@ -172,9 +194,12 @@ async function brokerFixture(upstreamDelayMilliseconds = 0): Promise<{
   cleanups.push(() => new Promise<void>((resolve) => { broker.close(() => resolve()); broker.closeAllConnections(); }));
   const brokerAddress = broker.address();
   if (brokerAddress === null || typeof brokerAddress === "string") throw new Error("broker test server has no listener");
+  const repository = attachment.repositories.public;
+  if (!repository) throw new Error("fixture repository missing");
   return {
     endpoint: `http://127.0.0.1:${String(brokerAddress.port)}`,
     gitPath: "/v1/projects/project-a/repositories/public.git/info/refs?service=git-upload-pack",
-    headers: { authorization: `Basic ${Buffer.from(`dim:${attachment.repositories.public?.grant ?? ""}`).toString("base64")}` }, received
+    headers: { authorization: `Basic ${Buffer.from(`dim:${repository.grant}`).toString("base64")}` }, received, ciTransport,
+    nativeWorkspaceId: repository.nativeWorkspaceId
   };
 }

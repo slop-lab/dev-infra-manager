@@ -46,6 +46,8 @@ describe("native workspace broker authority", () => {
     expect(healthy.headers.get("x-dim-native-git-runtime")).toBe(nativeWorkspaceBrokerRuntimeRevision);
     for (const request of ["/api/host-inputs/secret", "/v1/call/workspace.discard", "/health?extra=true",
       "/v1/projects/foreign/repositories/public.git/info/refs?service=git-upload-pack",
+      "/v1/projects/foreign/repositories/public/workspace-ci/requests/6f95757f-0f5b-43b8-9803-96f3511e4e5b",
+      "/v1/projects/example/repositories/public/workspace-ci/requests",
       `${gitPath}&service=git-receive-pack`]) {
       expect((await fetch(`${endpoint}${request}`, { headers })).status).toBe(404);
     }
@@ -81,6 +83,7 @@ it("fences each selected repository credential independently and never routes an
   const address = server.address(); if (!address || typeof address === "string") throw new Error("missing broker address");
   const headers = { authorization: `Basic ${Buffer.from(`dim:${attachment.repositories.public!.grant}`).toString("base64")}` };
   expect((await fetch(`http://127.0.0.1:${address.port}/v1/projects/example/repositories/private.git/info/refs?service=git-upload-pack`, { headers })).status).toBe(401);
+  expect((await fetch(`http://127.0.0.1:${address.port}/v1/projects/example/repositories/private/workspace-ci/requests/6f95757f-0f5b-43b8-9803-96f3511e4e5b`, { headers })).status).toBe(401);
   expect((await fetch(`http://127.0.0.1:${address.port}/v1/projects/example/repositories/unselected.git/info/refs?service=git-upload-pack`, { headers })).status).toBe(404);
   await store.write({ ...workspace, id: randomUUID() });
   expect((await fetch(`http://127.0.0.1:${address.port}/health`, { headers })).status).toBe(410);

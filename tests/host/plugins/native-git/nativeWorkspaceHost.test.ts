@@ -166,7 +166,10 @@ it("advertises scoped Git only to managed Project workspaces without guest opera
     stateRoot: fixture.context.store.root,
     service: new WorkspaceService(fixture.context.store, fixture.runtime, async () => { throw new Error("source acquisition is not expected"); })
   })).resolves.toMatchObject({ state: "unconfigured" });
-  expect(guest.commands).toEqual([{ name: "git", description: expect.stringContaining("scoped managed repositories") }]);
+  expect(guest.commands).toEqual([
+    { name: "git", description: expect.stringContaining("scoped managed repositories") },
+    { name: "dim-ci", description: expect.stringContaining("exact-candidate DIM CI") },
+  ]);
   expect(guest.operations).toBeUndefined();
 });
 it("rejects invalid repository selections before creating a runtime", async () => {

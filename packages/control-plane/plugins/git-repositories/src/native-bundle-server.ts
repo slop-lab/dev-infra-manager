@@ -68,7 +68,11 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
     let activated = startup.activated;
     let businessReady = false;
     const runtime = { activated: () => activated, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, state };
-    const context: RepositoryExtensionContext = { runtime, stateDirectory: options.stateDirectory, extensionStateDirectory: join(options.stateDirectory, ".extensions"), signal: shutdown.signal, extensions, knownCredentials, reconcileProposals: async (projectId, repositoryId, refs) => { for (const attachment of attachments) await attachment.onProposals?.(projectId, repositoryId, refs); }, available: () => !closed, serialize };
+    let workspaceWriteService: ReturnType<typeof createNativeProjectWorkspaceWriteService> | undefined;
+    const context: RepositoryExtensionContext = { runtime, stateDirectory: options.stateDirectory, extensionStateDirectory: join(options.stateDirectory, ".extensions"), signal: shutdown.signal, extensions, knownCredentials, reconcileProposals: async (projectId, repositoryId, refs) => { for (const attachment of attachments) await attachment.onProposals?.(projectId, repositoryId, refs); }, authorizeWorkspaceLease: (request, selector) => {
+      if (workspaceWriteService === undefined) throw new Error("workspace lease authorization is unavailable");
+      return workspaceWriteService.authorizeWorkspaceLease(request, selector);
+    }, available: () => !closed, serialize };
     for (const factory of factories) {
       shutdown.signal.throwIfAborted();
       await privateExtensionDirectory(context.extensionStateDirectory);
@@ -86,19 +90,20 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
     if (activated) await activate();
     const rootImportService = createNativeProjectRootImportService({ activated: () => businessReady, activationTokenDigest, available: () => !closed, expectedGenerationId: options.expectedGenerationId, stateDirectory: options.stateDirectory, state, importers: config.projectRootImporters, knownCredentials, gitExecutable: config.gitExecutable, gitIdentity, validatePolicy, serialize, async reconcilePolicy(projectId, repositoryId) { for (const attachment of attachments) await attachment.onPolicyChanged?.(projectId, repositoryId); } });
     const rootReadService = createNativeProjectRootReadService({ activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.projectRootReadIssuers, knownCredentials, now: options.rootReadLeaseClock ?? Date.now, operations, ...(options.rootReadLeaseHooks === undefined ? {} : { hooks: options.rootReadLeaseHooks }), state, stateDirectory: options.stateDirectory });
-    const workspaceWriteService = createNativeProjectWorkspaceWriteService({ activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.workspaceWriteIssuers, knownCredentials, now: options.workspaceWriteLeaseClock ?? Date.now, operations, reconcileProposalRefs: context.reconcileProposals, serializeReceive: serialize, ...(options.workspaceWriteLeaseHooks === undefined ? {} : { hooks: options.workspaceWriteLeaseHooks }), state, stateDirectory: options.stateDirectory });
+    const activeWorkspaceWriteService = createNativeProjectWorkspaceWriteService({ activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.workspaceWriteIssuers, knownCredentials, now: options.workspaceWriteLeaseClock ?? Date.now, operations, reconcileProposalRefs: context.reconcileProposals, serializeReceive: serialize, ...(options.workspaceWriteLeaseHooks === undefined ? {} : { hooks: options.workspaceWriteLeaseHooks }), state, stateDirectory: options.stateDirectory });
+    workspaceWriteService = activeWorkspaceWriteService;
     const prepareProject: NativeGitBundleServer["prepareProject"] = (generationId, ownerHostId, input) => serialize(async () => {
       if (!businessReady || generationId !== options.expectedGenerationId) throw new NativeGitBundleServerError("repository preparation requires exact activation");
       return executeNativeProjectPreparation({ database: state.database, stateDirectory: options.stateDirectory, runtimeConfig, generationId, ownerHostId, input });
     });
-    const handle = createNativeBundleRequestHandler({ activationTokenDigest, config, gitIdentity, operations, options, registrars, rootImportService, rootReadService, serialize, signal: shutdown.signal, state, stateDirectory: options.stateDirectory, workspaceWriteService, attachments, knownCredentials,
+    const handle = createNativeBundleRequestHandler({ activationTokenDigest, config, gitIdentity, operations, options, registrars, rootImportService, rootReadService, serialize, signal: shutdown.signal, state, stateDirectory: options.stateDirectory, workspaceWriteService: activeWorkspaceWriteService, attachments, knownCredentials,
       ...(options.projectAttachmentHooks === undefined ? {} : { projectAttachmentHooks: options.projectAttachmentHooks }),
       readiness: { activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.workspaceWriteIssuers, state, stateDirectory: options.stateDirectory },
       deliveryHealthy: () => attachments.every((entry) => entry.healthy?.() !== false), activated: () => businessReady, activate: () => serialize(activate), prepareProject });
     const server = createNativeBundleHttpServer({ closed: () => closed, handle, onListening() {} });
     let closing: Promise<void> | undefined;
     const close = () => closing ??= (async () => {
-      closed = true; shutdown.abort(); rootReadService.close(); workspaceWriteService.close();
+      closed = true; shutdown.abort(); rootReadService.close(); activeWorkspaceWriteService.close();
       const failures: unknown[] = [];
       try { await closeAttachments(); } catch (error) { failures.push(error); }
       try { await Promise.all([queue, rootImportService.waitForIdle(), operations.close()]); } catch (error) { failures.push(error); }

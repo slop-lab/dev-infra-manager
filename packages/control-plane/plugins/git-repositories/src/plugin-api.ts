@@ -4,6 +4,7 @@ import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plu
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";
 import type { NativeGitRoute } from "./routing.js";
+import type { WorkspaceWriteLeaseScope } from "./native-workspace-write-lifecycle.js";
 
 export const repositoryExtensionKind = "dim.git-repositories.extension";
 export type RepositoryRuntime = AuthoritativeNativeCandidateRuntime;
@@ -17,6 +18,8 @@ export type RepositoryExtensionContext = {
   readonly available: () => boolean;
   /** Notify enabled integrations after an already serialized proposal write. Does not acquire the mutation lock. */
   readonly reconcileProposals: (projectId: string, repositoryId: string, refs: readonly string[]) => Promise<void>;
+  /** Authenticate a current ephemeral workspace writer without granting ref-update authority. */
+  readonly authorizeWorkspaceLease: (request: IncomingMessage, selector: { readonly projectId: string; readonly repositoryId: string }) => Promise<WorkspaceWriteLeaseScope>;
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 };
 export type RepositoryAttachment = {
@@ -69,6 +72,9 @@ export * from "./native-root-import-storage.js";
 export * from "./native-bundle-server-types.js";
 export * from "./native-project-root-import-transitions.js";
 export * from "./native-bundle-activation.js";
+export type { WorkspaceWriteLeaseScope } from "./native-workspace-write-lifecycle.js";
+export { workspaceProtectedRefs } from "./candidate-ref-policy.js";
+export { WorkspaceWriteAuthorizationError } from "./native-project-workspace-write-http.js";
 
 export * from "./ref-update-policies.js";
 

@@ -13,6 +13,7 @@ import { createAuthoritativeNativeEventDispatcher } from "./authoritative-native
 import { assertGitCiPromotable, type GitCiQualityInput } from "./quality.js";
 import type { GitCiRuntime } from "./runtime.js";
 import { handleReviewCiStatus } from "./review-status-http.js";
+import { handleWorkspaceCandidateCi } from "./workspace-candidate-http.js";
 import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
 import { recordExplicitAuthoritativeNativeDeliveryIntent } from "./authoritative-native-delivery-store.js";
 import { gitCiEnvelope } from "./plan-store.js";
@@ -51,6 +52,7 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
         context.signal.addEventListener("abort", () => { void dispatcher.close(); execution.close(); }, { once: true });
         const attachedRuntime = runtime;
         return { async handle(request, response, url) {
+          if (await handleWorkspaceCandidateCi(context, attachedRuntime, { request, response, url, accepted: dispatcher.wake })) return true;
           if (await handleReviewCiStatus(context, attachedRuntime, { request, response, url })) return true;
           return execution.handle(request, response, url);
         }, serveGit: execution.serveGit,

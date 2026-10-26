@@ -42,6 +42,7 @@ import {
   type WorkspaceWriteLeaseRequest,
   type WorkspaceWriteVerificationInput
 } from "./native-workspace-write-proof.js";
+import type { WorkspaceWriteLeaseScope } from "./native-workspace-write-lifecycle.js";
 
 type Issuer = NativeBasicCredential & { readonly hostId: string };
 export type NativeProjectWorkspaceWriteHooks = {
@@ -59,6 +60,7 @@ type WorkspaceWriteServiceInput = WorkspaceWriteVerificationInput & {
 
 export type NativeProjectWorkspaceWriteService = {
   close(): void;
+  authorizeWorkspaceLease(request: IncomingMessage, selector: { readonly projectId: string; readonly repositoryId: string }): Promise<WorkspaceWriteLeaseScope>;
   handleLeaseRequest(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean>;
   serveGit(request: IncomingMessage, response: ServerResponse, route: NativeGitRoute): Promise<boolean>;
 };
@@ -70,6 +72,34 @@ export function createNativeProjectWorkspaceWriteService(
   return {
     close() {
       leases.clear();
+    },
+    async authorizeWorkspaceLease(request, selector) {
+      const credential = nativeBasicCredential(request);
+      const lease = credential === undefined ? undefined : leases.authenticate(credential);
+      if (lease === undefined || lease.generationId !== input.expectedGenerationId) {
+        throw new WorkspaceWriteAuthorizationError(401, "workspace lease is unauthorized");
+      }
+      if (lease.projectId !== selector.projectId || lease.repositoryId !== selector.repositoryId) {
+        throw new WorkspaceWriteAuthorizationError(404, "workspace repository scope was not found");
+      }
+      if (!input.activated() || !input.operations.isOpen()) {
+        throw new WorkspaceWriteAuthorizationError(503, "workspace repository access is unavailable");
+      }
+      const release = input.operations.acquire();
+      if (release === undefined) throw new WorkspaceWriteAuthorizationError(503, "workspace repository access is busy");
+      try {
+        await verifyAuthoritativeWorkspaceRoot(input, selector.projectId, selector.repositoryId, lease.ownerHostId);
+        const current = credential === undefined ? undefined : leases.authenticate(credential);
+        if (current === undefined || current.generationId !== input.expectedGenerationId
+          || current.projectId !== selector.projectId || current.repositoryId !== selector.repositoryId
+          || current.workspaceId !== lease.workspaceId || current.ownerHostId !== lease.ownerHostId) {
+          throw new WorkspaceWriteAuthorizationError(401, "workspace lease expired during authorization");
+        }
+        return current;
+      } catch (error) {
+        if (error instanceof WorkspaceWriteAuthorizationError) throw error;
+        throw new WorkspaceWriteAuthorizationError(409, "workspace repository proof is stale", { cause: error });
+      } finally { release(); }
     },
     async handleLeaseRequest(request, response, url) {
       const identityPath = "/v1/operator-workspace-write-issuer-identity";
@@ -231,6 +261,10 @@ export function createNativeProjectWorkspaceWriteService(
       return true;
     }
   };
+}
+
+export class WorkspaceWriteAuthorizationError extends Error {
+  constructor(readonly status: 401 | 404 | 409 | 503, message: string, options?: ErrorOptions) { super(message, options); }
 }
 
 function sendVerificationFailure(response: ServerResponse, error: unknown): void {

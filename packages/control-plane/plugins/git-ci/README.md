@@ -56,4 +56,29 @@ Plans, grants, results and delivery markers are private control-plane records
 inside the owned repository directories; CI result logs stay in the CI service.
 No host workspace store, host runtime backend or account credentials are loaded
 by this plugin. Public-only jobs never receive unselected private repositories
-or reusable repository credentials.
+or reusable repository credentials. A recorded delivery remains completed across
+repository-service generation or worker-image replacement during automatic
+startup. A current, fully revalidated workspace request or human review action
+records a generation-scoped delivery intent and may run the same immutable event
+once in the new generation. Duplicate explicit requests share that intent. The
+configured service and destination remain part of both completion and intent
+identity; an intent for another destination cannot override them.
+
+## Workspace candidate requests
+
+A current Native Git workspace lease may request CI for an exact ordinary branch
+or tag candidate. The request supplies a caller-generated UUID plus the ref,
+commit and tree. Git-CI verifies the live authoritative tuple before publishing
+the deterministic review and plan, saves the immutable request identity first,
+and reuses it on an exact retry. The same ID cannot be replayed with another
+workspace, repository or candidate. Current policy, protected head and repository
+proofs are rechecked for every request and status read; stale evidence requires a
+new request ID. This path creates no approval and exposes no promotion operation.
+
+Workspace status projects every job in the immutable plan, including non-required
+jobs; reviewer/merge status continues to evaluate only policy-required jobs.
+The workspace request is rejected before publication when Git-CI policy is
+absent. It cannot select protected candidates, supply job schemas or read another
+workspace's request. Completed request replay only reads its existing outcome;
+new work requires a freshly proved explicit request and current-generation
+delivery intent. A receipt is not a successful quality gate.

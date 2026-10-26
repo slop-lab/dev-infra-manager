@@ -85,7 +85,23 @@ Recovery rewrites only the exact previously owned HTTP origin. The attachment
 retains that prior endpoint until every selected checkout is repaired, so an
 interrupted migration is retry-safe and arbitrary user-modified remotes survive.
 Inside a managed workspace, `dim-workspace plugins` reports Native Git ready and
-advertises ordinary `git` fetch/push against those scoped origins. Ordinary Git
+advertises ordinary `git` fetch/push against those scoped origins. It also installs
+`dim-ci`, which requests or inspects CI for an exact ordinary branch candidate
+using that checkout's existing scoped Git credential:
+
+```sh
+# After committing on your ordinary feature branch:
+git push origin HEAD:refs/heads/feature/my-change
+REQUEST_ID="$(node --input-type=commonjs -p 'require("node:crypto").randomUUID()')"
+dim-ci request --request-id "$REQUEST_ID" --ref refs/heads/feature/my-change
+dim-ci status --request-id "$REQUEST_ID"
+```
+
+The request binds the current ref, commit and tree unless explicit exact values
+are supplied. Reusing the ID with the same candidate resumes the same durable
+review and CI plan; changing its repository scope or candidate is rejected.
+Protected refs cannot be candidate inputs, and the helper receives no reviewer,
+promoter, CI-worker or operator credential. Ordinary Git
 workspaces report the installed integration as unconfigured. Guest discovery
 does not expose Project registration, policy or other operator operations.
 Review, registrar, importer and
@@ -93,6 +109,15 @@ promoter credentials are never mounted into workspaces. Workspace identity check
 fence name reuse and discard. Optional Project metadata is supplied to generic
 host controllers through an injected resolver, rather than a host-core dependency
 on Native Git.
+
+Use the same request ID only for an exact transport retry. A changed candidate,
+policy, protected head or service generation requires a new explicit request;
+the helper never silently replans or resubmits historical work. Status includes
+all planned jobs under `status.jobs`, while `status.review.requiredJobs` retains
+the policy-required gate. HTTP 200 or a zero helper exit code means a receipt or
+inspection succeeded, not that CI passed. Failed, stale, unavailable and missing
+evidence are never successful gates. Execution reruns remain the execution
+scheduler's explicit operator operation; this helper does not acquire that role.
 
 ## Controller console operations
 
