@@ -1,10 +1,9 @@
 import { changeWebAccount, AccountChangeError } from "./accounts.js";
 import { webPluginContext } from "./controllers.js";
-import { timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
-import { fileURLToPath } from "node:url";
+import {accountRoles,expiredCookie,requireCurrentSession,requireMutation,requireOrigin,requireSession,sessionBody,sessionCookie} from './session-http.js';
 import { accountRolesSchema, loadWebConfig, type WebConfig } from "./config.js";
 import { BodyError, HttpResponseError, readJson, sendEmpty, sendJson } from "./http-response.js";
 import { AccountAuthenticator, SessionStore, type AuthenticationState, type WebSession } from "./session.js";
@@ -129,6 +128,7 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
     if (extension[2] === "operations" && request.method === "POST") {
       requireMutation(context.config, request, session);
       const result = await invokeWebPlugin(plugin, extension[3]!, await readJson(request), accountRoles(context.config, session));
+      requireCurrentSession(context.sessions, session);
       return sendJson(response, { status: 200, body: result });
     }
     throw new HttpResponseError(404, "not found");
@@ -217,48 +217,6 @@ async function login(context: RequestContext, request: IncomingMessage, response
   }
 }
 
-function requireSession(sessions: SessionStore, request: IncomingMessage): WebSession {
-  const values = (request.headers.cookie ?? "").split(";").map((value) => value.trim()).filter((value) => value.startsWith("dim_session="));
-  const id = values.length === 1 ? values[0]?.slice("dim_session=".length) : undefined;
-  const session = id === undefined || !/^[A-Za-z0-9_-]{43}$/.test(id) ? undefined : sessions.get(id);
-  if (session === undefined) throw new HttpResponseError(401, "authentication required");
-  return session;
-}
-
-function requireMutation(config: WebConfig, request: IncomingMessage, session: WebSession): void {
-  requireOrigin(config, request);
-  const supplied = request.headers["x-dim-csrf"];
-  if (typeof supplied !== "string" || !constantEqual(supplied, session.csrfToken)) throw new HttpResponseError(403, "request rejected");
-}
-
-function requireOrigin(config: WebConfig, request: IncomingMessage): void {
-  if (request.headers.origin !== config.publicOrigin) throw new HttpResponseError(403, "request rejected");
-}
-
-function sessionBody(context: RequestContext, session: WebSession) {
-  const roles = accountRoles(context.config, session);
-  return { authenticated: true, username: session.accountId, csrfToken: session.csrfToken, roles,
-    capabilities: { operations: context.config.operations !== undefined },
-    ...(roles.includes("operator") ? { accountAdministration: {
-      command: [process.execPath, fileURLToPath(new URL(import.meta.url.endsWith(".ts") ? "../dist/cli.js" : "./cli.js", import.meta.url)), "account"],
-      configPath: context.accountConfigPath
-    } } : {}) };
-}
-
-function constantEqual(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
-
-function sessionCookie(id: string, secure: boolean): string {
-  return `dim_session=${id}; Path=/; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`;
-}
-
-function expiredCookie(secure: boolean): string {
-  return `dim_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
-}
-
 function sendBusy(response: ServerResponse): void {
   sendJson(response, {
     status: 429,
@@ -273,9 +231,6 @@ function assertNever(value: never): never {
 
 export class WebStartupError extends Error { readonly name = "WebStartupError"; }
 
-function accountRoles(config: WebConfig, session: WebSession) {
-  return config.accounts.find((account) => account.username === session.accountId)?.roles ?? [];
-}
 async function handleOperations(context: RequestContext, session: WebSession, request: IncomingMessage, response: ServerResponse, path: string): Promise<void> {
   const operations = context.operations;
   if (!operations || !context.config.operations) throw new HttpResponseError(404, "operations are not configured");
@@ -302,5 +257,6 @@ async function handleOperations(context: RequestContext, session: WebSession, re
     if (error instanceof HttpResponseError || error instanceof z.ZodError || error instanceof BodyError) throw error;
     throw new HttpResponseError(503, "operations service unavailable; verify the connected generation");
   }
+  requireCurrentSession(context.sessions, session);
   return sendJson(response, { status: 200, body });
 }
