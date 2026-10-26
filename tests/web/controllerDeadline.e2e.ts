@@ -10,7 +10,7 @@ const executablePath = process.env.DIM_CHROMIUM; if (!executablePath) throw new 
 const root = await mkdtemp(join(tmpdir(), "dim-browser-deadline-")), directory = join(root, "node_modules/fixture-feature");
 await mkdir(directory, { recursive: true });
 await writeFile(join(directory, "package.json"), JSON.stringify({ name: "fixture-feature", type: "module", main: "index.js" }));
-await writeFile(join(directory, "index.js"), `const operation={name:'slow',description:'Deadline fixture',access:'operator',parseInput(v){return v;},parseOutput(v){return v;}};export const webPlugin={id:'fixture',title:'Fixture',description:'Deadline fixture',operations:[operation],assets:{'panel.js':new URL('./panel.js',import.meta.url)},browserEntry:'panel.js',async create(){return {async invoke(){await new Promise(resolve=>setTimeout(resolve,100));return {};}};}};`);
+await writeFile(join(directory, "index.js"), `const operation={name:'slow',description:'Deadline fixture',access:'operator',parseInput(v){if(v.invalid)throw new Error('invalid fixture field');return v;},parseOutput(v){return v;}};export const webPlugin={id:'fixture',title:'Fixture',description:'Deadline fixture',operations:[operation],assets:{'panel.js':new URL('./panel.js',import.meta.url)},browserEntry:'panel.js',async create(){return {async invoke(name,input){if(input.reject)throw new Error('internal service diagnostic');await new Promise(resolve=>setTimeout(resolve,100));return {};}};}};`);
 await writeFile(join(directory, "panel.js"), `// @ts-check\nexport function mount(container,context){globalThis.fixtureInvoke=context.invoke;container.textContent='Deadline fixture ready';}`);
 const specification = join(root, "features.json"), config = join(root, "web.json");
 await writeFile(specification, JSON.stringify({ pluginHome: root, plugins: [{ package: "fixture-feature", config: {} }] }), { mode: 0o600 });
@@ -21,15 +21,21 @@ try {
   page.on("request", (request) => { if (request.url().endsWith("/operations/slow")) dispatched++; });
   await page.goto(origin); await page.getByLabel("Username", { exact: true }).fill(credentials.username); await page.getByLabel("Password", { exact: true }).fill(credentials.password); await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByText("Deadline fixture ready", { exact: true }).waitFor();
-  async function invoke(options: unknown) {
-    return page.evaluate(async (options) => {
+  async function invoke(options: unknown, input: unknown = {}) {
+    return page.evaluate(async ({ options, input }) => {
       const invoke = (globalThis as unknown as { fixtureInvoke(name: string, input: unknown, options: unknown): Promise<unknown> }).fixtureInvoke;
-      try { return { result: await invoke("slow", {}, options) }; } catch (error) { return { error: String(error), outcome: error instanceof Error && 'outcome' in error ? error.outcome : null }; }
-    }, options);
+      try { return { result: await invoke("slow", input, options) }; } catch (error) { return { error: String(error), outcome: error instanceof Error && 'outcome' in error ? error.outcome : null }; }
+    }, { options, input });
   }
   for (const options of [{ timeoutMilliseconds: 0 }, { timeoutMilliseconds: -1 }, { timeoutMilliseconds: 185001 }, { timeoutMilliseconds: 1.5 }, { timeoutMilliseconds: 100, unexpected: true }]) assert.match(String((await invoke(options)).error), /Invalid feature request timeout/);
   assert.equal(dispatched, 0);
   assert.equal((await invoke({ timeoutMilliseconds: 20 })).outcome, 'unknown');
   assert.deepEqual((await invoke({ timeoutMilliseconds: 500 })).result, {}); assert.equal(dispatched, 2);
+  assert.deepEqual(await invoke({ timeoutMilliseconds: 500 }, { invalid: true }), {
+    error: "Error: The operation input is invalid. Check the selected target and fields.", outcome: "rejected"
+  });
+  assert.deepEqual(await invoke({ timeoutMilliseconds: 500 }, { reject: true }), {
+    error: "Error: The connected feature could not complete this operation. Check the selected target and fields. If they are correct, ask the operator to inspect the service; your input is kept.", outcome: "rejected"
+  });
   process.stdout.write("Generic browser invoke: invalid options reject before dispatch; explicit deadline abort and valid deadline passed.\n");
 } finally { await browser.close(); await web.close(); await rm(root, { recursive: true, force: true }); }

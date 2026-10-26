@@ -72,7 +72,7 @@ export async function invokeWebPlugin(plugin: LoadedWebPlugin, name: string, inp
   let parsed: unknown;
   try { parsed = operation.parseInput(input); } catch { throw new HttpResponseError(400, "The operation input is invalid. Check the selected target and fields."); }
   try { return operation.parseOutput(await plugin.runtime.invoke(name, parsed)); }
-  catch { throw new HttpResponseError(409, "The connected feature could not complete this operation. Refresh its state before retrying; your form input is kept."); }
+  catch { throw new HttpResponseError(409, "The connected feature could not complete this operation. Check the selected target and fields. If they are correct, ask the operator to inspect the service; your input is kept."); }
 }
 export async function serveWebPluginAsset(plugin: LoadedWebPlugin, name: string, response: ServerResponse): Promise<void> {
   const file = plugin.definition.assets[name];
