@@ -52,6 +52,18 @@ it("requires a running initialized workspace without starting it implicitly", as
   expect(execute).not.toHaveBeenCalled();
 }));
 
+it("reads server state and credentials without materializing or updating guest helpers", async () => fixture(async (context, workspace) => {
+  const execute = vi.spyOn(context.service, "exec").mockImplementation(async (_name, command, options) => {
+    if (command[0] === "node") return 0;
+    options?.stdout?.write(JSON.stringify(command.at(-1) === "credentials" ? { username: "opencode", password: "fixture-private-password" } : { state: "running", port: 4096 }));
+    return 0;
+  });
+  const identity = { workspace: workspace.name, workspaceId: workspace.id };
+  await invokeToolsConsole("server.status", identity, context);
+  await invokeToolsConsole("server.credentials", identity, context);
+  expect(execute.mock.calls.map(([, command]) => command[0])).toEqual(["bash", "bash"]);
+}));
+
 it("transports password updates only through guest stdin and returns credentials only on explicit read", async () => fixture(async (context, workspace) => {
   const password = 'private custom password "quotes"';
   vi.spyOn(context.service, "exec").mockImplementation(async (_name, command, options) => {

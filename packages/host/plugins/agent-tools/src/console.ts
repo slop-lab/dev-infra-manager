@@ -35,7 +35,7 @@ export async function invokeToolsConsole(operation: string, input: unknown, cont
   const workspace = await context.service.show(value.workspace);
   if (workspace.id !== value.workspaceId) throw new UserError("Workspace was replaced; refresh before running tools");
   if (!workspace.initialized || workspace.phase !== "running" || workspace.runtimeStatus !== "running") throw new UserError("Start the workspace before running tools");
-  await deployToolHelpers(workspace, context);
+  if (["tools.setup", "server.start", "server.stop", "server.password"].includes(operation)) await deployToolHelpers(workspace, context);
   const identity = { workspace: workspace.name, workspaceId: workspace.id };
   if (operation === "tools.setup") {
     await execute(context, workspace, ["bash", "-c", 'exec bash "$HOME/.local/share/dim-agent-tools/tool-setup.bash" "$1"', "dim-tools-setup", value.tool as string], false);
