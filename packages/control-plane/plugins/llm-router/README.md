@@ -192,14 +192,21 @@ Add this field to the router configuration; omitting it disables operator HTTP a
 
 The host plugin `@slop-lab/dim-host-plugin-llm-router` supplies the `llm` and `llm-router` commands through ordinary host command discovery. Its operator commands and the Web plugin use `@slop-lab/dim-service-client-llm-router` for transport and `@slop-lab/dim-contracts-llm-router` for shared operation definitions. They need a separate mode-0600 connection file `{ "schemaVersion":1, "endpoint":"http://127.0.0.1:8318", "actorId":"operator", "keyFile":"/absolute/operator.key" }`. They require no local database access. The authenticated `POST /v1/operator/operations/NAME` interface enforces read/operator roles on the service, validates input/output and records the operator actor in its audit log. Only bounded metadata is exposed; provider secrets, token hashes, local paths and prompt/response capture contents remain private. Local backup, restore and capture export remain local operator commands.
 
-Operator reads and writes share a bounded cross-process operation guard across
-the inference listener, independent operator listener and shared local operation
-implementation. A reconciliation read waits for an already-dispatched owner write
-through publication, output validation and audit; a busy read fails rather than
-claiming absence while that write is still running. Inference requests do not
-acquire this operator guard. Only typed pre-effect rejections return HTTP 409.
+Operator mutations and local CLI actions share a bounded cross-process operation
+guard across both listeners and the local operator. Reconciliation reads take a
+brief authoritative local snapshot behind already-dispatched writes; a busy read
+fails rather than claiming absence while publication is still running. Provider
+inspection and health release the guard before external I/O, so slow read-only
+inspection cannot block revocation or disable actions. Model inspection neither
+starts a worker nor rewrites managed aliases, and its cache is separate from
+inference preparation. Inference requests do not acquire this operator guard.
+Only typed pre-effect rejections return HTTP 409.
 Unexpected operation, post-publication or audit failures return HTTP 503 because
 the mutation may already have taken effect; clients must reconcile, not replay.
+Cancellation receipts correspond to a flag persisted atomically for running or
+durably occupied uncertain work. Settled, noncancellable requests return a known
+rejection; repeated cancellation of still-cancellable work adds no duplicate
+cancellation audit event and never claims upstream termination was confirmed.
 
 ### Independent operator listener
 
