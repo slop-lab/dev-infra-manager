@@ -2,9 +2,10 @@
 import { featureUi } from './feature-ui.js';
 import { scopedNavigation, registerFeatureDestination } from './navigation-broker.js';
 import { readLocation, navigateLocation, scopedLocation, subscribeLocation, hrefLocation } from './console-location.js';
-import { featureInvoker } from './feature-transport.js';
-import { updateWorkspaceFeatures } from './workspace-features.js';
+import { featureInvoker, suspendFeatureOperations, resumeFeatureOperations } from './feature-transport.js';
+import { updateWorkspaceFeatures, refreshWorkspaceFeatureConnection } from './workspace-features.js';
 import { clearSettings, showSettings } from './settings-panel.js';
+import { captureSessionEpoch, isSessionEpochCurrent } from './session-boundary.js';
 export { mountWorkspaceFeatures } from './workspace-features.js';
 /** @typedef {import('./types.js').Session} Session */
 /** @typedef {{name:string,description:string,access:string}} Operation */
@@ -16,24 +17,27 @@ let generation = 0, routeSequence = 0;
 /** @type {Feature[]} */ let catalog = [];
 /** @type {Session|null} */ let session = null;
 /** @type {Array<()=>void>} */ const disposers = [];
+/** @type {Map<string,Promise<boolean>>} */ const reconnecting = new Map();
 /** @type {Map<string,{button:HTMLAnchorElement,section:HTMLElement,feature:Feature,mounted:boolean,mounting:Promise<boolean>|null,navigate:import('../plugin-api.js').WebFeatureNavigationHandler|null,message:HTMLElement,reconnect:HTMLButtonElement}>} */ const views = new Map();
 export function clearFeaturePlugins() {
   generation++; routeSequence++; session = null; catalog = [];
   updateWorkspaceFeatures([], null); clearSettings();
   for (const dispose of disposers.splice(0)) dispose();
   views.clear(); tabList.replaceChildren(); panelList.replaceChildren(); nav.hidden = true; panelList.hidden = true;
+  reconnecting.clear();
   const unavailable = document.getElementById('route-unavailable'); if (unavailable) unavailable.hidden = true;
 }
 /** @param {Session} active */
 export async function showFeaturePlugins(active) {
-  clearFeaturePlugins(); session = active; const selected = generation;
+  clearFeaturePlugins(); session = active; const selected = generation, sessionEpoch = captureSessionEpoch();
   baseLink.hidden = !active.capabilities.operations;
   nav.hidden = false;
   try {
     const response = await fetch('/v1/extensions', { credentials: 'same-origin', signal: AbortSignal.timeout(10_000) });
+    if (selected !== generation || !isSessionEpochCurrent(sessionEpoch)) return;
     if (response.status === 401) { window.dispatchEvent(new Event('dim-session-expired')); return; }
     if (!response.ok) throw new Error('Feature catalog unavailable');
-    /** @type {Feature[]} */ const features = await response.json(); if (selected !== generation) return;
+    /** @type {Feature[]} */ const features = await response.json(); if (selected !== generation || !isSessionEpochCurrent(sessionEpoch)) return;
     catalog = features; updateWorkspaceFeatures(features, active);
     for (const feature of features.filter((entry) => (entry.surfaces ?? ['navigation']).includes('navigation'))) {
       const button = document.createElement('a'); button.className = 'console-link'; button.href = hrefLocation(['features', feature.id]); button.textContent = feature.title;
@@ -73,7 +77,7 @@ async function applyRoute() {
   document.getElementById('feature-settings')?.setAttribute('aria-current', setting ? 'page' : 'false');
   for (const [id, entry] of views) { entry.section.hidden = entry !== view; entry.button.setAttribute('aria-current', entry === view ? 'page' : 'false'); }
   document.title = `${workspace ? 'Workspaces' : setting ? 'Settings & access' : view?.feature.title ?? 'Page unavailable'} · DIM`;
-  if (setting) showSettings(active, catalog, path[1] ?? 'capabilities');
+  if (setting) showSettings(active, catalog, {section:path[1] ?? 'capabilities',reconnect:reconnectFeature});
   if (view) {
     await ensureFeatureMounted(view);
     if (sequence !== routeSequence) return;
@@ -109,10 +113,10 @@ async function mountFeature(view, active, selected) {
     if (selected !== generation) return false;
     if (typeof plugin.mount !== 'function') throw new Error('Feature UI entrypoint is unavailable');
     const dispose = await plugin.mount(content, {
-      operations: view.feature.operations, ui: featureUi, navigation: scopedNavigation(() => selected === generation),
-      location: scopedLocation(['features', view.feature.id], () => selected === generation),
+      operations: view.feature.operations, ui: featureUi, navigation: scopedNavigation(() => selected === generation && isSessionEpochCurrent()),
+      location: scopedLocation(['features', view.feature.id], () => selected === generation && isSessionEpochCurrent()),
       onNavigate(/** @type {import('../plugin-api.js').WebFeatureNavigationHandler} */ handler) { view.navigate = handler; return () => { if (view.navigate === handler) view.navigate = null; }; },
-      isCurrent: () => selected === generation, invoke: featureInvoker(view.feature, active, () => selected === generation)
+      isCurrent: () => selected === generation && isSessionEpochCurrent(), invoke: featureInvoker(view.feature, active, () => selected === generation && isSessionEpochCurrent())
     });
     content.dataset.pluginMounted = 'true';
     if (typeof dispose === 'function') { if (selected === generation) disposers.push(dispose); else dispose(); }
@@ -125,45 +129,57 @@ async function mountFeature(view, active, selected) {
 }
 /** @param {string} id @param {unknown} target @param {()=>boolean} current @returns {Promise<import('../plugin-api.js').WebNavigationResult>} */
 async function openNavigationFeature(id, target, current) {
+  const address = window.location.href;
+  const navigationCurrent = () => current() && address === window.location.href;
   const view = views.get(id);
   if (!view) return { status: 'unavailable', code: 'not-installed', message: 'This feature is not installed in navigation.' };
   if (!view.feature.configured || view.feature.status !== 'ready' || !view.feature.operations.length) return { status: 'unavailable', code: view.feature.status === 'unavailable' ? 'not-ready' : 'not-authorized', message: 'This feature is not available to the current session.' };
   if (!await ensureFeatureMounted(view)) return { status: 'unavailable', code: 'load-failed', message: 'This feature could not load.' };
-  if (!current()) return { status: 'unavailable', code: 'session-ended', message: 'This navigation request ended with the browser session.' };
+  if (!navigationCurrent()) return { status: 'unavailable', code: 'session-ended', message: 'This navigation request ended or a newer browser destination was selected.' };
   if (!view.navigate) return { status: 'unavailable', code: 'not-ready', message: 'This feature does not accept related-object navigation.' };
   const result = await view.navigate(target, current);
-  if (current() && result.status !== 'unavailable' && view.section.hidden) {
+  if (current() && result.status === 'opened' && view.section.hidden) {
     if (readLocation()[1] !== id) navigateLocation(['features', id]);
     await applyRoute();
   }
   return result;
 }
 /** @param {string} id */
-async function reconnectFeature(id) {
-  const view = views.get(id), active = session, selected = generation;
-  if (!view || !active || view.reconnect.disabled) return;
-  view.reconnect.disabled = true; view.message.textContent = 'Reconnecting…'; view.message.setAttribute('role', 'status');
+function reconnectFeature(id) {
+  const existing = reconnecting.get(id); if (existing) return existing;
+  const pending = runReconnect(id).finally(() => { if (reconnecting.get(id) === pending) reconnecting.delete(id); }); reconnecting.set(id,pending); return pending;
+}
+/** @param {string} id */
+async function runReconnect(id) {
+  const view = views.get(id), active = session, selected = generation, sessionEpoch = captureSessionEpoch();
+  const feature = catalog.find((entry)=>entry.id===id);
+  if (!feature || !active || !isSessionEpochCurrent(sessionEpoch) || view?.reconnect.disabled) return false;
+  if (view) { view.reconnect.disabled = true; view.message.textContent = 'Reconnecting…'; view.message.setAttribute('role', 'status'); }
+  suspendFeatureOperations(feature);
+  let resumed = false;
   try {
     const response = await fetch(`/v1/extensions/${id}/reconnect`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-dim-csrf': active.csrfToken }, body: '{}', signal: AbortSignal.timeout(35_000) });
-    if (selected !== generation) return;
+    if (selected !== generation || !isSessionEpochCurrent(sessionEpoch)) return false;
     if (response.status === 401) window.dispatchEvent(new Event('dim-session-expired'));
     if (!response.ok) throw new Error('reconnect failed');
-    /** @type {Feature} */ const fresh = await response.json();
+    /** @type {Feature} */ const fresh = await response.json(); if (!isSessionEpochCurrent(sessionEpoch)) return false;
     if (!fresh || fresh.id !== id) throw new Error('unexpected feature');
-    if (view.mounting) await view.mounting;
-    if (selected !== generation) return;
-    const operations = view.feature.operations; operations.splice(0, operations.length, ...fresh.operations);
-    view.feature = { ...fresh, operations }; catalog = catalog.map((entry) => entry.id === id ? view.feature : entry);
+    if (view?.mounting) await view.mounting;
+    if (selected !== generation) return false;
+    const operations = feature.operations; operations.splice(0, operations.length, ...fresh.operations); Object.assign(feature,{...fresh,operations});
+    if (view) view.feature = feature;
+    resumeFeatureOperations(feature); resumed = true; refreshWorkspaceFeatureConnection(id);
     if (fresh.status !== 'ready') throw new Error('connection unavailable');
-    view.message.textContent = 'Connection refreshed. Refresh this feature to load current data; your form input is kept.';
-    if (!view.section.querySelector('[data-plugin-mounted="true"]')) {
+    if (view) view.message.textContent = 'Connection refreshed. Refresh this feature to load current data; your form input is kept.';
+    if (view && !view.section.querySelector('[data-plugin-mounted="true"]')) {
       view.section.querySelector('.feature-content')?.remove(); view.section.querySelector('.feature-load-error')?.remove(); view.mounted = false;
       if (!await ensureFeatureMounted(view) || !view.section.querySelector('[data-plugin-mounted="true"]')) throw new Error('feature mount unavailable');
     }
+    return true;
   } catch {
-    if (selected !== generation) return;
-    view.message.setAttribute('role', 'alert'); view.message.textContent = 'Connection is still unavailable. Ask an operator to check its service, credentials and configured scope, then retry.';
-  } finally { view.reconnect.disabled = false; }
+    if (selected === generation && view) { view.message.setAttribute('role', 'alert'); view.message.textContent = 'Connection is still unavailable. Ask an operator to check its service, credentials and configured scope, then retry.'; }
+    return false;
+  } finally { if (!resumed) resumeFeatureOperations(feature); if (view) view.reconnect.disabled = false; }
 }
 export function showWorkspaceView() {
   if (session?.capabilities.operations) navigateLocation(['workspaces']);

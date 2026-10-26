@@ -6,7 +6,7 @@ import type { WebNavigationResult } from "../../packages/web/core/src/plugin-api
 
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
-const assets = new Map(await Promise.all(["workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "workspace-features.js", "feature-transport.js", "console-location.js", "settings-panel.js", "account-access.js", "account-management.js", "feature-panels.js", "feature-ui.js", "navigation-broker.js", "session-data.js", "tokens.css", "app.css"].map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
+const assets = new Map(await Promise.all(["workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "workspace-features.js", "feature-transport.js", "console-location.js", "settings-panel.js", "account-access.js", "account-management.js", "feature-panels.js", "feature-ui.js", "navigation-broker.js", "session-data.js", "session-boundary.js", "tokens.css", "app.css"].map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
 const evidence = process.env.DIM_WEB_EVIDENCE;
 if (evidence) await mkdir(evidence, { recursive: true });
 const firstId = "17094660-a627-4a17-acd2-6418c0b79967", secondId = "27094660-a627-4a17-acd2-6418c0b79967";
@@ -75,7 +75,8 @@ page.on("pageerror", (error) => errors.push(error.message));
 try {
   await page.goto(`http://127.0.0.1:${address.port}`);
   await page.addScriptTag({ type: "module", content: `
-    import {createWorkspaceHosts} from '/workspace-hosts.js'; import {showFeaturePlugins,clearFeaturePlugins} from '/feature-panels.js';
+    import {createWorkspaceHosts} from '/workspace-hosts.js'; import {showFeaturePlugins,clearFeaturePlugins} from '/feature-panels.js'; import {beginBrowserSession} from '/session-boundary.js';
+    beginBrowserSession(true);
     const hosts=createWorkspaceHosts(document.querySelector('#hosts'), async path=>(await fetch(path)).json());
     globalThis.fixture={hosts,clearFeaturePlugins};
     await hosts.refresh(['local'],true);
