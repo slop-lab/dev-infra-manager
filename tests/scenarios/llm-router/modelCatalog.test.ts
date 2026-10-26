@@ -40,7 +40,7 @@ it("discovers credential-scoped models, refreshes additions, rejects arbitrary m
   expect(await invokeRouterOperation(fx.config, fx.router.ledger, "overview", {})).toMatchObject({ routes: [{ models: "all" }] });
   expect(await invokeRouterOperation(fx.config, fx.router.ledger, "account.models", { accountId: "one" })).toHaveLength(2);
   expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers, body: JSON.stringify({ model: "not-in-account", input: [] }) })).status).toBe(403);
-  expect(discoveries).toBe(2);
+  expect(discoveries).toBe(3);
   failed = true; clock.mockReturnValue(now + 60_002);
   expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(503);
 });
@@ -58,6 +58,63 @@ it("discovers compatible API models with private provider keys and configures ba
   const worker = JSON.parse(await readFile(file, "utf8"));
   expect(worker["api-keys"]["openai-compatibility"][0].models).toEqual([{ name: "compatible-model", alias: "compatible-model" }]);
   expect(JSON.stringify(models)).not.toContain("provider-secret");
+});
+it("keeps operator model inspection read-only and separate from inference preparation", async () => {
+  // Given: a managed API account has no aliases and inference preparation is already waiting on provider I/O.
+  const requests: ServerResponse[] = [];
+  const fx = await fixture((_request, response) => { requests.push(response); });
+  const path = join(fx.config.stateDirectory, "managed-accounts/api"); await mkdir(path, { recursive: true });
+  const file = join(path, "config.yaml");
+  await writeFile(file, JSON.stringify({ "api-keys": { "openai-compatibility": [{ "base-url": fx.endpoint + "/v1", keys: [{ "api-key": "provider-secret" }], models: [] }] } }), { mode: 0o600 });
+  const account = { ...fx.config.accounts[0]!, id: "api", provider: "openai" as const };
+  const config = { ...fx.config, accounts: [account] };
+  const preparation = discoverAccountModels(config, account);
+  while (requests.length < 1) await new Promise<void>((resolve) => setTimeout(resolve, 10));
+
+  // When: account.models inspects the same account while preparation is pending.
+  const inspection = invokeRouterOperation(config, fx.router.ledger, "account.models", { accountId: "api" });
+  await new Promise<void>((resolve) => setTimeout(resolve, 250));
+  let requestCountError: unknown;
+  try { expect(requests).toHaveLength(2); }
+  catch (error) { requestCountError = error; }
+  if (requestCountError !== undefined) {
+    requests[0]?.writeHead(200, { "content-type": "application/json" }).end('{"data":[{"id":"prepared-model"}]}');
+    await Promise.allSettled([inspection, preparation]);
+    throw requestCountError;
+  }
+  requests[1]?.writeHead(200, { "content-type": "application/json" }).end('{"data":[{"id":"inspection-model"}]}');
+  expect(await inspection).toMatchObject([{ id: "inspection-model" }]);
+  const inspected = JSON.parse(await readFile(file, "utf8"));
+  expect(inspected["api-keys"]["openai-compatibility"][0].models).toEqual([]);
+
+  // Then: inference preparation remains independently pending and retains alias publication ownership.
+  requests[0]?.writeHead(200, { "content-type": "application/json" }).end('{"data":[{"id":"prepared-model"}]}');
+  expect(await preparation).toMatchObject([{ id: "prepared-model" }]);
+  const prepared = JSON.parse(await readFile(file, "utf8"));
+  expect(prepared["api-keys"]["openai-compatibility"][0].models).toEqual([{ name: "prepared-model", alias: "prepared-model" }]);
+});
+it("does not start a managed Codex worker during operator model inspection", async () => {
+  // Given: a stopped managed Codex account could be started by the configured backend executable.
+  const fx = await fixture((_request, response) => response.end('{"data":[]}'));
+  const reservation = createServer();
+  await new Promise<void>((resolve) => reservation.listen(0, "127.0.0.1", resolve));
+  const address = reservation.address();
+  if (!address || typeof address === "string") throw new Error("missing reserved address");
+  await new Promise<void>((resolve) => reservation.close(() => resolve()));
+  const accountPath = join(fx.config.stateDirectory, "managed-accounts/codex");
+  await mkdir(join(accountPath, "auth"), { recursive: true, mode: 0o700 });
+  await writeFile(join(accountPath, "config.yaml"), JSON.stringify({ server: { host: "127.0.0.1", port: address.port }, oauth: { "auth-dir": join(accountPath, "auth") }, access: { "api-keys": ["private-key"] } }), { mode: 0o600 });
+  const marker = join(fx.config.stateDirectory, "worker-started");
+  const executable = join(fx.config.stateDirectory, "backend.mjs");
+  await writeFile(executable, `#!${process.execPath}\nimport { createServer } from "node:http"; import { readFile, writeFile } from "node:fs/promises"; if (process.argv.includes("-h")) console.log("CLIProxyAPI Version: 8.0.33, Commit: fixture"); else { const config = JSON.parse(await readFile(process.argv[process.argv.indexOf("-config") + 1], "utf8")); await writeFile(${JSON.stringify(marker)}, "started"); const server = createServer((_request, response) => response.end('{"data":[{"id":"codex-model"}]}')); server.listen(config.server.port, config.server.host); process.once("SIGTERM", () => server.close()); }\n`, { mode: 0o700 });
+  const account = { ...fx.config.accounts[0]!, id: "codex", provider: "codex" as const, endpoint: `http://127.0.0.1:${address.port}`, credentialDirectory: join(accountPath, "auth") };
+  const config = { ...fx.config, accounts: [account], accountManagement: { backendExecutable: executable } };
+
+  // When: an operator requests the account catalog while its worker is stopped.
+  await expect(invokeRouterOperation(config, fx.router.ledger, "account.models", { accountId: "codex" })).rejects.toThrow();
+
+  // Then: inspection reports unavailability without starting the worker process.
+  await expect(readFile(marker, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 });
 it("rejects duplicate catalog entries and unsupported wildcard policy", async () => {
   const fx = await fixture((_request, response) => response.end(JSON.stringify({ data: [{ id: "duplicate" }, { id: "duplicate" }] })));

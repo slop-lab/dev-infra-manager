@@ -4,19 +4,26 @@ import { ensureManagedBackend, configureManagedAccountModels, managedAccountDisc
 const catalogs = new Map<string, { expires: number; pending: Promise<RouterModel[]> }>();
 const catalogLifetime = 30_000;
 const maximumBytes = 4 * 1024 * 1024;
+type DiscoveryMode = "inspection" | "preparation";
 
 /** Discovery is credential scoped; an all-model route never authorizes arbitrary model names. */
 export async function discoverAccountModels(config: RouterConfig, account: RouterAccount): Promise<RouterModel[]> {
-  const key = JSON.stringify([config.stateDirectory, account.id, account.endpoint, account.keyFile, account.provider]);
+  return discoverAccountModelsFor(config, account, "preparation");
+}
+export async function inspectAccountModels(config: RouterConfig, account: RouterAccount): Promise<RouterModel[]> {
+  return discoverAccountModelsFor(config, account, "inspection");
+}
+async function discoverAccountModelsFor(config: RouterConfig, account: RouterAccount, mode: DiscoveryMode): Promise<RouterModel[]> {
+  const key = JSON.stringify([mode, config.stateDirectory, account.id, account.endpoint, account.keyFile, account.provider]);
   const cached = catalogs.get(key);
   if (cached && cached.expires > Date.now()) return cached.pending;
-  const pending = discover(config, account);
+  const pending = discover(config, account, mode);
   const entry = { expires: Date.now() + catalogLifetime, pending };
   catalogs.set(key, entry);
   try { return await pending; }
   catch (error) { if (catalogs.get(key) === entry) catalogs.delete(key); throw error; }
 }
-async function discover(config: RouterConfig, account: RouterAccount): Promise<RouterModel[]> {
+async function discover(config: RouterConfig, account: RouterAccount, mode: DiscoveryMode): Promise<RouterModel[]> {
   const direct = await managedAccountDiscovery(config, account);
   const endpoint = direct?.endpoint ?? account.endpoint + "/v1/models";
   const headers = direct?.headers ?? { authorization: `Bearer ${(await privateFile(account.keyFile, 16 * 1024)).trim()}` };
@@ -24,7 +31,7 @@ async function discover(config: RouterConfig, account: RouterAccount): Promise<R
   let response: Response;
   try { response = await request(); }
   catch (error) {
-    if (direct || !account.provider) throw error;
+    if (mode === "inspection" || direct || !account.provider) throw error;
     // A separate operator listener may discover a worker already owned by inference.
     // Start a worker only when its existing listener cannot be reached.
     await ensureManagedBackend(config, account); response = await request();
@@ -50,7 +57,7 @@ async function discover(config: RouterConfig, account: RouterAccount): Promise<R
       output: row.output ?? row.max_output_tokens });
   });
   if (!models.length || new Set(models.map(({ id }) => id)).size !== models.length) throw new Error("account model catalog is empty or contains duplicate models");
-  if (direct) {
+  if (direct && mode === "preparation") {
     const explicit = config.routes.filter((route) => route.accountId === account.id && route.models !== "all").flatMap(({ models }) => models === "all" ? [] : models);
     await configureManagedAccountModels(config, account, [...new Map([...explicit, ...models].map((model) => [model.id, model])).values()]);
   }
