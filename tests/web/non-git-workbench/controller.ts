@@ -4,6 +4,7 @@ import { executionOperations } from "../../../packages/service-clients/execution
 import { llmOperations } from "../../../packages/contracts/llm-router/src/index.js";
 import { parseWorkbenchState } from "./state.js";
 import {z} from 'zod';
+import { tryAcquireKernelGuard } from '../../../packages/control-plane/core/src/lock.js';
 
 const statePath = process.env.DIM_NON_GIT_WORKBENCH_STATE;
 if (statePath === undefined) throw new Error("DIM_NON_GIT_WORKBENCH_STATE is required");
@@ -11,6 +12,9 @@ const rawArgs = process.argv.slice(2);
 const selector = rawArgs[0] === "--host" ? rawArgs[1] : undefined;
 if (selector === undefined) throw new Error("fixture controller requires --host");
 const args = rawArgs.slice(2).filter((argument) => argument !== "--json");
+const guard = await tryAcquireKernelGuard(`${statePath}.guard`, { timeoutMilliseconds: 5000 });
+if (guard === undefined) throw new Error('synthetic state is busy');
+try {
 const state = parseWorkbenchState(await readFile(statePath, "utf8"));
 const selectedHost = state.hosts[selector];
 if (selectedHost === undefined) throw new Error("unknown synthetic host");
@@ -100,7 +104,8 @@ async function main(): Promise<void> {
     if (operation === "server.start") host.servers[selected.id] = "running";
     if (operation === "server.stop") host.servers[selected.id] = "stopped";
     if (operation === "server.credentials") return print({ workspace: selected.name, workspaceId: selected.id, username: "opencode", password: "synthetic-only-password" });
-    await save(); return print(serverSnapshot(selected));
+    if (operation === "server.start" || operation === "server.stop") await save();
+    return print(serverSnapshot(selected));
   }
   if (domain === "external-url") {
     if (selected === undefined) throw new Error("workspace identity mismatch");
@@ -109,7 +114,8 @@ async function main(): Promise<void> {
     const route = routes.find((entry) => entry.id === body.id);
     if (route !== undefined && operation === "routes.approve") route.approval = "approved";
     if (route !== undefined && operation === "routes.revoke") route.approval = "revoked";
-    host.routes[selected.id] = routes; await save(); return print(routeSnapshot(selected));
+    if (["routes.create", "routes.approve", "routes.revoke"].includes(operation)) { host.routes[selected.id] = routes; await save(); }
+    return print(routeSnapshot(selected));
   }
   if (domain === "execution") {
     if (operation === "jobs.list") return print(jobs);
@@ -146,3 +152,4 @@ function llmResponse(operation: string, body: Record<string, unknown>): unknown 
 }
 
 await main();
+} finally { await guard.release(); }
