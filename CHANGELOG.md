@@ -243,6 +243,9 @@ is implied by these source changes.
   Bind plugin calls to server-owned generations across tabs, preserve known router
   rejections through controller transport, and reconcile account creation by its
   exact generated intent identity without erasing newer credentials or routes.
+  Restrict shared feature reconnect to operators, and order router reconciliation
+  reads after dispatched owner writes without reporting post-commit failure as a
+  known rejection.
   Run the disposable non-Git browser journeys in the Web CI lane.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
