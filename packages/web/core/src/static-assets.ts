@@ -30,6 +30,7 @@ const assets = new Map<string, StaticAsset>([
   ["/assets/feature-panels.js", asset("feature-panels.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/feature-ui.js", asset("feature-ui.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/session-data.js", asset("session-data.js", "text/javascript; charset=utf-8", ASSET_CSP)],
+  ["/assets/session-boundary.js", asset("session-boundary.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/app.js", asset("app.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/account-access.js", asset("account-access.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/account-management.js", asset("account-management.js", "text/javascript; charset=utf-8", ASSET_CSP)],

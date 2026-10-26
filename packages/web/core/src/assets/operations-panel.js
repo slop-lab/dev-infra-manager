@@ -3,6 +3,7 @@ import { record, text } from "./session-data.js";
 import { createWorkspaceHosts } from "./workspace-hosts.js";
 import { registerWorkspaceDestination } from "./navigation-broker.js";
 import { showWorkspaceView } from "./feature-panels.js";
+import { captureSessionEpoch, isSessionEpochCurrent } from "./session-boundary.js";
 /** @param {string} id */
 function element(id) {
   const value = document.getElementById(id);
@@ -15,6 +16,7 @@ let epoch = 0;
 /** @param {string} path @param {unknown} [body] @param {number} [timeout] */
 async function request(path, body, timeout = 35_000) {
   const active = session; if (!active) throw new Error("session required");
+  const selectedEpoch = captureSessionEpoch();
   let response;
   try {
     response = await fetch(path, { method: body === undefined ? "GET" : "POST", credentials: "same-origin",
@@ -23,12 +25,13 @@ async function request(path, body, timeout = 35_000) {
   } catch (cause) {
     throw Object.assign(new Error(body === undefined ? "read failed" : "mutation outcome unknown", { cause }), { outcome: body === undefined ? "read" : "unknown" });
   }
+  if (!isSessionEpochCurrent(selectedEpoch)) throw new Error("session expired");
   if (response.status === 401) window.dispatchEvent(new Event("dim-session-expired"));
   if (!response.ok) {
     const failure = record(await response.json().catch(() => null));
     throw Object.assign(new Error(response.status === 401 ? "session expired" : "operation failed"), { code: text(failure?.code), outcome: body !== undefined && response.status >= 500 ? "unknown" : "rejected" });
   }
-  try { /** @type {unknown} */ const value = await response.json(); return value; }
+  try { /** @type {unknown} */ const value = await response.json(); if (!isSessionEpochCurrent(selectedEpoch)) throw new Error("session expired"); return value; }
   catch (cause) { throw Object.assign(new Error("operation response unreadable", { cause }), { outcome: body === undefined ? "read" : "unknown" }); }
 }
 const workspaceHosts = createWorkspaceHosts(hosts, request, showWorkspaceView);

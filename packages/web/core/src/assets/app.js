@@ -5,6 +5,7 @@ import { clearOperations, showOperations } from "./operations-panel.js";
 import { showFeaturePlugins, clearFeaturePlugins } from "./feature-panels.js";
 import { endNavigationSession, startNavigationSession } from "./navigation-broker.js";
 import { showAccountAccess } from "./account-access.js";
+import { beginBrowserSession, captureSessionEpoch, invalidateBrowserSession, observeBrowserSession, sessionEpochUnchanged, sessionStorageAvailable } from "./session-boundary.js";
 
 /** @template {typeof HTMLElement} T @param {string} id @param {T} type @returns {InstanceType<T>} */
 function element(id, type) {
@@ -24,16 +25,19 @@ window.addEventListener("dim-account-access", openAccess);
 /** @type {import("./types.js").Session | null} */ let session = null;
 /** @param {string} path @param {import("./types.js").Operation} operation @param {RequestInit} [options] */
 async function request(path, operation, options = {}) {
+  const epoch = captureSessionEpoch();
   try {
     const response = await fetch(path, { ...options, credentials: "same-origin", headers: { accept: "application/json", ...options.headers }, signal: AbortSignal.any([operation.signal, AbortSignal.timeout(10_000)]) });
     /** @type {unknown} */ const body = response.status === 204 ? null : await response.json();
+    if (!sessionEpochUnchanged(epoch)) return { body: null, status: 0, ok: false };
     return { body, status: response.status, ok: response.ok };
   } catch { return { body: null, status: 0, ok: false }; }
 }
 /** @param {string} [message] */
-function signedOut(message = "") {
+function signedOut(message = "", invalidate = false, preserveAccess = false) {
+  invalidateBrowserSession(invalidate); password.value = '';
   operations.start(); session = null; endNavigationSession(); clearOperations(); clearFeaturePlugins();
-  if (accessDialog.open) accessDialog.close(); element("account-access-content", HTMLElement).replaceChildren();
+  if (!preserveAccess) { if (accessDialog.open) accessDialog.close(); element("account-access-content", HTMLElement).replaceChildren(); }
   element("restore-state", HTMLElement).hidden = true; element("login-view", HTMLElement).hidden = false; actions.hidden = true;
   loginError.textContent = message; alerts.textContent = message;
   element("settings-panel", HTMLElement).hidden = true; element("shell-message", HTMLElement).textContent = "";
@@ -41,8 +45,10 @@ function signedOut(message = "") {
   const invalid = message.startsWith("Sign-in failed.");
   username.setAttribute("aria-invalid", String(invalid)); password.setAttribute("aria-invalid", String(invalid)); username.focus();
 }
-/** @param {import("./types.js").Session} active */
-function signedIn(active) {
+/** @param {import("./types.js").Session} active @param {boolean} rotate */
+function signedIn(active, rotate) {
+  if (beginBrowserSession(rotate) === null) return signedOut("This browser blocks the local session fence. Allow local storage for this console, then sign in again.");
+  element('account-access-content', HTMLElement).replaceChildren(); if (accessDialog.open) accessDialog.close();
   session = active; password.value = ""; loginError.textContent = ""; alerts.textContent = "";
   startNavigationSession(active);
   element("restore-state", HTMLElement).hidden = true; element("login-view", HTMLElement).hidden = true; actions.hidden = false;
@@ -52,12 +58,13 @@ function signedIn(active) {
 }
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault(); if (!loginForm.reportValidity() || loginButton.disabled) return;
+  invalidateBrowserSession();
   const operation = operations.start(); loginButton.disabled = true; loginButton.classList.add("is-loading"); loginError.textContent = "";
   try {
     const response = await request("/v1/session", operation, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: username.value, password: password.value }) });
     if (!operations.isCurrent(operation)) return;
     const active = response.ok ? parseSession(response.body) : null;
-    if (active) return signedIn(active);
+    if (active) return signedIn(active, true);
     const explanation = text(record(response.body)?.error);
     signedOut(response.status === 403 && explanation?.startsWith("Open this console at ") ? explanation : response.status === 0
       ? "Cannot reach this console. Check your connection and try again."
@@ -70,14 +77,16 @@ logoutButton.addEventListener("click", async () => {
   try {
     const response = await request("/v1/session", operation, { method: "DELETE", headers: { "x-dim-csrf": session.csrfToken } });
     if (!operations.isCurrent(operation)) return;
-    if (response.ok || response.status === 401) signedOut();
+    if (response.ok || response.status === 401) signedOut("", true);
     else alerts.textContent = "Sign-out could not be completed. Retry before leaving this browser unattended.";
   } finally { logoutButton.disabled = false; }
 });
-window.addEventListener("dim-session-expired", () => signedOut("Your session ended. Sign in again."));
+window.addEventListener("dim-session-expired", () => signedOut("Your session ended. Sign in again.", true));
+window.addEventListener("dim-session-self-revoked", () => signedOut("Your account changed. Save the one-time result, then sign in again.", true, true));
+observeBrowserSession(() => signedOut(sessionStorageAvailable() ? "The browser session changed in another tab. Sign in again." : "This browser blocks the local session fence. Allow local storage for this console, then reload."));
 const restoring = operations.start();
 void request("/v1/session", restoring).then((response) => {
   if (!operations.isCurrent(restoring)) return;
   const active = response.ok ? parseSession(response.body) : null;
-  if (active) signedIn(active); else signedOut(response.status === 0 ? "Cannot reach this console. Check your connection and try again." : "");
+  if (active) signedIn(active, false); else signedOut(!sessionStorageAvailable() ? "This browser blocks the local session fence. Allow local storage for this console, then reload." : response.status === 0 ? "Cannot reach this console. Check your connection and try again." : "");
 });

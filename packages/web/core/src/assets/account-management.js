@@ -1,4 +1,5 @@
 // @ts-check
+import { captureSessionEpoch, isSessionEpochCurrent } from "./session-boundary.js";
 /** @typedef {{username:string,roles:string[]}} Account */
 /** @param {import('./types.js').Session} session @param {HTMLElement} container */
 export function mountAccountManagement(session, container) {
@@ -7,7 +8,8 @@ export function mountAccountManagement(session, container) {
   heading.textContent = "Manage browser accounts"; status.setAttribute("role", "status");
   container.append(region); region.append(heading, status, table);
   const dialog = container.closest("dialog");
-  const current = () => region.isConnected && (!(dialog instanceof HTMLDialogElement) || dialog.open);
+  const sessionEpoch = captureSessionEpoch();
+  const current = () => isSessionEpochCurrent(sessionEpoch) && region.isConnected && (!(dialog instanceof HTMLDialogElement) || dialog.open);
   const refresh = document.createElement("button"); refresh.type = "button"; refresh.className = "button button-secondary"; refresh.textContent = "Refresh accounts"; region.append(refresh);
   const form = document.createElement("form"); form.setAttribute("aria-label", "Manage browser account"); region.append(form, result);
   /** @param {string} label @param {HTMLInputElement|HTMLSelectElement} input */
@@ -60,7 +62,7 @@ export function mountAccountManagement(session, container) {
       const updated = parseAccounts(body.accounts); if (!current()) return;
       accounts = updated; accepted = true; signInRequired = body.signInRequired === true; status.textContent = `Account ${target}: ${action} saved. Changes apply immediately.`;
       if (typeof body.password === "string") { const label = document.createElement("label"), title = document.createElement("span"), generated = document.createElement("input"), copy = document.createElement("button"), feedback = document.createElement("p"); title.textContent = "Generated password"; generated.setAttribute("aria-label", "Generated password"); generated.value = body.password; generated.readOnly = true; label.className = "field"; label.append(title, generated); copy.type = "button"; copy.className = "button button-secondary"; copy.textContent = "Copy generated password"; feedback.setAttribute("role", "status"); copy.addEventListener("click", async () => { try { await navigator.clipboard.writeText(generated.value); feedback.textContent = "Password copied."; } catch { generated.focus(); generated.select(); feedback.textContent = "Password selected. Copy it with your keyboard."; } }); const hint = document.createElement("p"); hint.textContent = "This password is shown once. Save it before closing this dialog."; result.append(label, copy, feedback, hint); }
-      if (signInRequired) { const hint = document.createElement("p"), signIn = document.createElement("button"); hint.textContent = "Your account changed and your session ended. Save any generated password, then sign in again."; signIn.type = "button"; signIn.className = "button"; signIn.textContent = "Sign in again"; signIn.addEventListener("click", () => window.dispatchEvent(new Event("dim-session-expired"))); result.append(hint, signIn); }
+       if (signInRequired) { const hint = document.createElement("p"), signIn = document.createElement("button"); hint.textContent = "Your account changed and your session ended. Save any generated password, then sign in again."; signIn.type = "button"; signIn.className = "button"; signIn.textContent = "Sign in again"; signIn.addEventListener("click", () => window.dispatchEvent(new Event("dim-session-expired"))); result.append(hint, signIn); paintForm(); paintAccounts(); window.dispatchEvent(new Event("dim-session-self-revoked")); }
     } catch { if (current()) { uncertain = true; status.textContent = "Could not confirm the account update. It may have been saved. Refresh accounts to inspect the current state before retrying."; } }
     finally { pending = false; password.value = ""; if (current()) { paintForm(); paintAccounts(); refresh.disabled = signInRequired; } }
   });
