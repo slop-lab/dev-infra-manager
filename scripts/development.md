@@ -18,6 +18,20 @@ normally. The `dim-agent` adapter adds explicit session continuation support;
 `dim tools run dev TOOL` invokes it on the selected local or SSH host. No
 repository-specific agent bootstrap or runtime hooks are required.
 
+## Explicit selected-host usability smoke
+
+For a reusable live check of an already installed host, use the
+[selected-host scenario](../tests/scenarios/selected-host/README.md). Its
+configuration names every host, an operator-provisioned disposable managed
+Project, a `dim-smoke-*` workspace prefix, declared source SHA and observed host
+version, required plugins and existing shared ingress.
+Start with `--preflight-only`; the full run performs real guest Git fetch/push,
+exact-candidate required CI, OpenCode inference/tool use, server and ingress checks, recreate/reconnect, then
+UUID-fenced cleanup. It never silently uses the current host or configures host
+privileges, operator credentials, shared services, firewall rules or host plugins.
+Optional monitoring uses bounded public session metadata and a separate read-only
+OMO adapter; monitoring never establishes task acceptance.
+
 ## KVM example verification inside a workspace
 
 `bash scripts/dev.bash help` lists the repository tasks. From inside a workspace,
