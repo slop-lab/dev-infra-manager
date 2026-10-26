@@ -8,6 +8,7 @@ import { ContainerWorkspaceRuntime } from "../../../packages/host/core/src/works
 import { WorkspaceStore } from "../../../packages/host/core/src/workspace/store.js";
 import { WorkspaceService } from "../../../packages/host/core/src/workspace/service.js";
 import { workspaceServiceEndpoint } from "../../../packages/host/core/src/workspace/serviceEndpoint.js";
+import { openWorkspaceServiceChannel } from "../../../packages/host/core/src/workspace/serviceChannel.js";
 import type { WorkspaceRecord } from "../../../packages/host/core/src/workspace/models.js";
 import { bootstrapNativeProjectRepository } from "../../../packages/host/plugins/native-git/src/nativeProjectBootstrap.js";
 import { NativeProjectPendingStore } from "../../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js";
@@ -35,6 +36,16 @@ describe("disposable multi-repository workspace runtime", () => {
       NODE_OPTIONS: process.env.NODE_OPTIONS, TSX_TSCONFIG_PATH: process.env.TSX_TSCONFIG_PATH };
     const checkoutSources = new Map<string, string>();
     let cleanupSafe = true;
+    const channels: ReturnType<typeof openWorkspaceServiceChannel>[] = [];
+    const connectServices = async (record: WorkspaceRecord) => {
+      const attachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(managed, record.id));
+      const channel = openWorkspaceServiceChannel({ token: randomUUID(), port: 19420, signal: new AbortController().signal,
+        exec: (command, options) => runtime.exec(record, command, options),
+        current: async () => (await store.read(record.name)).id === record.id && !!(await runtime.inspect(record))?.running,
+        resolve: async (name) => name === "native-git" ? `http://${attachment.gateway}:${attachment.port}` : undefined,
+      });
+      channels.push(channel); await channel.ready;
+    };
     try {
       const inspected = await runner.run("docker", ["image", "inspect", image, "--format", "{{.Id}}"]);
       expect(inspected.exitCode, inspected.stderr).toBe(0);
@@ -84,6 +95,7 @@ describe("disposable multi-repository workspace runtime", () => {
       const all = await createManagedWorkspace({ name: names[0]!, source: { url: "dim://example" }, repositories: ["public", "private"],
         workingDirectory: "private", image, git: { name: "Workspace Developer", email: "workspace@example.invalid" },
         resources: { cpuCount: "2", memory: "2g", pidsLimit: "1024" } }, context);
+      await connectServices(all);
       const guest = async (record: WorkspaceRecord, argv: string[]) => {
         const result = await runtime.run(record, argv, { signal: AbortSignal.timeout(60_000) });
         expect(result.exitCode, result.stderr).toBe(0); return result.stdout.trim();
@@ -100,24 +112,28 @@ describe("disposable multi-repository workspace runtime", () => {
         expect(await guest(all, ["git", "-C", `/workspace/${repositoryId}`, "remote", "get-url", "origin"]))
           .toBe(`${workspaceServiceEndpoint("native-git")}/v1/projects/example/repositories/${repositoryId}.git`);
         await guest(all, ["git", "-C", `/workspace/${repositoryId}`, "fetch", "origin"]);
-        await guest(all, ["sh", "-ceu", `cd /workspace/${repositoryId}; printf 'proposal\\n' >> README.md; git add README.md; git commit -m proposal; git push origin`]);
+        await guest(all, ["sh", "-ceu", `cd /workspace/${repositoryId}; git checkout -b smoke/candidate; printf 'proposal\\n' >> README.md; git add README.md; git commit -m proposal; git push origin HEAD:refs/heads/smoke/candidate`]);
         const expected = await runGit("/usr/bin/git", ["-C", checkoutSources.get(repositoryId)!, "rev-parse", "HEAD"]);
         const protectedHead = await runGit("/usr/bin/git", ["--git-dir", join(root, "native/example", `${repositoryId}.git`), "rev-parse", "refs/heads/main"]);
         expect(protectedHead.stdout.trim()).toBe(expected.stdout.trim());
       }
       await guest(all, ["sh", "-ceu", "printf retained > /workspace/public/untracked; printf private-retained > /workspace/private/untracked"]);
       const recreated = await lifecycle.recreate(all.name, all.id); await ensureManagedWorkspace(recreated, context);
+      await connectServices(recreated);
       expect(recreated.id).toBe(all.id); expect(recreated.source).toEqual(all.source);
       expect(await guest(recreated, ["pwd"])).toBe("/workspace/private");
       expect(await guest(recreated, ["cat", "/workspace/public/untracked"])).toBe("retained");
       expect(await guest(recreated, ["cat", "/workspace/private/untracked"])).toBe("private-retained");
+      await guest(recreated, ["git", "fetch", "origin"]);
       const publicOnly = await createManagedWorkspace({ name: names[1]!, source: { url: "dim://example" }, repositories: ["public"], image,
         resources: { cpuCount: "2", memory: "2g", pidsLimit: "1024" } }, context);
+      await connectServices(publicOnly);
       expect(await guest(publicOnly, ["pwd"])).toBe("/workspace/public");
       expect(await guest(publicOnly, ["sh", "-ceu", "test ! -e /workspace/private; test ! -e /workspace/public/expected-public-version.txt; ls -A /workspace"])).toBe("public");
       expect(await guest(publicOnly, ["bash", ".dim/ci/jobs/source.bash"])).toBe("native-multiple-public-ok");
       expect(validatedConfigurations).toBe(2);
     } finally {
+      await Promise.allSettled(channels.map((channel) => channel.close()));
       for (const record of await store.list()) {
         try { await lifecycle.discard(record.name, record.id); }
         catch (error) { cleanupSafe = false; console.error(`preserved owned fixture state at ${root}`, error); }
