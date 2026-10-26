@@ -25,6 +25,8 @@ const journeys = [
   'web/plugins/llm-router/accounts.e2e.ts',
   'web/plugins/llm-router/accountReadiness.e2e.ts',
   'web/plugins/llm-router/controllerUncertainty.e2e.ts',
+  'web/plugins/llm-router/upstreamResponseLoss.e2e.ts',
+  'web/plugins/llm-router/draftLifetime.e2e.ts',
   'web/plugins/llm-router/panel.e2e.ts',
   'web/plugins/llm-router/controllers.e2e.ts',
   'web/plugins/llm-router/navigation-resolution.e2e.ts',
