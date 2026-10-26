@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { createLlmRouterClient, LlmRouterResultUnavailableError } from "../../../packages/service-clients/llm-router/src/index.js";
+import { createLlmRouterClient, LlmRouterRejectedError, LlmRouterResultUnavailableError } from "../../../packages/service-clients/llm-router/src/index.js";
 
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
@@ -13,7 +13,7 @@ async function fixture(mode: "rejected" | "lost") {
   const server = createServer((_request, response) => {
     if (mode === "rejected") {
       response.writeHead(409, { "content-type": "application/json" });
-      response.end('{"error":"known rejection"}');
+      response.end('{"error":"PRIVATE_PROVIDER_REJECTION"}');
       return;
     }
     response.destroy();
@@ -59,5 +59,7 @@ it("keeps an explicit service rejection distinct from an unavailable result", as
 
   const error = await client.invoke("project.state", { projectId: "example", action: "pause" }).catch((cause: unknown) => cause);
 
-  expect(error).toMatchObject({ name: "Error", message: "LLM router operation failed (HTTP 409)" });
+  expect(error).toBeInstanceOf(LlmRouterRejectedError);
+  expect(error).toMatchObject({ status: 409, errorCode: "llm_router_operation_rejected" });
+  expect(JSON.stringify(error)).not.toContain("PRIVATE_PROVIDER_REJECTION");
 });

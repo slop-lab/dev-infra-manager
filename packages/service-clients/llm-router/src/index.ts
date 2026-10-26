@@ -5,7 +5,13 @@ import { isIP } from "node:net";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
-import { capabilitiesSchema, llmOperation, llmOperations } from "@slop-lab/dim-contracts-llm-router";
+import { capabilitiesSchema, llmOperation, llmOperations, type LlmRouterRejectionCode } from "@slop-lab/dim-contracts-llm-router";
+export class LlmRouterRejectedError extends Error {
+  readonly name = "LlmRouterRejectedError";
+  constructor(readonly status: number, readonly errorCode: LlmRouterRejectionCode) {
+    super(status === 401 ? "LLM router operator authentication failed" : status === 403 ? "LLM router operator permission denied" : `LLM router operation rejected (HTTP ${status})`);
+  }
+}
 export class LlmRouterResultUnavailableError extends Error {
   readonly name = "LlmRouterResultUnavailableError";
   constructor(cause?: unknown) {
@@ -39,7 +45,9 @@ export function createLlmRouterClient(connectionFile: string, options: { signal?
       let response: Response;
       try { response = await fetch(`${connection.endpoint}/v1/operator/operations/${name}`, { method: "POST", redirect: "error", signal: AbortSignal.any([AbortSignal.timeout(name === "account.login.start" ? 30_000 : 15_000), ...(options.signal === undefined ? [] : [options.signal])]), headers: { "content-type": "application/json", authorization: `Basic ${Buffer.from(`${connection.actorId}:${key}`).toString("base64")}` }, body: JSON.stringify(payload) }); } catch (error) { throw new LlmRouterResultUnavailableError(error); }
       if (!response.ok) {
-        const failure = response.status >= 500 ? new LlmRouterResultUnavailableError() : new Error(response.status === 401 ? "LLM router operator authentication failed" : response.status === 403 ? "LLM router operator permission denied" : `LLM router operation failed (HTTP ${response.status})`);
+        const failure = response.status >= 400 && response.status < 500
+          ? new LlmRouterRejectedError(response.status, response.status === 401 ? "llm_router_authentication_failed" : response.status === 403 ? "llm_router_permission_denied" : "llm_router_operation_rejected")
+          : new LlmRouterResultUnavailableError();
         try { await response.body?.cancel(); } finally { throw failure; }
       }
       try {
