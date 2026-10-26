@@ -1,4 +1,7 @@
 // @ts-check
+import {invalidateNavigationRequests,navigationRevision} from './navigation-broker.js';
+let watching = false;
+const LOCATION_CHANGED = 'dim-console-location-changed';
 
 /** @param {string} hash @returns {string[] | null} */
 export function parseLocation(hash) {
@@ -20,21 +23,30 @@ export function hrefLocation(path) { return `#/${path.map(encodeURIComponent).jo
 export function navigateLocation(path, replace = false) {
   const hash = hrefLocation(path);
   if (window.location.hash === hash) return;
-  if (replace) {
-    window.history.replaceState(null, "", hash);
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
-  } else window.location.hash = hash;
+  if (replace) window.history.replaceState(null, '', hash);
+  else window.history.pushState(null, '', hash);
+  window.dispatchEvent(new Event(LOCATION_CHANGED));
 }
 /** @param {(path:string[])=>void} handler */
 export function subscribeLocation(handler) {
+  if (!watching) {
+    watching = true;
+    window.addEventListener('hashchange', invalidateNavigationRequests);
+    window.addEventListener('popstate', invalidateNavigationRequests);
+    document.addEventListener('click', (event) => { if (event instanceof MouseEvent && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.target instanceof Element && event.target.closest('a,button,input,select,textarea,summary')) invalidateNavigationRequests(); }, true);
+    document.addEventListener('submit', invalidateNavigationRequests, true);
+    document.addEventListener('input', (event) => { if (event.isTrusted) invalidateNavigationRequests(); }, true);
+  }
   const listener = () => handler(readLocation());
   window.addEventListener("hashchange", listener);
-  return () => window.removeEventListener("hashchange", listener);
+  window.addEventListener(LOCATION_CHANGED, listener);
+  return () => { window.removeEventListener('hashchange', listener); window.removeEventListener(LOCATION_CHANGED, listener); };
 }
 /** @param {readonly string[]} scope @param {()=>boolean} current @returns {import('../plugin-api.js').WebPluginLocation} */
 export function scopedLocation(scope, current) {
   const matches = (/** @type {readonly string[]} */ path) => scope.every((part, index) => path[index] === part);
   return {
+    get revision() { return navigationRevision(); },
     get path() { const path = readLocation(); return matches(path) ? path.slice(scope.length) : []; },
     href(path) { return hrefLocation([...scope, ...path]); },
     navigate(path, options) { if (current()) navigateLocation([...scope, ...path], options?.replace); },

@@ -1,5 +1,6 @@
 // @ts-check
 import { button, disclosure, failureCode, feedback, input, node, recovery, requiresReconciliation } from "./workspace-ui.js";
+import {navigationRevision} from './navigation-broker.js';
 
 /** @typedef {(path:string, body?:unknown, timeout?:number)=>Promise<unknown>} Request */
 
@@ -125,6 +126,8 @@ export function createWorkspaceForm(options) {
       ...(ref.value.trim() ? { ref: ref.value.trim() } : {}), ...(image.value.trim() ? { image: image.value.trim() } : {}),
       ...(Object.keys(resources).length ? { resources } : {}) };
     busy = true;
+    const addressAtSubmit = window.location.href;
+    const intentAtSubmit = navigationRevision();
     form.setAttribute("aria-busy", "true");
     updateGate();
     feedback(result, `Creating ${selectedName} on ${host}... This can take a few minutes.`);
@@ -138,7 +141,7 @@ export function createWorkspaceForm(options) {
           const acceptedId = workspaceId(selectedName);
           form.reset(); nameEdited = false; dirty = false; pendingPrefill = null; replace.hidden = true; updateSource(); advanced.open = false; blockedName = "";
           feedback(result, `The host accepted ${selectedName}, and the workspace is listed below.`);
-          if (acceptedId) openWorkspace(acceptedId);
+          if (acceptedId && addressAtSubmit === window.location.href && intentAtSubmit === navigationRevision()) openWorkspace(acceptedId);
         } else { blockedName = selectedName; feedback(result, `The host accepted the request, but ${selectedName} is not visible in the current state. Check current state before any retry.`, true); }
       } catch (error) {
         if (!active()) return;

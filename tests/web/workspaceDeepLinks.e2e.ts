@@ -16,6 +16,7 @@ const assetNames = [
   "navigation-broker.js",
   "console-location.js",
   "session-data.js",
+  "session-boundary.js",
 ] as const;
 const assets = new Map<string, Buffer>(await Promise.all(assetNames.map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
 const workspaceId = "17094660-a627-4a17-acd2-6418c0b79967";
@@ -42,6 +43,8 @@ try {
   await page.addScriptTag({ type: "module", content: `
     import { createWorkspaceHosts } from '/workspace-hosts.js';
     import { updateWorkspaceFeatures } from '/workspace-features.js';
+    import { beginBrowserSession } from '/session-boundary.js';
+    beginBrowserSession(true);
     const hosts=createWorkspaceHosts(document.querySelector('#hosts'), async()=>[{name:'development',id:${JSON.stringify(workspaceId)},phase:'running',runtime:'container',runtimeStatus:'running'}]);
     await hosts.refresh(['local'],true);
     updateWorkspaceFeatures([

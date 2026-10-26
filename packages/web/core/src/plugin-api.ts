@@ -87,6 +87,7 @@ export interface WebPluginBrowserContext {
 }
 export interface WebPluginLocation {
   readonly path: readonly string[];
+  readonly revision: number;
   href(path: readonly string[]): string;
   navigate(path: readonly string[], options?: { readonly replace?: boolean }): void;
   subscribe(handler: (path: readonly string[]) => void): () => void;
