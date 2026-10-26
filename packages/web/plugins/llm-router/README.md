@@ -138,13 +138,18 @@ the unknown outcome. Reads already in flight before the failure cannot release a
 newer lock. The later read either shows the intended state and keeps the mutation
 accepted, or shows that it was not applied and permits an explicit retry.
 
-Generated account creation is reconciled from the account catalog by comparing
-the post-lock account identities with the catalog observed before submission. If
-a new identity is present, Web does not submit the create again. Because the owner
+Account creation submits an internally generated UUID through the owner's
+existing optional account-ID field; users do not enter IDs. Reconciliation matches
+that exact ID and provider, never another actor's newly listed account. An absent
+current read permits an explicit retry with the same intent UUID, not a second
+generated account identity. Because the owner
 API has no device-session listing operation, an unknown `account.login.start`
 cannot be proven absent while the account remains unconnected; that sign-in action
 stays locked for the mounted session rather than starting another backend login.
 Account creation remains unavailable until a successful current account-catalog
-read establishes that comparison baseline. Out-of-order account reads cannot
+read establishes readiness. Out-of-order account reads cannot
 replace a newer catalog, and an account returned by a successful create is included
-in later baselines even when its immediate follow-up list read fails.
+in the retained catalog even when its immediate follow-up list read fails.
+An accepted or reconciled API connection clears its submitted key when that key
+is still present; a newer key draft is retained. Late route acceptance likewise
+preserves and unlocks a newer route draft after the older outcome is settled.

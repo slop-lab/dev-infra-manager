@@ -19,6 +19,9 @@ HTTP 5xx response, or missing, truncated, oversized, malformed or schema-invalid
 success response throws `LlmRouterResultUnavailableError`: the request may have
 reached the service, so mutation callers must read authoritative state before
 retrying.
+Known HTTP 4xx responses throw `LlmRouterRejectedError` with a bounded status and
+fixed public error code, not a raw service body. The LLM-owned controller envelope
+retains that distinction across a host console invocation.
 
 `capabilities`, `overview`, `health`, `projects`, `project.policy`, `usage`, `principals`, and `requests` require read access. Mutation operations require operator access. Prompt/response captures, credential paths, raw keys and token hashes are intentionally absent.
 
