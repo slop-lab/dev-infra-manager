@@ -9,7 +9,8 @@ export async function createOperationsBrowserFixture() {
   const root = await mkdtemp(join(tmpdir(), "dim-operations-browser-"));
   try {
     const workspace = { id: randomUUID(), name: "development", runtime: "container", phase: "running", runtimeStatus: "running", resources: { cpuCount: "1", memory: "2g", pidsLimit: "512" } };
-    const state = join(root, "workspace.json"), executable = join(root, "dim"), failures = join(root, "failures.json"), actions = join(root, "actions.json");
+    const state = join(root, "workspace.json"), executable = join(root, "dim"), failures = join(root, "failures.json"), actions = join(root, "actions.json"), delay = join(root, "delay.json");
+    await writeFile(delay, "{}");
     const incomplete = { ...workspace, id: randomUUID(), name: "incomplete", initialized: false, phase: "error", runtimeStatus: "missing", error: "Docker run failed: pull access denied PRIVATE_SECRET /private/host/path" };
     await writeFile(state, JSON.stringify([workspace, incomplete])); await writeFile(failures, "{}"); await writeFile(actions, "[]");
     await writeFile(executable, `#!${process.execPath}
@@ -18,6 +19,8 @@ const path=${JSON.stringify(state)}, failuresPath=${JSON.stringify(failures)}, a
 const flag=(name,fallback)=>{const index=args.indexOf(name);return index<0?fallback:args[index+1]};
 if(args[0]!=='--host'||args[1]!=='configured-host')process.exit(1);
 const failures=JSON.parse(fs.readFileSync(failuresPath,'utf8'));
+const delay=JSON.parse(fs.readFileSync(${JSON.stringify(delay)},'utf8'));
+if(delay.action===args[2]){fs.writeFileSync(${JSON.stringify(delay)},'{}');await new Promise(resolve=>setTimeout(resolve,delay.milliseconds));}
 if(failures[args[2]]){const diagnostic=failures[args[2]];delete failures[args[2]];fs.writeFileSync(failuresPath,JSON.stringify(failures));console.error(typeof diagnostic==='string'?diagnostic:'Temporary host connection failure');process.exit(1);}
 const actions=JSON.parse(fs.readFileSync(actionsPath,'utf8'));actions.push(args[2]);fs.writeFileSync(actionsPath,JSON.stringify(actions));
 let selected=rows.find(row=>row.name===args[3]);
@@ -46,6 +49,7 @@ fs.writeFileSync(path,JSON.stringify(rows));console.log(JSON.stringify(args[2]==
     return { origin: await web.listen(), username: browser.username, password: browser.password,
       failNextCreate: async () => writeFile(failures, JSON.stringify({ create: "Docker run failed: pull access denied PRIVATE_SECRET /private/host/path" })),
       failNextList: async () => writeFile(failures, JSON.stringify({ ls: true })),
+      delayNextAction: async (action: "resources" | "recreate", milliseconds: number) => writeFile(delay, JSON.stringify({ action, milliseconds })),
       clearWorkspaces: async () => writeFile(state, "[]"),
       stopRuntime: async () => {
         const rows = JSON.parse(await readFile(state, "utf8")) as Array<{ name: string; runtimeStatus: string }>;

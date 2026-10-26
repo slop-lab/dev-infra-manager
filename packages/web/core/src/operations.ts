@@ -107,7 +107,7 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
       for (const [key, flag] of [["cpuCount", "--cpus"], ["memory", "--memory"], ["pidsLimit", "--pids"]] as const) {
         const value = input.resources?.[key]; if (value !== undefined) args.push(flag, value);
       }
-      await command(id, args);
+      await command(id, args, 300_000);
     }
   };
 }

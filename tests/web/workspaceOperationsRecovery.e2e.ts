@@ -44,6 +44,8 @@ try {
   await page.getByLabel("Filter workspaces by state on devbox", { exact: true }).selectOption("all");
   await development.getByRole("button", { name: "stop development", exact: true }).waitFor();
   await development.getByText("Settings for development", { exact: true }).click();
+  await development.getByText(/resource change.*interrupting running processes and attached sessions.*keeping workspace data/i).waitFor();
+  await development.getByText(/recreate replaces the runtime.*interrupting running processes and attached sessions.*keeping checkout, home and nested Docker data/i).waitFor();
   await development.getByLabel("CPUs for development", { exact: true }).fill("0.75");
   await development.getByRole("button", { name: "Reset resource changes for development", exact: true }).click();
   assert.equal(await development.getByLabel("CPUs for development", { exact: true }).inputValue(), "1");
@@ -98,6 +100,21 @@ try {
   await development.getByText(/current state checked/i).waitFor();
   assert.equal(await development.getByLabel("Memory for development", { exact: true }).inputValue(), "unlimited");
   await development.getByText("No unsaved resource changes.", { exact: true }).waitFor();
+
+  // Given an edited resource draft whose mutation response is lost before the fake host receives it.
+  const pids = development.getByLabel("PIDs for development", { exact: true });
+  await pids.fill("768");
+  await page.route("**/v1/operations/hosts/devbox/workspaces", (route) => route.abort("connectionreset"), { times: 1 });
+  // When the operator checks the unchanged authoritative state after the unknown outcome.
+  await development.getByRole("button", { name: "Apply resources for development", exact: true }).click();
+  await development.getByText(/outcome is unknown/i).waitFor();
+  assert.equal((await fixture.workspace()).resources.pidsLimit, "512");
+  await development.getByRole("button", { name: "Check current state for development", exact: true }).click();
+  await development.getByText(/current state checked/i).waitFor();
+  // Then the unmatched draft remains available for an explicit retry instead of becoming false success.
+  assert.equal(await pids.inputValue(), "768");
+  assert.equal(await development.getByRole("button", { name: "Apply resources for development", exact: true }).isEnabled(), true);
+  await development.getByText("Unsaved resource changes.", { exact: true }).waitFor();
 
   await page.getByRole("button", { name: "New workspace on devbox", exact: true }).click();
   const create = page.getByRole("form", { name: "New workspace on devbox", exact: true });

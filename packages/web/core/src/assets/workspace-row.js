@@ -14,7 +14,8 @@ function displayPhase(workspace) {
 /** @param {{host:string,initial:Record<string,unknown>,canOperate:boolean,request:Request,refresh:()=>Promise<boolean>,active:()=>boolean}} options */
 export function createWorkspace(options) {
   const { host, initial, canOperate, request, refresh, active } = options;
-  let workspace = initial, busy = false, reconciliation = false, pendingResources = false, showingStoredFailure = false, disposed = false;
+  let workspace = initial, busy = false, reconciliation = false, showingStoredFailure = false, disposed = false;
+  /** @type {Record<string,string>|null} */ let pendingResources = null;
   const name = text(initial.name) ?? "workspace", expectedId = text(initial.id);
   const row = node("article", "workspace-row"), overview = node("div", "workspace-overview"), identity = node("div", "workspace-identity"), title = node("h3", "", name), badge = node("span", "badge"), meta = node("p", "workspace-meta"), limits = node("p", "workspace-limits");
   identity.append(title, badge); overview.append(identity, meta, limits); row.append(overview);
@@ -35,23 +36,27 @@ export function createWorkspace(options) {
   /** @param {string} action @param {Record<string,string>} [resources] */
   async function mutate(action, resources) {
     if (busy || reconciliation) return;
-    busy = true; pendingResources = action === "resources"; update(workspace);
+    busy = true; pendingResources = action === "resources" && resources ? { ...resources } : null; update(workspace);
     showingStoredFailure = false;
-    feedback(result, `${action === "resources" ? "Updating resources for" : action === "discard" ? "Discarding" : `${action.slice(0, 1).toUpperCase()}${action.slice(1)} requested for`} ${name} on ${host}...`);
+    feedback(result, action === "resources"
+      ? `Updating resources for ${name} on ${host}... If the host must replace the runtime, running processes and attached sessions will be interrupted while workspace data is kept.`
+      : action === "recreate"
+        ? `Recreating ${name} on ${host}... Running processes and attached sessions will be interrupted while checkout, home and nested Docker data are kept.`
+        : `${action === "discard" ? "Discarding" : `${action.slice(0, 1).toUpperCase()}${action.slice(1)} requested for`} ${name} on ${host}...`);
     try {
-      await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces`, { name, expectedId, action, ...(resources ? { resources } : {}) });
+      await request(`/v1/operations/hosts/${encodeURIComponent(host)}/workspaces`, { name, expectedId, action, ...(resources ? { resources } : {}) }, 315_000);
       if (!active()) return;
       const loaded = await refresh();
       if (!loaded) { setReconciliation(true); feedback(result, `${name}: the ${action} request was accepted, but current state could not be read. Do not repeat the action. Check current state.`, true); }
       else {
-        if (action === "resources") dirty.clear();
+        if (action === "resources") { dirty.clear(); pendingResources = null; }
         feedback(result, action === "resources" ? `${name}: resource limits refreshed from the host.` : `${name}: current state refreshed after ${action}.`);
         updateUnsaved();
       }
     } catch (error) {
       if (!active()) return;
       if (requiresReconciliation(error)) { setReconciliation(true); feedback(result, `${name}: the ${action} request did not return a reliable outcome, so the outcome is unknown. Do not repeat the action. Check current state.`, true); }
-      else feedback(result, `Could not ${action === "resources" ? "update resources for" : action} ${name} on ${host}. ${recovery(error)}`, true);
+      else { if (action === "resources") pendingResources = null; feedback(result, `Could not ${action === "resources" ? "update resources for" : action} ${name} on ${host}. ${recovery(error)}`, true); }
     } finally { busy = false; update(workspace); }
   }
   /** @param {HTMLElement} parent @param {string} action @param {string} label */
@@ -68,7 +73,17 @@ export function createWorkspace(options) {
     feedback(result, `Checking current state for ${name} on ${host}...`);
     const loaded = await refresh();
     if (active() && !disposed) {
-      if (loaded) { if (pendingResources) dirty.clear(); setReconciliation(false); update(workspace); updateUnsaved(); feedback(result, `${name}: current state checked. Review it before another action.`); }
+      if (loaded) {
+        if (pendingResources) {
+          const resources = record(workspace.resources);
+          for (const [key, value] of Object.entries(pendingResources)) if (text(resources?.[key]) === value) dirty.delete(key);
+          pendingResources = null;
+        }
+        setReconciliation(false); update(workspace); updateUnsaved();
+        feedback(result, dirty.size
+          ? `${name}: current state checked. Resource values that differ from your preserved draft remain unsaved; review them before applying again.`
+          : `${name}: current state checked. Review it before another action.`);
+      }
       else feedback(result, `${name}: current state could not be checked. Actions remain locked; retry Check current state. Your resource draft is kept.`, true);
     }
     check.disabled = false;
@@ -78,7 +93,7 @@ export function createWorkspace(options) {
     const settings = disclosure(row, `Settings for ${name}`); settings.className = "workspace-settings";
     const form = document.createElement("form"), grid = node("div", "workspace-fields");
     form.setAttribute("aria-label", `Resources for ${name}`);
-    form.append(node("h4", "", "Resource limits"), node("p", "field-hint", "Examples: CPUs 2 or 1.5, memory 4g, PIDs 2048. Use unlimited to remove a limit. Removing a limit may require replacing the runtime while keeping workspace data; this console reports only the state returned by the host."), grid);
+    form.append(node("h4", "", "Resource limits"), node("p", "field-hint", "Examples: CPUs 2 or 1.5, memory 4g, PIDs 2048. Use unlimited to remove a limit. A resource change may require replacing the runtime, interrupting running processes and attached sessions while keeping workspace data. This console reports only the state returned by the host."), grid);
     /** @type {Array<[string,string]>} */ const resourceFields = [["cpuCount", "CPUs"], ["memory", "Memory"], ["pidsLimit", "PIDs"]];
     for (const [key, label] of resourceFields) {
       const field = input(grid, key, label, `for ${name}`);
@@ -94,7 +109,7 @@ export function createWorkspace(options) {
     reset.addEventListener("click", () => { dirty.clear(); update(workspace); updateUnsaved(); });
     form.addEventListener("submit", (event) => { event.preventDefault(); if (!form.reportValidity() || !dirty.size) return; void mutate("resources", Object.fromEntries([...fields].filter(([key]) => dirty.has(key)).map(([key, field]) => [key, field.value.trim()]))); });
     settings.append(form);
-    const maintenance = node("div", "workspace-maintenance"); maintenance.append(node("p", "field-hint", "Recreate replaces the runtime and keeps checkout, home and nested Docker data.")); actionButton(maintenance, "recreate", "Recreate"); settings.append(maintenance);
+    const maintenance = node("div", "workspace-maintenance"); maintenance.append(node("p", "field-hint", "Recreate replaces the runtime, interrupting running processes and attached sessions while keeping checkout, home and nested Docker data.")); actionButton(maintenance, "recreate", "Recreate"); settings.append(maintenance);
     const discard = button("Discard workspace", "button-danger"); discard.setAttribute("aria-label", `discard ${name}`); controls.push({ control: discard, action: "discard" }); settings.append(discard);
     const confirmation = node("div", "workspace-confirmation"); confirmation.hidden = true; confirmation.setAttribute("role", "group"); confirmation.setAttribute("aria-label", `Discard ${name}`);
     confirmation.append(node("h4", "", `Discard ${name}?`), node("p", "", `Permanently delete ${name} on ${host}, including its checkout, home and Docker data. This cannot be undone.`));
