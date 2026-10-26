@@ -11,6 +11,7 @@
     "test:web-journeys": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/journeys/run.ts",
     "test:web-native-management": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/plugins/nativeManagement.e2e.ts",
     "test:web-git-sync": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/plugins/nativeBranchMerge.e2e.ts",
+    "test:web-opencode-workspace-link": "node --disable-warning=DEP0205 --import tsx --conditions=dim-source web/plugins/agent-tools/opencodeWorkspaceOpen.e2e.ts",
     "test:git-tools-web": "node --disable-warning=DEP0205 --import tsx --conditions=source git-tools/reactPullRequests.e2e.ts",
     "test:scenarios": "vitest run scenarios/harness scenarios/llm-router scenarios/execution --no-file-parallelism --exclude 'scenarios/harness/qemu*.test.ts' --exclude 'scenarios/harness/kvm*.test.ts' --exclude 'scenarios/harness/bootstrapInstallerSafety.test.ts'",
     "test:qemu-service": "node -e 'if (process.getuid?.() !== 0) { console.error(\"QEMU service fixtures require a disposable root environment; see docs/development/verification.md\"); process.exit(2); }' && vitest run --config vitest.privileged.config.ts",
