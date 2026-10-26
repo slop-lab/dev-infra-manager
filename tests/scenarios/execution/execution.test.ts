@@ -53,13 +53,25 @@ it("requeues transient authorization failure with bounded diagnostics", async ()
     expect(store.reserve("worker-b", slot, randomUUID())?.id).toBe(claim.id);
   } finally { store.close(); }
 });
-it("renews a pre-grant reservation only while delayed admission is connected", async () => {
-  const store = new ExecutionStore(join(await root(), "executions.sqlite3"), generation, 30);
+it.each([0, 40])("fences pre-grant admission deterministically with %i ms of simulated renewal stall", async (stall) => {
+  let now = 0;
+  const store = new ExecutionStore(join(await root(), "executions.sqlite3"), generation, 30, () => now);
   try {
-    store.enqueue(event()); const claim = store.reserve("worker-a", slot, randomUUID())!;
-    const authorized = await runAdmission({ store, assignment: claim, granted: false, signal: new AbortController().signal,
-      async operation(signal) { await delay(80, undefined, { signal }); return grant(claim); } });
-    expect(store.attachGrant(claim.id, authorized).grant).toEqual(authorized);
+    store.enqueue(event()); const claim = store.reserve("worker-a", slot, randomUUID());
+    if (!claim) throw new Error("expected an owned pre-grant reservation");
+    const operation = Promise.withResolvers<ReturnType<typeof grant>>();
+    const pending = runAdmission({ store, assignment: claim, granted: false, signal: new AbortController().signal,
+      operation: () => operation.promise,
+      async wait(milliseconds) { now += milliseconds + stall; operation.resolve(grant(claim)); } });
+    if (stall === 0) {
+      const authorized = await pending;
+      expect(store.attachGrant(claim.id, authorized).grant).toEqual(authorized);
+      expect(store.get(claim.id).leaseExpiresAt).toBeGreaterThan(30);
+    } else {
+      await expect(pending).rejects.toThrow();
+      expect(store.get(claim.id).phase).toBe("recovering");
+      expect(store.get(claim.id)).not.toHaveProperty("grant");
+    }
   } finally { store.close(); }
 });
 it("keeps authorize and candidate ownership current through a 34 second fake-clock authority delay", async () => {
