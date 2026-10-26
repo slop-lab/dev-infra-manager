@@ -2,9 +2,12 @@
 
 This is a static build of OpenCode's own UI, pinned with its server to 1.18.31
 and upstream commit `014614d35b397775e5d397a490fc72368c894ec2`. It has no default
-backend. Open it, select **Add server**, and enter an approved HTTPS OpenCode
-server and its own Basic credentials. Its sessions and terminal UI remain
-upstream OpenCode code; DIM adds only disconnected startup and hash routing.
+backend. DIM Web's existing workspace button passes a credential-free launch link
+that registers or reuses the approved server and opens the actual guest checkout.
+Required sign-in uses OpenCode's existing credential form. A manually opened client
+still offers **Add server**. Sessions, projects, authentication and credential
+persistence remain upstream OpenCode code; DIM adds disconnected startup, hash
+routing and a small pinned workspace-link adapter.
 
 The default URL is:
 
@@ -21,6 +24,24 @@ For a local client, `dim forward WORKSPACE 4096:4096` provides
 `http://127.0.0.1:4096`. Chromium's local-network permission allowed this loopback
 connection in the deployed Pages acceptance check; grant that permission when
 prompted. A remote HTTP address still needs an approved HTTPS endpoint.
+
+## Workspace launch links
+
+The workspace panel selects a running server's approved **Service URL**, including
+shared control-plane ingress URLs, not its worker relay or permanent-link address.
+Only HTTPS or explicitly published loopback HTTP endpoints are usable. If none
+exists, the panel retains the route/forwarding setup flow; a guest-local loopback
+address alone does not prove a browser-side forward exists.
+
+The adapter accepts `#/dim/open?server=ENCODED_ENDPOINT&directory=ENCODED_DIRECTORY`.
+Endpoints cannot contain userinfo, queries, fragments or traversal. Directories
+must be canonical guest paths under `/workspace`, including spaces and Unicode.
+Credentials, host private paths and executable selection never belong in this
+contract. Malformed or extra parameters fail before registration. No new
+credential storage or authorization handoff is added. Existing normalized server
+registrations retain their credentials; normal project and draft APIs deduplicate
+repeated opens. The existing default-server setting retains selection on reload.
+Unavailable servers expose Retry; normal authentication failures remain retryable.
 
 ## Publish with GitHub Actions
 
@@ -62,6 +83,23 @@ The source cache lives outside this checkout and must match the exact reviewed
 commit. Dependency installation uses the frozen upstream lockfile and disables
 install scripts. The temporary source edits are restored even when build fails.
 Only generated static assets are copied to `build/opencode-web/v/1.18.31/`.
+For private local verification, pass an explicit output under `.local/` so generated
+upstream bundles are outside repository source compiler scans:
+
+```sh
+node tools/opencode-web/build.ts /absolute/pinned-source "$PWD/.local/opencode-link/build"
+DIM_CHROMIUM=/absolute/chromium node scripts/checks/opencode-workspace-link.ts \
+  "$PWD/.local/opencode-link/build" /absolute/opencode-1.18.31
+```
+
+The real-browser check requires a disposable Linux checkout at `/workspace/main`;
+the Pages workflow creates that layout with an owned runner bind mount. It starts
+two isolated real backends with private HOME/XDG state and an explicit Chromium
+local-network permission. Only static Pages assets are served locally; server,
+authentication, registration, project and session behavior are real. It checks
+eight scenarios and malformed-link boundaries without raw traces or credentials.
+The build type-checks the patched upstream application and restores every modified
+source even on failure; staging rejects artifacts lacking workspace-link support.
 No credentials or host configuration are part of the artifact.
 
 Generated artifacts belong to the separate `gh-pages` archive branch. To inspect
