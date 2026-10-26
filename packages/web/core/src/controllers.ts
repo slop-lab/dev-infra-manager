@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { OperationsConfig } from "./operations.js";
 import type { WebPluginContext } from "./plugin-api.js";
+import { maximumHostOutputBytes } from "./host-output.js";
+import { HttpResponseError } from "./http-response.js";
 const execute = promisify(execFile);
 /** This is a server-side capability for reviewed plugins, never a browser RPC. */
 export function webPluginContext(hosts: OperationsConfig["hosts"] = []): WebPluginContext {
@@ -16,13 +18,13 @@ export function webPluginContext(hosts: OperationsConfig["hosts"] = []): WebPlug
         || args.reduce((bytes, arg) => bytes + Buffer.byteLength(arg, "utf8"), 0) > 128 * 1024) throw new Error("invalid controller command arguments");
       try {
         const execution = execute(executable, ["--host", selector, ...args, "--json"], {
-          timeout, maxBuffer: 2 * 1024 * 1024, encoding: "utf8", windowsHide: true
+          timeout, maxBuffer: maximumHostOutputBytes, encoding: "utf8", windowsHide: true
         });
         execution.child.stdin?.on("error", () => { /* A command may close stdin before consuming all input. */ });
         execution.child.stdin?.end(options?.input ?? "");
         const result = await execution;
         return JSON.parse(result.stdout) as unknown;
-      } catch { throw new Error("The selected controller command is unavailable or returned an invalid response"); }
+      } catch { throw new HttpResponseError(502, "The selected host command is unavailable or returned an invalid response. It may have completed; refresh its state before retrying.", "host_result_unavailable"); }
     }
   }))) });
 }

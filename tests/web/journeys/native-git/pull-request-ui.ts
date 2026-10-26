@@ -21,8 +21,9 @@ export class PullRequestUI extends ReviewUI {
     if (!await titleInput.isVisible()) await this.browserPage.locator("summary").filter({ hasText: /^Create pull request$/ }).click();
     await titleInput.fill(title);
     await this.browserPage.getByLabel("Pull request description", { exact: true }).fill("Review the workspace configuration change before merging.");
-    await this.browserPage.getByLabel("Source ref", { exact: true }).fill(proposalRef);
-    await this.browserPage.getByLabel("Target ref", { exact: true }).fill("main");
+    await this.browserPage.getByLabel("Source branch", { exact: true }).fill(proposalRef);
+    const target = this.browserPage.getByLabel("Target branch", { exact: true });
+    if (await target.evaluate(node => node instanceof HTMLSelectElement)) await target.selectOption("refs/heads/main"); else await target.fill("main");
     await this.browserPage.getByRole("button", { name: "Create pull request", exact: true }).click();
     await this.detail.getByRole("heading", { name: title, exact: true }).waitFor();
     await this.detail.getByRole("region", { name: `Diff for ${expectedPath}`, exact: true }).waitFor();

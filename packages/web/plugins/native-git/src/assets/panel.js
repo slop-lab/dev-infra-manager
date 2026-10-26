@@ -16,20 +16,23 @@ export function mount(container, context) {
   const current = () => !disposed && context.isCurrent();
   const status = element("p"); status.setAttribute("role", "status");
   const managementRegion = element("div"), pullRequestRegion = element("section");
-  const availability = element("div"), selectors = element("div"), guidance = element("section", "", "panel"), toolbar = element("div"), actions = element("div"), list = element("section"), detail = element("section"), syncStatus = element("section", "", "sync-result");
-  toolbar.className = actions.className = "feature-actions";
+  const availability = element("div"), selectors = element("div"), guidance = element("section", "", "panel"), toolbar = element("div"), actions = element("div"), navigationActions = element("div"), list = element("section"), detail = element("section"), syncStatus = element("section", "", "sync-result");
+  toolbar.className = actions.className = navigationActions.className = "feature-actions";
   /** @param {string} label */
   function selector(label) { const control = ui.select(selectors, label, []); const field = control.parentElement; if (!(field instanceof HTMLLabelElement)) throw new Error("Missing selector field"); return { field, control }; }
-  const host = selector("Controller"), project = selector("Project"), repository = selector("Repository");
+  const host = selector("Git connection"), project = selector("Project"), repository = selector("Repository");
   const metadata = () => controller()?.projects.find(({ projectId }) => projectId === project.control.value)?.repositories?.find(({ repositoryId }) => repositoryId === repository.control.value);
-  const targetBranch = ui.select(selectors, "Target branch", [{value:"refs/heads/main",label:"main"}]);
+  const advanced = document.createElement("details"), advancedSelectors = element("div"); advanced.append(element("summary", "Advanced: exact reviews and upstream sync"), advancedSelectors);
+  const targetBranch = ui.select(advancedSelectors, "Review target branch", []);
+  /** @type {Map<string,{source:string,target:string}>} */ const branchDrafts = new Map();
   const form = document.createElement("form"), proposal = ui.input(form, "Proposal ref"), submit = ui.button("Resolve proposal review", "primary");
   proposal.required = true; proposal.maxLength = 1024; proposal.placeholder = "refs/heads/feature or refs/tags/release-candidate"; submit.type = "submit"; form.append(submit);
   const filters = element("div", "", "workspace-filters"), reviewSearch = ui.input(filters, "Search reviews"), reviewState = ui.select(filters, "Review state", [
     { value: "", label: "All states" }, { value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "revoked", label: "Revoked" }, { value: "stale", label: "Stale" }
   ]);
   reviewSearch.placeholder = "Proposal, protected ref or review ID";
-  container.append(element("p", "Select a controller, project and repository to inspect exact review evidence."), toolbar, availability, selectors, guidance, managementRegion, actions, status, pullRequestRegion, form, syncStatus, filters, list, detail);
+  advanced.append(actions, form, syncStatus, filters, list, detail);
+  container.append(element("p", "Choose a project and repository, then create a pull request to review and merge a pushed branch."), toolbar, availability, selectors, guidance, navigationActions, managementRegion, status, pullRequestRegion, advanced);
   /** @type {Array<{reviewId:string,proposalRef:string,protectedRef:string,status:string,createdAt:string}>} */ let loadedReviews = [];
   /** @returns {Scope} */ const scope = () => ({ controllerId: host.control.value, projectId: project.control.value, repositoryId: repository.control.value });
   /** @param {Scope} value */ const key = (value) => JSON.stringify([value.controllerId, value.projectId, value.repositoryId]);
@@ -44,7 +47,7 @@ export function mount(container, context) {
   void import(prAsset).then((module) => {
     if (!current()) return;
     const adapter = /** @type {typeof import('../pull-requests.js')} */ (module);
-    pullRequests = adapter.mountPullRequests(pullRequestRegion, context, { scope, has, current: selected, reviewerId: () => controller()?.reviewerId });
+    pullRequests = adapter.mountPullRequests(pullRequestRegion, context, { scope, has, current: selected, reviewerId: () => controller()?.reviewerId, targetRefs: () => metadata()?.branches ?? [], defaultTargetRef: () => metadata()?.defaultRef });
     void pullRequests.refresh();
   }).catch(() => { if (current()) pullRequestRegion.textContent = "Pull request UI could not load. Reopen Git review to retry."; });
   let draftKey = "";
@@ -73,6 +76,7 @@ export function mount(container, context) {
   function showReview(review, target) {
     if (!selected(target)) return;
     if (review.projectId !== target.projectId || review.repositoryId !== target.repositoryId) throw new Error("Review evidence belongs to a different project or repository");
+    advanced.open = true;
     const reviewerId = controller()?.reviewerId;
     detail.replaceChildren(element("p", "Selected review evidence is retained independently of list filters.", "field-hint"), element("h3", `Review ${review.reviewId.slice(0, 12)} — ${review.status}`));
      const evidence = [["Project / repository", `${review.projectId}/${review.repositoryId}`], ["Proposal", review.proposalRef], ["Protected ref", review.protectedRef], ["Current protected commit", review.expectedProtectedHead], ["Candidate commit", review.candidateCommit], ["Candidate tree", review.candidateTree], ["Policy revision", review.policyRevision], ["Required reviewers", review.requiredReviewerIds.join(", ") || "None"], ["Stale reasons", review.staleReasons.join("; ") || "None"]];
@@ -130,30 +134,37 @@ export function mount(container, context) {
   }
   function renderGuidance() {
     const target = scope();
-    guidance.replaceChildren(element("h3", "Repository workflow"));
+    guidance.replaceChildren(element("h3", "Merge a branch"));
     if (!target.repositoryId) { guidance.append(element("p", "Select a repository to see its exact target and available next actions.")); return; }
-    guidance.append(element("p", `Current repository target: ${target.controllerId} · ${target.projectId}/${target.repositoryId}.`, "workspace-feedback"));
-    guidance.append(element("p", `Review and upstream actions target ${targetBranch.value || metadata()?.defaultRef || "the default branch"}. Branch merge reviews use the explicit source and target below.`, "field-hint"));
+    guidance.append(element("p", `Git connection: ${controller()?.title ?? target.controllerId} · ${target.projectId}/${target.repositoryId}.`, "workspace-feedback"));
+    guidance.append(element("p", has("pull-requests.create")
+      ? "Create a pull request from your pushed source branch to a repository target branch. Inspect its changes, prepare review to check DIM CI and required approvals, then merge when those checks allow it."
+      : has("pull-requests.list") ? "Select a pull request to inspect its changes and checks. Creating or merging requires the corresponding access on this Git connection."
+        : "Open Advanced to inspect exact reviews or prepare a branch merge with the operations available to this connection.", "field-hint"));
+    const access = document.createElement("details"); access.append(element("summary", "Connection scope and access"));
     const capabilities = element("ul");
     capabilities.append(element("li", has("reviews.resolve")
       ? `Reviewer: available${controller()?.reviewerId ? ` as ${controller()?.reviewerId}` : ""}. Resolution and decisions stay bound to exact evidence.`
-      : "Review-only: evidence can be inspected. To resolve or approve reviews, ask an operator for the reviewer role on your Web account and sign in again. A matching controller reviewer connection must also be available."));
+      : "Review-only: evidence can be inspected. To resolve or approve reviews, ask an operator for the reviewer role on your Web account and sign in again. A matching Git reviewer connection must also be available."));
     capabilities.append(element("li", has("sync.merge")
       ? "Sync operator: available. Merge creates a proposal and never advances the protected ref."
       : "Sync operator: unavailable. Operator browser access and a matching sync connection are required."));
     capabilities.append(element("li", has("reviews.promote")
       ? "Promoter: available when this review's requirements are satisfied; current policy and heads are rechecked."
       : "Promoter: unavailable. Operator browser access and a matching promoter connection are required."));
-    guidance.append(capabilities, element("p", "These controls describe this session and configured connection only. The service rechecks repository scope and authority for every action.", "field-hint"));
+    access.append(capabilities, element("p", "Access applies to this Web session and Git connection only. Every action rechecks the selected repository and your authority.", "field-hint")); guidance.append(access);
   }
   function renderActions() {
     management.update();
     renderGuidance();
-    actions.replaceChildren(); form.hidden = !has("reviews.resolve") || !scope().repositoryId;
+    const primary = has("pull-requests.list"); if (advanced.dataset.primary !== String(primary)) { advanced.open = !primary; advanced.dataset.primary = String(primary); }
+    actions.replaceChildren(); navigationActions.replaceChildren(); form.hidden = !has("reviews.resolve") || !scope().repositoryId;
     if (!scope().repositoryId) return;
     if (has("merges.prepare")) {
-      const mergeForm = document.createElement("form"), source = ui.input(mergeForm, "Merge source branch"), destination = ui.input(mergeForm, "Merge target branch");
-      source.value = "development"; destination.value = (metadata()?.defaultRef ?? "refs/heads/main").slice("refs/heads/".length); source.required = destination.required = true;
+      const mergeForm = document.createElement("form"), source = ui.input(mergeForm, "Merge source branch");
+      const refs = metadata()?.branches ?? [], destination = refs.length ? ui.select(mergeForm, "Merge target branch", refs.map(value => ({ value, label: value.replace(/^refs\/heads\//, "") }))) : ui.input(mergeForm, "Merge target branch");
+      const mergeScope = key(scope()), saved = branchDrafts.get(mergeScope);
+      source.value = saved?.source ?? ""; source.placeholder = "development-tmp or feature/my-change"; destination.value = saved?.target ?? metadata()?.defaultRef ?? ""; source.required = destination.required = true;
       const prepare = ui.button("Create branch merge review", "primary"); prepare.type = "submit"; mergeForm.append(prepare); actions.append(mergeForm);
       mergeForm.addEventListener("submit", async (event) => {
         event.preventDefault(); if (prepare.disabled) return; const target = scope(); prepare.disabled = source.disabled = destination.disabled = true;
@@ -169,7 +180,7 @@ export function mount(container, context) {
         } catch (error) { if (selected(target)) status.textContent = `Could not create branch merge review: ${error instanceof Error ? error.message : "service unavailable"}.`; }
         finally { if (current()) { prepare.disabled = prepare.dataset.accepted === "true"; source.disabled = destination.disabled = false; } }
       });
-      for (const input of [source, destination]) input.addEventListener("input", () => { delete prepare.dataset.accepted; prepare.disabled = false; });
+      for (const input of [source, destination]) input.addEventListener("input", () => { branchDrafts.set(mergeScope, { source: source.value, target: destination.value }); delete prepare.dataset.accepted; prepare.disabled = false; });
     }
     button(actions, "Refresh reviews", (_button, target) => refreshList(target));
     for (const [operation, title] of [["sync.fetch", "Fetch upstream"], ["sync.merge", "Propose upstream merge"], ["sync.publish", "Publish protected head"]]) {
@@ -195,7 +206,7 @@ export function mount(container, context) {
     }
     const target = scope(), controllerKey = controller()?.controllerKey;
     const selectedProject = controller()?.projects.find(({ projectId }) => projectId === target.projectId), projectRepositories = selectedProject?.repositoryIds;
-    appendNativeGitNavigationActions(actions, status, context, { ...(controllerKey ? { controllerKey } : {}), projectId: target.projectId, ...(selectedProject ? { projectName: selectedProject.name } : {}), repositoryId: target.repositoryId, ...(projectRepositories ? { repositoryIds: projectRepositories } : {}) }, () => selected(target));
+    appendNativeGitNavigationActions(navigationActions, status, context, { ...(controllerKey ? { controllerKey } : {}), projectId: target.projectId, ...(selectedProject ? { projectName: selectedProject.name } : {}), repositoryId: target.repositoryId, ...(projectRepositories ? { repositoryIds: projectRepositories } : {}) }, () => selected(target));
   }
   function switchScope() {
     const branchPolicy = metadata(), refs = branchPolicy?.branches ?? ["refs/heads/main"];
@@ -213,12 +224,12 @@ export function mount(container, context) {
     const version = ++catalogVersion, before = scope(), previous = preferred ? { ...preferred, repositoryId: preferred.repositoryId ?? "" } : before; saveDraft();
     const value = /** @type {{controllers:Controller[]}} */ (await context.invoke("projects.list", {}, { timeoutMilliseconds: 125_000 })); if (!current() || version !== catalogVersion) return;
     controllers = value.controllers; availability.replaceChildren();
-    for (const entry of controllers.filter(({ status }) => status === "unavailable")) availability.append(element("p", `${entry.title}: project discovery is unavailable. Install the Native Git host plugin and select its control plane on this controller, then reconnect this feature. Other controllers remain usable; refresh projects to retry temporary outages.`));
-    options(host.control, controllers.map(({ id, title }) => ({ id, title })), previous.controllerId); host.field.hidden = controllers.length < 2;
+    for (const entry of controllers.filter(({ status }) => status === "unavailable")) availability.append(element("p", `${entry.title}: project discovery is unavailable. Ask the operator to repair this Git connection, then refresh projects. Other Git connections remain usable.`));
+    options(host.control, controllers.map(({ id, title, status }) => ({ id, title: status === "unavailable" ? `${title} (unavailable)` : title })), previous.controllerId); host.field.hidden = controllers.length === 1 && controllers[0]?.status === "ready";
     if (!controllers.some(({ id, status }) => id === host.control.value && status === "ready")) { const ready = controllers.find(({ status }) => status === "ready"); if (ready) host.control.value = ready.id; }
     fillProjects(previous.projectId, previous.repositoryId);
     if (key(before) !== key(scope())) switchScope(); else { renderActions(); await refreshList(); }
-    if (!controllers.some(({ projects }) => projects.length)) list.replaceChildren(element("p", "No registered projects or ready repositories discovered. Import a project on a controller, then refresh projects."));
+    if (!controllers.some(({ projects }) => projects.length)) list.replaceChildren(element("p", "No registered projects or ready repositories discovered. Import a project through an available Git connection, then refresh projects."));
   }
   host.control.addEventListener("change", () => { saveDraft(); fillProjects(); switchScope(); });
   project.control.addEventListener("change", () => { saveDraft(); fillRepositories(); switchScope(); });

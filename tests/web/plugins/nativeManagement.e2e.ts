@@ -39,11 +39,11 @@ try {
   });
   await attachment.getByRole("button", { name: "Attach project", exact: true }).click();
   await seen;
-  await git.getByLabel("Controller", { exact: true }).selectOption("otherbox");
+  await git.getByLabel("Git connection", { exact: true }).selectOption("otherbox");
   releaseResponse(); await finished;
-  assert.equal(await git.getByLabel("Controller", { exact: true }).inputValue(), "otherbox");
+  assert.equal(await git.getByLabel("Git connection", { exact: true }).inputValue(), "otherbox");
   await page.unroute("**/v1/extensions/native-git/operations/projects.attach");
-  await git.getByLabel("Controller", { exact: true }).selectOption("devbox");
+  await git.getByLabel("Git connection", { exact: true }).selectOption("devbox");
   await prepareAttachment("taken");
   await git.getByRole("button", { name: "Refresh projects", exact: true }).click();
   assert.equal(await attachment.getByLabel("Available project", { exact: true }).inputValue(), "project-a");

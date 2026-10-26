@@ -44,7 +44,14 @@ export class ReviewUI {
     }, { label, value });
   }
 
+  private async openAdvanced() {
+    await this.page.getByRole("heading", { name: "Merge a branch", exact: true }).waitFor();
+    const section = this.page.locator("details").filter({ has: this.page.locator("summary").filter({ hasText: /^Advanced: exact reviews and upstream sync$/ }) });
+    if (!await section.evaluate(node => node instanceof HTMLDetailsElement && node.open)) await section.locator("summary").first().click();
+  }
+
   async inspectProposal(proposalRef: string) {
+    await this.openAdvanced();
     await this.page.getByLabel("Proposal ref", { exact: true }).fill(proposalRef);
     await this.page.getByRole("button", { name: "Resolve proposal review", exact: true }).click();
     await this.page.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
@@ -52,6 +59,7 @@ export class ReviewUI {
   }
 
   async openPendingProposal(proposalRef: string) {
+    await this.openAdvanced();
     await this.page.getByRole("button", { name: "Refresh reviews", exact: true }).click();
     const row = this.page.getByRole("row").filter({ has: this.page.getByRole("cell", { name: proposalRef, exact: true }) });
     await row.getByRole("button", { name: "Open review", exact: true }).click();

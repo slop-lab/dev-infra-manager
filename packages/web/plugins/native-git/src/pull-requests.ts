@@ -1,5 +1,5 @@
 import { createElement as h } from "react";
-import { mountPullRequestPanel, type PullRequestPanelProps } from "@slop-lab/react-git-pull-requests";
+import { mountPullRequestPanel, type PullRequestDraft, type PullRequestPanelProps } from "@slop-lab/react-git-pull-requests";
 import type { GitLineAttribution } from "@slop-lab/git-blame";
 import { currentRevision, parsePullRequest, parsePullRequestList, type PullRequest } from "@slop-lab/git-pull-requests";
 import { parseDiffSnapshot, type DiffSnapshot } from "@slop-lab/git-diff";
@@ -12,6 +12,8 @@ export interface PullRequestHost {
   has(name: string): boolean;
   current(scope: PullRequestScope): boolean;
   reviewerId(): string | undefined;
+  targetRefs?(): readonly string[];
+  defaultTargetRef?(): string | undefined;
 }
 type AcceptedMergePending = {
   readonly scopeIdentity: string;
@@ -38,6 +40,8 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
   let review: ReviewDto | null = null, feedback = "";
   const acceptedMerges = new Map<string, AcceptedMergePending>();
   const mergesInFlight = new Set<string>();
+  const createDrafts = new Map<string, PullRequestDraft>();
+  const createsInFlight = new Set<string>();
   const root = mountPullRequestPanel(container, { pullRequests: [], selected: null, snapshot: null });
   const scopeIdentity = (scope: PullRequestScope) => JSON.stringify([scope.controllerId, scope.projectId, scope.repositoryId]);
   const acceptedMergeKey = (scope: PullRequestScope, pr: PullRequest) => JSON.stringify([scopeIdentity(scope), pr.id, currentRevision(pr).id]);
@@ -103,19 +107,31 @@ export function mountPullRequests(container: HTMLElement, context: WebPluginBrow
     const pending = pr ? acceptedMerge(scope, pr) : undefined;
     const merging = pr ? mergesInFlight.has(acceptedMergeKey(scope, pr)) : false;
     const currentReview = pending?.review ?? review;
+    const createKey = scopeIdentity(scope);
+    const createDraft = createDrafts.get(createKey) ?? { title: "", body: "", sourceRef: "", targetRef: host.defaultTargetRef?.() ?? "" };
     const activeApproval = currentReview?.approvals.find(approval => approval.reviewerId === reviewerId
       && !currentReview.revocations.some(revocation => revocation.approvalId === approval.approvalId));
     const props: PullRequestPanelProps = {
       pullRequests: rows, selected: pr, snapshot, onSelect: select,
       reviewStatus: pending?.receipt ?? (merging ? "Merge in progress. Wait for the current request before changing pull request state."
-        : feedback || (currentReview ? `Human review ${currentReview.status} · required reviewers: ${currentReview.requiredReviewerIds.join(", ") || "none"}` : "Prepare this revision to inspect human review and DIM CI requirements.")),
+        : feedback || (currentReview ? `Human review ${currentReview.status} · required reviewers: ${currentReview.requiredReviewerIds.join(", ") || "none"}` : "Inspect the changes below, then choose Prepare review to check DIM CI and required approvals before merging.")),
       reviewContent: h("div", null,
         currentReview ? h("p", { className: "git-pr__ci-status", "data-ci-state": currentReview.ci?.state ?? "unavailable" }, reviewCiSummary(currentReview.ci)) : null,
         currentReview?.requiredReviewerIds.length && !canApprove && context.operations.some(operation => operation.name === "pull-requests.list")
           ? h("p", null, "Reviewer access is required to approve. ", h("button", { type: "button", onClick: () => window.dispatchEvent(new Event("dim-account-access")) }, "Configure review access")) : null),
-      ...(host.has("pull-requests.create") ? { onCreate: async draft => {
+      ...(host.has("pull-requests.create") ? { createScopeKey: createKey, createDraft, createDisabled: createsInFlight.has(createKey), targetRefs: host.targetRefs?.() ?? [], onCreateDraftChange: draft => {
+        if (!currentScope(scope)) return;
+        createDrafts.set(createKey, draft); render();
+      }, onCreate: async draft => {
+        if (createsInFlight.has(createKey)) return;
+        createsInFlight.add(createKey); render();
         const ref = (value: string) => value.startsWith("refs/") ? value : `refs/heads/${value}`;
-        await accept(scope, await invoke(scope, "pull-requests.create", { ...draft, sourceRef: ref(draft.sourceRef), targetRef: ref(draft.targetRef) }), expected);
+        try {
+          const value = await invoke(scope, "pull-requests.create", { ...draft, sourceRef: ref(draft.sourceRef.trim()), targetRef: ref(draft.targetRef.trim()) });
+          parsePullRequest(value);
+          if (JSON.stringify(createDrafts.get(createKey)) === JSON.stringify(draft)) createDrafts.delete(createKey);
+          await accept(scope, value, expected);
+        } finally { createsInFlight.delete(createKey); if (currentScope(scope)) render(); }
       } } : {}),
       ...(host.has("diff.read") ? { onInspectDiff: async input => parseDiffSnapshot(await invoke(scope, "diff.read", { ...input })) } : {}),
       ...(host.has("blame.line") ? { onInspectBlame: async input => await invoke(scope, "blame.line", { ...input }) as GitLineAttribution } : {}),

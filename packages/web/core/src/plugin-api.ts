@@ -6,7 +6,7 @@ export { loadPrivateJson } from "./config.js";
 /** Trusted controller selections come only from private server configuration. */
 export interface WebPluginController {
   readonly id: string;
-  /** Up to 128 arguments, 96 KiB UTF-8 each and 128 KiB combined; optional stdin text up to 128 KiB. No host/JSON overrides. */
+  /** Up to 128 arguments, 96 KiB UTF-8 each and 128 KiB combined; optional stdin text up to 128 KiB. JSON stdout and stderr each have a 32 MiB bound. No host/JSON overrides. */
   run(args: readonly string[], options?: { readonly timeoutMilliseconds: number; readonly input?: string }): Promise<unknown>;
 }
 export interface WebPluginContext {

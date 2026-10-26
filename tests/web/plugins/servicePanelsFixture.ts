@@ -59,8 +59,8 @@ export async function createServicePanelsFixture() {
     const settings = join(root, "operations.json"), file = join(root, "web.json");
     const controllerSettings = join(root, "controller-settings.json"), controller = join(root, "dim-fixture");
     await writeFile(controllerSettings, JSON.stringify({ reviewerConnection, queryConnection: join(root, "ci-query.json"), operatorConnection: join(root, "execution-operator.json"), generationId, mergeProposalRef: reviewProposalRef, projects: [
-      { projectId: "project-a", name: "Project A", repositoryIds: ["root", "private"] },
-      { projectId: "project-b", name: "Project B", repositoryIds: ["root", "private"] }
+      { projectId: "project-a", name: "project-alias", repositoryIds: ["root", "private"] },
+      { projectId: "project-b", name: "project-b", repositoryIds: ["root", "private"] }
     ] }), { mode: 0o600 });
     const fixtureEntry = fileURLToPath(new URL("./servicePanelsControllerFixture.ts", import.meta.url));
     const tsx = fileURLToPath(new URL("../../node_modules/tsx/dist/loader.mjs", import.meta.url));

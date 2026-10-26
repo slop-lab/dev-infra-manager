@@ -182,7 +182,19 @@ function featureInvoker(feature, active, current) {
     }
     if (!current()) throw new Error("Your session ended or workspace changed.");
     if (response.status === 401) window.dispatchEvent(new Event("dim-session-expired"));
-    if (!response.ok) throw Object.assign(new Error(response.status === 401 ? "Your session ended. Sign in again." : response.status === 403 ? "This account does not have permission for that action." : response.status >= 500 ? "The operation did not return a reliable outcome, so its outcome is unknown. Refresh current state before retrying; your input is kept." : "The connected service rejected this operation. Refresh its state before retrying; your input is kept."), { outcome: response.status >= 500 ? "unknown" : "rejected" });
+    if (!response.ok) {
+      let message = response.status === 401 ? "Your session ended. Sign in again." : response.status === 403 ? "This account does not have permission for that action." : response.status >= 500 ? "The operation did not return a reliable outcome, so its outcome is unknown. Refresh current state before retrying; your input is kept." : "The operation was rejected. Check the selected target and fields; your input is kept.";
+      // This endpoint returns the Web server's public error envelope, never raw
+      // controller stderr or upstream responses. Preserve useful input/connection
+      // guidance while keeping authentication and unknown-outcome handling fixed.
+      if ([400, 404, 409, 422].includes(response.status)) {
+        try {
+          const value = await response.json();
+          if (value && typeof value === "object" && typeof value.error === "string" && value.error.trim() && value.error.length <= 1024) message = value.error;
+        } catch { /* A rejected operation can still have an unreadable response. */ }
+      }
+      throw Object.assign(new Error(message), { outcome: response.status >= 500 ? "unknown" : "rejected" });
+    }
     try { return await response.json(); }
     catch (cause) { throw Object.assign(new Error("The operation succeeded but its response was unreadable, so its outcome is unknown. Refresh current state before retrying.", { cause }), { outcome: "unknown" }); }
   };

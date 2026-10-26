@@ -77,6 +77,16 @@ protected head and durable extension pin exactly; initial import proof remains
 strict. New workspaces use `push.default=current`; lifecycle/reconnect does not
 rewrite existing checkout Git choices.
 
+An operator merge preparation may select an ordinary direct branch in the same
+owned repository as its source; only its target must be policy-managed. Source
+selection rejects reserved refs, tags, revision expressions and noncommit or
+symbolic refs. Managed source branches retain authoritative-head validation.
+Preparation pins the exact source commit and current protected target head in
+an immutable review proposal; it does not write the target. The same pair is
+idempotent, and a later source update cannot change an existing proposal.
+Protected promotion still checks that review's target policy, approvals and
+required CI before the serialized compare-and-swap.
+
 Repository read and workspace-write lease requests remain version 1; responses
 are version 2 and require `preIssueMilliseconds`. The issuer measures that
 duration with a monotonic clock from handler entry to immediately before

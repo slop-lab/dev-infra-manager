@@ -13,6 +13,15 @@ pull request or revision clears local edit drafts, line selection and blame.
 `unmount()` for applications using ordinary DOM panels. Bundle the ESM entry
 with your application. Source text, comments and metadata are rendered as text.
 
+Applications can supply `createDraft` and `onCreateDraftChange` to retain creation
+drafts per repository, with `createScopeKey` fencing local pending state across
+selection changes. `createDisabled` preserves a repository's in-flight lock when
+it is selected again. `targetRefs` supplies actual target choices; absent metadata
+leaves an editable empty target. No source branch is inferred. The application
+clears a controlled draft only after creation is accepted.
+Supplying only `onCreateDraftChange` observes edits while the panel retains its
+local draft and clears it after successful creation.
+
 All mutation callbacks are optional; their absence hides unavailable actions:
 
 - `onSelect(id)`, `onRefresh()` and `onCreate({title,body,sourceRef,targetRef})`

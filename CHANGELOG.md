@@ -91,7 +91,12 @@ is implied by these source changes.
   and merge separate. Show required DIM CI evidence or explicitly absent policy,
   never infer CI success from human approval or GitHub status. Verify ordinary
   source rewrites, multi-repository scope and mapped publication in disposable
-  CLI/browser workflows and standalone package installations.
+  CLI/browser workflows and standalone package installations. Make pull requests
+  the primary Web merge flow, identify host authority as a Git connection, retain
+  repository-specific creation drafts, and use actual target metadata without
+  assuming a source branch. Keep exact reviews and upstream sync under Advanced.
+  Carry large review results through a bounded 32 MiB host response budget;
+  distinguish an unavailable mutation result from an authoritative rejection.
 
 - Manage independent Git repositories in one Project with separate imports,
   repository-scoped credentials, reviews and protected-ref promotion. Allow
@@ -104,8 +109,10 @@ is implied by these source changes.
   Default to `main` and manage multiple branches per repository through
   `.dim/repos.yml`. Require proposals for managed branches, apply configured
   file/field review rules on `main`, and prevent force pushes to both `main` and
-  `development`. Prepare branch-to-branch merges through the same review and
-  promotion path, while existing workspaces keep their selected branch.
+  `development`. Prepare ordinary or managed source branches for a protected
+  target through the same exact review and required CI promotion path, pinning
+  the source commit and preserving the target until approval. Existing workspaces
+  keep their selected branch.
   A runnable public/private example links its reviewed files to Git/CI and
   workspace runtime verification; example recipes identify required optional
   plugins and services.

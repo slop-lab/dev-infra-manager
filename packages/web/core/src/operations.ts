@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { HttpResponseError } from "./http-response.js";
+import { maximumHostOutputBytes } from "./host-output.js";
 const identifier = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const repositoryId = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const file = z.string().refine(isAbsolute);
@@ -59,6 +60,7 @@ function hostFailure(error: unknown): HttpResponseError {
   const code = "code" in value ? value.code : undefined;
   const diagnostic = "stderr" in value && typeof value.stderr === "string" ? value.stderr.slice(0, 2 * 1024 * 1024) : "";
   if (code === "ENOENT") return new HttpResponseError(503, "The configured DIM executable is unavailable on the Web server. Ask the operator to repair the host connection.", "host_unavailable");
+  if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return new HttpResponseError(502, "The host response exceeded its output limit. The operation may have completed; refresh the host before retrying.", "host_result_unavailable");
   if ("killed" in value && value.killed === true) return new HttpResponseError(504, "The host operation timed out. Refresh the host before retrying; it may still have created workspace data.", "host_timeout");
   if (/workspace '[a-z0-9._-]+' already exists/i.test(diagnostic)) return new HttpResponseError(409, "A workspace with this name already exists. Refresh the host and choose another name, or recover the existing workspace.", "workspace_exists");
   if (/pull access denied|manifest unknown|no such image|unable to find image|repository does not exist.*docker login/i.test(diagnostic)) return new HttpResponseError(409, "The workspace image is unavailable on the selected host. Choose an installed image, or ask the operator to build or pull the host default image.", "image_unavailable");
@@ -78,7 +80,7 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
     const selected = host(id);
     try {
       const result = await execute(selected.executable, ["--host", selected.selector, ...args, "--json"], {
-        timeout, maxBuffer: 2 * 1024 * 1024, encoding: "utf8", windowsHide: true
+        timeout, maxBuffer: maximumHostOutputBytes, encoding: "utf8", windowsHide: true
       });
       return JSON.parse(result.stdout);
     } catch (error) { throw hostFailure(error); }

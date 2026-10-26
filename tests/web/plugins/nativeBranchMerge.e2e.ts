@@ -80,21 +80,25 @@ try {
   const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(origin); await page.getByLabel("Username", { exact: true }).fill(login.username); await page.getByLabel("Password", { exact: true }).fill(login.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click(); await page.getByRole("button", { name: "Git review", exact: true }).click();
+  const advanced = page.getByText("Advanced: exact reviews and upstream sync", { exact: true });
+  if (!await advanced.evaluate(node => node.parentElement instanceof HTMLDetailsElement && node.parentElement.open)) await advanced.click();
   const fetchUpstream = page.getByRole("button", { name: "Fetch upstream", exact: true }); await fetchUpstream.click();
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => button.textContent === "Fetch upstream" && !button.disabled));
-  assert.equal(await page.getByLabel("Merge source branch", { exact: true }).inputValue(), "development");
-  assert.equal(await page.getByLabel("Merge target branch", { exact: true }).inputValue(), "main");
+  assert.equal(await page.getByLabel("Merge source branch", { exact: true }).inputValue(), "");
+  await page.getByLabel("Merge source branch", { exact: true }).fill("development");
+  assert.equal(await page.getByLabel("Merge target branch", { exact: true }).inputValue(), "");
+  await page.getByLabel("Merge target branch", { exact: true }).fill("main");
   await page.route("**/v1/extensions/native-git/operations/reviews.detail", (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporary detail failure"}' }), { times: 1 });
   await page.getByRole("button", { name: "Create branch merge review", exact: true }).click();
   await page.getByText(/Branch merge review created\..*Latest review details could not refresh/).waitFor();
   assert.equal(await page.getByRole("button", { name: "Create branch merge review", exact: true }).isDisabled(), true);
   const repository = page.getByLabel("Repository", { exact: true });
   await repository.selectOption("secondary");
-  await page.getByText(/Current repository target: .* · project\/secondary\./).waitFor();
+  await page.getByText(/Git connection: .* · project\/secondary\./).waitFor();
   assert.equal(await page.locator("tr").filter({ hasText: "/merge/" }).count(), 0, "main repository review rows must not leak into secondary scope");
   assert.equal(await page.getByText(/Branch merge review created/).count(), 0, "accepted review receipt must clear when repository scope changes");
   await repository.selectOption("main");
-  await page.getByText(/Current repository target: .* · project\/main\./).waitFor();
+  await page.getByText(/Git connection: .* · project\/main\./).waitFor();
   const mergeRow = page.locator("tr").filter({ hasText: "/merge/" });
   await mergeRow.getByRole("button", { name: "Open review", exact: true }).click();
   try { await page.getByRole("button", { name: "Approve exact candidate", exact: true }).waitFor(); }
@@ -110,7 +114,7 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => button.textContent === "Publish protected head" && !button.disabled));
   assert.equal((await git("/usr/bin/git", ["--git-dir", upstream, "rev-parse", "refs/heads/development"])).stdout.trim(), candidate, await page.locator("body").innerText());
   await repository.selectOption("secondary");
-  await page.getByText(/Current repository target: .* · project\/secondary\./).waitFor();
+  await page.getByText(/Git connection: .* · project\/secondary\./).waitFor();
   assert.equal(await page.getByText("Protected ref promotion accepted.", { exact: true }).count(), 0, "main promotion receipt must not leak into secondary scope");
   const secondaryPublish = page.getByRole("button", { name: "Publish protected head", exact: true });
   page.once("dialog", (dialog) => dialog.accept()); await secondaryPublish.click();
