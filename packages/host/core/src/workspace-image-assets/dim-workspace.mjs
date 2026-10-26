@@ -80,10 +80,11 @@ async function request(method, pathname, body) {
   if (!record(config) || typeof config.endpoint !== "string" || typeof config.token !== "string" || !config.token
     || typeof config.workspaceId !== "string" || !config.workspaceId) throw new Error("invalid workspace connection");
   const endpoint = new URL(config.endpoint);
-  if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.pathname !== "/" || endpoint.search || endpoint.hash) {
+  if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password
+    || endpoint.pathname !== "/" && !(endpoint.origin === "http://127.0.0.1:19420" && endpoint.pathname === "/services/workspace") || endpoint.search || endpoint.hash) {
     throw new Error("workspace endpoint must be an HTTP(S) origin");
   }
-  const response = await fetch(new URL(pathname, endpoint), {
+  const response = await fetch(`${config.endpoint}${pathname}`, {
     method, headers: { authorization: `Bearer ${config.token}`, "content-type": "application/json", accept: "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15_000), redirect: "error"
   });

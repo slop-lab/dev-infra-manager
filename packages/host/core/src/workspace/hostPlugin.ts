@@ -72,6 +72,10 @@ export interface WorkspaceHostPlugin {
     removing?(workspace: WorkspaceRecord, options: { readonly keepData: boolean }, context: WorkspaceRuntimeFactoryContext): Promise<void>;
   };
   workspaceReady?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void>;
+  readonly workspaceServices?: {
+    readonly names: readonly string[];
+    resolve(name: string, workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<string | undefined>;
+  };
   /** Guest clients belong to this plugin; transport supplies the immutable caller. */
   guest?: {
     readonly description: string;

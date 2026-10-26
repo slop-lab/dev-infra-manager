@@ -20,6 +20,18 @@ adapter checks the exact source, destination and permissions on every inspection
 The base `container` provider passes none. Repository configuration and guest
 requests cannot supply device mappings.
 
+Internal guest-to-host services use one host-initiated runtime execution channel
+with a guest-loopback adapter, not per-workspace bridge/IP/port firewall rules.
+The host dispatches only statically registered service IDs for the immutable
+workspace identity and current runtime. Plugins retain their own authentication,
+capability grants and authorization; core does not interpret Git or LLM policy.
+Streaming backpressure and cancellation cross the channel without buffering
+whole Git packs or model responses. Channel replacement never replays requests,
+does not abort the host operation performing a self-restart/recreate, and
+reconnects only while the same workspace remains running. Explicit external
+ingress reachability is a separate operator requirement. No host control socket,
+Docker socket or operator credential is mounted into the guest.
+
 CPU, memory and process limits apply to the agent container and its descendants.
 Explicit `unlimited` values are supported. Finite live updates are checked by
 read-back. Removing Docker limits uses keep-data recreation because zero-valued

@@ -15,7 +15,7 @@ run explicitly through `dim exec`. A future runtime can implement the same
 workspace operations without taking over source or Project policy ownership.
 
 Managed Git is optional. Its host-side attachment binds one core UUID to one
-native Project and proposal identity. A broker on the owned private bridge
+native Project and proposal identity. A plugin-owned host-loopback broker
 accepts a workspace-scoped credential, checks the current core record and
 running/initialized state, and forwards only exact Git smart-HTTP operations.
 It obtains short-lived upstream leases from a private operator connection;
@@ -23,6 +23,17 @@ it never returns those credentials to the agent. Native Git independently
 checks Project/ref scope and denies protected writes, foreign proposal refs,
 force and deletion. Removing a workspace or reusing its name cannot transfer
 its old grant to the new UUID.
+
+Internal guest clients use one guest-loopback HTTP adapter over a host-initiated
+runtime exec/stdio channel. HTTP/2 multiplexes named services with streaming
+backpressure and cancellation. The guest cannot choose a host URL, executable,
+another workspace or a control socket. Installed plugins statically declare
+unique service IDs and resolve only their own targets; service-specific grants
+and current-state checks still belong to those plugins. Channel loss reconnects
+only the same workspace identity and never replays an application request.
+Host identity, configuration generation and lifecycle changes fence the channel.
+No per-workspace host INPUT/FORWARD firewall allowance is required. External
+ingress and host-to-control-plane reachability remain operator responsibilities.
 
 The optional controller serves configured plugin routes for current core
 workspaces. Administrative access stays host-side. Workspace requests travel

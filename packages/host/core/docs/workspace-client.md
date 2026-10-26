@@ -5,6 +5,13 @@ workspace only, independently of its runtime backend. The host writes a private
 connection into `~/.config/dim/workspace.json`; do not copy it to another
 workspace or expose it through an application server.
 
+The client connects to guest loopback port 19420. DIM carries named services
+over a host-initiated runtime exec/stdio channel, not a guest connection to a
+host bridge address. Ordinary helper, managed Git and attached LLM traffic needs
+no per-workspace UFW rule. Do not bind an unrelated server to this owned port;
+DIM fails rather than taking over an unidentified listener. Host sockets and
+operator credentials remain outside the guest.
+
 ```sh
 dim-workspace resources --json
 dim-nproc
@@ -51,6 +58,15 @@ over an older copy baked into the image.
 That request cannot choose another workspace, Docker socket or host upstream.
 An ingress that requires approval remains unavailable until a host operator
 approves it. The guest cannot perform approval.
+
+The internal channel preserves streaming and cancellation. It bounds headers
+and multiplexes at most 128 concurrent streams per workspace; it does not add
+an upload-duration or SSE-chunk deadline. A disconnect interrupts in-flight
+requests instead of reporting a successful truncated response. The host repairs
+the channel after helper failure or recreation while the same UUID is running;
+clients must retry their own failed requests. Non-idempotent requests are never
+automatically replayed. External ingress still needs explicit operator approval,
+DNS, TLS and reachable operator-selected listeners.
 
 ## Continue a process after restart
 

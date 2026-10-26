@@ -24,13 +24,17 @@ export async function loadHostPlugins(): Promise<readonly WorkspaceHostPlugin[]>
     throw new UserError("invalid installed DIM plugin manifest");
   }
   const plugins: WorkspaceHostPlugin[] = [];
-  const names = new Set<string>(), commands = new Set<string>(), runtimes = new Set(["container"]), schemes = new Set<string>();
+  const names = new Set<string>(), commands = new Set<string>(), runtimes = new Set(["container"]), schemes = new Set<string>(), services = new Set(["workspace"]);
   for (const specifier of new Set<string>(raw.plugins)) {
     const module: unknown = await import(pathToFileURL(await resolveHostPluginModule(home, specifier)).href);
     if (!isObject(module) || module.hostPlugin === undefined) continue;
     const plugin = parseHostPlugin(module.hostPlugin);
     if (names.has(plugin.name)) throw new UserError(`duplicate host plugin '${plugin.name}'`);
     names.add(plugin.name);
+    for (const name of plugin.workspaceServices?.names ?? []) {
+      if (services.has(name)) throw new UserError(`duplicate workspace service '${name}'`);
+      services.add(name);
+    }
     for (const command of plugin.commands ?? []) {
       if (commands.has(command.name)) throw new UserError(`duplicate host plugin command '${command.name}'`);
       commands.add(command.name);
@@ -78,6 +82,12 @@ function parseHostPlugin(value: unknown): WorkspaceHostPlugin {
     throw new UserError(`invalid workspace lifecycle in '${value.name}'`);
   }
   if (value.workspaceReady !== undefined && typeof value.workspaceReady !== "function") throw new UserError(`invalid workspace integration in '${value.name}'`);
+  if (value.workspaceServices !== undefined) {
+    const services = value.workspaceServices;
+    if (!isObject(services) || !Array.isArray(services.names) || services.names.length < 1 || services.names.length > 32
+      || !services.names.every(identifier) || new Set(services.names).size !== services.names.length
+      || typeof services.resolve !== "function") throw new UserError(`invalid workspace services in '${value.name}'`);
+  }
   if (Array.isArray(value.commands) && value.commands.length && value.run === undefined) throw new UserError(`missing command handler in '${value.name}'`);
   if (value.guest !== undefined) {
     const guest = value.guest;
