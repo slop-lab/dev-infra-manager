@@ -20,11 +20,11 @@ async function login(username: string) {
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(fixture.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByRole("button", { name: "Execution", exact: true }).waitFor();
+  await page.getByRole("link", { name: "Execution", exact: true }).waitFor();
 }
 try {
   await login(fixture.username);
-  await page.getByRole("button", { name: "Execution", exact: true }).click();
+  await page.getByRole("link", { name: "Execution", exact: true }).click();
   const execution = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Execution", exact: true, level: 1 }) });
   const queued = execution.locator("tr").filter({ has: page.getByRole("cell", { name: "queued", exact: true }) }).first();
   await queued.getByRole("button", { name: "View job", exact: true }).click();
@@ -57,7 +57,7 @@ try {
   await execution.getByText("browser-safe-diagnostic", { exact: false }).waitFor();
   await execution.getByRole("button", { name: "Refresh worker capacity", exact: true }).click();
   await execution.getByRole("heading", { name: "Worker capacity", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("link", { name: "Git review", exact: true }).click();
   await openAdvanced();
   const git = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Git review", exact: true, level: 1 }) });
   await git.getByLabel("Repository", { exact: true }).selectOption("root");
@@ -155,11 +155,11 @@ try {
   assert.equal(await git.getByRole("button", { name: "Promote protected ref", exact: true }).count(), 0);
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await login("readonly");
-  await page.getByRole("button", { name: "Execution", exact: true }).click();
+  await page.getByRole("link", { name: "Execution", exact: true }).click();
   await execution.getByRole("button", { name: "View job", exact: true }).first().click();
   assert.equal(await execution.getByRole("button", { name: "Retry execution", exact: true }).count(), 0);
   assert.equal(await execution.getByRole("button", { name: "Refresh worker capacity", exact: true }).count(), 0);
-  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("link", { name: "Git review", exact: true }).click();
   await openAdvanced();
   await git.getByRole("button", { name: "Open review", exact: true }).click();
   await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();

@@ -6,7 +6,7 @@ import type { WebNavigationResult } from "../../packages/web/core/src/plugin-api
 
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
-const assets = new Map(await Promise.all(["workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "feature-panels.js", "feature-ui.js", "navigation-broker.js", "session-data.js", "tokens.css", "app.css"].map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
+const assets = new Map(await Promise.all(["workspace-hosts.js", "workspace-create.js", "workspace-row.js", "workspace-ui.js", "workspace-features.js", "feature-transport.js", "console-location.js", "settings-panel.js", "account-access.js", "account-management.js", "feature-panels.js", "feature-ui.js", "navigation-broker.js", "session-data.js", "tokens.css", "app.css"].map(async (name) => [name, await readFile(new URL(`../../packages/web/core/src/assets/${name}`, import.meta.url))] as const)));
 const evidence = process.env.DIM_WEB_EVIDENCE;
 if (evidence) await mkdir(evidence, { recursive: true });
 const firstId = "17094660-a627-4a17-acd2-6418c0b79967", secondId = "27094660-a627-4a17-acd2-6418c0b79967";
@@ -18,7 +18,7 @@ const reconnect = { id: "reconnect", title: "Reconnect race", description: "Dela
 const server = createServer((request, response) => {
   response.setHeader("Content-Type", "application/json");
   if (request.url === "/") {
-    response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/app.css"><div id="feature-navigation" class="console-navigation"><button id="feature-workspaces" class="button button-secondary"></button><div id="feature-tabs"></div></div><div id="feature-panels"></div><div id="operations-panel"><div id="hosts"></div></div>'); return;
+    response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/app.css"><nav id="feature-navigation" class="console-navigation"><a id="feature-workspaces" href="#/workspaces">Workspaces</a><div id="feature-tabs"></div></nav><div id="feature-panels"></div><section id="settings-panel" hidden></section><section id="route-unavailable" hidden></section><div id="operations-panel"><div id="hosts"></div></div>'); return;
   }
   const asset = assets.get(request.url?.slice(1) ?? "");
   if (asset) { response.setHeader("Content-Type", request.url?.endsWith(".css") ? "text/css" : "text/javascript"); response.end(asset); return; }
@@ -27,8 +27,10 @@ const server = createServer((request, response) => {
       globalThis.contexts ??= []; globalThis.contexts.push(context);
       const status=document.createElement('p'), button=document.createElement('button');
       status.textContent=context.workspace.id+' '+context.workspace.phase; button.textContent='Start scoped server';
+      const stopWorkspace=context.onWorkspaceChange?.(()=>{status.textContent=context.workspace.id+' '+context.workspace.phase;});
+      const draft=document.createElement('input');draft.setAttribute('aria-label','Scoped draft');container.append(draft);
       button.onclick=async()=>{try {await context.invoke('start',context.workspace); if(context.isCurrent())status.textContent='started';}catch{}};
-      container.append(status,button); return ()=>{globalThis.disposals=(globalThis.disposals??0)+1;};
+      container.append(status,button); return ()=>{stopWorkspace?.();globalThis.disposals=(globalThis.disposals??0)+1;};
     }`); return;
   }
   if (request.url === "/destination.js") {
@@ -79,13 +81,14 @@ try {
     await hosts.refresh(['local'],true);
     await showFeaturePlugins({roles:['operator'],csrfToken:'fixture-csrf',capabilities:{operations:true}});
   ` });
-  await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
+   await page.getByRole('link', {name:'Open development on local',exact:true}).click();
+   await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
    await page.getByText(`${firstId} running`, { exact: true }).waitFor();
    assert.equal(await page.evaluate("contexts[0].openFeature('not-installed')"), false);
    await page.locator('.workspace-feature').evaluate((details) => { if (details instanceof HTMLDetailsElement) details.open = false; });
    assert.equal(await page.evaluate("contexts[0].openFeature('inline')"), true);
    assert.equal(await page.locator('.workspace-feature').evaluate((details) => details instanceof HTMLDetailsElement && details.open), true);
-    assert.equal(await page.locator("#feature-tabs button").count(), 2);
+     assert.equal(await page.locator("#feature-tabs a").count(), 2);
    const concurrent = await page.evaluate<WebNavigationResult[]>(`import("/navigation-broker.js").then(({navigation}) => Promise.all([
      navigation.openFeature("destination", {id:"first"}), navigation.openFeature("destination", {id:"second"})
    ]))`);
@@ -124,8 +127,8 @@ try {
       }
       await page.setViewportSize({ width: 1280, height: 812 });
     }
-    await page.getByRole("button", { name: "Workspaces", exact: true }).click();
-    await page.getByRole("button", { name: "Reconnect race", exact: true }).click();
+     await page.getByRole("link", { name: "Workspaces", exact: true }).click();
+     await page.getByRole("link", { name: "Reconnect race", exact: true }).click();
     await page.waitForFunction("typeof finishReconnectImport === 'function'");
     const reconnectResponse = page.waitForResponse("**/v1/extensions/reconnect/reconnect");
     await page.getByRole("button", { name: "Reconnect feature", exact: true }).click();
@@ -138,7 +141,9 @@ try {
     assert.equal(await page.getByRole("button", { name: "Use reconnected feature", exact: true }).count(), 1);
     await page.getByRole("button", { name: "Use reconnected feature", exact: true }).click();
     await page.getByText("Reconnect feature is usable.", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "Workspaces", exact: true }).click();
+     await page.getByRole("link", { name: "Workspaces", exact: true }).click();
+     await page.getByRole('link', {name:'Open development on local',exact:true}).click();
+     await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
   await page.getByRole("button", { name: "Start scoped server" }).click();
   await page.getByText("started", { exact: true }).waitFor();
   assert.deepEqual(calls, [{ name: "start", input: { hostId: "local", name: "development", id: firstId, phase: "running" }, csrf: "fixture-csrf" }]);
@@ -155,20 +160,22 @@ try {
   assert.equal(await page.evaluate("contexts[0].navigation.hasFeature('destination')"), false);
   assert.equal(await page.evaluate("contexts[0].navigation.openFeature('destination',{id:'stale-workspace'}).then(result=>result.code)"), "session-ended");
   assert.equal(calls.length, 1);
+   await page.getByRole('link', {name:'Open development on local',exact:true}).click();
   await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
   await page.getByText(`${secondId} running`, { exact: true }).waitFor();
   phase = "stopped";
+  await page.getByLabel('Scoped draft',{exact:true}).fill('keep-through-phase-change');
   await page.evaluate("fixture.hosts.refresh(['local'],true)");
-  assert.equal(await page.evaluate("disposals"), 2);
-  await page.locator(".workspace-row summary").getByText("Inline tools", { exact: true }).click();
+  assert.equal(await page.evaluate("disposals"), 1);
   await page.getByText(`${secondId} stopped`, { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Scoped draft',{exact:true}).inputValue(),'keep-through-phase-change');
   const pending = page.evaluate<WebNavigationResult>(`import("/navigation-broker.js").then(({navigation}) => navigation.openFeature("destination", {id:"slow"}))`);
   await page.waitForFunction("typeof finishSlowNavigation === 'function'");
   await page.evaluate("fixture.clearFeaturePlugins()");
   await page.evaluate("finishSlowNavigation()");
   assert.deepEqual(await pending, { status: "unavailable", code: "session-ended", message: "This navigation request ended with the browser session." });
-  assert.equal(await page.evaluate("disposals"), 3);
-  assert.equal(await page.evaluate("contexts[2].isCurrent()"), false);
+  assert.equal(await page.evaluate("disposals"), 2);
+  assert.equal(await page.evaluate("contexts[1].isCurrent()"), false);
   assert.equal(await page.getByRole("button", { name: "Start scoped server" }).count(), 0);
   assert.deepEqual(errors, []);
   process.stdout.write("Workspace plugin placement, exact UUID replacement, lifecycle disposal and session authorization passed.\n");

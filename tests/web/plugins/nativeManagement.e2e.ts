@@ -10,7 +10,7 @@ const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.m
 let imports = 0; page.on("request", (request) => { if (request.url().endsWith("/operations/repositories.import")) imports++; });
 async function login(username: string) {
   await page.goto(fixture.origin); await page.getByLabel("Username", { exact: true }).fill(username); await page.getByLabel("Password", { exact: true }).fill(fixture.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click(); await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click(); await page.getByRole("link", { name: "Git review", exact: true }).click();
 }
 try {
   await login(fixture.username);
@@ -75,7 +75,7 @@ try {
   assert.equal(await workspaceDraft.getByLabel("Managed repositories (comma separated, optional) on devbox", { exact: true }).inputValue(), "private");
   assert.equal(await workspaceDraft.getByLabel("Managed working repository (optional) on devbox", { exact: true }).inputValue(), "private");
   await workspaceDraft.getByRole("button", { name: "Cancel new workspace on devbox", exact: true }).click();
-  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("link", { name: "Git review", exact: true }).click();
   await git.getByText("New project", { exact: true }).click();
   const create = git.getByRole("form", { name: "New managed project", exact: true });
   await create.getByLabel("New project ID", { exact: true }).fill("browser-created"); await create.getByRole("button", { name: "Create project", exact: true }).click();

@@ -3,11 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Manage DIM development workspaces, execution and reviewed changes">
+    <meta name="description" content="Manage persistent development workspaces, tools, executions and LLM routing with DIM">
     <title>DIM Console</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/assets/tokens.css">
     <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/assets/workbench.css">
+    <link rel="stylesheet" href="/assets/workspace-layout.css">
     <script src="/assets/app.js" type="module"></script>
   </head>
   <body>
@@ -17,7 +19,7 @@
         <div class="identity" aria-label="DIM Console">
           <span class="wordmark">DIM</span>
           <span class="identity-divider" aria-hidden="true"></span>
-          <span>Development console</span>
+          <span>Development workbench</span>
         </div>
         <div id="session-actions" class="session-actions" hidden>
 
@@ -34,8 +36,11 @@
     </dialog>
 
     <main id="main" tabindex="-1">
-      <nav id="feature-navigation" class="console-navigation" aria-label="Console sections" hidden><button id="feature-workspaces" class="button button-secondary" type="button" aria-pressed="true">Workspaces</button><div id="feature-tabs"></div></nav>
+      <nav id="feature-navigation" class="console-navigation" aria-label="Console sections" hidden><a id="feature-workspaces" class="console-link" href="#/workspaces">Workspaces</a><div id="feature-tabs"></div><a id="feature-settings" class="console-link" href="#/settings">Settings &amp; access</a></nav>
+      <p id="shell-message" class="shell-message" role="status"></p>
       <div id="feature-panels" hidden></div>
+      <section id="settings-panel" class="feature-page" hidden></section>
+      <section id="route-unavailable" class="feature-page" hidden><h1>Page unavailable</h1><p>This location is invalid, not installed or unavailable to your account. No other host or service was selected.</p><a class="button button-secondary" href="#/workspaces">Open Workspaces</a><a class="button button-secondary" href="#/settings">Check capabilities &amp; access</a></section>
       <section id="restore-state" class="centered-stage" aria-labelledby="restore-title">
         <div class="state-content" role="status">
           <span class="spinner" aria-hidden="true"></span>
@@ -51,7 +56,8 @@
           <div class="auth-intro">
             <p class="eyebrow">Development console</p>
             <h1 id="login-title">Sign in to DIM</h1>
-            <p>Use your configured browser account to access development hosts, execution results and reviewed changes.</p>
+            <p>Resume a workspace, open your tools or manage connected services. Sign in with this console’s browser account.</p>
+            <p>Your requested page opens after sign-in. Service accounts and provider login remain separate.</p>
           </div>
           <form id="login-form" class="panel login-form" novalidate>
             <div class="field">
@@ -74,7 +80,7 @@
       </section>
 
       <section id="operations-panel" class="operations-panel" aria-labelledby="operations-title" hidden>
-        <div class="operations-heading"><div><p class="eyebrow">Development console</p><h1 id="operations-title" tabindex="-1">Workspaces</h1><p class="operations-intro">Your development environments, grouped by host.</p></div><button id="operations-refresh" class="button button-secondary" type="button">Refresh services</button></div>
+        <div class="operations-heading"><div><p class="eyebrow">Persistent development</p><h1 id="operations-title" tabindex="-1">Workspaces</h1><p class="operations-intro">Find your environment, open its tools and keep working. Stopping the runtime keeps your data.</p></div><button id="operations-refresh" class="button button-secondary" type="button">Refresh services</button></div>
         <p id="operations-message" role="status"></p>
         <div id="operations-hosts"></div>
         <div id="operations-consoles" class="operations-consoles" aria-label="Connected consoles"></div>

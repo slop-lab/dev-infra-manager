@@ -34,6 +34,7 @@ async function abortCommittedMutation(route: Route) {
 try {
   await signIn(page);
   const development = page.locator(".workspace-row").filter({ has: page.getByRole("heading", { name: "development", exact: true }) });
+  await page.getByRole("link", { name: "Open development on devbox", exact: true }).click();
   await fixture.stopRuntime();
   await page.getByRole("button", { name: "Refresh workspaces on devbox", exact: true }).click();
   await development.getByRole("button", { name: "start development", exact: true }).waitFor();
@@ -57,7 +58,7 @@ try {
   assert.equal(await development.isVisible(), true);
   assert.equal(await development.getByLabel("CPUs for development", { exact: true }).inputValue(), "0.75");
   await state.selectOption("error");
-  assert.equal(await development.isVisible(), false);
+  assert.equal(await page.getByRole("link", { name: "Open development on devbox", exact: true }).isVisible(), false);
   await state.selectOption("all");
 
   let releaseStale: (() => void) | undefined;
@@ -87,6 +88,7 @@ try {
   await development.getByRole("button", { name: "restart development", exact: true }).waitFor();
   assert.equal((await fixture.actions()).filter((action) => action === "start").length, actionsBeforeLostStart + 1);
   assert.equal(await development.getByLabel("CPUs for development", { exact: true }).inputValue(), "0.75");
+  await development.getByRole("link", { name: "Settings", exact: true }).click();
   await development.getByText("Unsaved resource changes.", { exact: true }).waitFor();
 
   await development.getByLabel("Memory for development", { exact: true }).fill("unlimited");
@@ -99,7 +101,7 @@ try {
   assert.equal(await development.getByLabel("Memory for development", { exact: true }).inputValue(), "unlimited");
   await development.getByText("No unsaved resource changes.", { exact: true }).waitFor();
 
-  await page.getByRole("button", { name: "New workspace on devbox", exact: true }).click();
+  await page.getByRole("link", { name: "New workspace on devbox", exact: true }).click();
   const create = page.getByRole("form", { name: "New workspace on devbox", exact: true });
   await create.getByLabel("Git URL or dim://PROJECT on devbox", { exact: true }).fill("https://example.test/recovered.git");
   await create.getByLabel("Workspace name on devbox", { exact: true }).fill("response-lost");
@@ -111,7 +113,7 @@ try {
   await create.dispatchEvent("submit");
   assert.equal((await fixture.actions()).filter((action) => action === "create").length, createsBefore + 1);
   await create.getByRole("button", { name: "Check current state for response-lost", exact: true }).click();
-  await page.getByRole("heading", { name: "response-lost", exact: true }).waitFor();
+  await page.getByRole("link", { name: "Open response-lost on devbox", exact: true }).waitFor();
   assert.match(await create.innerText(), /already exists in the current host state/i);
   assert.doesNotMatch(await create.innerText(), /created by this attempt/i);
   assert.equal((await fixture.actions()).filter((action) => action === "create").length, createsBefore + 1);

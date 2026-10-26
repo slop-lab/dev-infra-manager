@@ -17,6 +17,7 @@ const loginButton = element("login-button", HTMLButtonElement), logoutButton = e
 const loginError = element("login-error", HTMLElement), alerts = element("alert-announcer", HTMLElement), actions = element("session-actions", HTMLElement);
 const operations = createOperationCoordinator();
 const accessDialog = element("account-access-dialog", HTMLDialogElement);
+document.querySelector('.skip-link')?.addEventListener('click', (event) => { event.preventDefault(); element('main', HTMLElement).focus(); });
 function openAccess() { if (session) { showAccountAccess(session, element("account-access-content", HTMLElement)); if (!accessDialog.open) accessDialog.showModal(); } }
 element("account-access-button", HTMLButtonElement).addEventListener("click", openAccess);
 window.addEventListener("dim-account-access", openAccess);
@@ -35,6 +36,8 @@ function signedOut(message = "") {
   if (accessDialog.open) accessDialog.close(); element("account-access-content", HTMLElement).replaceChildren();
   element("restore-state", HTMLElement).hidden = true; element("login-view", HTMLElement).hidden = false; actions.hidden = true;
   loginError.textContent = message; alerts.textContent = message;
+  element("settings-panel", HTMLElement).hidden = true; element("shell-message", HTMLElement).textContent = "";
+  document.title = "Sign in · DIM";
   const invalid = message.startsWith("Sign-in failed.");
   username.setAttribute("aria-invalid", String(invalid)); password.setAttribute("aria-invalid", String(invalid)); username.focus();
 }

@@ -22,7 +22,7 @@ try {
   await page.getByLabel("Password", { exact: true }).fill(fixture.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.route("**/v1/extensions/execution/operations/workers.list", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }), { times: 1 });
-  await page.getByRole("button", { name: "Execution", exact: true }).click();
+  await page.getByRole("link", { name: "Execution", exact: true }).click();
   const execution = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Execution", exact: true, level: 1 }) });
   await execution.getByText("Worker capacity read is unavailable. The selected execution result above is unchanged. Retry capacity independently; configured slots and worker connectivity could not be confirmed.", { exact: true }).waitFor();
   await execution.getByRole("cell", { name: "queued", exact: true }).first().waitFor();
@@ -48,7 +48,7 @@ try {
     await new Promise<void>((resolve) => setTimeout(resolve, 5_200));
     await route.continue();
   }, { times: 1 });
-  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("link", { name: "Git review", exact: true }).click();
   const git = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Git review", exact: true, level: 1 }) });
   assert.equal(await git.getByLabel("Proposal ref", { exact: true }).getAttribute("placeholder"), "refs/heads/feature or refs/tags/release-candidate");
   await git.getByLabel("Repository", { exact: true }).selectOption("root");

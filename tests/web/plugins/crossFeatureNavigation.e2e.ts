@@ -39,7 +39,7 @@ try {
   await page.getByLabel("Username", { exact: true }).fill(fixture.username);
   await page.getByLabel("Password", { exact: true }).fill(fixture.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("link", { name: "Git review", exact: true }).click();
   const git = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Git review", exact: true, level: 1 }) });
   await git.getByLabel("Repository", { exact: true }).selectOption("root");
   const invalidGitTarget = await page.evaluate(`import('/assets/navigation-broker.js').then(({ navigation }) => navigation.openFeature('native-git', { kind: 'repository', controllerKey: 'devbox', projectId: 'project-a', repositoryId: 'root', extra: true }))`);
@@ -85,14 +85,14 @@ try {
   assert.equal(await page.getByLabel("Managed working repository (optional) on devbox", { exact: true }).inputValue(), "root");
   assert.equal(creates, 0);
   await capture("managed-workspace-draft");
-  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("link", { name: "Git review", exact: true }).click();
   await git.getByRole("button", { name: "Create workspace with all repositories", exact: true }).click();
   assert.equal(await page.getByLabel("Managed repositories (comma separated, optional) on devbox", { exact: true }).inputValue(), "root, private");
   assert.equal(await page.getByLabel("Managed working repository (optional) on devbox", { exact: true }).inputValue(), "root");
   assert.equal(creates, 0);
   await page.route("**/v1/extensions/native-git/operations/projects.list", (route) => route.fulfill({ status: 503, json: { error: "initial discovery unavailable" } }), { times: 1 });
   await page.reload();
-  await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("link", { name: "Git review", exact: true }).click();
   await git.getByText(/^Could not discover projects:/).waitFor();
   await git.getByRole("button", { name: "Refresh projects", exact: true }).click();
   await git.getByRole("heading", { name: "Merge a branch", exact: true }).waitFor();

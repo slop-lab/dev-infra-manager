@@ -79,7 +79,7 @@ try {
   const page = await browser.newPage(); page.setDefaultTimeout(20_000);
   const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(origin); await page.getByLabel("Username", { exact: true }).fill(login.username); await page.getByLabel("Password", { exact: true }).fill(login.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click(); await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click(); await page.getByRole("link", { name: "Git review", exact: true }).click();
   const advanced = page.getByText("Advanced: exact reviews and upstream sync", { exact: true });
   if (!await advanced.evaluate(node => node.parentElement instanceof HTMLDetailsElement && node.parentElement.open)) await advanced.click();
   const fetchUpstream = page.getByRole("button", { name: "Fetch upstream", exact: true }); await fetchUpstream.click();
