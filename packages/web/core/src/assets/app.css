@@ -262,3 +262,14 @@ label.field { color: var(--color-text-secondary); font-size: var(--font-control)
 .account-management [role="status"] { overflow-wrap: anywhere; }
 .account-role-options label { white-space: nowrap; }
 .account-access-dialog .account-role-options input { inline-size: auto; }
+@media (max-width: 40rem) {
+  .account-management .feature-table { overflow-x: visible; }
+  .account-management .feature-table table { min-inline-size: 0; }
+  .account-management thead { position: absolute; inline-size: var(--line); block-size: var(--line); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .account-management tbody { display: grid; gap: var(--space-3); }
+  .account-management tr { display: grid; min-inline-size: 0; border: var(--line) solid var(--color-border-subtle); border-radius: var(--radius-control); background: var(--color-elevated); overflow: hidden; }
+  .account-management td, .account-management td:last-child { min-inline-size: 0; display: grid; gap: var(--space-2); padding: var(--space-3); border-block-end: 0; overflow-wrap: anywhere; }
+  .account-management td + td { border-block-start: var(--line) solid var(--color-border-subtle); }
+  .account-management td::before { content: attr(data-label); color: var(--color-text-muted); font-size: var(--font-label); font-weight: 600; }
+  .account-management td:last-child .button { inline-size: 100%; }
+}

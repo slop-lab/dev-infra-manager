@@ -32,10 +32,42 @@ try {
   await page.getByRole("button", { name: "Account & access", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Account & access", exact: true }), form = dialog.getByRole("form", { name: "Manage browser account", exact: true });
   await dialog.getByRole("cell", { name: login.username, exact: true }).waitFor();
-  for (const width of [375, 1280]) {
+  const initialAccountRow = dialog.locator("tbody tr").filter({ hasText: login.username }).first();
+  let accountWrites = 0;
+  page.on("request", (request) => { if (request.url() === origin + "/v1/accounts" && request.method() === "POST") accountWrites++; });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await initialAccountRow.scrollIntoViewIfNeeded();
+  const accountTable = dialog.locator(".feature-table");
+  assert.equal(await accountTable.evaluate((node) => node.scrollWidth <= node.clientWidth), true);
+  assert.deepEqual(await initialAccountRow.locator("td").evaluateAll((cells) => cells.map((cell) => ({ role: cell.getAttribute("role"), headers: cell.getAttribute("headers"), label: cell.getAttribute("data-label") }))), [
+    { role: "cell", headers: "account-username-heading", label: "Username" },
+    { role: "cell", headers: "account-roles-heading", label: "Roles" },
+    { role: "cell", headers: "account-actions-heading", label: "Actions" },
+  ]);
+  assert.equal(await dialog.getByRole("columnheader").count(), 3);
+  assert.equal(await dialog.getByRole("cell").count(), 3);
+  await initialAccountRow.getByRole("button", { name: "Edit roles", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await form.getByLabel("Account action", { exact: true }).inputValue(), "set-roles");
+  await initialAccountRow.getByRole("button", { name: "Reset password", exact: true }).click();
+  assert.equal(await form.getByLabel("Account action", { exact: true }).inputValue(), "reset-password");
+  await initialAccountRow.getByRole("button", { name: "Remove", exact: true }).click();
+  assert.equal(await form.getByLabel("Account action", { exact: true }).inputValue(), "remove");
+  assert.equal(accountWrites, 0);
+  await form.getByLabel("Account action", { exact: true }).selectOption("add");
+  await form.getByLabel("Grant read", { exact: true }).check();
+  for (const role of ["operator", "reviewer", "account-admin"]) await form.getByLabel(`Grant ${role}`, { exact: true }).uncheck();
+  for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     assert.equal(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth), true);
+    const currentDialogBox = await dialog.boundingBox();
+    assert(currentDialogBox);
+    for (const name of ["Edit roles", "Reset password", "Remove"]) {
+      const actionBox = await initialAccountRow.getByRole("button", { name, exact: true }).boundingBox();
+      assert(actionBox);
+      assert(actionBox.x >= currentDialogBox.x && actionBox.x + actionBox.width <= currentDialogBox.x + currentDialogBox.width);
+    }
     if (process.env.DIM_WEB_EVIDENCE) { await mkdir(process.env.DIM_WEB_EVIDENCE, { recursive: true }); await page.screenshot({ path: join(process.env.DIM_WEB_EVIDENCE, `dim-account-management-${width}.png`), fullPage: true }); }
   }
   let releaseSnapshot: () => void = () => {}, markSnapshot: () => void = () => {};
