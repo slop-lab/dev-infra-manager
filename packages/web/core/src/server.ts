@@ -1,10 +1,10 @@
-import { changeWebAccount, AccountChangeError } from "./accounts.js";
+import { handleAccounts } from "./account-http.js";
 import { webPluginContext } from "./controllers.js";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
-import {accountRoles,expiredCookie,requireCurrentSession,requireMutation,requireOrigin,requireSession,sessionBody,sessionCookie} from './session-http.js';
-import { accountRolesSchema, loadWebConfig, type WebConfig } from "./config.js";
+import {accountRoles,expiredCookie,requireCurrentSession,requireMutation,requireOrigin,requireSession,sendAuthenticationBusy,sessionBody,sessionCookie} from './session-http.js';
+import { loadWebConfig, type WebConfig } from "./config.js";
 import { BodyError, HttpResponseError, readJson, sendEmpty, sendJson } from "./http-response.js";
 import { AccountAuthenticator, SessionStore, type AuthenticationState, type WebSession } from "./session.js";
 import { serveStaticAsset } from "./static-assets.js";
@@ -13,7 +13,6 @@ import { configuredWebOperations, workspaceActionSchema, workspaceCreateSchema, 
 
 const DEFAULT_AUTHENTICATION_DERIVATIONS = 2;
 const DEFAULT_SESSIONS = 256;
-const RETRY_AFTER_SECONDS = "1";
 const loginSchema = z.object({ username: z.string().min(1).max(256), password: z.string().min(1).max(1024) }).strict().readonly();
 
 export type WebServerOptions = {
@@ -117,7 +116,9 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
     const plugin = context.plugins.find(({ definition }) => definition.id === reconnect[1]);
     if (!plugin) throw new HttpResponseError(404, "feature not found");
     z.object({}).strict().parse(await readJson(request));
+    requireCurrentSession(context.sessions, session);
     await reconnectWebPlugin(plugin);
+    requireCurrentSession(context.sessions, session);
     return sendJson(response, { status: 200, body: webPluginCatalog([plugin], accountRoles(context.config, session))[0] });
   }
   const extension = /^\/v1\/extensions\/([a-z][a-z0-9-]{0,63})\/(assets|operations)\/([a-zA-Z0-9._-]{1,160})$/.exec(url.pathname);
@@ -127,7 +128,9 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
     if (extension[2] === "assets" && request.method === "GET") return serveWebPluginAsset(plugin, extension[3]!, response);
     if (extension[2] === "operations" && request.method === "POST") {
       requireMutation(context.config, request, session);
-      const result = await invokeWebPlugin(plugin, extension[3]!, await readJson(request), accountRoles(context.config, session));
+      const input = await readJson(request);
+      requireCurrentSession(context.sessions, session);
+      const result = await invokeWebPlugin(plugin, extension[3]!, input, accountRoles(context.config, session), expectedPluginGeneration(request));
       requireCurrentSession(context.sessions, session);
       return sendJson(response, { status: 200, body: result });
     }
@@ -139,49 +142,13 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
   throw new HttpResponseError(404, "not found");
 }
 
-const accountMutationBase = z.object({ username: z.string().min(1).max(256), currentPassword: z.string().min(1).max(1024) });
-const accountMutationSchema = z.discriminatedUnion("operation", [
-  accountMutationBase.extend({ operation: z.literal("add"), roles: accountRolesSchema }).strict(),
-  accountMutationBase.extend({ operation: z.literal("set-roles"), roles: accountRolesSchema }).strict(),
-  accountMutationBase.extend({ operation: z.literal("reset-password") }).strict(),
-  accountMutationBase.extend({ operation: z.literal("remove") }).strict()
-]);
-async function handleAccounts(context: RequestContext, session: WebSession, request: IncomingMessage, response: ServerResponse): Promise<void> {
-  if (!accountRoles(context.config, session).includes("account-admin")) throw new HttpResponseError(403, "Account administrator access is required");
-  if (request.method === "GET") return sendJson(response, { status: 200, body: { accounts: context.config.accounts.map(({ username, roles }) => ({ username, roles })) } });
-  if (request.method !== "POST") throw new HttpResponseError(405, "method not allowed");
-  requireMutation(context.config, request, session);
-  const input = accountMutationSchema.parse(await readJson(request));
-  const actor = context.config.accounts.find((account) => account.username === session.accountId);
-  if (!actor?.roles.includes("account-admin") || context.sessions.get(session.id) !== session) throw new HttpResponseError(403, "Account access changed. Sign in again before changing accounts");
-  const authentication = await context.authenticator.authenticate(actor.username, input.currentPassword);
-  if (context.sessions.get(session.id) !== session || context.config.accounts.find((account) => account.username === session.accountId) !== actor) throw new HttpResponseError(403, "Account access changed. Sign in again before changing accounts");
-  if (authentication.kind === "busy") return sendBusy(response);
-  if (authentication.kind !== "accepted") throw new HttpResponseError(403, "Current password is incorrect");
-  const change = input.operation === "add" || input.operation === "set-roles"
-    ? { operation: input.operation, username: input.username, roles: input.roles }
-    : { operation: input.operation, username: input.username };
-  try {
-    const result = await changeWebAccount(context.accountConfigPath, change, {
-      authorize(config) {
-        const current = config.accounts.find((account) => account.username === actor.username);
-        if (context.sessions.get(session.id) !== session || !current?.roles.includes("account-admin")
-          || current.passwordHash !== actor.passwordHash || JSON.stringify(current.roles) !== JSON.stringify(actor.roles)) {
-          throw new HttpResponseError(403, "Account access changed. Sign in again before changing accounts");
-        }
-      },
-      committed(config) {
-        context.config = { ...context.config, accounts: config.accounts };
-        context.authenticator.replaceAccounts(config.accounts);
-        if (input.operation !== "add") context.sessions.deleteAccount(input.username);
-      }
-    });
-    sendJson(response, { status: 200, body: { accounts: result.accounts, username: result.username,
-      ...(result.password === undefined ? {} : { password: result.password }), signInRequired: input.operation !== "add" && input.username === session.accountId } });
-  } catch (error) {
-    if (error instanceof AccountChangeError) throw new HttpResponseError(409, error.message);
-    throw error;
-  }
+function expectedPluginGeneration(request: IncomingMessage): number | undefined {
+  const value = request.headers["x-dim-plugin-generation"];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(value)) throw new HttpResponseError(400, "invalid feature generation");
+  const generation = Number(value);
+  if (!Number.isSafeInteger(generation)) throw new HttpResponseError(400, "invalid feature generation");
+  return generation;
 }
 
 async function login(context: RequestContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -200,12 +167,12 @@ async function login(context: RequestContext, request: IncomingMessage, response
   const authentication = await context.authenticator.authenticate(input.username, input.password);
   switch (authentication.kind) {
     case "busy":
-      return sendBusy(response);
+      return sendAuthenticationBusy(response);
     case "rejected":
       throw new HttpResponseError(401, "authentication failed");
     case "accepted": {
       const session = context.sessions.create(authentication.accountId);
-      if (session === undefined) return sendBusy(response);
+      if (session === undefined) return sendAuthenticationBusy(response);
       return sendJson(response, {
         status: 201,
         body: sessionBody(context, session),
@@ -215,14 +182,6 @@ async function login(context: RequestContext, request: IncomingMessage, response
     default:
       return assertNever(authentication);
   }
-}
-
-function sendBusy(response: ServerResponse): void {
-  sendJson(response, {
-    status: 429,
-    body: { error: "authentication temporarily unavailable" },
-    headers: { "Retry-After": RETRY_AFTER_SECONDS }
-  });
 }
 
 function assertNever(value: never): never {

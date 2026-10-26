@@ -11,6 +11,7 @@ export function featureInvoker(feature, active, current) {
   return async (name, input = {}, options) => {
     const epoch = captureSessionEpoch();
     const connection = scopes.get(feature)?.version ?? 0;
+    const serverGeneration = feature.generation;
     const invocationCurrent = () => current() && isSessionEpochCurrent(epoch) && !scopes.get(feature)?.suspended && connection === (scopes.get(feature)?.version ?? 0);
     const timeout = options === undefined ? 35_000 : options?.timeoutMilliseconds;
     if (options !== undefined && (typeof options !== "object" || options === null || Object.keys(options).some((key) => key !== "timeoutMilliseconds"))
@@ -19,7 +20,7 @@ export function featureInvoker(feature, active, current) {
     let response;
     try {
       response = await fetch(`/v1/extensions/${feature.id}/operations/${encodeURIComponent(name)}`, { method: "POST", credentials: "same-origin",
-        headers: { "content-type": "application/json", "x-dim-csrf": active.csrfToken }, body: JSON.stringify(input), signal: AbortSignal.timeout(timeout) });
+        headers: { "content-type": "application/json", "x-dim-csrf": active.csrfToken, ...(serverGeneration === undefined ? {} : { "x-dim-plugin-generation": String(serverGeneration) }) }, body: JSON.stringify(input), signal: AbortSignal.timeout(timeout) });
     } catch (cause) {
       throw Object.assign(new Error("The operation did not return a reliable response, so its outcome is unknown. Refresh current state before retrying.", { cause }), { outcome: "unknown" });
     }

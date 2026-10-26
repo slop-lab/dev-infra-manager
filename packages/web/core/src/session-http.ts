@@ -1,8 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
-import type { IncomingMessage } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 import type { WebConfig } from "./config.js";
-import { HttpResponseError } from "./http-response.js";
+import { HttpResponseError, sendJson } from "./http-response.js";
 import type { SessionStore, WebSession } from "./session.js";
 
 export function requireSession(sessions: SessionStore, request: IncomingMessage): WebSession {
@@ -52,4 +52,12 @@ export function sessionCookie(id: string, secure: boolean): string {
 
 export function expiredCookie(secure: boolean): string {
   return `dim_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
+}
+
+export function sendAuthenticationBusy(response: ServerResponse): void {
+  sendJson(response, {
+    status: 429,
+    body: { error: "authentication temporarily unavailable" },
+    headers: { "Retry-After": "1" }
+  });
 }

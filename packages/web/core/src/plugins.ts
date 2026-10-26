@@ -15,6 +15,7 @@ export interface LoadedWebPlugin {
   readonly definition: WebPlugin;
   readonly context: WebPluginContext;
   readonly config?: unknown;
+  generation: number;
   runtime?: WebPluginRuntime;
   status: "ready" | "unconfigured" | "unavailable";
   reconnecting?: Promise<void>;
@@ -22,14 +23,25 @@ export interface LoadedWebPlugin {
 export async function reconnectWebPlugin(plugin: LoadedWebPlugin): Promise<void> {
   if (plugin.config === undefined && (!plugin.definition.autoConnect || plugin.context.controllers.length === 0)) return;
   if (plugin.reconnecting) return plugin.reconnecting;
+  const generation = ++plugin.generation;
+  delete plugin.runtime;
+  plugin.status = "unavailable";
   plugin.reconnecting = (async () => {
     try {
       const runtime = plugin.config !== undefined ? await plugin.definition.create(plugin.config) : await plugin.definition.autoConnect!(plugin.context);
       const available = runtime.operations ?? plugin.definition.operations;
       operationDescriptors(available);
       if (typeof runtime.invoke !== "function" || available.some((operation) => !plugin.definition.operations.some((known) => known.name === operation.name && known.access === operation.access))) throw new Error("Web plugin runtime advertised an undeclared operation");
-      plugin.runtime = { ...runtime, operations: available, invoke: runtime.invoke.bind(runtime) }; plugin.status = "ready";
-    } catch { delete plugin.runtime; plugin.status = "unavailable"; }
+      if (plugin.generation === generation) {
+        plugin.runtime = { ...runtime, operations: available, invoke: runtime.invoke.bind(runtime) };
+        plugin.status = "ready";
+      }
+    } catch {
+      if (plugin.generation === generation) {
+        delete plugin.runtime;
+        plugin.status = "unavailable";
+      }
+    }
   })();
   try { await plugin.reconnecting; } finally { delete plugin.reconnecting; }
 }
@@ -54,28 +66,39 @@ export async function loadWebPlugins(selections: readonly WebPluginSelection[], 
       || typeof definition.create !== "function" || (definition.autoConnect !== undefined && typeof definition.autoConnect !== "function") || !definition.assets || !Object.hasOwn(definition.assets, definition.browserEntry)) throw new Error("invalid or duplicate Web plugin definition");
     ids.add(definition.id); operationDescriptors(definition.operations);
     for (const [name, url] of Object.entries(definition.assets)) if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.(?:js|css|svg)$/.test(name) || !(url instanceof URL) || url.protocol !== "file:") throw new Error("invalid Web plugin asset declaration");
-    const loaded: LoadedWebPlugin = { definition, context, ...(selection.config === undefined ? {} : { config: selection.config }), status: selection.config !== undefined || definition.autoConnect !== undefined && context.controllers.length > 0 ? "unavailable" : "unconfigured" };
+    const loaded: LoadedWebPlugin = { definition, context, ...(selection.config === undefined ? {} : { config: selection.config }), generation: 0, status: selection.config !== undefined || definition.autoConnect !== undefined && context.controllers.length > 0 ? "unavailable" : "unconfigured" };
     await reconnectWebPlugin(loaded); result.push(loaded);
   }
   return result;
 }
 export function webPluginCatalog(plugins: readonly LoadedWebPlugin[], roles: readonly string[]) {
-  return plugins.map(({ definition, runtime, config, context, status }) => ({ id: definition.id, title: definition.title, description: definition.description, surfaces: definition.surfaces ?? ["navigation"], status,
+  return plugins.map(({ definition, runtime, config, context, generation, status }) => ({ id: definition.id, title: definition.title, description: definition.description, surfaces: definition.surfaces ?? ["navigation"], status, generation,
     configured: config !== undefined || definition.autoConnect !== undefined && context.controllers.length > 0, browserEntry: `/v1/extensions/${definition.id}/assets/${definition.browserEntry}`,
     operations: operationDescriptors(runtime?.operations ?? []).filter(({ access }) => roles.includes(access)) }));
 }
-export async function invokeWebPlugin(plugin: LoadedWebPlugin, name: string, input: unknown, roles: readonly AccountRole[]): Promise<unknown> {
-  if (!plugin.runtime) throw new HttpResponseError(409, "This feature connection is not ready. Configure its private connection or reconnect the feature before retrying.");
-  const operation = plugin.runtime.operations?.find((candidate) => candidate.name === name);
+export async function invokeWebPlugin(plugin: LoadedWebPlugin, name: string, input: unknown, roles: readonly AccountRole[], expectedGeneration?: number): Promise<unknown> {
+  if (plugin.reconnecting || !plugin.runtime) throw new HttpResponseError(409, "This feature connection is not ready. Configure its private connection or reconnect the feature before retrying.");
+  if (expectedGeneration !== undefined && expectedGeneration !== plugin.generation) throw new HttpResponseError(409, "This feature catalog is stale. Reconnect the feature before retrying.");
+  const runtime = plugin.runtime;
+  const generation = plugin.generation;
+  const operation = runtime.operations?.find((candidate) => candidate.name === name);
   if (!operation) throw new HttpResponseError(404, "operation not found");
   if (!roles.includes(operation.access)) throw new HttpResponseError(403, `${operation.access} authority required`);
   let parsed: unknown;
   try { parsed = operation.parseInput(input); } catch { throw new HttpResponseError(400, "The operation input is invalid. Check the selected target and fields."); }
-  try { return operation.parseOutput(await plugin.runtime.invoke(name, parsed)); }
+  try {
+    const output = await runtime.invoke(name, parsed);
+    if (plugin.generation !== generation || plugin.runtime !== runtime || plugin.reconnecting) throw supersededInvocation();
+    return operation.parseOutput(output);
+  }
   catch (error) {
+    if (plugin.generation !== generation || plugin.runtime !== runtime || plugin.reconnecting) throw supersededInvocation();
     if (error instanceof HttpResponseError) throw error;
     throw new HttpResponseError(409, "The connected feature could not complete this operation. Check the selected target and fields. If they are correct, ask the operator to inspect the service; your input is kept.");
   }
+}
+function supersededInvocation(): HttpResponseError {
+  return new HttpResponseError(503, "The feature connection changed while this operation was pending. Its outcome is unknown; refresh current state before retrying.");
 }
 export async function serveWebPluginAsset(plugin: LoadedWebPlugin, name: string, response: ServerResponse): Promise<void> {
   const file = plugin.definition.assets[name];

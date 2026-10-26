@@ -9,7 +9,7 @@ import { captureSessionEpoch, isSessionEpochCurrent } from './session-boundary.j
 export { mountWorkspaceFeatures } from './workspace-features.js';
 /** @typedef {import('./types.js').Session} Session */
 /** @typedef {{name:string,description:string,access:string}} Operation */
-/** @typedef {{id:string,title:string,description:string,configured:boolean,status:'ready'|'unconfigured'|'unavailable',browserEntry:string,surfaces?:Array<'navigation'|'workspace'>,operations:Operation[]}} Feature */
+/** @typedef {{id:string,title:string,description:string,configured:boolean,status:'ready'|'unconfigured'|'unavailable',generation?:number,browserEntry:string,surfaces?:Array<'navigation'|'workspace'>,operations:Operation[]}} Feature */
 const navigation = document.getElementById('feature-navigation'), tabs = document.getElementById('feature-tabs'), panels = document.getElementById('feature-panels'), base = document.getElementById('feature-workspaces');
 if (!(navigation instanceof HTMLElement) || !(tabs instanceof HTMLElement) || !(panels instanceof HTMLElement) || !(base instanceof HTMLAnchorElement)) throw new Error('Missing feature navigation');
 const nav = navigation, tabList = tabs, panelList = panels, baseLink = base;
