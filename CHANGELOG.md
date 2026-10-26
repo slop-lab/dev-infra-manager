@@ -246,6 +246,9 @@ is implied by these source changes.
   Restrict shared feature reconnect to operators, and order router reconciliation
   reads after dispatched owner writes without reporting post-commit failure as a
   known rejection.
+  Keep local CLI mutations in the same ordering boundary, let slow provider reads
+  leave revocation responsive, persist truthful cancellation intent, and expose
+  account actions without hidden horizontal scrolling on narrow screens.
   Run the disposable non-Git browser journeys in the Web CI lane.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
