@@ -23,6 +23,7 @@ try {
     const body = await readFile(new URL(`../../packages/web/plugins/${plugin}/src/assets/panel.js`, import.meta.url), 'utf8');
     await page.route(`**/${url}`, (route) => route.fulfill({ contentType: 'text/javascript', body }));
   }
+  await page.route('**/workspace-link.js', async (route) => route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL('../../packages/web/plugins/agent-tools/src/assets/workspace-link.js', import.meta.url), 'utf8') }));
   await page.route('**/v1/extensions/*/operations/*', async (route) => {
     const name = route.request().url().split('/').at(-1);
     if (!name) throw new Error('Missing fixture operation');

@@ -7,15 +7,18 @@ const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
 const panel = await readFile(new URL("../../../../packages/web/plugins/agent-tools/src/assets/panel.js", import.meta.url));
 const featureUi = await readFile(new URL("../../../../packages/web/core/src/assets/feature-ui.js", import.meta.url));
+const workspaceLink = await readFile(new URL("../../../../packages/web/plugins/agent-tools/src/assets/workspace-link.js", import.meta.url));
 const workspaceId = "17094660-a627-4a17-acd2-6418c0b79967", stoppedId = "27094660-a627-4a17-acd2-6418c0b79967";
 const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
 let installed = false, running = false, holdStatus = true, failTools = false, loseStart = false;
 let pending: ServerResponse | undefined, pendingCredential: ServerResponse | undefined, holdCredential = false;
 let password = "private-server-password";
-function status() { return { workspace: "development", workspaceId, state: running ? "running" : "stopped", port: 4096, directory: "/workspace/main", url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log", externalUrlsAvailable: true, externalUrls: [{ url: "https://opencode.example.test:8443", permalink: "https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967", ingress: "shared", approval: "approved" }, { url: "https://pending.example.test", ingress: "shared", approval: "pending" }] }; }
+let approvedUrl: string | undefined = 'https://opencode.example.test:8443';
+function status() { return { workspace: "development", workspaceId, state: running ? "running" : "stopped", port: 4096, directory: "/workspace/main", url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log", externalUrlsAvailable: true, externalUrls: [...(approvedUrl ? [{ url: approvedUrl, permalink: "https://permanent.example.test/route/37094660-a627-4a17-acd2-6418c0b79967", ingress: "shared", approval: "approved" }] : []), { url: "https://pending.example.test", ingress: "shared", approval: "pending" }] }; }
 const server = createServer((request, response) => {
   if (request.url === "/panel.js") { response.setHeader("Content-Type", "text/javascript"); response.end(panel); return; }
   if (request.url === "/feature-ui.js") { response.setHeader("Content-Type", "text/javascript"); response.end(featureUi); return; }
+  if (request.url === "/workspace-link.js") { response.setHeader("Content-Type", "text/javascript"); response.end(workspaceLink); return; }
   if (request.url === "/") { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><div id="panel"></div>'); return; }
   if (request.url !== "/invoke" || request.method !== "POST") { response.statusCode = 404; response.end(); return; }
   const chunks: Buffer[] = [];
@@ -73,8 +76,10 @@ try {
   await page.getByRole("button", { name: "Refresh status", exact: true }).click();
   await page.getByText("Refresh status completed.", { exact: true }).waitFor();
   assert.match(await page.locator("#panel").innerText(), /dim --host local forward development 4096:4096/);
-  assert.equal(await page.getByRole("link", { name: "Open OpenCode Web", exact: true }).getAttribute("href"), "https://slop-lab.github.io/dev-infra-manager/opencode-web/");
-  await page.getByText('Use Add project to open /workspace/main;', { exact: false }).waitFor();
+   const launchUrl = new URL(await page.getByRole("link", { name: "Open OpenCode Web", exact: true }).getAttribute("href") ?? "");
+   const launch = new URLSearchParams(launchUrl.hash.split('?')[1]);
+   assert.equal(launchUrl.origin, "https://slop-lab.github.io");
+   assert.deepEqual([...launch.entries()], [["server", "https://opencode.example.test:8443"], ["directory", "/workspace/main"]]);
   await page.getByText('Project directory: /workspace/main', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Copy project directory', exact: true }).click();
   assert.equal(await page.getByLabel('Select and copy project directory', { exact: true }).inputValue(), '/workspace/main');
@@ -130,7 +135,16 @@ try {
   assert.equal(await page.getByRole("button", { name: "Start OpenCode server", exact: true }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "Copy server password", exact: true }).count(), 0);
   assert.equal(await page.getByLabel("New server password", { exact: true }).count(), 0);
-  await page.getByRole('button', { name: 'Copy project directory', exact: true }).waitFor();
+   await page.getByRole('button', { name: 'Copy project directory', exact: true }).waitFor();
+   for (const unusable of [undefined, 'http://worker-relay.example.test:4096', 'https://endpoint.example.test?token=private']) {
+     approvedUrl = unusable;
+     await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+     await page.getByText('Refresh status completed.', { exact: true }).waitFor();
+     assert.equal(await page.getByRole('link', { name: 'Open OpenCode Web', exact: true }).count(), 0);
+     assert.equal(await page.getByRole('button', { name: 'Configure external access', exact: true }).count(), 1);
+     assert.equal(await page.getByRole('button', { name: 'Copy forwarding command', exact: true }).count(), 1);
+   }
+   approvedUrl = 'https://opencode.example.test:8443';
   await mount(true); await page.getByRole('button', { name: 'Copy server password', exact: true }).waitFor(); holdCredential = true;
   const credentialRequest = page.waitForRequest((request) => request.method() === 'POST' && request.postDataJSON().name === 'server.credentials');
   await page.getByRole('button', { name: 'Copy server password', exact: true }).click();

@@ -1,4 +1,5 @@
 // @ts-check
+import { buildWorkspaceClientLink } from './workspace-link.js';
 /** @typedef {{name:string,id:string,phase:string}} Workspace */
 /** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'>}} Controller */
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginWorkspaceBrowserContext} Context */
@@ -121,8 +122,18 @@ export function mount(container, context) {
       server.append(element('pre', `dim --host ${controller.id} forward ${selectedWorkspace.name} ${value.port}:${value.port}`));
       button(server, 'Copy forwarding command', async () => { await copy(`dim --host ${controller.id} forward ${selectedWorkspace.name} ${value.port}:${value.port}`, 'Select and copy forwarding command', server); });
       server.append(element('p', `After forwarding, the server address is ${value.url}. This is the workspace-local address until forwarding is active.`));
-      const link = document.createElement('a'); link.href = 'https://slop-lab.github.io/dev-infra-manager/opencode-web/'; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open OpenCode Web'; server.append(link);
-      server.append(element('p', `Select this workspace's forwarded or approved HTTPS server in OpenCode Web. Use Add project to open ${value.directory}; Copy project directory provides the exact path. An operator can copy or change the server password here.`));
+      const clientLink = publicRoutes.map(route => buildWorkspaceClientLink({ endpoint: route.url, directory: value.directory })).find(Boolean);
+      if (clientLink) {
+        const link = document.createElement('a'); link.href = clientLink; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open OpenCode Web'; server.append(link);
+        server.append(element('p', `OpenCode Web selects this server and opens ${value.directory}. Sign in with the server's normal credentials if prompted; no credentials are included in this link.`));
+      } else {
+        server.append(element('p', 'OpenCode Web needs an approved HTTPS or explicitly published loopback server URL. Configure external access or use the forwarding setup above, then refresh status; the workspace-local address alone is not a forwarded endpoint.'));
+        if (publicRoutes.length) {
+          const configure = context.ui.button('Configure external access');
+          configure.addEventListener('click', () => { if (!context.openFeature('external-urls')) context.ui.feedback(notice, 'External routes is not installed for this workspace. Ask an operator to install its Web and host plugins, or use the forwarding command above.'); });
+          server.append(configure);
+        }
+      }
       server.append(element('p', 'If the browser blocks a local HTTP connection from the HTTPS client, use your configured HTTPS workspace endpoint.'));
       updateActions();
     }

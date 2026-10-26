@@ -87,6 +87,6 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
 }
 export const webPlugin: WebPlugin = {
   id: "agent-tools", title: "Workspace tools", description: "Install workspace tools and manage OpenCode servers", surfaces: ["workspace"], operations,
-  assets: { "panel.js": new URL("./assets/panel.js", import.meta.url) }, browserEntry: "panel.js", autoConnect: automatic,
+  assets: { "panel.js": new URL("./assets/panel.js", import.meta.url), "workspace-link.js": new URL("./assets/workspace-link.js", import.meta.url) }, browserEntry: "panel.js", autoConnect: automatic,
   async create() { throw new Error("Workspace tools require a selected DIM controller; use automatic connection"); }
 };
