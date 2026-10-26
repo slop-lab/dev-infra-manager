@@ -44,6 +44,92 @@ it("discovers credential-scoped models, refreshes additions, rejects arbitrary m
   failed = true; clock.mockReturnValue(now + 60_002);
   expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(503);
 });
+it("keeps a previously authorized all-route model retryable through transient catalog disappearance", async () => {
+  let ids = ["stable", "cooling"], recovered = false, inferenceCalls = 0;
+  const fx = await fixture((request, response) => {
+    if (request.url === "/v1/models") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ data: ids.map((id) => ({ id })) }));
+      return;
+    }
+    inferenceCalls++;
+    response.writeHead(recovered ? 200 : 500, { "content-type": "application/json" });
+    response.end(recovered
+      ? JSON.stringify({ id: "response", object: "response", status: "completed", error: null, incomplete_details: null,
+        model: "cooling", output: [], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } })
+      : JSON.stringify({ error: { code: "server_error", message: "model cooling down" } }));
+  });
+  const now = Date.now(), clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
+  ids = ["stable"];
+  clock.mockReturnValue(now + 30_001);
+  const live = await fetch(fx.origin + "/v1/models", { headers: fx.headers });
+  expect((await live.json())).toMatchObject({ data: [{ id: "stable" }] });
+
+  const unavailable = await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+    body: JSON.stringify({ model: "cooling", input: [] }) });
+  expect(unavailable.status).toBe(500);
+  expect(unavailable.headers.get("x-dim-error-category")).toBe("upstream_rejected");
+  expect(inferenceCalls).toBe(1);
+
+  ids = ["stable", "cooling"]; recovered = true; clock.mockReturnValue(now + 60_002);
+  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+    body: JSON.stringify({ model: "cooling", input: [] }) })).status).toBe(200);
+  expect(inferenceCalls).toBe(2);
+
+  ids = ["stable"]; clock.mockReturnValue(now + 360_003);
+  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+    body: JSON.stringify({ model: "cooling", input: [] }) })).status).toBe(403);
+  expect(inferenceCalls).toBe(2);
+});
+it("applies explicit route denial and principal revocation immediately despite prior all-route discovery", async () => {
+  let inferenceCalls = 0;
+  const fx = await fixture((request, response) => {
+    if (request.url === "/v1/models") response.end(JSON.stringify({ data: [{ id: "allowed" }, { id: "denied" }] }));
+    else { inferenceCalls++; response.end(JSON.stringify({ status: "completed", model: "allowed", output: [], usage: { input_tokens: 1, output_tokens: 1 } })); }
+  });
+  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
+  fx.config.routes[0] = { ...fx.config.routes[0]!, models: [{ id: "allowed", name: "allowed", api: "responses" }] };
+
+  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+    body: JSON.stringify({ model: "denied", input: [] }) })).status).toBe(403);
+  expect(inferenceCalls).toBe(0);
+  fx.router.ledger.revoke("workspace");
+  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+    body: JSON.stringify({ model: "allowed", input: [] }) })).status).toBe(401);
+  expect(inferenceCalls).toBe(0);
+});
+it("invalidates remembered authorization immediately when account credentials change in place", async () => {
+  let ids = ["cooling"], inferenceCalls = 0;
+  const fx = await fixture((request, response) => {
+    if (request.url === "/v1/models") response.end(JSON.stringify({ data: ids.map((id) => ({ id })) }));
+    else { inferenceCalls++; response.writeHead(500, { "content-type": "application/json" }).end('{"error":{"code":"server_error"}}'); }
+  });
+  const now = Date.now(), clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
+  ids = ["stable"]; await writeFile(fx.config.accounts[0]!.keyFile, "rotated-key", { mode: 0o600 }); clock.mockReturnValue(now + 30_001);
+
+  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+    body: JSON.stringify({ model: "cooling", input: [] }) })).status).toBe(403);
+  expect(inferenceCalls).toBe(0);
+});
+it.each(["principal", "project"] as const)("denies inference without backend dispatch after %s revocation", async (revocation) => {
+  let ids = ["allowed"], inferenceCalls = 0;
+  const fx = await fixture((request, response) => {
+    if (request.url === "/v1/models") response.end(JSON.stringify({ data: ids.map((id) => ({ id })) }));
+    else { inferenceCalls++; response.end(JSON.stringify({ status: "completed", model: "allowed", output: [], usage: { input_tokens: 1, output_tokens: 1 } })); }
+  });
+  const now = Date.now(), clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
+  ids = ["other"]; clock.mockReturnValue(now + 30_001);
+  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
+  if (revocation === "principal") fx.router.ledger.revoke("workspace");
+  else fx.router.ledger.setProject("demo", "disable");
+
+  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+    body: JSON.stringify({ model: "allowed", input: [] }) })).status).toBe(401);
+  expect(inferenceCalls).toBe(0);
+});
 it("discovers compatible API models with private provider keys and configures backend aliases", async () => {
   const fx = await fixture((request, response) => {
     expect(request.url).toBe("/v1/models"); expect(request.headers.authorization).toBe("Bearer provider-secret");

@@ -12,7 +12,7 @@ import { upstreamResponse } from "./upstream.js";
 import { handleRouterOperator } from "./operator-http.js";
 import { effectiveRouterConfig } from "./account-catalog.js";
 import { ensureManagedBackend, closeManagedBackends } from "./managed-backend.js";
-import { resolveRouteModels } from "./model-catalog.js";
+import { authorizeRouteModel, resolveRouteModels } from "./model-catalog.js";
 import { RequestError, body, send } from "./http.js";
 
 export async function createRouter(baseConfig: RouterConfig) {
@@ -118,7 +118,7 @@ export async function createRouter(baseConfig: RouterConfig) {
     const bytes = await body(request, maximumRequest);
     let payload: Record<string, unknown>;
     try { const value: unknown = JSON.parse(bytes.toString("utf8")); payload = object(value); } catch { throw new RequestError(400, "request must be a JSON object"); }
-    const model = (await resolveRouteModels(config, route)).find((model) => model.id === payload.model && model.api === api);
+    const model = await authorizeRouteModel(config, route, payload.model, api);
     if (!model) throw new RequestError(403, "model is not permitted by this principal route", "authorization_failed");
     for (const name of ["previous_response_id", "conversation", "background", "api_key", "apiKey", "base_url", "account", "account_id", "route", "provider", "project_id"]) {
       if (payload[name] !== undefined && payload[name] !== false && payload[name] !== null) throw new RequestError(400, `unsupported request field: ${name}`, "unsupported_capability");

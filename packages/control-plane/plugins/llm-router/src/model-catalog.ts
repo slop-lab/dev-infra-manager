@@ -1,30 +1,44 @@
+import { createHash } from "node:crypto";
 import { object, parseModel, privateFile, type RouterAccount, type RouterConfig, type RouterModel, type RouterRoute } from "./config.js";
 import { ensureManagedBackend, configureManagedAccountModels, managedAccountDiscovery } from "./managed-backend.js";
 
-const catalogs = new Map<string, { expires: number; pending: Promise<RouterModel[]> }>();
+const catalogs = new Map<string, { readonly identity: string; readonly expires: number; readonly pending: Promise<RouterModel[]> }>();
+const authorizedCatalogs = new Map<string, { readonly identity: string; readonly models: Map<string, { readonly model: RouterModel; readonly expires: number }> }>();
 const catalogLifetime = 30_000;
+const authorizationLifetime = 5 * 60_000;
 const maximumBytes = 4 * 1024 * 1024;
 
-/** Discovery is credential scoped; an all-model route never authorizes arbitrary model names. */
-export async function discoverAccountModels(config: RouterConfig, account: RouterAccount): Promise<RouterModel[]> {
-  const key = JSON.stringify([config.stateDirectory, account.id, account.endpoint, account.keyFile, account.provider]);
-  const cached = catalogs.get(key);
-  if (cached && cached.expires > Date.now()) return cached.pending;
-  const pending = discover(config, account);
-  const entry = { expires: Date.now() + catalogLifetime, pending };
-  catalogs.set(key, entry);
-  try { return await pending; }
-  catch (error) { if (catalogs.get(key) === entry) catalogs.delete(key); throw error; }
+function accountScope(config: RouterConfig, account: RouterAccount): string {
+  return JSON.stringify([config.stateDirectory, account.id, account.endpoint, account.keyFile, account.provider]);
 }
-async function discover(config: RouterConfig, account: RouterAccount): Promise<RouterModel[]> {
+async function discoveryContext(config: RouterConfig, account: RouterAccount): Promise<{ readonly endpoint: string; readonly headers: Record<string, string>; readonly identity: string; readonly direct: boolean }> {
   const direct = await managedAccountDiscovery(config, account);
   const endpoint = direct?.endpoint ?? account.endpoint + "/v1/models";
   const headers = direct?.headers ?? { authorization: `Bearer ${(await privateFile(account.keyFile, 16 * 1024)).trim()}` };
-  const request = () => fetch(endpoint, { headers, redirect: "error", signal: AbortSignal.timeout(10_000) });
+  const identity = createHash("sha256").update(JSON.stringify([endpoint, Object.entries(headers).sort(([left], [right]) => left.localeCompare(right))])).digest("hex");
+  return { endpoint, headers, identity, direct: direct !== undefined };
+}
+async function discoverAccountCatalog(config: RouterConfig, account: RouterAccount): Promise<{ readonly models: RouterModel[]; readonly identity: string; readonly scope: string }> {
+  const scope = accountScope(config, account), context = await discoveryContext(config, account);
+  const cached = catalogs.get(scope);
+  if (cached && cached.identity === context.identity && cached.expires > Date.now()) return { models: await cached.pending, identity: context.identity, scope };
+  const pending = discover(config, account, context);
+  const entry = { identity: context.identity, expires: Date.now() + catalogLifetime, pending };
+  catalogs.set(scope, entry);
+  try { return { models: await pending, identity: context.identity, scope }; }
+  catch (error) { if (catalogs.get(scope) === entry) catalogs.delete(scope); throw error; }
+}
+
+/** Discovery is credential scoped; an all-model route never authorizes arbitrary model names. */
+export async function discoverAccountModels(config: RouterConfig, account: RouterAccount): Promise<RouterModel[]> {
+  return (await discoverAccountCatalog(config, account)).models;
+}
+async function discover(config: RouterConfig, account: RouterAccount, context: { readonly endpoint: string; readonly headers: Record<string, string>; readonly direct: boolean }): Promise<RouterModel[]> {
+  const request = () => fetch(context.endpoint, { headers: context.headers, redirect: "error", signal: AbortSignal.timeout(10_000) });
   let response: Response;
   try { response = await request(); }
   catch (error) {
-    if (direct || !account.provider) throw error;
+    if (context.direct || !account.provider) throw error;
     // A separate operator listener may discover a worker already owned by inference.
     // Start a worker only when its existing listener cannot be reached.
     await ensureManagedBackend(config, account); response = await request();
@@ -50,7 +64,7 @@ async function discover(config: RouterConfig, account: RouterAccount): Promise<R
       output: row.output ?? row.max_output_tokens });
   });
   if (!models.length || new Set(models.map(({ id }) => id)).size !== models.length) throw new Error("account model catalog is empty or contains duplicate models");
-  if (direct) {
+  if (context.direct) {
     const explicit = config.routes.filter((route) => route.accountId === account.id && route.models !== "all").flatMap(({ models }) => models === "all" ? [] : models);
     await configureManagedAccountModels(config, account, [...new Map([...explicit, ...models].map((model) => [model.id, model])).values()]);
   }
@@ -60,5 +74,23 @@ export async function resolveRouteModels(config: RouterConfig, route: RouterRout
   if (route.models !== "all") return route.models;
   const account = config.accounts.find(({ id }) => id === route.accountId);
   if (!account) throw new Error("route account is unavailable");
-  return discoverAccountModels(config, account);
+  const discovered = await discoverAccountCatalog(config, account);
+  rememberAuthorizedModels(discovered);
+  return discovered.models;
+}
+export async function authorizeRouteModel(config: RouterConfig, route: RouterRoute, id: unknown, api: RouterModel["api"]): Promise<RouterModel | undefined> {
+  if (route.models !== "all") return route.models.find((model) => model.id === id && model.api === api);
+  const account = config.accounts.find(({ id }) => id === route.accountId);
+  if (!account) throw new Error("route account is unavailable");
+  const discovered = await discoverAccountCatalog(config, account);
+  return rememberAuthorizedModels(discovered).find((model) => model.id === id && model.api === api);
+}
+function rememberAuthorizedModels(discovered: { readonly models: RouterModel[]; readonly identity: string; readonly scope: string }): RouterModel[] {
+  const now = Date.now(), existing = authorizedCatalogs.get(discovered.scope);
+  const authorized = existing?.identity === discovered.identity ? existing.models : new Map<string, { readonly model: RouterModel; readonly expires: number }>();
+  for (const model of discovered.models) authorized.set(model.id, { model, expires: now + authorizationLifetime });
+  for (const [id, entry] of authorized) if (entry.expires <= now) authorized.delete(id);
+  if (authorized.size === 0) authorizedCatalogs.delete(discovered.scope);
+  else authorizedCatalogs.set(discovered.scope, { identity: discovered.identity, models: authorized });
+  return [...authorized.values()].map(({ model }) => model);
 }
