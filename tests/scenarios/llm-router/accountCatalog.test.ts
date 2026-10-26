@@ -10,12 +10,13 @@ import { invokeRouterOperation } from "../../../packages/control-plane/plugins/l
 import { RouterLedger } from "../../../packages/control-plane/plugins/llm-router/src/ledger.js";
 import { backupRouter, restoreRouter } from "../../../packages/control-plane/plugins/llm-router/src/operator.js";
 import { loadConfig } from "../../../packages/control-plane/plugins/llm-router/src/config.js";
+import { authorizeRouteModel, RouteModelInventoryError } from "../../../packages/control-plane/plugins/llm-router/src/model-catalog.js";
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "dim-account-catalog-")); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const binary = join(root, "backend.ts"), source = await readFile(new URL("./managedBackendFixture.ts", import.meta.url), "utf8");
-  await writeFile(binary, `#!${process.execPath}\n${source.replace("response.end('{\"data\":[]}');", "response.end(JSON.stringify(request.method === 'POST' ? { choices: [], usage: { prompt_tokens: 1, completion_tokens: 2 } } : { data: [] }));")}`, { mode: 0o700 });
+  await writeFile(binary, `#!${process.execPath}\n${source.replace("response.end('{\"data\":[]}');", "response.end(JSON.stringify(request.method === 'POST' ? { choices: [], usage: { prompt_tokens: 1, completion_tokens: 2 } } : { data: [{ id: 'registered-model' }] }));")}`, { mode: 0o700 });
   const stateDirectory = join(root, "state"); await mkdir(stateDirectory, { mode: 0o700 });
   const keyFile = join(root, "existing.key"); await writeFile(keyFile, "existing-key", { mode: 0o600 });
   const model = { id: "test-model", name: "Test", api: "chat" as const, context: 1000, output: 100 };
@@ -38,6 +39,57 @@ it("persists multiple credential partitions independently from route bindings an
   await expect(addRouterAccount(config, { accountId: "one", reference: "Duplicate", provider: "codex" })).rejects.toThrow("already exists");
   await expect(upsertRouterRoute(config, { id: "missing", accountId: "unknown", models: [model] })).rejects.toThrow("not found");
   expect((await effectiveRouterConfig(config)).accounts).toHaveLength(3);
+});
+it("registers and persists an authoritative supported inventory when an operator selects all models", async () => {
+  const { config, ledger } = await fixture();
+  const account = await addRouterAccount(config, { accountId: "codex-all", reference: "Codex all", provider: "codex" });
+
+  await invokeRouterOperation(config, ledger, "route.upsert", { routeId: "all", accountId: account.id, models: "all" });
+
+  const effective = await effectiveRouterConfig(config);
+  expect(effective.accounts.find(({ id }) => id === account.id)?.supportedModels)
+    .toEqual([{ id: "registered-model", name: "registered-model", api: "responses" }]);
+  expect(effective.routes.find(({ id }) => id === "all")).toEqual({ id: "all", accountId: account.id, models: "all" });
+  expect(JSON.parse(await readFile(join(config.stateDirectory, "account-catalog.json"), "utf8")).supportedModels)
+    .toEqual({ [account.id]: [{ id: "registered-model", name: "registered-model", api: "responses" }] });
+});
+
+it("never adopts inherited object properties as an account's registered model inventory", async () => {
+  const { config } = await fixture(), account = config.accounts[0], route = config.routes[0];
+  if (!account || !route) throw new Error("fixture account missing");
+  const effective = await effectiveRouterConfig({ ...config, accounts: [{ ...account, id: "constructor" }], routes: [{ ...route, accountId: "constructor" }] });
+  expect(effective.accounts[0]).not.toHaveProperty("supportedModels");
+});
+it("atomically adopts a legacy explicit-route catalog without changing its accounts or routes", async () => {
+  const { root, config, model } = await fixture();
+  const keyFile = join(root, "legacy.key"); await writeFile(keyFile, "legacy-key", { mode: 0o600 });
+  const account = { id: "legacy", reference: "Legacy", endpoint: "http://127.0.0.1:2", keyFile };
+  const route = { id: "legacy", accountId: account.id, models: [model] };
+  await writeFile(join(config.stateDirectory, "account-catalog.json"), JSON.stringify({ schemaVersion: 1, accounts: [account], routes: [route] }), { mode: 0o600 });
+
+  const effective = await effectiveRouterConfig(config);
+
+  expect(effective.accounts.find(({ id }) => id === account.id)).toEqual(account);
+  expect(effective.routes.find(({ id }) => id === route.id)).toEqual(route);
+  expect(JSON.parse(await readFile(join(config.stateDirectory, "account-catalog.json"), "utf8"))).toEqual({
+    schemaVersion: 2, accounts: [account], routes: [route], supportedModels: {}
+  });
+});
+it("adopts a legacy all-route as unregistered and lets the operator replace it explicitly", async () => {
+  const { config, model } = await fixture();
+  const legacy = { id: "default", accountId: "existing", models: "all" as const };
+  await writeFile(join(config.stateDirectory, "account-catalog.json"), JSON.stringify({ schemaVersion: 1, accounts: [], routes: [legacy] }), { mode: 0o600 });
+  const effective = await effectiveRouterConfig(config);
+  const adopted = effective.routes.find(({ id }) => id === legacy.id);
+  if (!adopted) throw new Error("legacy all route was not adopted");
+
+  await expect(authorizeRouteModel(effective, adopted, model.id, model.api))
+    .rejects.toBeInstanceOf(RouteModelInventoryError);
+
+  await upsertRouterRoute(config, { ...legacy, models: [model] });
+  const repaired = await effectiveRouterConfig(config);
+  expect(repaired.routes.find(({ id }) => id === legacy.id)).toEqual({ ...legacy, models: [model] });
+  expect(JSON.parse(await readFile(join(config.stateDirectory, "account-catalog.json"), "utf8"))).toMatchObject({ schemaVersion: 2, supportedModels: {} });
 });
 it("backs up dynamic credentials, routes and worker configuration and rewrites private paths on restore", async () => {
   const { root, config, model, ledger } = await fixture();

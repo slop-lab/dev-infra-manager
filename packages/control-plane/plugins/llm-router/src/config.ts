@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { isIP } from "node:net";
 
 export interface RouterModel { id: string; name: string; api: "responses" | "chat"; context?: number; output?: number }
-export interface RouterAccount { id: string; reference: string; endpoint: string; keyFile: string; credentialDirectory?: string; provider?: "codex" | "openai" | "anthropic" }
+export interface RouterAccount { id: string; reference: string; endpoint: string; keyFile: string; credentialDirectory?: string; provider?: "codex" | "openai" | "anthropic"; supportedModels?: RouterModel[] }
 export interface RouterRoute { id: string; accountId: string; models: RouterModel[] | "all" }
 export interface RouterLimits { concurrent: number | null; requestsPerUtcDay: number | null; requestBytes: number | null; responseBytes: number | null; captureBytesPerProject: number | null; deadlineMilliseconds: number | null }
 export interface ProjectPolicy { allowedRoutes: string[]; limits: RouterLimits; captureMode: "required" | "best-effort" | "metadata";
@@ -73,11 +73,17 @@ export function parseConfig(value: unknown): RouterConfig {
   if (Object.entries(backendProfile).some(([key, value]) => backend[key] !== value)) throw new Error("unsupported backend capabilities; only pinned exclusive-worker/request-level CLIProxyAPI profile is enabled");
   if (row.schemaVersion !== 3 || !Array.isArray(row.routes) || !Array.isArray(row.accounts)) throw new Error("unsupported router configuration");
   const accounts = row.accounts.map((value: unknown): RouterAccount => {
-    const account = object(value); exact(account, ["id", "reference", "endpoint", "keyFile"], ["credentialDirectory", "provider"]);
+    const account = object(value); exact(account, ["id", "reference", "endpoint", "keyFile"], ["credentialDirectory", "provider", "supportedModels"]);
     if (account.provider !== undefined && !["codex", "openai", "anthropic"].includes(String(account.provider))) throw new Error("unsupported account provider");
     const endpoint = origin(account.endpoint), url = new URL(endpoint);
     if (url.protocol === "http:" && !["127.0.0.1", "[::1]"].includes(url.hostname)) throw new Error("HTTP upstream must use loopback");
-    return { id: identifier(account.id), reference: text(account.reference), endpoint, keyFile: absolute(account.keyFile), ...(account.credentialDirectory === undefined ? {} : { credentialDirectory: absolute(account.credentialDirectory) }), ...(account.provider === undefined ? {} : { provider: account.provider as "codex" | "openai" | "anthropic" }) };
+    const supportedModels = account.supportedModels === undefined ? undefined : (() => {
+      if (!Array.isArray(account.supportedModels) || !account.supportedModels.length || account.supportedModels.length > 10_000) throw new Error("account supportedModels must be a nonempty bounded model list");
+      const models = account.supportedModels.map(parseModel);
+      if (new Set(models.map(({ id }) => id)).size !== models.length) throw new Error("duplicate account supported model");
+      return models;
+    })();
+    return { id: identifier(account.id), reference: text(account.reference), endpoint, keyFile: absolute(account.keyFile), ...(account.credentialDirectory === undefined ? {} : { credentialDirectory: absolute(account.credentialDirectory) }), ...(account.provider === undefined ? {} : { provider: account.provider as "codex" | "openai" | "anthropic" }), ...(supportedModels === undefined ? {} : { supportedModels }) };
   });
   if (new Set(accounts.map((account) => account.id)).size !== accounts.length || new Set(accounts.map((account) => account.endpoint)).size !== accounts.length) throw new Error("account IDs and exclusive backend endpoints must be unique");
   if (!Array.isArray(row.hostIssuers)) throw new Error("host issuers must be an explicit array");

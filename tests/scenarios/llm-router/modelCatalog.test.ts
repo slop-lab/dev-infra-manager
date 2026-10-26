@@ -8,15 +8,16 @@ import { discoverAccountModels } from "../../../packages/control-plane/plugins/l
 import { createRouter } from "../../../packages/control-plane/plugins/llm-router/src/server.js";
 import { invokeRouterOperation } from "../../../packages/control-plane/plugins/llm-router/src/operations.js";
 const cleanup: (() => Promise<void>)[] = [];
+const supportedModels = ["first", "second", "stable", "cooling", "allowed", "denied"].map((id) => ({ id, name: id, api: "responses" as const }));
 afterEach(async () => { vi.restoreAllMocks(); for (const close of cleanup.splice(0).reverse()) await close(); });
-async function fixture(handle: (request: IncomingMessage, response: ServerResponse) => void) {
+async function fixture(handle: (request: IncomingMessage, response: ServerResponse) => void, inventory = supportedModels) {
   const root = await mkdtemp(join(tmpdir(), "dim-model-catalog-")); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const upstream = createServer(handle); await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
   cleanup.push(async () => { upstream.closeAllConnections(); await new Promise<void>((resolve) => upstream.close(() => resolve())); });
   const address = upstream.address(); if (!address || typeof address === "string") throw new Error("missing address");
   const endpoint = `http://127.0.0.1:${address.port}`, keyFile = join(root, "key"); await writeFile(keyFile, "private-key", { mode: 0o600 });
   const config = parseConfig({ schemaVersion: 3, stateDirectory: join(root, "state"), hostIssuers: [], listen: { host: "127.0.0.1", port: 8318 }, backend: backendProfile,
-    accounts: [{ id: "one", reference: "One account", endpoint, keyFile }], routes: [{ id: "default", accountId: "one", models: "all" }], limits: defaultLimits });
+    accounts: [{ id: "one", reference: "One account", endpoint, keyFile, supportedModels: inventory }], routes: [{ id: "default", accountId: "one", models: "all" }], limits: defaultLimits });
   const router = await createRouter(config); cleanup.push(() => router.close()); await new Promise<void>((resolve) => router.server.listen(0, "127.0.0.1", resolve));
   const selected = router.server.address(); if (!selected || typeof selected === "string") throw new Error("missing router address");
   router.ledger.createProject("demo", { allowedRoutes: ["default"], limits: defaultLimits, captureMode: "metadata", tokenMode: "observe" });
@@ -31,8 +32,7 @@ it("discovers credential-scoped models, refreshes additions, rejects arbitrary m
   });
   expect((await fetch(fx.origin + "/v1/models")).status).toBe(401); expect(discoveries).toBe(0);
   const now = Date.now(), clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  const first = await fetch(fx.origin + "/v1/models", { headers: fx.headers }); expect(first.status).toBe(200);
-  expect(await first.json()).toMatchObject({ data: [{ id: "first", api: "responses", context: 200_000, output: 20_000 }] });
+  expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toMatchObject([{ id: "first", api: "responses", context: 200_000, output: 20_000 }]);
   ids = ["first", "second"];
   expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toHaveLength(1); expect(discoveries).toBe(1);
   clock.mockReturnValue(now + 30_001);
@@ -42,7 +42,7 @@ it("discovers credential-scoped models, refreshes additions, rejects arbitrary m
   expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers, body: JSON.stringify({ model: "not-in-account", input: [] }) })).status).toBe(403);
   expect(discoveries).toBe(2);
   failed = true; clock.mockReturnValue(now + 60_002);
-  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(503);
+  await expect(discoverAccountModels(fx.config, fx.config.accounts[0]!)).rejects.toThrow(/discovery is unavailable/);
 });
 it("keeps a previously authorized all-route model retryable through transient catalog disappearance", async () => {
   let ids = ["stable", "cooling"], recovered = false, inferenceCalls = 0;
@@ -60,11 +60,14 @@ it("keeps a previously authorized all-route model retryable through transient ca
       : JSON.stringify({ error: { code: "server_error", message: "model cooling down" } }));
   });
   const now = Date.now(), clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
+  expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toHaveLength(2);
   ids = ["stable"];
-  clock.mockReturnValue(now + 30_001);
-  const live = await fetch(fx.origin + "/v1/models", { headers: fx.headers });
-  expect((await live.json())).toMatchObject({ data: [{ id: "stable" }] });
+  clock.mockReturnValue(now + 20 * 60_000 + 1);
+  expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toMatchObject([{ id: "stable" }]);
+  const published = await fetch(fx.origin + "/v1/models", { headers: fx.headers });
+  expect((await published.json())).toMatchObject({ data: expect.arrayContaining([
+    expect.objectContaining({ id: "stable" }), expect.objectContaining({ id: "cooling" })
+  ]) });
 
   const unavailable = await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
     body: JSON.stringify({ model: "cooling", input: [] }) });
@@ -72,14 +75,15 @@ it("keeps a previously authorized all-route model retryable through transient ca
   expect(unavailable.headers.get("x-dim-error-category")).toBe("upstream_rejected");
   expect(inferenceCalls).toBe(1);
 
-  ids = ["stable", "cooling"]; recovered = true; clock.mockReturnValue(now + 60_002);
-  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+  await fx.router.close();
+  const restarted = await createRouter(fx.config); cleanup.push(() => restarted.close());
+  await new Promise<void>((resolve) => restarted.server.listen(0, "127.0.0.1", resolve));
+  const address = restarted.server.address(); if (!address || typeof address === "string") throw new Error("missing restarted router address");
+  recovered = true;
+  const capabilities = await fetch(`http://127.0.0.1:${address.port}/v1/capabilities`, { headers: fx.headers });
+  expect((await capabilities.json())).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ id: "cooling" })]) });
+  expect((await fetch(`http://127.0.0.1:${address.port}/v1/responses`, { method: "POST", headers: fx.headers,
     body: JSON.stringify({ model: "cooling", input: [] }) })).status).toBe(200);
-  expect(inferenceCalls).toBe(2);
-
-  ids = ["stable"]; clock.mockReturnValue(now + 360_003);
-  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
-    body: JSON.stringify({ model: "cooling", input: [] }) })).status).toBe(403);
   expect(inferenceCalls).toBe(2);
 });
 it("applies explicit route denial and principal revocation immediately despite prior all-route discovery", async () => {
@@ -88,7 +92,7 @@ it("applies explicit route denial and principal revocation immediately despite p
     if (request.url === "/v1/models") response.end(JSON.stringify({ data: [{ id: "allowed" }, { id: "denied" }] }));
     else { inferenceCalls++; response.end(JSON.stringify({ status: "completed", model: "allowed", output: [], usage: { input_tokens: 1, output_tokens: 1 } })); }
   });
-  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
+  expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toHaveLength(2);
   fx.config.routes[0] = { ...fx.config.routes[0]!, models: [{ id: "allowed", name: "allowed", api: "responses" }] };
 
   expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
@@ -99,35 +103,30 @@ it("applies explicit route denial and principal revocation immediately despite p
     body: JSON.stringify({ model: "allowed", input: [] }) })).status).toBe(401);
   expect(inferenceCalls).toBe(0);
 });
-it("invalidates remembered authorization immediately when account credentials change in place", async () => {
-  let ids = ["cooling"], inferenceCalls = 0;
-  const fx = await fixture((request, response) => {
-    if (request.url === "/v1/models") response.end(JSON.stringify({ data: ids.map((id) => ({ id })) }));
-    else { inferenceCalls++; response.writeHead(500, { "content-type": "application/json" }).end('{"error":{"code":"server_error"}}'); }
-  });
-  const now = Date.now(), clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
-  ids = ["stable"]; await writeFile(fx.config.accounts[0]!.keyFile, "rotated-key", { mode: 0o600 }); clock.mockReturnValue(now + 30_001);
-
-  expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
-    body: JSON.stringify({ model: "cooling", input: [] }) })).status).toBe(403);
-  expect(inferenceCalls).toBe(0);
+it("returns an actionable service error when an all-model route loses its authoritative inventory", async () => {
+  const fx = await fixture((_request, response) => response.end(JSON.stringify({ data: [{ id: "stable" }] })));
+  delete fx.config.accounts[0]!.supportedModels;
+  const response = await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
+    body: JSON.stringify({ model: "stable", input: [] }) });
+  expect(response.status).toBe(503);
+  expect(await response.text()).toContain("registered supportedModels inventory");
 });
-it.each(["principal", "project"] as const)("denies inference without backend dispatch after %s revocation", async (revocation) => {
+it.each(["account", "principal", "project"] as const)("denies inference without backend dispatch after %s revocation", async (revocation) => {
   let ids = ["allowed"], inferenceCalls = 0;
   const fx = await fixture((request, response) => {
     if (request.url === "/v1/models") response.end(JSON.stringify({ data: ids.map((id) => ({ id })) }));
     else { inferenceCalls++; response.end(JSON.stringify({ status: "completed", model: "allowed", output: [], usage: { input_tokens: 1, output_tokens: 1 } })); }
   });
   const now = Date.now(), clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
+  expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toHaveLength(1);
   ids = ["other"]; clock.mockReturnValue(now + 30_001);
-  expect((await fetch(fx.origin + "/v1/models", { headers: fx.headers })).status).toBe(200);
-  if (revocation === "principal") fx.router.ledger.revoke("workspace");
+  expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toHaveLength(1);
+  if (revocation === "account") fx.config.accounts.splice(0);
+  else if (revocation === "principal") fx.router.ledger.revoke("workspace");
   else fx.router.ledger.setProject("demo", "disable");
 
   expect((await fetch(fx.origin + "/v1/responses", { method: "POST", headers: fx.headers,
-    body: JSON.stringify({ model: "allowed", input: [] }) })).status).toBe(401);
+    body: JSON.stringify({ model: "allowed", input: [] }) })).status).toBe(revocation === "account" ? 403 : 401);
   expect(inferenceCalls).toBe(0);
 });
 it("discovers compatible API models with private provider keys and configures backend aliases", async () => {
@@ -149,6 +148,8 @@ it("rejects duplicate catalog entries and unsupported wildcard policy", async ()
   const fx = await fixture((_request, response) => response.end(JSON.stringify({ data: [{ id: "duplicate" }, { id: "duplicate" }] })));
   await expect(discoverAccountModels(fx.config, fx.config.accounts[0]!)).rejects.toThrow("duplicate");
   expect(() => parseConfig({ ...fx.config, routes: [{ ...fx.config.routes[0], models: "*" }] })).toThrow();
+  const account = { ...fx.config.accounts[0] }; delete account.supportedModels;
+  expect(parseConfig({ ...fx.config, accounts: [account] }).accounts[0]?.supportedModels).toBeUndefined();
 });
 
 it("rejects partial paginated catalogs instead of silently limiting all models", async () => {
@@ -157,8 +158,8 @@ it("rejects partial paginated catalogs instead of silently limiting all models",
 });
 
 it("preserves unknown model limits through discovery, the account API and workspace catalog", async () => {
-  const fx = await fixture((_request, response) => response.end(JSON.stringify({ data: [{ id: "unknown" }, { id: "output-only", max_output_tokens: 128_000 }] })));
-  const expected = [{ id: "unknown", name: "unknown", api: "responses" }, { id: "output-only", name: "output-only", api: "responses", output: 128_000 }];
+  const expected = [{ id: "unknown", name: "unknown", api: "responses" as const }, { id: "output-only", name: "output-only", api: "responses" as const, output: 128_000 }];
+  const fx = await fixture((_request, response) => response.end(JSON.stringify({ data: [{ id: "unknown" }, { id: "output-only", max_output_tokens: 128_000 }] })), expected);
   expect(await discoverAccountModels(fx.config, fx.config.accounts[0]!)).toEqual(expected);
   expect(await invokeRouterOperation(fx.config, fx.router.ledger, "account.models", { accountId: "one" })).toEqual(expected);
   const catalog = await fetch(fx.origin + "/v1/models", { headers: fx.headers });

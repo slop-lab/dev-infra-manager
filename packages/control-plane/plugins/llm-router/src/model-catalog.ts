@@ -3,9 +3,7 @@ import { object, parseModel, privateFile, type RouterAccount, type RouterConfig,
 import { ensureManagedBackend, configureManagedAccountModels, managedAccountDiscovery } from "./managed-backend.js";
 
 const catalogs = new Map<string, { readonly identity: string; readonly expires: number; readonly pending: Promise<RouterModel[]> }>();
-const authorizedCatalogs = new Map<string, { readonly identity: string; readonly models: Map<string, { readonly model: RouterModel; readonly expires: number }> }>();
 const catalogLifetime = 30_000;
-const authorizationLifetime = 5 * 60_000;
 const maximumBytes = 4 * 1024 * 1024;
 
 function accountScope(config: RouterConfig, account: RouterAccount): string {
@@ -74,23 +72,10 @@ export async function resolveRouteModels(config: RouterConfig, route: RouterRout
   if (route.models !== "all") return route.models;
   const account = config.accounts.find(({ id }) => id === route.accountId);
   if (!account) throw new Error("route account is unavailable");
-  const discovered = await discoverAccountCatalog(config, account);
-  rememberAuthorizedModels(discovered);
-  return discovered.models;
+  if (!account.supportedModels) throw new RouteModelInventoryError("all-model route publication requires the account's registered supportedModels inventory; run route.upsert again or configure supportedModels explicitly");
+  return account.supportedModels;
 }
+export class RouteModelInventoryError extends Error {}
 export async function authorizeRouteModel(config: RouterConfig, route: RouterRoute, id: unknown, api: RouterModel["api"]): Promise<RouterModel | undefined> {
-  if (route.models !== "all") return route.models.find((model) => model.id === id && model.api === api);
-  const account = config.accounts.find(({ id }) => id === route.accountId);
-  if (!account) throw new Error("route account is unavailable");
-  const discovered = await discoverAccountCatalog(config, account);
-  return rememberAuthorizedModels(discovered).find((model) => model.id === id && model.api === api);
-}
-function rememberAuthorizedModels(discovered: { readonly models: RouterModel[]; readonly identity: string; readonly scope: string }): RouterModel[] {
-  const now = Date.now(), existing = authorizedCatalogs.get(discovered.scope);
-  const authorized = existing?.identity === discovered.identity ? existing.models : new Map<string, { readonly model: RouterModel; readonly expires: number }>();
-  for (const model of discovered.models) authorized.set(model.id, { model, expires: now + authorizationLifetime });
-  for (const [id, entry] of authorized) if (entry.expires <= now) authorized.delete(id);
-  if (authorized.size === 0) authorizedCatalogs.delete(discovered.scope);
-  else authorizedCatalogs.set(discovered.scope, { identity: discovered.identity, models: authorized });
-  return [...authorized.values()].map(({ model }) => model);
+  return (await resolveRouteModels(config, route)).find((model) => model.id === id && model.api === api);
 }
