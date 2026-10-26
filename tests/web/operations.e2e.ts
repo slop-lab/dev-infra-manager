@@ -142,8 +142,13 @@ try {
   const retryWorkspaces = page.getByRole("button", { name: "Retry workspaces on devbox", exact: true });
   await retryWorkspaces.click();
   await retryWorkspaces.waitFor({ state: "hidden" });
-  await createdRow.waitFor();
-  assert.equal(await development.getByRole("button", { name: "start development", exact: true }).isVisible(), true);
+   await createdRow.waitFor();
+   assert.equal(await development.getByRole("button", { name: "start development", exact: true }).isVisible(), true);
+   await createdRow.getByRole("button", { name: "discard browser-created", exact: true }).click();
+   await createdRow.getByRole("button", { name: "Discard browser-created and its data", exact: true }).click();
+   await createdRow.waitFor({ state: "detached" });
+   assert.equal(await fixture.workspaceNamed("browser-created"), undefined);
+   assert.equal((await fixture.workspace()).name, "development");
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.locator("#login-view").waitFor({ state: "visible" });
   assert.equal(await page.locator("#operations-panel").isHidden(), true);

@@ -24,7 +24,7 @@ let selected=rows.find(row=>row.name===args[3]);
 if(args.includes('--expect-id')&&flag('--expect-id')!==selected?.id)process.exit(1);
 if(args[2]==='stop'){selected.phase='stopped';selected.runtimeStatus='stopped';}
 if(['start','restart','recreate'].includes(args[2])){selected.phase='running';selected.runtimeStatus='running';}
-if(args[2]==='discard'){rows.splice(rows.indexOf(selected),1);}
+if(args[2]==='discard'){if(!args.includes('--yes')){console.error('discard requires --yes noninteractively');process.exit(2)}rows.splice(rows.indexOf(selected),1);}
 if(args[2]==='resources'){for(const [key,option] of [['cpuCount','--cpus'],['memory','--memory'],['pidsLimit','--pids']])if(args.includes(option))selected.resources[key]=flag(option);}
 if(args[2]==='create'){
  selected={id:randomUUID(),name:args[4],source:args[3],runtime:flag('--runtime','container'),image:flag('--image'),phase:'running',runtimeStatus:'running',resources:{cpuCount:flag('--cpus','2'),memory:flag('--memory','4g'),pidsLimit:flag('--pids','2048')}};
