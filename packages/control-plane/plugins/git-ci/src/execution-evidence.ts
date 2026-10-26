@@ -73,7 +73,7 @@ export async function assertCurrentExecution(runtime: GitCiRuntime, grant: Execu
   if (!snapshot.envelope.events.some((event) => isDeepStrictEqual(event, grant.event))) throw new ExecutionConflictError("execution envelope is stale");
   if (!isDeepStrictEqual(grant.descriptor.inputs, grant.event.inputs)) throw new ExecutionConflictError("execution input snapshot conflicts");
   await assertExecutionInputsCurrent(runtime, { ...review, inputs: grant.descriptor.inputs });
-  const latest = (await grants(snapshot.target.repository)).filter((other) => sameJob(other, grant.event))
+  const latest = (await grants(snapshot.target.repository)).filter((other) => other.generationId === runtime.expectedGenerationId && sameJob(other, grant.event))
     .sort((left, right) => right.attempt - left.attempt)[0];
   if (latest?.executionId !== grant.executionId) throw new ExecutionConflictError("execution attempt was superseded");
   return snapshot.target.repository;
@@ -101,7 +101,8 @@ export async function recordExecutionEvidence(runtime: GitCiRuntime,
 
 export async function currentExecutionEvidence(runtime: GitCiRuntime,
   repository: string, event: ExecutionGrant["event"]): Promise<{ grant: ExecutionGrant; result: ExecutionResult; digest: string }> {
-  const grant = (await grants(repository)).filter((grant) => sameJob(grant, event)).sort((a, b) => b.attempt - a.attempt)[0];
+  const grant = (await grants(repository)).filter((candidate) => candidate.generationId === runtime.expectedGenerationId && sameJob(candidate, event))
+    .sort((a, b) => b.attempt - a.attempt)[0];
   if (grant === undefined) throw new ExecutionConflictError("execution evidence is missing", "evidence-missing");
   await assertCurrentExecution(runtime, grant);
   const value = await readOptional(join(repository, "dim-execution-evidence", `${grant.executionId}.json`));

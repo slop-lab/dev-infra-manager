@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
 import * as rootProofGit from "../../../../packages/control-plane/plugins/git-repositories/src/native-root-import-proof-git.js";
-import { reconcileNativeProposalRefs } from "../../../../packages/control-plane/plugins/git-review/src/native-proposal-reconciler.js";
+import { isCandidateAbsorbed, reconcileNativeProposalRefs, reconcileRegisteredNativeProposals } from "../../../../packages/control-plane/plugins/git-review/src/native-proposal-reconciler.js";
 import {
   readNativeProposalRefs
 } from "../../../../packages/control-plane/plugins/git-repositories/src/native-proposal-reconciler.js";
@@ -15,12 +15,38 @@ import {
 } from "./nativeRootImportFinalizeFixture.js";
 import {
   nativeBundleReviewFixture,
+  reviewProposalRef,
   reviewWorkspaceId
 } from "../git-ci/nativeBundleReviewFixture.js";
 
 afterEach(async () => { vi.restoreAllMocks(); await cleanupFinalizeFixtures(); });
 
 describe("native proposal ref reconciliation bounds", () => {
+  it("skips absorbed proposal refs during startup while retaining fresh reconciliation and explicit retry", async () => {
+    // Given
+    const fixture = await nativeBundleReviewFixture("reconciliation-absorbed-startup");
+    const repository = rootRepository(fixture.root);
+    const protectedCommit = (await runGit("/usr/bin/git", ["--git-dir", repository, "rev-parse", "refs/heads/main"])).stdout.trim();
+    const strictDescendant = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();
+    expect(strictDescendant).not.toBe(protectedCommit);
+    await expect(isCandidateAbsorbed({ runtime: fixture.service.context.runtime, repository,
+      candidateCommit: protectedCommit, protectedCommit: strictDescendant })).resolves.toBe(true);
+    const absorbedRef = `refs/heads/proposals/${reviewWorkspaceId}/absorbed`;
+    await runGitInput(repository, `update ${absorbedRef} ${protectedCommit}\n`);
+
+    // When
+    const startup = await fixture.service.context.serialize(() => reconcileRegisteredNativeProposals(fixture.service.context.runtime));
+
+    // Then
+    expect(startup.some(({ review }) => review.proposalRef === absorbedRef)).toBe(false);
+    expect(startup.some(({ review }) => review.proposalRef === reviewProposalRef)).toBe(true);
+    const retry = await fixture.service.context.serialize(() => reconcileNativeProposalRefs(
+      fixture.service.context.runtime, "project-a", "root", [reviewProposalRef]
+    ));
+    expect(retry).toHaveLength(1);
+    expect(retry[0]?.review.proposalRef).toBe(reviewProposalRef);
+  });
+
   it("proves each branch once across a reconciliation batch and reproves the next batch", async () => {
     // Given: several proposals share the same two authoritative branch targets.
     const policyInput = { ...authoritativePolicy(), defaultRef: "refs/heads/main", branches: {

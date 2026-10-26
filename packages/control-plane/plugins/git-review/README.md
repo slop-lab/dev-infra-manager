@@ -25,6 +25,11 @@ repository input snapshots, protected heads and proposal commit/tree identities.
 Listing does not rebuild patches or run project matchers. Opening an exact review,
 approving it or promoting it performs the full evidence and requirement checks;
 a list status is informational and never authorizes a decision.
+Startup reconciliation ignores retained proposal refs whose candidate commit is
+already contained in the selected protected head. Fresh proposal writes and
+explicit review resolution remain available and retain their normal current-state
+checks; the skip prevents old absorbed refs from manufacturing new review or CI
+events after a restart or protected-head change.
 
 ## Conditional security review
 

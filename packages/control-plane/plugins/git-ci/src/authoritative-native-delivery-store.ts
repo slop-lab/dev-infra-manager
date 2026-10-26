@@ -9,6 +9,9 @@ import {
 } from "./plan-store.js";
 import type { AuthoritativeNativeReviewEnvelope } from "./plan-schema.js";
 import type { AuthoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
+import { completeDeliveryIntent, initializeDeliveryIntentStore, readExplicitDeliveryIntents,
+  supersedeDeliveryIntent, type DeliveryIntent } from "./authoritative-native-delivery-intent-store.js";
+export { recordExplicitAuthoritativeNativeDeliveryIntent } from "./authoritative-native-delivery-intent-store.js";
 import {
   ownedReviewDirectory,
   publishReviewRecord,
@@ -40,6 +43,7 @@ export type AuthoritativeNativePendingDelivery = {
   readonly event: AuthoritativeNativeReviewEnvelope["events"][number];
   readonly eventDigest: string;
   readonly policyDigest: string;
+  readonly intent?: DeliveryIntent;
 };
 
 export async function readPendingAuthoritativeNativeDeliveries(
@@ -56,8 +60,17 @@ export async function readPendingAuthoritativeNativeDeliveries(
   const paths = await initializeDeliveryStore(repository);
   const envelopes = await readAuthoritativeNativeReviewEnvelopes(repository);
   const events = executionEvents(envelopes);
-  const delivered = await readMarkers(paths.delivered, events, binding, generationId, now);
-  return events.filter(({ event }) => !delivered.has(event.eventId)).slice(0, limit);
+  const markers = await readMarkers(paths.delivered, events);
+  const intents = await readExplicitDeliveryIntents(paths.intents, events, binding, generationId);
+  return events.flatMap((delivery) => {
+    const marker = markers.get(delivery.event.eventId), intent = intents.get(delivery.event.eventId);
+    if (intent?.state === "completed" || intent?.state === "superseded" && intent.retryAfter > now) return [];
+    if (marker?.serviceId === binding.serviceId && marker.destinationDigest === binding.destinationDigest) {
+      if (marker.state === "superseded" && marker.retryAfter > now) return [];
+      if (marker.state === "recorded" && (marker.generationId === generationId || intent === undefined)) return [];
+    }
+    return [{ ...delivery, ...(intent === undefined ? {} : { intent }) }];
+  }).slice(0, limit);
 }
 
 export async function acknowledgeAuthoritativeNativeDelivery(
@@ -72,6 +85,10 @@ export async function acknowledgeAuthoritativeNativeDelivery(
     .find(({ event }) => event.eventId === delivery.event.eventId);
   if (stored === undefined || stored.eventDigest !== delivery.eventDigest) {
     throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery event does not match stored review");
+  }
+  if (delivery.intent !== undefined && (delivery.intent.generationId !== acknowledgement.generationId
+    || delivery.intent.serviceId !== binding.serviceId || delivery.intent.destinationDigest !== binding.destinationDigest)) {
+    throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery acknowledgement conflicts with explicit intent");
   }
   const marker = markerSchema.parse({ schemaVersion: 3, state: "recorded", eventId: delivery.event.eventId,
     eventDigest: delivery.eventDigest, serviceId: acknowledgement.serviceId,
@@ -90,6 +107,7 @@ export async function acknowledgeAuthoritativeNativeDelivery(
     if (JSON.stringify(existing) !== JSON.stringify(marker)) await replaceReviewRecord({ path,
       serialized: `${JSON.stringify(marker)}\n`, stagingRoot: paths.staging, faults });
   }
+  if (delivery.intent !== undefined) await completeDeliveryIntent({ intents: paths.intents, staging: paths.intentStaging }, delivery.intent, acknowledgement.executionId);
   return marker;
 }
 
@@ -98,6 +116,10 @@ export async function supersedeAuthoritativeNativeDelivery(repository: string,
   rejectionStatus: 404 | 409, suppressionMilliseconds: number, faults: CiDeliveryPublicationFaults = {}): Promise<void> {
   const paths = await initializeDeliveryStore(repository);
   const rejectedAt = Date.now();
+  if (delivery.intent !== undefined) {
+    await supersedeDeliveryIntent({ intents: paths.intents, staging: paths.intentStaging }, delivery.intent, rejectionStatus, rejectedAt, rejectedAt + suppressionMilliseconds);
+    return;
+  }
   const marker = markerSchema.parse({ schemaVersion: 3, state: "superseded", eventId: delivery.event.eventId,
     eventDigest: delivery.eventDigest, serviceId: binding.serviceId, destinationDigest: binding.destinationDigest,
     rejectionStatus, rejectedAt, retryAfter: rejectedAt + suppressionMilliseconds });
@@ -116,8 +138,10 @@ export async function supersedeAuthoritativeNativeDelivery(repository: string,
 async function initializeDeliveryStore(repository: string): Promise<DeliveryPaths> {
   await assertAuthoritativeNativeReviewStore(repository);
   const root = join(repository, "dim-git-ci-deliveries");
-  const paths = { delivered: join(root, "delivered"), staging: join(root, "delivery-staging") };
+  const intent = await initializeDeliveryIntentStore(repository);
+  const paths = { delivered: join(root, "delivered"), intents: intent.intents, intentStaging: intent.staging, staging: join(root, "delivery-staging") };
   await ownedReviewDirectory(paths.delivered);
+  await ownedReviewDirectory(paths.intents);
   await ownedReviewDirectory(paths.staging);
   await recoverPublishedReviewStaging({ stagingRoot: paths.staging, proposalRoot: paths.delivered });
   return paths;
@@ -125,13 +149,10 @@ async function initializeDeliveryStore(repository: string): Promise<DeliveryPath
 
 async function readMarkers(
   directory: string,
-  events: readonly AuthoritativeNativePendingDelivery[],
-  binding: AuthoritativeNativeDeliveryBinding,
-  generationId: string,
-  now: number
-): Promise<ReadonlySet<string>> {
+  events: readonly AuthoritativeNativePendingDelivery[]
+): Promise<ReadonlyMap<string, z.infer<typeof markerSchema>>> {
   const expected = new Map(events.map((delivery) => [delivery.event.eventId, delivery]));
-  const delivered = new Set<string>();
+  const markers = new Map<string, z.infer<typeof markerSchema>>();
   const entries = await readdir(directory, { withFileTypes: true });
   if (entries.length > maximumEvents) {
     throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker capacity is exceeded");
@@ -147,13 +168,11 @@ async function readMarkers(
     if (event === undefined || marker.eventId !== eventId || marker.eventDigest !== event.eventDigest) {
       throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker does not match its event");
     }
-    if (marker.serviceId === binding.serviceId && marker.destinationDigest === binding.destinationDigest
-      && (marker.state === "superseded" ? marker.retryAfter > now : marker.generationId === generationId)) {
-      delivered.add(eventId);
-    }
+    markers.set(eventId, marker);
   }
-  return delivered;
+  return markers;
 }
+
 
 function executionEvents(
   envelopes: readonly AuthoritativeNativeReviewEnvelope[]
@@ -181,7 +200,7 @@ function isCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
 }
 
-type DeliveryPaths = { readonly delivered: string; readonly staging: string };
+type DeliveryPaths = { readonly delivered: string; readonly intents: string; readonly staging: string; readonly intentStaging: string };
 export class AuthoritativeNativeDeliveryStoreError extends Error {
   readonly name = "AuthoritativeNativeDeliveryStoreError";
 }

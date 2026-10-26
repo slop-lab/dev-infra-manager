@@ -18,6 +18,7 @@ export type ReviewPreparation = {
   readonly name: string;
   prepare(input: ReviewPreparationInput): Promise<{ readonly inputs: RepositorySnapshots; readonly attachment?: ReviewAttachment }>;
   assertCurrent?(input: { readonly runtime: RepositoryRuntime; readonly review: AuthoritativeNativeReviewIdentity; readonly attachment?: ReviewAttachment }): Promise<void>;
+  accepted?(input: { readonly runtime: RepositoryRuntime; readonly envelope: AuthoritativeNativeReviewEnvelope; readonly ownerRequestId: string }): Promise<void>;
 };
 export type CodeReviewRuntime = RepositoryRuntime & { readonly reviewPreparations?: readonly ReviewPreparation[]; readonly reviewChangeMatchers?: readonly ReviewChangeMatcher[] };
 export function reviewPreparationExtension(preparation: ReviewPreparation): ControlPlaneExtension {
@@ -32,9 +33,12 @@ export function reviewPreparations(extensions: readonly ControlPlaneExtension[])
 export type CodeReviewService = {
   readonly name: "code-review";
   /** Trusted caller already holds the repository mutation queue. */
-  createInTransaction(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined }): Promise<AuthoritativeNativeReviewEnvelope>;
-  create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined }): Promise<AuthoritativeNativeReviewEnvelope>;
+  createInTransaction(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined; readonly ownerRequestId?: string }): Promise<AuthoritativeNativeReviewEnvelope>;
+  create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined; readonly ownerRequestId?: string }): Promise<AuthoritativeNativeReviewEnvelope>;
 };
+export async function acceptReviewPreparations(runtime: CodeReviewRuntime, envelope: AuthoritativeNativeReviewEnvelope, ownerRequestId: string): Promise<void> {
+  for (const preparation of runtime.reviewPreparations ?? []) await preparation.accepted?.({ runtime, envelope, ownerRequestId });
+}
 export * from "./authoritative-native-review-schema.js";
 export * from "./authoritative-native-review-store.js";
 export * from "./authoritative-native-decision-store.js";

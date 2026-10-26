@@ -13,6 +13,10 @@ import { createAuthoritativeNativeEventDispatcher } from "./authoritative-native
 import { assertGitCiPromotable, type GitCiQualityInput } from "./quality.js";
 import type { GitCiRuntime } from "./runtime.js";
 import { handleReviewCiStatus } from "./review-status-http.js";
+import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
+import { recordExplicitAuthoritativeNativeDeliveryIntent } from "./authoritative-native-delivery-store.js";
+import { gitCiEnvelope } from "./plan-store.js";
+import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 export type GitCiOptions = {
   readonly httpClient?: NativeGitAdmissionHttpClient;
@@ -22,8 +26,17 @@ export type GitCiOptions = {
 export function prepareGitCi(config: import("./config.js").GitCiConfig, options: GitCiOptions = {}): PreparedControlPlanePlugin {
     let compiler: WorkflowCompiler | undefined;
     let runtime: GitCiRuntime | undefined;
+    const binding = authoritativeNativeDeliveryBinding("ci", config.webhook.endpoint);
     const preparation = gitCiPreparation(() => {
       if (!compiler) throw new Error("Git CI repository attachment is not ready"); return compiler;
+    }, async ({ runtime: base, envelope, ownerRequestId }) => {
+      if (!runtime) throw new Error("Git CI repository attachment is unavailable");
+      const requestRuntime = { ...base, authoritativeTargetProofs: new Map() };
+      const target = await resolveAuthoritativeNativeRepositoryTarget(requestRuntime, { projectId: envelope.review.projectId,
+        repositoryId: envelope.review.repositoryId, protectedRef: envelope.review.protectedRef });
+      const planned = await gitCiEnvelope(target.repository, envelope);
+      if (planned !== undefined) await recordExplicitAuthoritativeNativeDeliveryIntent(target.repository, planned,
+        runtime.expectedGenerationId, binding, ownerRequestId);
     });
     const feature = repositoryExtension({ name: "git-ci", policyName: "git-ci",
       credentials: [config.grantIssuer, config.candidateReader, config.resultReporter, config.webhook],

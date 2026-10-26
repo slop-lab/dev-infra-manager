@@ -10,7 +10,8 @@ import { captureExecutionInputs, assertExecutionInputsCurrent } from "./executio
 import type { AuthoritativeNativePlanning } from "./plan-schema.js";
 import type { GitCiRuntime } from "./runtime.js";
 
-export function gitCiPreparation(compiler: () => WorkflowCompiler): ReviewPreparation {
+export function gitCiPreparation(compiler: () => WorkflowCompiler,
+  accepted?: NonNullable<ReviewPreparation["accepted"]>): ReviewPreparation {
   return { name: "git-ci",
     async prepare(input: ReviewPreparationInput) {
       if (!Object.hasOwn(input.target.imported.policy.extensions, "git-ci")) return { inputs: {
@@ -45,6 +46,7 @@ export function gitCiPreparation(compiler: () => WorkflowCompiler): ReviewPrepar
       await assertExecutionInputsCurrent(runtime, review);
       const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: review.projectId, repositoryId: review.repositoryId, protectedRef: review.protectedRef });
       if (!isDeepStrictEqual(target.currentHead.commit, review.expectedProtectedHead)) throw new Error("review protected head changed");
-    }
+    },
+    ...(accepted === undefined ? {} : { accepted }),
   };
 }

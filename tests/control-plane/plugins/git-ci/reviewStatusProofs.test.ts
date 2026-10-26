@@ -3,9 +3,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
 import * as rootProofGit from "../../../../packages/control-plane/plugins/git-repositories/src/native-root-import-proof-git.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
-import { cleanupFinalizeFixtures, generationId, humanReviewerAuthorization } from "../git-repositories/nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures, generationId, humanReviewerAuthorization, rootRepository } from "../git-repositories/nativeRootImportFinalizeFixture.js";
 import { idleNativeConfig } from "../git-repositories/bundleConfigFixture.js";
 import { result, slot } from "../../../contracts/ci/executionFixture.js";
+import { assertCurrentExecution, currentExecutionEvidence } from "../../../../packages/control-plane/plugins/git-ci/src/execution-evidence.js";
+import { dimWorkflowCompiler } from "../../../../packages/control-plane/plugins/ci-workflows/src/index.js";
 
 afterEach(async () => { vi.restoreAllMocks(); await cleanupFinalizeFixtures(); });
 
@@ -19,14 +21,17 @@ it("shares one full proof across required CI jobs but proves storage again on th
       "x-dim-generation-id": generationId, "content-type": "application/json" }, body: JSON.stringify(body)
   });
   const config = idleNativeConfig();
+  let firstGrant: ReturnType<typeof executionGrantSchema.parse> | undefined;
   for (const event of envelope.events) {
     const response = await post("/v1/execution-grants", config.ci.grantIssuer, { executionId: randomUUID(), generationId, event,
       workerId: "worker-a", slotId: "primary", profile: slot.profile });
     expect(response.status, await response.clone().text()).toBe(201);
     const grant = executionGrantSchema.parse(await response.json());
+    firstGrant ??= grant;
     const { logs: _logs, ...output } = result(grant);
     const evidence = await post(`/v1/executions/project-a/root/${grant.executionId}/evidence`, config.ci.resultReporter, output);
     expect(evidence.status, await evidence.clone().text()).toBe(201);
+    expect((await post(`/v1/executions/project-a/root/${grant.executionId}/evidence`, config.ci.resultReporter, output)).status).toBe(201);
   }
   const read = () => fetch(`${f.service.origin}/v1/projects/project-a/repositories/root/reviews/${envelope.review.reviewId}/ci`, {
     headers: { authorization: humanReviewerAuthorization, "x-dim-generation-id": generationId }
@@ -42,4 +47,10 @@ it("shares one full proof across required CI jobs but proves storage again on th
   expect(proofs).toHaveBeenCalledTimes(1);
   expect((await read()).status).toBe(200);
   expect(proofs).toHaveBeenCalledTimes(2);
+  await expect(currentExecutionEvidence({ ...f.service.context.runtime,
+    expectedGenerationId: "b".repeat(64), workflowCompiler: dimWorkflowCompiler }, rootRepository(f.root), envelope.events[0]!))
+    .rejects.toMatchObject({ code: "evidence-missing" });
+  if (!firstGrant) throw new Error("execution grant is missing");
+  await expect(assertCurrentExecution({ ...f.service.context.runtime,
+    expectedGenerationId: "b".repeat(64), workflowCompiler: dimWorkflowCompiler }, firstGrant)).rejects.toThrow(/generation is stale/);
 }, 30_000);

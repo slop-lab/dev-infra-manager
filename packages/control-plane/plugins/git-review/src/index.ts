@@ -4,7 +4,7 @@ import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "@slop-lab/d
 import { repositoryExtension, nativeBasicAuthorized, resolveAuthoritativeNativeRepositoryTarget, exactActivationIsBound, RepositoryAccessError, readNativeProjectRegistrations, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { parseCodeReviewConfig, type CodeReviewConfig } from "./config.js";
 import { reviewChangeMatchers } from "./change-matchers.js";
-import { reviewPreparations, type CodeReviewRuntime } from "./plugin-api.js";
+import { acceptReviewPreparations, reviewPreparations, type CodeReviewRuntime } from "./plugin-api.js";
 import { createAuthoritativeNativeReview, type AuthoritativeNativeReviewHooks } from "./authoritative-native-review.js";
 import { assertConfiguredHumanReviewers, policyReviewerIds } from "./native-human-reviewer-policy.js";
 import { createNativeHumanReviewerService, type NativeHumanReviewerHooks } from "./native-human-reviewer-http.js";
@@ -20,11 +20,17 @@ export * from "./policy.js";
 export const controlPlanePlugin: ControlPlanePlugin = { apiVersion: 1, name: "code-review", configure(raw) { return prepareCodeReview(parseCodeReviewConfig(raw)); } };
 export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly review?: AuthoritativeNativeReviewHooks; readonly humanReviewer?: NativeHumanReviewerHooks } = {}): PreparedControlPlanePlugin {
     let attached: RepositoryExtensionContext | undefined;
-    const createInTransaction = (context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined }) => createAuthoritativeNativeReview({ ...context.runtime, authoritativeTargetProofs: new Map(), reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) }, input, hooks.review);
+    const createInTransaction = async (context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined; readonly ownerRequestId?: string }) => {
+      const runtime: CodeReviewRuntime = { ...context.runtime, authoritativeTargetProofs: new Map(), reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) };
+      const { ownerRequestId, ...selector } = input;
+      const envelope = await createAuthoritativeNativeReview(runtime, selector, hooks.review);
+      await acceptReviewPreparations(runtime, envelope, ownerRequestId ?? `review:${envelope.review.reviewId}`);
+      return envelope;
+    };
     const service = {
       name: "code-review" as const,
       createInTransaction,
-      async create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string }) {
+      async create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string; readonly ownerRequestId?: string }) {
         return context.serialize(() => createInTransaction(context, input));
       }
     };
@@ -80,7 +86,10 @@ export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly re
               handle: http.handle,
               validatePolicy(policy) { assertConfiguredHumanReviewers(config, policy, runtime.reviewChangeMatchers); },
               async activate() { await reconcile(); },
-              async onProposals(projectId, repositoryId, refs) { try { await reconcileNativeProposalRefs(runtime, projectId, repositoryId, refs, hooks.review); } catch (error) { retry.wake(); throw error; } },
+              async onProposals(projectId, repositoryId, refs) { try {
+                const envelopes = await reconcileNativeProposalRefs(runtime, projectId, repositoryId, refs, hooks.review);
+                for (const envelope of envelopes) await acceptReviewPreparations(runtime, envelope, `proposal:${envelope.review.reviewId}`);
+              } catch (error) { retry.wake(); throw error; } },
               onPolicyChanged() { retry.wake(); },
               healthy: () => healthy,
               async close() { attached = undefined; await retry.close(); }
