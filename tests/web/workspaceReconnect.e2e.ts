@@ -8,13 +8,25 @@ const fixture=await createNonGitWorkbench(),browser=await chromium.launch({execu
 let reconnects=0;
 let releaseCreate:()=>void=()=>{};
 try{
+  let catalogReads=0;
   await page.route('**/v1/extensions',async(route)=>{
     const response=await route.fetch(),body:unknown=await response.json();assert(Array.isArray(body));
-    await route.fulfill({json:body.map((feature:unknown)=>feature!==null&&typeof feature==='object'&&'id'in feature&&feature.id==='external-urls'?{...feature,status:'unavailable'}:feature)});
-  },{times:1});
+    catalogReads++;
+    await route.fulfill({json:body.map((feature:unknown)=>feature!==null&&typeof feature==='object'&&(catalogReads===1||'id'in feature&&feature.id==='external-urls')?{...feature,status:'unavailable'}:feature)});
+  },{times:2});
   page.on('request',request=>{if(request.url().endsWith('/extensions/external-urls/reconnect'))reconnects++;});
   await page.goto(`${fixture.origin}/#/workspaces/local/${WORKSPACE_IDS.running}/tools`);
+  await page.getByLabel('Username',{exact:true}).fill(fixture.readonlyUsername);await page.getByLabel('Password',{exact:true}).fill(fixture.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.getByRole('link',{name:'Execution',exact:true}).click();
+  await page.getByText('This feature connection is unavailable. Ask a browser operator to reconnect it; workspaces and other connected features remain available.',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Reconnect feature',exact:true}).count(),0);
+  await page.getByRole('link',{name:'Settings & access',exact:true}).click();
+  await page.getByText('A browser operator must reconnect this fixed private connection.',{exact:true}).first().waitFor();
+  for(const width of [375,768,1280]){await page.setViewportSize({width,height:812});assert.equal(await page.getByText('A browser operator must reconnect this fixed private connection.',{exact:true}).first().isVisible(),true);assert.equal(await page.getByRole('button',{name:/^Reconnect /}).count(),0);}
+  assert.equal(reconnects,0);
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
   await page.getByLabel('Username',{exact:true}).fill(fixture.username);await page.getByLabel('Password',{exact:true}).fill(fixture.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.goto(`${fixture.origin}/#/workspaces/local/${WORKSPACE_IDS.running}/tools`);
   const row=page.locator('.workspace-row:visible');
   await row.getByLabel('New server password',{exact:true}).fill('synthetic-only-draft');
   await row.getByRole('link',{name:'Routes',exact:true}).click();await row.getByText('This host feature is unavailable.',{exact:false}).waitFor();

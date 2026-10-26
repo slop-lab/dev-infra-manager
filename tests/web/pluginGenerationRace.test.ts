@@ -50,13 +50,24 @@ export const webPlugin={id:'race',title:'Race',description:'Generation race fixt
     const readerHeaders = { origin, "content-type": "application/json", cookie: readerLogin.headers.get("set-cookie")?.split(";")[0] ?? "", "x-dim-csrf": readerSession.csrfToken };
     const catalogResponse = await fetch(base + "/v1/extensions", { headers: { cookie: operatorHeaders.cookie } });
     const [tabACatalog] = await catalogResponse.json() as FeatureCatalogEntry[];
+    if (tabACatalog === undefined) throw new Error("expected race feature catalog");
     expect(tabACatalog).toMatchObject({ id: "race", status: "ready", generation: expect.any(Number) });
     const tabAMutation = fetch(base + "/v1/extensions/race/operations/change", { method: "POST", headers: { ...operatorHeaders, "x-dim-plugin-generation": String(tabACatalog?.generation) }, body: JSON.stringify({ hold: true }) });
     await waitForFile(startedPath);
 
-    // When: tab B changes the private selection to B and reconnects the shared server runtime.
+    // When: a reader attempts reconnect while tab A's mutation is pending.
+    const readerReconnect = await fetch(base + "/v1/extensions/race/reconnect", { method: "POST", headers: readerHeaders, body: "{}" });
+    expect(readerReconnect.status).toBe(403);
+    expect(await readFile(reconnectStartedPath, "utf8").catch(() => "")).toBe("");
+    const unchangedCatalogResponse = await fetch(base + "/v1/extensions", { headers: { cookie: operatorHeaders.cookie } });
+    const [unchangedCatalog] = await unchangedCatalogResponse.json() as FeatureCatalogEntry[];
+    expect(unchangedCatalog?.generation).toBe(tabACatalog.generation);
+    const uninterruptedResponse = await fetch(base + "/v1/extensions/race/operations/change", { method: "POST", headers: { ...operatorHeaders, "x-dim-plugin-generation": String(tabACatalog?.generation) }, body: JSON.stringify({ hold: false }) });
+    expect(await uninterruptedResponse.json()).toEqual({ receipt: "A" });
+
+    // And: tab B uses the same operator session to reconnect the shared server runtime.
     await writeFile(authorityPath, "B");
-    const reconnectPending = fetch(base + "/v1/extensions/race/reconnect", { method: "POST", headers: readerHeaders, body: "{}" });
+    const reconnectPending = fetch(base + "/v1/extensions/race/reconnect", { method: "POST", headers: operatorHeaders, body: "{}" });
     await waitForFile(reconnectStartedPath);
     const reconnectingResponse = await fetch(base + "/v1/extensions/race/operations/change", { method: "POST", headers: { ...operatorHeaders, "x-dim-plugin-generation": String(tabACatalog?.generation) }, body: JSON.stringify({ hold: false }) });
     expect(reconnectingResponse.status).toBe(409);
@@ -73,18 +84,18 @@ export const webPlugin={id:'race',title:'Race',description:'Generation race fixt
     expect(await lateResponse.json()).toEqual({ error: "The feature connection changed while this operation was pending. Its outcome is unknown; refresh current state before retrying." });
     const staleResponse = await fetch(base + "/v1/extensions/race/operations/change", { method: "POST", headers: { ...operatorHeaders, "x-dim-plugin-generation": String(tabACatalog?.generation) }, body: JSON.stringify({ hold: false }) });
     expect(staleResponse.status).toBe(409);
-    expect(JSON.parse(await readFile(callsPath, "utf8"))).toEqual([{ authority: "A", input: { hold: true } }]);
+    expect(JSON.parse(await readFile(callsPath, "utf8"))).toEqual([{ authority: "A", input: { hold: true } }, { authority: "A", input: { hold: false } }]);
 
     const tabAReconnect = await fetch(base + "/v1/extensions/race/reconnect", { method: "POST", headers: operatorHeaders, body: "{}" });
     const tabAFreshCatalog = await tabAReconnect.json() as FeatureCatalogEntry;
     const freshResponse = await fetch(base + "/v1/extensions/race/operations/change", { method: "POST", headers: { ...operatorHeaders, "x-dim-plugin-generation": String(tabAFreshCatalog.generation) }, body: JSON.stringify({ hold: false }) });
     expect(await freshResponse.json()).toEqual({ receipt: "B" });
-    expect(JSON.parse(await readFile(callsPath, "utf8"))).toEqual([{ authority: "A", input: { hold: true } }, { authority: "B", input: { hold: false } }]);
+    expect(JSON.parse(await readFile(callsPath, "utf8"))).toEqual([{ authority: "A", input: { hold: true } }, { authority: "A", input: { hold: false } }, { authority: "B", input: { hold: false } }]);
 
     await writeFile(authorityPath, "C"); await rm(reconnectStartedPath, { force: true }); await rm(reconnectReleasePath, { force: true });
-    const revokedReconnect = fetch(base + "/v1/extensions/race/reconnect", { method: "POST", headers: readerHeaders, body: "{}" });
+    const revokedReconnect = fetch(base + "/v1/extensions/race/reconnect", { method: "POST", headers: operatorHeaders, body: "{}" });
     await waitForFile(reconnectStartedPath);
-    const logout = await fetch(base + "/v1/session", { method: "DELETE", headers: readerHeaders });
+    const logout = await fetch(base + "/v1/session", { method: "DELETE", headers: operatorHeaders });
     expect(logout.status).toBe(204);
     await writeFile(reconnectReleasePath, "release");
     expect((await revokedReconnect).status).toBe(401);

@@ -45,7 +45,7 @@ export async function showFeaturePlugins(active) {
       const heading = document.createElement('h1'); heading.textContent = feature.title; heading.tabIndex = -1;
       const description = document.createElement('p'); description.className = 'operations-intro'; description.textContent = feature.description;
       const connection = document.createElement('div'); connection.className = 'feature-connection';
-      const reconnect = document.createElement('button'); reconnect.type = 'button'; reconnect.className = 'button button-secondary'; reconnect.textContent = 'Reconnect feature'; reconnect.hidden = !feature.configured;
+      const reconnect = document.createElement('button'); reconnect.type = 'button'; reconnect.className = 'button button-secondary'; reconnect.textContent = 'Reconnect feature'; reconnect.hidden = !feature.configured || !active.roles.includes('operator');
       const message = document.createElement('p'); message.setAttribute('role', 'status'); connection.append(reconnect, message);
       section.append(heading, description, connection); panelList.append(section); tabList.append(button);
       const view = { button, section, feature, mounted: false, mounting: null, navigate: null, message, reconnect }; views.set(feature.id, view);
@@ -104,7 +104,9 @@ async function mountFeature(view, active, selected) {
     content.className = 'feature-content panel feature-empty'; content.append(heading, copy); return false;
   }
   if (view.feature.status === 'unavailable') {
-    const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = 'This feature connection is unavailable. Use Reconnect feature to retry; workspaces and other connected features remain available.';
+    const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = active.roles.includes('operator')
+      ? 'This feature connection is unavailable. Use Reconnect feature to retry; workspaces and other connected features remain available.'
+      : 'This feature connection is unavailable. Ask a browser operator to reconnect it; workspaces and other connected features remain available.';
     content.append(message); return false;
   }
   if (!view.feature.operations.length) { content.textContent = 'This connection does not provide any operations for your account. Ask an operator to check its assigned permissions.'; return false; }
@@ -153,7 +155,7 @@ function reconnectFeature(id) {
 async function runReconnect(id) {
   const view = views.get(id), active = session, selected = generation, sessionEpoch = captureSessionEpoch();
   const feature = catalog.find((entry)=>entry.id===id);
-  if (!feature || !active || !isSessionEpochCurrent(sessionEpoch) || view?.reconnect.disabled) return false;
+  if (!feature || !active || !active.roles.includes('operator') || !isSessionEpochCurrent(sessionEpoch) || view?.reconnect.disabled) return false;
   if (view) { view.reconnect.disabled = true; view.message.textContent = 'Reconnecting…'; view.message.setAttribute('role', 'status'); }
   suspendFeatureOperations(feature);
   let resumed = false;

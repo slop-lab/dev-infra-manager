@@ -113,6 +113,7 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
   const reconnect = /^\/v1\/extensions\/([a-z][a-z0-9-]{0,63})\/reconnect$/.exec(url.pathname);
   if (request.method === "POST" && reconnect) {
     requireMutation(context.config, request, session);
+    if (!accountRoles(context.config, session).includes("operator")) throw new HttpResponseError(403, "operator authority required");
     const plugin = context.plugins.find(({ definition }) => definition.id === reconnect[1]);
     if (!plugin) throw new HttpResponseError(404, "feature not found");
     z.object({}).strict().parse(await readJson(request));

@@ -40,10 +40,10 @@ export function showSettings(active, catalog, task) {
     row.append(title, state, ui.element('p', feature.description), ui.element('p', `${feature.operations.length} operation${feature.operations.length === 1 ? '' : 's'} available to this account.`, 'field-hint'));
     const link = ui.element('a', (feature.surfaces ?? ['navigation']).includes('workspace') ? 'Open a workspace to use this capability' : `Open ${feature.title}`);
     link.href = hrefLocation((feature.surfaces ?? ['navigation']).includes('workspace') ? ['workspaces'] : ['features', feature.id]); row.append(link); features.append(row);
-    if (feature.configured) {
+    if (feature.configured && active.roles.includes('operator')) {
       const retry = ui.button(`Reconnect ${feature.title}`), feedback = ui.element('p'); feedback.setAttribute('role','status');
       retry.addEventListener('click', () => { if (retry.disabled) return; retry.disabled = true; feedback.textContent = 'Reattesting this fixed connection…'; void reconnect(feature.id).then((ready) => { if (!row.isConnected) return; feedback.textContent = ready ? 'Connection reattested. Open the capability or refresh its state; existing drafts were kept.' : 'Connection is still unavailable. Ask the operator to inspect its service and private scope, then retry.'; state.textContent = ready ? 'Feature ready' : 'Connection unavailable'; state.className = `badge ${ready ? 'badge-approved' : 'badge-pending'}`; }).finally(() => { retry.disabled = false; }); }); row.append(retry,feedback);
-    }
+    } else if (feature.configured && feature.status === 'unavailable') row.append(ui.element('p', 'A browser operator must reconnect this fixed private connection.', 'field-hint'));
   }
   if (!catalog.length) features.append(ui.element('p', 'No optional Web capabilities were discovered. If services were expected, reload this console or ask its owner to check the selected Web plugins.'));
   const hosts = ui.element('section', '', 'settings-section');
