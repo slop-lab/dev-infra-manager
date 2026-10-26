@@ -14,6 +14,7 @@ import { effectiveRouterConfig } from "./account-catalog.js";
 import { ensureManagedBackend, closeManagedBackends } from "./managed-backend.js";
 import { resolveRouteModels } from "./model-catalog.js";
 import { RequestError, body, send } from "./http.js";
+import { RouterOperationRejectedError } from "./operation-errors.js";
 
 export async function createRouter(baseConfig: RouterConfig) {
   const config = baseConfig;
@@ -27,11 +28,11 @@ export async function createRouter(baseConfig: RouterConfig) {
     const operation = handle(request, response).catch((error: unknown) => {
       if (response.headersSent) response.destroy();
       else {
-        const known = error instanceof RequestError || error instanceof AdmissionError;
+        const known = error instanceof RequestError || error instanceof AdmissionError || error instanceof RouterOperationRejectedError;
         const requestId = response.getHeader("x-dim-request-id");
         const indeterminate = typeof requestId === "string" && ledger.request(requestId).execution === "outcome_unknown";
-        send(response, error instanceof RequestError ? error.status : error instanceof AdmissionError ? error.category === "authorization_failed" ? 403 : error.category === "cancellation_requested" ? 409 : error.category === "payload_too_large" ? 413 : error.category === "recording_failed" || error.category === "admissions_paused" ? 503 : 429 : 503,
-          { error: { type: "dim_llm_router", category: indeterminate ? "indeterminate_upstream_outcome" : known ? error.category : error instanceof ArchiveError ? "recording_failed" : "service_unavailable", message: known ? error.message : "router operation unavailable",
+        send(response, error instanceof RequestError ? error.status : error instanceof RouterOperationRejectedError ? 409 : error instanceof AdmissionError ? error.category === "authorization_failed" ? 403 : error.category === "cancellation_requested" ? 409 : error.category === "payload_too_large" ? 413 : error.category === "recording_failed" || error.category === "admissions_paused" ? 503 : 429 : 503,
+          { error: { type: "dim_llm_router", category: indeterminate ? "indeterminate_upstream_outcome" : error instanceof RouterOperationRejectedError ? "operation_failed" : error instanceof RequestError || error instanceof AdmissionError ? error.category : error instanceof ArchiveError ? "recording_failed" : "service_unavailable", message: known ? error.message : "router operation unavailable",
             requestId: response.getHeader("x-dim-request-id") ?? null, retryable: !indeterminate && (error instanceof AdmissionError ? ["local_capacity_exhausted", "local_quota_exhausted"].includes(error.category) : !known), scope: "service/project policy", retryAt: null } });
       }
     });
