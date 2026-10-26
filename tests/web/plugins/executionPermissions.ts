@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import type {Page} from 'playwright-core';
+export async function assertWorkerOnlyExecutionAccess(page: Page): Promise<void> {
+  await page.getByLabel('Controller',{exact:true}).selectOption('operator-only');
+  await page.getByRole('heading',{name:'Job query access required',exact:true}).waitFor();
+  await page.getByRole('link',{name:'Workers',exact:true}).click();
+  await page.locator('.execution-worker-table').waitFor();
+  await page.getByText('Job details require read access.',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'View worker job',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Retry execution',exact:true}).count(),0);
+}

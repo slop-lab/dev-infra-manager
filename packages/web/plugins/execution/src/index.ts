@@ -48,7 +48,7 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
 }
 export const webPlugin: WebPlugin = {
   id: "execution", title: "Execution", description: "CI jobs, diagnostic logs and worker capacity", operations: [catalogOperation, ...operations.map(wrapped)],
-  assets: { "panel.js": new URL("./assets/panel.js", import.meta.url), "navigation.js": new URL("./assets/navigation.js", import.meta.url) }, browserEntry: "panel.js",
+  assets: { "panel.js": new URL("./assets/panel.js", import.meta.url), "navigation.js": new URL("./assets/navigation.js", import.meta.url), "guidance.js": new URL("./assets/guidance.js", import.meta.url), "workbench.js": new URL("./assets/workbench.js", import.meta.url), "capacity.js": new URL("./assets/capacity.js", import.meta.url), "cancellation.js": new URL("./assets/cancellation.js", import.meta.url), "execution.css": new URL("./assets/execution.css", import.meta.url) }, browserEntry: "panel.js",
   autoConnect: automatic,
   async create(input) {
     const config = configSchema.parse(input);

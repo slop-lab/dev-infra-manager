@@ -31,9 +31,10 @@ function parseTarget(value) {
 /** @param {Context} context @param {{ready:Promise<void>,open:(target:Target,isCurrent:()=>boolean)=>Promise<boolean>}} destination */
 export function registerExecutionNavigation(context, destination) {
   return context.onNavigate(async (raw, isCurrent) => {
+    const address = window.location.href;
     const target = parseTarget(raw); if (!target) return invalid();
     try { await destination.ready; } catch { return { status: "unavailable", code: "load-failed", message: "Execution targets could not be loaded." }; }
-    if (!isCurrent()) return unavailable();
+    if (!isCurrent() || address !== window.location.href) return unavailable();
     const opened = await destination.open(target, isCurrent);
     if (!opened) return unavailable();
     return { status: "opened", message: target.kind === "job" ? `Opened execution job ${target.jobId}.` : `Opened jobs for ${target.projectId}/${target.repositoryId}.` };
