@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright-core";
-import {assertWorkerOnlyExecutionAccess} from './executionPermissions.js';
+import {assertBrowserRoleExecutionAuthority,assertReadOnlyExecutionAuthority,assertWorkerOnlyExecutionAccess} from './executionPermissions.js';
 import {loadExecutionBrowserAssets} from './executionBrowserAssets.js';
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chromium executable");
@@ -70,8 +70,9 @@ try {
     const subscribers = new Set();
     const module = await import(${JSON.stringify(`data:text/javascript;base64,${Buffer.from(panelSource).toString("base64")}`)});
     const { featureUi } = await import(${JSON.stringify(`data:text/javascript;base64,${Buffer.from(uiSource).toString("base64")}`)});
+    const advertisedOperations = ${JSON.stringify(descriptors)};
     const browserContext = {
-      operations: ${JSON.stringify(descriptors)},
+      operations: advertisedOperations,
       invoke: (name, input) => window.executionInvoke(name, input), isCurrent: () => true, ui: featureUi,
       location: {
         get path() { return path; },
@@ -82,7 +83,8 @@ try {
       navigation: { canCreateWorkspace: false, hasFeature: () => false, openFeature: async () => ({ status: "unavailable", code: "not-installed", message: "Unavailable" }), openWorkspaceCreate: async () => ({ status: "unavailable", code: "not-installed", message: "Unavailable" }) },
       onNavigate: (handler) => { window.executionNavigate = handler; return () => { delete window.executionNavigate; }; }
     };
-    window.remountExecution = (next) => {
+    window.remountExecution = (next, operationNames) => {
+      browserContext.operations = operationNames ? advertisedOperations.filter(({name}) => operationNames.includes(name)) : advertisedOperations;
       window.disposeExecution?.(); path = [...next]; history.replaceState(null, '', '#/features/execution/' + next.map(encodeURIComponent).join('/'));
       window.disposeExecution = module.mount(document.querySelector("main"), browserContext);
     };
@@ -200,7 +202,7 @@ try {
   releaseDetail();
   await page.getByRole("row", { name: /read-only job sample\/root/ }).getByRole("button", { name: "View job", exact: true }).click();
   await page.getByRole("heading", { name: "read-only detail — finished", exact: true }).waitFor();
-  assert.equal(await page.getByRole("button", { name: "Retry execution", exact: true }).count(), 0);
+  await assertReadOnlyExecutionAuthority(page);
   assert.equal(await page.getByRole("button", { name: "Refresh worker capacity", exact: true }).count(), 0);
   await page.getByRole('link', {name:'Workers',exact:true}).click();
   await page.getByRole('heading', {name:'Capacity access required',exact:true}).waitFor();
@@ -208,6 +210,11 @@ try {
   assert.equal(await page.getByRole("heading", { name: "second detail — finished", exact: true }).count(), 0);
   emptyWorkers = false;
   await assertWorkerOnlyExecutionAccess(page);
+  await page.evaluate(`window.remountExecution(["controllers", "first", "jobs", ${JSON.stringify(job.id)}], ["controllers.list", "jobs.list", "jobs.detail"])`);
+  await page.getByRole("heading", { name: "first detail — finished", exact: true }).waitFor();
+  await assertBrowserRoleExecutionAuthority(page);
+  await page.evaluate('window.remountExecution(["controllers", "operator-only", "jobs"])');
+  await page.getByLabel('Controller',{exact:true}).waitFor();
   await page.getByLabel("Controller", { exact: true }).selectOption("offline");
   await page.getByText(/^Execution is unavailable on this controller/).waitFor();
   assert.equal(await page.getByRole("button", { name: "Refresh jobs", exact: true }).count(), 0);

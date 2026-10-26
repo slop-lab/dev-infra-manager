@@ -34,7 +34,13 @@ export function mount(container, context) {
     /** @type {{projectId:string,repositoryId:string}|undefined} */ let repositoryTarget;
     /** @type {Job[]} */ let loadedJobs = [];
     const scoped = () => current() && version === scopeVersion;
-    /** @param {string} name */ const allowed = (name) => operations.some((operation) => operation.name === name) && advertised(name);
+    /** @param {string} name */ const connectionAllows = (name) => operations.some((operation) => operation.name === name);
+    /** @param {string} name */ const allowed = (name) => connectionAllows(name) && advertised(name);
+    /** @param {'jobs.cancel'|'jobs.retry'} operation @param {'Cancel'|'Retry'} label */
+    function authorityGuidance(operation, label) { const browserAllows = advertised(operation), serviceAllows = connectionAllows(operation);
+      const reason = browserAllows ? `This browser account has the operator role, but the selected service connection is not operator-enabled.` : serviceAllows ? `The selected service connection is operator-enabled, but this browser account does not have the operator role.` : `This browser account does not have the operator role, and the selected service connection is not operator-enabled.`, note = ui.element('p', `${label} is unavailable. It requires both the browser operator role and an operator-enabled service connection. ${reason}`, 'field-hint');
+      note.dataset.executionAuthority = operation === 'jobs.cancel' ? 'cancel' : 'retry'; return note;
+    }
     const invoke = (/** @type {string} */ name, /** @type {Record<string,unknown>} */ input) => {
       if (!scoped()) return Promise.reject(new Error("Controller selection changed"));
       return context.invoke(name, controllerId === undefined ? input : { ...input, controllerId });
@@ -139,14 +145,15 @@ export function mount(container, context) {
       } else logs.append(ui.element("p", value.job.phase === "finished" ? "This job finished without a guest result or captured logs. Use its completion and admission guidance to distinguish infrastructure failure, cancellation, timeout or output-limit termination." : "Logs become available after this job completes."));
       detail.append(ui.element("h4", "Artifacts"), ui.element("p", "This execution contract does not expose downloadable artifacts. Artifact ownership remains with the task producer or CI integration that submitted the work.", "field-hint"));
       if (value.job.phase === "queued") detail.append(ui.element("p", `Waiting for an active worker with a matching ${value.job.executionKind} slot. Inspect Worker capacity below; configured idle slots do not prove the worker process is running.`, "field-hint"));
-      if (allowed("jobs.cancel") && value.job.cancelRequestedAt === undefined && ["queued", "assigned", "running", "recovering"].includes(value.job.phase)) { const key = `${controllerId ?? 'direct'}/${value.job.id}`; const cancel = actionButton(detail, "Cancel execution", async (button) => {
-        if (!window.confirm(`Cancel ${value.job.jobName} (${value.job.id})?`)) { ui.feedback(status, "Cancellation dismissed."); return false; }
-        await invoke("jobs.cancel", { id: value.job.id }); cancellations.accepted(key); return accepted(button, "Cancellation accepted.", [["job list and details", refreshJobs]]);
+      const cancellable = value.job.cancelRequestedAt === undefined && ["queued", "assigned", "running", "recovering"].includes(value.job.phase);
+      if (cancellable && !allowed('jobs.cancel')) detail.append(authorityGuidance('jobs.cancel', 'Cancel'));
+      if (cancellable && allowed('jobs.cancel')) { const key = `${controllerId ?? 'direct'}/${value.job.id}`; const cancel = actionButton(detail, "Cancel execution", async (button) => {
+          if (!window.confirm(`Cancel ${value.job.jobName} (${value.job.id})?`)) { ui.feedback(status, "Cancellation dismissed."); return false; } await invoke("jobs.cancel", { id: value.job.id }); cancellations.accepted(key); return accepted(button, "Cancellation accepted.", [["job list and details", refreshJobs]]);
       }, "lock"); cancel.dataset.cancelKey = key; cancel.disabled = cancellations.locked(key); if (cancel.disabled) detail.append(ui.element('p', cancellations.outcome(key) === 'unknown' ? 'Cancellation outcome is unknown. Use Refresh jobs to inspect authoritative state before another action.' : 'Cancellation was accepted or already observed. Use Refresh jobs to inspect current state.', 'field-hint')); }
-      if (allowed("jobs.retry") && value.job.phase === "finished") actionButton(detail, "Retry execution", async (button) => {
-        const key = `${controllerId ?? "direct"}/${value.job.id}`;
-        let requestId = retryRequests.get(key); if (!requestId) { requestId = crypto.randomUUID(); retryRequests.set(key, requestId); }
-        await invoke("jobs.retry", { id: value.job.id, requestId }); return accepted(button, "Retry execution accepted.", [["job list", refreshJobs]]);
+      if (value.job.phase === "finished" && !allowed('jobs.retry')) detail.append(authorityGuidance('jobs.retry', 'Retry'));
+      if (value.job.phase === "finished" && allowed('jobs.retry')) actionButton(detail, "Retry execution", async (button) => {
+          const key = `${controllerId ?? "direct"}/${value.job.id}`; let requestId = retryRequests.get(key); if (!requestId) { requestId = crypto.randomUUID(); retryRequests.set(key, requestId); }
+          await invoke("jobs.retry", { id: value.job.id, requestId }); return accepted(button, "Retry execution accepted.", [["job list", refreshJobs]]);
       }, "reuse");
       if (controllerKey && context.navigation.hasFeature("native-git")) context.ui.navigationAction(detail, {
         label: "Open repository reviews", status, isCurrent: () => scoped() && activeDetail === value.job.id,
@@ -196,7 +203,7 @@ export function mount(container, context) {
     if (controllerSelect) controllerSelect.value = controller?.id ?? '';
     const copy = discovery.querySelector('.execution-provenance-copy'); copy?.replaceChildren(ui.element('p', 'Service provenance', 'eyebrow'), ui.element('p', controller?.controllerKey ? `${controller.title} is discovered through trusted controller ${controller.controllerKey}. Operations remain pinned to its attested service generation.` : 'No alternate execution authority was selected.'));
     if (!controller || controller.status !== "ready") { ++scopeVersion; activePanel = undefined; content.replaceChildren(ui.element("p", controller ? "Execution is unavailable on this controller. Refresh controllers after connecting its execution service." : "The requested execution controller is unavailable or not configured. Select a configured controller explicitly; no other service was selected.")); return; }
-    activePanel = render(controller, controller.operations.filter(({ name }) => advertised(name)));
+    activePanel = render(controller, controller.operations);
   }
 
   async function discover() {
