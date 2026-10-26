@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     if (operation === "workers.list") return print([{ id: "synthetic-worker", observedConnected: true, lastSeenAt: Date.now(), slots: [{ id: "sysbox-1", executionKind: "ordinary-sysbox", state: "busy", available: true, job: queuedJob, leaseExpiresAt: Date.now() + 60_000 }] }]);
     return print(operation === "jobs.retry" ? { ...queuedJob, id: randomUUID(), retryOf: body.id } : { ...finishedJob, cancelRequestedAt: Date.now() });
   }
-  if (domain === "llm-router") return print(llmResponse(operation, body));
+  if (domain === "llm-router") return print({ schemaVersion: 1, outcome: "success", output: llmResponse(operation, body) });
   throw new Error("unsupported fixture domain");
 }
 

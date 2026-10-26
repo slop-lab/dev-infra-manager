@@ -1,6 +1,9 @@
+import { randomBytes } from "node:crypto";
+import { createServer } from "node:http";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { webPluginContext } from "../../../../packages/web/core/src/controllers.js";
 import { expect, it } from "vitest";
 import { webPlugin } from "../../../../packages/web/plugins/llm-router/src/index.js";
@@ -11,7 +14,7 @@ it("discovers each controller's selected router and binds every operation to its
   const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "remote", async run(args, options) {
     calls.push([...args]); inputs.push(options);
     if (args[2] === "describe") return { schemaVersion: 1, selectionId, operations: capabilities };
-    return [];
+    return { schemaVersion: 1, outcome: "success", output: [] };
   } }, { id: "offline", async run() { throw new Error("private operator key/path must not escape"); } }] });
   const catalog = await runtime.invoke("controllers.list", {});
   expect(catalog).toMatchObject({ controllers: [{ id: "remote", controllerKey: "remote", status: "ready" }, { id: "offline", status: "unavailable", operations: [] }] });
@@ -42,8 +45,8 @@ it("keeps provider credentials out of process arguments and preserves the device
   const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "remote", async run(args, options) {
     calls.push({ args, ...(options ? { options } : {}) });
     if (args[2] === "describe") return { schemaVersion: 1, selectionId, operations: available };
-    if (args[3] === "account.create") return { id: "managed", reference: "Test", provider: "openai", status: "configured" };
-    return { accountId: "managed", sessionId: "session", verificationUrl: "https://auth.openai.com/codex/device", status: "pending", expiresAt: 1 };
+    if (args[3] === "account.create") return { schemaVersion: 1, outcome: "success", output: { id: "managed", reference: "Test", provider: "openai", status: "configured" } };
+    return { schemaVersion: 1, outcome: "success", output: { accountId: "managed", sessionId: "session", verificationUrl: "https://auth.openai.com/codex/device", status: "pending", expiresAt: 1 } };
   } }] });
   await runtime.invoke("account.create", { controllerId: "remote", provider: "openai", endpoint: "https://api.example.test", apiKey: secret });
   const write = calls.at(-1)!;
@@ -56,12 +59,26 @@ it("keeps provider credentials out of process arguments and preserves the device
 it("marks malformed controller operation output as unavailable after dispatch", async () => {
   const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "remote", async run(args) {
     if (args[2] === "describe") return { schemaVersion: 1, selectionId, operations: capabilities };
-    return { invalid: "operation output" };
+    return { schemaVersion: 1, outcome: "rejected", status: 409, errorCode: "llm_router_operation_rejected", rawBody: "PRIVATE_PROVIDER_REJECTION" };
   } }] });
 
-  await expect(runtime.invoke("projects", { controllerId: "remote" })).rejects.toMatchObject({
+  const error = await runtime.invoke("projects", { controllerId: "remote" }).catch((cause: unknown) => cause);
+  expect(error).toMatchObject({
     status: 502,
     code: "llm_controller_result_unavailable",
+  });
+  expect(JSON.stringify(error)).not.toContain("PRIVATE_PROVIDER_REJECTION");
+});
+
+it("returns a known retryable rejection from a validated controller envelope", async () => {
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "remote", async run(args) {
+    if (args[2] === "describe") return { schemaVersion: 1, selectionId, operations: capabilities };
+    return { schemaVersion: 1, outcome: "rejected", status: 409, errorCode: "llm_router_operation_rejected" };
+  } }] });
+
+  await expect(runtime.invoke("project.state", { controllerId: "remote", projectId: "example", action: "pause" })).rejects.toMatchObject({
+    status: 409,
+    code: "llm_router_operation_rejected",
   });
 });
 
@@ -77,11 +94,55 @@ if (args.filter((arg) => arg === "--json").length !== 1 || args[0] !== "--host" 
   if (args.includes("describe")) { process.stdout.write(JSON.stringify(${JSON.stringify({ schemaVersion: 1, selectionId, operations: capabilities })})); return; }
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   if (args[args.indexOf("--input") + 1] !== "-" || JSON.stringify(JSON.parse(Buffer.concat(chunks).toString("utf8"))) !== "{}") process.exit(3);
-  process.stdout.write("[]");
+   process.stdout.write(JSON.stringify({schemaVersion:1,outcome:'success',output:[]}));
 })().catch(() => { process.exitCode = 4; });
 `, { mode: 0o700 });
     const runtime = await webPlugin.autoConnect!(webPluginContext([{ id: "transport", selector: "selected-host", executable }]));
     expect(await runtime.invoke("controllers.list", {})).toMatchObject({ controllers: [{ id: "transport", status: "ready" }] });
     expect(await runtime.invoke("projects", { controllerId: "transport" })).toEqual([]);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it("preserves a known rejection but keeps response loss unknown through the actual controller CLI", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-router-controller-result-"));
+  let mode: "rejected" | "lost" = "rejected";
+  const server = createServer((request, response) => {
+    if (request.url?.endsWith("/capabilities")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(capabilities));
+      return;
+    }
+    if (mode === "lost") {
+      response.destroy();
+      return;
+    }
+    response.writeHead(409, { "content-type": "application/json" });
+    response.end('{"error":"PRIVATE_PROVIDER_REJECTION"}');
+  });
+  try {
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing controller result fixture address");
+    const keyFile = join(root, "operator.key");
+    await writeFile(keyFile, randomBytes(32).toString("base64url"), { mode: 0o600 });
+    const connectionFile = join(root, "operator.json");
+    await writeFile(connectionFile, JSON.stringify({ schemaVersion: 1, endpoint: `http://127.0.0.1:${address.port}`, actorId: "operator", keyFile }), { mode: 0o600 });
+    const executable = join(root, "controller");
+    const main = fileURLToPath(new URL("../../../../packages/host/plugins/llm-router/src/operator/main.ts", import.meta.url));
+    const loader = fileURLToPath(new URL("../../../node_modules/tsx/dist/loader.mjs", import.meta.url));
+    await writeFile(executable, `#!${process.execPath}\nimport{spawn}from"node:child_process";const args=process.argv.slice(2);if(args[0]!=="--host"||args[1]!=="selected-host"||args[2]!=="llm-router"||args.at(-1)!=="--json")process.exit(2);const child=spawn(process.execPath,["--import",${JSON.stringify(loader)},"--conditions=dim-source",${JSON.stringify(main)},...args.slice(3,-1)],{stdio:"inherit",env:{...process.env,DIM_LLM_ROUTER_OPERATOR_CONNECTION_FILE:${JSON.stringify(connectionFile)}}});process.exitCode=await new Promise((resolve,reject)=>{child.once("error",reject);child.once("close",resolve)});`, { mode: 0o700 });
+    const runtime = await webPlugin.autoConnect!(webPluginContext([{ id: "transport", selector: "selected-host", executable }]));
+
+    const rejected = await runtime.invoke("project.state", { controllerId: "transport", projectId: "example", action: "pause" }).catch((cause: unknown) => cause);
+    expect(rejected).toMatchObject({ status: 409, code: "llm_router_operation_rejected" });
+    expect(JSON.stringify(rejected)).not.toContain("PRIVATE_PROVIDER_REJECTION");
+    mode = "lost";
+    const unavailable = await runtime.invoke("project.state", { controllerId: "transport", projectId: "example", action: "pause" }).catch((cause: unknown) => cause);
+    expect(unavailable).toMatchObject({ status: 502, code: "host_result_unavailable" });
+    expect(JSON.stringify(unavailable)).not.toContain("PRIVATE_PROVIDER_REJECTION");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
 });
