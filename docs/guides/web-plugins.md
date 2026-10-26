@@ -113,6 +113,11 @@ operation declares read, operator or reviewer access plus input and result
 validation. The console checks session roles and CSRF before invoking an
 operation. A handler still authenticates to its authoritative service, which
 retains its own policy and concurrency checks.
+Server adapters can throw the `HttpResponseError` exported by
+`@slop-lab/dim-web/plugin-api` when they can provide a sanitized HTTP outcome.
+Use a 4xx response only for an established rejection. A dispatched operation
+whose result was lost or could not be validated must use a 5xx response so the
+browser keeps the write locked for owner-state reconciliation.
 
 A plugin can declare `surfaces: ["workspace"]` to contribute directly to workspace
 management. Omitting `surfaces` selects navigation; a plugin can explicitly select

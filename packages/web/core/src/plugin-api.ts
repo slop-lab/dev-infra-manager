@@ -2,6 +2,7 @@
 import type { Operation } from "@slop-lab/dim-contracts-operations";
 export type { Operation, OperationAccess, OperationDescriptor } from "@slop-lab/dim-contracts-operations";
 export { loadPrivateJson } from "./config.js";
+export { HttpResponseError } from "./http-response.js";
 
 /** Trusted controller selections come only from private server configuration. */
 export interface WebPluginController {
