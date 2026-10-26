@@ -1,38 +1,21 @@
-type Workspace = {
-  readonly id: string;
-  readonly name: string;
-  readonly runtime: string;
-  phase: string;
-  runtimeStatus: string;
-  readonly initialized?: boolean;
-  readonly failureCode?: string;
-  resources: { readonly cpuCount: string; readonly memory: string; readonly pidsLimit: string };
-};
-
-type Route = {
-  readonly id: string;
-  readonly ingress: string;
-  readonly url: string;
-  readonly permalink?: string;
-  approval: "not-required" | "pending" | "approved" | "revoked";
-  readonly port: number;
-  readonly containers: readonly string[];
-  readonly protocol: "http" | "https" | "tcp";
-};
-
-type Host = {
-  readonly available: boolean;
-  readonly workspaces: Workspace[];
-  readonly servers: Record<string, "running" | "stopped">;
-  readonly routes: Record<string, Route[]>;
-};
-
-export type WorkbenchState = { readonly hosts: Record<string, Host> };
+import {z} from 'zod';
+const workspaceSchema = z.strictObject({
+  id:z.string().uuid(), name:z.string(), runtime:z.string(), phase:z.string(), runtimeStatus:z.string(),
+  initialized:z.boolean().optional(), failureCode:z.string().optional(),
+  resources:z.strictObject({cpuCount:z.string(),memory:z.string(),pidsLimit:z.string()})
+});
+const routeSchema = z.strictObject({
+  id:z.string().uuid(), ingress:z.string(), url:z.string().url(), permalink:z.string().url().optional(),
+  approval:z.enum(['not-required','pending','approved','revoked']), port:z.number().int().min(1).max(65535),
+  containers:z.array(z.string()), protocol:z.enum(['http','https','tcp'])
+});
+const stateSchema = z.strictObject({hosts:z.record(z.string(),z.strictObject({
+  available:z.boolean(),workspaces:z.array(workspaceSchema),servers:z.record(z.string(),z.enum(['running','stopped'])),routes:z.record(z.string(),z.array(routeSchema))
+}))});
+export type WorkbenchState = z.infer<typeof stateSchema>;
 
 export function parseWorkbenchState(input: string): WorkbenchState {
-  const value: unknown = JSON.parse(input);
-  if (value === null || typeof value !== "object" || Array.isArray(value) || !("hosts" in value)) throw new Error("invalid workbench state");
-  return value as WorkbenchState;
+  return stateSchema.parse(JSON.parse(input));
 }
 
 export const WORKSPACE_IDS = {

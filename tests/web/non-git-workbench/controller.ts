@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { executionOperations } from "../../../packages/service-clients/execution/src/console.js";
 import { llmOperations } from "../../../packages/contracts/llm-router/src/index.js";
 import { parseWorkbenchState } from "./state.js";
+import {z} from 'zod';
 
 const statePath = process.env.DIM_NON_GIT_WORKBENCH_STATE;
 if (statePath === undefined) throw new Error("DIM_NON_GIT_WORKBENCH_STATE is required");
@@ -25,9 +26,7 @@ const argument = (name: string): string | undefined => {
 const input = (): Record<string, unknown> => {
   const inline = argument("--input");
   const value = args.includes("--input-stdin") || inline === "-" ? awaitInput : inline;
-  const parsed: unknown = JSON.parse(value ?? "{}");
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid fixture input");
-  return parsed as Record<string, unknown>;
+  return z.record(z.string(),z.unknown()).parse(JSON.parse(value ?? '{}'));
 };
 const awaitInput = args.includes("--input-stdin") || argument("--input") === "-"
   ? await new Promise<string>((resolve) => { let body = ""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk: string) => { body += chunk; }); process.stdin.on("end", () => resolve(body)); })
