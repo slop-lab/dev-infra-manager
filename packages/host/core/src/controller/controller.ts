@@ -3,7 +3,16 @@ import { isUserError, UserError, ProcessRunner, type StreamingCommandRunner } fr
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { bufferControllerRequestBody, parseControllerJsonBody } from "./controllerRequestBody.js";
-import { ControllerWorkspaces, type ControllerWorkspaceMetadataResolver } from "./controllerWorkspace.js";
+import {
+  ControllerWorkspaces,
+  controllerWorkspaceStateRoot,
+  type ControllerWorkspaceMetadataResolver
+} from "./controllerWorkspace.js";
+import type {
+  ResolvedWorkspaceRuntimeTarget,
+  WorkspaceRuntime,
+  WorkspaceRuntimeTarget
+} from "@slop-lab/dim-host-core/workspace";
 
 export type ControllerMethod = "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
 
@@ -14,18 +23,10 @@ export interface ControllerWorkspace {
   projectName?: string;
 }
 
-export interface WorkspaceTarget {
-  containers: string[];
-  port: number;
-  protocol: "http" | "https" | "tcp";
-}
+export type WorkspaceTarget = WorkspaceRuntimeTarget;
+export type ResolvedWorkspaceTarget = ResolvedWorkspaceRuntimeTarget;
 
-export interface ResolvedWorkspaceTarget {
-  readonly protocol: "http" | "https" | "tcp";
-  readonly host: string;
-  readonly port: number;
-  readonly fingerprint: string;
-}
+type ControllerConfiguration = LifecycleOptions & { readonly workspaceRuntime?: WorkspaceRuntime };
 
 export interface ControllerRouteResponse {
   status?: number;
@@ -78,12 +79,11 @@ export interface DimControllerOptions {
 
 /** Optional host-side plugin API; it never owns workspace lifecycle. */
 export function configuredDimController(
-  lifecycle: LifecycleOptions,
+  lifecycle: ControllerConfiguration,
   plugins: RegisteredDimPlugins,
-  runner: StreamingCommandRunner = new ProcessRunner(),
   metadata?: ControllerWorkspaceMetadataResolver
 ): Server {
-  const workspaces = new ControllerWorkspaces(lifecycle, runner, undefined, metadata);
+  const workspaces = new ControllerWorkspaces(lifecycle, controllerWorkspaceStateRoot(), metadata);
   return createDimController({
     stateRoot: lifecycle.stateRoot,
     routes: plugins.controllerRoutes,
@@ -95,12 +95,12 @@ export function configuredDimController(
 }
 
 export async function initializeControllerRoutes(
-  lifecycle: LifecycleOptions,
+  lifecycle: ControllerConfiguration,
   plugins: RegisteredDimPlugins,
   runner: StreamingCommandRunner = new ProcessRunner(),
   metadata?: ControllerWorkspaceMetadataResolver
 ): Promise<void> {
-  const workspaces = new ControllerWorkspaces(lifecycle, runner, undefined, metadata);
+  const workspaces = new ControllerWorkspaces(lifecycle, controllerWorkspaceStateRoot(), metadata);
   const runtime: ControllerRuntimeContext = {
     stateRoot: lifecycle.stateRoot, runner,
     listWorkspaces: () => workspaces.list(),

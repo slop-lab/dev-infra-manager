@@ -5,7 +5,10 @@ export type { RunOptions, CommandRunner, StreamingCommandRunner } from "./types.
 export type { WorkspaceRecord, WorkspaceView, WorkspaceSource, WorkspaceResources, AcquiredWorkspaceSource, WorkspaceCheckout } from "./workspace/models.js";
 export { WorkspaceStore, parseWorkspaceRecord, validateResources } from "./workspace/store.js";
 export { WorkspaceService } from "./workspace/service.js";
-export type { CreateWorkspaceInput, AcquireSource, WorkspaceRuntime, WorkspaceConnectOptions, WorkspaceExecOptions } from "./workspace/service.js";
+export type {
+  CreateWorkspaceInput, AcquireSource, WorkspaceRuntime, WorkspaceConnectOptions, WorkspaceExecOptions,
+  WorkspaceRuntimeTarget, ResolvedWorkspaceRuntimeTarget
+} from "./workspace/service.js";
 export { acquireWorkspaceSource } from "./workspace/source.js";
 export { buildWorkspaceImage } from "./workspaceImage.js";
 export { ContainerWorkspaceRuntime, workspaceRuntimeResources } from "./workspace/runtime.js";

@@ -64,7 +64,7 @@ test("published list with --workspace remains scoped to that workspace grant", a
   const state = new WorkspaceStore(fixture.stateRoot);
   const record = workspaceRecord("work-a");
   await state.write(record);
-  const grant = await new ControllerWorkspaces({ stateRoot: fixture.stateRoot }, undefined, fixture.stateRoot).ensureGrant(record.name);
+  const grant = await new ControllerWorkspaces({ stateRoot: fixture.stateRoot }, fixture.stateRoot).ensureGrant(record.name);
   fixture.environment.DIM_CONTROLLER_SOCKET = fixture.socketPath;
 
   const result = await runPublishedCli(

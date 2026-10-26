@@ -164,6 +164,11 @@ export function composeWorkspaceRuntime(context: WorkspaceRuntimeFactoryContext)
         await beforeAccess(record, runtime);
         return runtime.connect(record, port, options);
       },
+      resolveTarget: async (record, target) => {
+        const runtime = await get(record.runtime);
+        if (!runtime.resolveTarget) throw new UserError(`workspace runtime '${record.runtime}' does not support controller targets`);
+        return runtime.resolveTarget(record, target);
+      },
       hostGateway: async (record) => {
         const runtime = await get(record.runtime);
         if (!runtime.hostGateway) throw new UserError(`workspace runtime '${record.runtime}' has no host service gateway`);

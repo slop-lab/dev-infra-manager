@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,24 +7,16 @@ import { UserError } from "../errors.js";
 import type { CommandResult, CommandRunner, RunOptions, StreamingCommandRunner } from "../types.js";
 import type { WorkspaceRecord, WorkspaceResources } from "./models.js";
 import type { WorkspaceConnectOptions } from "./service.js";
+import type { ResolvedWorkspaceRuntimeTarget, WorkspaceRuntimeTarget } from "./service.js";
 import { validateWorkspacePort, workspacePortBridge, workspacePortBridgeMarker, workspacePortCleanup } from "./portBridge.js";
+import { resolveContainerWorkspaceTarget } from "./containerTarget.js";
+import { workspaceRuntimeResources } from "./runtimeResources.js";
+
+export { workspaceRuntimeResources } from "./runtimeResources.js";
 
 export interface WorkspaceRuntimeInspection {
   id: string;
   running: boolean;
-}
-
-/** Docker resources are named by immutable identity, never by a reusable display name. */
-export function workspaceRuntimeResources(record: Pick<WorkspaceRecord, "id">) {
-  const prefix = `dim-workspace-${createHash("sha256").update(record.id).digest("hex").slice(0, 24)}`;
-  return {
-    container: prefix,
-    network: prefix,
-    home: `${prefix}-home`,
-    checkout: `${prefix}-checkout`,
-    docker: `${prefix}-docker`,
-    tmp: `${prefix}-tmp`
-  };
 }
 
 /** Device grants are constructed by trusted host runtime providers, never repository input. */
@@ -291,6 +283,10 @@ export class ContainerWorkspaceRuntime {
         }
       }
     }
+  }
+
+  resolveTarget(record: WorkspaceRecord, target: WorkspaceRuntimeTarget): Promise<ResolvedWorkspaceRuntimeTarget> {
+    return resolveContainerWorkspaceTarget({ runner: this.runner, record, target, inspect: () => this.inspect(record) });
   }
 
   private execArguments(record: WorkspaceRecord, container: string, command: string[], options: RunOptions): string[] {

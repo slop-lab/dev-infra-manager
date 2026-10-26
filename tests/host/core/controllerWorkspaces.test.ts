@@ -7,12 +7,13 @@ import { createServer, createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ProcessRunner, WorkspaceStore, workspaceRuntimeResources, type StreamingCommandRunner, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
+import { ContainerWorkspaceRuntime, ProcessRunner, WorkspaceStore, workspaceRuntimeResources, type StreamingCommandRunner, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import { ControllerWorkspaces } from "../../../packages/host/core/src/controller/controllerWorkspace.js";
 import { WorkspaceGrantStore } from "../../../packages/host/core/src/controller/workspaceGrantStore.js";
 import { nativeWorkspaceMetadata } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceMetadata.js";
 import { writeNativeWorkspaceAttachment } from "../../../packages/host/plugins/native-git/src/nativeWorkspaceAttachment.js";
 import { workspaceRecord } from "../../support/workspaceFixture.js";
+import type { WorkspaceRuntime } from "@slop-lab/dim-host-core/workspace";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -21,7 +22,10 @@ async function fixture() {
   const core = join(root, "core"), managed = join(root, "managed"), record = workspaceRecord();
   const store = new WorkspaceStore(core); await store.write(record);
   const runner = new RouteRunner(record);
-  return { root, core, managed, record, store, runner, controller: new ControllerWorkspaces({ stateRoot: managed }, runner, core) };
+  return { root, core, managed, record, store, runner, controller: new ControllerWorkspaces({
+    stateRoot: managed,
+    workspaceRuntime: new ContainerWorkspaceRuntime(runner)
+  }, core) };
 }
 
 describe("optional plugin controller core workspace adapter", () => {
@@ -49,7 +53,7 @@ describe("optional plugin controller core workspace adapter", () => {
     const attachment = { ...attachmentRecord(f.managed, f.record.id, f.record.name), workspaceStateRoot: f.core, projectName: "project", projectId: "project-id" };
     await writeNativeWorkspaceAttachment(attachment);
     expect(await f.controller.list()).toEqual([{ id: f.record.id, name: f.record.name }]);
-    const controller = new ControllerWorkspaces({ stateRoot: f.managed }, f.runner, f.core,
+    const controller = new ControllerWorkspaces({ stateRoot: f.managed }, f.core,
       (record) => nativeWorkspaceMetadata(record, f.managed, f.core));
     expect(await controller.list()).toEqual([{ id: f.record.id, name: f.record.name, projectName: "project", projectId: "project-id" }]);
     await writeNativeWorkspaceAttachment({ ...attachment, workspaceName: "other" });
@@ -86,7 +90,10 @@ describe("optional plugin controller core workspace adapter", () => {
         return actual;
       }
     }(f.record, "127.0.0.1");
-    const controller = new ControllerWorkspaces({ stateRoot: f.managed }, runner, f.core);
+    const controller = new ControllerWorkspaces({
+      stateRoot: f.managed,
+      workspaceRuntime: new ContainerWorkspaceRuntime(runner)
+    }, f.core);
     try {
       const requested = { containers: [], port: address.port, protocol: "tcp" as const };
       const first = await controller.resolveTarget(f.record, requested);
@@ -113,7 +120,10 @@ describe("optional plugin controller core workspace adapter", () => {
         return result;
       }
     }(f.record);
-    const controller = new ControllerWorkspaces({ stateRoot: f.managed }, runner, f.core);
+    const controller = new ControllerWorkspaces({
+      stateRoot: f.managed,
+      workspaceRuntime: new ContainerWorkspaceRuntime(runner)
+    }, f.core);
     await expect(controller.resolveTarget(f.record, { containers: [], port: 80, protocol: "http" }))
       .rejects.toThrow(/identity/);
   });
@@ -130,6 +140,26 @@ describe("optional plugin controller core workspace adapter", () => {
     await f.store.write({ ...f.record, id: randomUUID() });
     await expect(f.controller.resolveTarget(f.record, { containers: [], port: 80, protocol: "http" }))
       .rejects.toThrow(/identity/);
+  });
+
+  it("rejects a selected runtime that does not provide controller target resolution", async () => {
+    const f = await fixture();
+    const lifecycleOnlyRuntime = {
+      inspect: async () => ({ running: true }),
+      create: async () => {},
+      start: async () => {},
+      stop: async () => {},
+      remove: async () => {},
+      updateResources: async () => ({ recreated: false }),
+      seed: async () => {},
+      exec: async () => 0,
+      connect: async () => 0
+    } satisfies WorkspaceRuntime;
+    const controller = new ControllerWorkspaces({ stateRoot: f.managed, workspaceRuntime: lifecycleOnlyRuntime }, f.core);
+
+    await expect(controller.resolveTarget(f.record, { containers: [], port: 80, protocol: "http" }))
+      .rejects.toThrow(/does not support controller targets/);
+    expect(f.runner.relay).toBeUndefined();
   });
 });
 

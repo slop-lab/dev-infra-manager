@@ -1,5 +1,5 @@
 import { ControllerWorkspaces, lifecycleOptions } from "../index.js";
-import { MissingRecordError, UserError, ProcessRunner } from "@slop-lab/dim-host-core";
+import { MissingRecordError, UserError } from "@slop-lab/dim-host-core";
 import { ensureManagedController } from "./managed-controller.js";
 import { adminErrorDetail, unixHttpRequest } from "./controller-transport.js";
 
@@ -41,7 +41,7 @@ export async function controllerRequest(
     const options = lifecycleOptions();
     socketPath ??= options.controllerSocketPath;
     try {
-      token = await new ControllerWorkspaces(options, new ProcessRunner()).ensureGrant(workspace);
+      token = await new ControllerWorkspaces(options).ensureGrant(workspace);
       if (socketPath === options.controllerSocketPath) await ensureManagedController(options);
     } catch (error) {
       if (error instanceof MissingRecordError

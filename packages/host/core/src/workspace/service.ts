@@ -18,8 +18,22 @@ export interface WorkspaceRuntime {
   seed(record: WorkspaceRecord, directory: string): Promise<void>;
   exec(record: WorkspaceRecord, command: string[], options?: RunOptions): Promise<number>;
   connect(record: WorkspaceRecord, port: number, options?: WorkspaceConnectOptions): Promise<number>;
+  resolveTarget?(record: WorkspaceRecord, target: WorkspaceRuntimeTarget): Promise<ResolvedWorkspaceRuntimeTarget>;
   /** Host address reachable from this guest; used only for scoped service bridges. */
   hostGateway?(record: WorkspaceRecord): Promise<string>;
+}
+
+export interface WorkspaceRuntimeTarget {
+  readonly containers: readonly string[];
+  readonly port: number;
+  readonly protocol: "http" | "https" | "tcp";
+}
+
+export interface ResolvedWorkspaceRuntimeTarget {
+  readonly protocol: WorkspaceRuntimeTarget["protocol"];
+  readonly host: string;
+  readonly port: number;
+  readonly fingerprint: string;
 }
 
 export interface WorkspaceConnectOptions extends Pick<RunOptions, "stdin" | "stdout" | "stderr" | "signal"> {

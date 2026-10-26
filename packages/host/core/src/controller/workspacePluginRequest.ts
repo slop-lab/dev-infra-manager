@@ -1,4 +1,4 @@
-import { ProcessRunner, UserError, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
+import { UserError, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import { ControllerWorkspaces } from "./controllerWorkspace.js";
 import { lifecycleOptions } from "./lifecycleOptions.js";
 
@@ -11,7 +11,7 @@ export async function workspacePluginRequest(
 ): Promise<unknown> {
   if (!/^\/api\/[a-z0-9/-]+$/.test(pathname)) throw new UserError("invalid workspace plugin path");
   const options = lifecycleOptions();
-  const token = await new ControllerWorkspaces(options, new ProcessRunner()).ensureGrant(workspace.name, workspace.id);
+  const token = await new ControllerWorkspaces(options).ensureGrant(workspace.name, workspace.id);
   const { ensureManagedController } = await import("./cli/managed-controller.js");
   const { unixHttpRequest } = await import("./cli/controller-transport.js");
   await ensureManagedController(options);

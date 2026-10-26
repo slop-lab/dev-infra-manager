@@ -27,7 +27,7 @@ describe("workspace instance route authority", () => {
     const newRecord = workspaceRecord("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     const state = new WorkspaceStore(stateRoot);
     await state.write(oldRecord);
-    const authority = new ControllerWorkspaces({ stateRoot }, undefined, stateRoot);
+    const authority = new ControllerWorkspaces({ stateRoot }, stateRoot);
     const staleGrant = await authority.ensureGrant(oldRecord.name);
     const target = net.createServer((socket) => socket.pipe(socket));
     await listen(target);

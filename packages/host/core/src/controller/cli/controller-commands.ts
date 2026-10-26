@@ -3,9 +3,9 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import { controllerRequest } from "./controller-client.js";
-import type { ControllerWorkspaceMetadataResolver } from "../controllerWorkspace.js";
+import { controllerWorkspaceStateRoot, type ControllerWorkspaceMetadataResolver } from "../controllerWorkspace.js";
 import { UserError, ProcessRunner } from "@slop-lab/dim-host-core";
-const runner = new ProcessRunner();
+import { composeWorkspaceRuntime } from "../../application/host-plugins.js";
 import {
   ADMIN_CONTROLLER_STOP_EVENT, configuredDimAdminController, configuredDimController,
   initializeControllerRoutes, lifecycleOptions, loadInstalledPlugins,
@@ -19,6 +19,8 @@ import {
   closeControllerServers,
   disposeControllerPlugins
 } from "./controller-teardown.js";
+
+const runner = new ProcessRunner();
 
 export function registerControllerCommands(program: Command, metadata?: ControllerWorkspaceMetadataResolver): void {
   const controller = program.command("controller").description("Run trusted DIM controller services");
@@ -86,11 +88,17 @@ controller.command("serve")
         async () => await loadInstalledPlugins(await resolvePluginHome())
       );
       loaded = loadedPlugins;
+      const workspaceRuntime = composeWorkspaceRuntime({
+        runner,
+        cleanupRunner: runner,
+        stateRoot: controllerWorkspaceStateRoot()
+      }).runtime;
+      const controllerOptions = { ...options, workspaceRuntime };
       await controllerStartupStage(
         "initializing plugin routes",
-        async () => await initializeControllerRoutes(options, loadedPlugins.registered, runner, metadata)
+        async () => await initializeControllerRoutes(controllerOptions, loadedPlugins.registered, runner, metadata)
       );
-      server = configuredDimController(options, loaded.registered, runner, metadata);
+      server = configuredDimController(controllerOptions, loaded.registered, metadata);
       adminServer = configuredDimAdminController(options, loaded.registered, runner);
       const stopRequested = once(adminServer, ADMIN_CONTROLLER_STOP_EVENT);
       if (flags.socket && adminSocket) {

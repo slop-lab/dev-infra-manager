@@ -18,7 +18,7 @@ it.each(["stopped", "missing"] as const)("restores saved HTTP/TCP routes when a 
   const root = await mkdtemp(path.join(tmpdir(), "dim-route-restoration-")); cleanups.push(() => rm(root, { recursive: true, force: true }));
   vi.stubEnv("DIM_STATE_ROOT", root);
   const record = workspaceRecord("development"), store = new WorkspaceStore(root); await store.write(record);
-  const authority = new ControllerWorkspaces({ stateRoot: root }, undefined, root);
+  const authority = new ControllerWorkspaces({ stateRoot: root }, root);
   const httpTarget = http.createServer((_request, response) => response.end("restored")); await listen(httpTarget); cleanups.push(() => close(httpTarget));
   const tcpTarget = net.createServer((socket) => socket.pipe(socket)); await listen(tcpTarget); cleanups.push(() => close(tcpTarget));
   const httpPort = await freePort(), tcpPort = await freePort();

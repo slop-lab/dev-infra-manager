@@ -24,7 +24,7 @@ const service = new WorkspaceService(store, runtime, async ({ destination }) => 
   const initialized = await runner.run("git", ["init", destination]); assert.equal(initialized.exitCode, 0, initialized.stderr);
   return { url: "https://example.invalid/relay-smoke.git", ref: "refs/heads/main", commit: "a".repeat(40) };
 });
-const controller = new ControllerWorkspaces({ stateRoot: join(root, "managed") }, runner, store.root);
+const controller = new ControllerWorkspaces({ stateRoot: join(root, "managed"), workspaceRuntime: runtime }, store.root);
 
 let record: import("../../packages/host/core/src/workspace.js").WorkspaceRecord | undefined;
 

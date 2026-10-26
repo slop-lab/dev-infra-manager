@@ -10,7 +10,7 @@ import { workspaceRecord } from "../../support/workspaceFixture.js";
 
 test("an incomplete request holds no workspace lock and cannot dispatch after discard intent", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-partial-plugin-"));
-  const workspaces = new ControllerWorkspaces({ stateRoot: path.join(root, "managed") }, undefined, root);
+  const workspaces = new ControllerWorkspaces({ stateRoot: path.join(root, "managed") }, root);
   const record = workspaceRecord("work");
   await workspaces.store.write(record);
   const grant = await workspaces.ensureGrant(record.name);

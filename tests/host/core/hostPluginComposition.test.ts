@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProcessRunner } from "@slop-lab/dim-host-core/workspace";
 import { composeWorkspaceRuntime, loadHostPlugins } from "../../../packages/host/core/src/application/host-plugins.js";
+import { workspaceRecord } from "../../support/workspaceFixture.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -20,6 +21,30 @@ it("keeps ordinary container composition independent of optional plugin configur
   const composition = composeWorkspaceRuntime({ runner, cleanupRunner: runner, stateRoot: root });
   expect(await composition.defaultImage("container")).toBeUndefined();
   await expect(composition.defaultImage("vm")).rejects.toThrow();
+});
+
+it("dispatches controller targets only to the selected optional runtime capability", async () => {
+  // Given: one optional runtime with target resolution and one without it.
+  const root = await fixture();
+  const capable = path.join(root, "capable.mjs"), lifecycleOnly = path.join(root, "lifecycle-only.mjs");
+  const methods = "inspect:async()=>({running:true}),create:async()=>{},start:async()=>{},stop:async()=>{},remove:async()=>{},updateResources:async()=>({recreated:false}),seed:async()=>{},exec:async()=>0,connect:async()=>0";
+  await writeFile(capable, `export const hostPlugin={name:'capable',runtime:{name:'capable-runtime',create:async()=>({${methods},resolveTarget:async(_record,target)=>({protocol:target.protocol,host:'127.0.0.2',port:4321,fingerprint:'selected'})})}};`);
+  await writeFile(lifecycleOnly, `export const hostPlugin={name:'lifecycle-only',runtime:{name:'lifecycle-only-runtime',create:async()=>({${methods}})}};`);
+  await writeFile(path.join(root, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: [capable, lifecycleOnly] }));
+  const runner = new ProcessRunner();
+  const runtime = composeWorkspaceRuntime({ runner, cleanupRunner: runner, stateRoot: root }).runtime;
+  if (!runtime.resolveTarget) throw new Error("composed runtime target dispatcher is missing");
+  const target = { containers: [], port: 80, protocol: "http" as const };
+
+  // When: target resolution selects each recorded optional runtime.
+  const resolved = await runtime.resolveTarget({ ...workspaceRecord(), runtime: "capable-runtime" }, target);
+
+  // Then: only the owning capability resolves, while absence and unknown names fail closed.
+  expect(resolved).toEqual({ protocol: "http", host: "127.0.0.2", port: 4321, fingerprint: "selected" });
+  await expect(runtime.resolveTarget({ ...workspaceRecord(), runtime: "lifecycle-only-runtime" }, target))
+    .rejects.toThrow(/does not support controller targets/);
+  await expect(runtime.resolveTarget({ ...workspaceRecord(), runtime: "missing-runtime" }, target))
+    .rejects.toThrow(/not installed/);
 });
 
 it("discovers explicit host commands without a managed controller and rejects competing command owners", async () => {
