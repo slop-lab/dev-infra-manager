@@ -104,7 +104,9 @@ try {
   await page.getByLabel('Route ID', { exact: true }).fill('all-codex-edited');
   assert.equal(await page.getByRole('button', { name: 'Save route', exact: true }).isDisabled(), true);
   await page.getByRole('button', { name: 'Refresh router', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('button[data-pending="true"]'));
   assert.equal(writes.filter((value) => value.name === 'route.upsert').length, 1);
+  assert.equal(await page.getByRole('button', { name: 'Save route', exact: true }).isEnabled(), true);
   await page.getByLabel('Load route', { exact: true }).selectOption('all-codex');
   assert.deepEqual(writes.find((value) => value.name === 'route.upsert')?.input, { routeId: 'all-codex', accountId: workAccountId, models: 'all' });
   assert.equal(await page.getByLabel('Load route', { exact: true }).locator('option[value="all-codex"]').count(), 1);
