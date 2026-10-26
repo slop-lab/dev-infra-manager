@@ -1,0 +1,206 @@
+.operations-panel {
+  inline-size: min(calc(100% - (2 * var(--space-4))), var(--content-max));
+  padding: var(--space-8) 0 var(--space-12);
+}
+
+.operations-heading {
+  align-items: end;
+  margin-block-end: var(--space-6);
+}
+
+#operations-hosts {
+  gap: var(--space-8);
+}
+
+.workspace-host {
+  overflow: visible;
+  background: transparent;
+}
+
+.host-heading {
+  border: var(--line) solid var(--color-border-subtle);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+}
+
+.workspace-host-layout {
+  min-inline-size: 0;
+  display: grid;
+  grid-template-columns: minmax(min(var(--rail-width), 100%), var(--rail-width)) minmax(0, 1fr);
+  border: var(--line) solid var(--color-border-subtle);
+  border-block-start: 0;
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  background: var(--color-panel);
+}
+
+.workspace-directory {
+  min-inline-size: 0;
+  border-inline-end: var(--line) solid var(--color-border-subtle);
+  background: var(--color-recessed);
+}
+
+.workspace-filters {
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--space-4);
+  border-block-start: 0;
+}
+
+.workspace-filters .button {
+  inline-size: 100%;
+}
+
+.workspace-list {
+  display: grid;
+}
+
+.workspace-list-item {
+  min-inline-size: 0;
+  border-block-start: var(--line) solid var(--color-border-subtle);
+}
+
+.workspace-list-item > a {
+  min-block-size: var(--control-height);
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.workspace-list-item > a:hover,
+.workspace-list-item > a:focus-visible,
+.workspace-list-item > a[aria-current="page"] {
+  background: var(--color-elevated);
+}
+
+.workspace-list-copy {
+  min-inline-size: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.workspace-list-copy strong,
+.workspace-list-meta {
+  overflow-wrap: anywhere;
+}
+
+.workspace-list-meta {
+  color: var(--color-text-muted);
+  font-size: var(--font-label);
+}
+
+.workspace-list-item .badge {
+  flex: none;
+}
+
+.workspace-directory > .workspace-feedback:not(:empty),
+.workspace-directory > .button {
+  margin: var(--space-4);
+}
+
+.workspace-stage {
+  min-inline-size: 0;
+}
+
+.workspace-stage-empty {
+  min-block-size: var(--state-panel-min);
+  display: grid;
+  place-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.workspace-detail {
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-block-start: 0;
+  padding: var(--space-6);
+}
+
+.workspace-detail .workspace-identity h2 {
+  font-size: var(--font-section);
+}
+
+.workspace-detail .workspace-identity a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.workspace-section-navigation {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding-block: var(--space-2);
+  border-block: var(--line) solid var(--color-border-subtle);
+}
+
+.workspace-section-navigation a {
+  min-block-size: var(--control-height);
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.workspace-section-navigation a:hover,
+.workspace-section-navigation a[aria-current="page"] {
+  background: var(--color-elevated);
+  color: var(--color-text);
+}
+
+.workspace-detail .workspace-settings,
+.workspace-detail .workspace-features,
+.workspace-detail > .workspace-feedback {
+  grid-column: 1 / -1;
+}
+
+.workspace-feature .button {
+  inline-size: fit-content;
+  justify-self: start;
+}
+
+.workspace-create {
+  margin: 0;
+  border: 0;
+  border-radius: 0 0 var(--radius-panel) 0;
+}
+
+@media (max-width: 48rem) {
+  .workspace-host-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-directory {
+    border-inline-end: 0;
+    border-block-end: var(--line) solid var(--color-border-subtle);
+  }
+}
+
+@media (max-width: 40rem) {
+  .workspace-detail {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-4);
+  }
+
+  .workspace-detail > .workspace-actions {
+    justify-content: flex-start;
+  }
+
+  .workspace-feature .button {
+    inline-size: 100%;
+  }
+}
+
+@media (forced-colors: active) {
+  .workspace-host-layout,
+  .workspace-directory,
+  .workspace-list-item,
+  .workspace-section-navigation {
+    border-color: CanvasText;
+  }
+}
