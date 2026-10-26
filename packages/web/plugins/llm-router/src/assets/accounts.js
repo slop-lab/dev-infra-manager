@@ -40,6 +40,7 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
   /** @type {import('./routes.js').RouterRoute} */ let activeRoute = { section: 'accounts', objectId: '', valid: true };
   /** @type {Record<string,unknown>[]} */ let routes = [];
   let accountCatalogReady = false, accountReadRevision = 0;
+  /** @type {string|undefined} */ let pendingCodexAccountId, pendingApiAccountId;
   /** @type {(accountId:string,model:Record<string,unknown>)=>void} */ let useAccountModel = () => {};
   /** @type {(value:unknown,read?:number)=>void} */ let setRoutes = () => {};
   /** @param {string} accountId @param {Record<string,unknown>} session */
@@ -94,14 +95,15 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
     accountRows = new Map(result.map((account) => [String(account.id), account])); accountElements.clear(); list.replaceChildren(); list.className = 'llm-object-list';
     for (const [key, expectation] of mutationExpectations) {
       const kind = expectation.kind;
-      const committed = kind === 'create' ? result.some((account) => !rows(expectation.baseline).some((prior) => prior.id === account.id))
+      const committed = kind === 'create' ? result.some((account) => account.id === expectation.id && account.provider === expectation.provider)
         : kind === 'rename' ? result.some((account) => account.id === expectation.id && account.reference === expectation.reference)
         : kind === 'login' ? result.some((account) => account.id === expectation.id && account.status === 'connected') || undefined : undefined;
       const outcome = mutations.reconcile(read, key, committed); if (outcome !== 'unknown') mutationExpectations.delete(key);
+      if (kind === 'create' && outcome === 'accepted') { if (key === 'account.create:codex') pendingCodexAccountId = undefined; else if (key === 'account.create:api') pendingApiAccountId = undefined; if (typeof expectation.settle === 'function' && expectation.settle()) mutations.edit(key); }
       if (kind === 'rename' && outcome === 'accepted') { const id = String(expectation.id), draft = renameDrafts.get(id); if (draft === undefined || draft === String(expectation.draft)) renameDrafts.delete(id); else mutations.edit(key); }
       if (kind === 'login' && outcome === 'accepted') mutations.edit(key);
       if (key === 'account.create:codex' && outcome === 'accepted' && newCodexIntent) { newCodexIntent.hidden = false; context.ui.feedback(feedback, 'Account list refreshed. Review the listed accounts before connecting another Codex account.'); }
-      for (const control of container.querySelectorAll(`button[data-mutation-key="${CSS.escape(key)}"]`)) if (control instanceof HTMLButtonElement) { control.disabled = outcome !== undefined; if (outcome === undefined) delete control.dataset.accepted; }
+      for (const control of container.querySelectorAll(`button[data-mutation-key="${CSS.escape(key)}"]`)) if (control instanceof HTMLButtonElement) { control.disabled = mutations.locked(key); if (!control.disabled) delete control.dataset.accepted; }
     }
     if (!result.length) list.append(node('p', 'No provider accounts connected yet.'));
     for (const account of result) { const row = node('article'); row.className = 'operations-row'; const id = String(account.id); row.dataset.accountId = id; accountElements.set(id, row);
@@ -131,10 +133,10 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
   }
   if (has('account.create') && has('account.login.start')) {
     const connectCodex = button(connections, 'Connect Codex account', async () => {
-      connectCodex.dataset.mutationKey = 'account.create:codex'; mutationExpectations.set(connectCodex.dataset.mutationKey, { kind: 'create', baseline: [...accountRows.values()] });
-      const account = object(await context.invoke('account.create', { provider: 'codex' })), id = String(account.id);
+      const id = pendingCodexAccountId ??= crypto.randomUUID(); connectCodex.dataset.mutationKey = 'account.create:codex'; mutationExpectations.set(connectCodex.dataset.mutationKey, { kind: 'create', id, provider: 'codex' });
+      const account = object(await context.invoke('account.create', { accountId: id, provider: 'codex' }));
       if (!current()) return;
-      accountRows.set(id, account); mutations.accepted(connectCodex.dataset.mutationKey); connectCodex.dataset.accepted = 'true'; if (newCodexIntent) newCodexIntent.hidden = false;
+      accountRows.set(id, account); pendingCodexAccountId = undefined; mutationExpectations.delete(connectCodex.dataset.mutationKey); mutations.accepted(connectCodex.dataset.mutationKey); connectCodex.dataset.accepted = 'true'; if (newCodexIntent) newCodexIntent.hidden = false;
       feedback.textContent = 'Account added. Starting Codex sign-in…';
       await refresh().catch(() => {});
       if (!current()) return;
@@ -142,7 +144,7 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
       catch { if (current()) feedback.textContent = mutations.outcome(`account.login:${id}`) === 'unknown' ? 'Account added, but the sign-in start outcome is unknown. Ask the router operator to inspect that account’s pending provider login; the account list cannot recover its authorization code.' : 'Account added. Sign-in could not start; retry from its account row.'; }
     }, feedback); connectCodex.dataset.mutationKey = 'account.create:codex'; creationControls.add(connectCodex); updateCreationReadiness();
     newCodexIntent = context.ui.button('Connect another Codex account'); newCodexIntent.hidden = true;
-    newCodexIntent.addEventListener('click', () => { if (mutations.outcome('account.create:codex') !== 'accepted') return; mutations.edit('account.create:codex'); delete connectCodex.dataset.accepted; updateCreationReadiness(); if (newCodexIntent) newCodexIntent.hidden = true; context.ui.feedback(feedback, 'A separate account connection is ready. The interrupted request will not be retried.'); }); connections.append(newCodexIntent);
+    newCodexIntent.addEventListener('click', () => { if (mutations.outcome('account.create:codex') !== 'accepted') return; pendingCodexAccountId = undefined; mutations.edit('account.create:codex'); delete connectCodex.dataset.accepted; updateCreationReadiness(); if (newCodexIntent) newCodexIntent.hidden = true; context.ui.feedback(feedback, 'A separate account connection is ready. The interrupted request will not be retried.'); }); connections.append(newCodexIntent);
   }
   if (has('account.create')) {
     const details = document.createElement('details'); details.append(node('summary', 'Connect API provider')); connections.append(details);
@@ -152,12 +154,15 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
     const api = node('div'); form.append(api); const endpoint = input(api, 'API base URL'); endpoint.type = 'url'; const key = input(api, 'API key'); key.type = 'password'; key.autocomplete = 'new-password'; key.spellcheck = false;
     let previousDefault = '';
     const mode = () => { endpoint.required = true; key.required = true; key.value = ''; const next = provider.value === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'; if (!endpoint.value || endpoint.value === previousDefault) endpoint.value = next; previousDefault = next; }; mode(); provider.addEventListener('change', mode);
+    let formRevision = 0; form.addEventListener('input', () => { formRevision++; }); form.addEventListener('change', () => { formRevision++; });
     form.append(node('p', 'Each account has its own credentials and routes. API keys are stored by the router and never returned to this page.'));
     const submit = button(form, 'Add provider account', async () => {
       if (!form.reportValidity()) { feedback.textContent = 'Complete the account fields.'; return; }
-      submit.dataset.mutationKey = 'account.create:api'; mutationExpectations.set(submit.dataset.mutationKey, { kind: 'create', baseline: [...accountRows.values()] });
-      const account = object(await context.invoke('account.create', { ...(reference.value.trim() ? { reference: reference.value.trim() } : {}), provider: provider.value, endpoint: endpoint.value.trim(), apiKey: key.value })); const id = String(account.id);
-      key.value = ''; if (!current()) return; accountRows.set(id, account); mutations.accepted(submit.dataset.mutationKey); submit.dataset.accepted = 'true'; feedback.textContent = `${String(account.reference)} added. Create a route to use this API account.`;
+      const id = pendingApiAccountId ??= crypto.randomUUID(), submittedRevision = formRevision, submittedKey = key.value, submittedProvider = provider.value;
+      const settle = () => { const superseded = formRevision !== submittedRevision; if (key.value === submittedKey) key.value = ''; return superseded; };
+      submit.dataset.mutationKey = 'account.create:api'; mutationExpectations.set(submit.dataset.mutationKey, { kind: 'create', id, provider: submittedProvider, settle });
+      const account = object(await context.invoke('account.create', { accountId: id, ...(reference.value.trim() ? { reference: reference.value.trim() } : {}), provider: submittedProvider, endpoint: endpoint.value.trim(), apiKey: submittedKey }));
+      if (!current()) return; accountRows.set(id, account); pendingApiAccountId = undefined; mutationExpectations.delete(submit.dataset.mutationKey); mutations.accepted(submit.dataset.mutationKey); const superseded = settle(); if (superseded) mutations.edit(submit.dataset.mutationKey); else submit.dataset.accepted = 'true'; feedback.textContent = `${String(account.reference)} added. Create a route to use this API account.`;
       const reads = await Promise.allSettled([refresh(), refreshOverview()]); if (current() && reads.some((result) => result.status === 'rejected')) feedback.textContent = `${id} added. The account list could not refresh; use Refresh router. The account was accepted.`;
     }, feedback); submit.dataset.mutationKey = 'account.create:api'; creationControls.add(submit); updateCreationReadiness(); editable(form, submit);
   }
@@ -175,7 +180,7 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
       const api = select(row, 'Model API'); option(api, 'responses', 'Responses'); option(api, 'chat', 'Chat completions'); if (typeof initial.api === 'string') api.value = initial.api;
       const context = input(row, 'Context tokens', String(initial.context ?? '')), output = input(row, 'Output tokens', String(initial.output ?? '')); for (const bound of [context, output]) { bound.type = 'number'; bound.min = '1'; bound.step = '1'; bound.placeholder = 'Use client model catalog'; }
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'button button-secondary'; remove.textContent = 'Remove model'; remove.addEventListener('click', () => { models = models.filter((model) => model.row !== row); row.remove(); form.dispatchEvent(new Event('input', { bubbles: true })); }); row.append(remove); models.push({ row, id, name, api, context, output }); modelList.append(row); }
-    addModel(); const routeFeedback = node('p'); routeFeedback.setAttribute('role', 'status'); form.append(routeFeedback);
+    addModel(); let formRevision = 0; form.addEventListener('input', () => { formRevision++; }); form.addEventListener('change', () => { formRevision++; }); const routeFeedback = node('p'); routeFeedback.setAttribute('role', 'status'); form.append(routeFeedback);
     button(modelList, 'Add model', async () => { addModel(); routeFeedback.textContent = 'Model row added.'; form.dispatchEvent(new Event('input', { bubbles: true })); }, routeFeedback);
     const updateScope = () => { modelList.hidden = modelScope.value === 'all'; modelList.disabled = modelScope.value === 'all'; }; updateScope(); modelScope.addEventListener('change', updateScope);
     useAccountModel = (accountId, model) => {
@@ -189,12 +194,12 @@ function editable(form, submit) { form.addEventListener('submit', (event) => { e
       routePanel.scrollIntoView({ block: 'nearest' }); if (!routeId.value) routeId.focus();
     };
     const submit = button(form, 'Save route', async () => { if (!form.reportValidity() || (modelScope.value !== 'all' && !models.length)) { routeFeedback.textContent = modelScope.value === 'all' ? 'Enter a route ID and choose an account.' : 'Enter a route ID, choose an account and add at least one complete model.'; return; }
-      const id = routeId.value.trim(), routeInput = { routeId: id, accountId: accountSelect?.value, models: modelScope.value === 'all' ? 'all' : models.map((model) => ({ id: model.id.value.trim(), name: model.name.value.trim(), api: model.api.value, ...(model.context.value ? { context: Number(model.context.value) } : {}), ...(model.output.value ? { output: Number(model.output.value) } : {}) })) }; submit.dataset.mutationKey = `route.upsert:${id}`; mutationExpectations.set(submit.dataset.mutationKey, { kind: 'route', ...routeInput }); await context.invoke('route.upsert', routeInput); if (!current()) return;
-      mutations.accepted(submit.dataset.mutationKey); submit.dataset.accepted = 'true'; routeFeedback.textContent = `Route ${id} saved.`; try { await refreshOverview(); } catch { if (current()) routeFeedback.textContent = `Route ${id} saved. Routes could not refresh; use Refresh router. The route was accepted.`; }
+      const id = routeId.value.trim(), submittedRevision = formRevision, routeInput = { routeId: id, accountId: accountSelect?.value, models: modelScope.value === 'all' ? 'all' : models.map((model) => ({ id: model.id.value.trim(), name: model.name.value.trim(), api: model.api.value, ...(model.context.value ? { context: Number(model.context.value) } : {}), ...(model.output.value ? { output: Number(model.output.value) } : {}) })) }; submit.dataset.mutationKey = `route.upsert:${id}`; mutationExpectations.set(submit.dataset.mutationKey, { kind: 'route', revision: submittedRevision, ...routeInput }); await context.invoke('route.upsert', routeInput); if (!current()) return;
+      mutationExpectations.delete(submit.dataset.mutationKey); mutations.accepted(submit.dataset.mutationKey); if (submittedRevision !== formRevision) mutations.edit(submit.dataset.mutationKey); else submit.dataset.accepted = 'true'; routeFeedback.textContent = `Route ${id} saved.`; try { await refreshOverview(); } catch { if (current()) routeFeedback.textContent = `Route ${id} saved. Routes could not refresh; use Refresh router. The route was accepted.`; }
     }, routeFeedback); editable(form, submit);
     existing.addEventListener('change', () => { const route = routes.find((value) => value.id === existing.value); routeId.value = route ? String(route.id) : ''; if (route && accountSelect) accountSelect.value = String(route.accountId); models = []; for (const row of modelList.querySelectorAll('fieldset')) row.remove(); modelScope.value = !route || route.models === 'all' ? 'all' : 'selected'; for (const model of route && route.models !== 'all' ? rows(route.models) : [{}]) addModel(model); updateScope(); form.dispatchEvent(new Event('input', { bubbles: true })); });
     /** @param {unknown} value */
-    setRoutes = (/** @type {unknown} */ value, read = mutations.beginRead()) => { routes = rows(value); for (const [key, expectation] of mutationExpectations) if (expectation.kind === 'route') { const route = routes.find((item) => item.id === expectation.routeId); const committed = route !== undefined && route.accountId === expectation.accountId && JSON.stringify(route.models) === JSON.stringify(expectation.models); const outcome = mutations.reconcile(read, key, committed); if (outcome !== 'unknown') mutationExpectations.delete(key); if (submit.dataset.mutationKey === key) { submit.disabled = outcome !== undefined; if (outcome === undefined) delete submit.dataset.accepted; } } const selected = existing.value; existing.replaceChildren(); option(existing, '', 'New route'); for (const route of routes) option(existing, String(route.id), String(route.id)); existing.value = selected; };
+    setRoutes = (/** @type {unknown} */ value, read = mutations.beginRead()) => { routes = rows(value); for (const [key, expectation] of mutationExpectations) if (expectation.kind === 'route') { const route = routes.find((item) => item.id === expectation.routeId); const committed = route !== undefined && route.accountId === expectation.accountId && JSON.stringify(route.models) === JSON.stringify(expectation.models); const outcome = mutations.reconcile(read, key, committed); if (outcome === 'accepted' && expectation.revision !== formRevision) mutations.edit(key); if (outcome !== 'unknown') mutationExpectations.delete(key); if (submit.dataset.mutationKey === key) { submit.disabled = mutations.locked(key); if (!submit.disabled) delete submit.dataset.accepted; } } const selected = existing.value; existing.replaceChildren(); option(existing, '', 'New route'); for (const route of routes) option(existing, String(route.id), String(route.id)); existing.value = selected; };
   }
   /** @param {import('./routes.js').RouterRoute} route */
   function applyRoute(route) {
