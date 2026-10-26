@@ -284,7 +284,12 @@ is implied by these source changes.
   ignore file while retaining existing patterns and custom ignore paths.
   Prepare the OpenCode PTY compatibility library in Alpine workspaces and
   refresh owned servers when their project directory or runtime changes. Show
-  the actual checkout path with copy and OpenCode project-selection guidance.
+  the actual checkout path with copy and a credential-free OpenCode Web link.
+  Register or reuse the approved exact server and open the managed or ordinary
+  checkout automatically in the pinned client, retaining other servers, projects
+  and sessions across repeated clicks and reloads. Keep authentication in the
+  client's normal credential form and retain setup guidance when no usable URL
+  exists; do not infer a forwarded endpoint or copy host credentials.
   Show running state, readable service URLs and separate permanent URLs. Use
   host/workspace suffixes only for shared-name collisions, preserving assigned
   names on reconciliation. Let operators explicitly copy
