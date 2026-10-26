@@ -4,6 +4,7 @@ import { llmOperation } from "@slop-lab/dim-contracts-llm-router";
 import { privateFile, type RouterConfig } from "./config.js";
 import { hash, type RouterLedger } from "./ledger.js";
 import { invokeRouterOperation } from "./operations.js";
+import { RouterOperationRejectedError } from "./operation-errors.js";
 import { RequestError, body, send } from "./http.js";
 export async function handleRouterOperator(config: RouterConfig, ledger: RouterLedger, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const url = new URL(request.url ?? "/", "http://dim-llm-operator");
@@ -33,5 +34,8 @@ export async function handleRouterOperator(config: RouterConfig, ledger: RouterL
   let input: unknown;
   try { input = operation.parseInput(JSON.parse((await body(request, 64 * 1024)).toString("utf8")) as unknown); } catch { throw new RequestError(400, "invalid operator input"); }
   try { return send(response, 200, await invokeRouterOperation(config, ledger, name, input, actor.id, actor.role)); }
-  catch { throw new RequestError(409, "operator operation failed; verify current project and request state", "operation_failed"); }
+  catch (error) {
+    if (error instanceof RouterOperationRejectedError) throw new RequestError(409, "operator operation rejected; refresh current state before retrying", "operation_failed");
+    throw new RequestError(503, "operator operation result unavailable; refresh current state before retrying", "operation_result_unknown");
+  }
 }
