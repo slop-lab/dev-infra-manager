@@ -1,6 +1,5 @@
 // @ts-check
 import { featureUi as ui } from './feature-ui.js';
-import { showAccountAccess } from './account-access.js';
 import { hrefLocation } from './console-location.js';
 /** @type {import('./types.js').Session|null} */ let session = null;
 /** @type {HTMLElement|null} */ let content = null;
@@ -8,8 +7,9 @@ export function clearSettings() {
   session = null; content = null;
   document.getElementById('settings-panel')?.replaceChildren();
 }
-/** @param {import('./types.js').Session} active @param {import('./feature-panels.js').Feature[]} catalog @param {string} section */
-export function showSettings(active, catalog, section) {
+/** @param {import('./types.js').Session} active @param {import('./feature-panels.js').Feature[]} catalog @param {{section:string,reconnect:(id:string)=>Promise<boolean>}} task */
+export function showSettings(active, catalog, task) {
+  const {section,reconnect} = task;
   const root = document.getElementById('settings-panel'); if (!root) return;
   if (session !== active) {
     session = active;
@@ -25,17 +25,25 @@ export function showSettings(active, catalog, section) {
   root.querySelectorAll('nav a').forEach((link) => link.setAttribute('aria-current', link.getAttribute('href') === hrefLocation(['settings', section]) ? 'page' : 'false'));
   const existing = content.querySelector(`[data-settings-section="${section}"]`);
   content.querySelectorAll('[data-settings-section]').forEach((entry) => { if (entry instanceof HTMLElement) entry.hidden = entry !== existing; });
-  if (existing) return;
+  if (existing && section === 'access') return;
+  existing?.remove();
   const panel = ui.element('section', '', 'settings-section'); panel.dataset.settingsSection = section; content.append(panel);
-  if (section === 'access') { showAccountAccess(active, panel); return; }
-  panel.append(ui.element('h2', 'Installed Web capabilities'), ui.element('p', 'Installation, connection readiness and your account’s permissions are separate. Opening a capability never grants additional access.', 'field-hint'));
+  if (section === 'access') {
+    panel.append(ui.element('h2', 'Account & access'), ui.element('p', `Signed in as ${active.username}. Browser roles: ${active.roles.join(', ')}.`), ui.element('p', 'Browser roles and service authority are independent. Account administration requires account-admin access and your current password.'));
+    const access = ui.button('Manage account & access'); access.addEventListener('click', () => window.dispatchEvent(new Event('dim-account-access'))); panel.append(access); return;
+  }
+  panel.append(ui.element('h2', 'Installed Web capabilities'), ui.element('p', 'Installation, feature readiness and your account’s permissions are separate. Open a capability to inspect its individual service connections; a ready feature does not prove worker connectivity or provider reachability.', 'field-hint'));
   const features = ui.element('div', '', 'capability-list'); panel.append(features);
   for (const feature of catalog) {
     const row = ui.element('article', '', 'capability-row');
-    const title = ui.element('h3', feature.title), state = ui.element('span', feature.status === 'ready' ? 'Connection ready' : feature.status === 'unavailable' ? 'Connection unavailable' : 'Connection required', `badge ${feature.status === 'ready' ? 'badge-approved' : 'badge-pending'}`);
+    const title = ui.element('h3', feature.title), state = ui.element('span', feature.status === 'ready' ? 'Feature ready' : feature.status === 'unavailable' ? 'Connection unavailable' : 'Connection required', `badge ${feature.status === 'ready' ? 'badge-approved' : 'badge-pending'}`);
     row.append(title, state, ui.element('p', feature.description), ui.element('p', `${feature.operations.length} operation${feature.operations.length === 1 ? '' : 's'} available to this account.`, 'field-hint'));
     const link = ui.element('a', (feature.surfaces ?? ['navigation']).includes('workspace') ? 'Open a workspace to use this capability' : `Open ${feature.title}`);
     link.href = hrefLocation((feature.surfaces ?? ['navigation']).includes('workspace') ? ['workspaces'] : ['features', feature.id]); row.append(link); features.append(row);
+    if (feature.configured) {
+      const retry = ui.button(`Reconnect ${feature.title}`), feedback = ui.element('p'); feedback.setAttribute('role','status');
+      retry.addEventListener('click', () => { if (retry.disabled) return; retry.disabled = true; feedback.textContent = 'Reattesting this fixed connection…'; void reconnect(feature.id).then((ready) => { if (!row.isConnected) return; feedback.textContent = ready ? 'Connection reattested. Open the capability or refresh its state; existing drafts were kept.' : 'Connection is still unavailable. Ask the operator to inspect its service and private scope, then retry.'; state.textContent = ready ? 'Feature ready' : 'Connection unavailable'; state.className = `badge ${ready ? 'badge-approved' : 'badge-pending'}`; }).finally(() => { retry.disabled = false; }); }); row.append(retry,feedback);
+    }
   }
   if (!catalog.length) features.append(ui.element('p', 'No optional Web capabilities were discovered. If services were expected, reload this console or ask its owner to check the selected Web plugins.'));
   const hosts = ui.element('section', '', 'settings-section');

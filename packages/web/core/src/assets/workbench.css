@@ -1,4 +1,5 @@
 a { color: var(--color-info-text); text-underline-offset: var(--space-1); }
+h1, h2, h3, h4 { overflow-wrap: anywhere; }
 a.button { text-decoration: none; }
 .console-navigation { inline-size: min(calc(100% - 2 * var(--space-6)), var(--content-max)); margin-block-start: 0; padding-block: var(--space-3) 0; gap: var(--space-2); }
 .console-link { display: inline-flex; align-items: center; min-block-size: var(--control-height); padding: var(--space-2) var(--space-4); color: var(--color-text-secondary); text-decoration: none; border-block-end: var(--focus-width) solid transparent; font-size: var(--font-control); font-weight: 560; }
@@ -19,6 +20,7 @@ a.button { text-decoration: none; }
 .capability-row p, .capability-row a { grid-column: 1 / -1; }
 .capability-row p { color: var(--color-text-secondary); max-inline-size: var(--reading-max); }
 .capability-row a { justify-self: start; min-block-size: var(--control-height); display: inline-flex; align-items: center; }
+.capability-row > .button { justify-self: start; max-inline-size: 100%; overflow-wrap: anywhere; }
 .capability-definitions { display: grid; gap: var(--space-5); }
 .capability-definitions dt { font-weight: 600; margin-block-end: var(--space-1); }
 .capability-definitions dd { color: var(--color-text-secondary); max-inline-size: var(--reading-max); }
