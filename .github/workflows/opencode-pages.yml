@@ -6,6 +6,9 @@ on:
     paths:
       - .github/workflows/opencode-pages.yml
       - tools/opencode-web/**
+      - packages/web/plugins/agent-tools/src/assets/workspace-link.js
+      - scripts/checks/opencode-workspace-link.ts
+      - tests/web/plugins/agent-tools/opencode*.ts
   workflow_dispatch:
 
 permissions:
@@ -31,12 +34,29 @@ jobs:
           node-version: 26.5.0
       - name: Read reviewed Bun version
         id: pin
-        run: node -e 'const fs=require("node:fs");fs.appendFileSync(process.env.GITHUB_OUTPUT,"bun="+JSON.parse(fs.readFileSync("tools/opencode-web/upstream.json","utf8")).bun+"\n")'
+        run: node -e 'const fs=require("node:fs"),pin=JSON.parse(fs.readFileSync("tools/opencode-web/upstream.json","utf8"));fs.appendFileSync(process.env.GITHUB_OUTPUT,"bun="+pin.bun+"\nopencode="+pin.version+"\n")'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ steps.pin.outputs.bun }}
       - name: Build reviewed upstream static UI
         run: node tools/opencode-web/build.ts "$RUNNER_TEMP/opencode-source" "$RUNNER_TEMP/opencode-build"
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+        with:
+          version: 10.13.1
+      - name: Prepare disposable browser verification
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --dir tests exec playwright-core install --with-deps chromium
+          pnpm --dir tests exec node --input-type=module <<'NODE'
+          import { chromium } from "playwright-core";
+          import { appendFileSync } from "node:fs";
+          appendFileSync(process.env.GITHUB_ENV, `DIM_CHROMIUM=${chromium.executablePath()}\n`);
+          NODE
+          npm install --prefix "$RUNNER_TEMP/opencode-runtime" --ignore-scripts --no-audit --no-fund --package-lock=false "opencode-linux-x64@${{ steps.pin.outputs.opencode }}"
+          sudo mkdir -p /workspace/main
+          sudo mount --bind "$GITHUB_WORKSPACE" /workspace/main
+      - name: Verify real workspace registration and authentication before publication
+        run: node /workspace/main/scripts/checks/opencode-workspace-link.ts "$RUNNER_TEMP/opencode-build" "$RUNNER_TEMP/opencode-runtime/node_modules/opencode-linux-x64/bin/opencode"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: opencode-web-build
