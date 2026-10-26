@@ -240,6 +240,9 @@ is implied by these source changes.
   Fence prior tabs and delayed credential actions when browser identity changes,
   retain exact-job cancellation receipts through stale or failed reads, and
   reconnect workspace-only capabilities without clearing healthy sibling drafts.
+  Bind plugin calls to server-owned generations across tabs, preserve known router
+  rejections through controller transport, and reconcile account creation by its
+  exact generated intent identity without erasing newer credentials or routes.
   Run the disposable non-Git browser journeys in the Web CI lane.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
