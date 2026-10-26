@@ -144,6 +144,26 @@ for this source gate.
 
 ### Browser user journeys
 
+The same exact-candidate `Web journeys` job also runs the non-Git workbench lane
+before its Git-specific journeys. It uses disposable Web sessions, synthetic
+host/service controllers and real LLM owner/ledger fixtures, with no installed
+operator configuration or real provider inference:
+
+```bash
+DIM_CHROMIUM=/absolute/path/to/chromium pnpm --dir tests run test:web-non-git
+```
+
+Build matching packages first. The lane covers workspace lifecycle/resources,
+tools/routes, account access, service authority, browser locations and session
+recovery, uncertain writes and stale responses. Safe screenshots selected by the
+journeys are uploaded separately from the Git evidence. Its serve fixture and
+scope limits are documented in
+[`tests/web/non-git-workbench`](../../tests/web/non-git-workbench/README.md).
+This browser gate does not establish real SSH/Sysbox/VM effects, provider OAuth
+or inference, or staged pinned OpenCode client integration. Those remain separate
+runtime/operator gates. Adding this workflow step does not dispatch DIM CI,
+publish an artifact or configure a required repository check automatically.
+
 The `Web journeys` workflow runs the default-operator review journey on every
 development push and on pull requests and merge groups targeting main. Making
 its `review` check mandatory requires the repository's admission rules to select
