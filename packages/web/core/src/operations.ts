@@ -103,6 +103,7 @@ export function configuredWebOperations(config: OperationsConfig): WebOperations
     },
     async workspaceAction(id, input) {
       const args = [input.action, input.name, "--expect-id", input.expectedId];
+      if (input.action === "discard") args.push("--yes");
       for (const [key, flag] of [["cpuCount", "--cpus"], ["memory", "--memory"], ["pidsLimit", "--pids"]] as const) {
         const value = input.resources?.[key]; if (value !== undefined) args.push(flag, value);
       }

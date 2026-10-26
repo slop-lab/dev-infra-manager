@@ -87,6 +87,8 @@ it("executes only configured public DIM host ports, projects safe summaries and 
   expect(await readFile(argv, "utf8")).toBe(JSON.stringify(["--host", "ssh-development", "ls", "--json"]));
   await operations.workspaceAction("devbox", { name: "development", expectedId: uuid, action: "restart" });
   expect(JSON.parse(await readFile(argv, "utf8"))).toEqual(["--host", "ssh-development", "restart", "development", "--expect-id", uuid, "--json"]);
+  await operations.workspaceAction("devbox", { name: "development", expectedId: uuid, action: "discard" });
+  expect(JSON.parse(await readFile(argv, "utf8"))).toEqual(["--host", "ssh-development", "discard", "development", "--expect-id", uuid, "--yes", "--json"]);
   await operations.workspaceCreate("devbox", workspaceCreateSchema.parse({ name: "new-dev", source: "https://example.test/repo;literal.git", ref: "main",
     runtime: "container", image: "registry.example.test/team/dev@sha256:" + "a".repeat(64), resources: { cpuCount: "unlimited", memory: "4g", pidsLimit: "512" } }));
   expect(JSON.parse(await readFile(argv, "utf8"))).toEqual(["--host", "ssh-development", "create", "https://example.test/repo;literal.git", "new-dev", "--runtime", "container", "--ref", "main",
