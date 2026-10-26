@@ -42,7 +42,7 @@ export function mountRouterControllers(container, context, mountSelected) {
       get path() { return localPath(location.path, controllerKey); },
       href: (path) => location.href(globalPath(path, controllerKey)),
       navigate: (path, options) => location.navigate(globalPath(path, controllerKey), options),
-      subscribe(handler) { return location.subscribe((path) => { if (path[1] === controllerKey) handler(localPath(path, controllerKey)); }); }
+      subscribe(handler) { return location.subscribe((path) => { if (!path.length || path[1] === controllerKey) handler(localPath(path, controllerKey)); }); }
     };
   }
   /** @param {Controller|undefined} controller @param {boolean} [confirmed] */

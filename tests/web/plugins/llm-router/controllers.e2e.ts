@@ -35,7 +35,20 @@ try {
   await page.goto(first.origin); await page.getByLabel('Username', { exact: true }).fill(first.username); await page.getByLabel('Password', { exact: true }).fill(first.password); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('link', { name: 'LLM router', exact: true }).click();
   await page.getByText(/^first backend /).waitFor();
+  // Given the router root's default task and a local project draft.
   await page.getByRole('link', { name: 'Projects & policy', exact: true }).click();
+  await page.getByRole('heading', { name: 'Routing projects', exact: true }).waitFor();
+  await page.getByText('New routing project', { exact: true }).click();
+  await page.getByLabel('Project ID', { exact: true }).fill('retained-history-draft');
+  // When browser history returns to the bare feature root.
+  await page.goBack();
+  await page.waitForURL(/#\/features\/llm-router$/);
+  // Then the default task is restored without discarding its draft.
+  await page.getByRole('heading', { name: 'Accounts & routes', exact: true }).waitFor({ timeout: 5000 });
+  assert.equal(await page.getByRole('link', { name: 'Accounts & routes', exact: true }).getAttribute('aria-current'), 'page');
+  await page.goForward();
+  await page.getByLabel('Project ID', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Project ID', { exact: true }).inputValue(), 'retained-history-draft');
   await page.getByRole('link', { name: 'example', exact: true }).click();
   await page.getByLabel('Allowed routes (comma separated)', { exact: true }).fill('unsaved-first-route');
   await page.getByRole('link', { name: 'Traffic & access', exact: true }).click();
