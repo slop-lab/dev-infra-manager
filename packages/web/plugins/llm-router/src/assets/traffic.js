@@ -1,4 +1,5 @@
 // @ts-check
+import { createMutationReconciliation } from "./mutation-reconciliation.js";
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginBrowserContext} Context */
 /** @typedef {{ readonly input: string, readonly output: string }} ResolutionDraft */
 /** @typedef {"execution"|"accounting"} ResolutionKind */
@@ -13,14 +14,17 @@ function rows(value) { return Array.isArray(value) ? value.map(object) : []; }
 /** @param {unknown} value */
 function text(value) { return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : "—"; }
 
-/** @param {HTMLElement} container @param {Context} context @param {TrafficOptions} options */
-export function mountTraffic(container, context, options) {
+/** @param {HTMLElement} container @param {Context} context @param {TrafficOptions} trafficOptions */
+export function mountTraffic(container, context, trafficOptions) {
   const { element: node, input } = context.ui;
+  const mutations = createMutationReconciliation();
+  /** @type {Map<string,Record<string,unknown>>} */ const mutationExpectations = new Map();
   const has = (/** @type {string} */ name) => context.operations.some((operation) => operation.name === name);
   /** @type {Map<string,ResolutionDraft>} */ const drafts = new Map();
   /** @type {Map<string,ResolutionKind>} */ const acceptedResolutions = new Map();
   /** @type {Map<string,{kind:ResolutionKind}>} */ const unknownResolutions = new Map();
   const traffic = node("section", "", "panel"), principals = node("section", "", "panel");
+  traffic.dataset.routerSection = "traffic"; principals.dataset.routerSection = "traffic";
   const requestList = node("div"), principalList = node("div"), trafficStatus = node("p"), principalStatus = node("p"), trafficReceipt = node("p"), principalReceipt = node("p");
   for (const feedback of [trafficStatus, principalStatus, trafficReceipt, principalReceipt]) feedback.setAttribute("role", "status");
   traffic.append(node("h2", "Recent requests"), trafficStatus, trafficReceipt);
@@ -47,18 +51,18 @@ export function mountTraffic(container, context, options) {
   function action(parent, label, options) {
     const button = context.ui.button(label);
     button.addEventListener("click", () => { if (button.disabled) return; button.disabled = true; button.dataset.pending = "true"; context.ui.feedback(options.feedback, `${label}…`);
-      void options.run(button).catch((error) => context.ui.feedback(options.feedback, error instanceof Error ? error.message : "Operation failed. Refresh before retrying.", "error")).finally(() => { delete button.dataset.pending; button.disabled = button.dataset.accepted === "true"; }); });
+      void options.run(button).catch((error) => { const key = button.dataset.mutationKey; if (key && error instanceof Error && "outcome" in error && error.outcome === "unknown") { mutations.unknown(key); button.dataset.accepted = "true"; } context.ui.feedback(options.feedback, error instanceof Error ? error.message : "Operation failed. Refresh before retrying.", "error"); }).finally(() => { delete button.dataset.pending; button.disabled = button.dataset.accepted === "true" || Boolean(button.dataset.mutationKey && mutations.locked(button.dataset.mutationKey)); }); });
     parent.append(button); return button;
   }
   /** @param {HTMLButtonElement} button @param {AcceptedOptions} acceptedOptions */
   async function accepted(button, acceptedOptions) {
     button.dataset.accepted = "true"; context.ui.feedback(acceptedOptions.feedback, acceptedOptions.receipt);
     try { await acceptedOptions.refresh(); }
-    catch { if (options.current()) context.ui.feedback(acceptedOptions.feedback, `${acceptedOptions.receipt} Latest recent requests could not refresh. Use Refresh router to read the current state; the resolution was accepted.`); }
+    catch { if (trafficOptions.current()) context.ui.feedback(acceptedOptions.feedback, `${acceptedOptions.receipt} Latest recent requests could not refresh. Use Refresh router to read the current state; the resolution was accepted.`); }
   }
   /** @param {HTMLElement} parent @param {string} projectId @param {HTMLElement} status */
   function projectNavigation(parent, projectId, status) {
-    context.ui.navigationAction(parent, { label: `Open routing project ${projectId}`, status, isCurrent: options.current,
+    context.ui.navigationAction(parent, { label: `Open routing project ${projectId}`, status, isCurrent: trafficOptions.current,
       open: () => context.navigation.openFeature("llm-router", { kind: "project", projectId }) });
   }
   /** @param {HTMLInputElement} inputTokens @param {HTMLInputElement} outputTokens */
@@ -74,10 +78,12 @@ export function mountTraffic(container, context, options) {
   function resolutionChanged(request, kind) { return kind === "execution" ? request.execution !== "outcome_unknown" : request.accounting !== "reconciliation_required"; }
   /** @param {boolean} [reconcileUnknown] */
   async function refreshRequests(reconcileUnknown = false) {
+    const mutationRead = mutations.beginRead();
     const reconciling = reconcileUnknown ? new Map(unknownResolutions) : null;
-    const requests = await context.invoke("requests", { limit: 100 }); if (!options.current()) return;
+    const requests = await context.invoke("requests", { limit: 100 }); if (!trafficOptions.current()) return;
     requestList.replaceChildren(); trafficStatus.textContent = "";
     const requestRows = rows(requests); if (!requestRows.length) requestList.append(node("p", "No requests recorded yet."));
+    for (const [key, expectation] of mutationExpectations) if (expectation.kind === "cancel") { const request = requestRows.find((item) => item.id === expectation.id); const outcome = mutations.reconcile(mutationRead, key, request?.cancel_requested === 1); if (outcome !== "unknown") mutationExpectations.delete(key); }
     for (const request of requestRows) {
       const id = text(request.id), projectId = text(request.project_id), row = node("article", "", "operations-row"), feedback = node("p"), navigationStatus = node("p");
       const acceptedKind = acceptedResolutions.get(id);
@@ -90,8 +96,12 @@ export function mountTraffic(container, context, options) {
       row.append(node("h3", `${projectId} · ${text(request.model)}`), node("p", `${text(request.outcome)} · Execution ${text(request.execution)} · Usage ${text(request.accounting)}`), node("p", `Request ${id}`, "field-hint"), feedback, navigationStatus);
       projectNavigation(row, projectId, navigationStatus);
       const details = document.createElement("details"); details.append(node("summary", "Request metadata"));
-      details.append(context.ui.table(["Field", "Value"], [["Account", request.account_id], ["Started", new Date(Number(request.started_at)).toLocaleString()], ["Finished", request.finished_at === null ? "Not finished" : new Date(Number(request.finished_at)).toLocaleString()], ["Delivery", request.delivery], ["Input tokens", request.input_tokens ?? "Unknown"], ["Output tokens", request.output_tokens ?? "Unknown"], ["Cancellation requested", request.cancel_requested ? "Yes" : "No"], ["Error code", request.error_code ?? "None"]].map((values) => values.map(text)))); row.append(details);
-      if (has("request.cancel") && (request.outcome === "running" || request.occupied === 1)) action(row, `Request cancellation ${id.slice(0, 8)}`, { feedback, run: async () => { await context.invoke("request.cancel", { requestId: id }); if (options.current()) feedback.textContent = "Cancellation requested. Upstream termination is not confirmed; inspect the eventual outcome."; } });
+      const metadata = node("dl", "", "llm-metadata");
+      for (const [label, value] of Object.entries({ Account: request.account_id, Started: new Date(Number(request.started_at)).toLocaleString(), Finished: request.finished_at === null ? 'Not finished' : new Date(Number(request.finished_at)).toLocaleString(), Delivery: request.delivery, 'Input tokens': request.input_tokens ?? 'Unknown', 'Output tokens': request.output_tokens ?? 'Unknown', 'Cancellation requested': request.cancel_requested ? 'Yes' : 'No', 'Error code': request.error_code ?? 'None' })) {
+        const item = node("div"); item.append(node("dt", label), node("dd", text(value))); metadata.append(item);
+      }
+      details.append(metadata); row.append(details);
+      if (has("request.cancel") && (request.outcome === "running" || request.occupied === 1)) { const cancel = action(row, "Request cancellation", { feedback, run: async (button) => { button.dataset.mutationKey = `request.cancel:${id}`; mutationExpectations.set(button.dataset.mutationKey, { kind: "cancel", id }); await context.invoke("request.cancel", { requestId: id }); if (trafficOptions.current()) { mutations.accepted(button.dataset.mutationKey); button.dataset.accepted = "true"; feedback.textContent = "Cancellation requested. Upstream termination is not confirmed; inspect the eventual outcome."; } } }); cancel.dataset.mutationKey = `request.cancel:${id}`; cancel.disabled = mutations.locked(cancel.dataset.mutationKey); }
       const resolutionKind = request.execution === "outcome_unknown" ? "execution" : request.accounting === "reconciliation_required" && request.outcome !== "running" ? "accounting" : undefined;
       if (has("request.resolve") && resolutionKind !== undefined) {
         if (acceptedResolutions.has(id)) row.append(node("p", "Resolution was accepted. Refresh current state before another mutation.", "field-hint"));
@@ -103,7 +113,7 @@ export function mountTraffic(container, context, options) {
           for (const field of [inputTokens, outputTokens]) { field.type = "number"; field.min = "0"; field.step = "1"; field.placeholder = "Optional"; }
           const remember = () => drafts.set(id, { input: inputTokens.value, output: outputTokens.value }); inputTokens.addEventListener("input", remember); outputTokens.addEventListener("input", remember);
           form.append(node("p", resolutionKind === "execution" ? "Enter both observed nonnegative token counts, or leave both blank to retain unknown usage." : "Enter both observed nonnegative token counts to settle accounting without replaying inference.", "field-hint"));
-          const label = resolutionKind === "execution" ? `Resolve unknown outcome ${id.slice(0, 8)}` : `Record observed usage ${id.slice(0, 8)}`;
+          const label = resolutionKind === "execution" ? "Resolve outcome" : "Record usage";
           const submit = action(form, label, { feedback, run: async (button) => {
             const usage = observedUsage(inputTokens, outputTokens);
             if (usage.status === "invalid" || resolutionKind === "accounting" && usage.status === "empty") { context.ui.feedback(feedback, resolutionKind === "execution" ? "Enter both observed token counts, or leave both blank." : "Enter both observed token counts.", "error"); return; }
@@ -119,7 +129,7 @@ export function mountTraffic(container, context, options) {
               unknownResolutions.set(id, { kind: resolutionKind }); inputTokens.disabled = true; outputTokens.disabled = true; button.dataset.accepted = "true";
               context.ui.feedback(feedback, "The resolution outcome is unknown. Your draft is kept; use Refresh router to check authoritative request state before retrying.", "error"); return;
             }
-            if (!options.current()) return;
+            if (!trafficOptions.current()) return;
             drafts.delete(id); acceptedResolutions.set(id, resolutionKind); inputTokens.value = ""; outputTokens.value = ""; feedback.textContent = "";
             const receipt = resolutionKind === "accounting" ? `Observed usage recorded for request ${id}.` : usage.status === "observed" ? `Resolution recorded with observed token usage for request ${id}.` : `Resolution recorded without observed token usage for request ${id}.`;
             await accepted(button, { feedback: trafficReceipt, receipt, refresh: refreshRequests });
@@ -132,33 +142,39 @@ export function mountTraffic(container, context, options) {
     filterRequests();
   }
   async function refreshPrincipals() {
-    const credentials = await context.invoke("principals"); if (!options.current()) return;
+    const read = mutations.beginRead(), credentials = await context.invoke("principals"); if (!trafficOptions.current()) return;
     principalList.replaceChildren(); principalStatus.textContent = "";
     const credentialRows = rows(credentials); if (!credentialRows.length) principalList.append(node("p", "No workspace principals issued yet."));
+    for (const [key, expectation] of mutationExpectations) if (expectation.kind === "principal") { const principal = credentialRows.find((item) => item.id === expectation.id); const outcome = mutations.reconcile(read, key, principal?.enabled !== 1); if (outcome !== "unknown") mutationExpectations.delete(key); }
     for (const principal of credentialRows) {
       const row = node("article", "", "operations-row"), feedback = node("p"), navigationStatus = node("p"), projectId = text(principal.project_id);
       feedback.setAttribute("role", "status"); navigationStatus.setAttribute("role", "status");
       row.append(node("h3", `${text(principal.workspace_name)} · ${projectId}`), node("p", `Route ${text(principal.route_id)} · ${principal.enabled === 1 ? "Enabled" : "Revoked"}`), feedback, navigationStatus);
       projectNavigation(row, projectId, navigationStatus);
-      if (has("principal.revoke") && principal.enabled === 1) action(row, `Revoke ${text(principal.workspace_name)}`, { feedback, run: async (button) => {
+      if (has("principal.revoke") && principal.enabled === 1) { const revoke = action(row, `Revoke ${text(principal.workspace_name)}`, { feedback, run: async (button) => {
         if (!window.confirm(`Revoke ${text(principal.workspace_name)} access to ${projectId}? Reattachment requires host authorization.`)) { feedback.textContent = "No access was revoked."; return; }
-        await context.invoke("principal.revoke", { principalId: text(principal.id) }); if (!options.current()) return;
+        button.dataset.mutationKey = `principal.revoke:${text(principal.id)}`; mutationExpectations.set(button.dataset.mutationKey, { kind: "principal", id: text(principal.id) }); await context.invoke("principal.revoke", { principalId: text(principal.id) }); if (!trafficOptions.current()) return;
         feedback.textContent = ""; button.dataset.accepted = "true";
         const receipt = `${text(principal.workspace_name)} access revoked.`; principalReceipt.textContent = receipt;
         try { await refreshPrincipals(); }
-        catch { if (options.current()) principalReceipt.textContent = `${receipt} Latest workspace access could not refresh. Use Refresh router to read the current state; the change was accepted.`; }
-      } });
+        catch { if (trafficOptions.current()) principalReceipt.textContent = `${receipt} Latest workspace access could not refresh. Use Refresh router to read the current state; the change was accepted.`; }
+      } }); revoke.dataset.mutationKey = `principal.revoke:${text(principal.id)}`; revoke.disabled = mutations.locked(revoke.dataset.mutationKey); if (revoke.disabled) feedback.textContent = 'A previous revocation is awaiting reconciliation. Use Refresh router to inspect current workspace access.'; }
       principalList.append(row);
     }
   }
   /** @param {boolean} [reconcileUnknown] */
   async function refresh(reconcileUnknown = false) {
-    const results = await Promise.allSettled([refreshRequests(reconcileUnknown), refreshPrincipals()]); if (!options.current()) return false;
+    const results = await Promise.allSettled([refreshRequests(reconcileUnknown), refreshPrincipals()]); if (!trafficOptions.current()) return false;
     for (const [index, feedback, label] of /** @type {Array<[number,HTMLElement,string]>} */ ([[0, trafficStatus, "Recent requests"], [1, principalStatus, "Workspace access"]])) {
       if (results[index]?.status === "rejected") context.ui.feedback(feedback, `${label} could not refresh. Previously loaded rows are kept; use Refresh router to retry this read.`, "error");
       else feedback.setAttribute("role", "status");
     }
     return results.every((result) => result.status === "fulfilled");
   }
-  return { refresh, dispose() { drafts.clear(); acceptedResolutions.clear(); unknownResolutions.clear(); } };
+  /** @param {import('./routes.js').RouterRoute} route */
+  function applyRoute(route) {
+    const hidden = route.section !== "traffic";
+    traffic.hidden = hidden; principals.hidden = hidden;
+  }
+  return { refresh, applyRoute, hasUnknown: () => mutations.anyUnknown() || unknownResolutions.size > 0, hasPending: () => Boolean(container.querySelector('button[data-pending="true"]')), dispose() { mutations.clear(); drafts.clear(); acceptedResolutions.clear(); unknownResolutions.clear(); } };
 }
