@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
-import { assertGitExecutableIdentity, resolveAuthoritativeNativeRepositoryTarget, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { assertGitExecutableIdentity, isNativeGitOrdinaryCandidateRef, nativeRepositoryBranches, resolveAuthoritativeNativeRepositoryTarget, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { createAuthoritativeNativeReview, reviewPreparations, reviewChangeMatchers } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 
 const execute = promisify(execFile);
@@ -15,8 +15,8 @@ export async function prepareBranchMerge(context: RepositoryExtensionContext,
   selector: { readonly projectId: string; readonly repositoryId: string; readonly sourceRef: string; readonly targetRef: string }): Promise<PreparedBranchMerge> {
   if (selector.sourceRef === selector.targetRef) throw new Error("merge source and target branches must differ");
   const target = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: selector.projectId, repositoryId: selector.repositoryId, protectedRef: selector.targetRef });
-  const source = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: selector.projectId, repositoryId: selector.repositoryId, protectedRef: selector.sourceRef });
-  const sourceCommit = source.currentHead.commit, expectedProtectedHead = target.currentHead.commit;
+  if (!selector.sourceRef.startsWith("refs/heads/") || !isNativeGitOrdinaryCandidateRef(selector.sourceRef)) throw new Error("merge source must be an ordinary branch ref");
+  const expectedProtectedHead = target.currentHead.commit;
   const git = async (args: readonly string[], conflict = false) => {
     await assertGitExecutableIdentity(context.runtime.gitExecutable, context.runtime.gitIdentity);
     try {
@@ -31,6 +31,15 @@ export async function prepareBranchMerge(context: RepositoryExtensionContext,
       throw new Error("branch merge could not be prepared");
     }
   };
+  let sourceCommit: string;
+  if (Object.hasOwn(nativeRepositoryBranches(target.imported.policy), selector.sourceRef)) {
+    const source = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: selector.projectId, repositoryId: selector.repositoryId, protectedRef: selector.sourceRef });
+    sourceCommit = source.currentHead.commit;
+  } else {
+    if (!(await git(["symbolic-ref", "--quiet", selector.sourceRef], true)).conflict) throw new Error("merge source must be a direct branch ref");
+    sourceCommit = objectId((await git(["show-ref", "--verify", "--hash", selector.sourceRef])).output);
+    if ((await git(["cat-file", "-t", sourceCommit])).output.trim() !== "commit") throw new Error("merge source must point to a commit");
+  }
   const evidence = { schemaVersion: 1 as const, sourceRef: selector.sourceRef, targetRef: selector.targetRef, sourceCommit, expectedProtectedHead };
   if (!(await git(["merge-base", "--is-ancestor", sourceCommit, expectedProtectedHead], true)).conflict) return { ...evidence, outcome: "unchanged" };
   let candidateCommit = sourceCommit;

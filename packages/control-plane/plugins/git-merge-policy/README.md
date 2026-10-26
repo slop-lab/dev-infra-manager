@@ -26,6 +26,18 @@ dim-merge-policy promote /absolute/path/promoter.json PROJECT REPOSITORY REVIEW_
 The client checks file ownership, mode 0600, host identity and deployment
 generation before submitting a promotion.
 
+Operators can prepare an ordinary branch or a managed branch for merge into a
+policy-managed protected target with `POST /v1/projects/PROJECT/repositories/REPOSITORY/merges`
+and `{schemaVersion: 1, sourceRef: "refs/heads/feature", targetRef: "refs/heads/main"}`.
+The source must be an existing direct branch in the same owned repository and
+point to a commit. Tags, revision expressions and reserved proposal/internal refs
+are rejected. Managed sources retain their authoritative-head validation.
+Preparation snapshots the source commit and target protected head, creates only
+a review proposal, and reports conflicts without changing the target. Repeating
+that exact pair reuses its proposal and review; moving the source produces a new
+snapshot while the earlier proposal stays pinned. Promotion still requires the
+selected target's approvals and required CI for that exact review.
+
 Promotion checks the exact current proposal, protected head, imported policy
 and human approvals. The complete canonical policy digest binds the review, so
 changing quality policy requires a fresh review. Optional quality providers

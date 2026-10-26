@@ -96,8 +96,10 @@ is implied by these source changes.
   Default to `main` and manage multiple branches per repository through
   `.dim/repos.yml`. Require proposals for managed branches, apply configured
   file/field review rules on `main`, and prevent force pushes to both `main` and
-  `development`. Prepare branch-to-branch merges through the same review and
-  promotion path, while existing workspaces keep their selected branch.
+  `development`. Prepare ordinary or managed source branches for a protected
+  target through the same exact review and required CI promotion path, pinning
+  the source commit and preserving the target until approval. Existing workspaces
+  keep their selected branch.
   A runnable public/private example links its reviewed files to Git/CI and
   workspace runtime verification; example recipes identify required optional
   plugins and services.
