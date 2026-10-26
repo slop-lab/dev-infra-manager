@@ -1,5 +1,6 @@
+import { defaultRepositoryReviewExtensions } from "../../../../packages/host/plugins/native-git/src/defaultRepositoryReviewPolicy.js";
 import { randomUUID } from "node:crypto";
-import { rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import * as decisionStore from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-decision-store.js";
@@ -29,6 +30,7 @@ it("binds main PR rules to its target while development stays approval-free, the
     for (const [file, contents, required] of [["README.md", "ordinary change\n", []], ["boundary.txt", "boundary change\n", ["owner"]], ["runtime.json", '{"isolation":false}', ["owner"]], ["runtime.json", '{"isolation":false,"theme":"light"}', []], ["custom.txt", "custom rule\n", ["owner"]]] as const) {
       await writeFile(join(f.source, file), contents);
       await git("/usr/bin/git", ["-C", f.source, "add", file]);
+      await git("/usr/bin/git", ["-C", f.source, "add", "."]);
       await f.commit();
       await git("/usr/bin/git", ["-C", f.source, "push", "origin", `HEAD:${f.proposalRef}`]);
       for (const [protectedRef, reviewers] of [["refs/heads/main", required], ["refs/heads/development", []]] as const) {
@@ -84,5 +86,48 @@ it("binds main PR rules to its target while development stays approval-free, the
     expect(mainAndHistory.find((entry) => entry.reviewId === result.reviewId)?.status).toBe("stale");
     const retired = mainAndHistory.filter((entry) => entry.protectedRef === "refs/heads/development");
     expect(retired.length).toBeGreaterThan(1); expect(retired.every((entry) => entry.status === "stale")).toBe(true);
+  } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
+}, 30_000);
+
+it("ordinary imported defaults resolve and promote normal changes while .dim changes wait for the importing reviewer", async () => {
+  const promoter = { hostId: "host-a", username: "promoter", password: token(10) };
+  const merge = await mergePlugin.configure({ hostPromoters: [promoter] });
+  const defaults = defaultRepositoryReviewExtensions(undefined, reviewer.reviewerId) as Record<string, unknown>;
+  const f = await fixture(true, merge.extensions ?? [], defaults["code-review"], [reviewer], { "merge-policy": {} });
+  const path = `${f.origin}/v1/projects/project/repositories/main`;
+  const post = (suffix: string, body: unknown, credential = reviewer as { username: string; password: string }) => fetch(path + suffix, { method: "POST", headers: {
+    authorization: basic(credential), "content-type": "application/json", "x-dim-generation-id": generationId }, body: JSON.stringify(body) });
+  try {
+    for (const sensitive of [false, true]) {
+      if (sensitive) { await mkdir(join(f.source, ".dim")); await writeFile(join(f.source, ".dim/runtime.json"), '{"isolation":"changed"}'); }
+      else await writeFile(join(f.source, "README.md"), "ordinary change\n");
+      await git("/usr/bin/git", ["-C", f.source, "add", "."]);
+      await f.commit();
+      await git("/usr/bin/git", ["-C", f.source, "push", "origin", `HEAD:${f.proposalRef}`]);
+      const resolved = await post("/reviews/resolve", { schemaVersion: 1, proposalRef: f.proposalRef });
+      expect(resolved.status, await resolved.clone().text()).toBe(200);
+      const review = record(record(await resolved.json()).review), reviewId = text(review, "reviewId");
+      expect(review.requiredReviewerIds).toEqual(sensitive ? [reviewer.reviewerId] : []);
+      if (sensitive) {
+        expect((await post(`/reviews/${reviewId}/promotions`, { schemaVersion: 1 }, promoter)).status).toBe(409);
+        expect((await post(`/reviews/${reviewId}/approvals`, { requestId: randomUUID() })).status).toBe(201);
+      }
+      expect((await post(`/reviews/${reviewId}/promotions`, { schemaVersion: 1 }, promoter)).status).toBe(201);
+    }
+  } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
+}, 30_000);
+
+it("rejects updates that remove review configuration from a review-enabled branch without changing its policy", async () => {
+  const f = await fixture(true);
+  const path = `${f.origin}/v1/projects/project/repositories/main/policy`;
+  const headers = { authorization: basic({ username: "importer", password: token(1) }), "content-type": "application/json", "x-dim-generation-id": generationId };
+  try {
+    const before = record(await (await fetch(path, { headers })).json());
+    const next = { protectedRef: text(record(before.policy), "protectedRef"), extensions: {} };
+    const response = await fetch(path, { method: "POST", headers, body: JSON.stringify({ schemaVersion: 1, expectedPolicyDigest: before.policyDigest,
+      expectedProtectedHead: record(before.currentHead).commit, policy: { schemaVersion: 1, ...next, policyRevision: nativeRepositoryPolicyRevision(next) } }) });
+    expect(response.status).toBe(400);
+    const after = record(await (await fetch(path, { headers })).json());
+    expect(after.policyDigest).toBe(before.policyDigest);
   } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 }, 30_000);

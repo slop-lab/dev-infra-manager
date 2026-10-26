@@ -78,7 +78,7 @@ export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly re
             const http = createNativeHumanReviewerService({ config, features: context.extensions.filter((entry) => entry.kind === "dim.git-repositories.feature").map((entry) => entry.name).sort(), knownCredentials: context.knownCredentials, runtime, serialize: context.serialize, ...(hooks.humanReviewer === undefined ? {} : { hooks: hooks.humanReviewer }) });
             return {
               handle: http.handle,
-              validatePolicy(policy) { if (Object.hasOwn(policy.extensions, "code-review")) assertConfiguredHumanReviewers(config, policy, runtime.reviewChangeMatchers); },
+              validatePolicy(policy) { assertConfiguredHumanReviewers(config, policy, runtime.reviewChangeMatchers); },
               async activate() { await reconcile(); },
               async onProposals(projectId, repositoryId, refs) { try { await reconcileNativeProposalRefs(runtime, projectId, repositoryId, refs, hooks.review); } catch (error) { retry.wake(); throw error; } },
               onPolicyChanged() { retry.wake(); },

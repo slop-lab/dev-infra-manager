@@ -1,3 +1,4 @@
+import { defaultRepositoryReviewExtensions, repositoryReviewDefaultsNeeded } from "./defaultRepositoryReviewPolicy.js";
 import { execFile } from "node:child_process";
 import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
@@ -21,6 +22,8 @@ export type NativeRootBootstrapGitInput = {
   readonly scratchRoot: string;
   readonly policySource: { readonly kind: "reviewed-manifest" }
     | { readonly kind: "manifest-free"; readonly extensions?: unknown; readonly defaultRef?: string; readonly branches?: Readonly<Record<string, NativeRepositoryBranchPolicy>> };
+  readonly reviewerId?: string;
+  readonly resolveReviewerId?: () => Promise<string>;
   readonly signal: AbortSignal;
 };
 
@@ -98,6 +101,11 @@ export async function prepareNativeRootBootstrapGit(
       throw new UserError(`native root bootstrap policy source is unsupported: ${String(exhaustive)}`);
     }
   }
+  const reviewerId = input.reviewerId ?? (input.resolveReviewerId !== undefined && repositoryReviewDefaultsNeeded(policy.repositoryPolicy.extensions, policy.repositoryPolicy.branches)
+    ? await input.resolveReviewerId() : undefined);
+  if (reviewerId !== undefined) policy = compileNativeRepositoryBootstrapPolicy({ repositoryId: policy.repositoryId, protectedRef: policy.protectedRef,
+    defaultRef: policy.repositoryPolicy.defaultRef!, branches: policy.repositoryPolicy.branches!,
+    extensions: defaultRepositoryReviewExtensions(policy.repositoryPolicy.extensions, reviewerId, policy.repositoryPolicy.branches) });
   const stage = await mkdtemp(join(input.scratchRoot, "dim-root-"));
   const repository = join(stage, "source.git");
   const verifier = join(stage, "verify.git");

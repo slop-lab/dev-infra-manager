@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
-import { chmod, link, readFile, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, link, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -41,7 +41,7 @@ test("manifest import previews host-side YAML sources and rejects an unsafe mani
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout).repositories[0], { repositoryId: "root", url: "https://github.com/octocat/Hello-World.git", branch: "master", protectedRef: "refs/heads/main",
     defaultRef: "refs/heads/main", branches: { "refs/heads/main": { review: true }, "refs/heads/development": { review: false } },
-    policy: { "git-sync": { upstream: { url: "https://github.com/octocat/Hello-World.git", branch: "master" } } } });
+    policy: { "code-review": { requiredReviewerIds: [], pathReviewerRules: [{ pathPrefix: ".dim/", reviewerIds: ["owner"] }] }, "merge-policy": {}, "git-sync": { upstream: { url: "https://github.com/octocat/Hello-World.git", branch: "master" } } } });
   await chmod(manifest, 0o620);
   const rejected = await runCli(["project", "repository", "import-manifest", "acme", "--manifest", manifest, "--json"], fixture.environment);
   assert.equal(rejected.status, 2, rejected.stderr);
@@ -89,7 +89,7 @@ test("native root bootstrap imports a repository-only source without a policy fi
 
   // Then
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout).repositoryPolicy.extensions, {});
+  assert.deepEqual(JSON.parse(result.stdout).repositoryPolicy.extensions, { "code-review": { requiredReviewerIds: [], pathReviewerRules: [{ pathPrefix: ".dim/", reviewerIds: ["owner"] }] }, "merge-policy": {} });
 });
 
 test("native root bootstrap rejects unsafe external policy files before service mutation", async (context) => {
@@ -212,3 +212,13 @@ async function removeReviewedManifest(fixture: NativeFixture): Promise<void> {
   await runFile("/usr/bin/git", ["-C", fixture.sourceRepository, "-c", "user.name=DIM Test", "-c",
     "user.email=dim@example.invalid", "commit", "-m", "remove manifest"]);
 }
+
+test("explicit review-disabled imports do not need a reviewer connection or add review plugins", async () => {
+  const fixture = await nativeFixture({ seedImportedDraft: false });
+  await rm(join(fixture.controlPath, "..", "reviewer.json"));
+  const policy = join(fixture.stateRoot, "no-review.json");
+  await writeFile(policy, JSON.stringify({ schemaVersion: 1, repositoryId: "root", branches: { "refs/heads/main": { review: false } }, extensions: {} }), { mode: 0o600 });
+  const result = await runBootstrap(fixture, policy);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).repositoryPolicy.extensions, {});
+});

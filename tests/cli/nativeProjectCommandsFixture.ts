@@ -89,6 +89,8 @@ export async function nativeFixture(options: NativeFixtureOptions = {}): Promise
     await drafts.markRepositoryImported("acme", "root", receipt);
     await projects.admitRepository("acme", "root", client, parseNativeControlPlaneConnection(controlConnection(service.origin, importer.hostId, generationId)), AbortSignal.timeout(20_000));
   }
+  await writeFile(join(root, "reviewer.json"), JSON.stringify({ schemaVersion: 1, serviceId: "native-main", baseUrl: service.origin,
+    generationId, reviewerId: "owner", username: "human-reviewer-owner", password: bundleSecrets.humanReviewer }), { mode: 0o600 });
   const controlPath = join(root, "control.json");
   await writeFile(controlPath,
     JSON.stringify(controlConnection(service.origin, importer.hostId, generationId)), { mode: 0o600 });

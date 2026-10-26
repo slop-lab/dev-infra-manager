@@ -189,3 +189,22 @@ owning plugin, the command or policy that activates it, and any scripts it
 references. Developer commands such as `scripts/dev.bash`, example installation
 recipes and KVM verification scripts remain repository tooling even when they
 read files under `.dim`.
+
+Trusted repository imports (local sources, public URLs and reviewed manifests)
+with review-enabled branches and no `code-review` declaration add a default
+`code-review` and `merge-policy` using the selected controller's connected reviewer
+identity. The default review rule covers `.dim/`;
+ordinary files do not require human approval. CLI manifest preview shows the same
+resolved policy used by import. Explicit plugin declarations take precedence,
+including custom reviewer rules and required CI jobs. Fully declared review
+policies and explicit review-disabled imports require no reviewer connection to
+provide defaults. Repository files never
+supply the controller's authenticated reviewer identity.
+
+A review-enabled branch with a missing or malformed `code-review` policy fails
+closed with a configuration error. Configure the declaration through the trusted
+repository policy update operation before retrying review. A branch with
+`review: false` can resolve reviews without that extension; explicitly malformed
+extensions remain invalid. Imports and policy updates validate reviewer identities
+against the configured review service. Required CI remains a separate policy:
+no CI declaration means no configured CI requirement, not a passed CI check.

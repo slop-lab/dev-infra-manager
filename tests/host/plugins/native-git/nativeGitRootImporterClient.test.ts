@@ -49,7 +49,7 @@ describe("native Git root importer host client", () => {
     const input = {
       serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
-      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main", extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } } }).repositoryPolicy,
       bundlePath
     } as const;
 
@@ -74,7 +74,7 @@ describe("native Git root importer host client", () => {
     const client = await createNodeNativeGitRootImporterClient(await connection(service.origin));
     const receipt = await client.importRepository({ serviceId: "native-main", projectId: "project-a",
       repositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
-      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main", extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } } }).repositoryPolicy,
       bundlePath }, AbortSignal.timeout(20_000));
     const databasePath = join(root, "native-idle.sqlite3");
     const before = await readFile(databasePath);
@@ -99,7 +99,7 @@ describe("native Git root importer host client", () => {
     const connectionPath = await connection(service.origin);
     const input = { serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
-      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main", extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } } }).repositoryPolicy,
       bundlePath } as const;
     const first = await (await createNodeNativeGitRootImporterClient(connectionPath))
       .importRepository(input, AbortSignal.timeout(20_000));
@@ -170,7 +170,7 @@ describe("native Git root importer host client", () => {
 
     await expect(client.importRepository({ serviceId: "native-main", projectId: "project-a",
       repositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: "a".repeat(40),
-      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main", extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } } }).repositoryPolicy,
       bundlePath }, AbortSignal.timeout(5_000))).rejects.toThrow(NativeGitRootImporterClientError);
     expect(uploadBytes).toBeGreaterThan(bundle.length);
     expect(finalizeCalls).toBe(0);

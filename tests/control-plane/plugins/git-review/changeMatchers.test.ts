@@ -154,3 +154,14 @@ it("binds structured matcher evidence even when the required reviewer set stays 
     expect((await promote()).status).toBe(201);
   } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 }, 30_000);
+
+it("allows review-disabled branches without an extension and fails closed with actionable missing or malformed policy", () => {
+  const input = { protectedRef: "refs/heads/main", branches: { "refs/heads/main": { review: true }, "refs/heads/development": { review: false } }, extensions: {} };
+  const missing = { schemaVersion: 1 as const, ...input, policyRevision: nativeRepositoryPolicyRevision(input) };
+  expect(codeReviewPolicy(missing, [], "refs/heads/development").requiredReviewerIds).toEqual([]);
+  expect(() => codeReviewPolicy(missing, [], "refs/heads/main")).toThrow(/missing.*policy.code-review/);
+  expect(() => codeReviewPolicy(missing)).toThrow(/missing/);
+  const malformed = { ...missing, extensions: { "code-review": { requiredReviewerIds: "owner" } } };
+  expect(() => codeReviewPolicy(malformed, [], "refs/heads/main")).toThrow(/invalid.*policy.code-review/);
+  expect(() => codeReviewPolicy(malformed, [], "refs/heads/development")).toThrow(/invalid/);
+});

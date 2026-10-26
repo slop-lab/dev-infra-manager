@@ -57,7 +57,7 @@ describe("native Git root read issuer host client", () => {
     await importerClient.importRepository({
       serviceId: "native-main", projectId: "project-a", repositoryId: "root",
       protectedRef: "refs/heads/main", expectedCommit: bundle.commit,
-      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main" }).repositoryPolicy,
+      policy: compileNativeRepositoryBootstrapPolicy({ repositoryId: "root", protectedRef: "refs/heads/main", extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } } }).repositoryPolicy,
       bundlePath
     }, AbortSignal.timeout(20_000));
     const client = await createNodeNativeGitRootReadIssuerClient(await connection(service.origin));

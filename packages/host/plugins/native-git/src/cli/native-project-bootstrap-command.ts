@@ -1,4 +1,5 @@
-import { loadPrivateJson, reviewerConnectionSchema } from "@slop-lab/dim-service-client-native-git";
+import { repositoryReviewDefaultsNeeded } from "../defaultRepositoryReviewPolicy.js";
+import { selectedRepositoryReviewer } from "./selected-reviewer.js";
 import { importNativeProjectPublicRepository } from "../publicRepositoryImport.js";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { bootstrapNativeProjectRepository } from "../nativeProjectBootstrap.js";
 import { UserError } from "@slop-lab/dim-host-core";
 import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 import type { Command } from "commander";
-import { selectedControlPlaneHostFile, selectedControlPlaneImporterFile } from "../controlPlaneSelection.js";
+import { selectedControlPlaneImporterFile } from "../controlPlaneSelection.js";
 import { print, type JsonFlags } from "@slop-lab/dim-host-core/controller/cli";
 import { readNativeRepositoryPolicyFile } from "./repository-policy-file.js";
 import { nativeProjectImporter, selectNativeProject } from "./native-project-selector.js";
@@ -47,15 +48,10 @@ export function registerNativeProjectBootstrapCommand(repository: Command): void
       const stateRoot = managedStateRoot(process.env);
       await mkdir(stateRoot, { recursive: true, mode: 0o700 });
       if (remote) {
-        let reviewerId = "owner";
-        if (flags.policy === undefined) {
-          const reviewer = reviewerConnectionSchema.parse(await loadPrivateJson(path.join(path.dirname(await selectedControlPlaneHostFile()), "reviewer.json")));
-          if (reviewer.baseUrl !== native.connection.nativeGit.endpoint || reviewer.generationId !== native.connection.nativeGit.generationId) throw new UserError("Reviewer connection conflicts with selected control plane");
-          reviewerId = reviewer.reviewerId;
-        }
+        const reviewerId = repositoryReviewDefaultsNeeded(policy.extensions, "branches" in policy ? policy.branches : undefined) ? await selectedRepositoryReviewer(native.connection) : undefined;
         const branch = flags.branch ?? flags.ref?.slice("refs/heads/".length);
         print(await importNativeProjectPublicRepository({ name, projectId: project.projectId, repositoryId, url: flags.source, ...(branch === undefined ? {} : { branch }),
-          stateRoot, selected: native.connection, registrarConnectionFile, importerConnectionFile, gitExecutable: flags.gitExecutable, reviewerId,
+          stateRoot, selected: native.connection, registrarConnectionFile, importerConnectionFile, gitExecutable: flags.gitExecutable, ...(reviewerId === undefined ? {} : { reviewerId }),
           ...(flags.policy === undefined ? {} : policy), signal: AbortSignal.timeout(150_000) }), flags);
         return;
       }
@@ -63,6 +59,7 @@ export function registerNativeProjectBootstrapCommand(repository: Command): void
         stateRoot, scratchRoot: stateRoot, sourceRepository: flags.source, selectedRef: flags.ref!,
         registrarConnectionFile, importerConnectionFile, gitExecutable: flags.gitExecutable,
         selectedControlPlane: { endpoint: native.connection.nativeGit.endpoint, hostId: native.connection.hostId, generationId: native.connection.nativeGit.generationId },
+        resolveReviewerId: () => selectedRepositoryReviewer(native.connection),
         policySource: flags.repositoryPolicy ? { kind: "reviewed-manifest" } : { kind: "manifest-free", ...policy }, signal: AbortSignal.timeout(120_000) });
       const record = await native.store.admitRepository(name, repositoryId, importer, native.connection, AbortSignal.timeout(30_000));
       print(record.repositories[repositoryId], flags);

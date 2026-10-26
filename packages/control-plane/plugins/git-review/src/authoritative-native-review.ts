@@ -1,5 +1,5 @@
 import { defaultReviewChangeMatchers } from "./change-matchers.js";
-import { codeReviewPolicy } from "./policy.js";
+import { codeReviewPolicy, CodeReviewPolicyError } from "./policy.js";
 import type { CodeReviewRuntime, ReviewAttachment } from "./plugin-api.js";
 import { assertReviewInputsCurrent } from "./review-inputs.js";
 import { z } from "zod";
@@ -123,7 +123,7 @@ export async function createAuthoritativeNativeReview(
     });
     return saveAuthoritativeNativeReviewEnvelope(target.repository, envelope);
   } catch (error) {
-    if (error instanceof AuthoritativeNativeReviewError) throw error;
+    if (error instanceof AuthoritativeNativeReviewError || error instanceof CodeReviewPolicyError) throw error;
     if (error instanceof Error && /changed during review creation/.test(error.message)) {
       throw new AuthoritativeNativeReviewError("authoritative native refs changed during review creation", { cause: error });
     }

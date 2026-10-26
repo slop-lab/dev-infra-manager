@@ -40,7 +40,7 @@ export async function createNativeProjectManagement(input: { selected: NativeCon
     if (!existing) throw new Error("Project does not exist on this controller");
     if ("manifest" in parsed && typeof parsed.manifest === "string") {
       if (name === "repositories.preview-manifest") {
-        const plan = previewNativeRepositoryManifest(projectId, parsed.manifest);
+        const plan = previewNativeRepositoryManifest(projectId, parsed.manifest, input.reviewerId);
         return operation.parseOutput({ ...plan, configurationRepositoryId: existing.configurationRepositoryId ?? plan.configurationRepositoryId, defaultWorkingRepositoryId: existing.defaultWorkingRepositoryId ?? plan.defaultWorkingRepositoryId });
       }
       return operation.parseOutput(await importNativeRepositoryManifest({ name: existing.name, projectId, manifest: parsed.manifest,

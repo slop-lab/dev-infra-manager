@@ -54,7 +54,7 @@ it("creates a project and imports public/private repositories with host review p
   const importer = await createNodeNativeGitRootImporterClient(f.importerConnectionFile), proof = await importer.proveRepository("codyssey", "public", AbortSignal.timeout(5000));
   expect(proof.importReceipt).toMatchObject({ expectedCommit: record!.repositories.public!.commit, resolvedTree: record!.repositories.public!.tree });
   await expect(readFile(join(f.root, "untrusted-hook-ran"))).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(importNativeProjectPublicRepository({ name: "codyssey", projectId: "codyssey", repositoryId: "public", url: publicInput.url, stateRoot: f.state, selected: f.connection, registrarConnectionFile: f.registrarConnectionFile, importerConnectionFile: f.importerConnectionFile, reviewerId: "owner", extensions: {}, signal: AbortSignal.timeout(10_000) }, f.deps)).rejects.toThrow("immutable policy");
+  await expect(importNativeProjectPublicRepository({ name: "codyssey", projectId: "codyssey", repositoryId: "public", url: publicInput.url, stateRoot: f.state, selected: f.connection, registrarConnectionFile: f.registrarConnectionFile, importerConnectionFile: f.importerConnectionFile, reviewerId: "owner", extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } }, signal: AbortSignal.timeout(10_000) }, f.deps)).rejects.toThrow("immutable policy");
 });
 it("requires valid generation-bound management roles and rejects malformed or private URLs before acquisition", async () => {
   const f = await fixture(), runtime = await createNativeProjectConsole(f.env, generationId, f.deps);

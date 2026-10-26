@@ -1,3 +1,5 @@
+import { repositoryReviewDefaultsNeeded } from "../defaultRepositoryReviewPolicy.js";
+import { selectedRepositoryReviewer } from "./selected-reviewer.js";
 import type { Command } from "commander";
 import { dirname, join } from "node:path";
 import { UserError } from "@slop-lab/dim-host-core";
@@ -18,14 +20,17 @@ export function registerNativeProjectManifestCommand(repository: Command): void 
       const manifest = await readNativeReviewedPolicyText(flags.manifest), native = await selectNativeProject();
       const project = await native.store.read(name, native.connection.hostId);
       if (!project) throw new UserError(`Project '${name}' does not exist`);
+      const preview = previewNativeRepositoryManifest(project.projectId, manifest);
+      const reviewerId = preview.repositories.some((entry) => repositoryReviewDefaultsNeeded(entry.policy, entry.branches))
+        ? await selectedRepositoryReviewer(native.connection) : undefined;
       if (flags.preview) {
-        const plan = previewNativeRepositoryManifest(project.projectId, manifest);
+        const plan = previewNativeRepositoryManifest(project.projectId, manifest, reviewerId);
         print({ ...plan, configurationRepositoryId: project.configurationRepositoryId ?? plan.configurationRepositoryId, defaultWorkingRepositoryId: project.defaultWorkingRepositoryId ?? plan.defaultWorkingRepositoryId }, flags);
         return;
       }
       const importerConnectionFile = await selectedControlPlaneImporterFile(native.environment);
       print(await importNativeRepositoryManifest({ name, projectId: project.projectId, manifest,
         stateRoot: managedStateRoot(native.environment), selected: native.connection, importerConnectionFile,
-        registrarConnectionFile: join(dirname(importerConnectionFile), "registrar.json"), reviewerId: "owner", signal: AbortSignal.timeout(150_000) }), flags);
+        registrarConnectionFile: join(dirname(importerConnectionFile), "registrar.json"), ...(reviewerId === undefined ? {} : { reviewerId }), signal: AbortSignal.timeout(150_000) }), flags);
     });
 }

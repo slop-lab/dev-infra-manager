@@ -1,3 +1,4 @@
+import { defaultRepositoryReviewExtensions } from "./defaultRepositoryReviewPolicy.js";
 import { createHash } from "node:crypto";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
@@ -11,7 +12,7 @@ import { publicGitBranch, publicGitUrl } from "./public-git-source.js";
 import { importNativeProjectPublicRepository, type PublicRepositoryImportInput, type PublicRepositoryImportDependencies } from "./publicRepositoryImport.js";
 
 /** Parse declarative data only. The explicit import action authorizes these repository policies. */
-export function previewNativeRepositoryManifest(projectId: string, manifest: string) {
+export function previewNativeRepositoryManifest(projectId: string, manifest: string, reviewerId?: string) {
   if (Buffer.byteLength(manifest, "utf8") > 64 * 1024) throw new UserError("Repository manifest exceeds 64 KiB");
   const document = parseDocument(manifest, { uniqueKeys: true });
   if (document.errors.length) throw new UserError("Repository manifest is invalid YAML");
@@ -27,7 +28,7 @@ export function previewNativeRepositoryManifest(projectId: string, manifest: str
     }
     const protectedRef = normalizeRepositoryRef(raw.ref);
     const policy = parseNativeRootBootstrapManifestYaml(manifest, protectedRef, repositoryId);
-    return { repositoryId, url: publicGitUrl(raw.upstream.url).toString(), branch: publicGitBranch(raw.upstream.branch), protectedRef, policy: policy.repositoryPolicy.extensions,
+    return { repositoryId, url: publicGitUrl(raw.upstream.url).toString(), branch: publicGitBranch(raw.upstream.branch), protectedRef, policy: reviewerId === undefined ? policy.repositoryPolicy.extensions : defaultRepositoryReviewExtensions(policy.repositoryPolicy.extensions, reviewerId, policy.repositoryPolicy.branches),
       defaultRef: policy.repositoryPolicy.defaultRef!, branches: policy.repositoryPolicy.branches! };
   });
   const first = repositories[0]!;
@@ -36,7 +37,7 @@ export function previewNativeRepositoryManifest(projectId: string, manifest: str
 
 export async function importNativeRepositoryManifest(input: Omit<PublicRepositoryImportInput, "repositoryId" | "url" | "branch" | "extensions" | "protectedRef"> & { manifest: string }, dependencies: PublicRepositoryImportDependencies = {}) {
   // Validate the entire graph before persisting intent or contacting the registrar.
-  const plan = previewNativeRepositoryManifest(input.projectId, input.manifest);
+  const plan = previewNativeRepositoryManifest(input.projectId, input.manifest, input.reviewerId);
   const lock = await acquireLifecycleLock({ root: input.stateRoot, name: `manifest-import-${createHash("sha256").update(input.projectId).digest("hex").slice(0, 24)}`, description: "Repository manifest import" });
   try {
     const path = join(input.stateRoot, "native-project-manifest-imports", `${input.name}.json`);

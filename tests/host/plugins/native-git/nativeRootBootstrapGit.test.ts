@@ -58,6 +58,20 @@ policy:
 }
 
 describe("native root bootstrap Git plan", () => {
+  it("uses the connected reviewer for ordinary local imports without a manifest and preserves explicit policies", async () => {
+    const { source, scratch } = await fixture(false);
+    const input = { repositoryId: "root", gitExecutable, sourceRepository: source, selectedRef: "refs/heads/main", scratchRoot: scratch,
+      reviewerId: "security", signal: AbortSignal.timeout(20_000) };
+    const plan = await prepareNativeRootBootstrapGit({ ...input, policySource: { kind: "manifest-free" } });
+    expect(plan.repositoryPolicy.extensions).toEqual({ "code-review": { requiredReviewerIds: [], pathReviewerRules: [{ pathPrefix: ".dim/", reviewerIds: ["security"] }] }, "merge-policy": {} });
+    expect(plan.repositoryPolicy.branches).toEqual({ "refs/heads/main": { review: true }, "refs/heads/development": { review: false } });
+    await plan.cleanup();
+    const explicit = await prepareNativeRootBootstrapGit({ ...input, policySource: { kind: "manifest-free", extensions } });
+    expect(explicit.repositoryPolicy.extensions).toEqual(extensions);
+    await explicit.cleanup();
+  });
+
+
   it("derives policy and a self-contained one-ref bundle from one pinned commit across source movement", async () => {
     const { source, scratch } = await fixture(true);
     const commit = await git(["-C", source, "rev-parse", "HEAD"]);

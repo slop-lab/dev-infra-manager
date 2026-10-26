@@ -1,3 +1,4 @@
+import { CodeReviewPolicyError } from "./policy.js";
 import { createAuthoritativeNativeReview, AuthoritativeNativeReviewError } from "./authoritative-native-review.js";
 import { readAuthoritativeNativeReviewEnvelopes } from "./authoritative-native-review-store.js";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
@@ -69,6 +70,7 @@ export async function resolveCurrentEnvelope(
             protectedRef: target.currentHead.protectedRef
           });
         } catch (error) {
+          if (error instanceof CodeReviewPolicyError) return sendJson(response, 409, { error: error.message });
           if (error instanceof AuthoritativeNativeReviewError) {
             return sendJson(response, 409, { error: "review input snapshot is unavailable" });
           }
@@ -100,6 +102,7 @@ export async function resolveCurrentEnvelope(
       }
       return sendJson(response, 200, created);
     } catch (error) {
+      if (error instanceof CodeReviewPolicyError) return sendJson(response, 409, { error: error.message });
       if (error instanceof AuthoritativeNativeReviewError) {
         return sendJson(response, 409, { error: "review candidate is unavailable" });
       }

@@ -7,6 +7,9 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
+- Repository imports consistently configure `.dim/` review with the connected reviewer, preserve explicit review and CI policies, and report missing review configuration without silently waiving protection.
+- CI source acquisition reports bounded authentication, transport and timeout failure codes without exposing read credentials; failed acquisition remains failed required evidence.
+
 - Pin production validation and service images to Zod 4.6.6 to reject oversized
   constrained collections before walking their elements, addressing
   [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).

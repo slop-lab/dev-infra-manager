@@ -107,3 +107,9 @@ dim-code-review revoke /absolute/path/reviewer.json PROJECT REPOSITORY REVIEW_ID
 The CLI checks file ownership, mode 0600, reviewer identity and deployment
 generation before an operation. `./plugin-api` exports the typed review service
 and preparation ports for separately installed trusted features.
+
+Review-enabled branches require a valid `code-review` declaration. Import and
+policy updates reject missing declarations when this plugin is enabled; resolving
+an existing incomplete repository reports how to configure it instead of treating
+it as approval-free. Review-disabled branches can resolve without the extension.
+Explicit malformed declarations are rejected even for review-disabled targets.

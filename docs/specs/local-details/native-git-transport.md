@@ -280,3 +280,12 @@ or scoped receive operations. Effective policy digests bind subsequent reviews a
 ref transitions, while original import receipts and historical transition digests
 are retained. Import proofs therefore distinguish immutable `importReceipt` policy
 identity from the effective `currentHead.policyDigest`.
+
+Trusted operator imports fill omitted review declarations using the controller's
+connected reviewer identity, requiring that reviewer for `.dim/` changes on
+review-enabled branches. Explicit declarations remain authoritative. Missing
+review configuration never means an empty required-reviewer set for a
+review-enabled target. The review plugin validates these policies at import and
+policy update; existing incomplete policies return an actionable configuration
+error when resolved. Review-disabled targets need no review declaration, while
+explicit malformed review declarations are rejected.

@@ -229,3 +229,10 @@ repository selection without repeating unrelated workspace-readiness proofs
 before review/sync calls; catalog availability and workspace acquisition retain
 their explicit live readiness checks. See the
 [complete capability and ownership map](../../../../docs/guides/git-capabilities.md).
+
+When an operator imports a review-enabled repository without review declarations,
+the plugin uses the controller's connected reviewer to protect `.dim/` changes.
+Local, public URL and manifest imports share this default; explicit review
+policies and entirely review-disabled imports do not require a reviewer
+connection or acquire implicit review plugins. Manifest preview shows the policy
+that import will persist. Required CI is declared separately and remains unchanged.
