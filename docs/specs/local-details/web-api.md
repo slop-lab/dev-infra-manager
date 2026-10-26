@@ -129,7 +129,14 @@ nosniff, and framing denial.
 ## Plugin operation and asset boundary
 
 `GET /v1/extensions` returns installed feature descriptions, configuration status,
-and only operations allowed by the current account roles. Each operation has a
+and only operations allowed by the current account roles. Each feature entry has
+a server-owned catalog `generation`. Browser operation requests send that value in
+`X-DIM-Plugin-Generation`; stale catalogs receive `409` before dispatch. Reconnect
+advances the generation before attestation and blocks dispatch while pending.
+An invocation whose runtime is superseded while awaiting a result receives an
+unknown-outcome `503`, even when another tab initiated reconnect. Direct API
+callers may omit the header to select the current runtime at dispatch, but still
+receive the same post-await generation fence. Each operation has a
 unique declared name, access role, strict input parser and bounded public output
 parser. `POST /v1/extensions/ID/operations/NAME` requires an authenticated session,
 exact Origin, CSRF and the declared role before invoking a configured handler.

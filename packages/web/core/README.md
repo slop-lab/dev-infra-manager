@@ -159,6 +159,9 @@ Settings also offers reconnect for workspace-only features. Successful connectio
 attestation is distinct from a successful workspace read: failed mounts can retry
 without remounting healthy siblings or clearing their drafts. Replies crossing a
 reconnect boundary cannot reconcile an uncertain write.
+The server also fences generations across tabs: an old feature catalog cannot
+silently invoke the newly reconnected authority, and a superseded pending result
+is reported as unknown rather than mixed with the new service's state.
 
 To initialize a feature-only console, write a private specification file:
 
