@@ -78,10 +78,18 @@ export interface WebPluginBrowserContext {
   readonly operations: readonly import("@slop-lab/dim-contracts-operations").OperationDescriptor[];
   readonly ui: WebPluginUi;
   readonly navigation: WebPluginNavigation;
+  /** Optional task-local URL state. Contains object identities, never credentials or drafts. */
+  readonly location?: WebPluginLocation;
   /** Register this mounted destination's strict target decoder. Disposed with its session. */
   onNavigate(handler: WebFeatureNavigationHandler): () => void;
   isCurrent(): boolean;
   invoke(name: string, input?: unknown, options?: WebPluginInvokeOptions): Promise<unknown>;
+}
+export interface WebPluginLocation {
+  readonly path: readonly string[];
+  href(path: readonly string[]): string;
+  navigate(path: readonly string[], options?: { readonly replace?: boolean }): void;
+  subscribe(handler: (path: readonly string[]) => void): () => void;
 }
 export interface WebPluginWorkspaceBrowserContext extends WebPluginBrowserContext {
   readonly workspace: WebPluginWorkspace;
