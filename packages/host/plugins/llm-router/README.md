@@ -45,6 +45,11 @@ instead of receiving invented context or output bounds. Explicit per-model
 limits remain user-owned; custom DIM providers need route/user metadata when
 OpenCode has no catalog entry for them.
 
+Generated provider options disable header and stream-chunk deadlines with
+OpenCode's supported `false` value, not zero. Explicit positive or `false`
+OpenAI deadlines remain unchanged. This keeps the generated configuration
+valid for the pinned OpenCode consumer without changing model selection.
+
 Main, small/background and role-specific model choices belong to OpenCode and
 OMO. Attachment installs only routing credentials and helpers; it neither selects
 a default model nor changes user model choices. Responses requests use
@@ -80,6 +85,22 @@ workspace, `dim-workspace plugins` advertises the integration and reports
 whether its local connection can reach the gateway. An unattached workspace
 shows setup instructions rather than an active router. Deleting the private
 connection requires an explicit host-side attachment again.
+
+## Verify the OpenCode configuration consumer
+
+From the repository root, with the reviewed OpenCode 1.18.31 binary:
+
+```sh
+pnpm --dir tests exec tsx scenarios/llm-router/opencodeConsumer.e2e.ts /absolute/opencode-1.18.31
+```
+
+This explicit gate passes adapter-generated configuration to the actual pinned
+server, checks its `/config` response, creates a session and verifies HTTP
+authentication. It uses a temporary HOME and XDG roots, a synthetic authenticated
+model catalogue and an environment allowlist. It never loads live credentials,
+OMO configuration or user sessions. Its private server and temporary files are
+removed on success and failure. The check does not load OMO or establish real
+provider inference, tool execution, guest connectivity or multi-host readiness.
 
 Codex may use an explicitly configured custom Responses provider with this same
 scoped bearer token. No TLS interception or copying of ChatGPT authentication is

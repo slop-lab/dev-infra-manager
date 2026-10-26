@@ -97,7 +97,7 @@ async function DimLlmRouter() {
       const name = `dim-${api}`;
       if (providers[name] !== undefined) throw new Error(`OpenCode provider '${name}' already exists; refusing to replace it`);
       providers[name] = { npm: api === "responses" ? "@ai-sdk/openai" : "@ai-sdk/openai-compatible", name: "DIM workspace router",
-        options: { baseURL: `${connection.endpoint}/v1`, apiKey: connection.token, headerTimeout: false, chunkTimeout: 0 },
+        options: { baseURL: `${connection.endpoint}/v1`, apiKey: connection.token, headerTimeout: false, chunkTimeout: false },
         models: Object.fromEntries(selected.map((model) => [model.id, { name: model.name, ...(api === "responses" ? { options: { store: false } } : {}), ...modelLimits(model) }])) };
     }
     config.provider = providers;
@@ -125,7 +125,7 @@ async function DimLlmRouter() {
       providers.openai = { ...openai, npm: "@ai-sdk/openai", name: "OpenAI via DIM workspace router",
         whitelist: openaiModels.map(({ id }) => id),
         options: { ...options, baseURL: `${endpoint}/v1`, apiKey: token, fetch: transport,
-          headerTimeout: options.headerTimeout ?? false, chunkTimeout: options.chunkTimeout ?? 0 },
+          headerTimeout: options.headerTimeout ?? false, chunkTimeout: options.chunkTimeout ?? false },
         models: Object.fromEntries(openaiModels.map(({ id, target: model }) => {
           const existing = configured[id] === undefined ? {} : record(configured[id]);
           const modelOptions = existing.options === undefined ? {} : record(existing.options);

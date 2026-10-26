@@ -31,8 +31,8 @@ it("uses the authenticated current route catalogue without selecting main or bac
   const config: Record<string, unknown> = {};
   await hooks.config(config);
   expect(config).toMatchObject({ provider: {
-    "dim-chat": { models: { added: { name: "Added", limit: { context: 64000, output: 8000 } } } },
-    "dim-responses": { models: { reviewed: { name: "Reviewed" } } }
+    "dim-chat": { options: { chunkTimeout: false }, models: { added: { name: "Added", limit: { context: 64000, output: 8000 } } } },
+    "dim-responses": { options: { chunkTimeout: false }, models: { reviewed: { name: "Reviewed" } } }
   } });
   expect(config).not.toHaveProperty("model");
   expect(config).not.toHaveProperty("small_model");
@@ -82,7 +82,7 @@ it("redirects only OpenAI while preserving OMO role models, variants, fallbacks 
   await hooks.config(config);
   expect(config.agent).toEqual(originalAgents);
   expect(config).toMatchObject({ model: "openai/reviewed", small_model: "anthropic/fast", provider: {
-    anthropic, openai: { whitelist: ["reviewed", "reviewed-fast"], options: { baseURL: "http://127.0.0.1:8319/v1", apiKey: token, headerTimeout: false, chunkTimeout: 0 },
+    anthropic, openai: { whitelist: ["reviewed", "reviewed-fast"], options: { baseURL: "http://127.0.0.1:8319/v1", apiKey: token, headerTimeout: false, chunkTimeout: false },
       models: { reviewed: { variants, options: { reasoningEffort: "high", store: false } } } }
   } });
   const parameters = { options: { reasoningEffort: "high", store: true } };
@@ -145,10 +145,10 @@ it("leaves unknown model limits unset so OpenCode retains its native catalog and
   expect(explicit).toMatchObject({ provider: { openai: { models: { native: { limit: { context: 1050000, input: 922000, output: 128000 } } } } } });
 });
 
-it("preserves explicit OpenCode transport deadlines while leaving absent deadlines disabled", async () => {
+it.each([false, 2345])("preserves explicit OpenCode chunk deadline %s while disabling only absent deadlines", async (chunkTimeout) => {
   await fixture();
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json({ models: [reviewed] })));
-  const hooks = await DimLlmRouter(), config: Record<string, unknown> = { provider: { openai: { options: { headerTimeout: 1234, chunkTimeout: 2345 } } } };
+  const hooks = await DimLlmRouter(), config: Record<string, unknown> = { provider: { openai: { options: { headerTimeout: 1234, chunkTimeout } } } };
   await hooks.config(config);
-  expect(config).toMatchObject({ provider: { openai: { options: { headerTimeout: 1234, chunkTimeout: 2345 } }, "dim-responses": { options: { headerTimeout: false, chunkTimeout: 0 } } } });
+  expect(config).toMatchObject({ provider: { openai: { options: { headerTimeout: 1234, chunkTimeout } }, "dim-responses": { options: { headerTimeout: false, chunkTimeout: false } } } });
 });

@@ -6,3 +6,6 @@
   Share guest file preparation with other host integrations, repair attached
   workspace helpers on readiness and advertise connection state to guest agents
   without rotating credentials or requiring repository metadata.
+  Generate provider timeouts accepted by pinned OpenCode, preserving explicit
+  user deadlines and model selections so configuration loading does not reject
+  the attached route.
