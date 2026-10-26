@@ -48,13 +48,15 @@ async function mount(operator: boolean, stopped = false) {
    await page.addScriptTag({ type: "module", content: `import { mount } from '/panel.js'; import { featureUi } from '/feature-ui.js';
     window.sessionCurrent = true;
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText() { throw new Error('clipboard unavailable'); } } });
-    window.disposePanel = mount(document.querySelector('#panel'), {
+     window.locationPaths = [];
+     window.disposePanel = mount(document.querySelector('#panel'), {
       ui: featureUi,
       openFeature: () => false,
       operations: ${JSON.stringify(["controllers.list", "tools.status", "server.status", ...(operator ? ["tools.setup", "server.start", "server.stop", "server.credentials", "server.password"] : [])].map((name) => ({ name })))},
       isCurrent: () => window.sessionCurrent,
       // Persisted lifecycle intent can still say running after the container exits.
-      workspace: ${JSON.stringify({hostId:"local",name:stopped ? "offline":"development",id:stopped ? stoppedId:workspaceId,phase:"running"})},
+       workspace: ${JSON.stringify({hostId:"local",name:stopped ? "offline":"development",id:stopped ? stoppedId:workspaceId,phase:"running"})},
+       location: { path: ['tools'], href: path => '#/'+path.join('/'), navigate: path => window.locationPaths.push(path), subscribe: () => () => {} },
       async invoke(name, input) { const response = await fetch('/invoke', {method:'POST',body:JSON.stringify({name,input})}); if(!response.ok) throw Object.assign(new Error('outcome unknown'),{outcome:'unknown'}); return response.json(); }
     });` });
 }
@@ -141,7 +143,10 @@ try {
      await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
      await page.getByText('Refresh status completed.', { exact: true }).waitFor();
      assert.equal(await page.getByRole('link', { name: 'Open OpenCode Web', exact: true }).count(), 0);
-     assert.equal(await page.getByRole('button', { name: 'Configure external access', exact: true }).count(), 1);
+      assert.equal(await page.getByRole('button', { name: 'Configure external access', exact: true }).count(), 1);
+      await page.getByRole('button', { name: 'Configure external access', exact: true }).click();
+       assert.equal(await page.evaluate('window.locationPaths.length'), 0);
+       await page.getByText('External routes is not installed for this workspace.', {exact:false}).waitFor();
      assert.equal(await page.getByRole('button', { name: 'Copy forwarding command', exact: true }).count(), 1);
    }
    approvedUrl = 'https://opencode.example.test:8443';
