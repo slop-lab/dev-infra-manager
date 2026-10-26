@@ -219,6 +219,25 @@ is implied by these source changes.
   and confirm route revocation explicitly. Show actual container state after an
   external stop, offer Start, and explain stopped workspace tool availability
   without issuing failing guest status reads.
+  Rebuild non-Git work as a task-oriented workbench with native object URLs,
+  sign-in return, reload and browser-history behavior. Open workspace overview,
+  tools, routes and resource settings by immutable identity; retain in-session
+  drafts and reconcile uncertain writes without replay. Separate execution jobs,
+  workers and task-producer ownership, and organize LLM accounts/routes, project
+  policy and traffic into service-scoped tasks. Keep discovered router URLs bound
+  to their explicit controller even when availability changes. Explain unavailable
+  hosts, read-only capacity and missing owner APIs; expose capability and account
+  settings without inventing host configuration or granting service authority.
+  Retain workspace-feature drafts and recovery locks through runtime phase
+  changes, fence late object reads against newer browser tasks, and require fresh
+  owner-state reconciliation before repeating unknown LLM writes. Establish a
+  current account-catalog baseline before generated account creation, retain
+  unknown provider-login ownership across controller rediscovery, and require a
+   freshly loaded policy revision before editing a reconciled lost-response save.
+   Fence prior tabs and delayed credential actions when browser identity changes,
+   retain exact-job cancellation receipts through stale or failed reads, and
+   reconnect workspace-only capabilities without clearing healthy sibling drafts.
+   Run the disposable non-Git browser journeys in the Web CI lane.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
   repositories through the Native Git plugin, with explicit controller, Project
