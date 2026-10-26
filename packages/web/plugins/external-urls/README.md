@@ -11,6 +11,10 @@ for its service port. OpenCode defaults to port 4096. The route form also suppor
 other ports, protocols, and named nested containers. Creating a route never
 implicitly approves it: when approval is required, an operator must select
 **Approve route**. Pending and revoked routes have no active browser link.
+The task has a canonical `#/workspaces/HOST/UUID/routes` URL. Reload and browser
+history restore the selected workspace and route task, but never resubmit a
+create, approval or revocation. Revocation uses an inline confirmation that keeps
+the route when canceled.
 Read-only accounts can inspect available routes but cannot create, approve, or
 revoke them.
 
