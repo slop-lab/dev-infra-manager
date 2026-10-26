@@ -1,21 +1,36 @@
 import { llmOperation, llmOperations } from "@slop-lab/dim-contracts-llm-router";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
-import { join } from "node:path";
-import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import { object, parsePolicy, text, type RouterConfig } from "./config.js";
 import { type RouterLedger, type Usage } from "./ledger.js";
 import { effectiveRouterConfig, addRouterAccount, renameRouterAccount, defaultAccountReference, upsertRouterRoute } from "./account-catalog.js";
 import { accountLoginStatus, startAccountLogin, managedAccountConnected, managedAccountEmail } from "./managed-backend.js";
 import type { RouterAccount, RouterRoute } from "./config.js";
-import { discoverAccountModels } from "./model-catalog.js";
+import { inspectAccountModels } from "./model-catalog.js";
 import { accountHealth } from "./operator.js";
 import { RouterOperationRejectedError } from "./operation-errors.js";
+import { withRouterOperationGuard } from "./operation-guard.js";
 /** One implementation for local operator CLI and authenticated remote clients. */
 export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: RouterLedger, name: string, raw: unknown, actor = "operator", role: "read" | "operator" = "operator"): Promise<unknown> {
   const operation = llmOperation(name), input = object(operation.parseInput(raw));
-  const guard = await tryAcquireKernelGuard(join(baseConfig.stateDirectory, "operator-operation.guard"), { timeoutMilliseconds: 5000 });
-  if (!guard) throw new RouterOperationRejectedError("another router operator operation is running; retry after it finishes");
-  try {
+  const completeRead = async (output: unknown) => {
+    const result = operation.parseOutput(output);
+    await withRouterOperationGuard(baseConfig, async () => { ledger.audit(actor, `remote.${name}`, "router"); });
+    return result;
+  };
+  if (name === "account.models") {
+    const snapshot = await withRouterOperationGuard(baseConfig, async () => {
+      const config = await effectiveRouterConfig(baseConfig);
+      const account = config.accounts.find(({ id }) => id === input.accountId);
+      if (!account) throw new RouterOperationRejectedError("account was not found");
+      return { config, account };
+    });
+    return completeRead(await inspectAccountModels(snapshot.config, snapshot.account));
+  }
+  if (name === "accounts" || name === "health") {
+    const config = await withRouterOperationGuard(baseConfig, () => effectiveRouterConfig(baseConfig));
+    return completeRead(name === "accounts" ? await Promise.all(config.accounts.map((account) => accountSummary(config, account))) : await accountHealth(config));
+  }
+  return withRouterOperationGuard(baseConfig, async () => {
   const config = await effectiveRouterConfig(baseConfig);
   const projectId = () => text(input.projectId);
   const project = () => { const id = projectId(); const row = ledger.database.prepare("SELECT 1 FROM projects WHERE id=?").get(id); if (!row) throw new RouterOperationRejectedError("project was not found"); return ledger.project(id); };
@@ -24,12 +39,6 @@ export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: Ro
   let output: unknown;
   switch (name) {
     case "capabilities": output = operationDescriptors(llmOperations.filter((op) => (op.access === "read" || role === "operator" && op.access === "operator") && ((!op.name.startsWith("account.") || op.name === "account.models") && op.name !== "route.upsert" || config.accountManagement !== undefined))); break;
-    case "accounts": output = await Promise.all(config.accounts.map((account) => accountSummary(config, account))); break;
-    case "account.models": {
-      const account = config.accounts.find(({ id }) => id === input.accountId);
-      if (!account) throw new RouterOperationRejectedError("account was not found");
-      output = await discoverAccountModels(config, account); break;
-    }
     case "account.create": {
       if (!config.accountManagement) throw new RouterOperationRejectedError("account management is not configured");
       if (typeof input.accountId === "string" && config.accounts.some(({ id }) => id === input.accountId)) throw new RouterOperationRejectedError("account already exists");
@@ -52,7 +61,6 @@ export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: Ro
       output = await upsertRouterRoute(baseConfig, { id: text(input.routeId), accountId: text(input.accountId), models: input.models as RouterRoute["models"] }); break;
     }
     case "overview": output = { backend: config.backend, accounts: config.accounts.map(({ id, reference }) => ({ id, reference })), routes: config.routes, limits: config.limits }; break;
-    case "health": output = await accountHealth(config); break;
     case "projects": output = ledger.projects(); break;
     case "project.create": if (ledger.database.prepare("SELECT 1 FROM projects WHERE id=?").get(projectId())) throw new RouterOperationRejectedError("project already exists"); ledger.createProject(projectId(), policy({ allowedRoutes: [input.routeId], limits: config.limits, captureMode: "required", tokenMode: "observe" })); output = ledger.project(projectId()); break;
     case "project.policy": output = project(); break;
@@ -83,7 +91,7 @@ export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: Ro
   const result = operation.parseOutput(output);
   ledger.audit(actor, `remote.${name}`, typeof input.projectId === "string" ? input.projectId : "router");
   return result;
-  } finally { await guard.release(); }
+  });
 }
 
 async function accountSummary(config: RouterConfig, account: RouterAccount) {

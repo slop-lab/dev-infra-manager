@@ -1,12 +1,16 @@
 import { randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
+import { tryAcquireKernelGuard } from "../../../packages/control-plane/core/src/lock.js";
 import { backendProfile, defaultLimits, parseConfig } from "../../../packages/control-plane/plugins/llm-router/src/config.js";
 import { createRouterOperatorServer } from "../../../packages/control-plane/plugins/llm-router/src/operator-server.js";
 import { createRouter } from "../../../packages/control-plane/plugins/llm-router/src/server.js";
+import { effectivePolicy } from "../../../packages/control-plane/plugins/llm-router/src/operator.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 
@@ -22,15 +26,18 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
-async function fixture() {
+async function fixture(upstreamHandler: (response: ServerResponse) => void = (response) => response.writeHead(200, { "content-type": "application/json" }).end('{"data":[]}')) {
   const root = await mkdtemp(join(tmpdir(), "dim-router-consistency-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   const operatorKey = randomBytes(32).toString("base64url");
+  const readerKey = randomBytes(32).toString("base64url");
   const operatorKeyFile = join(root, "operator.key");
+  const readerKeyFile = join(root, "reader.key");
   const providerKeyFile = join(root, "provider.key");
   await writeFile(operatorKeyFile, operatorKey, { mode: 0o600 });
+  await writeFile(readerKeyFile, readerKey, { mode: 0o600 });
   await writeFile(providerKeyFile, "provider-key", { mode: 0o600 });
-  const upstream = createServer((_request, response) => response.writeHead(200, { "content-type": "application/json" }).end('{"data":[]}'));
+  const upstream = createServer((_request, response) => upstreamHandler(response));
   const upstreamEndpoint = await listen(upstream);
   cleanup.push(async () => {
     upstream.closeAllConnections();
@@ -45,7 +52,7 @@ async function fixture() {
     routes: [{ id: "default", accountId: "provider", models: [{ id: "test-model", name: "Test", api: "responses", context: 1000, output: 100 }] }],
     limits: defaultLimits,
     hostIssuers: [],
-    operators: [{ id: "operator", keyFile: operatorKeyFile, role: "operator" }]
+    operators: [{ id: "operator", keyFile: operatorKeyFile, role: "operator" }, { id: "reader", keyFile: readerKeyFile, role: "read" }]
   });
   const router = await createRouter(config);
   cleanup.push(() => router.close());
@@ -53,11 +60,11 @@ async function fixture() {
   const operator = await createRouterOperatorServer(config);
   cleanup.push(() => operator.close());
   const operatorEndpoint = await listen(operator.server);
-  const authorization = `Basic ${Buffer.from(`operator:${operatorKey}`).toString("base64")}`;
-  const invoke = (endpoint: string, name: string, input: unknown, signal?: AbortSignal) => fetch(`${endpoint}/v1/operator/operations/${name}`, {
+  const authorization = (actor: "operator" | "reader") => `Basic ${Buffer.from(`${actor}:${actor === "operator" ? operatorKey : readerKey}`).toString("base64")}`;
+  const invoke = (endpoint: string, name: string, input: unknown, signal?: AbortSignal, actor: "operator" | "reader" = "operator") => fetch(`${endpoint}/v1/operator/operations/${name}`, {
     method: "POST",
     ...(signal === undefined ? {} : { signal }),
-    headers: { authorization, "content-type": "application/json" },
+    headers: { authorization: authorization(actor), "content-type": "application/json" },
     body: JSON.stringify(input)
   });
   return { root, config, router, routerEndpoint, operatorEndpoint, invoke };
@@ -99,6 +106,65 @@ it("does not let an authoritative account read claim absence while a disconnecte
   const response = await read;
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual(expect.arrayContaining([expect.objectContaining({ id: "held-account" })]));
+});
+
+it("does not let a slow read-authorized model inspection block project disable or principal revocation", async () => {
+  // Given: provider model inspection remains in flight for longer than the operation-guard timeout.
+  const dispatched = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const fx = await fixture((response) => {
+    dispatched.resolve();
+    void release.promise.then(() => response.writeHead(200, { "content-type": "application/json" }).end('{"data":[{"id":"slow-model"}]}'));
+  });
+  expect((await fx.invoke(fx.routerEndpoint, "project.create", { projectId: "demo", routeId: "default" })).status).toBe(200);
+  fx.router.ledger.issue({ id: "workspace", name: "Workspace" }, "default", "demo");
+  const inspection = fx.invoke(fx.operatorEndpoint, "account.models", { accountId: "provider" }, undefined, "reader");
+  await dispatched.promise;
+
+  // When: owner mutations run while the provider has still not answered.
+  const mutations = Promise.all([
+    fx.invoke(fx.routerEndpoint, "project.state", { projectId: "demo", action: "disable" }),
+    fx.invoke(fx.operatorEndpoint, "principal.revoke", { principalId: "workspace" })
+  ]);
+  await new Promise<void>((resolve) => setTimeout(resolve, 5_100));
+
+  // Then: both mutations completed successfully without waiting for provider I/O.
+  const responses = await mutations;
+  release.resolve();
+  const inspectionResponse = await inspection;
+  expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+  expect(fx.router.ledger.project("demo").enabled).toBe(false);
+  expect(inspectionResponse.status).toBe(200);
+});
+
+it("orders a cross-process CLI policy write with owner HTTP operations and reports its committed revision", async () => {
+  // Given: an owner operation guard is held before a legacy CLI policy mutation starts.
+  const fx = await fixture();
+  expect((await fx.invoke(fx.routerEndpoint, "project.create", { projectId: "demo", routeId: "default" })).status).toBe(200);
+  const configPath = join(fx.root, "router.json");
+  const policyPath = join(fx.root, "policy.json");
+  await writeFile(configPath, JSON.stringify(fx.config), { mode: 0o600 });
+  await writeFile(policyPath, JSON.stringify({ allowedRoutes: ["default"], limits: defaultLimits, captureMode: "metadata", tokenMode: "observe" }), { mode: 0o600 });
+  const guard = await tryAcquireKernelGuard(join(fx.config.stateDirectory, "operator-operation.guard"));
+  if (!guard) throw new Error("failed to hold owner operation guard");
+  const child = spawn(process.execPath, ["--import", fileURLToPath(new URL("../../node_modules/tsx/dist/loader.mjs", import.meta.url)), "--conditions=dim-source",
+    fileURLToPath(new URL("../../../packages/control-plane/plugins/llm-router/src/main.ts", import.meta.url)), "project-policy", "demo", "--config", configPath, "--policy-file", policyPath],
+  { stdio: ["ignore", "pipe", "pipe"] });
+  let stdout = "", stderr = "";
+  child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+  child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+  const closed = new Promise<number | null>((resolve, reject) => { child.once("error", reject); child.once("close", resolve); });
+
+  // When: the CLI reaches the shared ordering boundary.
+  const observed = await Promise.race([closed.then(() => "completed" as const), new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 1_500))]);
+  try { expect(observed).toBe("blocked"); }
+  finally { await guard.release(); }
+
+  // Then: its output revision describes the policy effect it committed after the held write.
+  expect(await closed, stderr).toBe(0);
+  const output: unknown = JSON.parse(stdout);
+  expect(output).toEqual(effectivePolicy(fx.config, fx.router.ledger, "demo"));
+  expect(fx.router.ledger.project("demo").policy.captureMode).toBe("metadata");
 });
 
 it("returns 5xx when post-commit audit fails while preserving the committed project state", async () => {

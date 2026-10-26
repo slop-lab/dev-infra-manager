@@ -9,6 +9,7 @@ import { createRouter } from "./server.js";
 import { createRouterOperatorServer } from "./operator-server.js";
 import { exportCapture, removeCapture } from "./archive.js";
 import { backupRouter, effectivePolicy, restoreRouter } from "./operator.js";
+import { withRouterOperationGuard } from "./operation-guard.js";
 
 const usage = `dim-control-plane-llm-router prepare DIRECTORY --backend ORIGIN --backend-key-file FILE --exclusive-account-reference NAME --model ID --context-tokens N --output-tokens N [--operator-id ID --operator-key-file FILE]
   dim-control-plane-llm-router serve|operator-serve|health|projects|principals|active CONFIG
@@ -56,22 +57,25 @@ export async function runRouterCommand(args: string[], context: { signal: AbortS
   if (!guard) { ledger.close(); throw new Error("another router operator command is running; retry after it finishes"); }
   try {
     if (action === "health") { console.log(JSON.stringify(await invokeRouterOperation(config, ledger, "health", {}), null, 2)); return; }
-    if (action === "backup") { await backupRouter(config, resolve(required("--output")), { backendStateQuiesced: flags.get("--backend-state-quiesced") === "yes" }); console.log("Private consistent backup written; inspect its backendCredentials coverage before relying on it"); return; }
+    if (action === "backup") { await withRouterOperationGuard(config, () => backupRouter(config, resolve(required("--output")), { backendStateQuiesced: flags.get("--backend-state-quiesced") === "yes" })); console.log("Private consistent backup written; inspect its backendCredentials coverage before relying on it"); return; }
     if (action === "projects") { console.log(JSON.stringify(await invokeRouterOperation(config, ledger, "projects", {}), null, 2)); return; }
     if (action === "principals") { console.log(JSON.stringify(await invokeRouterOperation(config, ledger, "principals", {}), null, 2)); return; }
-    if (action === "active") { console.log(JSON.stringify(ledger.database.prepare("SELECT id,project_id,principal_id,account_id,started_at,execution,delivery,accounting,occupied,cancel_requested FROM requests WHERE occupied=1 OR outcome='running' ORDER BY started_at LIMIT 1000").all(), null, 2)); return; }
+    if (action === "active") { console.log(JSON.stringify(await withRouterOperationGuard(config, async () => ledger.database.prepare("SELECT id,project_id,principal_id,account_id,started_at,execution,delivery,accounting,occupied,cancel_requested FROM requests WHERE occupied=1 OR outcome='running' ORDER BY started_at LIMIT 1000").all()), null, 2)); return; }
     if (action === "project-add" || action === "project-policy") {
       const policy = flags.has("--policy-file") ? parsePolicy(JSON.parse(await privateFile(resolve(required("--policy-file")))))
         : parsePolicy({ allowedRoutes: [flags.get("--route") ?? "default"], limits: config.limits, captureMode: "required", tokenMode: "observe" });
       if (policy.allowedRoutes.some((id) => !config.routes.some((route) => route.id === id))) throw new Error("policy refers to an unknown route");
-      if (action === "project-add") ledger.createProject(positional, policy); else ledger.updatePolicy(positional, policy);
-      console.log(JSON.stringify(effectivePolicy(config, ledger, positional), null, 2)); return;
+      const result = await withRouterOperationGuard(config, async () => {
+        if (action === "project-add") ledger.createProject(positional, policy); else ledger.updatePolicy(positional, policy);
+        return effectivePolicy(config, ledger, positional);
+      });
+      console.log(JSON.stringify(result, null, 2)); return;
     }
-    if (["pause", "resume", "disable", "enable"].includes(action)) { ledger.setProject(positional, action === "pause" ? "pause" : action === "resume" ? "resume" : action === "disable" ? "disable" : "enable"); return; }
-    if (action === "policy") { console.log(JSON.stringify(effectivePolicy(config, ledger, positional), null, 2)); return; }
+    if (["pause", "resume", "disable", "enable"].includes(action)) { await withRouterOperationGuard(config, async () => ledger.setProject(positional, action === "pause" ? "pause" : action === "resume" ? "resume" : action === "disable" ? "disable" : "enable")); return; }
+    if (action === "policy") { console.log(JSON.stringify(await withRouterOperationGuard(config, async () => effectivePolicy(config, ledger, positional)), null, 2)); return; }
     if (action === "usage") { console.log(JSON.stringify(await invokeRouterOperation(config, ledger, "usage", { projectId: positional }), null, 2)); return; }
     if (action === "principal-revoke") { await invokeRouterOperation(config, ledger, "principal.revoke", { principalId: positional }); return; }
-    if (action === "cancel") { ledger.cancel(positional); console.log(JSON.stringify({ cancellationRequested: true, upstreamTerminationConfirmed: false })); return; }
+    if (action === "cancel") { await withRouterOperationGuard(config, async () => ledger.cancel(positional)); console.log(JSON.stringify({ cancellationRequested: true, upstreamTerminationConfirmed: false })); return; }
     if (action === "resolve") {
       let usage: Usage | undefined;
       if (flags.has("--usage-file")) { const raw: unknown = JSON.parse(await privateFile(resolve(required("--usage-file"))));
@@ -80,23 +84,28 @@ export async function runRouterCommand(args: string[], context: { signal: AbortS
           || !Number.isSafeInteger(row.inputTokens) || !Number.isSafeInteger(row.outputTokens) || row.inputTokens < 0 || row.outputTokens < 0) throw new Error("resolution usage requires nonnegative inputTokens/outputTokens");
         usage = { inputTokens: row.inputTokens, outputTokens: row.outputTokens, raw, source: "operator-resolution" };
       }
-      ledger.resolve(positional, usage); return;
+      await withRouterOperationGuard(config, async () => ledger.resolve(positional, usage)); return;
     }
-    if (action === "capture") { await exportCapture(ledger, positional, resolve(required("--output"))); return; }
-    if (action === "capture-delete") { await removeCapture(ledger, positional, "deleted"); return; }
+    if (action === "capture") { await withRouterOperationGuard(config, () => exportCapture(ledger, positional, resolve(required("--output")))); return; }
+    if (action === "capture-delete") { await withRouterOperationGuard(config, () => removeCapture(ledger, positional, "deleted")); return; }
     if (action === "retention") {
-      ledger.project(positional); const before = Date.parse(required("--before")); if (!Number.isFinite(before) || !required("--before").endsWith("Z")) throw new Error("retention requires an explicit UTC timestamp ending Z");
-      let removed = 0;
-      while (true) { context.signal.throwIfAborted(); const rows = ledger.database.prepare("SELECT id FROM requests WHERE project_id=? AND outcome!='running' AND finished_at<? AND capture_state NOT IN ('expired','deleted','disabled_by_policy') ORDER BY finished_at LIMIT 100").all(positional, before);
-        if (!rows.length) break; for (const row of rows) { await removeCapture(ledger, text(row.id), "expired"); removed++; } }
+      const removed = await withRouterOperationGuard(config, async () => {
+        ledger.project(positional); const before = Date.parse(required("--before")); if (!Number.isFinite(before) || !required("--before").endsWith("Z")) throw new Error("retention requires an explicit UTC timestamp ending Z");
+        let count = 0;
+        while (true) { context.signal.throwIfAborted(); const rows = ledger.database.prepare("SELECT id FROM requests WHERE project_id=? AND outcome!='running' AND finished_at<? AND capture_state NOT IN ('expired','deleted','disabled_by_policy') ORDER BY finished_at LIMIT 100").all(positional, before);
+          if (!rows.length) break; for (const row of rows) { await removeCapture(ledger, text(row.id), "expired"); count++; } }
+        return count;
+      });
       console.log(JSON.stringify({ expired: removed, backups: "existing backups retain data until the operator expires those backups separately" })); return;
     }
     if (action === "usage-export") {
-      ledger.project(positional); const file = await open(resolve(required("--output")), "wx", 0o600);
-      try { await file.writeFile(JSON.stringify({ kind: "summary", ...ledger.usage(positional, config.limits) }) + "\n"); let cursor = 0;
-        while (true) { context.signal.throwIfAborted(); const rows = ledger.database.prepare("SELECT rowid AS cursor,* FROM requests WHERE project_id=? AND rowid>? ORDER BY rowid LIMIT 100").all(positional, cursor);
-          if (!rows.length) break; for (const row of rows) { await file.writeFile(JSON.stringify({ kind: "request", ...row }) + "\n"); cursor = Number(row.cursor); } } await file.sync();
-      } finally { await file.close(); } ledger.audit("operator", "usage.export", positional); return;
+      await withRouterOperationGuard(config, async () => {
+        ledger.project(positional); const file = await open(resolve(required("--output")), "wx", 0o600);
+        try { await file.writeFile(JSON.stringify({ kind: "summary", ...ledger.usage(positional, config.limits) }) + "\n"); let cursor = 0;
+          while (true) { context.signal.throwIfAborted(); const rows = ledger.database.prepare("SELECT rowid AS cursor,* FROM requests WHERE project_id=? AND rowid>? ORDER BY rowid LIMIT 100").all(positional, cursor);
+            if (!rows.length) break; for (const row of rows) { await file.writeFile(JSON.stringify({ kind: "request", ...row }) + "\n"); cursor = Number(row.cursor); } } await file.sync();
+        } finally { await file.close(); } ledger.audit("operator", "usage.export", positional);
+      }); return;
     }
     throw new Error(usage);
   } finally { ledger.close(); await guard.release(); }
