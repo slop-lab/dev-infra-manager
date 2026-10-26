@@ -49,7 +49,7 @@ describe("native root import request admission", () => {
       const prelude = Buffer.from(`${JSON.stringify({
         schemaVersion: 1, generationId, serviceId: "native-main", projectId: "project-a",
         repositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: "c".repeat(40),
-        policy: gitPolicy()
+        policy: gitPolicy({ "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } })
       })}\n`);
       const changes = watch(root, { recursive: true, signal: AbortSignal.timeout(5_000) });
       const intentCreated = (async () => {

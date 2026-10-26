@@ -242,7 +242,7 @@ async function importRepository(service: RunningService, repositoryId = "root"):
   const bundle = await createRootBundle({ [`${repositoryId}.txt`]: `${repositoryId}\n` });
   await service.prepareProject(generationId, importer.hostId, projectInput("project-a", repositoryId));
   const receipt = parseImportReceipt(await (
-    await uploadRootBundle(service.origin, bundle, gitPolicy({}), repositoryId)
+    await uploadRootBundle(service.origin, bundle, gitPolicy({ "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } }), repositoryId)
   ).json());
   const finalized = await finalizeRootImport(service.origin, {
     schemaVersion: 1,

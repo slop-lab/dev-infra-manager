@@ -117,7 +117,7 @@ async function finalizedFixture(label: string, policy?: object): Promise<{ reado
 function protectedPolicy(): object {
   const branches = { "refs/heads/main": { review: true }, "refs/heads/development": { review: false },
     "refs/heads/release": { review: true } } as const;
-  const input = { protectedRef: "refs/heads/main", defaultRef: "refs/heads/main", branches, extensions: {} } as const;
+  const input = { protectedRef: "refs/heads/main", defaultRef: "refs/heads/main", branches, extensions: { "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } } } as const;
   return { schemaVersion: 1, ...input, policyRevision: nativeRepositoryPolicyRevision(input) };
 }
 

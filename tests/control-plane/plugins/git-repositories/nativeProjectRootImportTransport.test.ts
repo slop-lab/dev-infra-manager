@@ -22,7 +22,7 @@ const readinessToken = Buffer.alloc(32, 41).toString("base64url");
 const activationToken = Buffer.alloc(32, 42).toString("base64url");
 const roots: string[] = [];
 const services: ManagedGitFixture[] = [];
-const policy = gitPolicy();
+const policy = gitPolicy({ "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [] } });
 
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => service.close()));
