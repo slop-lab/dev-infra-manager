@@ -26,8 +26,17 @@ mutation, Refresh status must reconcile the outcome before another change.
 The status also shows the checkout's actual project directory, with a copy action.
 For a managed multi-repository workspace this can be `/workspace/main`, rather than
 the `/workspace` directory containing the checkouts. **Open OpenCode Web** opens
-the Pages client. Select this workspace's server there, then use **Add project**
-with the displayed path. Server selection and authentication remain with that client.
+the pinned Pages client with the approved service endpoint and guest checkout
+directory. The client reuses or registers that exact server, selects it, and opens
+the project without manual Add server or Add project steps. Existing registrations,
+projects and sessions remain available; repeated clicks and reloads reuse the
+normal client state. A required sign-in remains OpenCode's normal credential form.
+No username, password, token, host path or executable is included in the link, and
+DIM does not read or copy credentials for this flow. The client uses its existing
+authentication and persistence, including its normal selected/default server setting.
+If no approved HTTPS or explicitly published loopback URL is usable, the panel keeps
+the external-route/forwarding setup guidance instead of offering a misleading link.
+The guest-only loopback address is not assumed to be forwarded to the browser.
 With the optional External routes Web/host plugins, create its port-4096 route
 from the same workspace row and approve it explicitly if the ingress requires it.
 

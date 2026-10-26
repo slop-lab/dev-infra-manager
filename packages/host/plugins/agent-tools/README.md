@@ -35,6 +35,9 @@ require an operator Web session; every request binds the workspace's current ID.
 No repository configuration or extra control-plane connection is required.
 The Web view shows and copies the actual checkout directory for OpenCode Web;
 a multi-repository workspace may use `/workspace/main` rather than `/workspace`.
+Its Open OpenCode Web link passes only the approved endpoint and this guest path
+to the pinned client, which reuses server/project registrations. Required server
+authentication stays in OpenCode; DIM does not copy credentials into this link.
 
 On Alpine/musl workspaces, explicit OpenCode setup or launch installs `gcompat`
 through the workspace package manager when needed, and applies it only to the
@@ -100,8 +103,9 @@ dim-expose --name opencode --port 4096 --ingress YOUR_HTTPS_INGRESS
 dim-expose list
 ```
 
-A host operator must approve a pending route. Enter that approved HTTPS URL
-and the workspace user's OpenCode credentials into the server selector at
+A host operator must approve a pending route. DIM Web's workspace button opens
+that approved service URL and the actual checkout automatically in the client.
+For a manually opened client, enter the approved HTTPS URL in its server selector at
 `https://slop-lab.github.io/dev-infra-manager/opencode-web/`. Passwords are not
 printed in launcher output; read the indicated private credentials file only
 when connecting your own client. The default CORS origin is exactly
