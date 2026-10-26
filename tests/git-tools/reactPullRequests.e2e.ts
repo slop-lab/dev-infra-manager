@@ -70,8 +70,36 @@ try {
     assert.deepEqual(overflow, []);
     await page.screenshot({ path: `${process.env.DIM_WEB_EVIDENCE}/portable-pr-mobile.png`, fullPage: true });
   }
+  const createScope = async (scope: "alpha" | "beta" | "observer") => page.evaluate(async (value) => { const modulePath = "/panel.js"; const module = await import(modulePath) as typeof import("./fixtures/controlledPanel.js"); module.selectCreateScope(value); }, scope);
+  await createScope("alpha");
+  assert.equal(await page.getByLabel("Source branch", { exact: true }).inputValue(), "");
+  assert.equal(await page.getByLabel("Target branch", { exact: true }).inputValue(), "refs/heads/release");
+  await page.getByLabel("Source branch", { exact: true }).fill("development-tmp");
+  await page.getByLabel("Pull request title", { exact: true }).fill("Merge the pushed branch");
+  await createScope("beta");
+  assert.equal(await page.getByLabel("Source branch", { exact: true }).inputValue(), "");
+  assert.equal(await page.getByLabel("Target branch", { exact: true }).inputValue(), "refs/heads/main");
+  await page.getByLabel("Source branch", { exact: true }).fill("feature/other-repository");
+  await createScope("alpha");
+  assert.equal(await page.getByLabel("Source branch", { exact: true }).inputValue(), "development-tmp");
+  assert.equal(await page.getByLabel("Pull request title", { exact: true }).inputValue(), "Merge the pushed branch");
+  await page.getByRole("button", { name: "Create pull request", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[aria-label="Source branch"]')?.value === "");
+  const created = await page.evaluate(async () => { const modulePath = "/panel.js"; const module = await import(modulePath) as typeof import("./fixtures/controlledPanel.js"); return module.created; });
+  assert.deepEqual(created, [{ scope: "alpha", draft: { title: "Merge the pushed branch", body: "", sourceRef: "development-tmp", targetRef: "refs/heads/release" } }]);
+  await createScope("observer");
+  await page.getByLabel("Source branch", { exact: true }).fill("feature/observed");
+  await page.getByLabel("Target branch", { exact: true }).fill("main");
+  await page.getByLabel("Pull request title", { exact: true }).fill("Observer keeps local editing");
+  assert.equal(await page.getByLabel("Source branch", { exact: true }).inputValue(), "feature/observed");
+  const observed = await page.evaluate(async () => { const modulePath = "/panel.js"; const module = await import(modulePath) as typeof import("./fixtures/controlledPanel.js"); return module.observedDrafts.at(-1); });
+  assert.deepEqual(observed, { title: "Observer keeps local editing", body: "", sourceRef: "feature/observed", targetRef: "main" });
+  await page.getByRole("button", { name: "Create pull request", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[aria-label="Source branch"]')?.value === "");
+  assert.equal(await page.getByLabel("Pull request title", { exact: true }).inputValue(), "");
+  assert.equal(await page.getByLabel("Target branch", { exact: true }).inputValue(), "main");
   assert.deepEqual(errors, []);
-  console.log("Portable React PR panel: opaque identities, scoped drafts and pending comment selection passed");
+  console.log("Portable React PR panel: opaque identities, scoped creation drafts, repository targets and pending comment selection passed");
 } finally {
   try { await browser?.close(); }
   finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }

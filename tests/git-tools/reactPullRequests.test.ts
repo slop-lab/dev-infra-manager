@@ -25,7 +25,7 @@ it("keeps review preparation, approval, revocation and merge as explicit indepen
 });
 it("shows clear empty and create states without any service or account setup", () => {
   const html = renderToStaticMarkup(h(PullRequestPanel, { pullRequests: [], selected: null, snapshot: null, onCreate() {} }));
-  expect(html).toContain("No pull requests."); expect(html).toContain("Create pull request"); expect(html).toContain("Source ref"); expect(html).toContain("Target ref");
+  expect(html).toContain("No pull requests."); expect(html).toContain("Create pull request"); expect(html).toContain("Source branch"); expect(html).toContain("Target branch");
 });
 
 it("offers direct diff and blame inspection without requiring a pull request", () => {
@@ -49,4 +49,11 @@ it("indexes comments once instead of scanning every comment for every diff line"
   const manyLines = parseGitDiff(["diff --git a/file b/file", "--- a/file", "+++ b/file", "@@ -1,100 +1,100 @@", ...Array.from({ length: 100 }, () => " unchanged"), ""].join("\n"), { baseCommit: base, headCommit: head });
   const html = renderToStaticMarkup(h(PullRequestPanel, { pullRequests: [pr], selected: { ...pr, comments }, snapshot: manyLines }));
   expect(html).toContain("Current anchored thread"); expect(revisionReads).toBeLessThan(20);
+});
+
+it("uses supplied repository targets and controlled drafts without inventing a source branch", () => {
+  const html = renderToStaticMarkup(h(PullRequestPanel, { pullRequests: [], selected: null, snapshot: null, onCreate() {}, createScopeKey: "project/private", createDraft: { title: "Merge feature", body: "", sourceRef: "development-tmp", targetRef: "refs/heads/release" }, targetRefs: ["refs/heads/release", "refs/heads/staging"] }));
+  expect(html).toContain('value="development-tmp"');
+  expect(html).toContain('<select'); expect(html).toContain('value="refs/heads/release" selected');
+  expect(html).not.toContain('value="main"'); expect(html).not.toContain('value="development"');
 });

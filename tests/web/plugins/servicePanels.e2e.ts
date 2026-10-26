@@ -10,6 +10,11 @@ const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.m
 async function failNextRead(feature: string, operation: string) {
   await page.route(`**/v1/extensions/${feature}/operations/${operation}`, (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"injected read failure"}' }), { times: 1 });
 }
+async function openAdvanced() {
+  await page.getByRole("heading", { name: "Merge a branch", exact: true }).waitFor();
+  const summary = page.getByText("Advanced: exact reviews and upstream sync", { exact: true });
+  if (!await summary.evaluate(node => node.parentElement instanceof HTMLDetailsElement && node.parentElement.open)) await summary.click();
+}
 async function login(username: string) {
   await page.goto(fixture.origin);
   await page.getByLabel("Username", { exact: true }).fill(username);
@@ -53,6 +58,7 @@ try {
   await execution.getByRole("button", { name: "Refresh worker capacity", exact: true }).click();
   await execution.getByRole("heading", { name: "Worker capacity", exact: true }).waitFor();
   await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await openAdvanced();
   const git = page.locator(".feature-page").filter({ has: page.getByRole("heading", { name: "Git review", exact: true, level: 1 }) });
   await git.getByLabel("Repository", { exact: true }).selectOption("root");
   await git.getByRole("button", { name: "Open review", exact: true }).click();
@@ -60,11 +66,11 @@ try {
   await git.getByText("Candidate commit", { exact: true }).waitFor();
   // Two projects reuse repository IDs; drafts and late evidence remain scope-owned.
   await git.getByLabel("Proposal ref", { exact: true }).fill("refs/heads/project-a-root-draft");
-  await git.getByLabel("Controller", { exact: true }).selectOption("otherbox");
+  await git.getByLabel("Git connection", { exact: true }).selectOption("otherbox");
   await git.getByRole("button", { name: "Open review", exact: true }).waitFor();
   assert.equal(await git.getByLabel("Proposal ref", { exact: true }).inputValue(), "");
   await git.getByLabel("Proposal ref", { exact: true }).fill("refs/heads/other-controller-root-draft");
-  await git.getByLabel("Controller", { exact: true }).selectOption("devbox");
+  await git.getByLabel("Git connection", { exact: true }).selectOption("devbox");
   assert.equal(await git.getByLabel("Proposal ref", { exact: true }).inputValue(), "refs/heads/project-a-root-draft");
 
   await git.getByLabel("Repository", { exact: true }).selectOption("private");
@@ -88,12 +94,12 @@ try {
   });
   await git.getByRole("button", { name: "Open review", exact: true }).click();
   await detailReady;
-  await git.getByLabel("Controller", { exact: true }).selectOption("otherbox");
+  await git.getByLabel("Git connection", { exact: true }).selectOption("otherbox");
   await git.getByRole("button", { name: "Open review", exact: true }).waitFor();
   assert.equal(await git.getByLabel("Project", { exact: true }).inputValue(), "project-a");
   assert.equal(await git.getByLabel("Repository", { exact: true }).inputValue(), "root");
   assert.equal(await git.getByRole("heading", { name: "Changed files", exact: true }).count(), 0);
-  await git.getByLabel("Controller", { exact: true }).selectOption("devbox");
+  await git.getByLabel("Git connection", { exact: true }).selectOption("devbox");
   await git.getByLabel("Project", { exact: true }).selectOption("project-b");
   await git.getByText("No reviews for this repository. Resolve a proposal ref below to start one.", { exact: true }).waitFor();
   assert.equal(await git.getByLabel("Proposal ref", { exact: true }).inputValue(), "refs/heads/project-b-root-draft");
@@ -154,6 +160,7 @@ try {
   assert.equal(await execution.getByRole("button", { name: "Retry execution", exact: true }).count(), 0);
   assert.equal(await execution.getByRole("button", { name: "Refresh worker capacity", exact: true }).count(), 0);
   await page.getByRole("button", { name: "Git review", exact: true }).click();
+  await openAdvanced();
   await git.getByRole("button", { name: "Open review", exact: true }).click();
   await git.getByRole("heading", { name: "Changed files", exact: true }).waitFor();
   assert.equal(await git.getByRole("button", { name: "Approve exact candidate", exact: true }).isDisabled(), true);

@@ -17,6 +17,11 @@ export interface PullRequestPanelProps {
   readonly className?: string;
   readonly onSelect?: Action<string>;
   readonly onCreate?: Action<PullRequestDraft>;
+  readonly createDraft?: PullRequestDraft;
+  readonly onCreateDraftChange?: (draft: PullRequestDraft) => void;
+  readonly createScopeKey?: string;
+  readonly createDisabled?: boolean;
+  readonly targetRefs?: readonly string[];
   readonly onRefresh?: () => void | Promise<void>;
   readonly onEdit?: Action<Pick<PullRequestDraft, "title" | "body">>;
   readonly onSetState?: Action<"open" | "closed">;
@@ -52,13 +57,24 @@ function inputField(label: string, value: string, set: (value: string) => void, 
     h(multiline ? "textarea" : "input", { "aria-label": label, value, required, disabled, maxLength: label.includes("title") ? 240 : 3000,
       className: "git-pr__input", onChange: (event: { currentTarget: { value: string } }) => set(event.currentTarget.value) }));
 }
-function CreateForm({ action }: { readonly action: NonNullable<PullRequestPanelProps["onCreate"]> }): ReactNode {
-  const [title, setTitle] = useState(""), [body, setBody] = useState(""), [sourceRef, setSource] = useState(""), [targetRef, setTarget] = useState("main");
+function CreateForm({ action, draft, onChange, targetRefs, disabled = false, expanded }: { readonly action: NonNullable<PullRequestPanelProps["onCreate"]>; readonly draft?: PullRequestDraft; readonly onChange?: (draft: PullRequestDraft) => void; readonly targetRefs?: readonly string[]; readonly disabled?: boolean; readonly expanded: boolean }): ReactNode {
+  const [local, setLocal] = useState<PullRequestDraft>({ title: "", body: "", sourceRef: "", targetRef: "" });
+  const value = draft ?? local;
+  const change = (patch: Partial<PullRequestDraft>) => { const next = { ...value, ...patch }; if (draft === undefined) setLocal(next); onChange?.(next); };
   const state = useAction();
-  return h("details", null, h("summary", null, "Create pull request"), h("form", { onSubmit: (event: FormEvent) => { event.preventDefault(); void state.run(async () => {
-    await action({ title, body, sourceRef, targetRef }); setTitle(""); setBody(""); setSource("");
-  }); } }, inputField("Pull request title", title, setTitle, false, true, state.pending), inputField("Pull request description", body, setBody, true, false, state.pending),
-  inputField("Source ref", sourceRef, setSource, false, true, state.pending), inputField("Target ref", targetRef, setTarget, false, true, state.pending), h("button", { type: "submit", disabled: state.pending }, "Create pull request"), state.feedback));
+  const pending = state.pending || disabled;
+  return h("details", { open: expanded }, h("summary", null, "Create pull request"),
+    h("p", null, "Choose the branch to merge, then inspect changes, CI and required approvals before merging."),
+    h("form", { onSubmit: (event: FormEvent) => { event.preventDefault(); if (pending) return; void state.run(async () => {
+      await action(value); if (draft === undefined) setLocal({ title: "", body: "", sourceRef: "", targetRef: value.targetRef });
+    }); } },
+    inputField("Source branch", value.sourceRef, sourceRef => change({ sourceRef }), false, true, pending),
+    h("p", { className: "git-pr__hint" }, "Enter an existing pushed branch, for example development-tmp or feature/my-change. Full refs are also accepted."),
+    targetRefs?.length ? h("label", { className: "git-pr__field" }, "Target branch", h("select", { "aria-label": "Target branch", className: "git-pr__input", value: value.targetRef, disabled: pending, required: true,
+      onChange: (event: { currentTarget: { value: string } }) => change({ targetRef: event.currentTarget.value }) }, targetRefs.map(ref => h("option", { key: ref, value: ref }, ref.replace(/^refs\/heads\//, "")))))
+      : inputField("Target branch", value.targetRef, targetRef => change({ targetRef }), false, true, pending),
+    inputField("Pull request title", value.title, title => change({ title }), false, true, pending), inputField("Pull request description", value.body, body => change({ body }), true, false, pending),
+    h("button", { type: "submit", disabled: pending }, "Create pull request"), state.feedback));
 }
 function Comment({ comment, outdated }: { readonly comment: DiscussionComment; readonly outdated: boolean }): ReactNode {
   return h("article", { "aria-label": `Comment by ${comment.actorId}`, className: "git-pr__comment" },
@@ -147,7 +163,7 @@ export function PullRequestPanel(props: PullRequestPanelProps): ReactNode {
     ...(props.onInspectDiff ? { onInspectDiff: props.onInspectDiff } : {}),
     ...(props.onInspectBlame ? { onInspectBlame: props.onInspectBlame } : {})
   };
-  return h("div", { className: ["git-pr", props.className].filter(Boolean).join(" "), "data-git-pull-requests": "" }, props.onCreate ? h(CreateForm, { action: props.onCreate }) : null,
+  return h("div", { className: ["git-pr", props.className].filter(Boolean).join(" "), "data-git-pull-requests": "" }, props.onCreate ? h(CreateForm, { action: props.onCreate, expanded: props.selected === null, key: props.createScopeKey, ...(props.createDisabled === undefined ? {} : { disabled: props.createDisabled }), ...(props.createDraft ? { draft: props.createDraft } : {}), ...(props.onCreateDraftChange ? { onChange: props.onCreateDraftChange } : {}), ...(props.targetRefs ? { targetRefs: props.targetRefs } : {}) }) : null,
     h(DirectInspection, inspectionProps),
     !props.selected && props.onRefresh ? h("button", { type: "button", disabled: state.pending, onClick: () => { void state.run(props.onRefresh!); } }, "Refresh pull requests") : null, state.feedback,
     h("nav", { "aria-label": "Pull requests" }, props.pullRequests.length ? h("ul", null, props.pullRequests.map(pr => h("li", { key: pr.id },

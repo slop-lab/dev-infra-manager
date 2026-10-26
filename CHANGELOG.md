@@ -83,7 +83,10 @@ is implied by these source changes.
   and merge separate. Show required DIM CI evidence or explicitly absent policy,
   never infer CI success from human approval or GitHub status. Verify ordinary
   source rewrites, multi-repository scope and mapped publication in disposable
-  CLI/browser workflows and standalone package installations.
+  CLI/browser workflows and standalone package installations. Make pull requests
+  the primary Web merge flow, identify host authority as a Git connection, retain
+  repository-specific creation drafts, and use actual target metadata without
+  assuming a source branch. Keep exact reviews and upstream sync under Advanced.
 
 - Manage independent Git repositories in one Project with separate imports,
   repository-scoped credentials, reviews and protected-ref promotion. Allow

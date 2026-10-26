@@ -45,7 +45,16 @@ Creation/import receipts are retained if the following catalog read fails;
 accepted operations cannot accidentally be resubmitted by the same unchanged
 form. Refresh projects to inspect current state after a read failure.
 
-The UI selects controller, project and repository independently. Proposal drafts
+The UI calls each configured host authority a **Git connection**. A single ready
+connection is selected automatically; multiple or unavailable connections remain
+visible, and the selected connection and repository scope are always identified.
+Select a project and repository, enter a pushed source branch, and create a pull
+request to inspect changes, DIM CI and required approvals before merging. Target
+choices use repository metadata; when metadata is absent the target must be
+entered explicitly. Exact proposal reviews, direct branch-merge preparation and
+upstream synchronization are under **Advanced: exact reviews and upstream sync**.
+
+The UI selects connection, project and repository independently. Creation and proposal drafts
 are retained separately for each scope; switching scope clears evidence and fences
 late responses. Read-only accounts can inspect reviews; `reviewer` authority is
 required for resolve/approve/revoke, and `operator` for promotion/synchronization.
