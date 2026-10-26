@@ -6,6 +6,12 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { operationDescriptors } from "@slop-lab/dim-contracts-operations";
 import { capabilitiesSchema, llmOperation, llmOperations } from "@slop-lab/dim-contracts-llm-router";
+export class LlmRouterResultUnavailableError extends Error {
+  readonly name = "LlmRouterResultUnavailableError";
+  constructor(cause?: unknown) {
+    super("LLM router operation result unavailable; refresh current state before retrying", { cause });
+  }
+}
 export async function privateOperatorFile(path: string, maximum = 64 * 1024): Promise<string> {
   if (!isAbsolute(path)) throw new Error("operator files require absolute paths");
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -31,12 +37,21 @@ export function createLlmRouterClient(connectionFile: string, options: { signal?
       const { connection, key, selectionId } = await attestLlmRouterOperatorConnection(connectionFile);
       if (options.expectedSelectionId !== undefined && options.expectedSelectionId !== selectionId) throw new Error("LLM router operator selection changed; reconnect before continuing");
       let response: Response;
-      try { response = await fetch(`${connection.endpoint}/v1/operator/operations/${name}`, { method: "POST", redirect: "error", signal: AbortSignal.any([AbortSignal.timeout(name === "account.login.start" ? 30_000 : 15_000), ...(options.signal === undefined ? [] : [options.signal])]), headers: { "content-type": "application/json", authorization: `Basic ${Buffer.from(`${connection.actorId}:${key}`).toString("base64")}` }, body: JSON.stringify(payload) }); } catch { throw new Error("LLM router connection unavailable; check the configured endpoint and service"); }
-      if (!response.ok) { await response.body?.cancel(); throw new Error(response.status === 401 ? "LLM router operator authentication failed" : response.status === 403 ? "LLM router operator permission denied" : `LLM router operation failed (HTTP ${response.status})`); }
-      const reader = response.body?.getReader(); if (!reader) throw new Error("LLM router returned no operation result");
-      const chunks: Uint8Array[] = []; let size = 0;
-      try { while (true) { const next = await reader.read(); if (next.done) break; size += next.value.byteLength; if (size > 2 * 1024 * 1024) throw new Error("LLM router response exceeds operation bound"); chunks.push(next.value); } } finally { await reader.cancel(); }
-      return operation.parseOutput(JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown);
+      try { response = await fetch(`${connection.endpoint}/v1/operator/operations/${name}`, { method: "POST", redirect: "error", signal: AbortSignal.any([AbortSignal.timeout(name === "account.login.start" ? 30_000 : 15_000), ...(options.signal === undefined ? [] : [options.signal])]), headers: { "content-type": "application/json", authorization: `Basic ${Buffer.from(`${connection.actorId}:${key}`).toString("base64")}` }, body: JSON.stringify(payload) }); } catch (error) { throw new LlmRouterResultUnavailableError(error); }
+      if (!response.ok) {
+        const failure = response.status >= 500 ? new LlmRouterResultUnavailableError() : new Error(response.status === 401 ? "LLM router operator authentication failed" : response.status === 403 ? "LLM router operator permission denied" : `LLM router operation failed (HTTP ${response.status})`);
+        try { await response.body?.cancel(); } finally { throw failure; }
+      }
+      try {
+        const reader = response.body?.getReader(); if (!reader) throw new LlmRouterResultUnavailableError();
+        const chunks: Uint8Array[] = []; let size = 0;
+        try { while (true) { const next = await reader.read(); if (next.done) break; size += next.value.byteLength; if (size > 2 * 1024 * 1024) throw new Error("LLM router response exceeds operation bound"); chunks.push(next.value); } } finally { await reader.cancel(); }
+        const output: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        return operation.parseOutput(output);
+      } catch (error) {
+        if (error instanceof LlmRouterResultUnavailableError) throw error;
+        throw new LlmRouterResultUnavailableError(error);
+      }
     }
   };
 }
