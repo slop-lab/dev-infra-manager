@@ -30,6 +30,9 @@ sections and filters belong in routes. Secrets and form bodies never do. The
 requested hash stays through sign-in, expiry and restoration. Missing destinations
 show an explanation and an explicit Workspaces link, never a different authority.
 Core owns route syntax and session fencing; each plugin owns its route tail.
+The location capability also exposes a non-secret user-intent revision. Async
+creation may open its accepted object only when no newer user intent or URL
+has superseded that submission; accepted background work never steals a task.
 
 Reusable primitives: native navigation links (default/current/focus), object
 headers, workspace list/detail, section navigation, grouped labeled fields,
