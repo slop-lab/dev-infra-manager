@@ -11,7 +11,7 @@ import { dimWorkflowCompiler } from "../../../../packages/control-plane/plugins/
 
 afterEach(async () => { vi.restoreAllMocks(); await cleanupFinalizeFixtures(); });
 
-it("shares one full proof across required CI jobs but proves storage again on the next HTTP request", async () => {
+it("reuses immutable proof across required CI jobs while checking live storage on each HTTP request", async () => {
   // Given: two required jobs have actual grant/result records from the authority HTTP API.
   const f = await nativeBundleReviewFixture("ci-status-proof-reuse");
   const envelope = (await publishedReviewEnvelopes(f.root))[0];
@@ -37,6 +37,7 @@ it("shares one full proof across required CI jobs but proves storage again on th
     headers: { authorization: humanReviewerAuthorization, "x-dim-generation-id": generationId }
   });
   const proofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
+  const liveProofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootLive");
 
   // When
   const first = await read();
@@ -44,9 +45,12 @@ it("shares one full proof across required CI jobs but proves storage again on th
   // Then
   expect(first.status, await first.clone().text()).toBe(200);
   expect(await first.json()).toMatchObject({ state: "succeeded", requiredJobs: [{ status: "succeeded" }, { status: "succeeded" }] });
-  expect(proofs).toHaveBeenCalledTimes(1);
+  expect(proofs).not.toHaveBeenCalled();
+  const firstLiveProofs = liveProofs.mock.calls.length;
+  expect(firstLiveProofs).toBeGreaterThan(0);
   expect((await read()).status).toBe(200);
-  expect(proofs).toHaveBeenCalledTimes(2);
+  expect(proofs).not.toHaveBeenCalled();
+  expect(liveProofs.mock.calls.length).toBeGreaterThan(firstLiveProofs);
   await expect(currentExecutionEvidence({ ...f.service.context.runtime,
     expectedGenerationId: "b".repeat(64), workflowCompiler: dimWorkflowCompiler }, rootRepository(f.root), envelope.events[0]!))
     .rejects.toMatchObject({ code: "evidence-missing" });

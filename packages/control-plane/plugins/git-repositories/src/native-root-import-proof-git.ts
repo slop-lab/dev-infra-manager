@@ -36,6 +36,18 @@ type NativeRootProofGitInput = {
 
 export async function inspectImportedNativeRootReadOnly(input: NativeRootProofGitInput): Promise<void> {
   try {
+    await inspectImportedNativeRootLive(input);
+    await runPinned(input, ["-c", "fsck.fullPathname=error", "fsck", "--strict", "--full",
+      "--no-reflogs", "--no-progress", input.currentCommit]);
+    await inspectRefs(input);
+  } catch (error) {
+    if (error instanceof NativeRootImportBundleError) throw error;
+    throw new NativeRootImportBundleError("native imported root proof inspection failed", { cause: error });
+  }
+}
+
+export async function inspectImportedNativeRootLive(input: NativeRootProofGitInput): Promise<void> {
+  try {
     const format = (await runPinned(input, ["rev-parse", "--show-object-format"])).stdout.trim();
     if (format !== "sha1" && format !== "sha256") {
       throw new NativeRootImportBundleError("native root object format is unsupported");
@@ -60,12 +72,10 @@ export async function inspectImportedNativeRootReadOnly(input: NativeRootProofGi
     if (importedTree !== input.importedTree) {
       throw new NativeRootImportBundleError("native root imported tree conflicts");
     }
-    await runPinned(input, ["-c", "fsck.fullPathname=error", "fsck", "--strict", "--full",
-      "--no-reflogs", "--no-progress", input.currentCommit]);
     await inspectRefs(input);
   } catch (error) {
     if (error instanceof NativeRootImportBundleError) throw error;
-    throw new NativeRootImportBundleError("native imported root proof inspection failed", { cause: error });
+    throw new NativeRootImportBundleError("native imported root live inspection failed", { cause: error });
   }
 }
 

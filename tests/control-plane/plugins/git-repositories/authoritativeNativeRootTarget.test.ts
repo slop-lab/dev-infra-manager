@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -111,6 +112,41 @@ describe("authoritative imported-root target", () => {
 
     // Then
     await expect(read).rejects.toBeInstanceOf(AuthoritativeRepositoryError);
+  });
+
+  it("rejects immutable storage tampering between target proof and final snapshot", async () => {
+    // Given
+    const fixture = await finalizedCandidateRoot("target-final-storage-fence", matchingRunner(), authoritativePolicy());
+    try {
+      const selector = { projectId: "project-a", repositoryId: "root" };
+      const target = await resolveAuthoritativeNativeRepositoryTarget(fixture.context, selector);
+      const bundle = join(fixture.root, "project-a", ".dim-import-root", `${target.imported.importNonce}.bundle`);
+      const bytes = await readFile(bundle);
+      bytes[0] = (bytes[0] ?? 0) ^ 1;
+      await writeFile(bundle, bytes, { mode: 0o600 });
+
+      // When
+      const current = assertAuthoritativeNativeRepositoryTargetCurrent({ runtime: fixture.context, selector, target });
+
+      // Then
+      await expect(current).rejects.toThrow(/storage changed after proof/);
+    } finally { await fixture.close(); }
+  });
+
+  it("retains the final snapshot across trusted repository state directory creation", async () => {
+    // Given
+    const fixture = await finalizedCandidateRoot("target-final-trusted-directory", matchingRunner(), authoritativePolicy());
+    try {
+      const selector = { projectId: "project-a", repositoryId: "root" };
+      const target = await resolveAuthoritativeNativeRepositoryTarget(fixture.context, selector);
+      await mkdir(join(fixture.repository, ".extensions", "code-review"), { recursive: true, mode: 0o700 });
+
+      // When
+      const current = assertAuthoritativeNativeRepositoryTargetCurrent({ runtime: fixture.context, selector, target });
+
+      // Then
+      await expect(current).resolves.toBeUndefined();
+    } finally { await fixture.close(); }
   });
 
   it("does not treat a completed legacy import as kind-bound authority", async () => {

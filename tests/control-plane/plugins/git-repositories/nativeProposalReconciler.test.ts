@@ -47,7 +47,7 @@ describe("native proposal ref reconciliation bounds", () => {
     expect(retry[0]?.review.proposalRef).toBe(reviewProposalRef);
   });
 
-  it("proves each branch once across a reconciliation batch and reproves the next batch", async () => {
+  it("shares immutable proof across branch reconciliation batches", async () => {
     // Given: several proposals share the same two authoritative branch targets.
     const policyInput = { ...authoritativePolicy(), defaultRef: "refs/heads/main", branches: {
       "refs/heads/main": { review: true }, "refs/heads/development": { review: false }
@@ -64,17 +64,15 @@ describe("native proposal ref reconciliation bounds", () => {
       fixture.service.context.runtime, "project-a", "root", refs
     ));
 
-    // Then: full checks remain per branch, rather than per proposal or process-wide.
+    // Then: branch authority remains live while startup's unchanged immutable proof is reused.
     expect(first).toHaveLength(6);
-    expect(proofs).toHaveBeenCalledTimes(2);
-    expect(proofs.mock.calls.map(([input]) => input.protectedRef).sort())
-      .toEqual(["refs/heads/development", "refs/heads/main"]);
+    expect(proofs).not.toHaveBeenCalled();
     proofs.mockClear();
     const second = await fixture.service.context.serialize(() => reconcileNativeProposalRefs(
       fixture.service.context.runtime, "project-a", "root", refs
     ));
     expect(second).toHaveLength(6);
-    expect(proofs).toHaveBeenCalledTimes(2);
+    expect(proofs).not.toHaveBeenCalled();
   });
 
   it("rejects more than ten thousand proposal refs", async () => {
