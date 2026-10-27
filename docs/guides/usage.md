@@ -196,6 +196,34 @@ Common workspace commands also work under `dim workspace`; `list` accepts
 `ls`. Record commands offer `--json`, while `exec` preserves stdin, stdout,
 stderr and the command's exit status.
 
+### Copy files to or from a workspace
+
+```bash
+dim cp ./settings.json dev:settings.json
+dim cp dev:build/output.bin ./output.bin
+dim cp --recursive ./fixtures dev:fixtures
+dim cp --recursive --overwrite dev:reports ./reports
+printf 'binary input' | dim cp - dev:input.bin
+dim cp dev:output.bin - > ./output.bin
+```
+
+Exactly one operand uses `WORKSPACE:PATH`; the other is an operator-machine
+path or `-`. This remains true for an SSH-selected host, so a local path is
+never reinterpreted as a remote host filesystem path. Relative guest paths use
+the workspace working directory, while an absolute guest path stays inside the
+guest filesystem. Destinations are exact and existing data is preserved unless
+`--overwrite` is supplied. Directories require `--recursive`.
+
+Recursive copies preserve ordinary files, executable modes, directories and
+symlinks whose targets remain within the copied tree. Standalone or escaping
+symlinks, hard links and device, socket or FIFO entries are rejected. Downloads
+are validated before local replacement: absolute or traversing archive names,
+duplicate entries, escaping links and unsupported types fail without replacing
+the destination. The selected host does not extract an upload onto its own
+filesystem; it streams the bounded archive to the pinned workspace runtime.
+Cancellation removes operator-side staging data and leaves an existing exact
+destination unchanged.
+
 ## Select a remote host
 
 Install the same DIM source build and runtime prerequisites on the remote host
