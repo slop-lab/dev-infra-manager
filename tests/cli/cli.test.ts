@@ -57,6 +57,20 @@ test("installation protocol probe and client version work without contacting a h
     const env={DIM_HOST_EXECUTABLE:"/missing-host"};
     const probe=await run(["--host-protocol"],env);assert.equal(probe.status,0);assert.deepEqual(JSON.parse(probe.stdout),{protocol:"dim.cli-host",versions:[1]});
     const version=await run(["--version"],env);assert.equal(version.status,0);assert.equal(version.stdout.trim(),"0.10.0");
+    for(const option of ["--help","-h"]){const help=await run(["cp",option],env);assert.equal(help.status,0,help.stderr);assert.match(help.stdout,/Usage: dim cp/);assert.match(help.stdout,/WORKSPACE:PATH/);}
+  });
+});
+
+test("copy owns operator-local paths instead of forwarding them as selected-host paths",async()=>{
+  await fixture(async(run,root)=>{
+    const missing=path.join(root,"operator-only","missing.txt");
+    const result=await run(["cp",missing,"dev:/workspace/copied.txt"]);
+    assert.equal(result.status,2);
+    assert.equal(result.stdout,"");
+    assert.match(result.stderr,/local copy source.*does not exist/i);
+    const target=path.join(root,"target");const link=path.join(root,"source-link");await writeFile(target,"data");await import("node:fs/promises").then(({symlink})=>symlink(target,link));
+    const linked=await run(["cp",link,"dev:/workspace/copied.txt"],{DIM_HOST_EXECUTABLE:"/missing-host"});
+    assert.equal(linked.status,2);assert.match(linked.stderr,/symlink.*recursive directory source/i);
   });
 });
 

@@ -5,7 +5,7 @@ import { UserError, type WorkspaceRecord, type WorkspaceView } from "../../works
 
 import { runRecordOperation, runStreamOperation } from "./operations.js";
 
-import { createWorkspaceWithPlugins } from "./create-workspace.js";
+import { createWorkspaceWithPlugins } from "./create-workspace.js"; import { registerWorkspaceCopyCommand } from "./copy.js";
 
 interface OutputFlags { json?: boolean; expectId?: string }
 interface CreateFlags extends OutputFlags {
@@ -42,7 +42,8 @@ export function registerDevelopmentCommands(program: Command): void {
   for (const parent of [program, workspace]) registerWorkspaceOperations(parent);
 }
 
-function registerWorkspaceOperations(parent: Command): void {
+function registerWorkspaceOperations(parent: Command): void { registerWorkspaceCopyCommand(parent);
+
   parent.command("connect")
     .description("Connect standard input/output to a workspace loopback TCP port")
     .argument("<name>")

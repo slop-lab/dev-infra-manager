@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import {
   acquireWorkspaceSource, buildWorkspaceImage, checkWorkspaceHost, ProcessRunner, UserError,
   WorkspaceService, WorkspaceStore
@@ -8,6 +9,7 @@ import { createWorkspaceOnHost, ensureWorkspaceIntegration, type WorkspaceHostCr
 import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting, hostPluginExtensions } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
 import { installRequiredPlugins, workspaceRequirements } from "./workspace-requirements.js";
+import { workspaceCopyGuest, workspaceCopyMarker } from "../workspace/copy.js";
 
 export interface HostOperationRequest { readonly operation: string; readonly input?: Record<string, unknown> }
 
@@ -141,6 +143,20 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
       await ensureWorkspaceAgent(await store.read(name), agentContext);
       process.exitCode = await service.exec(name, input.command as string[], {
         signal, stdin: process.stdin, ...(input.interactive === true ? { terminal: true } : {})
+      });
+      return;
+    }
+    case "copy": {
+      const direction = string(input.direction, "direction");
+      if (direction !== "send" && direction !== "receive") throw new UserError("invalid workspace copy direction");
+      const name = string(input.name, "name"), copyPath = string(input.path, "path"), token = randomUUID();
+      process.exitCode = await service.copy(name, [
+        "node", "--input-type=commonjs", "-e", workspaceCopyGuest,
+        direction, copyPath, input.recursive === true ? "1" : "0", input.overwrite === true ? "1" : "0", workspaceCopyMarker, "helper", token
+      ], {
+        workspaceId: string(input.expectedId, "expectedId"), signal, token, path: copyPath,
+        stderr: process.stderr,
+        ...(direction === "receive" ? { stdin: process.stdin } : { stdout: process.stdout })
       });
       return;
     }

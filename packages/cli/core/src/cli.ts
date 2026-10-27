@@ -5,6 +5,7 @@ import { HostContextError, HostContextStore } from "./host-context.js";
 import { HostTransportError, negotiateHost, streamHost } from "./host-transport.js";
 import { forwardWorkspace } from "./port-forward.js";
 import { packageVersion } from "./package-version.js";
+import { copyHelp, copyWorkspace } from "./copy.js";
 
 let signalExitCode: number | undefined;
 try {
@@ -16,10 +17,14 @@ try {
     const selected = hostArguments(args), hosts = new HostContextStore();
     if (selected.args[0] === "host") await clientHostCommands(hosts).parseAsync(selected.args, { from: "user" });
     else {
-      const target = await hosts.resolve(selected.host);
-      await withSignals(async (signal) => {
-        const command = selected.args[0] === "workspace" ? selected.args.slice(1) : selected.args;
-        if (command[0] === "forward") {
+      const command = selected.args[0] === "workspace" ? selected.args.slice(1) : selected.args;
+      if (command[0] === "cp" && command.length === 2 && (command[1] === "--help" || command[1] === "-h")) process.stdout.write(copyHelp);
+      else {
+        const target = await hosts.resolve(selected.host);
+        await withSignals(async (signal) => {
+        if (command[0] === "cp") {
+          process.exitCode = await copyWorkspace(target, command, signal);
+        } else if (command[0] === "forward") {
           const program = new Command().name("dim").exitOverride();
           program.command("forward").argument("<workspace>").argument("<local:remote>")
             .action(async (name: string, ports: string) => {
@@ -35,7 +40,8 @@ try {
           const terminal = Boolean(process.stdin.isTTY && process.stdout.isTTY);
           process.exitCode = await streamHost(target, createHostRequest("command", { args: selected.args, terminal }), { signal, terminal });
         }
-      });
+        });
+      }
     }
   }
 } catch (error) {
