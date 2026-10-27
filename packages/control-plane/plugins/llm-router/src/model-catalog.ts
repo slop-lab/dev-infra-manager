@@ -5,6 +5,7 @@ import { ensureManagedBackend, configureManagedAccountModels, managedAccountDisc
 const catalogs = new Map<string, { readonly identity: string; readonly expires: number; readonly pending: Promise<RouterModel[]> }>();
 const catalogLifetime = 30_000;
 const maximumBytes = 4 * 1024 * 1024;
+type DiscoveryMode = "inspection" | "preparation";
 
 function accountScope(config: RouterConfig, account: RouterAccount): string {
   return JSON.stringify([config.stateDirectory, account.id, account.endpoint, account.keyFile, account.provider]);
@@ -16,11 +17,11 @@ async function discoveryContext(config: RouterConfig, account: RouterAccount): P
   const identity = createHash("sha256").update(JSON.stringify([endpoint, Object.entries(headers).sort(([left], [right]) => left.localeCompare(right))])).digest("hex");
   return { endpoint, headers, identity, direct: direct !== undefined };
 }
-async function discoverAccountCatalog(config: RouterConfig, account: RouterAccount): Promise<{ readonly models: RouterModel[]; readonly identity: string; readonly scope: string }> {
-  const scope = accountScope(config, account), context = await discoveryContext(config, account);
+async function discoverAccountCatalog(config: RouterConfig, account: RouterAccount, mode: DiscoveryMode = "preparation"): Promise<{ readonly models: RouterModel[]; readonly identity: string; readonly scope: string }> {
+  const scope = JSON.stringify([mode, accountScope(config, account)]), context = await discoveryContext(config, account);
   const cached = catalogs.get(scope);
   if (cached && cached.identity === context.identity && cached.expires > Date.now()) return { models: await cached.pending, identity: context.identity, scope };
-  const pending = discover(config, account, context);
+  const pending = discover(config, account, context, mode);
   const entry = { identity: context.identity, expires: Date.now() + catalogLifetime, pending };
   catalogs.set(scope, entry);
   try { return { models: await pending, identity: context.identity, scope }; }
@@ -31,12 +32,15 @@ async function discoverAccountCatalog(config: RouterConfig, account: RouterAccou
 export async function discoverAccountModels(config: RouterConfig, account: RouterAccount): Promise<RouterModel[]> {
   return (await discoverAccountCatalog(config, account)).models;
 }
-async function discover(config: RouterConfig, account: RouterAccount, context: { readonly endpoint: string; readonly headers: Record<string, string>; readonly direct: boolean }): Promise<RouterModel[]> {
+export async function inspectAccountModels(config: RouterConfig, account: RouterAccount): Promise<RouterModel[]> {
+  return (await discoverAccountCatalog(config, account, "inspection")).models;
+}
+async function discover(config: RouterConfig, account: RouterAccount, context: { readonly endpoint: string; readonly headers: Record<string, string>; readonly direct: boolean }, mode: DiscoveryMode): Promise<RouterModel[]> {
   const request = () => fetch(context.endpoint, { headers: context.headers, redirect: "error", signal: AbortSignal.timeout(10_000) });
   let response: Response;
   try { response = await request(); }
   catch (error) {
-    if (context.direct || !account.provider) throw error;
+    if (mode === "inspection" || context.direct || !account.provider) throw error;
     // A separate operator listener may discover a worker already owned by inference.
     // Start a worker only when its existing listener cannot be reached.
     await ensureManagedBackend(config, account); response = await request();
@@ -62,7 +66,7 @@ async function discover(config: RouterConfig, account: RouterAccount, context: {
       output: row.output ?? row.max_output_tokens });
   });
   if (!models.length || new Set(models.map(({ id }) => id)).size !== models.length) throw new Error("account model catalog is empty or contains duplicate models");
-  if (context.direct) {
+  if (context.direct && mode === "preparation") {
     const explicit = config.routes.filter((route) => route.accountId === account.id && route.models !== "all").flatMap(({ models }) => models === "all" ? [] : models);
     await configureManagedAccountModels(config, account, [...new Map([...explicit, ...models].map((model) => [model.id, model])).values()]);
   }

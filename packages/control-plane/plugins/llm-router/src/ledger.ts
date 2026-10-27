@@ -4,6 +4,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { routerSchemaSql, validateSharedRouterSchema } from "./schema.js";
 import { object, text, identifier, parsePolicy, parseLimits, type ProjectPolicy, type RouterLimits } from "./config.js";
+import { RouterOperationRejectedError } from "./operation-errors.js";
 
 export interface WorkspaceGrant { workspaceId: string; workspaceName: string; routeId: string; projectId: string; principalId: string; credentialHash: string }
 export interface Usage { inputTokens: number; outputTokens: number; raw: unknown; source: "backend-response" | "operator-resolution" }
@@ -159,7 +160,15 @@ export class RouterLedger {
     const row = this.database.prepare("SELECT * FROM requests WHERE id=?" + (projectId === undefined ? "" : " AND project_id=?")).get(...(projectId === undefined ? [id] : [id, projectId]));
     if (!row) throw new Error("request was not found"); return object(row);
   }
-  cancel(id: string, actor = "operator"): void { this.transaction(() => { this.request(id); this.database.prepare("UPDATE requests SET cancel_requested=1 WHERE id=? AND outcome='running'").run(id); this.audit(actor, "request.cancel", id, { terminationConfirmed: false }); }); }
+  cancel(id: string, actor = "operator"): void {
+    this.transaction(() => {
+      const result = this.database.prepare("UPDATE requests SET cancel_requested=1 WHERE id=? AND cancel_requested=0 AND (outcome='running' OR occupied=1)").run(id);
+      if (result.changes === 1) { this.audit(actor, "request.cancel", id, { terminationConfirmed: false }); return; }
+      const row = this.database.prepare("SELECT outcome,occupied,cancel_requested FROM requests WHERE id=?").get(id);
+      if (!row) throw new RouterOperationRejectedError("request was not found");
+      if (row.outcome !== "running" && row.occupied !== 1) throw new RouterOperationRejectedError("request is not cancellable in its current state");
+    });
+  }
   cancelled(id: string): boolean { return this.database.prepare("SELECT cancel_requested FROM requests WHERE id=?").get(id)?.cancel_requested === 1; }
   resolve(id: string, usage?: Usage): void {
     this.transaction(() => {

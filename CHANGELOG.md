@@ -207,7 +207,10 @@ is implied by these source changes.
   responses, parent/child activity aggregation, scoped optional OMO metadata and
   redacted evidence. Incomplete monitoring and failed or absent host-doctor
   checks cannot count as successful selected-host verification; task completion
-  remains independently unassessed.
+  remains independently unassessed. Verify explicitly selected hosts through
+  real disposable workspace Git, LLM, helper, ingress and reconnect flows;
+  cleanup uses immutable workspace identity and an exact remote-commit lease,
+  retaining resources when ownership or deletion cannot be confirmed.
 - Provide the separate `dim-web` console for workspace creation,
   lifecycle and resources, with explicit Web plugins for LLM router governance,
   execution diagnostics and authoritative Git review. Shared validated operation
@@ -254,6 +257,37 @@ is implied by these source changes.
   and confirm route revocation explicitly. Show actual container state after an
   external stop, offer Start, and explain stopped workspace tool availability
   without issuing failing guest status reads.
+  Rebuild non-Git work as a task-oriented workbench with native object URLs,
+  sign-in return, reload and browser-history behavior. Open workspace overview,
+  tools, routes and resource settings by immutable identity; retain in-session
+  drafts and reconcile uncertain writes without replay. Separate execution jobs,
+  workers and task-producer ownership, and organize LLM accounts/routes, project
+  policy and traffic into service-scoped tasks. Keep discovered router URLs bound
+  to their explicit controller even when availability changes. Explain unavailable
+  hosts, read-only capacity and missing owner APIs; expose capability and account
+  settings without inventing host configuration or granting service authority.
+  Retain workspace-feature drafts and recovery locks through runtime phase
+  changes, fence late object reads against newer browser tasks, and require fresh
+  owner-state reconciliation before repeating unknown LLM writes. Establish a
+  current account-catalog baseline before generated account creation, retain
+  unknown provider-login ownership across controller rediscovery, and require a
+  freshly loaded policy revision before editing a reconciled lost-response save.
+  Preserve newer same-form edits across late project creation and account rename,
+  and keep direct-router and controller result loss indeterminate after dispatch
+  instead of presenting it as a known service rejection.
+  Fence prior tabs and delayed credential actions when browser identity changes,
+  retain exact-job cancellation receipts through stale or failed reads, and
+  reconnect workspace-only capabilities without clearing healthy sibling drafts.
+  Bind plugin calls to server-owned generations across tabs, preserve known router
+  rejections through controller transport, and reconcile account creation by its
+  exact generated intent identity without erasing newer credentials or routes.
+  Restrict shared feature reconnect to operators, and order router reconciliation
+  reads after dispatched owner writes without reporting post-commit failure as a
+  known rejection.
+  Keep local CLI mutations in the same ordering boundary, let slow provider reads
+  leave revocation responsive, persist truthful cancellation intent, and expose
+  account actions without hidden horizontal scrolling on narrow screens.
+  Run the disposable non-Git browser journeys in the Web CI lane.
   Git review can reuse the selected controller's plugin connection without
   copying credentials to the Web server. Discover projects and their independent
   repositories through the Native Git plugin, with explicit controller, Project

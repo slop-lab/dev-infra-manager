@@ -7,6 +7,7 @@ import { runCommand, type CommandResult } from "../web-lifecycle/process.js";
 import { inspectOpenCodeMonitor, parseOmoTeamMetadata, type MonitorEvidence, type OmoTeamMetadata } from "./monitor.js";
 import { authenticatedMonitorClient } from "./monitorClient.js";
 import { monitorInspection } from "./monitorCommand.ts";
+import { cleanupOwnedSmokeWorkspace } from "./cleanup.js";
 import { CandidateCiError, verifyWorkspaceCandidateCi } from "./candidateCi.js";
 
 type PluginEntry = { readonly name: string; readonly state?: string; readonly commands: readonly string[] };
@@ -151,16 +152,10 @@ export async function runHostSmoke(selected: HostProfile, installedSourceSha: st
       } else progress("partial creation: no owned UUID was discoverable; no unproven resource was discarded");
     }
     if (owned !== undefined) {
-      try {
-        if (branchAttempted) {
-          const remote = await dim(profile.name, ["exec", owned.name, "--", "git", "ls-remote", "--exit-code", "--refs", "origin", `refs/heads/${branch}`], true);
-          if (remote.exitCode === 0) {
-            if (remote.stdout.trim() !== `${candidateCommit}\trefs/heads/${branch}`) throw new SmokeFailure(profile.name, "branch cleanup", "owned branch changed; retained for operator inspection");
-            await checked(profile, "owned ordinary-branch cleanup", ["exec", owned.name, "--", "git", "push", "origin", `:refs/heads/${branch}`]);
-          } else if (remote.exitCode !== 2) throw new SmokeFailure(profile.name, "branch cleanup", "remote branch ownership could not be inspected");
-        }
-      }
-      finally { await checked(profile, "exact owned cleanup", ["discard", owned.name, "--yes", "--expect-id", owned.id, "--json"], 180_000); }
+      if (branchAttempted && candidateCommit === undefined) throw new SmokeFailure(profile.name, "owned cleanup", "branch commit ownership is unavailable; workspace retained for operator inspection");
+      await cleanupOwnedSmokeWorkspace({ host: profile.name, owned,
+        ...(branchAttempted && candidateCommit !== undefined ? { branch: { ref: `refs/heads/${branch}`, commit: candidateCommit } } : {}),
+        run: (args, timeoutMs) => dim(profile.name, args, true, timeoutMs) });
       progress("exact owned cleanup");
     }
   }

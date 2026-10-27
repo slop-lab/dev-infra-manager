@@ -31,6 +31,9 @@ it("loads installed feature packages with role-filtered discovery, exact Origin/
     for (const secret of [fixture.operatorKey, fixture.connectionFile, fixture.keyFile, "keyFile", "token_hash"]) expect(metadata).not.toContain(secret);
     expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/panel.js", { headers: observer })).status).toBe(200);
     expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/traffic.js", { headers: observer })).status).toBe(200);
+    expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/routes.js", { headers: observer })).status).toBe(200);
+    expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/mutation-reconciliation.js", { headers: observer })).status).toBe(200);
+    expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/router.css", { headers: observer })).status).toBe(200);
     expect((await fetch(fixture.origin + "/v1/extensions/llm-router/assets/config.json", { headers: observer })).status).toBe(404);
     expect(fixture.inferenceRequests()).toBe(0);
   } finally { await fixture.close(); }
@@ -48,8 +51,10 @@ it("isolates an unavailable optional connection and reconnects only its configur
     await writeFile(fixture.connectionFile, before, { mode: 0o600 });
     const url = fixture.origin + "/v1/extensions/llm-router/reconnect";
     expect((await fetch(url, { method: "POST", headers: { ...headers, "x-dim-csrf": "wrong" }, body: "{}" })).status).toBe(403);
-    expect((await fetch(url, { method: "POST", headers, body: '{"connectionFile":"/tmp/untrusted"}' })).status).toBe(400);
-    const connected = await fetch(url, { method: "POST", headers, body: "{}" });
+    expect((await fetch(url, { method: "POST", headers, body: "{}" })).status).toBe(403);
+    const operatorHeaders = await fixture.login();
+    expect((await fetch(url, { method: "POST", headers: operatorHeaders, body: '{"connectionFile":"/tmp/untrusted"}' })).status).toBe(400);
+    const connected = await fetch(url, { method: "POST", headers: operatorHeaders, body: "{}" });
     expect(connected.status).toBe(200);
     expect(await connected.json()).toMatchObject({ id: "llm-router", configured: true, status: "ready", operations: expect.arrayContaining([expect.objectContaining({ name: "projects", access: "read" })]) });
   } finally { await fixture.close(); }

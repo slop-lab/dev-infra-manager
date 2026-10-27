@@ -1,6 +1,7 @@
 // @ts-check
 import { record, text } from "./session-data.js";
-import { mountWorkspaceFeatures } from "./feature-panels.js";
+import { mountWorkspaceFeatures } from "./workspace-features.js";
+import { hrefLocation, readLocation, subscribeLocation } from "./console-location.js";
 import { button, disclosure, feedback, input, node, recovery, requiresReconciliation } from "./workspace-ui.js";
 
 /** @typedef {(path:string, body?:unknown, timeout?:number)=>Promise<unknown>} Request */
@@ -17,8 +18,17 @@ export function createWorkspace(options) {
   let workspace = initial, busy = false, reconciliation = false, showingStoredFailure = false, disposed = false;
   /** @type {Record<string,string>|null} */ let pendingResources = null;
   const name = text(initial.name) ?? "workspace", expectedId = text(initial.id);
-  const row = node("article", "workspace-row"), overview = node("div", "workspace-overview"), identity = node("div", "workspace-identity"), title = node("h3", "", name), badge = node("span", "badge"), meta = node("p", "workspace-meta"), limits = node("p", "workspace-limits");
+  const workspacePath = ["workspaces", host, expectedId ?? ""];
+  const row = node("article", "workspace-row workspace-detail"), overview = node("div", "workspace-overview"), identity = node("div", "workspace-identity"), title = node("h2"), titleLink = document.createElement("a"), badge = node("span", "badge"), meta = node("p", "workspace-meta"), limits = node("p", "workspace-limits");
+  titleLink.textContent = name; titleLink.href = hrefLocation(workspacePath); title.append(titleLink);
   identity.append(title, badge); overview.append(identity, meta, limits); row.append(overview);
+  const listItem = node("article", "workspace-list-item"), listLink = document.createElement("a"), listCopy = node("span", "workspace-list-copy"), listName = node("strong", "", name), listMeta = node("span", "workspace-list-meta"), listBadge = node("span", "badge");
+  listLink.href = hrefLocation(workspacePath); listLink.setAttribute("aria-label", `Open ${name} on ${host}`); listCopy.append(listName, listMeta); listLink.append(listCopy, listBadge); listItem.append(listLink);
+  const sectionNavigation = node("nav", "workspace-section-navigation"); sectionNavigation.setAttribute("aria-label", `${name} sections`);
+  for (const [label, tail] of Object.entries({ Overview: '', Tools: 'tools', Routes: 'routes', Settings: 'settings' })) {
+    const link = document.createElement("a"); link.textContent = label; link.href = hrefLocation(tail ? [...workspacePath, tail] : workspacePath); link.dataset.workspaceSection = tail || "overview"; sectionNavigation.append(link);
+  }
+  row.append(sectionNavigation);
   const actions = node("div", "workspace-actions"), result = node("p", "workspace-feedback");
   row.append(actions);
   /** @type {Array<{control:HTMLButtonElement,action:string}>} */ const controls = [];
@@ -90,7 +100,7 @@ export function createWorkspace(options) {
   })(); });
   if (canOperate) {
     actionButton(actions, "start", "Start"); actionButton(actions, "stop", "Stop"); actionButton(actions, "restart", "Restart");
-    const settings = disclosure(row, `Settings for ${name}`); settings.className = "workspace-settings";
+    const settings = disclosure(row, `Settings for ${name}`); settings.className = "workspace-settings"; settings.dataset.workspaceSectionPanel = "settings";
     const form = document.createElement("form"), grid = node("div", "workspace-fields");
     form.setAttribute("aria-label", `Resources for ${name}`);
     form.append(node("h4", "", "Resource limits"), node("p", "field-hint", "Examples: CPUs 2 or 1.5, memory 4g, PIDs 2048. Use unlimited to remove a limit. A resource change may require replacing the runtime, interrupting running processes and attached sessions while keeping workspace data. This console reports only the state returned by the host."), grid);
@@ -122,17 +132,20 @@ export function createWorkspace(options) {
   }
   row.append(result);
   const features = node("div", "workspace-features"); row.append(features);
-  let featurePhase = "";
-  /** @type {(()=>void)|undefined} */ let disposeFeatures;
+  const featureNotice = node('p', 'workspace-feedback'); featureNotice.hidden = true; featureNotice.setAttribute('role', 'status'); row.append(featureNotice);
+  /** @type {ReturnType<typeof mountWorkspaceFeatures>|undefined} */ let disposeFeatures;
   const current = () => !disposed && active();
   /** @param {Record<string,unknown>} next */
   function update(next) {
     workspace = next;
     const phase = displayPhase(next) ?? "unknown", runtimeStatus = text(next.runtimeStatus) ?? "unknown", resources = record(next.resources);
-    if (featurePhase !== phase) { featurePhase = phase; disposeFeatures?.(); if (expectedId) disposeFeatures = mountWorkspaceFeatures(features, { hostId: host, name, id: expectedId, phase }, current, refresh); }
-    badge.textContent = phase;
+    if (!disposeFeatures && expectedId) disposeFeatures = mountWorkspaceFeatures(features, { hostId: host, name, id: expectedId, phase }, current, refresh);
+    else disposeFeatures?.update(phase);
+    badge.textContent = phase; listBadge.textContent = phase;
     badge.className = `badge ${phase === "running" ? "badge-approved" : phase === "error" ? "badge-error" : phase === "stopped" ? "badge-neutral" : "badge-pending"}`;
+    listBadge.className = badge.className;
     meta.textContent = `${text(next.runtime) ?? "unknown runtime"}${runtimeStatus === phase ? "" : ` · runtime ${runtimeStatus}`}`;
+    listMeta.textContent = `${host} · ${text(next.runtime) ?? "unknown runtime"}`;
     limits.textContent = `CPU ${text(resources?.cpuCount) ?? "unlimited"} · Memory ${text(resources?.memory) ?? "unlimited"} · PIDs ${text(resources?.pidsLimit) ?? "unlimited"}`;
     if (phase !== "error" && showingStoredFailure) { feedback(result, ""); showingStoredFailure = false; }
     if (phase === "error" && !busy && (!result.textContent || showingStoredFailure)) {
@@ -149,6 +162,27 @@ export function createWorkspace(options) {
     }
     row.setAttribute("aria-busy", String(busy));
   }
+  const applyLocation = (/** @type {string[]} */ path) => {
+    const selected = expectedId !== undefined && path[0] === "workspaces" && path[1] === host && path[2] === expectedId;
+    row.hidden = !selected;
+    listLink.setAttribute("aria-current", selected ? "page" : "false");
+    if (!selected) return;
+    const section = path[3] ?? "overview";
+    for (const link of sectionNavigation.querySelectorAll("a")) link.setAttribute("aria-current", link.dataset.workspaceSection === section ? "page" : "false");
+    const settings = row.querySelector(".workspace-settings");
+    if (settings instanceof HTMLDetailsElement) settings.open = section === "settings";
+    const featureId = section === "tools" ? "agent-tools" : section === "routes" ? "external-urls" : "";
+    const missing = featureId && features.dataset.catalogReady === 'true' && !features.querySelector(`[data-feature-id="${featureId}"]`);
+    const invalid = path.length > 4 || !['overview', 'tools', 'routes', 'settings'].includes(section);
+    featureNotice.hidden = !missing && !invalid;
+    featureNotice.textContent = invalid ? 'This workspace task is unavailable. Use Overview or choose one of the listed tasks.' : missing ? `${section === 'tools' ? 'Workspace tools' : 'External routes'} is not installed in this console. Check Settings & access for capabilities and ask the console owner to configure the Web and host plugins.` : '';
+    for (const feature of features.querySelectorAll("[data-feature-id]")) {
+      if (feature instanceof HTMLDetailsElement) feature.open = featureId !== "" && feature.dataset.featureId === featureId;
+    }
+  };
+  const disposeLocation = subscribeLocation(applyLocation); applyLocation(readLocation());
+  const featuresReady = () => applyLocation(readLocation());
+  window.addEventListener("dim-workspace-features-ready", featuresReady);
   update(initial); updateUnsaved();
-  return { row, name, get phase() { return displayPhase(workspace) ?? "unknown"; }, update, dispose() { disposed = true; disposeFeatures?.(); } };
+  return { row, listItem, name, id: expectedId ?? "", get phase() { return displayPhase(workspace) ?? "unknown"; }, update, dispose() { disposed = true; disposeLocation(); window.removeEventListener("dim-workspace-features-ready", featuresReady); disposeFeatures?.(); } };
 }

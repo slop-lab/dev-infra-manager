@@ -6,6 +6,8 @@
 /** @typedef {(target:WorkspaceTarget)=>NavigationResult} WorkspaceDestination */
 
 let epoch = 0, sequence = 0, authorized = false;
+export function invalidateNavigationRequests() { sequence++; }
+export function navigationRevision() { return sequence; }
 /** @type {Map<string,FeatureDestination>} */ const features = new Map();
 /** @type {WorkspaceDestination | null} */ let workspaceDestination = null;
 

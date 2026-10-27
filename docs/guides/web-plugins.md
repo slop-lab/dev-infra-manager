@@ -53,6 +53,8 @@ configured feature connections before writing a fresh account. At service
 startup, an unavailable backend disables its feature while other features remain
 usable. Reconnect retries the same server configuration and attests it again;
 it cannot change connection paths or grant account authority.
+Reconnect requires the browser `operator` role because it replaces shared server
+connection state; read-only accounts cannot interrupt another user's operations.
 Reconnect is also available for an active feature after service replacement.
 Mounted forms retain drafts; refresh the feature's data after reconnecting.
 
@@ -113,6 +115,11 @@ operation declares read, operator or reviewer access plus input and result
 validation. The console checks session roles and CSRF before invoking an
 operation. A handler still authenticates to its authoritative service, which
 retains its own policy and concurrency checks.
+Server adapters can throw the `HttpResponseError` exported by
+`@slop-lab/dim-web/plugin-api` when they can provide a sanitized HTTP outcome.
+Use a 4xx response only for an established rejection. A dispatched operation
+whose result was lost or could not be validated must use a 5xx response so the
+browser keeps the write locked for owner-state reconciliation.
 
 A plugin can declare `surfaces: ["workspace"]` to contribute directly to workspace
 management. Omitting `surfaces` selects navigation; a plugin can explicitly select

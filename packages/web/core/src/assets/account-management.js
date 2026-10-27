@@ -1,4 +1,5 @@
 // @ts-check
+import { captureSessionEpoch, isSessionEpochCurrent } from "./session-boundary.js";
 /** @typedef {{username:string,roles:string[]}} Account */
 /** @param {import('./types.js').Session} session @param {HTMLElement} container */
 export function mountAccountManagement(session, container) {
@@ -7,7 +8,8 @@ export function mountAccountManagement(session, container) {
   heading.textContent = "Manage browser accounts"; status.setAttribute("role", "status");
   container.append(region); region.append(heading, status, table);
   const dialog = container.closest("dialog");
-  const current = () => region.isConnected && (!(dialog instanceof HTMLDialogElement) || dialog.open);
+  const sessionEpoch = captureSessionEpoch();
+  const current = () => isSessionEpochCurrent(sessionEpoch) && region.isConnected && (!(dialog instanceof HTMLDialogElement) || dialog.open);
   const refresh = document.createElement("button"); refresh.type = "button"; refresh.className = "button button-secondary"; refresh.textContent = "Refresh accounts"; region.append(refresh);
   const form = document.createElement("form"); form.setAttribute("aria-label", "Manage browser account"); region.append(form, result);
   /** @param {string} label @param {HTMLInputElement|HTMLSelectElement} input */
@@ -27,9 +29,11 @@ export function mountAccountManagement(session, container) {
   const select = (action, account) => { if (pending || signInRequired) return; operation.value = action; username.value = account.username; for (const [role, check] of checks) check.checked = account.roles.includes(role); accepted = false; result.replaceChildren(); paintForm(); password.focus(); };
   const paintAccounts = () => {
     const listing = document.createElement("table"), head = document.createElement("thead"), title = document.createElement("tr");
-    for (const name of ["Username", "Roles", "Actions"]) { const cell = document.createElement("th"); cell.scope = "col"; cell.textContent = name; title.append(cell); } head.append(title); listing.append(head);
+    listing.setAttribute("role", "table"); head.setAttribute("role", "rowgroup"); title.setAttribute("role", "row");
+    for (const [id, name] of [["account-username-heading", "Username"], ["account-roles-heading", "Roles"], ["account-actions-heading", "Actions"]]) { const cell = document.createElement("th"); cell.id = id ?? ""; cell.scope = "col"; cell.setAttribute("role", "columnheader"); cell.textContent = name ?? ""; title.append(cell); } head.append(title); listing.append(head);
     const body = document.createElement("tbody");
-    for (const account of accounts) { const row = document.createElement("tr"), name = document.createElement("td"), granted = document.createElement("td"), actions = document.createElement("td"); name.textContent = account.username; granted.textContent = account.roles.join(", ");
+    body.setAttribute("role", "rowgroup");
+    for (const account of accounts) { const row = document.createElement("tr"), name = document.createElement("td"), granted = document.createElement("td"), actions = document.createElement("td"); row.setAttribute("role", "row"); for (const {cell, label, heading} of [{cell: name, label: "Username", heading: "account-username-heading"}, {cell: granted, label: "Roles", heading: "account-roles-heading"}, {cell: actions, label: "Actions", heading: "account-actions-heading"}]) { cell.dataset.label = label; cell.headers = heading; cell.setAttribute("role", "cell"); } name.textContent = account.username; granted.textContent = account.roles.join(", ");
       for (const [action, label] of [["set-roles", "Edit roles"], ["reset-password", "Reset password"], ["remove", "Remove"]]) { const button = document.createElement("button"); button.type = "button"; button.className = "button button-secondary"; button.textContent = label ?? ""; button.disabled = pending || signInRequired; button.addEventListener("click", () => select(action ?? "set-roles", account)); actions.append(button); }
       row.append(name, granted, actions); body.append(row);
     } listing.append(body); table.replaceChildren(listing);
@@ -60,7 +64,7 @@ export function mountAccountManagement(session, container) {
       const updated = parseAccounts(body.accounts); if (!current()) return;
       accounts = updated; accepted = true; signInRequired = body.signInRequired === true; status.textContent = `Account ${target}: ${action} saved. Changes apply immediately.`;
       if (typeof body.password === "string") { const label = document.createElement("label"), title = document.createElement("span"), generated = document.createElement("input"), copy = document.createElement("button"), feedback = document.createElement("p"); title.textContent = "Generated password"; generated.setAttribute("aria-label", "Generated password"); generated.value = body.password; generated.readOnly = true; label.className = "field"; label.append(title, generated); copy.type = "button"; copy.className = "button button-secondary"; copy.textContent = "Copy generated password"; feedback.setAttribute("role", "status"); copy.addEventListener("click", async () => { try { await navigator.clipboard.writeText(generated.value); feedback.textContent = "Password copied."; } catch { generated.focus(); generated.select(); feedback.textContent = "Password selected. Copy it with your keyboard."; } }); const hint = document.createElement("p"); hint.textContent = "This password is shown once. Save it before closing this dialog."; result.append(label, copy, feedback, hint); }
-      if (signInRequired) { const hint = document.createElement("p"), signIn = document.createElement("button"); hint.textContent = "Your account changed and your session ended. Save any generated password, then sign in again."; signIn.type = "button"; signIn.className = "button"; signIn.textContent = "Sign in again"; signIn.addEventListener("click", () => window.dispatchEvent(new Event("dim-session-expired"))); result.append(hint, signIn); }
+       if (signInRequired) { const hint = document.createElement("p"), signIn = document.createElement("button"); hint.textContent = "Your account changed and your session ended. Save any generated password, then sign in again."; signIn.type = "button"; signIn.className = "button"; signIn.textContent = "Sign in again"; signIn.addEventListener("click", () => window.dispatchEvent(new Event("dim-session-expired"))); result.append(hint, signIn); paintForm(); paintAccounts(); window.dispatchEvent(new Event("dim-session-self-revoked")); }
     } catch { if (current()) { uncertain = true; status.textContent = "Could not confirm the account update. It may have been saved. Refresh accounts to inspect the current state before retrying."; } }
     finally { pending = false; password.value = ""; if (current()) { paintForm(); paintAccounts(); refresh.disabled = signInRequired; } }
   });

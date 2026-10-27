@@ -11,14 +11,24 @@ export function mount(container, context) {
   const current = () => !disposed && context.isCurrent();
   const allowed = new Set(context.operations.map(({ name }) => name));
   const content = element('section'), notice = element('p'); notice.setAttribute('role', 'status');
+  /** @type {(()=>Promise<boolean>)|undefined} */ let refreshExisting;
   content.className = 'feature-form';
   container.append(element('p', 'Install tools in a running workspace and manage its OpenCode server. Installation can take a few minutes.'), notice, content);
   const retryDiscovery = context.ui.button('Retry workspace tools'); retryDiscovery.hidden = true; container.prepend(retryDiscovery);
+  const disposeWorkspaceChange = context.onWorkspaceChange?.(() => {
+    content.inert = true; retryDiscovery.hidden = false;
+    for (const field of content.querySelectorAll('input[type="password"]')) if (field instanceof HTMLInputElement) field.value = '';
+    notice.textContent = context.workspace.phase === 'running' ? 'Workspace runtime changed. Previous tool state is stale. Use Retry workspace tools to check current state; pending recovery locks and other workspace drafts are kept.' : 'Start this workspace from Workspaces before inspecting or installing tools. Previous tool state is stale; drafts and recovery locks are kept.';
+  });
+  function openExternalRoutes() {
+    if (context.openFeature('external-urls')) context.location?.navigate(['routes']);
+    else context.ui.feedback(notice, 'External routes is not installed for this workspace. Ask an operator to install its Web and host plugins, or use the forwarding command below.');
+  }
   /** @param {Controller} controller @param {Workspace|undefined} workspace */
   function show(controller, workspace) {
     const version = ++revision;
     const scoped = () => current() && version === revision;
-    content.replaceChildren(); notice.textContent = '';
+    content.replaceChildren(); content.inert = false; refreshExisting = undefined; notice.textContent = '';
     if (!workspace) { content.append(element('p', 'No workspaces on this controller. Create one from Workspaces, then refresh this view.')); return; }
     const selectedWorkspace = workspace;
     content.append(element('h3', workspace.name), element('p', `Workspace state: ${workspace.phase}`));
@@ -91,7 +101,7 @@ export function mount(container, context) {
       } else {
         server.append(element('p', value.externalUrlsAvailable === false ? 'External route status unavailable. Refresh status or inspect External routes for this workspace.' : 'No approved external URL. Create a route for this server port in External routes, then refresh status.'));
         const configure = context.ui.button('Configure external access');
-        configure.addEventListener('click', () => { if (!context.openFeature('external-urls')) context.ui.feedback(notice, 'External routes is not installed for this workspace. Ask an operator to install its Web and host plugins, or use the forwarding command below.'); });
+        configure.addEventListener('click', openExternalRoutes);
         server.append(configure);
       }
       server.append(element('p', `Username: ${value.username}.`));
@@ -109,6 +119,7 @@ export function mount(container, context) {
       });
       if (allowed.has('server.password')) {
         const form = document.createElement('form'), label = document.createElement('label'), password = document.createElement('input');
+        form.className = 'feature-form'; label.className = 'field';
         label.textContent = 'New server password'; password.type = 'password'; password.autocomplete = 'new-password'; password.minLength = 12; password.maxLength = 128; password.required = true; password.pattern = '[ -~]{12,128}'; label.append(password); form.append(label, element('p', 'Use 12–128 printable ASCII characters. Changing it restarts a running server.'));
         const save = button(form, 'Set server password', async () => {
           if (!form.reportValidity()) return;
@@ -130,7 +141,7 @@ export function mount(container, context) {
         server.append(element('p', 'OpenCode Web needs an approved HTTPS or explicitly published loopback server URL. Configure external access or use the forwarding setup above, then refresh status; the workspace-local address alone is not a forwarded endpoint.'));
         if (publicRoutes.length) {
           const configure = context.ui.button('Configure external access');
-          configure.addEventListener('click', () => { if (!context.openFeature('external-urls')) context.ui.feedback(notice, 'External routes is not installed for this workspace. Ask an operator to install its Web and host plugins, or use the forwarding command above.'); });
+          configure.addEventListener('click', openExternalRoutes);
           server.append(configure);
         }
       }
@@ -146,8 +157,9 @@ export function mount(container, context) {
         fallback.readOnly = true; fallback.value = value; label.append(fallback); parent.append(label); fallback.focus(); fallback.select();
       }
     }
-    const toolbar = element('div'); toolbar.className = 'feature-actions'; content.prepend(toolbar);
-    if (allowed.has('tools.status') && allowed.has('server.status')) button(toolbar, 'Refresh status', async () => {
+    const toolbar = element('div'); toolbar.className = 'feature-actions'; content.insertBefore(toolbar, tools);
+    if (allowed.has('tools.status') && allowed.has('server.status')) refreshExisting = async () => {
+      if (context.workspace.phase !== 'running') { notice.textContent = 'Start this workspace before refreshing tool state.'; return false; }
       const [installed, running] = await Promise.allSettled([invoke('tools.status'), invoke('server.status')]);
       if (!scoped()) return false;
       if (installed.status === 'fulfilled') renderTools(installed.value);
@@ -155,8 +167,9 @@ export function mount(container, context) {
       if (running.status === 'fulfilled') renderServer(running.value);
       else server.replaceChildren(element('h4', 'OpenCode server'), element('p', 'Server status unavailable. Tool status is loaded independently; use Refresh status to retry.'));
       if (installed.status === 'rejected' || running.status === 'rejected') { context.ui.feedback(notice, 'Some status reads failed. Available results are shown; Refresh status retries without changing the workspace.', 'error'); return false; }
-      reconciliation = false;
-    });
+      reconciliation = false; content.inert = false; retryDiscovery.hidden = true; updateActions(); return true;
+    };
+    if (refreshExisting) button(toolbar, 'Refresh status', refreshExisting);
     if (allowed.has('tools.setup')) for (const tool of controller.tools) button(toolbar, `Install ${tool}`, async () => { renderTools(await invoke('tools.setup', { tool })); }, true);
     if (allowed.has('server.start')) startButton = button(toolbar, 'Start OpenCode server', async () => { renderServer(await invoke('server.start')); }, true);
     if (allowed.has('server.stop')) stopButton = button(toolbar, 'Stop OpenCode server', async () => { renderServer(await invoke('server.stop')); }, true);
@@ -180,7 +193,7 @@ export function mount(container, context) {
     } catch { if (current() && selected === discoveryVersion) { retryDiscovery.hidden = false; notice.textContent = 'Could not discover workspace tools. Use Retry workspace tools to retry.'; } }
     finally { if (current() && selected === discoveryVersion) retryDiscovery.disabled = false; }
   }
-  retryDiscovery.addEventListener('click', () => { if (current() && !retryDiscovery.hidden && !retryDiscovery.disabled) void discover(); });
+  retryDiscovery.addEventListener('click', () => { if (current() && !retryDiscovery.hidden && !retryDiscovery.disabled) { retryDiscovery.disabled = true; void (refreshExisting ? refreshExisting() : discover()).finally(() => { if (current()) retryDiscovery.disabled = false; }); } });
   void discover();
-  return () => { disposed = true; ++revision; content.replaceChildren(); };
+  return () => { disposed = true; ++revision; disposeWorkspaceChange?.(); content.replaceChildren(); };
 }

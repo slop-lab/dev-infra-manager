@@ -64,6 +64,45 @@ the request. Errors stay beside the affected form or host, with a retry for host
 lookup. **Settings** holds resource edits, recreation and explicit discard
 confirmation; canceling discard sends no mutation.
 
+### Task URLs and returning to work
+
+The console is a development workbench. Its native links support opening in a
+new tab, reload and browser Back/Forward. Hash routes keep the existing exact
+server-path/origin boundary: `#/workspaces`, `#/workspaces/HOST/UUID`, and the
+workspace's `/tools`, `/routes` and `/settings` tasks. Creation uses
+`#/workspaces/HOST/new`. Hosts are selected for workspace tasks, not inferred as
+the authority for every shared service. Installed service tasks live below
+`#/features/FEATURE`; the owning plugin defines its object paths.
+
+The requested location remains through login and session expiry. Invalid or
+missing destinations explain the problem without selecting a different host or
+service. A stopped runtime retains persistent data; recreation replaces only
+the runtime, while discard requires explicit confirmation of data loss.
+Unavailable hosts allow preparing a draft but pause creation until a successful
+host refresh. Tools distinguish OpenCode process state from reachable approved
+URLs and expose passwords only after explicit authorized actions.
+
+Forms remain mounted through in-session navigation and refresh. Reload performs
+fresh reads and never replays a write; unsaved form input is not persisted to
+browser storage. Sign-out and session expiry clear session-owned forms and
+results, including credentials. No service secret belongs in a URL. When a
+response is uncertain, inspect current authoritative state before retrying.
+
+Stopping or starting a workspace keeps its mounted route drafts and uncertain
+tool/route outcomes. Tool controls are marked stale after a runtime change;
+**Retry workspace tools** performs an explicit current-state read before enabling
+them again. A replacement workspace UUID never inherits the previous workspace's
+drafts, results or action authority.
+
+`#/settings` inventories installed Web capabilities, their observed connection
+state, and account access. Host-owned VM/KVM, cache/mirror, tailnet/tunnel and
+image/shell capabilities have explicit owner guidance, not invented Web setup
+controls. `#/settings/access` offers **Manage account & access**, which opens the
+single sensitive dialog for the existing role/password-confirmed account-management
+flow. Browser roles and service authority remain independent.
+On narrow screens the account list becomes labeled rows with all account actions
+in view, rather than requiring sideways scrolling inside the dialog.
+
 Each host also has a scoped refresh, name search and state filter. Filters retain
 mounted rows, open settings, focus and drafts, and distinguish no matches from an
 empty or unavailable host. Resource settings identify unsaved edits and can reset
@@ -118,6 +157,15 @@ Native Git, workspace tools and External routes Web packages in a separate runti
 installing a feature does not grant service authority. An unavailable backend
 leaves its feature unavailable while workspaces and other features keep working.
 Reconnect retries the same private configuration and verifies its identity again.
+Because reconnect replaces a shared server runtime, it requires the browser
+`operator` role. Read-only users are directed to a browser operator instead.
+Settings also offers reconnect for workspace-only features. Successful connection
+attestation is distinct from a successful workspace read: failed mounts can retry
+without remounting healthy siblings or clearing their drafts. Replies crossing a
+reconnect boundary cannot reconcile an uncertain write.
+The server also fences generations across tabs: an old feature catalog cannot
+silently invoke the newly reconnected authority, and a superseded pending result
+is reported as unknown rather than mixed with the new service's state.
 
 To initialize a feature-only console, write a private specification file:
 
@@ -168,6 +216,11 @@ Configuration and connection files are owned mode-0600 regular files; symbolic
 links and hard links are rejected. Browser passwords use scrypt. Sessions use
 opaque HttpOnly SameSite=Strict cookies, Secure for HTTPS, rotating login,
 monotonic idle/absolute expiry, bounded concurrency and bounded guessing.
+Same-origin tabs use only a non-secret `dim.browser-session.epoch` local-storage
+marker to fence older session content and delayed credential actions when another
+tab signs in or out. Browser storage must permit that marker; credentials and
+drafts are never stored there. A self-account change can retain its one-time
+receipt until the user continues or a later identity change supersedes it.
 Host control credentials, private service connection files and raw service
 capabilities never reach the browser. Operators can inspect the trusted local
 account-management command and console configuration path in Account & access. Reviewed plugins can offer an

@@ -5,6 +5,9 @@ import { chromium } from "playwright-core";
 const executablePath = process.env.DIM_CHROMIUM;
 if (!executablePath) throw new Error("DIM_CHROMIUM is required");
 const source = await readFile(new URL("../../../../packages/web/plugins/llm-router/src/assets/traffic.js", import.meta.url), "utf8");
+const reconciliationSource = await readFile(new URL("../../../../packages/web/plugins/llm-router/src/assets/mutation-reconciliation.js", import.meta.url), "utf8");
+const reconciliationUrl = `data:text/javascript;base64,${Buffer.from(reconciliationSource).toString("base64")}`;
+const trafficUrl = `data:text/javascript;base64,${Buffer.from(source.replace('./mutation-reconciliation.js', reconciliationUrl)).toString("base64")}`;
 const uiSource = await readFile(new URL("../../../../packages/web/core/src/assets/feature-ui.js", import.meta.url), "utf8");
 const requestId = "10000000-0000-4000-8000-000000000001";
 const browser = await chromium.launch({ executablePath, headless: true });
@@ -14,7 +17,7 @@ try {
   await page.route("http://localhost/", (route) => route.fulfill({ contentType: "text/html", body: "<main></main>" }));
   await page.goto("http://localhost/");
   await page.evaluate(`(async () => {
-    const {mountTraffic} = await import(${JSON.stringify(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`)});
+    const {mountTraffic} = await import(${JSON.stringify(trafficUrl)});
     const {featureUi} = await import(${JSON.stringify(`data:text/javascript;base64,${Buffer.from(uiSource).toString("base64")}`)});
     const requests = [{id:${JSON.stringify(requestId)},project_id:"example",model:"model-one",outcome:"uncertain",execution:"outcome_unknown",accounting:"reconciliation_required",started_at:1700000000000,finished_at:1700000001000}];
     globalThis.traffic = mountTraffic(document.querySelector("main"), {
@@ -37,10 +40,10 @@ try {
   await page.evaluate("globalThis.holdRead=true;globalThis.staleRead=globalThis.traffic.refresh(true);void 0");
   await page.waitForFunction("typeof globalThis.releaseRead==='function'");
   page.once("dialog", (dialog) => dialog.accept());
-  await row.getByRole("button", { name: /Resolve unknown outcome/ }).click();
+  await row.getByRole("button", { name: "Resolve outcome", exact: true }).click();
   await row.getByText(/The resolution outcome is unknown/).waitFor();
   await page.evaluate("globalThis.releaseRead();globalThis.staleRead");
-  assert.equal(await row.getByRole("button", { name: /Resolve unknown outcome/ }).count(), 0);
+  assert.equal(await row.getByRole("button", { name: /Resolve outcome/ }).count(), 0);
   await row.getByText("The resolution outcome is unknown. Use Refresh router to check authoritative request state before retrying.", { exact: true }).waitFor();
   await page.evaluate("globalThis.traffic.refresh(true)");
   await row.getByLabel("Observed input tokens", { exact: true }).waitFor();

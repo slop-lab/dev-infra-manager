@@ -14,6 +14,7 @@ try {
   await page.getByLabel("Username", { exact: true }).fill(fixture.username);
   await page.getByLabel("Password", { exact: true }).fill(fixture.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("link", { name: "Open development on devbox", exact: true }).click();
   const row = page.locator(".workspace-row").filter({ has: page.getByRole("heading", { name: "development", exact: true }) });
   await row.getByText("Settings for development", { exact: true }).click();
   await row.getByLabel("CPUs for development", { exact: true }).fill("0.75");

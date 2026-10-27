@@ -182,6 +182,12 @@ Web feature reconnect. The fingerprint is checked against the exact connection
 and key snapshot used for the HTTP request. Web sends JSON through bounded stdin
 (`--input -`), keeping provider API keys out of process arguments. Read-only
 operator actors expose only their permitted read operations.
+The owner-specific `console invoke` JSON result is a versioned `success` or
+`rejected` envelope. Success contains the validated operation output; rejection
+contains only a bounded HTTP 4xx status and fixed public error code. Transport or
+unreadable-result failures remain nonzero command failures. This preserves known
+rejection versus indeterminate execution across the controller bridge without
+exposing raw service bodies or changing the generic CLI-host wire contract.
 
 Project policy replacement takes `--policy-file` with an owned mode-0600 JSON file. Each operation rejects unrelated flags and validates its arguments with the same definition used by the service and Web plugin. Workspace inference principals and host issuer credentials cannot authenticate this interface.
 

@@ -15,7 +15,7 @@ async function login(page: Page, fixture: DimWebFixture): Promise<void> {
   await page.getByLabel("Username", { exact: true }).fill(fixture.username);
   await page.getByLabel("Password", { exact: true }).fill(fixture.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.locator(".workspace-row").first().waitFor();
+  await page.locator(".workspace-row").first().waitFor({state:'attached'});
 }
 
 function workspaceRow(page: Page, host: string): Locator {
@@ -24,7 +24,10 @@ function workspaceRow(page: Page, host: string): Locator {
 }
 
 async function revealTools(row: Locator): Promise<void> {
-  await row.locator(".workspace-feature").filter({ hasText: "Workspace tools" }).locator("summary").click();
+  const href = await row.getByRole('heading', {name:'development',exact:true}).getByRole('link').getAttribute('href');
+  assert(href);
+  await row.page().locator(`.workspace-list-item a[href="${href}"]`).click();
+  await row.getByRole('link',{name:'Tools',exact:true}).click();
   await row.getByText("opencode: 1.18.31", { exact: true }).waitFor();
 }
 

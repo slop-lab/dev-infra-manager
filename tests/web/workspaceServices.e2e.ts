@@ -45,7 +45,8 @@ try {
   await page.getByLabel('Password', { exact: true }).fill(fixture.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   const row = page.locator('.workspace-row').filter({ has: page.getByRole('heading', { name: 'development', exact: true }) });
-  await row.getByText('Workspace tools', { exact: true }).click();
+  await page.getByRole('link', {name:'Open development on devbox',exact:true}).click();
+  await row.getByRole('link', {name:'Tools',exact:true}).click();
   await row.getByRole('button', { name: 'Start OpenCode server', exact: true }).click();
   await row.getByText('Start OpenCode server completed.', { exact: true }).waitFor();
   await row.getByRole('button', { name: 'Configure external access', exact: true }).click();
@@ -62,6 +63,7 @@ try {
   assert.equal(calls.filter(({ name }) => name === 'routes.create').length, 1);
   await row.getByRole('button', { name: 'Approve route', exact: true }).click();
   await row.getByRole('link', { name: 'https://workspace.example.test', exact: true }).waitFor();
+  await row.getByRole('link', {name:'Tools',exact:true}).click();
   await row.getByRole('button', { name: 'Refresh status', exact: true }).click();
   await row.getByText('Refresh status completed.', { exact: true }).waitFor();
   for (const width of [375, 768, 1280]) {

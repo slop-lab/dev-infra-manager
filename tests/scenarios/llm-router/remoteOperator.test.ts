@@ -82,7 +82,7 @@ it("discovers a separately hosted router through host-owned operator state and f
   };
   const apiKey = "provider-secret-via-private-stdin";
   const added = await piped("account.create", JSON.stringify({ accountId: "stdin-account", provider: "openai", endpoint: "https://api.example.test/v1", apiKey }));
-  expect(added.code, added.stderr.replaceAll(apiKey, "[redacted]")).toBe(0); expect(JSON.parse(added.stdout)).toMatchObject({ id: "stdin-account", provider: "openai" });
+  expect(added.code, added.stderr.replaceAll(apiKey, "[redacted]")).toBe(0); expect(JSON.parse(added.stdout)).toMatchObject({ schemaVersion: 1, outcome: "success", output: { id: "stdin-account", provider: "openai" } });
   expect(JSON.stringify(added.args)).not.toContain(apiKey); expect(added.stdout + added.stderr).not.toContain(apiKey);
   const malformed = await piped("account.create", `{"apiKey":"${apiKey}`);
   expect(malformed.code).toBe(1); expect(malformed.stderr).toContain("must be valid JSON"); expect(malformed.stderr).not.toContain(apiKey);

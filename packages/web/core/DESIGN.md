@@ -6,6 +6,67 @@ current result and next useful action understandable. It is an operational
 interface: use concrete verbs, restrained hierarchy and nearby explanations.
 Do not invent metrics or imply authority from a successful login.
 
+## Non-Git task workbench
+
+The 2026-10 rebuild is an operational workbench, not a monitoring dashboard.
+Keep the existing self-hosted Geist, dark neutral tonal surfaces, explicit borders,
+44px controls and scarce pale-blue action color. Use a compact persistent task
+navigation, a readable object header and separated working sections. Document
+scroll owns vertical movement; only literal logs and wide tables scroll locally.
+On narrow screens navigation wraps and list/detail regions become one column.
+
+The primary user is a developer resuming a persistent workspace; secondary users
+inspect execution failures, connect routing accounts or administer console access.
+Read-only users must understand blocked actions without being offered authority
+they do not have. Status must distinguish runtime, durable data, service readiness
+and reachability. Unknown writes remain locked until an explicit authoritative
+read; navigation and reload never repeat a write.
+
+Native hash routes keep browser history and new-tab behavior without broadening
+the server's static-path or query acceptance: `#/workspaces`,
+`#/workspaces/HOST/UUID`, `#/workspaces/HOST/new`,
+`#/features/FEATURE/...`, and `#/settings`. Only object identities, selected
+sections and filters belong in routes. Secrets and form bodies never do. The
+requested hash stays through sign-in, expiry and restoration. Missing destinations
+show an explanation and an explicit Workspaces link, never a different authority.
+Core owns route syntax and session fencing; each plugin owns its route tail.
+The location capability also exposes a non-secret user-intent revision. Async
+creation may open its accepted object only when no newer user intent or URL
+has superseded that submission; accepted background work never steals a task.
+
+Reusable primitives: native navigation links (default/current/focus), object
+headers, workspace list/detail, section navigation, grouped labeled fields,
+inline feedback (waiting/empty/denied/stale/unknown/accepted/error), selectable
+literal evidence, destructive confirmation and connection recovery. All reuse
+the existing token scale. No decorative charts, metrics, heroes or auto-motion.
+Forms remain mounted through in-session navigation. No service secret is stored
+in browser storage; sign-out clears mounted data. Persist only explicitly safe
+workspace creation/resource drafts scoped to the authenticated account where
+implemented, and reconcile uncertain state after reload rather than replaying it.
+
+### Capability and ownership outcome map
+
+| Task | Existing owner and supported behavior | Rebuild responsibility |
+| --- | --- | --- |
+| Workspace | Core operations: configured local/SSH host list, create, start/stop/restart/recreate/discard, CPU/memory/PID updates with UUID guard | Object links, clear persistent-data/runtime distinction, retained forms and reconciliation |
+| Tools | agent-tools Web/host plugins: setup, OpenCode status/start/stop, explicit credentials/password, approved URL/client opening | Natural workspace section, running versus reachable status |
+| External URLs | external-urls Web/host plugins: list/create/approve/revoke with workspace UUID and ingress catalog | Visible workspace route task, pending/revoked versus usable links, recovery |
+| Execution | execution Web/service client: jobs/detail/capacity/cancel/retry, generic installed task handlers | Independent service selection, job URLs, results/logs/artifacts and truthful worker/dependency failures; no arbitrary command launcher |
+| LLM routing | llm-router Web/owner service: independent accounts, Codex device flow, compatible API keys, catalog/routes/projects/policy/traffic | Task sections and object URLs with explicit service scope; preserve account and model choices |
+| Settings/access | Core session/accounts, installed extension catalog | Capability/connection overview, role/access administration and exact owner guidance |
+| Secondary host features | VM/KVM, cache-server/mirrors, tailscale/tunnels are explicit host plugins | Discoverable capability guidance; no invented Web configuration APIs |
+| Git | Existing Native Git plugin and domain contracts | Keep existing access only; no Git domain redesign |
+
+### Decision and evidence
+
+Direction independently reviewed by a delegated visual-engineering designer.
+Reference: Vercel Web Interface Guidelines for native links, URL state, labeled
+forms and inline recovery, adapted to DIM's authority boundaries. Existing
+design primitives are retained rather than importing a new framework. Agent
+critique is heuristic evidence, not a human usability study. Real provider OAuth,
+real remote hosts and privileged VM/cache/network behavior require separate
+operator/runtime verification; synthetic browser services cannot establish them.
+
 This document owns interaction and presentation guidance. The
 [Web API contract](../../../docs/specs/local-details/web-api.md) owns security
 requirements; the [Web plugin guide](../../../docs/guides/web-plugins.md) describes

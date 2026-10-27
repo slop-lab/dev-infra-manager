@@ -11,11 +11,11 @@ export class ReviewUI {
     await this.page.getByLabel("Username", { exact: true }).fill(username);
     await this.page.getByLabel("Password", { exact: true }).fill(password);
     await this.page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await this.page.getByRole("button", { name: "Git review", exact: true }).waitFor();
+    await this.page.getByRole("link", { name: "Git review", exact: true }).waitFor();
   }
 
   async openReviews(projectId?: string, repositoryId?: string) {
-    await this.page.getByRole("button", { name: "Git review", exact: true }).click();
+    await this.page.getByRole("link", { name: "Git review", exact: true }).click();
     if (projectId) await this.page.getByLabel("Project", { exact: true }).selectOption(projectId);
     if (repositoryId) await this.page.getByLabel("Repository", { exact: true }).selectOption(repositoryId);
   }

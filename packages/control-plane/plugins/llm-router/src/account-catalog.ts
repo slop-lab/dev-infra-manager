@@ -5,6 +5,7 @@ import { tryAcquireKernelGuard } from "@slop-lab/dim-control-plane-core/lock";
 import { object, parseConfig, parseModel, privateFile, type RouterAccount, type RouterConfig, type RouterModel, type RouterRoute } from "./config.js";
 import { discoverAccountModels } from "./model-catalog.js";
 import { createManagedAccount, configureManagedAccountModels } from "./managed-backend.js";
+import { RouterOperationRejectedError } from "./operation-errors.js";
 
 interface Catalog { schemaVersion: 2; accounts: RouterAccount[]; routes: RouterRoute[]; supportedModels: Record<string, RouterModel[]> }
 function catalogPath(config: RouterConfig): string { return join(config.stateDirectory, "account-catalog.json"); }
@@ -65,7 +66,7 @@ export async function effectiveRouterConfig(config: RouterConfig): Promise<Route
 async function changeCatalog<T>(config: RouterConfig, update: (catalog: Catalog) => Promise<T>): Promise<T> {
   await mkdir(config.stateDirectory, { recursive: true, mode: 0o700 });
   const guard = await tryAcquireKernelGuard(join(config.stateDirectory, "account-catalog.guard"), { timeoutMilliseconds: 5000 });
-  if (!guard) throw new Error("account catalog is busy; retry");
+  if (!guard) throw new RouterOperationRejectedError("account catalog is busy; retry");
   const temporary = join(config.stateDirectory, `account-catalog.${randomUUID()}.tmp`);
   try {
     const catalog = await readCatalog(config, false), result = await update(catalog);
@@ -82,7 +83,7 @@ export async function addRouterAccount(config: RouterConfig, input: { accountId?
     return await changeCatalog(config, async (catalog) => {
       const accountId = input.accountId ?? `${input.provider}-${randomUUID()}`;
       const reference = input.reference ?? defaultAccountReference(input.provider);
-      if ([...config.accounts, ...catalog.accounts].some(({ id }) => id === accountId)) throw new Error("account already exists");
+      if ([...config.accounts, ...catalog.accounts].some(({ id }) => id === accountId)) throw new RouterOperationRejectedError("account already exists");
       const account = await createManagedAccount({ ...config, accounts: [...config.accounts, ...catalog.accounts] }, { ...input, accountId, reference });
       created = account; catalog.accounts.push(account); return account;
     });
@@ -102,7 +103,7 @@ export async function renameRouterAccount(config: RouterConfig, accountId: strin
   if (!reference.trim() || reference.trim().length > 200) throw new Error("account label requires 1 to 200 characters");
   return changeCatalog(config, async (catalog) => {
     const account = catalog.accounts.find(({ id }) => id === accountId);
-    if (!account) throw new Error("managed account was not found; configuration accounts must be renamed in their configuration");
+    if (!account) throw new RouterOperationRejectedError("managed account was not found; configuration accounts must be renamed in their configuration");
     account.reference = reference.trim(); return account;
   });
 }
@@ -110,7 +111,7 @@ export async function renameRouterAccount(config: RouterConfig, accountId: strin
 export async function upsertRouterRoute(config: RouterConfig, route: RouterRoute): Promise<RouterRoute> {
   return changeCatalog(config, async (catalog) => {
     let account = effectiveAccounts(config, catalog).find(({ id }) => id === route.accountId);
-    if (!account) throw new Error("account was not found");
+    if (!account) throw new RouterOperationRejectedError("account was not found");
     const allRoutes = [...config.routes.filter(({ id }) => !catalog.routes.some((candidate) => candidate.id === id) && id !== route.id), ...catalog.routes.filter(({ id }) => id !== route.id), route];
     if (route.models === "all") {
       const models = await discoverAccountModels({ ...config, accounts: effectiveAccounts(config, catalog), routes: allRoutes }, account);

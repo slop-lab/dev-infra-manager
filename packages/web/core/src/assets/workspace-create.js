@@ -1,16 +1,18 @@
 // @ts-check
 import { button, disclosure, failureCode, feedback, input, node, recovery, requiresReconciliation } from "./workspace-ui.js";
+import {navigationRevision} from './navigation-broker.js';
 
 /** @typedef {(path:string, body?:unknown, timeout?:number)=>Promise<unknown>} Request */
 
-/** @param {{host:string,request:Request,refresh:()=>Promise<boolean>,active:()=>boolean,close:()=>void,hasName:(name:string)=>boolean}} options */
+/** @param {{host:string,request:Request,refresh:()=>Promise<boolean>,active:()=>boolean,close:()=>void,workspaceId:(name:string)=>string|undefined,openWorkspace:(id:string)=>void}} options */
 export function createWorkspaceForm(options) {
-  const { host, request, refresh, active, close, hasName } = options;
+  const { host, request, refresh, active, close, workspaceId, openWorkspace } = options;
   const form = document.createElement("form");
   form.hidden = true;
   form.className = "workspace-create panel";
   form.setAttribute("aria-label", `New workspace on ${host}`);
   form.append(node("h3", "", "New workspace"), node("p", "field-hint", `Create an isolated development environment on ${host}. Enter a Git clone URL, or dim:// followed by a managed project ID already imported on this host.`));
+  const availability = node('p', 'workspace-feedback'); availability.setAttribute('role', 'status'); form.append(availability);
   const basic = node("div", "workspace-fields");
   form.append(basic);
   const source = input(basic, "source", "Git URL or dim://PROJECT", `on ${host}`);
@@ -25,7 +27,7 @@ export function createWorkspaceForm(options) {
   basic.append(sourceHelp);
   const name = input(basic, "name", "Workspace name", `on ${host}`);
   name.required = true;
-  name.pattern = "[a-z0-9][a-z0-9._-]{0,47}";
+  name.pattern = "[a-z0-9][a-z0-9._\\-]{0,47}";
   name.placeholder = "my-project";
   name.maxLength = 48;
   name.title = "1-48 lowercase letters, digits, dots, underscores or hyphens; start with a letter or digit.";
@@ -38,7 +40,7 @@ export function createWorkspaceForm(options) {
   ref.placeholder = "Repository default";
   const runtime = input(fields, "runtime", "Runtime", `on ${host}`, "container");
   runtime.required = true;
-  runtime.pattern = "[a-z][a-z0-9-]{0,31}";
+  runtime.pattern = "[a-z][a-z0-9\\-]{0,31}";
   fields.append(node("p", "field-hint", "Use container for the usual Docker workspace. vm requires the VM runtime and KVM on the host."));
   const image = input(fields, "image", "Image (optional)", `on ${host}`);
   image.placeholder = "Host default";
@@ -57,7 +59,7 @@ export function createWorkspaceForm(options) {
   check.hidden = true; replace.hidden = true;
   actions.append(submit, replace, check, cancel);
   form.append(result, actions);
-  let nameEdited = false, busy = false, blockedName = "", dirty = false;
+  let nameEdited = false, busy = false, blockedName = "", dirty = false, hostReady = false;
   /** @type {import("../plugin-api.js").WebManagedWorkspaceCreateTarget | null} */ let pendingPrefill = null;
 
   function updateSource() {
@@ -68,8 +70,9 @@ export function createWorkspaceForm(options) {
     }
   }
   function updateGate() {
-    const selectedName = name.value.trim(), exists = hasName(selectedName), blocked = blockedName !== "" && selectedName === blockedName;
-    submit.disabled = busy || blocked || exists;
+    const selectedName = name.value.trim(), exists = workspaceId(selectedName) !== undefined, blocked = blockedName !== "" && selectedName === blockedName;
+    submit.disabled = busy || blocked || exists || !hostReady;
+    availability.textContent = hostReady ? '' : `Host ${host} is unavailable or has not finished loading. You can prepare this draft, but creation is paused. Use Refresh or Retry host to check the connection; your input is kept.`;
     cancel.disabled = busy; replace.disabled = busy || blockedName !== "";
     for (const field of form.querySelectorAll("input")) field.disabled = busy;
     if (!busy) updateSource();
@@ -103,7 +106,7 @@ export function createWorkspaceForm(options) {
     const loaded = await refresh();
     if (active()) {
       if (!loaded) feedback(result, `Current state for ${blockedName} could not be checked. Creation remains locked; retry Check current state. Your input is kept.`, true);
-      else if (hasName(blockedName)) feedback(result, `${blockedName} already exists in the current host state. This check does not establish which request created it. Choose another name to submit a new workspace.`, true);
+      else if (workspaceId(blockedName) !== undefined) feedback(result, `${blockedName} already exists in the current host state. This check does not establish which request created it. Choose another name to submit a new workspace.`, true);
       else { blockedName = ""; feedback(result, `${name.value.trim()} is not present in the current host state. Review the preserved input before retrying.`); }
     }
     check.disabled = false;
@@ -111,10 +114,10 @@ export function createWorkspaceForm(options) {
   })(); });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (busy || !form.reportValidity()) return;
+    if (busy || !hostReady || !form.reportValidity()) return;
     const selectedName = name.value.trim();
     if (blockedName !== "" && selectedName === blockedName) return;
-    if (hasName(selectedName)) { blockedName = selectedName; feedback(result, `${selectedName} already exists in the current host state. Choose another name.`, true); updateGate(); return; }
+    if (workspaceId(selectedName) !== undefined) { blockedName = selectedName; feedback(result, `${selectedName} already exists in the current host state. Choose another name.`, true); updateGate(); return; }
     /** @type {Record<string,string>} */ const resources = {};
     for (const field of [cpuCount, memory, pidsLimit]) if (field.value.trim()) resources[field.name] = field.value.trim();
     const payload = { source: source.value.trim(), name: selectedName, runtime: runtime.value.trim(),
@@ -123,6 +126,8 @@ export function createWorkspaceForm(options) {
       ...(ref.value.trim() ? { ref: ref.value.trim() } : {}), ...(image.value.trim() ? { image: image.value.trim() } : {}),
       ...(Object.keys(resources).length ? { resources } : {}) };
     busy = true;
+    const addressAtSubmit = window.location.href;
+    const intentAtSubmit = navigationRevision();
     form.setAttribute("aria-busy", "true");
     updateGate();
     feedback(result, `Creating ${selectedName} on ${host}... This can take a few minutes.`);
@@ -132,9 +137,11 @@ export function createWorkspaceForm(options) {
         if (!active()) return;
         const loaded = await refresh();
         if (!loaded) { blockedName = selectedName; feedback(result, `The create request for ${selectedName} was accepted, but current state could not be read. Do not submit it again. Check current state.`, true); }
-        else if (hasName(selectedName)) {
+        else if (workspaceId(selectedName) !== undefined) {
+          const acceptedId = workspaceId(selectedName);
           form.reset(); nameEdited = false; dirty = false; pendingPrefill = null; replace.hidden = true; updateSource(); advanced.open = false; blockedName = "";
           feedback(result, `The host accepted ${selectedName}, and the workspace is listed below.`);
+          if (acceptedId && addressAtSubmit === window.location.href && intentAtSubmit === navigationRevision()) openWorkspace(acceptedId);
         } else { blockedName = selectedName; feedback(result, `The host accepted the request, but ${selectedName} is not visible in the current state. Check current state before any retry.`, true); }
       } catch (error) {
         if (!active()) return;
@@ -170,5 +177,6 @@ export function createWorkspaceForm(options) {
     return { status: "opened", message: `Opened a workspace draft for managed project ${target.projectId}.` };
   }
   updateSource();
-  return { form, source, updateGate, prefill };
+  updateGate();
+  return { form, source, updateGate, prefill, setHostReady(/** @type {boolean} */ ready) { hostReady = ready; updateGate(); } };
 }

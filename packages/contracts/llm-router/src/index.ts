@@ -20,6 +20,13 @@ const principal = z.strictObject({ id: z.string(), project_id: id, workspace_id:
 const request = z.strictObject({ id: z.string().uuid(), project_id: id, principal_id: z.string(), account_id: id, started_at: nonnegative, finished_at: nonnegative.nullable(), model: z.string(), outcome: z.string(), execution: z.string(), delivery: z.string(), accounting: z.string(), occupied: nonnegative, cancel_requested: nonnegative, input_tokens: nonnegative.nullable(), output_tokens: nonnegative.nullable(), error_code: z.string().nullable() });
 function operation<I, O>(name: string, description: string, access: OperationAccess, input: z.ZodType<I>, output: z.ZodType<O>): Operation<I, O> { return { name, description, access, parseInput: (value) => input.parse(value), parseOutput: (value) => output.parse(value) }; }
 export const capabilitiesSchema = z.array(z.strictObject({ name: z.string(), description: z.string(), access: z.enum(["read", "operator", "reviewer"]) })).max(1000);
+export const llmRouterRejectionCodeSchema = z.enum(["llm_router_authentication_failed", "llm_router_permission_denied", "llm_router_operation_rejected"]);
+export type LlmRouterRejectionCode = z.infer<typeof llmRouterRejectionCodeSchema>;
+export const llmRouterControllerResultSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({ schemaVersion: z.literal(1), outcome: z.literal("success"), output: z.unknown() }),
+  z.strictObject({ schemaVersion: z.literal(1), outcome: z.literal("rejected"), status: z.number().int().min(400).max(499), errorCode: llmRouterRejectionCodeSchema }),
+]);
+export type LlmRouterControllerResult = z.infer<typeof llmRouterControllerResultSchema>;
 export const routerAccountSchema = z.strictObject({ id, reference: z.string(), provider: z.enum(["backend", "codex", "openai", "anthropic"]), status: z.enum(["configured", "connected", "authorization_required"]) });
 const accountInput = z.strictObject({ accountId: id });
 const createAccountInput = z.strictObject({ accountId: id.optional(), reference: z.string().trim().min(1).max(200).optional(), provider: z.enum(["codex", "openai", "anthropic"]), endpoint: z.string().url().max(2048).refine((value) => { try { const endpoint = new URL(value); return !endpoint.username && !endpoint.password && !endpoint.search && !endpoint.hash && (endpoint.protocol === "https:" || endpoint.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(endpoint.hostname)); } catch { return false; } }, "API endpoint requires HTTPS or loopback HTTP without credentials, query or fragment").optional(), apiKey: z.string().min(1).max(16384).regex(/^[^\r\n]+$/).optional() }).superRefine((value, context) => {

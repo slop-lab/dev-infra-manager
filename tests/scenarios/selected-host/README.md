@@ -21,8 +21,10 @@ succeed. The Project must have Git-CI policy and real registered worker capacity
 Missing policy, failed/stale/unavailable jobs or bounded pending timeout fail;
 the runner never publishes fabricated worker evidence or cancels other work.
 
-Its randomly named branch is deleted only after the remote still reports the
-exact commit it pushed. A changed branch is retained for operator inspection.
+Its randomly named branch is deleted only with an explicit Git lease for the
+exact commit it pushed, after matching remote readback. If the branch changed,
+cannot be inspected, or deletion fails, both the branch and workspace are
+retained for operator inspection; workspace discard is not attempted.
 Partial creation learns the exact random name's UUID and checks source and
 creation time before cleanup; it never discards a merely similar workspace.
 

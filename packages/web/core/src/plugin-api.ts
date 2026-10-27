@@ -2,6 +2,7 @@
 import type { Operation } from "@slop-lab/dim-contracts-operations";
 export type { Operation, OperationAccess, OperationDescriptor } from "@slop-lab/dim-contracts-operations";
 export { loadPrivateJson } from "./config.js";
+export { HttpResponseError } from "./http-response.js";
 
 /** Trusted controller selections come only from private server configuration. */
 export interface WebPluginController {
@@ -78,13 +79,23 @@ export interface WebPluginBrowserContext {
   readonly operations: readonly import("@slop-lab/dim-contracts-operations").OperationDescriptor[];
   readonly ui: WebPluginUi;
   readonly navigation: WebPluginNavigation;
+  /** Optional task-local URL state. Contains object identities, never credentials or drafts. */
+  readonly location?: WebPluginLocation;
   /** Register this mounted destination's strict target decoder. Disposed with its session. */
   onNavigate(handler: WebFeatureNavigationHandler): () => void;
   isCurrent(): boolean;
   invoke(name: string, input?: unknown, options?: WebPluginInvokeOptions): Promise<unknown>;
 }
+export interface WebPluginLocation {
+  readonly path: readonly string[];
+  readonly revision: number;
+  href(path: readonly string[]): string;
+  navigate(path: readonly string[], options?: { readonly replace?: boolean }): void;
+  subscribe(handler: (path: readonly string[]) => void): () => void;
+}
 export interface WebPluginWorkspaceBrowserContext extends WebPluginBrowserContext {
   readonly workspace: WebPluginWorkspace;
+  onWorkspaceChange?(handler: () => void): () => void;
   refreshWorkspace(): Promise<boolean>;
   openFeature(featureId: string): boolean;
 }
