@@ -214,6 +214,7 @@ if (args[0] === "--host-protocol") {
 ${options.echoFile
     ? `writeFileSync(${JSON.stringify(options.echoFile)}, JSON.stringify({
   argv: args,
+  pid: process.pid,
   cwd: process.cwd(),
   env: {
     DIM_HOST_EXECUTABLE: process.env.DIM_HOST_EXECUTABLE ?? null,

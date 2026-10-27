@@ -1,17 +1,15 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { hostExecutable, configuredCli, queryCliVersion, validateConfiguredCli } from "./install.js";
-import { interactiveInstall, installerCommand } from "./installerCommands.js";
-import { printFacadeHelp } from "./installerHelp.js";
+import { configuredCli, hostExecutable } from "./installConfig.js";
+import { queryCliVersion, validateConfiguredCli } from "./cliExecutable.js";
 import { installerVersion } from "./installerVersion.js";
-import { ControlPlaneInstallError, formatControlPlaneInstallError } from "./controlPlaneInstallError.js";
 
 const args = process.argv.slice(2);
 
 try {
   process.exitCode = await dispatch(args);
 } catch (error) {
+  const { ControlPlaneInstallError, formatControlPlaneInstallError } = await import("./controlPlaneInstallError.js");
   if (error instanceof ControlPlaneInstallError) {
     for (const line of formatControlPlaneInstallError(error)) console.error(`dim: ${line}`);
   } else {
@@ -26,6 +24,7 @@ async function dispatch(commandArgs: string[]): Promise<number> {
   }
   const first = commandArgs[0];
   if (first === "installer") {
+    const { installerCommand } = await import("./installerCommands.js");
     await installerCommand(commandArgs.slice(1));
     return 0;
   }
@@ -39,10 +38,12 @@ async function dispatch(commandArgs: string[]): Promise<number> {
   const cli = await configuredCli();
   if (cli === undefined) {
     if (first === undefined) {
+      const { interactiveInstall } = await import("./installerCommands.js");
       await interactiveInstall();
       return 0;
     }
     if (isHelp(first)) {
+      const { printFacadeHelp } = await import("./installerHelp.js");
       printFacadeHelp();
       return 0;
     }
@@ -69,42 +70,17 @@ async function dispatch(commandArgs: string[]): Promise<number> {
   return proxyCli(executable, commandArgs, await installerVersion());
 }
 
-async function proxyCli(executable: string, commandArgs: string[], version: string): Promise<number> {
-  return new Promise<number>((resolve, reject) => {
-    const child = spawn(executable, commandArgs, {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        DIM_HOST_EXECUTABLE: hostExecutable(),
-        DIM_INVOKED_VIA_INSTALLER: "1",
-        DIM_INSTALLER_VERSION: version,
-        DIM_INSTALLER_ENTRYPOINT: fileURLToPath(import.meta.url)
-      },
-      stdio: "inherit"
-    });
-    const forwardedSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
-    const handlers = new Map<NodeJS.Signals, () => void>();
-    for (const signal of forwardedSignals) {
-      const handler = () => child.kill(signal);
-      handlers.set(signal, handler);
-      process.on(signal, handler);
-    }
-    const cleanup = () => {
-      for (const [signal, handler] of handlers) process.off(signal, handler);
-    };
-    child.once("error", (error) => {
-      cleanup();
-      reject(error);
-    });
-    child.once("exit", (code, signal) => {
-      cleanup();
-      if (signal) {
-        process.kill(process.pid, signal);
-        return;
-      }
-      resolve(code ?? 1);
-    });
+async function proxyCli(executable: string, commandArgs: string[], version: string): Promise<never> {
+  const execve = process.execve;
+  if (execve === undefined) throw new Error("DIM requires a Node.js runtime with process replacement support");
+  execve(executable, [executable, ...commandArgs], {
+    ...process.env,
+    DIM_HOST_EXECUTABLE: hostExecutable(),
+    DIM_INVOKED_VIA_INSTALLER: "1",
+    DIM_INSTALLER_VERSION: version,
+    DIM_INSTALLER_ENTRYPOINT: fileURLToPath(import.meta.url)
   });
+  throw new Error("process replacement returned unexpectedly");
 }
 
 function isHelp(value: string | undefined): boolean {
