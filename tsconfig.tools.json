@@ -22,6 +22,7 @@
     "scripts/**/*.mts",
     "tools/**/*.ts",
     "packages/**/scripts/**/*.ts",
+    "packages/gs/build-package.ts",
     "examples/**/*.ts",
     "packages/**/image/**/*.ts"
   ],

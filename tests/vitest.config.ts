@@ -10,7 +10,7 @@ export default defineConfig({
     // production deadline; explicitly bounded operations retain their limits.
     testTimeout: 15_000,
     include: [
-      "{host,control-plane,contracts,installer,web,git-review-tracing,git-tools}/**/*.test.ts",
+      "{host,control-plane,contracts,installer,web,gs,git-review-tracing,git-tools}/**/*.test.ts",
       "cli/host/**/*.test.ts",
       "scenarios/{harness,execution,llm-router,selected-host,web-lifecycle}/**/*.test.ts"
     ],
@@ -19,7 +19,7 @@ export default defineConfig({
   // Keep linked package SDKs in the same source graph as direct owner imports.
   ssr: {
     resolve: { conditions: ["dim-source", "source", "node"] },
-    noExternal: [/^@slop-lab\/(?:dim-|git-|react-git-)/, /^@this-project\/control-plane-deployment/]
+    noExternal: [/^@slop-lab\/(?:dim-|gs-|git-|react-git-)/, /^@this-project\/control-plane-deployment/]
   },
   resolve: {
     conditions: ["dim-source", "source"]
