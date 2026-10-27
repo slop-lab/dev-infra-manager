@@ -47,8 +47,8 @@ for (const [name, expectedVersion] of Object.entries(expectedVersions)) {
 
 const openCode = parseJsonc(openCodePath)
 const expectedPlugins = fixture === "preserved"
-  ? ["example-plugin@2.0.0", ["oh-my-openagent@4.19.4", { preserve: "plugin-options" }]]
-  : ["oh-my-openagent@4.19.4"]
+  ? ["example-plugin@2.0.0", [require("node:url").pathToFileURL(path.join(installPrefix, "lib/node_modules/oh-my-openagent/dist/index.js")).href, { preserve: "plugin-options" }]]
+  : [require("node:url").pathToFileURL(path.join(installPrefix, "lib/node_modules/oh-my-openagent/dist/index.js")).href]
 if (openCode.autoupdate !== false) throw new Error("OpenCode autoupdate was not disabled")
 if (JSON.stringify(openCode.plugin) !== JSON.stringify(expectedPlugins)) {
   throw new Error(`unexpected OpenCode plugins: ${JSON.stringify(openCode.plugin)}`)

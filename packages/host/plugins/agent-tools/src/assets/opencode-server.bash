@@ -444,6 +444,9 @@ trap cleanup_started_process EXIT
 trap 'exit 130' HUP INT TERM
 
 if [[ -z "${server_pid:-}" ]]; then
+  availability_helper="$HOME/.local/share/dim-agent-tools/omo-model-availability.mjs"
+  [[ -f "$availability_helper" ]] || availability_helper="$(dirname -- "${BASH_SOURCE[0]}")/omo-model-availability.mjs"
+  LD_PRELOAD="$runtime_preload" node "$availability_helper" --refresh "$(command -v opencode)" || fail 'could not discover available OpenCode models'
   : >"$log_file"
   chmod 0600 "$log_file"
   instance_id="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"

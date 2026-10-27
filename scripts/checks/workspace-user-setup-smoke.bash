@@ -243,42 +243,6 @@ assert_accepted_cache_descendant() {
   test -e "$marker"
 }
 
-assert_rejected_omo_coordinate_symlink() {
-  local target_scope="$1"
-  local test_home="$work_dir/omo-coordinate-$target_scope-home"
-  local outside="$work_dir/omo-coordinate-$target_scope-outside"
-  local marker="$work_dir/omo-coordinate-$target_scope-npm-invoked"
-  local coordinate="$test_home/.cache/opencode/packages/oh-my-openagent@4.19.4"
-  local target
-  mkdir -p "$(dirname -- "$coordinate")"
-  case "$target_scope" in
-    inside)
-      target="$test_home/omo-coordinate-target"
-      ;;
-    outside)
-      target="$outside"
-      ;;
-    *)
-      echo "unknown OMO coordinate target scope: $target_scope" >&2
-      exit 1
-      ;;
-  esac
-  mkdir -p "$target"
-  printf '%s\n' "$target_scope-sentinel" >"$target/sentinel"
-  ln -s "$target" "$coordinate"
-  if env -u XDG_CACHE_HOME -u XDG_DATA_HOME -u XDG_STATE_HOME HOME="$test_home" \
-    XDG_CONFIG_HOME="$test_home/.config" PATH="$work_dir/reject-tools:$system_path" \
-    NPM_INVOCATION_MARKER="$marker" bash "$setup_script" >/dev/null 2>&1; then
-    echo "workspace setup unexpectedly accepted $target_scope-HOME OMO coordinate symlink" >&2
-    exit 1
-  fi
-  if [[ -e "$marker" ]]; then
-    echo "npm was invoked before $target_scope-HOME OMO coordinate symlink rejection" >&2
-    exit 1
-  fi
-  test "$(cat "$target/sentinel")" = "$target_scope-sentinel"
-}
-
 assert_rejected_npm_descendant() {
   local descendant="$1"
   local name="${descendant//\//-}"
@@ -434,13 +398,9 @@ for variable in XDG_DATA_HOME XDG_STATE_HOME; do
   fi
 done
 
-for descendant in opencode opencode/packages; do
+for descendant in opencode; do
   assert_rejected_cache_descendant "$descendant"
   assert_accepted_cache_descendant "$descendant"
-done
-
-for target_scope in inside outside; do
-  assert_rejected_omo_coordinate_symlink "$target_scope"
 done
 
 for descendant in .local/bin .local/lib .local/lib/node_modules .local/state/dim-tools; do
@@ -491,6 +451,8 @@ test ! -s "$HOME/.workspace-user-setup.lock"
   sha256sum --check workspace-user-setup.bash.sha256
 )
 
+git config --global core.excludesFile "$HOME/.config/git/existing-ignore"
+printf '%s\n' 'existing-entry' >"$HOME/.config/git/existing-ignore"
 git_config_before="$(sha256sum "$GIT_CONFIG_GLOBAL")"
 WORKSPACE_SETUP_NPM_MODE=real bash "$setup_script" >"$work_dir/setup-one.log" &
 first_pid=$!
@@ -602,6 +564,8 @@ grep -Fqx '  "theme"  :  "dim-smoke",' "$XDG_CONFIG_HOME/opencode/opencode.jsonc
 grep -Fqx '  // OMO fixture comment must survive targeted edits.' "$HOME/.omo/omo.jsonc"
 grep -Fqx '    "channel" : "stable",' "$HOME/.omo/omo.jsonc"
 assert_no_opencode_runtime
+grep -Fxq 'existing-entry' "$HOME/.config/git/existing-ignore"
+grep -Fxq '.omo/' "$HOME/.config/git/existing-ignore"
 test "$(sha256sum "$GIT_CONFIG_GLOBAL")" = "$git_config_before"
 
 mapfile -t npm_paths <"$HOME/.workspace-setup-npm-paths"
@@ -622,7 +586,6 @@ test "${npm_paths[0]}" != "${npm_paths[3]}"
 test -d "$HOME/.local/share/workspace-user-setup/cache"
 test -d "$HOME/.local/state"
 test -d "$HOME/.cache/opencode"
-test -d "$HOME/.cache/opencode/packages"
 
 open_code_before="$(sha256sum "$XDG_CONFIG_HOME/opencode/opencode.jsonc")"
 omo_before="$(sha256sum "$HOME/.omo/omo.jsonc")"

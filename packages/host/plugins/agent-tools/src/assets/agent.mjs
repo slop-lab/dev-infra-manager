@@ -76,6 +76,9 @@ async function main() {
       }
     }
   }
+  if (tool === "opencode" && !args.includes("--version") && !args.includes("--help")) {
+    execFileSync(process.execPath, [path.join(home, ".local/share/dim-agent-tools/omo-model-availability.mjs"), "--refresh", executable], { stdio: ["ignore", "ignore", "inherit"] });
+  }
   const resume = args[0] === "--resume";
   if (resume) args.shift();
   const continuation = "Continue the interrupted task from the saved session. Re-read workspace state before changing files.";

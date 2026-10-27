@@ -18,7 +18,23 @@ dim tools setup development codex
 dim tools run development codex
 ```
 
-Setup pins OpenCode 1.18.31, oh-my-openagent 4.19.4 and Codex 0.156.1. OMO team
+Setup pins OpenCode 1.18.31, oh-my-openagent 4.19.4 and Codex 0.156.1. The OMO
+plugin is loaded from its verified local installation, rather than installing a
+second runtime copy. Agent-tools applies an explicit, source-guarded 4.19.4
+compatibility patch: initial default selection and foreground/background retries
+retain the upstream role chains and variants but skip provider/model pairs absent
+from the authenticated catalog. A connected provider alone does not prove access
+to every model it advertises elsewhere. Explicit operator model overrides remain
+operator choices; missing models are never renamed to another model family.
+
+Before starting an agent or Web server, the helper runs the pinned OpenCode
+`models --verbose` command with the current provider integrations and launch
+environment. This refreshes OMO's private inventory, including metadata, before
+OMO selects defaults, including on a fresh installation. It starts no agent
+session. Inventory discovery failure stops launch with an error. This patch must
+be revalidated or removed when changing the OMO pin; changed source is rejected.
+
+OMO team
 mode is configured in the user's home; reviewed repository-specific tool
 settings remain in the repository. OpenCode/OMO setup adds `.omo/` to the
 workspace user's global Git ignore file, preserving existing entries and a

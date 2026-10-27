@@ -54,6 +54,7 @@ it("starts an authenticated owned listener, reports safely, and stops only that 
 // @ts-check
 const http = require('node:http');
 if (process.argv.includes('--version')) { console.log('1.18.31'); process.exit(0); }
+if (process.argv.includes('models')) { console.log('openai/test-model\\n{\\n  \"id\": \"test-model\"\\n}'); process.exit(0); }
 const expected = 'Basic ' + Buffer.from(process.env.OPENCODE_SERVER_USERNAME + ':' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
 http.createServer((req, res) => { res.statusCode = req.headers.authorization === expected ? 200 : 401; res.end(JSON.stringify({healthy: res.statusCode === 200})); }).listen(Number(process.env.OPENCODE_WEB_PORT), '127.0.0.1');
 `);
