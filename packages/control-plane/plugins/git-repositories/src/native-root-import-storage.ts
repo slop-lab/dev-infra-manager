@@ -19,12 +19,7 @@ export async function assertDurableNativeRootBundle(
   });
   try {
     const before = await file.stat({ bigint: true });
-    const owner = process.geteuid?.();
-    if (!before.isFile() || owner === undefined || before.uid !== BigInt(owner)
-      || (before.mode & 0o777n) !== 0o600n || before.nlink !== 1n
-      || before.size !== BigInt(expectedSize)) {
-      throw new NativeRootImportBundleError("durable root bundle file is invalid");
-    }
+    assertBundleMetadata(before, expectedSize);
     const digest = createHash("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     let position = 0;
@@ -42,6 +37,32 @@ export async function assertDurableNativeRootBundle(
     if (digest.digest("hex") !== expectedDigest) {
       throw new NativeRootImportBundleError("durable root bundle digest is invalid");
     }
+  } finally {
+    await file.close();
+  }
+}
+
+export async function inspectDurableNativeRootBundleIdentity(
+  stateDirectory: string,
+  projectId: string,
+  repositoryId: string,
+  importNonce: string,
+  expectedSize: number
+): Promise<string> {
+  const path = rootBundlePath(stateDirectory, projectId, repositoryId, importNonce);
+  await assertPrivateDirectory(join(stateDirectory, projectId));
+  await assertPrivateDirectory(rootBundleDirectory(stateDirectory, projectId, repositoryId));
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW).catch((error: unknown) => {
+    throw new NativeRootImportBundleError("durable root bundle file is invalid", { cause: error });
+  });
+  try {
+    const opened = await file.stat({ bigint: true });
+    assertBundleMetadata(opened, expectedSize);
+    const current = await lstat(path, { bigint: true });
+    if (!sameBundleIdentity(opened, current)) {
+      throw new NativeRootImportBundleError("durable root bundle file changed during inspection");
+    }
+    return bundleIdentity(opened);
   } finally {
     await file.close();
   }
@@ -77,6 +98,20 @@ function sameBundleIdentity(left: BigIntStats, right: BigIntStats): boolean {
   return left.dev === right.dev && left.ino === right.ino && left.size === right.size
     && left.mode === right.mode && left.uid === right.uid && left.nlink === right.nlink
     && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
+}
+
+function assertBundleMetadata(metadata: BigIntStats, expectedSize: number): void {
+  const owner = process.geteuid?.();
+  if (!metadata.isFile() || owner === undefined || metadata.uid !== BigInt(owner)
+    || (metadata.mode & 0o777n) !== 0o600n || metadata.nlink !== 1n
+    || metadata.size !== BigInt(expectedSize)) {
+    throw new NativeRootImportBundleError("durable root bundle file is invalid");
+  }
+}
+
+function bundleIdentity(metadata: BigIntStats): string {
+  return [metadata.dev, metadata.ino, metadata.size, metadata.mode, metadata.uid, metadata.nlink,
+    metadata.mtimeNs, metadata.ctimeNs].map(String).join(":");
 }
 
 export class NativeRootImportBundleError extends Error {
