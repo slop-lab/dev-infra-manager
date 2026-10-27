@@ -12,6 +12,8 @@ const browser = await chromium.launch({ executablePath, headless: true });
 let releaseOverview: () => void = () => {}, markOverview: () => void = () => {};
 const overviewGate = new Promise<void>((resolve) => { releaseOverview = resolve; }), overviewStarted = new Promise<void>((resolve) => { markOverview = resolve; });
 let holdOverview = false, firstReady = true;
+let holdPolicyProjects = false, releasePolicyProjects: () => void = () => {}, markPolicyProjects: () => void = () => {};
+const policyProjectsGate = new Promise<void>((resolve) => { releasePolicyProjects = resolve; }), policyProjectsStarted = new Promise<void>((resolve) => { markPolicyProjects = resolve; });
 const reads: Array<{controllerId: unknown; name: string}> = [];
 const writes: Array<{ controllerId: string; name: string }> = [], errors: string[] = [];
 try {
@@ -27,6 +29,8 @@ try {
     const { controllerId, ...input } = route.request().postDataJSON() as Record<string, unknown>;
     if (controllerId !== 'first' && controllerId !== 'second') throw new Error('Operation did not select an exact router controller');
     reads.push({controllerId,name});
+    if (name === 'project.policy.update') holdPolicyProjects = true;
+    if (name === 'projects' && controllerId === 'second' && holdPolicyProjects) { holdPolicyProjects = false; markPolicyProjects(); await policyProjectsGate; }
     if (name === 'overview' && controllerId === 'first' && holdOverview) { holdOverview = false; markOverview(); await overviewGate; }
     if (capabilities.find((operation) => operation.name === name)?.access !== 'read') writes.push({ controllerId, name });
     const result = await clients[controllerId].invoke(name, input);
@@ -76,9 +80,17 @@ try {
   // Saving is an intentional mutation only against this disposable second router.
   await page.getByRole('button', { name: 'Save routing policy', exact: true }).click();
   await page.getByText('Policy saved for example.', { exact: true }).waitFor();
+  await policyProjectsStarted;
   assert.deepEqual(writes, [{ controllerId: 'second', name: 'project.policy.update' }]);
+  await page.getByLabel('Router controller', { exact: true }).selectOption('first');
+  assert.equal(await page.getByLabel('Router controller', { exact: true }).inputValue(), 'second');
+  await page.getByText('Wait for the current router operation before changing controllers.', { exact: true }).waitFor();
+  releasePolicyProjects();
+  await page.waitForFunction(() => !document.querySelector('button[data-pending="true"]'));
   holdOverview = true;
-  await page.getByLabel('Router controller', { exact: true }).selectOption('first'); await overviewStarted;
+  await page.getByLabel('Router controller', { exact: true }).selectOption('first');
+  assert.equal(await page.getByLabel('Router controller', { exact: true }).inputValue(), 'first', (await page.getByRole('status').allTextContents()).join(' | '));
+  await overviewStarted;
   await page.getByLabel('Router controller', { exact: true }).selectOption('second'); await page.getByText(/^second backend /).waitFor();
   releaseOverview(); await page.waitForTimeout(100);
   assert.equal(await page.getByText(/^first backend /).count(), 0);
@@ -102,4 +114,4 @@ try {
   assert.equal(new URL(page.url()).hash,'#/features/llm-router/projects/missing/example');
   assert.equal(first.inferenceRequests() + second.inferenceRequests(), 0); assert.deepEqual(errors, []);
   console.log('Router controller selection, draft confirmation, exact write binding, late-read fencing and unavailable isolation PASS (two disposable routers, no inference)');
-} finally { releaseOverview(); await browser.close(); await second.close(); await first.close(); }
+} finally { releasePolicyProjects(); releaseOverview(); await browser.close(); await second.close(); await first.close(); }
