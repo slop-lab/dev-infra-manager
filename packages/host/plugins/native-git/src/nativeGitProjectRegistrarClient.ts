@@ -11,7 +11,6 @@ import {
 } from "./nativeGitProjectRegistrarConnection.js";
 
 const maximumResponseBytes = 64 * 1024;
-const requestTimeoutMilliseconds = 5_000;
 
 export type NativeGitProjectPreparation = {
   readonly serviceId: "native-main";
@@ -66,7 +65,8 @@ export function createNativeGitProjectRegistrarClient(
     async prepare(input, signal) {
       const preparation = parsePreparation(input);
       await attestIdentity(connection, authorization, httpClient, signal);
-      const response = await requestJson(httpClient, request(connection, authorization, {
+      try {
+        const response = await requestJson(httpClient, request(connection, authorization, {
         method: "POST",
         path: "/v1/operator-project-preparations",
         body: JSON.stringify({
@@ -75,8 +75,16 @@ export function createNativeGitProjectRegistrarClient(
           preparation
         }),
         signal
-      }));
-      return parsePreparationResponse(response, connection, preparation);
+        }));
+        return parsePreparationResponse(response, connection, preparation);
+      } catch (error) {
+        if (error instanceof NativeGitProjectRegistrarUncertainWriteError
+          || error instanceof NativeGitProjectRegistrarRejectedError && error.statusCode >= 400 && error.statusCode < 500) throw error;
+        throw new NativeGitProjectRegistrarUncertainWriteError(
+          "native Git Project preparation acknowledgement is unconfirmed; result is uncertain, inspect current state and retry only the identical preparation intent",
+          { cause: error }
+        );
+      }
     }
   };
 }
@@ -87,10 +95,16 @@ export class NativeGitProjectRegistrarClientError extends Error {
 
 export class NativeGitProjectRegistrarRejectedError extends NativeGitProjectRegistrarClientError {
   override readonly name = "NativeGitProjectRegistrarRejectedError";
+  readonly outcome = "rejected";
 
   constructor(readonly statusCode: number) {
     super(`native Git rejected the Project registrar request with HTTP ${statusCode}`);
   }
+}
+
+export class NativeGitProjectRegistrarUncertainWriteError extends NativeGitProjectRegistrarClientError {
+  override readonly name = "NativeGitProjectRegistrarUncertainWriteError";
+  readonly outcome = "uncertain-write";
 }
 
 async function attestIdentity(
@@ -101,9 +115,10 @@ async function attestIdentity(
 ): Promise<void> {
   const identity = exactRecord(await requestJson(httpClient, request(connection, authorization, {
     method: "GET", path: "/v1/operator-project-registrar-identity", signal
-  })), ["schemaVersion", "serviceId", "role", "hostId"]);
+  }), "read"), ["schemaVersion", "serviceId", "role", "hostId", "generationId"]);
   if (identity.schemaVersion !== 1 || identity.serviceId !== connection.serviceId
-    || identity.role !== "operator-project-registrar" || identity.hostId !== connection.hostId) {
+    || identity.role !== "operator-project-registrar" || identity.hostId !== connection.hostId
+    || identity.generationId !== connection.generationId) {
     throw new NativeGitProjectRegistrarClientError("native Git Project registrar identity does not match configuration");
   }
 }
@@ -126,19 +141,26 @@ function request(
     path: input.path,
     authorization,
     ...(input.body === undefined ? {} : { body: input.body }),
-    signal: AbortSignal.any([input.signal, AbortSignal.timeout(requestTimeoutMilliseconds)])
+    signal: input.signal
   };
 }
 
 async function requestJson(
   httpClient: NativeGitAdmissionHttpClient,
-  input: NativeGitAdmissionHttpRequest
+  input: NativeGitAdmissionHttpRequest,
+  operation: "read" | "write" = "write"
 ): Promise<unknown> {
   let response: NativeGitAdmissionHttpResponse;
   try {
     response = await httpClient.request(input);
-  } catch {
-    throw new NativeGitProjectRegistrarClientError("native Git Project registrar request failed");
+  } catch (error) {
+    if (operation === "write") {
+      throw new NativeGitProjectRegistrarUncertainWriteError(
+        "native Git Project preparation result is uncertain after transport loss; retry only the identical preparation intent",
+        { cause: error }
+      );
+    }
+    throw new NativeGitProjectRegistrarClientError("native Git Project registrar identity request failed", { cause: error });
   }
   if (response.statusCode !== 200) throw new NativeGitProjectRegistrarRejectedError(response.statusCode);
   if (response.contentType !== "application/json" || response.cacheControl !== "no-store"

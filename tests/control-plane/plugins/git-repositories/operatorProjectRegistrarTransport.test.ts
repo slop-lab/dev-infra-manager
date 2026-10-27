@@ -71,7 +71,7 @@ describe("operator Project registrar transport", () => {
 
     // Then
     expect(await identity.json()).toEqual({
-      schemaVersion: 1, serviceId: "native-main", role: "operator-project-registrar", hostId: "host-a"
+      schemaVersion: 1, serviceId: "native-main", role: "operator-project-registrar", hostId: "host-a", generationId
     });
     expect([identity.status, wrongRole.status, unknown.status]).toEqual([200, 403, 401]);
   });

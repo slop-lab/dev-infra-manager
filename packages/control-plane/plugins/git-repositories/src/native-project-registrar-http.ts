@@ -74,7 +74,8 @@ export async function handleNativeGitProjectRegistrarHttp(context: RegistrarHttp
   }
   if (identityRequest) {
     sendJson(context.response, 200, {
-      schemaVersion: 1, serviceId: "native-main", role: "operator-project-registrar", hostId: registrar.hostId
+      schemaVersion: 1, serviceId: "native-main", role: "operator-project-registrar",
+      hostId: registrar.hostId, generationId: context.expectedGenerationId
     });
     return true;
   }

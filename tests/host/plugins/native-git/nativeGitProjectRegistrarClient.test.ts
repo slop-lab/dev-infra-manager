@@ -77,7 +77,7 @@ describe("native Git Project registrar client", () => {
         requests.push(`${input.method} ${input.path}`);
         return {
           statusCode: 200, contentType: "application/json", cacheControl: "no-store", body: Buffer.from(JSON.stringify({
-            schemaVersion: 1, serviceId: "native-main", role: "operator-project-registrar", hostId: "host-b"
+            schemaVersion: 1, serviceId: "native-main", role: "operator-project-registrar", hostId: "host-b", generationId
           }))
         };
       }

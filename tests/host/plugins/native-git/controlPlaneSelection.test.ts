@@ -47,6 +47,18 @@ it("gives explicit environment selectors precedence and checks mixed selections 
   await expect(selectedControlPlaneHostFile({ ...f.environment, DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: "" })).rejects.toThrow(/empty/);
 });
 
+it("rejects mixed inherited and explicit generations without clearing either selection", async () => {
+  const f = await fixture(); await saveControlPlaneSelection(f, f.environment);
+  const staleImporter = join(f.root, "stale-importer.json");
+  await writeFile(staleImporter, JSON.stringify({ ...f.importer, generationId: "b".repeat(64) }), { mode: 0o600 });
+  const environment = { ...f.environment, DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE: staleImporter };
+
+  expect(await selectedControlPlaneHostFile(environment)).toBe(f.hostConnectionFile);
+  expect(await selectedControlPlaneImporterFile(environment)).toBe(staleImporter);
+  await expect(nativeProjectImporter(await selectNativeProject(environment))).rejects.toThrow(/conflicts/);
+  expect(environment.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE).toBe(staleImporter);
+});
+
 it("retains a good selection when connections disagree and guides a fresh SSH host to connect", async () => {
   const f = await fixture();
   await expect(selectedControlPlaneHostFile(f.environment)).rejects.toThrow(/control-plane connect/);
