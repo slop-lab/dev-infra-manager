@@ -26,6 +26,21 @@ Inside a workspace, discover the host's enabled integrations with:
 dim-workspace plugins
 ```
 
+For the authoritative machine-readable workspace, selected-host, service and
+capability view, use `dim-workspace discovery`. The host also refreshes a
+readiness snapshot at `~/.config/dim/discovery.json` and trusted agent guidance
+at `~/.agents/skills/dim-environment/SKILL.md`; neither depends on repository
+configuration. Discovery identifies the workspace runtime boundary, installed
+plugin set, guest service endpoints and available developer
+capabilities. It includes observation time, runtime status, declared isolation,
+workspace-scoped authorization, bridge/plugin-manifest freshness and built-in
+skill provenance. Online responses and readiness-cache snapshots are explicitly
+distinguished. Declared plugin service routes remain `not-probed` until their
+owner is actually used; declaration does not claim readiness. Host plugins
+supply capability availability and access facts.
+Core does not infer routes from plugin names, and host operator commands are not
+advertised as guest-callable operations.
+
 The response describes plugin commands, scoped operations and readiness. It
 contains no host configuration or credentials. Plugins own their user-facing
 clients, such as `dim-expose`; the generic client also supports namespaced
