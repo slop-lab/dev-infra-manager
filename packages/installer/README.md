@@ -34,7 +34,10 @@ dim installer remove-plugin PACKAGE...
 ```
 
 Bare `dim installer` is interactive only on a TTY. Once a CLI is installed,
-presentation commands are forwarded to that exact CLI. The obsolete
+presentation commands replace the facade process with that exact CLI, preserving
+the process identity, terminal streams and signals without retaining an idle
+installer parent. Installer implementation modules are loaded only for the
+installer namespace. The obsolete
 `install-cp` token is rejected rather than aliased or forwarded.
 
 ## Core installation
