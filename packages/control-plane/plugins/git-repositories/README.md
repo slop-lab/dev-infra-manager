@@ -49,17 +49,21 @@ change policy or refs, or grant any new authority. Local Project names and
 configuration/default working repository choices belong to the host plugin and
 are not part of this service catalog.
 
-Attachment proof remains sequential and performs the complete read-only Git
-inspection, including full `fsck`, for every repository. A repository proof has
-a 30-second ceiling, while the complete HTTP attachment request has an 80-second
-deadline. The request deadline is authoritative for sequential multi-repository
-Projects: it permits two proofs to consume their full ceilings with time for
-descriptor construction and the final check, but does not imply that all 64
-repositories can each consume 30 seconds. A larger or slower set fails as
-unavailable without returning a verified prefix. Successful responses still
-perform the final serialized repository-set/current-state check. The current
-implementation shares no proof result, never caches proof or authorization
-between requests, and cancels the active Git inspection on disconnect.
+Attachment proof performs the complete read-only Git inspection, including full
+`fsck` and durable bundle SHA-256, on the first proof in each service process and
+after any meaningful immutable-root change. A process-local attestation may
+reuse only those two expensive results. It is scoped to the live state owner and
+binds the exact registration, owner, import generation/nonce/receipt, pinned Git
+executable, bundle inode metadata, repository inode and recursively captured Git
+object metadata. Replacement, in-place writes, trusted object installation and
+process restart therefore require a new complete proof; no TTL or persisted
+cache exists. Every request still checks exact activation, live database
+authority/policy/head, storage ownership and modes, bundle identity, the complete
+allowed ref namespace, commit/tree identity and ancestry, with pre/post storage
+snapshots and final authority rereads. A repository proof has a 30-second ceiling,
+while the complete HTTP attachment request has an 80-second deadline. The request
+deadline remains authoritative for a multi-repository Project, and disconnect
+cancels the active Git inspection.
 
 `hostId` is a configured host authority. Exporting the same role bundle to
 multiple machines shares that authority; it does not create per-machine grants.
@@ -88,11 +92,15 @@ review. Installing review does not enable promotion. The separate CI coordinator
 and host CI worker own execution capacity and runtimes.
 
 `RepositoryExtensionFactory.attach(context)` returns only the feature's HTTP,
-Git-transport, proposal notification, activation, policy validation, health and
-close hooks. The context supplies the owned repository runtime, one serialization
-gate, cancellation, selected extensions and private feature storage. Factories
+Git-transport, proposal notification, activation, policy validation, health,
+background-drain and close hooks. The context supplies the owned repository
+runtime, repository-scoped `mutate` lanes, an exclusive lifecycle/snapshot
+`serialize` fence, bounded `read` admission, cancellation, selected extensions
+and private feature storage. Scheduler callbacks are non-reentrant; reads retain
+live authorization and final snapshot checks rather than trusting cached state. Factories
 must clean resources they create if attachment fails. The repository service
-closes successfully attached features in reverse order and releases the listener
+drains accepted foreground work and background owners before closing any feature
+resource, then closes successfully attached features in reverse order and releases the listener
 and storage owner even when cleanup fails. Repository code imports no concrete
 review, merge, CI or webhook implementation.
 
@@ -138,7 +146,7 @@ repository-only deployment does not implicitly install those features.
 ## Protected refs and recovery
 
 A trusted extension calls `compareAndSwapProtectedRef` under the repository's
-serialization gate after checking its own authorization and evidence. The
+mutation lane after checking its own authorization and evidence. The
 repository revalidates the owned import, expected protected head, candidate
 commit/tree, ancestry and proposal ref. It durably records the authorization and
 evidence digests before Git CAS, then finalizes one monotonic repository
