@@ -1,26 +1,31 @@
 import { Command, CommanderError } from "commander";
-import { UserError } from "../../workspace.js";
+import { UserError } from "../../errors.js";
 import { packageVersion } from "../../package-version.js";
-import { executeHostOperation } from "../host-application.js";
-import { registerDevelopmentCommands } from "./workspaces.js";
-import { runControllerApplication } from "./controller.js";
-import { runControlPlaneApplication } from "./control-plane.js";
 
 /** The selected host owns its commands, options, help and output. None of this
  * parser is imported by the independently installed transport CLI. */
 export async function runHostCommand(args: readonly string[]): Promise<void> {
-  if (args[0] === "controller") { await runControllerApplication([...args]); return; }
-  if (args[0] === "control-plane") { await runControlPlaneApplication([...args]); return; }
+  if (args[0] === "controller") {
+    const { runControllerApplication } = await import("./controller.js");
+    await runControllerApplication([...args]); return;
+  }
+  if (args[0] === "control-plane") {
+    const { runControlPlaneApplication } = await import("./control-plane.js");
+    await runControlPlaneApplication([...args]); return;
+  }
   const program = new Command().name("dim").description("Persistent, isolated development workspaces")
     .version(packageVersion).showSuggestionAfterError().configureHelp({ sortSubcommands: true, sortOptions: true });
+  const { registerDevelopmentCommands } = await import("./workspaces.js");
   registerDevelopmentCommands(program);
   program.command("controller").description("Manage this host controller");
   program.command("control-plane").description("Optional control-plane deployment and operator commands");
   if (args[0] && !args[0].startsWith("-") && !program.commands.some((command) => command.name() === args[0] || command.aliases().includes(args[0]!))) {
+    const { executeHostOperation } = await import("../host-application.js");
     await executeHostOperation({ operation: "plugin.cli", input: { args: [...args] } });
     return;
   }
   if (!args.length || args.length === 1 && ["--help", "-h"].includes(args[0]!)) {
+    const { executeHostOperation } = await import("../host-application.js");
     const plugins = await executeHostOperation({ operation: "plugins" });
     if (!Array.isArray(plugins)) throw new UserError("Invalid installed host command catalog");
     const commands = plugins.flatMap((plugin: { commands?: readonly { name: string; description: string }[] }) => plugin.commands ?? []);
