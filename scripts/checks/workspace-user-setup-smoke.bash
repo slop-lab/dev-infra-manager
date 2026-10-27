@@ -468,6 +468,10 @@ fi
 grep -Fq 'workspace user setup is already running' "$work_dir/setup-two.stderr"
 wait "$first_pid"
 
+# Poison npm paths only while testing installer containment. Agent launch accepts
+# an explicit operator cache; its separate tests cover that choice.
+unset NPM_CONFIG_CACHE npm_config_cache NPM_CONFIG_USERCONFIG npm_config_userconfig
+
 test "$($HOME/.local/bin/opencode --version)" = "1.18.31"
 tool_launcher="$HOME/.local/bin/dim-agent"
 tool_manifest="$HOME/.local/state/dim-tools/opencode.json"
