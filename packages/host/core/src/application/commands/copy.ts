@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { UserError } from "../../workspace.js";
+import { workspaceName } from "../../workspace/store.js";
 import { runStreamOperation } from "./operations.js";
 
 interface CopyFlags { readonly recursive?: boolean; readonly overwrite?: boolean; readonly expectId?: string }
@@ -28,8 +29,8 @@ export function registerWorkspaceCopyCommand(parent: Command): void {
 }
 
 function copyOperand(value: string): { readonly name: string; readonly path: string } | undefined {
-  const match = /^([a-z][a-z0-9-]{0,31}):(.*)$/.exec(value);
+  const match = /^([^:]+):(.*)$/.exec(value);
   if (match === null) return undefined;
   if (!match[2] || match[2].includes("\0")) throw new UserError("workspace copy path must be nonempty");
-  return { name: match[1] ?? "", path: match[2] };
+  return { name: workspaceName(match[1] ?? ""), path: match[2] };
 }
