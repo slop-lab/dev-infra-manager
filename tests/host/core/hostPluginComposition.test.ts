@@ -59,6 +59,17 @@ it("discovers explicit host commands without a managed controller and rejects co
   await expect(loadHostPlugins()).rejects.toThrow("duplicate host plugin command");
 });
 
+it("dispatches owned copy only through the recorded runtime's cancellation-safe capability", async () => {
+  const root = await fixture(), provider = path.join(root, "copy.mjs");
+  await writeFile(provider, `export const hostPlugin={name:'copy',runtime:{name:'copy-runtime',create:async()=>({copy:async(record,operation)=>{if(record.runtime!=='copy-runtime'||operation.path!=='destination'||operation.command[0]!=='owned-helper')throw Error('copy input changed');return 17}})}};`);
+  await writeFile(path.join(root, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: [provider] }));
+  const runner = new ProcessRunner(), runtime = composeWorkspaceRuntime({ runner, cleanupRunner: runner, stateRoot: root }).runtime;
+  if (!runtime.copy) throw new Error("composed runtime copy dispatcher is missing");
+  expect(await runtime.copy(workspaceRecord("copy-target", { runtime: "copy-runtime" }), {
+    command: ["owned-helper"], token: "11111111-1111-4111-8111-111111111111", path: "destination"
+  })).toBe(17);
+});
+
 it.each([["host-mirrors", "mirrors"], ["cache-server", "cache-server"]])("discovers the installed %s package using its host command identity", async (pluginName, commandName) => {
   const root = await fixture();
   await mkdir(path.join(root, "node_modules", "@slop-lab"), { recursive: true });

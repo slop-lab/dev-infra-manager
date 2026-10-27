@@ -17,6 +17,7 @@ export interface WorkspaceRuntime {
   updateResources(record: WorkspaceRecord, resources: WorkspaceResources): Promise<{ recreated: boolean }>;
   seed(record: WorkspaceRecord, directory: string): Promise<void>;
   exec(record: WorkspaceRecord, command: string[], options?: RunOptions): Promise<number>;
+  copy?(record: WorkspaceRecord, operation: WorkspaceRuntimeCopy, options?: RunOptions): Promise<number>;
   connect(record: WorkspaceRecord, port: number, options?: WorkspaceConnectOptions): Promise<number>;
   resolveTarget?(record: WorkspaceRecord, target: WorkspaceRuntimeTarget): Promise<ResolvedWorkspaceRuntimeTarget>;
   /** Host address reachable from this guest; used only for scoped service bridges. */
@@ -42,6 +43,8 @@ export interface WorkspaceConnectOptions extends Pick<RunOptions, "stdin" | "std
 }
 
 export interface WorkspaceExecOptions extends RunOptions { workspaceId?: string }
+export interface WorkspaceRuntimeCopy { readonly command: string[]; readonly token: string; readonly path: string }
+export interface WorkspaceCopyOptions extends RunOptions { workspaceId: string; token: string; path: string }
 
 export interface CreateWorkspaceInput {
   name: string;
@@ -162,6 +165,21 @@ export class WorkspaceService {
     this.requireInitialized(record);
     if (record.phase !== "running") throw new UserError(`workspace '${name}' is ${record.phase}; run dim start ${name}`);
     return this.runtime.exec(record, command, options);
+  }
+
+  async copy(name: string, command: string[], options: WorkspaceCopyOptions): Promise<number> {
+    if (!command.length || command.some((argument) => typeof argument !== "string" || argument.includes("\0"))) {
+      throw new UserError("workspace copy requires a helper command");
+    }
+    const selected = workspaceName(name);
+    return this.store.withLock(selected, async () => {
+      const record = await this.store.read(selected);
+      this.requireIdentity(record, options.workspaceId);
+      this.requireInitialized(record);
+      if (record.phase !== "running") throw new UserError(`workspace '${name}' is ${record.phase}; run dim start ${name}`);
+      if (!this.runtime.copy) throw new UserError(`workspace runtime '${record.runtime}' does not support safe copy cancellation`);
+      return this.runtime.copy(record, { command, token: options.token, path: options.path }, options);
+    });
   }
 
   async connect(name: string, port: number, options: WorkspaceConnectOptions = {}): Promise<number> {

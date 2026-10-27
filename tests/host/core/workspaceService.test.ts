@@ -128,6 +128,30 @@ describe("workspace application lifecycle", () => {
     await expect(f.service.connect("dev", 3000)).rejects.toThrow("run dim start dev");
   });
 
+  it("pins copy streams to workspace identity while holding the lifecycle lock", async () => {
+    const f = await fixture();
+    const original = await f.service.create(create);
+    let releaseCopy: (() => void) | undefined;
+    f.runtime.copy = async (_record, operation) => {
+      f.calls.push(`copy:${operation.command.join(" ")}`);
+      await new Promise<void>((resolve) => { releaseCopy = resolve; });
+      return 0;
+    };
+    const copying = f.service.copy("dev", ["copy-helper"], { workspaceId: original.id, token: randomUUID(), path: "target" });
+    while (releaseCopy === undefined) await new Promise<void>((resolve) => setImmediate(resolve));
+    const recreating = f.service.recreate("dev", original.id);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(f.calls).not.toContain("remove:keep");
+    releaseCopy();
+    await expect(copying).resolves.toBe(0);
+    await recreating;
+    expect(f.calls).toContain("copy:copy-helper");
+    await f.service.discard("dev");
+    const replacement = await f.service.create(create);
+    await expect(f.service.copy("dev", ["copy-helper"], { workspaceId: original.id, token: randomUUID(), path: "target" })).rejects.toThrow("identity changed");
+    expect(replacement.id).not.toBe(original.id);
+  });
+
   it("validates complete persisted records rather than asserting partial data", async () => {
     const f = await fixture(); const record = await f.service.create(create);
     for (const mutation of [
@@ -159,3 +183,4 @@ it("persists independent checkout identities and rejects ambiguous or escaping l
   expect(() => parseWorkspaceRecord({ ...record, source: { ...source, workingDirectory: "private" } })).toThrow();
   expect(() => parseWorkspaceRecord({ ...record, source: { ...source, checkouts: [{ directory: "public", source: { ...publicSource, commit: "invalid" } }] } })).toThrow();
 });
+import { randomUUID } from "node:crypto";

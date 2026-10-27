@@ -57,6 +57,7 @@ function parseHostPlugin(value: unknown): WorkspaceHostPlugin {
   if (!isObject(value) || !identifier(value.name)) throw new UserError("invalid host plugin name");
   if (value.runtime !== undefined && (!isObject(value.runtime) || !identifier(value.runtime.name)
     || (value.runtime.defaultImage !== undefined && (typeof value.runtime.defaultImage !== "string" || !value.runtime.defaultImage))
+    || (value.runtime.isolation !== undefined && !["container", "virtual-machine", "process"].includes(String(value.runtime.isolation)))
     || typeof value.runtime.create !== "function")) throw new UserError(`invalid runtime provider in '${value.name}'`);
   if (value.commands !== undefined && (!Array.isArray(value.commands) || value.commands.some((command: unknown) =>
     !isObject(command) || !identifier(command.name) || typeof command.description !== "string"))) {
@@ -82,6 +83,7 @@ function parseHostPlugin(value: unknown): WorkspaceHostPlugin {
     throw new UserError(`invalid workspace lifecycle in '${value.name}'`);
   }
   if (value.workspaceReady !== undefined && typeof value.workspaceReady !== "function") throw new UserError(`invalid workspace integration in '${value.name}'`);
+  if (value.workspaceCapabilities !== undefined && typeof value.workspaceCapabilities !== "function") throw new UserError(`invalid workspace capabilities in '${value.name}'`);
   if (value.workspaceServices !== undefined) {
     const services = value.workspaceServices;
     if (!isObject(services) || !Array.isArray(services.names) || services.names.length < 1 || services.names.length > 32
@@ -168,6 +170,11 @@ export function composeWorkspaceRuntime(context: WorkspaceRuntimeFactoryContext)
         const runtime = await get(record.runtime);
         await beforeAccess(record, runtime);
         return runtime.exec(record, command, options);
+      },
+      copy: async (record, operation, options) => {
+        const runtime = await get(record.runtime);
+        if (!runtime.copy) throw new UserError(`workspace runtime '${record.runtime}' does not support safe copy cancellation`);
+        return runtime.copy(record, operation, options);
       },
       connect: async (record, port, options) => {
         const runtime = await get(record.runtime);

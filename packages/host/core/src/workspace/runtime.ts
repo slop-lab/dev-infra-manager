@@ -6,10 +6,11 @@ import path from "node:path";
 import { UserError } from "../errors.js";
 import type { CommandResult, CommandRunner, RunOptions, StreamingCommandRunner } from "../types.js";
 import type { WorkspaceRecord, WorkspaceResources } from "./models.js";
-import type { WorkspaceConnectOptions } from "./service.js";
+import type { WorkspaceConnectOptions, WorkspaceRuntimeCopy } from "./service.js";
 import type { ResolvedWorkspaceRuntimeTarget, WorkspaceRuntimeTarget } from "./service.js";
 import { validateWorkspacePort, workspacePortBridge, workspacePortBridgeMarker, workspacePortCleanup } from "./portBridge.js";
 import { resolveContainerWorkspaceTarget } from "./containerTarget.js";
+import { runContainerWorkspaceCopy } from "./copyRuntime.js";
 import { workspaceRuntimeResources } from "./runtimeResources.js";
 
 export { workspaceRuntimeResources } from "./runtimeResources.js";
@@ -259,6 +260,12 @@ export class ContainerWorkspaceRuntime {
   async exec(record: WorkspaceRecord, command: string[], options: RunOptions = {}): Promise<number> {
     const container = await this.requireRunning(record);
     return this.runner.runStreaming("docker", this.execArguments(record, container.id, command, options), options);
+  }
+
+  async copy(record: WorkspaceRecord, operation: WorkspaceRuntimeCopy, options: RunOptions = {}): Promise<number> {
+    const container = await this.requireRunning(record);
+    return runContainerWorkspaceCopy({ runner: this.runner, cleanupRunner: this.cleanupRunner, record, container: container.id,
+      operation, runArguments: this.execArguments(record, container.id, operation.command, options), options });
   }
 
   async connect(record: WorkspaceRecord, port: number, options: WorkspaceConnectOptions = {}): Promise<number> {
