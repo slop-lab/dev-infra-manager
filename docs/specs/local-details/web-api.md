@@ -80,7 +80,7 @@ host settings. Each entry exposes an ID and a JSON-returning `run(args)` method.
 Only the reviewed server-side plugin receives it. Executable and host selector
 are fixed; the invocation is `[--host, SELECTOR, ...ARGS, --json]` without a shell.
 Arguments are bounded to 128 entries, 96 KiB UTF-8 each and 128 KiB UTF-8 total;
-NUL and `--host`/`--json` overrides are rejected. Output is bounded to 2 MiB and
+NUL and `--host`/`--json` overrides are rejected. Stdout and stderr are each bounded to 32 MiB and
 execution to 30 seconds by default. A trusted plugin may request a positive
 integral deadline up to 180 seconds; the browser operation transport separately
 permits an explicit deadline up to 185 seconds (35 seconds by default). Invalid
@@ -277,6 +277,14 @@ The Native Git Web plugin owns controller, Project and repository selection.
 Automatic connections use the controller's Native Git plugin to discover its
 current local project catalog and ready repositories. Role credentials stay on
 the controller; the Web server receives public metadata and validated results.
+Controller discovery is a coalesced background cycle. Web startup does not wait
+for it, and a catalog read may return once one controller has freshly attested;
+initial in-flight controllers are unavailable until their own result arrives.
+During later refreshes, a previously successful catalog remains visible only for
+presentation; a completed failure clears availability. Each operation MUST join
+the selected controller's in-flight describe or start a new describe, then check
+fresh scope, operation and generation before dispatch. A retained presentation
+catalog cannot grant access or skip reattestation, and no TTL is used.
 Every invocation supplies the attested generation and the controller rejects
 selection changes before dispatch. Catalog refresh cannot adopt a replacement
 generation; explicit reconnect is required. Each request rechecks current catalog
