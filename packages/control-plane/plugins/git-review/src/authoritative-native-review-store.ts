@@ -12,7 +12,7 @@ import {
   recoverPublishedReviewStaging
 } from "./review-record-storage.js";
 
-const maximumRecordBytes = 128 * 1024 * 1024;
+export const maximumRecordBytes = 128 * 1024 * 1024;
 const maximumRecords = 100_000;
 const recordPattern = /^([0-9a-f]{64})\.([0-9a-f]{64})\.json$/;
 

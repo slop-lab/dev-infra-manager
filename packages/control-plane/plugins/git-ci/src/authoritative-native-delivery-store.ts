@@ -64,12 +64,13 @@ export async function readPendingAuthoritativeNativeDeliveries(
   const intents = await readExplicitDeliveryIntents(paths.intents, events, binding, generationId);
   return events.flatMap((delivery) => {
     const marker = markers.get(delivery.event.eventId), intent = intents.get(delivery.event.eventId);
-    if (intent?.state === "completed" || intent?.state === "superseded" && intent.retryAfter > now) return [];
+    if (intent === undefined) return [];
+    if (intent.state === "completed" || intent.state === "superseded" && intent.retryAfter > now) return [];
     if (marker?.serviceId === binding.serviceId && marker.destinationDigest === binding.destinationDigest) {
       if (marker.state === "superseded" && marker.retryAfter > now) return [];
-      if (marker.state === "recorded" && (marker.generationId === generationId || intent === undefined)) return [];
+      if (marker.state === "recorded" && marker.generationId === generationId) return [];
     }
-    return [{ ...delivery, ...(intent === undefined ? {} : { intent }) }];
+    return [{ ...delivery, intent }];
   }).slice(0, limit);
 }
 

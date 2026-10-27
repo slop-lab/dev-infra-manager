@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { assertGitExecutableIdentity, isNativeGitOrdinaryCandidateRef, nativeRepositoryBranches, resolveAuthoritativeNativeRepositoryTarget, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { createAuthoritativeNativeReview, reviewPreparations, reviewChangeMatchers } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { codeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 
 const execute = promisify(execFile);
 export type PreparedBranchMerge = {
@@ -55,7 +55,7 @@ export async function prepareBranchMerge(context: RepositoryExtensionContext,
   const existing = await git(["rev-parse", "--verify", "--quiet", proposalRef], true);
   if (existing.conflict) await git(["update-ref", "--no-deref", proposalRef, candidateCommit, "0".repeat(candidateCommit.length)]);
   else candidateCommit = objectId(existing.output);
-  const envelope = await createAuthoritativeNativeReview({ ...context.runtime, reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) }, {
+  const envelope = await codeReviewService(context.extensions).createInTransaction(context, {
     projectId: selector.projectId, repositoryId: selector.repositoryId, proposalRef, protectedRef: selector.targetRef
   });
   return { ...evidence, outcome: "proposed", proposalRef, candidateCommit, reviewId: envelope.review.reviewId };

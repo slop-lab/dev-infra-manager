@@ -17,7 +17,7 @@ it("preserves completed delivery deduplication across generation replacement whi
     .some((candidate) => candidate.event.eventId === job.event.eventId)).toBe(false);
   const afterRollover = await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, "b".repeat(64));
   expect(afterRollover.some((candidate) => candidate.event.eventId === job.event.eventId)).toBe(false);
-  expect(afterRollover).toHaveLength(pending.length - 1);
+  expect(afterRollover).toEqual([]);
   const envelope = (await publishedReviewEnvelopes(fixture.root))[0];
   if (!envelope) throw new Error("review envelope is missing");
   const foreignBinding = authoritativeNativeDeliveryBinding("ci", "http://foreign:8080/v1/jobs");
@@ -41,6 +41,8 @@ it("preserves completed delivery deduplication across generation replacement whi
   expect((await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, "b".repeat(64)))
     .some((candidate) => candidate.event.eventId === job.event.eventId)).toBe(false);
   const replacedDestination = authoritativeNativeDeliveryBinding("ci", "http://replacement:8080/v1/jobs");
+  expect(await readPendingAuthoritativeNativeDeliveries(repository, 10, replacedDestination, "b".repeat(64))).toEqual([]);
+  await recordExplicitAuthoritativeNativeDeliveryIntent(repository, envelope, "b".repeat(64), replacedDestination, "destination-request");
   expect((await readPendingAuthoritativeNativeDeliveries(repository, 10, replacedDestination, "b".repeat(64)))
     .some((candidate) => candidate.event.eventId === job.event.eventId)).toBe(true);
 });

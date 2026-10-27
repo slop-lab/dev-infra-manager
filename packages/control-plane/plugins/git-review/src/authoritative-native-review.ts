@@ -39,6 +39,7 @@ const selectorSchema = z.object({
 
 export type AuthoritativeNativeReviewHooks = {
   readonly beforeFinalVerification?: () => void | Promise<void>;
+  readonly beforePublication?: (input: { readonly repository: string; readonly envelope: AuthoritativeNativeReviewEnvelope }) => void | Promise<void>;
 };
 
 export async function createAuthoritativeNativeReview(
@@ -121,6 +122,7 @@ export async function createAuthoritativeNativeReview(
       candidateCommit: identity.candidateCommit,
       candidateTree: identity.candidateTree
     });
+    await hooks.beforePublication?.({ repository: target.repository, envelope });
     return saveAuthoritativeNativeReviewEnvelope(target.repository, envelope);
   } catch (error) {
     if (error instanceof AuthoritativeNativeReviewError || error instanceof CodeReviewPolicyError) throw error;
