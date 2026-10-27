@@ -15,7 +15,10 @@ run without Git CI or any workflow compiler. In that composition candidate
 workflow files are never interpreted.
 
 The plugin attaches to the repository service's existing HTTP listener and
-serialization gate. Configure distinct private `grantIssuer`, `candidateReader`,
+repository-scoped mutation lanes, exclusive lifecycle/sweep fence and bounded
+read admission. Candidate Git/status reads bypass mutation queues and retain
+fresh authority checks; grants/evidence and promotion share their repository's
+mutation lane. Configure distinct private `grantIssuer`, `candidateReader`,
 `resultReporter` and `webhook` credentials; `webhook` additionally has the CI
 intake `endpoint` URL. `compiler` selects an installed compiler by extension name
 and defaults to `dim`. The core control-plane runtime only resolves declared
@@ -67,9 +70,13 @@ Every delivery, including an event without a completion marker, requires that
 matching current-generation intent. Old unacknowledged envelopes alone cannot
 authorize work at startup or after a destination change. Explicit ordinary-branch
 merge preparation uses the same accepted-review path to publish its CI intent.
-Live proposal acceptance is journaled before review publication; a same-generation
+Legacy proposal pushes wait only for a durable raw-job handoff. Review matching,
+workflow planning and delivery acceptance happen asynchronously, with per-job
+pending/failed/stale/ready inspection. Live proposal acceptance is journaled before review publication; a same-generation
 restart can finish an interrupted intent publication after rechecking the exact
-review, policy, refs and inputs. Another generation cannot resume that action.
+review, policy, refs and inputs. Another generation cannot resume that action,
+and an unresolved envelope remains approval/promotion-blocked until a fresh
+explicit acceptance succeeds. Preparation readiness is not successful CI evidence.
 
 ## Workspace candidate requests
 
