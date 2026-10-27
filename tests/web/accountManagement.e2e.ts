@@ -124,6 +124,24 @@ try {
   await page.waitForTimeout(1_100); await form.getByLabel("Your current password", { exact: true }).fill(login.password); page.once("dialog", (confirmation) => confirmation.accept()); await form.getByRole("button", { name: "Save account", exact: true }).click();
   await dialog.getByRole("button", { name: "Sign in again", exact: true }).waitFor();
   const selfPassword = await generated.inputValue(); assert.notEqual(selfPassword, login.password); assert.equal((await page.request.get(origin + "/v1/session")).status(), 401); assert.equal(await generated.inputValue(), selfPassword);
-  await page.keyboard.press("Escape"); await page.getByLabel("Username", { exact: true }).fill(login.username); await page.getByLabel("Password", { exact: true }).fill(selfPassword); await page.waitForTimeout(1_100); await page.getByRole("button", { name: "Sign in", exact: true }).click(); await page.getByRole("button", { name: "Account & access", exact: true }).waitFor();
-  assert.deepEqual(errors, []); await reviewerContext.close(); process.stdout.write("Browser account add, reauthentication, password reset, removal, last-admin protection and live self-role recovery passed.\n");
+  await page.keyboard.press("Escape"); assert.equal(await dialog.isVisible(), false); await page.getByLabel("Username", { exact: true }).fill(login.username); await page.getByLabel("Password", { exact: true }).fill(selfPassword); await page.waitForTimeout(1_100); await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const accessButton = page.getByRole("button", { name: "Account & access", exact: true }); await accessButton.click(); await dialog.getByRole("cell", { name: login.username, exact: true }).waitFor();
+  const focusSnapshot = () => page.evaluate(() => {
+    const active = document.activeElement, currentDialog = document.getElementById("account-access-dialog");
+    if (!(active instanceof HTMLElement) || !(currentDialog instanceof HTMLDialogElement)) throw new Error("missing dialog focus state");
+    return { tag: active.tagName, id: active.id, className: active.className, contains: currentDialog.contains(active), open: currentDialog.open, hasFocus: document.hasFocus(), modal: currentDialog.matches(":modal") };
+  });
+  const closeDialog = dialog.getByRole("button", { name: "Close", exact: true }), forwardBoundary = [], backwardBoundary = [];
+  await closeDialog.focus(); for (let press = 0; press < 3; press++) { await page.keyboard.press("Tab"); forwardBoundary.push(await focusSnapshot()); }
+  await dialog.locator("tbody tr").filter({ hasText: login.username }).first().getByRole("button", { name: "Edit roles", exact: true }).focus();
+  for (let press = 0; press < 3; press++) { await page.keyboard.press("Shift+Tab"); backwardBoundary.push(await focusSnapshot()); }
+  for (const snapshot of [...forwardBoundary, ...backwardBoundary]) {
+    assert.equal(snapshot.open, true, JSON.stringify({ forwardBoundary, backwardBoundary })); assert.equal(snapshot.modal, true, JSON.stringify({ forwardBoundary, backwardBoundary }));
+    if (!snapshot.contains) { assert.equal(snapshot.tag, "BODY", JSON.stringify({ forwardBoundary, backwardBoundary })); assert.equal(snapshot.id, "", JSON.stringify({ forwardBoundary, backwardBoundary })); assert.equal(snapshot.hasFocus, false, JSON.stringify({ forwardBoundary, backwardBoundary })); }
+  }
+  await page.keyboard.press("Escape"); assert.equal(await dialog.isVisible(), false); assert.equal(await accessButton.evaluate((button) => button === document.activeElement), true);
+  const closeContext = await browser.newContext({ storageState: await page.context().storageState() }), closePage = await closeContext.newPage(); await closePage.goto(origin); const closeAccessButton = closePage.getByRole("button", { name: "Account & access", exact: true }); await closeAccessButton.click();
+  const closePageDialog = closePage.getByRole("dialog", { name: "Account & access", exact: true }); await closePageDialog.getByRole("button", { name: "Close", exact: true }).click();
+  assert.equal(await closePageDialog.isVisible(), false); assert.equal(await closeAccessButton.evaluate((button) => button === document.activeElement), true); await closeContext.close();
+  assert.deepEqual(errors, []); await reviewerContext.close(); process.stdout.write(`Browser account management and modal focus boundaries passed: ${JSON.stringify({ forwardBoundary, backwardBoundary })}\n`);
 } finally { await browser?.close(); await web?.close(); await rm(root, { recursive: true, force: true }); }
