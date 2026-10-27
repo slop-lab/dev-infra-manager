@@ -32,30 +32,51 @@ function selectedInput(input: unknown) {
   return { controllerId: controllerId.parse(selected), value };
 }
 async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
-  let controllers: Array<z.infer<typeof controllerSchema>> = [], generations = new Map<string, string>(), discoveryVersion = 0;
-  async function discover() {
-    const version = ++discoveryVersion, expectedGenerations = new Map(generations), discoveredGenerations = new Map(generations);
-    const discoveredControllers = await Promise.all(context.controllers.map(async (controller) => {
+  type ControllerState = { readonly controller: WebPluginContext["controllers"][number]; catalog: z.infer<typeof controllerSchema>; generation?: string; discovery?: Promise<void>; observed: boolean };
+  const unavailable = (id: string): z.infer<typeof controllerSchema> => ({ id, controllerKey: id, title: id, status: "unavailable", projects: [], operations: [] });
+  const states: ControllerState[] = context.controllers.map((controller) => ({ controller, catalog: unavailable(controller.id), observed: false }));
+  function beginDiscovery(state: ControllerState): Promise<void> {
+    if (state.discovery) return state.discovery;
+    const expected = state.generation;
+    const discovery = (async () => {
       try {
-        const expected = expectedGenerations.get(controller.id);
-        const description = discoverySchema.parse(await controller.run(["project", "console", "describe", ...(expected ? ["--expected-generation", expected] : [])], { timeoutMilliseconds: 120_000 }));
+        const description = discoverySchema.parse(await state.controller.run(["project", "console", "describe", ...(expected ? ["--expected-generation", expected] : [])], { timeoutMilliseconds: 120_000 }));
         if (expected && description.generationId !== expected) throw new Error("Controller generation changed; reconnect this feature");
         for (const operation of description.operations) if (!controllerOperations.some((known) => known.name === operation.name && known.access === operation.access)) throw new Error("unknown controller operation");
-        discoveredGenerations.set(controller.id, description.generationId);
-        return { id: controller.id, controllerKey: controller.id, title: controller.id, status: "ready" as const, reviewerId: description.reviewerId, projects: description.projects, operations: description.operations };
-      } catch { return { id: controller.id, controllerKey: controller.id, title: controller.id, status: "unavailable" as const, projects: [], operations: [] }; }
-    }));
-    if (version === discoveryVersion) { controllers = discoveredControllers; generations = discoveredGenerations; }
-    return { controllers: discoveredControllers };
+        state.catalog = { id: state.controller.id, controllerKey: state.controller.id, title: state.controller.id, status: "ready", reviewerId: description.reviewerId, projects: description.projects, operations: description.operations };
+        state.generation = description.generationId;
+        state.observed = false;
+      } catch { state.catalog = unavailable(state.controller.id); }
+    })();
+    state.discovery = discovery;
+    void discovery.finally(() => { if (state.discovery === discovery) delete state.discovery; });
+    return discovery;
   }
-  await discover();
+  async function discover() {
+    for (const state of states) if (!state.discovery && (state.catalog.status !== "ready" || state.observed)) beginDiscovery(state);
+    if (!states.some(({ catalog, observed }) => catalog.status === "ready" && !observed)) {
+      const pending = states.flatMap((state) => state.discovery ? [state.discovery.then(() => state.catalog.status === "ready")] : []);
+      if (pending.length > 0) await new Promise<void>((resolve) => {
+        let settled = 0;
+        for (const result of pending) void result.then((ready) => { settled++; if (ready || settled === pending.length) resolve(); });
+      });
+    }
+    const controllers = states.map((state) => state.catalog);
+    for (const state of states) if (state.catalog.status === "ready") state.observed = true;
+    return { controllers };
+  }
+  for (const state of states) beginDiscovery(state);
   return {
     operations,
     async invoke(name, input) {
       if (name === "projects.list") return discover();
       const selected = selectedInput(input), controller = context.controllers.find(({ id }) => id === selected.controllerId);
-      if (!controller || !controllers.some(({ id, status, operations }) => id === selected.controllerId && status === "ready" && operations.some((operation) => operation.name === name))) throw new Error("Controller operation is unavailable");
-       const catalog = controllers.find(({ id }) => id === selected.controllerId)?.projects ?? [];
+      const state = states.find(({ controller }) => controller.id === selected.controllerId);
+      if (!controller || !state) throw new Error("Controller operation is unavailable");
+      await beginDiscovery(state);
+      if (state.catalog.status !== "ready" || !state.catalog.operations.some((operation) => operation.name === name)) throw new Error("Controller operation is unavailable");
+       state.observed = true;
+       const catalog = state.catalog.projects;
        const project = name === "projects.discover" ? undefined : z.object({ projectId: identifier }).passthrough().parse(selected.value);
        const existing = project ? catalog.find(({ projectId }) => projectId === project.projectId) : undefined;
        const externalProjectOperation = name === "projects.discover" || name === "projects.inspect" || name === "projects.attach";
@@ -74,7 +95,7 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
       const operation = controllerOperations.find((operation) => operation.name === name);
       if (!operation) throw new Error("Unknown Native Git operation");
       const parsed = operation.parseInput(selected.value);
-      const generation = generations.get(selected.controllerId);
+       const generation = state.generation;
       if (!generation) throw new Error("Controller serving generation has not been attested");
        return operation.parseOutput(await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : name === "projects.attach" || /^(?:reviews|merges|sync|pull-requests)\./.test(name) ? { timeoutMilliseconds: 120_000 } : undefined));
     }

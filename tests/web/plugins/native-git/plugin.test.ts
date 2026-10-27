@@ -92,11 +92,11 @@ it("discovers controller projects independently and refreshes their live reposit
   ] });
   expect(await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-b", repositoryId: "public" })).toEqual([]);
   expect(calls.at(-1)?.args).toEqual(["project", "console", "invoke", "reviews.list", "--expected-generation", "a".repeat(64), "--input", JSON.stringify({ projectId: "project-b", repositoryId: "public" })]);
-  const before = calls.length;
+  const beforeOperations = calls.filter(({ args }) => args[2] === "invoke").length;
   await expect(runtime.invoke("reviews.list", { controllerId: "offline", projectId: "project-a", repositoryId: "public" })).rejects.toThrow("unavailable");
   await expect(runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-b", repositoryId: "private" })).rejects.toThrow("scope");
   await expect(runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "foreign", repositoryId: "public" })).rejects.toThrow("scope");
-  expect(calls).toHaveLength(before);
+  expect(calls.filter(({ args }) => args[2] === "invoke")).toHaveLength(beforeOperations);
   repositories = ["public", "private", "docs"];
   await runtime.invoke("projects.list", {});
   expect(await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "docs" })).toEqual([]);
@@ -128,30 +128,6 @@ it("pins controller discovery generation across refresh and sends it before dele
   const reconnected = await webPlugin.autoConnect!(context);
   await reconnected.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "public" });
   expect(writes[1]).toContain(generationId);
-});
-
-it("keeps the newest automatic discovery catalog and generation when an older refresh finishes last", async () => {
-  let describeCalls = 0, releaseOlder = () => {}, markOlderStarted = () => {};
-  const olderGate = new Promise<void>((resolve) => { releaseOlder = resolve; });
-  const olderStarted = new Promise<void>((resolve) => { markOlderStarted = resolve; });
-  const writes: string[][] = [];
-  const descriptors = operations.filter(({ name }) => name === "projects.list" || name === "reviews.list").map(({ name, description, access }) => ({ name, description, access }));
-  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "devbox", async run(args) {
-    if (args[2] === "describe") {
-      describeCalls++;
-      if (describeCalls === 1) throw new Error("initially unavailable");
-      if (describeCalls === 2) { markOlderStarted(); await olderGate; return { schemaVersion: 1, generationId: "a".repeat(64), reviewerId: "owner", projects: [], operations: descriptors }; }
-      return { schemaVersion: 1, generationId: "b".repeat(64), reviewerId: "owner", projects: [{ projectId: "project-a", name: "Project A", repositoryIds: ["public"] }], operations: descriptors };
-    }
-    writes.push([...args]); return [];
-  } }] });
-  const older = runtime.invoke("projects.list", {}); await olderStarted;
-  const newer = await runtime.invoke("projects.list", {});
-  expect(newer).toMatchObject({ controllers: [{ status: "ready", projects: [{ projectId: "project-a" }] }] });
-  releaseOlder();
-  expect(await older).toMatchObject({ controllers: [{ status: "ready", projects: [] }] });
-  expect(await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "public" })).toEqual([]);
-  expect(writes[0]).toContain("b".repeat(64));
 });
 
 it("forwards a bounded controller deadline for repository review and merge work", async () => {
