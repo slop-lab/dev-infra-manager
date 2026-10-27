@@ -46,6 +46,8 @@ dim show dev
 dim shell dev
 dim exec dev -- git status
 dim run dev exec -- docker compose up -d
+dim cp ./notes.txt dev:notes.txt
+dim cp --recursive dev:reports ./reports
 dim resources dev --cpus 4 --memory 8g --pids 4096
 dim stop dev
 dim start dev
@@ -63,6 +65,34 @@ recreate the container while retaining those persistent volumes.
 COMMAND` and `exec dev -- COMMAND` execute ordinary commands without custom
 Project hooks. The `workspace` group exposes the same operations when explicit
 grouping is helpful.
+
+### Copy workspace files
+
+```bash
+dim cp [--overwrite] LOCAL_PATH WORKSPACE:GUEST_PATH
+dim cp [--overwrite] WORKSPACE:GUEST_PATH LOCAL_PATH
+dim cp --recursive DIRECTORY WORKSPACE:GUEST_PATH
+dim cp LOCAL_FILE WORKSPACE:GUEST_PATH --host devbox
+dim cp - WORKSPACE:GUEST_PATH
+dim cp WORKSPACE:GUEST_PATH - > local-file
+```
+
+The operand without `WORKSPACE:` is always on the operator machine, not the
+selected local or SSH host. Relative guest paths resolve from the workspace
+working directory; `/absolute` paths are absolute inside the guest. The
+destination is exact: `cp` does not append the source basename. Directories
+require `--recursive`. A symlink is retained only when it is contained in a
+recursive directory source and its target stays within that tree. Standalone or
+escaping symlinks, hard links and special files are rejected.
+
+An existing exact destination is preserved unless `--overwrite` is explicit.
+Files are staged and replaced rather than written in place, so shorter content
+cannot retain old trailing bytes. `-` carries one regular file over stdin or
+stdout; directory archives never use the terminal stream. Payload bytes use
+stdout exclusively and diagnostics use stderr. The client validates downloaded
+entry paths and link targets before writing local files. The host streams upload
+archives into the guest instead of extracting them on the host, and pins the
+workspace UUID and running runtime for the transfer.
 
 ### Required workspace plugins
 
