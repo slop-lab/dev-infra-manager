@@ -63,7 +63,7 @@ key is required and unknown keys are rejected:
         "route": "default"
       },
       "monitor": {
-        "parentSessionId": "ses_REVIEWED_PARENT",
+        "parentSessionId": "ses_REVIEWEDPARENT",
         "directory": "/workspace/main",
         "maxSessions": 80,
         "maxDepth": 8,
@@ -112,6 +112,10 @@ work remains `active-stale`; current and historical failures remain separate.
 Truncated or partial idle discovery is `unknown`, and API failure is
 `unreachable`. Completion is always `not-assessed` because status monitoring is
 not task acceptance.
+When configured monitoring is unreachable, unknown or only partially discovered,
+the smoke report is `incomplete` and exits with code 2, even if its other runtime
+checks passed. Preflight also requires nonempty doctor checks with every `ok`
+strictly true; an exit-zero doctor command alone is insufficient.
 
 `omoMetadataPath`, when present, names an independently installed, guest-owned
 adapter output file. The narrow JSON shape is `source`, `enabled`, `truncated`,
@@ -142,6 +146,68 @@ destructive cleanup; a mismatched name or malformed UUID stops cleanup and
 retains evidence for operator inspection.
 
 ## Invocation
+
+### Inspect an existing task without workspace mutation
+
+The standalone monitor accepts existing server endpoints and parent identities;
+it does not create a smoke workspace or invoke any DIM, SSH, Docker, setup or
+restart command. Put only metadata in an owned regular JSON file:
+
+```json
+{
+  "schemaVersion": 1,
+  "targets": [
+    {
+      "name": "existing-task",
+      "serverOrigin": "https://reviewed-opencode.example.invalid",
+      "monitor": {
+        "parentSessionId": "ses_REVIEWEDPARENT",
+        "directory": "/workspace/main",
+        "maxSessions": 80,
+        "maxDepth": 8,
+        "maxRequests": 240,
+        "recentMessages": 12,
+        "staleMinutes": 15,
+        "deadlineSeconds": 90,
+        "requestTimeoutSeconds": 10
+      }
+    }
+  ]
+}
+```
+
+Replace the example origin and identity with the explicitly reviewed existing
+task. Origins must be HTTP(S), with no credentials, path, query or fragment.
+An optional absolute `omoMetadataFile` on the target selects an existing local
+adapter-output file, not a guest execution path. Files are opened without
+following a final symlink and reads stay within 2 MiB even during concurrent
+growth. Evidence includes only OMO teams and members visited in the selected
+parent's bounded task tree, not unrelated runs in a shared adapter output.
+
+Pipe an authorized in-memory credential producer into:
+
+```sh
+node scripts/checks/opencode-task-monitor.ts \
+  --targets /absolute/private/opencode-targets.json \
+  --target existing-task --credentials-stdin --json
+```
+
+The producer must send the JSON envelope
+`{ "schemaVersion": 1, "credentials": { "existing-task": { "username": ..., "password": ... } } }`
+on stdin and close it. Do not persist that envelope, interpolate secrets in a
+shell command or include them in process arguments. Input is limited to 64 KiB
+and 10 seconds. Credential resolution is operator-owned; this driver contains no
+environment-specific paths, Docker credential reads or target discovery.
+
+Repeat `--target` to inspect multiple selected entries sequentially. Without
+`--json`, progress is incremental. Exit 0 means inspection was complete, not
+that the task succeeded or finished. Partial/truncated discovery exits 2 with
+`incomplete`; API unavailability exits 2 with `unavailable`. Activity and current
+or historical errors remain separate evidence. Completion is always
+`not-assessed`. Help is immediate and offline; unknown flags fail before input
+files or endpoints are accessed.
+
+### Exercise a disposable selected host
 
 Run the mutation-free checks first:
 
@@ -179,6 +245,7 @@ pnpm --dir tests exec vitest run \
   --no-file-parallelism
 ```
 
-The monitor fixture is deliberately offline. It proves classification,
-recursive discovery, OMO/API disagreement preservation and evidence redaction;
-it is not evidence that any live parent-idle/child-busy case was observed.
+The monitor fixtures use in-memory responses or disposable loopback HTTP servers,
+including the public standalone CLI. They prove classification, recursive
+discovery, OMO/API disagreement preservation, file-growth bounds and evidence
+redaction. They do not establish that any operator's live task was observed.
