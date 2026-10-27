@@ -3,6 +3,7 @@ import path from "node:path";
 import { workspaceImageReference } from "@slop-lab/dim-host-core";
 import { ContainerWorkspaceRuntime, UserError, type CommandRunner } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
+import { kvmWorkspaceCapabilities, verifyWorkspaceKvm } from "./guest.js";
 
 const kvmDeviceNumber = 10 * 256 + 232;
 const probe = `import os,fcntl,sys
@@ -63,8 +64,10 @@ export async function configureKvm(stateRoot: string, runner: CommandRunner, ima
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "kvm",
+  workspaceCapabilities: kvmWorkspaceCapabilities,
   runtime: {
     name: "container-kvm",
+    isolation: "container",
     defaultImage: workspaceImageReference(process.env.DIM_WORKSPACE_IMAGE),
     async create(context) {
       const device = await kvmDevice(context.stateRoot).catch((error: unknown) => { throw new UserError(`KVM runtime is not configured; run dim kvm configure: ${error instanceof Error ? error.message : String(error)}`); });
@@ -86,6 +89,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
   },
   guest: {
     description: "Explicit KVM device access for disposable VM verification; repository tooling owns QEMU and test VM setup",
+    operations: [{ name: "verify", description: "Create and close one KVM VM descriptor inside this explicitly KVM-enabled workspace", handle: verifyWorkspaceKvm }],
     async inspect(workspace) {
       return workspace.runtime === "container-kvm" ? { state: "ready", message: "/dev/kvm is explicitly granted; run repository KVM verification prerequisites before launching VMs" } : { state: "unconfigured", message: "Create an explicitly selected container-kvm workspace to use KVM" };
     }

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, copyFile, chmod, rm, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { ProcessRunner } from "@slop-lab/dim-host-core/workspace";
+import { ProcessRunner, WorkspaceService, WorkspaceStore } from "@slop-lab/dim-host-core/workspace";
 import { configureKvm, hostPlugin } from "../../../../packages/host/plugins/kvm/src/index.js";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
 
@@ -23,10 +23,21 @@ it.skipIf(!image || !parent || !probe)("prepares KVM without sudo and retains ac
     runtime = await runtimeFactory.create({ stateRoot: root, runner, cleanupRunner: runner });
     await runtime.create(record); await runtime.start(record); await runtime.seed(record, source);
     record.initialized = true;
+    const store = new WorkspaceStore(root);
+    const service = new WorkspaceService(store, runtime, async () => { throw new Error("verification cannot acquire source"); });
+    const context = { store, service, stateRoot: root, runner, cleanupRunner: runner, signal: AbortSignal.timeout(90_000) };
+    const verification = hostPlugin.guest?.operations?.find(({ name }) => name === "verify");
+    if (!verification) throw new Error("guest KVM verification is not discoverable");
     for (const phase of ["create", "restart", "recreate"] as const) {
       if (phase === "restart") { await runtime.stop(record); await runtime.start(record); }
       if (phase === "recreate") { await runtime.stop(record); await runtime.remove(record, { keepData: true }); await runtime.create(record); await runtime.start(record); }
       expect(await runtime.exec(record, ["/workspace/kvm-probe"]), phase).toBe(0);
+      await store.write(record);
+      expect(await hostPlugin.workspaceCapabilities?.(record, context), phase).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "vm-fd-verification", state: "available", access: { kind: "guest-operation", operation: "verify" } })
+      ]));
+      expect(await verification.handle({}, record, context), phase).toMatchObject({ workspaceId: record.id,
+        scope: "workspace-kvm", outcome: "verified", effect: "vm-fd-created-and-closed", kvmApiVersion: 12 });
     }
     const after = await lstat("/dev/kvm");
     expect({ inode: after.ino, mode: after.mode, uid: after.uid, gid: after.gid }).toEqual({ inode: original.ino, mode: original.mode, uid: original.uid, gid: original.gid });
