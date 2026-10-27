@@ -148,10 +148,20 @@ is implied by these source changes.
   remotes, existing grants and policy evidence. Preserve gzip request metadata
   through the broker and CGI backend so protocol-v2 fetch acknowledgments remain
   valid when negotiation expands beyond small histories.
-  Reuse full Git proofs only within a request while retaining final authority
-  checks, avoid duplicate host source-readiness work before authoritative review
+  Reuse immutable bundle hashes and full Git proofs across requests only while
+  exact process-owned authority/storage/object identities remain unchanged, with
+  live authorization and final snapshot checks. Return legacy proposal pushes
+  after durable raw-job handoff and prepare reviews/CI asynchronously, exposing
+  pending/failed/stale/ready outcomes with crash recovery and generation-safe
+  approval/merge gates. Keep unrelated repositories and reads progressing through
+  scoped mutation lanes and bounded background preparation. Avoid duplicate host source-readiness work before authoritative review
   operations, and reconcile policy changes without delaying their committed
-  response on historical proposals. Bound CI admission coherently and expose
+  response on historical proposals. Keep Native Git Web startup and ready
+  controller catalogs responsive when another configured controller is slow;
+  coalesce duplicate discovery, retain last-known catalogs for presentation without
+  flapping, and freshly attest scope/generation before every operation. Lazy-load
+  installer-only and selected host command graphs and replace the facade with the
+  configured CLI while preserving mandatory CLI-host v1 negotiation. Bound CI admission coherently and expose
   safe timeout/stale-acquisition diagnostics instead of generic guest failures.
   Examples own executable recipes, repository templates and development/check
   scripts. Both lightweight integration and fresh-VM workspace acceptance use
