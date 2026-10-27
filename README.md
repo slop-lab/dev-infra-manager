@@ -65,6 +65,8 @@ dim create https://example.com/team/app.git dev
 dim ls
 dim shell dev
 dim exec dev -- docker compose up -d
+dim cp ./notes.txt dev:notes.txt
+dim cp --recursive dev:reports ./reports
 ```
 
 Use a real repository URL in place of the example. To seed from a repository
@@ -73,6 +75,11 @@ Git content into private storage; it does not copy dirty or untracked files or
 write into the original checkout. A portable origin is retained for ordinary
 fetch/push. Git credentials and host SSH agents are not forwarded into the
 workspace.
+
+`dim cp` always treats the unqualified operand as a path on the operator
+machine, even when `--host` selects SSH. The `WORKSPACE:PATH` operand explicitly
+selects the workspace and guest path. Existing destinations require
+`--overwrite`; directory trees require `--recursive`.
 
 No Project registration, protected-ref policy or scheduler is required for this
 path. A source branch can be selected with `--ref`. Updating a user's working
