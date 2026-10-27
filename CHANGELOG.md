@@ -65,8 +65,11 @@ is implied by these source changes.
   current policy and immutable plan, deduplicate exact retries, and expose every
   planned job without treating absent or failed evidence as success. Preserve
   recorded delivery history across generation updates and skip absorbed proposal
-  refs during automatic startup, while freshly proved explicit requests retain
-  current-generation delivery intent and execution authority.
+  refs during automatic startup. Unacknowledged historical events also require
+  freshly proved current-generation delivery intent. Journal live proposal
+  acceptance before review publication so same-generation crash recovery can
+  finish that exact action without granting authority to startup history.
+  Explicit ordinary-branch merge preparation retains its CI delivery intent.
   General execution uses the named scheduler
   and worker plugins and `dim execution worker`; CI contracts retain CI-specific
   messages, while execution contracts own shared scheduling data. Plugin author
@@ -199,6 +202,12 @@ is implied by these source changes.
 - Separate workflow compilation, Git authority and execution responsibilities.
   Candidate scripts never gain host, review or protected-ref authority. Inspect
   CI jobs and bounded diagnostics through a separate read-only query role.
+- Inspect explicitly selected existing OpenCode task trees through a standalone
+  read-only monitor, with stdin-only server credentials, bounded discovery and
+  responses, parent/child activity aggregation, scoped optional OMO metadata and
+  redacted evidence. Incomplete monitoring and failed or absent host-doctor
+  checks cannot count as successful selected-host verification; task completion
+  remains independently unassessed.
 - Provide the separate `dim-web` console for workspace creation,
   lifecycle and resources, with explicit Web plugins for LLM router governance,
   execution diagnostics and authoritative Git review. Shared validated operation
