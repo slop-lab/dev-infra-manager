@@ -31,6 +31,10 @@ UUID-fenced cleanup. It never silently uses the current host or configures host
 privileges, operator credentials, shared services, firewall rules or host plugins.
 Optional monitoring uses bounded public session metadata and a separate read-only
 OMO adapter; monitoring never establishes task acceptance.
+For an existing task, use the standalone `node scripts/checks/opencode-task-monitor.ts`
+driver documented in that scenario. Explicit target metadata and credentials on
+stdin let it inspect existing HTTP session endpoints without invoking DIM, SSH,
+Docker, setup or restart. Incomplete or unreachable inspection exits with code 2.
 
 ## KVM example verification inside a workspace
 
