@@ -5,6 +5,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 export const packageDirectories = [
+  "packages/gs/repository/dist",
   "packages/gs/diff/dist",
   "packages/gs/discussions/dist",
   "packages/gs/blame/dist",

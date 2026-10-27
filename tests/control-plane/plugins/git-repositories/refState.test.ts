@@ -21,7 +21,15 @@ it("binds protected-ref CAS to exact repository/head/authorization and returns o
     const change = () => f.service.context.serialize(() => compareAndSwapProtectedRef(f.service.context, input));
     expect(await change()).toEqual({ outcome: "promoted", sequence: 1 });
     expect(await change()).toEqual({ outcome: "already-current", sequence: 1 });
-    expect(readProtectedRefTransition(f.service.context.runtime, input.authorizationId)).toMatchObject(input);
+    const transition = readProtectedRefTransition(f.service.context.runtime, input.authorizationId);
+    expect(transition).toMatchObject(input);
+    if (transition === undefined) throw new Error("protected ref transition is missing");
+    expect(f.service.context.runtime.state.stateFormat).toBe(12);
+    const database = new DatabaseSync(f.service.context.runtime.state.database, { readOnly: true });
+    try {
+      const row = database.prepare("SELECT transition_id,record_json FROM repository_ref_transition").get();
+      expect(row).toEqual({ transition_id: repositoryTransitionId(transition), record_json: JSON.stringify(transition) });
+    } finally { database.close(); }
     await expect(f.service.context.serialize(() => compareAndSwapProtectedRef(f.service.context, { ...input, evidenceDigest: "d".repeat(64) }))).rejects.toThrow(/head conflicts/);
     await expect(f.service.context.serialize(() => compareAndSwapProtectedRef(f.service.context, { ...input, repositoryId: "private" }))).rejects.toThrow(/not registered/);
     expect(readNativeProjectRootCurrentHeadFromDatabase(f.service.context.runtime.state.database, "project", "main")).toMatchObject({ sequence: 1, commit: input.candidateCommit, tree: input.candidateTree });

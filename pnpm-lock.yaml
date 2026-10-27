@@ -461,6 +461,9 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      '@slop-lab/gs-repository':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -726,6 +729,19 @@ importers:
       react-dom:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/repository:
+    dependencies:
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3

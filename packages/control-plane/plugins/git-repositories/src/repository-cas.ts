@@ -1,73 +1,254 @@
-import { checkRefUpdatePolicies } from "./ref-update-policies.js";
-import { z } from "zod";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { atomicPromote, candidateDescendsFrom } from "./promotion-git.js";
-import { resolveAuthoritativeNativeRepositoryTarget } from "./authoritative-native-root-target.js";
-import { assertGitExecutableIdentity, NativeGitRepositoryError } from "./repository.js";
-import { saveRepositoryRefIntent, finalizeRepositoryRef, readRepositoryRefTransitions, assertRepositoryRefTransitions, cancelRepositoryRefIntent, type RepositoryRefTransition } from "./repository-ref-state.js";
-import type { RepositoryExtensionContext, RepositoryRuntime } from "./plugin-api.js";
+import { join } from "node:path";
+import { z } from "zod";
 import { isNativeGitCandidateRef } from "@slop-lab/dim-contracts-git";
-const execute = promisify(execFile);
+import {
+  compareAndSwapProtectedRef as compareAndSwapGsProtectedRef,
+  recoverProtectedRefChanges,
+  type JournalPort,
+  type ProtectedRefChange as GsProtectedRefChange,
+  type ProtectedRefIntent,
+  type ProtectedRefPorts,
+} from "@slop-lab/gs-repository";
+import {
+  assertAuthoritativeNativeRepositoryTargetCurrent,
+  resolveAuthoritativeNativeRepositoryTarget,
+  type AuthoritativeNativeRepositoryTarget,
+} from "./authoritative-native-root-target.js";
+import { checkRefUpdatePolicies } from "./ref-update-policies.js";
+import {
+  assertRepositoryRefTransitions,
+  cancelRepositoryRefIntent,
+  finalizeRepositoryRef,
+  readRepositoryRefTransitions,
+  saveRepositoryRefIntent,
+  type RepositoryRefTransition,
+} from "./repository-ref-state.js";
+import type { RepositoryExtensionContext, RepositoryRuntime } from "./plugin-api.js";
+
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
-const protectedRefChangeSchema = z.object({ projectId: identifier, repositoryId: identifier, protectedRef: z.string().startsWith("refs/heads/").optional(),
+const protectedRefChangeSchema = z.object({
+  projectId: identifier,
+  repositoryId: identifier,
+  protectedRef: z.string().startsWith("refs/heads/").optional(),
   proposalRef: z.string().refine(isNativeGitCandidateRef),
-  expectedCommit: objectId, candidateCommit: objectId, candidateTree: objectId, authorizationId: digest, evidenceDigest: digest
+  expectedCommit: objectId,
+  candidateCommit: objectId,
+  candidateTree: objectId,
+  authorizationId: digest,
+  evidenceDigest: digest,
 }).strict().readonly();
+
 export type ProtectedRefChange = z.infer<typeof protectedRefChangeSchema>;
-export async function compareAndSwapProtectedRef(context: RepositoryExtensionContext, input: ProtectedRefChange): Promise<{ readonly outcome: "promoted" | "already-current"; readonly sequence: number }> {
-  input = protectedRefChangeSchema.parse(input);
-  const target = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: input.projectId, repositoryId: input.repositoryId, ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }) });
-  if (input.proposalRef === target.currentHead.protectedRef) throw new NativeGitRepositoryError("protected ref source and target must differ");
-  const config = { gitExecutable: context.runtime.gitExecutable, storageRoot: context.stateDirectory };
-  if (target.currentHead.commit !== input.expectedCommit) {
-    const database = new DatabaseSync(context.runtime.state.database, { readOnly: true });
-    try {
-      const previous = readRepositoryRefTransitions(database).find(({ transition, finalized }) => finalized && transition.projectId === input.projectId && transition.repositoryId === input.repositoryId && transition.authorizationId === input.authorizationId && transition.protectedRef === target.currentHead.protectedRef);
-      if (previous !== undefined && previous.transition.candidateCommit === input.candidateCommit && previous.transition.candidateTree === input.candidateTree && previous.transition.evidenceDigest === input.evidenceDigest && target.currentHead.commit === input.candidateCommit) return { outcome: "already-current", sequence: previous.transition.sequence };
-    } finally { database.close(); }
-    throw new Error("protected ref compare-and-swap head conflicts");
-  }
-  if (!await candidateDescendsFrom(config, input, input.expectedCommit, input.candidateCommit)) throw new Error("protected ref candidate does not descend from the current head");
-  await assertGitExecutableIdentity(context.runtime.gitExecutable, context.runtime.gitIdentity);
-  const tree = await execute(context.runtime.gitExecutable, ["--no-replace-objects", "--git-dir", target.repository, "rev-parse", "--verify", `${input.candidateCommit}^{tree}`], { env: gitEnvironment(), maxBuffer: 1024, timeout: 30_000 });
-  if (tree.stdout.trim() !== input.candidateTree) throw new Error("protected ref candidate tree conflicts");
-  const refPolicyRevision = await checkRefUpdatePolicies(context, target, input);
-  const current = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, { projectId: input.projectId, repositoryId: input.repositoryId, ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }) });
-  if (JSON.stringify(current) !== JSON.stringify(target)) throw new Error("repository changed during ref update authorization");
-  await assertGitExecutableIdentity(context.runtime.gitExecutable, context.runtime.gitIdentity);
-  const transition: RepositoryRefTransition = { ...input, expectedTree: target.currentHead.tree, protectedRef: target.currentHead.protectedRef,
-    sequence: target.currentHead.sequence + 1, importNonce: target.imported.importNonce,
-    generationId: context.runtime.expectedGenerationId, refPolicyRevision, policyDigest: target.imported.policyDigest };
-  saveRepositoryRefIntent(context.runtime.state.database, transition);
-  if (!await atomicPromote(config, transition, input.expectedCommit, input.candidateCommit)) throw new Error("protected ref compare-and-swap failed; recovery is required");
-  finalizeRepositoryRef(context.runtime.state.database, transition);
-  return { outcome: "promoted", sequence: transition.sequence };
+type DimFence = {
+  readonly importNonce: string;
+  readonly generationId: string;
+  readonly policyDigest: string;
+};
+type DimPolicyProof = { readonly refPolicyRevision: string };
+type DimIntent = ProtectedRefIntent<DimFence, DimPolicyProof>;
+type DimPorts = ProtectedRefPorts<DimFence, DimPolicyProof, AuthoritativeNativeRepositoryTarget>;
+
+export async function compareAndSwapProtectedRef(
+  context: RepositoryExtensionContext,
+  input: ProtectedRefChange,
+): Promise<{ readonly outcome: "promoted" | "already-current"; readonly sequence: number }> {
+  const change = protectedRefChangeSchema.parse(input);
+  return compareAndSwapGsProtectedRef(livePortsAlreadyExclusive(context), toGsChange(change));
 }
-export async function recoverRepositoryRefChanges(runtime: Pick<RepositoryRuntime, "state" | "gitExecutable" | "gitIdentity">, stateDirectory: string): Promise<void> {
-  const database = new DatabaseSync(runtime.state.database, { readOnly: true });
-  const pending = (() => { try { assertRepositoryRefTransitions(database); return readRepositoryRefTransitions(database).filter((entry) => !entry.finalized); } finally { database.close(); } })();
-  for (const { transition } of pending) {
-    await assertGitExecutableIdentity(runtime.gitExecutable, runtime.gitIdentity);
-    const repository = join(stateDirectory, transition.projectId, `${transition.repositoryId}.git`);
-    const tree = await execute(runtime.gitExecutable, ["--no-replace-objects", "--git-dir", repository, "rev-parse", "--verify", `${transition.candidateCommit}^{tree}`], { env: gitEnvironment(), maxBuffer: 1024, timeout: 30_000 });
-    if (tree.stdout.trim() !== transition.candidateTree || !await candidateDescendsFrom({ gitExecutable: runtime.gitExecutable, storageRoot: stateDirectory }, transition, transition.expectedCommit, transition.candidateCommit)) throw new Error("pending repository ref candidate is invalid");
-    const result = await execute(runtime.gitExecutable, ["--no-replace-objects", "--git-dir", repository, "rev-parse", "--verify", transition.protectedRef], { env: gitEnvironment(), maxBuffer: 1024, timeout: 30_000 });
-    if (result.stdout.trim() === transition.expectedCommit) {
-      // An intent is not permission to replay after policy or approval changes.
-      cancelRepositoryRefIntent(runtime.state.database, transition);
-      continue;
-    } else if (result.stdout.trim() !== transition.candidateCommit) throw new Error("pending repository ref change conflicts with Git state");
-    finalizeRepositoryRef(runtime.state.database, transition);
-  }
+
+export async function recoverRepositoryRefChanges(
+  runtime: Pick<RepositoryRuntime, "state" | "gitExecutable" | "gitIdentity">,
+  stateDirectory: string,
+): Promise<void> {
+  await recoverProtectedRefChanges(recoveryPortsAlreadyExclusive(runtime, stateDirectory));
 }
-function gitEnvironment(): NodeJS.ProcessEnv { return { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_NO_REPLACE_OBJECTS: "1", HOME: "/dev/null", LC_ALL: "C" }; }
 
 export function readProtectedRefTransition(runtime: RepositoryRuntime, authorizationId: string): RepositoryRefTransition | undefined {
   const database = new DatabaseSync(runtime.state.database, { readOnly: true, defensive: true });
-  try { return readRepositoryRefTransitions(database).find((entry) => entry.finalized && entry.transition.authorizationId === authorizationId)?.transition; } finally { database.close(); }
+  try {
+    return readRepositoryRefTransitions(database)
+      .find((entry) => entry.finalized && entry.transition.authorizationId === authorizationId)?.transition;
+  } finally {
+    database.close();
+  }
+}
+
+function livePortsAlreadyExclusive(context: RepositoryExtensionContext): DimPorts {
+  const journal = journalPort(context.runtime.state.database);
+  return {
+    runtime: { gitExecutable: context.runtime.gitExecutable, storageRoot: context.stateDirectory },
+    gitIdentity: context.runtime.gitIdentity,
+    serialization: { kind: "already-exclusive" },
+    journal,
+    targets: {
+      async resolve(change) {
+        const selector = toDimSelector(change);
+        const authority = await resolveAuthoritativeNativeRepositoryTarget(context.runtime, selector);
+        return {
+          selector: { namespaceId: change.namespaceId, repositoryId: change.repositoryId },
+          repositoryPath: authority.repository,
+          head: {
+            sequence: authority.currentHead.sequence,
+            protectedRef: authority.currentHead.protectedRef,
+            commit: authority.currentHead.commit,
+            tree: authority.currentHead.tree,
+          },
+          fence: {
+            importNonce: authority.imported.importNonce,
+            generationId: context.runtime.expectedGenerationId,
+            policyDigest: authority.imported.policyDigest,
+          },
+          authority,
+        };
+      },
+      async assertCurrent(target) {
+        await assertAuthoritativeNativeRepositoryTargetCurrent({
+          runtime: context.runtime,
+          selector: { projectId: target.selector.namespaceId, repositoryId: target.selector.repositoryId, protectedRef: target.head.protectedRef },
+          target: target.authority,
+        });
+      },
+      async locateForRecovery(intent) {
+        return join(context.stateDirectory, intent.namespaceId, `${intent.repositoryId}.git`);
+      },
+    },
+    policy: {
+      async authorize({ change, target }) {
+        return { refPolicyRevision: await checkRefUpdatePolicies(context, target.authority, toDimChange(change)) };
+      },
+    },
+  };
+}
+
+function recoveryPortsAlreadyExclusive(
+  runtime: Pick<RepositoryRuntime, "state" | "gitExecutable" | "gitIdentity">,
+  stateDirectory: string,
+): DimPorts {
+  return {
+    runtime: { gitExecutable: runtime.gitExecutable, storageRoot: stateDirectory },
+    gitIdentity: runtime.gitIdentity,
+    serialization: { kind: "already-exclusive" },
+    journal: journalPort(runtime.state.database),
+    targets: {
+      async resolve() { throw new Error("protected ref recovery cannot resolve a live target"); },
+      async assertCurrent() { throw new Error("protected ref recovery cannot authorize a live target"); },
+      async locateForRecovery(intent) { return join(stateDirectory, intent.namespaceId, `${intent.repositoryId}.git`); },
+    },
+    policy: {
+      async authorize() { throw new Error("protected ref recovery cannot authorize a new transition"); },
+    },
+  };
+}
+
+function journalPort(databasePath: string): JournalPort<DimFence, DimPolicyProof> {
+  return {
+    findFinalized(change, protectedRef) {
+      const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
+      try {
+        const entry = readRepositoryRefTransitions(database).find(({ transition, finalized }) => finalized
+          && transition.projectId === change.namespaceId
+          && transition.repositoryId === change.repositoryId
+          && transition.authorizationId === change.authorizationId
+          && transition.protectedRef === protectedRef);
+        return entry === undefined ? undefined : fromDimIntent(entry.transition);
+      } finally {
+        database.close();
+      }
+    },
+    appendIntent(intent) { saveRepositoryRefIntent(databasePath, toDimIntent(intent)); },
+    finalize(intent) { finalizeRepositoryRef(databasePath, toDimIntent(intent)); },
+    cancel(intent) { cancelRepositoryRefIntent(databasePath, toDimIntent(intent)); },
+    pending() {
+      const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
+      try {
+        assertRepositoryRefTransitions(database);
+        return readRepositoryRefTransitions(database)
+          .filter((entry) => !entry.finalized)
+          .map((entry) => fromDimIntent(entry.transition));
+      } finally {
+        database.close();
+      }
+    },
+  };
+}
+
+function toGsChange(input: ProtectedRefChange): GsProtectedRefChange {
+  return {
+    namespaceId: input.projectId,
+    repositoryId: input.repositoryId,
+    ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }),
+    proposalRef: input.proposalRef,
+    expectedCommit: input.expectedCommit,
+    candidateCommit: input.candidateCommit,
+    candidateTree: input.candidateTree,
+    authorizationId: input.authorizationId,
+    evidenceDigest: input.evidenceDigest,
+  };
+}
+
+function toDimChange(input: GsProtectedRefChange): ProtectedRefChange {
+  return {
+    projectId: input.namespaceId,
+    repositoryId: input.repositoryId,
+    ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }),
+    proposalRef: input.proposalRef,
+    expectedCommit: input.expectedCommit,
+    candidateCommit: input.candidateCommit,
+    candidateTree: input.candidateTree,
+    authorizationId: input.authorizationId,
+    evidenceDigest: input.evidenceDigest,
+  };
+}
+
+function toDimSelector(input: GsProtectedRefChange): { readonly projectId: string; readonly repositoryId: string; readonly protectedRef?: string } {
+  return {
+    projectId: input.namespaceId,
+    repositoryId: input.repositoryId,
+    ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }),
+  };
+}
+
+function toDimIntent(intent: DimIntent): RepositoryRefTransition {
+  return {
+    projectId: intent.namespaceId,
+    repositoryId: intent.repositoryId,
+    sequence: intent.sequence,
+    importNonce: intent.fence.importNonce,
+    protectedRef: intent.protectedRef,
+    proposalRef: intent.proposalRef,
+    expectedCommit: intent.expectedCommit,
+    expectedTree: intent.expectedTree,
+    candidateCommit: intent.candidateCommit,
+    candidateTree: intent.candidateTree,
+    generationId: intent.fence.generationId,
+    policyDigest: intent.fence.policyDigest,
+    refPolicyRevision: intent.proof.refPolicyRevision,
+    authorizationId: intent.authorizationId,
+    evidenceDigest: intent.evidenceDigest,
+  };
+}
+
+function fromDimIntent(transition: RepositoryRefTransition): DimIntent {
+  return {
+    namespaceId: transition.projectId,
+    repositoryId: transition.repositoryId,
+    sequence: transition.sequence,
+    protectedRef: transition.protectedRef,
+    proposalRef: transition.proposalRef,
+    expectedCommit: transition.expectedCommit,
+    expectedTree: transition.expectedTree,
+    candidateCommit: transition.candidateCommit,
+    candidateTree: transition.candidateTree,
+    authorizationId: transition.authorizationId,
+    evidenceDigest: transition.evidenceDigest,
+    fence: {
+      importNonce: transition.importNonce,
+      generationId: transition.generationId,
+      policyDigest: transition.policyDigest,
+    },
+    proof: { refPolicyRevision: transition.refPolicyRevision },
+  };
 }
