@@ -71,11 +71,55 @@ Reserved internal, replacement, remote-tracking and extension refs are not
 ordinary refs. Existing workspace proposal namespaces remain owner-scoped and
 create/fast-forward-only; deletion and force are denied there. Foreign repository
 and foreign proposal authority remain denied. Ordinary ref pushes do not
-automatically resolve reviews or read workflows. Legacy proposal reconciliation
-is separately bounded. Live proofs admit ordinary refs while validating every
+automatically resolve reviews or read workflows. For changed legacy proposal refs,
+successful transport completion waits for a bounded, fsynced raw-job handoff,
+not review matchers, workflow planning or CI execution. The handoff binds serving
+generation, import/owner authority, candidate commit/tree, protected head/ref and
+effective policy. Preparation runs in an owned worker with at most four active
+repositories and one active attempt per repository. Candidate preparation failure
+is a durable job outcome, not a reason to stop unrelated repositories. Transient
+failures receive six bounded per-job attempts; exhaustion leaves a discoverable
+failed job, retryable on same-generation restart or an explicit fresh review action. Stale
+generation, ref, head, policy or import authority never becomes ready by replay.
+Live proofs admit ordinary refs while validating every
 protected head and durable extension pin exactly; initial import proof remains
 strict. New workspaces use `push.default=current`; lifecycle/reconnect does not
 rewrite existing checkout Git choices.
+
+The reviewer-authenticated
+`GET /v1/projects/:project/repositories/:repository/review-preparations` endpoint
+requires the exact active `X-Dim-Generation-Id` and current repository reviewer
+policy. It exposes repository-scoped raw-job history, including prior generations,
+with each job's generation and `pending`, `failed`, `stale` or
+`ready` state even before a canonical review exists. `ready` means preparation
+and acceptance finished, not successful required CI or human approval. A pending
+or failed published-envelope acceptance blocks approval and protected promotion
+across serving-generation changes. Only explicit, fully revalidated acceptance
+may clear a historical blocker; another generation cannot automatically resume
+historical CI intent. Uncertain/failed Git transport does not promise that no
+ordinary ref changed: inspect the exact ref and job state before retrying.
+
+Raw-job admission permits at most 100,000 records per repository and exact
+duplicates remain idempotent at capacity. New identities are rejected before
+journal publication, so exhaustion cannot make existing records unreadable or
+poison other repositories. This is post-receive handoff admission, not an atomic
+pre-receive reservation for an entire multi-ref push; a handoff error can follow
+an already accepted ordinary Git ref. Terminal records are retained, not silently
+deleted to regain capacity. Private staging recovery validates identity, inode,
+ownership and link count; uncommitted single-link staging is discarded without
+overwriting a canonical record, while published two-link staging is reconciled.
+
+The service MAY retain a process-local immutable-root attestation to avoid
+repeating the durable bundle SHA-256 and repository-wide strict `fsck`. Such an
+attestation MUST be scoped to the live storage owner and exact imported authority,
+including owner, registration, import generation/nonce/receipt and pinned Git
+executable. Reuse MUST also match the bundle and repository identities plus a
+recursively captured exact Git object-store metadata snapshot; an object-directory
+mtime alone is insufficient. There is no time-based or persisted validity:
+restart, replacement, in-place writes and trusted object mutations require a new
+complete proof. Activation, current database authority/policy/head, storage
+ownership, refs, exact commit/tree and ancestry remain live checks on every use,
+with pre/post storage and authority checks rejecting concurrent change.
 
 An operator merge preparation may select an ordinary direct branch in the same
 owned repository as its source; only its target must be policy-managed. Source
@@ -128,11 +172,19 @@ stores the policy and validates its envelope; it does not interpret feature
 policy or load concrete feature implementations.
 
 Repository-owned typed extension factories attach to one service context. They
-receive the owned runtime, selected extensions, cancellation, a serialization
-gate, known credentials and private extension state. Features return their own
+receive the owned runtime, selected extensions, cancellation, known credentials
+and private extension state. `mutate({projectId,repositoryId}, operation)` orders
+changes within one repository; `serialize(operation)` is an exclusive lifecycle
+or whole-service snapshot fence against participating mutations. `read(operation)`
+uses bounded admission without waiting behind mutation lanes. Read callers retain
+fresh authorization and final authority/snapshot checks after expensive I/O.
+Scheduler callbacks are non-reentrant: already-locked inner helpers never acquire
+another lane or fence. Features return their own
 HTTP/transport handlers, proposal/activation hooks, policy checks and cleanup.
-Partial attachment must clean its resources. Successful attachments close in
-reverse order; failures must not prevent listener closure or storage-owner
+Partial attachment must clean its resources. Shutdown closes admission, drains
+accepted mutations/reads/imports, then invokes owned background `drain` hooks
+before closing any attachment resource. Successful attachments close in reverse
+order; failures must not prevent listener closure or storage-owner
 release. Control-plane core composes generic extension identities only.
 
 ## Human review and merge policy
