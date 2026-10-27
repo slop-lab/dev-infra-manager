@@ -10,11 +10,12 @@ Production packages are grouped by where they run and what they own:
 | `packages/control-plane/plugins/<name>` | `@slop-lab/dim-control-plane-plugin-<name>` | Independent authoritative services and workflow interpretation |
 | `packages/control-plane/deployment` | `@this-project/control-plane-deployment` (private) | Composition artifact for the installer’s fixed service-image profile |
 | `packages/control-plane/admin` | `@slop-lab/dim-control-plane-admin` | Explicit service deployment and operator connection tools |
-| `packages/git-review-tracing/runtimes/node` | `@slop-lab/dim-git-review-tracing-runtime-node` | Brokered JS/TS loader and isolated Docker execution, shared by host and control-plane adapters |
-| `packages/git-review-tracing/engine` | `@slop-lab/dim-git-review-tracing` | Runtime-neutral read tracking and dependency comparison; `/plugin-api` for runtime adapters |
+| `packages/gs/repository` | `@slop-lab/gs-repository` | Git-owned storage/transport primitives, standalone hosting and protected-ref ordering through typed authority/journal/policy ports |
+| `packages/gs/review-tracing-node` | `@slop-lab/gs-review-tracing-node` | Optional brokered JS/TS detector evaluator; DIM registration and scheduled placement remain adapters |
+| `packages/gs/review-tracing` | `@slop-lab/gs-review-tracing` | Neutral tracking, comparison and detector runtime contracts; no DIM extension registration |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
-| `packages/git-tools/{diff,discussions,pull-requests,blame}` | `@slop-lab/git-{diff,discussions,pull-requests,blame}` | Portable Git models, parsers and pure transitions, with no DIM dependency |
-| `packages/git-tools/{react-diff,react-git-pull-requests}` | `@slop-lab/react-git-{diff,pull-requests}` | Controlled React presentation, callbacks and optional external CSS, with no DIM dependency |
+| `packages/gs/{diff,discussions,pull-requests,blame}` | `@slop-lab/gs-{diff,discussions,pull-requests,blame}` | Portable Git models, parsers and pure transitions, with no DIM dependency |
+| `packages/gs/{react-diff,react-pull-requests}` | `@slop-lab/gs-react-{diff,pull-requests}` | Controlled React presentation, callbacks and optional external CSS, with no DIM dependency |
 | `packages/cli/core` | `@slop-lab/dim-cli` | Client host selection, terminal streams and transport |
 | `packages/service-clients/<name>` | `@slop-lab/dim-service-client-<name>` | Shared service calls and validated operations without running their authoritative service; LLM router, execution and Native Git clients |
 | `packages/installer` | `@slop-lab/dim-installer` | Installation facade and artifact validation |
@@ -28,11 +29,14 @@ Host plugins own delivery of their workspace and agent helpers through the
 shared host integration mechanism. Repositories need no plugin configuration
 for capabilities selected by the operator.
 
-Reusable Git models and UI live in `git-tools`, outside DIM runtime packages.
-They use the generic `source` export condition for repository development and
-compiled exports in published artifacts. DIM control-plane plugins own private
-storage and authorization; host and Web adapters connect those services to the
-portable UI. See [Git pull requests](../specs/git-pull-requests.md).
+Git-service-owned source lives in the movable `packages/gs/*` subtree rather
+than a host/control-plane deployment hierarchy. Its packages use GS-owned build
+configuration and the generic `source` export condition, with no DIM runtime,
+client or plugin-framework dependency. The current DIM repository adapter binds
+registration, activation, workspace grants and format-12 durable state to that
+engine. Host and Web adapters connect those services to the portable UI. See
+[Git pull requests](../specs/git-pull-requests.md) and the
+[extraction checkpoint](../development/gs-extraction-prep.md) for remaining cuts.
 The [Git capability map](git-capabilities.md) records the complete library,
 authority, transport, policy and CLI/Web responsibility boundaries and practical
 operator flows. Source manifests stay private; generated `dist` manifests are
@@ -67,7 +71,7 @@ connects immutable Git snapshots to review requirements. The host and control-pl
 `git-review-tracing-node` plugins register the shared isolated Node runtime; the
 runtime library owns execution and import/file-read mediation.
 Additional runtimes implement the same tracing contract without changing review
-or ref-policy core. The Node implementation is a neutral package; control-plane
+or ref-policy core. The Node implementation is a neutral GS package; control-plane
 and host plugins register it in their owning runtimes. The scheduled adapter
 uses the same task queue, leases and worker loop as CI; it retains immutable Git
 reads and dependency evidence in the repository-owning control plane.
@@ -81,7 +85,8 @@ Plugin implementation entrypoints are named explicitly:
 | `@slop-lab/dim-web/plugin-api` | Web feature panels and validated operation handlers |
 | `@slop-lab/dim-contracts-operations` | Shared client operation declarations and access descriptions |
 | `@slop-lab/dim-contracts-execution/plugin-api` | Worker task handlers |
-| `@slop-lab/dim-git-review-tracing/plugin-api` | Review detector runtime adapters |
+| `@slop-lab/gs-review-tracing/plugin-api` | Neutral review detector runtime contracts |
+| `@slop-lab/dim-control-plane-plugin-git-review-tracing/plugin-api` | DIM review detector runtime registration |
 | `@slop-lab/dim-contracts-ci/workflow-plugin-api` | CI workflow compilers |
 | `@slop-lab/dim-host-plugin-mirrors/protocol-plugin-api` | Mirror protocol adapters |
 
