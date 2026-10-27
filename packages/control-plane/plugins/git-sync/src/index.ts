@@ -41,7 +41,7 @@ export const controlPlanePlugin: ControlPlanePlugin = {
               catch (error) { if (!(error instanceof z.ZodError || error instanceof NativeGitBundleHttpError)) throw error; }
               if (!validBody) { sendJson(response, 400, { error: "git-sync request is invalid" }); return true; }
               const projectId = route![1]!, repositoryId = route![2]!, operation = route![3]! as GitSyncOperation;
-              await context.serialize(async () => {
+              await context.mutate({ projectId, repositoryId }, async () => {
                 if (request.headers["x-dim-generation-id"] !== context.runtime.expectedGenerationId) {
                   sendJson(response, 409, { error: "git-sync generation conflicts with service startup" }); return;
                 }
