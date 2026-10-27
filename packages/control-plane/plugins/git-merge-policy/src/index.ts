@@ -47,7 +47,7 @@ export const controlPlanePlugin: ControlPlanePlugin = {
       } catch (error) { store.close(); throw error; }
       stores.add(store); repositoryStores.set(context.stateDirectory, store);
       const http = createNativeHostPromoterService({ promoters: config.hostPromoters, context,
-        promote: (projectId, repositoryId, reviewId) => context.serialize(async () => {
+        promote: (projectId, repositoryId, reviewId) => context.mutate({ projectId, repositoryId }, async () => {
           const result = await promoteInstalledNativeReview({ repository: context, store, guards: mergeQualityGuards(context.extensions) }, projectId, repositoryId, reviewId);
           for (const listener of wake) listener(); return result;
         }) });

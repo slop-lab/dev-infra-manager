@@ -36,8 +36,9 @@ export function createNativeHostPromoterService(input: {
     try {
       if (merge) {
         const body = z.object({ schemaVersion: z.literal(1), sourceRef: z.string().startsWith("refs/heads/").max(1024), targetRef: z.string().startsWith("refs/heads/").max(1024) }).strict().parse(await readBoundedJson(request));
-        const prepared = await input.context.serialize(async () => {
+        const prepared = await input.context.mutate({ projectId, repositoryId }, async () => {
           if (!input.context.available() || !input.context.runtime.activated() || !exactActivationIsBound(input.context.runtime.state, input.context.runtime.expectedGenerationId, input.context.runtime.activationTokenDigest)) throw new Error("branch merge requires exact generation activation");
+          if (!readNativeProjectRegistrations(input.context.runtime.state).some((entry) => entry.projectId === projectId && entry.repositoryId === repositoryId && entry.ownerHostId === promoter.hostId)) throw new Error("repository ownership changed");
           return prepareBranchMerge(input.context, { projectId, repositoryId, sourceRef: body.sourceRef, targetRef: body.targetRef });
         });
         sendJson(response, 200, prepared); return true;
