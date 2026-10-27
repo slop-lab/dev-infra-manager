@@ -30,7 +30,7 @@ export function prepareGitBlame(): PreparedControlPlanePlugin {
         const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/blame$/.exec(url.pathname);
         if (!match || request.method !== "POST" || url.search !== "") return false;
         try {
-          await context.serialize(async () => {
+          await context.read(async () => {
             const selector = { projectId: match[1]!, repositoryId: match[2]! };
             const { target } = await access.authorize(context, request, selector);
             const body = gitBlameRequestSchema.parse(await readBoundedJson(request));
