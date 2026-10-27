@@ -50,7 +50,9 @@ commands and transport helpers.
 `/application` composes the explicitly installed host plugins, source providers,
 runtimes, checkout requirements and scoped guest bridge. Its `dim-host` executable
 interprets commands and loads optional operator integrations without depending on
-the DIM CLI. Control-plane administration is loaded only for its own commands.
+the DIM CLI. Controller, control-plane and workspace command owners are selected
+before their implementation graphs are loaded. Control-plane administration is
+loaded only for its own commands.
 The CLI uses the retained [v1 wire contract](../../../docs/specs/cli-host-protocol-v1.md)
 from `@slop-lab/dim-contracts-cli-host`; domain operations stay inside the host.
 Capability negotiation does not load feature implementations. The guest
