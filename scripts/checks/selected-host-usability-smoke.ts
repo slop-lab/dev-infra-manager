@@ -2,6 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { helpText, OperatorInputError, SmokeFailure, parseOperatorArguments, parseSmokeConfiguration } from "../../tests/scenarios/selected-host/config.js";
 import { preflightHost, runHostSmoke } from "../../tests/scenarios/selected-host/scenario.js";
+import { monitorInspection } from "../../tests/scenarios/selected-host/monitorCommand.ts";
 
 async function main(): Promise<void> {
   const values = process.argv.slice(2);
@@ -39,11 +40,15 @@ async function main(): Promise<void> {
   const results = [];
   for (const profile of selected) {
     if (!input.json) process.stdout.write(`progress\t${profile.name}\tstarting selected-host usability smoke\n`);
-    const smokeOptions = input.json ? {} : { onProgress: (step: string): void => { process.stdout.write(`pass\t${profile.name}\t${step}\n`); } };
+    const smokeOptions = input.json ? {} : { onProgress: (step: string, phase: "pass" | "progress" | "incomplete"): void => { process.stdout.write(`${phase}\t${profile.name}\t${step}\n`); } };
     const monitor = await runHostSmoke(profile, configuration.installedSourceSha, smokeOptions);
-    results.push({ host: profile.name, outcome: "passed", completion: "not-assessed", monitor });
+    const outcome = monitor !== null && monitorInspection(monitor) !== "inspected" ? "incomplete" : "passed";
+    results.push({ host: profile.name, outcome, completion: "not-assessed", monitor });
+    if (!input.json && outcome === "incomplete") process.stderr.write(`${profile.name}: configured monitoring is incomplete; runtime checks are not full inspection evidence\n`);
   }
-  if (input.json) process.stdout.write(`${JSON.stringify({ outcome: "passed", completion: "not-assessed", preflights, results })}\n`);
+  const outcome = results.every((result) => result.outcome === "passed") ? "passed" : "incomplete";
+  if (input.json) process.stdout.write(`${JSON.stringify({ outcome, completion: "not-assessed", preflights, results })}\n`);
+  if (outcome !== "passed") process.exitCode = 2;
 }
 
 try { await main(); }

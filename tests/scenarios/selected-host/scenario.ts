@@ -4,12 +4,14 @@ import { randomBytes } from "node:crypto";
 import type { HostProfile } from "./config.js";
 import { ownedPartialWorkspace, ownedWorkspaceName, smokeWorkspaceName, OperatorInputError, SmokeFailure, type OwnedWorkspace } from "./config.js";
 import { runCommand, type CommandResult } from "../web-lifecycle/process.js";
-import { inspectOpenCodeMonitor, parseOmoTeamMetadata, type MonitorClient, type MonitorEvidence, type OmoTeamMetadata } from "./monitor.js";
+import { inspectOpenCodeMonitor, parseOmoTeamMetadata, type MonitorEvidence, type OmoTeamMetadata } from "./monitor.js";
+import { authenticatedMonitorClient } from "./monitorClient.js";
+import { monitorInspection } from "./monitorCommand.ts";
 import { CandidateCiError, verifyWorkspaceCandidateCi } from "./candidateCi.js";
 
 type PluginEntry = { readonly name: string; readonly state?: string; readonly commands: readonly string[] };
 type PreflightResult = { readonly ok: boolean; readonly details: readonly string[] };
-type SmokeOptions = { readonly onProgress?: (step: string) => void };
+type SmokeOptions = { readonly onProgress?: (step: string, phase: "pass" | "progress" | "incomplete") => void };
 
 export async function preflightHost(profile: HostProfile, installedSourceSha: string): Promise<PreflightResult> {
   const details: string[] = [];
@@ -21,10 +23,12 @@ export async function preflightHost(profile: HostProfile, installedSourceSha: st
 
   const doctor = await dim(profile.name, ["doctor", "--json"], true);
   const checks = array(json(doctor.stdout, "doctor output"), "doctor output");
+  let doctorReady = checks.length > 0;
   for (const value of checks) {
     const check = record(value, "doctor check");
     const name = text(check["name"], "doctor check name");
     const ok = check["ok"] === true;
+    doctorReady &&= ok;
     const detail = text(check["detail"], "doctor check detail");
     details.push(`${ok ? "ok" : "unavailable"}: ${/^[a-zA-Z0-9 ._-]{1,80}$/.test(name) ? name : "host check"}`);
   }
@@ -39,7 +43,7 @@ export async function preflightHost(profile: HostProfile, installedSourceSha: st
   details.push(workspaceAvailable ? `workspace-name available=${profile.workspace}` : `workspace-name already exists=${profile.workspace}`);
   details.push(`operator-declared-source-sha=${installedSourceSha}`);
   const ready = version.exitCode === 0 && actualVersion === profile.expectedHostVersion
-    && doctor.exitCode === 0 && profile.requiredPlugins.every((required) => plugins.some(({ name }) => name === required))
+    && doctor.exitCode === 0 && doctorReady && profile.requiredPlugins.every((required) => plugins.some(({ name }) => name === required))
     && workspaceAvailable;
   return { ok: ready, details };
 }
@@ -50,7 +54,7 @@ export async function runHostSmoke(selected: HostProfile, installedSourceSha: st
   let attemptedCreate = false, branchAttempted = false, candidateCommit: string | undefined;
   const startedAt = Date.now(), branch = `smoke/${randomBytes(16).toString("hex")}`;
   let monitorEvidence: MonitorEvidence | null = null;
-  const progress = (step: string): void => { options.onProgress?.(step); };
+  const progress = (step: string, phase: "pass" | "progress" | "incomplete" = "pass"): void => { options.onProgress?.(step, phase); };
   try {
     attemptedCreate = true;
     const created = await checked(profile, "workspace creation", [
@@ -114,7 +118,7 @@ export async function runHostSmoke(selected: HostProfile, installedSourceSha: st
 
     if (profile.monitor !== undefined) {
       const monitorDeadline = Date.now() + profile.monitor.deadlineSeconds * 1000;
-      progress("OpenCode monitor: reading bounded public session metadata");
+      progress("OpenCode monitor: reading bounded public session metadata", "progress");
       const credentialOutput = await checked(profile, "OpenCode monitor credentials", ["tools", "console", "invoke", "server.credentials", "--input", JSON.stringify({ workspace: owned.name, workspaceId: owned.id }), "--json"], Math.max(1, monitorDeadline - Date.now()));
       const credentials = record(json(credentialOutput.stdout, "server credentials"), "server credentials");
       const username = text(credentials["username"], "server credential username");
@@ -130,7 +134,7 @@ export async function runHostSmoke(selected: HostProfile, installedSourceSha: st
         recentMessages: profile.monitor.recentMessages, staleMinutes: profile.monitor.staleMinutes,
         deadlineMs: Math.max(1, monitorDeadline - Date.now()), requestTimeoutMs: profile.monitor.requestTimeoutSeconds * 1_000
       }, team, authenticatedMonitorClient(url, { username, password }, profile.monitor.directory));
-      progress(`OpenCode monitor: ${monitorEvidence.state}; discovery=${monitorEvidence.discovery}; completion=${monitorEvidence.completion}`);
+      progress(`OpenCode monitor: ${monitorEvidence.state}; discovery=${monitorEvidence.discovery}; completion=${monitorEvidence.completion}`, monitorInspection(monitorEvidence) === "inspected" ? "pass" : "incomplete");
     }
 
     const recreated = ownedWorkspaceName(profile.workspace, json((await checked(profile, "workspace recreate", ["recreate", owned.name, "--expect-id", owned.id, "--json"], 180_000)).stdout, "recreated workspace"));
@@ -173,26 +177,6 @@ async function checked(profile: HostProfile, step: string, args: readonly string
 
 function dim(host: string, args: readonly string[], acceptFailure: boolean, timeoutMs = 120_000): Promise<CommandResult> {
   return runCommand("dim", ["--host", host, ...args], { acceptFailure, timeoutMs });
-}
-
-function authenticatedMonitorClient(base: string, credentials: { readonly username: string; readonly password: string }, directory: string): MonitorClient {
-  const authorization = `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`;
-  return { async get(pathname, timeoutMs) {
-    const url = new URL(pathname, base);
-    url.searchParams.set("directory", directory);
-    const client = url.protocol === "https:" ? requestHttps : url.protocol === "http:" ? request : undefined;
-    if (client === undefined) throw new OperatorInputError("OpenCode monitor requires an HTTP(S) server URL");
-    const body = await new Promise<string>((resolve, reject) => {
-      const call = client(url, { method: "GET", headers: { authorization }, signal: AbortSignal.timeout(timeoutMs) }, (response) => {
-        let output = "";
-        response.setEncoding("utf8");
-        response.on("data", (chunk: string) => { output += chunk; if (Buffer.byteLength(output) > 2 * 1024 * 1024) call.destroy(new Error("monitor response limit")); });
-        response.on("end", () => response.statusCode !== undefined && response.statusCode >= 200 && response.statusCode < 300 ? resolve(output) : reject(new Error(`monitor HTTP ${response.statusCode ?? 0}`)));
-      });
-      call.once("error", reject); call.end();
-    });
-    return json(body, "OpenCode monitor response");
-  } };
 }
 
 function parsePlugins(output: string): readonly PluginEntry[] {
