@@ -1,4 +1,6 @@
-import { UserError, parseWorkspaceRecord, type WorkspaceRecord } from "../../workspace.js";
+import { UserError } from "../../errors.js";
+import type { WorkspaceRecord } from "../../workspace/models.js";
+import { parseWorkspaceRecord } from "../../workspace/store.js";
 interface HostTarget { readonly name: string }
 import { runRecordOperation } from "./operations.js";
 import type { HostOperationRequest as HostRequest } from "../host-application.js";

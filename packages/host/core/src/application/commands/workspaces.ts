@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { type Command } from "commander";
 import { hostname } from "node:os";
-import { UserError, type WorkspaceRecord, type WorkspaceView } from "../../workspace.js";
+import { UserError } from "../../errors.js"; import type { WorkspaceRecord, WorkspaceView } from "../../workspace/models.js";
 
 import { runRecordOperation, runStreamOperation } from "./operations.js";
 

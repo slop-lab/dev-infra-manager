@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { UserError } from "../../workspace.js";
+import { UserError } from "../../errors.js";
 import { workspaceName } from "../../workspace/store.js";
 import { runStreamOperation } from "./operations.js";
 
