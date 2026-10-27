@@ -30,6 +30,11 @@ already contained in the selected protected head. Fresh proposal writes and
 explicit review resolution remain available and retain their normal current-state
 checks; the skip prevents old absorbed refs from manufacturing new review or CI
 events after a restart or protected-head change.
+Live proposal notifications durably stage their exact verified review and service
+generation before publishing the review. Recovery finishes accepted preparations
+only for a matching-generation staged action whose policy, refs, repository inputs
+and preparation proofs remain current. Ordinary historical review envelopes and
+prior-generation staged actions do not become new execution authority.
 
 ## Conditional security review
 
