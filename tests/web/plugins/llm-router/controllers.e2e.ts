@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright-core';
+import { chromium, type Route } from 'playwright-core';
 import { createLlmRouterClient } from '../../../../packages/service-clients/llm-router/src/index.js';
 import { llmWebFixture } from './fixture.js';
 const executablePath = process.env.DIM_CHROMIUM; if (!executablePath) throw new Error('DIM_CHROMIUM is required');
@@ -16,14 +16,23 @@ let holdPolicyProjects = false, releasePolicyProjects: () => void = () => {}, ma
 const policyProjectsGate = new Promise<void>((resolve) => { releasePolicyProjects = resolve; }), policyProjectsStarted = new Promise<void>((resolve) => { markPolicyProjects = resolve; });
 const reads: Array<{controllerId: unknown; name: string}> = [];
 const writes: Array<{ controllerId: string; name: string }> = [], errors: string[] = [];
+const activeHandlers = new Set<Promise<void>>(), handlerErrors: unknown[] = [];
+function trackedHandler(handler: (route: Route) => Promise<void>) {
+  return (route: Route) => {
+    const pending = handler(route).catch((error: unknown) => { handlerErrors.push(error); });
+    activeHandlers.add(pending);
+    void pending.then(() => activeHandlers.delete(pending));
+    return pending;
+  };
+}
 try {
   const page = await browser.newPage(); page.on('pageerror', (error) => errors.push(error.message));
-  await page.route('**/v1/extensions', async (route) => {
+  await page.route('**/v1/extensions', trackedHandler(async (route) => {
     const response = await route.fetch(), features = await response.json() as Array<{ id: string; operations: Array<{ name: string; description: string; access: string }> }>;
     features.find(({ id }) => id === 'llm-router')!.operations.unshift({ name: 'controllers.list', description: 'Router controllers', access: 'read' });
     await route.fulfill({ response, json: features });
-  });
-  await page.route('**/v1/extensions/llm-router/operations/*', async (route) => {
+  }));
+  await page.route('**/v1/extensions/llm-router/operations/*', trackedHandler(async (route) => {
     const name = route.request().url().split('/').at(-1)!;
     if (name === 'controllers.list') { await route.fulfill({ json: { controllers: ['first', 'second', 'offline'].map((id) => ({ id, controllerKey: id, title: id, status: id === 'offline' || id === 'first' && !firstReady ? 'unavailable' : 'ready', operations: id === 'offline' || id === 'first' && !firstReady ? [] : capabilities })) } }); return; }
     const { controllerId, ...input } = route.request().postDataJSON() as Record<string, unknown>;
@@ -35,7 +44,7 @@ try {
     if (capabilities.find((operation) => operation.name === name)?.access !== 'read') writes.push({ controllerId, name });
     const result = await clients[controllerId].invoke(name, input);
     await route.fulfill({ json: name === 'overview' ? { ...result as object, backend: { ...(result as {backend:object}).backend, name: controllerId + ' backend' } } : result });
-  });
+  }));
   await page.goto(first.origin); await page.getByLabel('Username', { exact: true }).fill(first.username); await page.getByLabel('Password', { exact: true }).fill(first.password); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('link', { name: 'LLM router', exact: true }).click();
   await page.getByText(/^first backend /).waitFor();
@@ -114,4 +123,11 @@ try {
   assert.equal(new URL(page.url()).hash,'#/features/llm-router/projects/missing/example');
   assert.equal(first.inferenceRequests() + second.inferenceRequests(), 0); assert.deepEqual(errors, []);
   console.log('Router controller selection, draft confirmation, exact write binding, late-read fencing and unavailable isolation PASS (two disposable routers, no inference)');
-} finally { releasePolicyProjects(); releaseOverview(); await browser.close(); await second.close(); await first.close(); }
+} finally {
+  releasePolicyProjects(); releaseOverview();
+  try {
+    while (activeHandlers.size) await Promise.all([...activeHandlers]);
+    for (const context of browser.contexts()) for (const page of context.pages()) await page.unrouteAll({ behavior: 'wait' });
+    assert.deepEqual(handlerErrors, [], 'fixture proxy handlers must finish without errors');
+  } finally { await browser.close(); await second.close(); await first.close(); }
+}
