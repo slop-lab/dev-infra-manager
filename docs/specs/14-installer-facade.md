@@ -297,6 +297,11 @@ DIM_INVOKED_VIA_INSTALLER=1
 DIM_INSTALLER_VERSION=<installer version>
 ```
 
+On supported Linux runtimes the facade replaces its process with the configured
+CLI after validation. It does not retain an idle parent process for the duration
+of the command. Installer-only implementation modules are not part of the
+ordinary proxy startup path.
+
 `@slop-lab/dim-cli` may use these two variables only to adjust `--help`
 display text (root help and a short per-subcommand footer). They must not
 affect command dispatch, configuration resolution, credential handling,
