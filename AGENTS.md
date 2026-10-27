@@ -48,7 +48,10 @@ provider-specific tools; do not assume that `origin` is GitHub.
   select a live forge or an issue destination.
 - This root repository is the canonical monorepo. Production packages live in
   `packages/{host,control-plane}/{core,plugins}` and `packages/contracts`, with
-  CLI, installer and web packages alongside them. See
+  CLI, installer and web packages alongside them. `packages/gs/*` is the
+  Git-service-owned extraction subtree; its `@slop-lab/gs-*` packages must not
+  depend on DIM implementations, runtime registration or build configuration.
+  DIM integration stays in explicitly DIM-owned adapters. See
   `docs/guides/repository-layout.md` for ownership and dependency boundaries.
 - Keep all tests and test-only fixtures in the single `tests/` workspace;
   cross-component and privileged fixtures live in `tests/scenarios/`.
