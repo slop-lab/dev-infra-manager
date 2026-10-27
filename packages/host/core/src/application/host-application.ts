@@ -1,10 +1,15 @@
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import {
-  acquireWorkspaceSource, buildWorkspaceImage, checkWorkspaceHost, ProcessRunner, UserError,
-  WorkspaceService, WorkspaceStore
-} from "../workspace.js";
+import { UserError } from "../errors.js";
+import { ProcessRunner } from "../runner.js";
+import type { RunOptions } from "../types.js";
+import { buildWorkspaceImage } from "../workspaceImage.js";
+import type { WorkspaceRecord } from "../workspace/models.js";
+import { WorkspaceService } from "../workspace/service.js";
+import { WorkspaceStore } from "../workspace/store.js";
+import { acquireWorkspaceSource } from "../workspace/source.js";
+import { checkWorkspaceHost } from "../workspace/doctor.js";
 import { createWorkspaceOnHost, ensureWorkspaceIntegration, type WorkspaceHostCreateInput } from "./workspace-composition.js";
 import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting, hostPluginExtensions } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
@@ -28,9 +33,9 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
   const processRunner = new ProcessRunner();
   const requirements = workspaceRequirements(input.expectedSourceCommit === undefined ? undefined : string(input.expectedSourceCommit, "expectedSourceCommit"));
   const runner = {
-    run: (command: string, args: string[], options: import("../workspace.js").RunOptions = {}) =>
+    run: (command: string, args: string[], options: RunOptions = {}) =>
       processRunner.run(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal }),
-    runStreaming: (command: string, args: string[], options: import("../workspace.js").RunOptions = {}) =>
+    runStreaming: (command: string, args: string[], options: RunOptions = {}) =>
       processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal })
   };
   const store = new WorkspaceStore(path.resolve(process.env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")), { signal });
@@ -38,9 +43,9 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
   const cleanupWorkspace = async (name: string, workspaceId?: string) => {
     const cleanupSignal = AbortSignal.timeout(30_000);
     const cleanupRunner = {
-      run: (command: string, args: string[], options: import("../workspace.js").RunOptions = {}) =>
+      run: (command: string, args: string[], options: RunOptions = {}) =>
         processRunner.run(command, args, { ...options, signal: options.signal ? AbortSignal.any([cleanupSignal, options.signal]) : cleanupSignal }),
-      runStreaming: (command: string, args: string[], options: import("../workspace.js").RunOptions = {}) =>
+      runStreaming: (command: string, args: string[], options: RunOptions = {}) =>
         processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([cleanupSignal, options.signal]) : cleanupSignal })
     };
     const cleanupRuntime = composeWorkspaceRuntime({ runner: cleanupRunner, cleanupRunner: processRunner, stateRoot: store.root });
@@ -51,7 +56,7 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
   const executionRouting = async () => resolveHostExecutionRouting(await loadHostPlugins(), { runner, cleanupRunner: processRunner, stateRoot: store.root, signal });
   const context = { executionRouting, store, runner, cleanupRunner: processRunner, signal, runtime: composition.runtime, cleanupWorkspace,
     validateCheckout: requirements.validateCheckout,
-    hostGateway: (workspace: import("../workspace.js").WorkspaceRecord) => {
+    hostGateway: (workspace: WorkspaceRecord) => {
       if (!composition.runtime.hostGateway) throw new UserError(`runtime '${workspace.runtime}' does not provide a private host gateway`);
       return composition.runtime.hostGateway(workspace);
     } };

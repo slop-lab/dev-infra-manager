@@ -2,9 +2,12 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { ContainerWorkspaceRuntime, UserError, resolveHostPluginModule, type WorkspaceRuntime } from "../workspace.js";
+import { UserError } from "../errors.js";
+import { resolveHostPluginModule } from "../pluginModule.js";
 import { type WorkspaceRuntimeFactoryContext, type HostExecutionRouting } from "../plugin-api.js";
 import { type WorkspaceHostPlugin, type HostPluginExtension } from "../plugin-api.js";
+import { ContainerWorkspaceRuntime } from "../workspace/runtime.js";
+import type { WorkspaceRuntime } from "../workspace/service.js";
 
 /** Only explicitly installed host modules execute. Repository files never select host code. */
 export function hostPluginHome(): string {

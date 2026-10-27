@@ -1,4 +1,6 @@
-import { UserError, type WorkspaceRecord, type WorkspaceService } from "../workspace.js";
+import { UserError } from "../errors.js";
+import type { WorkspaceRecord } from "../workspace/models.js";
+import type { WorkspaceService } from "../workspace/service.js";
 import { type WorkspaceSourceCreateInput, type WorkspaceSourceProviderContext, type WorkspaceRuntimeFactoryContext } from "../plugin-api.js";
 import { hostPluginExtensions, loadHostPlugins } from "./host-plugins.js";
 
