@@ -10,7 +10,7 @@ const [modulePath, root] = process.argv.slice(2);
 if (!modulePath || !root) throw new Error("provide an isolated GS artifact and fixture root");
 const api: typeof import("../../../packages/gs/repository/src/index.js") = await import(pathToFileURL(modulePath).href);
 const execute = promisify(execFile), git = join(root, "git"), storageRoot = join(root, "storage");
-await mkdir(root, { recursive: true }); await copyFile("/usr/bin/git", git); await chmod(git, 0o755);
+await mkdir(root, { recursive: true, mode: 0o700 }); await copyFile("/usr/bin/git", git); await chmod(git, 0o755);
 const environment = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0", HOME: "/dev/null", LC_ALL: "C" };
 const runGit = (args: readonly string[]) => execute(git, [...args], { env: environment, timeout: 20_000 });
 const version = (await runGit(["--version"])).stdout.trim().replace(/^git version /, "");
