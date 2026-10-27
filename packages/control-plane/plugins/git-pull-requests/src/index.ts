@@ -61,11 +61,14 @@ export const controlPlanePlugin: ControlPlanePlugin = {
           if (!((request.method === "GET" && operation === undefined) || (request.method === "POST" && (requestId === undefined || operation !== undefined)) || (request.method === "PATCH" && requestId !== undefined && operation === undefined))) { sendJson(response, 405, { error: "Method not allowed" }); return true; }
           try {
             const body = request.method === "GET" ? undefined : await readBoundedJson(request);
-            await context.serialize(async () => {
+            const run = request.method === "GET" ? context.read
+              : <Result>(operation: () => Promise<Result>) => context.mutate({ projectId, repositoryId }, operation);
+            await run(async () => {
               const access = await repositoryAccessProvider(context.extensions).authorize(context, request, { projectId, repositoryId });
               if (requestId === undefined) {
                 if (request.method === "GET") {
                   const records = await ownedStore.list(projectId, repositoryId);
+                  await repositoryAccessProvider(context.extensions).authorize({ ...context, runtime: { ...context.runtime, authoritativeTargetProofs: new Map() } }, request, { projectId, repositoryId });
                   sendJson(response, 200, records.slice(0, 100)); return;
                 }
                 const input = create.parse(body);
