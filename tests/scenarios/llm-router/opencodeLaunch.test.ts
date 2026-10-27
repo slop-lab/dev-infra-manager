@@ -23,7 +23,7 @@ async function fixture() {
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models: [{ id: "reviewed", name: "Reviewed", api: "responses" }] })));
   return { home, connection, omo: join(home, ".omo/omo.jsonc") };
 }
-it("invalidates only generated OMO provider inventory across failed discovery and recovery", async () => {
+it("preserves OMO inventory while probing the router across failed discovery and recovery", async () => {
   const fx = await fixture();
   const inventory = join(fx.home, ".cache/oh-my-opencode");
   const authentication = join(fx.home, ".local/share/opencode/auth.json");
@@ -43,8 +43,8 @@ it("invalidates only generated OMO provider inventory across failed discovery an
 
   await expect(prepareOpenCode()).rejects.toThrow("DIM router model discovery failed; check the workspace router connection");
 
-  await expect(readFile(join(inventory, "connected-providers.json"))).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(readFile(join(inventory, "provider-models.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(inventory, "connected-providers.json"), "utf8")).toBe('{"connected":["openai"],"updatedAt":"stale"}');
+  expect(await readFile(join(inventory, "provider-models.json"), "utf8")).toBe('{"models":{"openai":[{"id":"removed"}]},"connected":["openai"],"updatedAt":"stale"}');
   expect(await readFile(join(inventory, "model-capabilities.json"), "utf8")).toBe('{"user":"preserved"}');
   expect(await readFile(authentication, "utf8")).toBe('{"openai":{"type":"oauth"}}');
   expect(await readFile(session, "utf8")).toBe('{"id":"user-session"}');
@@ -121,7 +121,7 @@ it("does not follow a symlink when reading ownership evidence", async () => {
   await symlink(fx.connection, metadata);
   await expect(prepareOpenCode()).rejects.toMatchObject({ code: "ELOOP" });
 });
-it("refuses to remove generated inventory through a symlink", async () => {
+it("does not follow or modify OMO inventory owned by the catalog bootstrap", async () => {
   const fx = await fixture();
   const inventory = join(fx.home, ".cache/oh-my-opencode");
   const authentication = join(fx.home, "authentication.json");
@@ -129,7 +129,8 @@ it("refuses to remove generated inventory through a symlink", async () => {
   await writeFile(authentication, '{"preserve":true}', { mode: 0o600 });
   await symlink(authentication, join(inventory, "connected-providers.json"));
 
-  await expect(prepareOpenCode()).rejects.toThrow("OMO generated inventory must be user-owned regular files");
+  await expect(prepareOpenCode()).resolves.toEqual({});
+  expect(await readFile(join(inventory, "connected-providers.json"), "utf8")).toBe('{"preserve":true}');
 
   expect(await readFile(authentication, "utf8")).toBe('{"preserve":true}');
 });

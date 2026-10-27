@@ -383,6 +383,9 @@ is implied by these source changes.
   appear inside each workspace management row, discover selected controllers,
   install pinned OpenCode/Codex explicitly and
   start, inspect or stop owned OpenCode servers without repository setup.
+  Load the verified local OMO installation and refresh its authenticated model
+  catalog before launch. Preserve role chains and variants while skipping
+  nonexistent provider/model pairs during initial selection and retries.
   OpenCode/OMO setup ignores `.omo/` through the workspace user's global Git
   ignore file while retaining existing patterns and custom ignore paths.
   Prepare the OpenCode PTY compatibility library in Alpine workspaces and

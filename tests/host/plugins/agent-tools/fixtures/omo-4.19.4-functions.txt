@@ -1,0 +1,193 @@
+// Extracts from oh-my-openagent 4.19.4 (MIT), retry/agent selection regression fixture.
+function getFirstFallbackModel(requirement) {
+  const entry = requirement?.fallbackChain?.[0];
+  if (!entry || entry.providers.length === 0)
+    return;
+  const provider = entry.providers[0];
+  const transformedModel = transformModelForProvider(provider, entry.model);
+  return {
+    model: `${provider}/${transformedModel}`,
+    provenance: "provider-fallback",
+    variant: entry.variant
+  };
+}
+
+function getNextReachableFallback(sessionID, state3) {
+  const isReachable = createReachabilityChecker(state3);
+  while (state3.attemptCount < state3.fallbackChain.length) {
+    const attemptCount = state3.attemptCount;
+    const fallback = state3.fallbackChain[attemptCount];
+    state3.attemptCount++;
+    if (!isReachable(fallback)) {
+      log2("[model-fallback] Skipping unreachable fallback for session: " + sessionID + ", attempt: " + attemptCount + ", model: " + fallback.model);
+      continue;
+    }
+    const providerID = selectFallbackProvider(fallback.providers, state3.providerID);
+    const modelID = transformModelForProvider(providerID, fallback.model);
+    const isNoOpFallback = providerID.toLowerCase() === state3.providerID.toLowerCase() && canonicalizeModelID(modelID) === canonicalizeModelID(state3.modelID);
+    if (isNoOpFallback) {
+      log2("[model-fallback] Skipping no-op fallback for session: " + sessionID + ", attempt: " + attemptCount + ", model: " + fallback.model);
+      continue;
+    }
+    state3.pending = false;
+    log2("[model-fallback] Using fallback for session: " + sessionID + ", attempt: " + attemptCount + ", model: " + fallback.model);
+    return {
+      providerID,
+      modelID,
+      variant: fallback.variant,
+      reasoning: fallback.reasoning,
+      reasoningEffort: fallback.reasoningEffort,
+      temperature: fallback.temperature,
+      top_p: fallback.top_p,
+      maxTokens: fallback.maxTokens,
+      thinking: fallback.thinking
+    };
+  }
+  return null;
+}
+
+async function tryFallbackRetry(args) {
+  const { task: task2, errorInfo, source, concurrencyManager, client: client3, idleDeferralTimers, queuesByKey, processKey, onRetrying } = args;
+  const deps = { ...defaultFallbackRetryHandlerDeps, ...args.deps };
+  const fallbackChain = task2.fallbackChain;
+  const canUseProviderExhaustionFallback = deps.isProviderExhaustionFallbackEligible(errorInfo);
+  const canRetry = (deps.shouldRetryError(errorInfo) || canUseProviderExhaustionFallback) && fallbackChain && fallbackChain.length > 0 && deps.hasMoreFallbacks(fallbackChain, task2.attemptCount ?? 0);
+  if (!canRetry)
+    return false;
+  const attemptCount = task2.attemptCount ?? 0;
+  const providerModelsCache = deps.readProviderModelsCache();
+  const connectedProviders = providerModelsCache?.connected ?? deps.readConnectedProvidersCache();
+  const connectedSet = connectedProviders ? new Set(connectedProviders.map((p) => p.toLowerCase())) : null;
+  const isReachable = (entry) => {
+    if (!connectedSet)
+      return true;
+    return entry.providers.some((provider) => connectedSet.has(provider.toLowerCase()));
+  };
+  let selectedAttemptCount = attemptCount;
+  let nextFallback;
+  let nextProviderID;
+  while (fallbackChain && selectedAttemptCount < fallbackChain.length) {
+    const candidate = deps.getNextFallback(fallbackChain, selectedAttemptCount);
+    if (!candidate)
+      break;
+    selectedAttemptCount++;
+    if (!isReachable(candidate)) {
+      deps.log("[background-agent] Skipping unreachable fallback:", {
+        taskId: task2.id,
+        source,
+        model: candidate.model,
+        providers: candidate.providers
+      });
+      continue;
+    }
+    const candidateProviderID = deps.selectFallbackProvider(candidate.providers, task2.model?.providerID);
+    const candidateModelID = deps.transformModelForProvider(candidateProviderID, candidate.model);
+    const isNoOpFallback = !!task2.model && candidateProviderID.toLowerCase() === task2.model.providerID.toLowerCase() && canonicalizeModelID2(candidateModelID) === canonicalizeModelID2(task2.model.modelID);
+    if (isNoOpFallback) {
+      deps.log("[background-agent] Skipping no-op fallback:", {
+        taskId: task2.id,
+        source,
+        model: candidate.model,
+        providers: candidate.providers
+      });
+      continue;
+    }
+    nextFallback = candidate;
+    nextProviderID = candidateProviderID;
+    break;
+  }
+  if (!nextFallback)
+    return false;
+  const providerID = nextProviderID ?? deps.selectFallbackProvider(nextFallback.providers, task2.model?.providerID);
+  deps.log("[background-agent] Retryable error, attempting fallback:", {
+    taskId: task2.id,
+    source,
+    errorName: errorInfo.name,
+    errorMessage: errorInfo.message?.slice(0, 100),
+    attemptCount: selectedAttemptCount,
+    nextModel: `${providerID}/${nextFallback.model}`
+  });
+  if (task2.concurrencyKey) {
+    concurrencyManager.release(task2.concurrencyKey);
+    task2.concurrencyKey = undefined;
+  }
+  const idleTimer = idleDeferralTimers.get(task2.id);
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleDeferralTimers.delete(task2.id);
+  }
+  const previousSessionID = task2.sessionId;
+  const previousModel = task2.model;
+  const transformedModelId = deps.transformModelForProvider(providerID, nextFallback.model);
+  const nextModel = {
+    providerID,
+    modelID: transformedModelId,
+    variant: nextFallback.variant
+  };
+  task2.attemptCount = selectedAttemptCount;
+  const failedAttemptID = ensureCurrentAttempt(task2, previousModel).attemptId;
+  const nextAttempt = failedAttemptID ? scheduleRetryAttempt(task2, failedAttemptID, nextModel, errorInfo.message) : undefined;
+  if (!nextAttempt) {
+    return false;
+  }
+  task2.queuedAt = new Date;
+  task2.retryNotification = {
+    previousSessionID,
+    failedModel: previousModel ? `${previousModel.providerID}/${previousModel.modelID}` : undefined,
+    failedError: errorInfo.message,
+    nextModel: `${providerID}/${transformedModelId}`
+  };
+  onRetrying?.({
+    task: task2,
+    source,
+    previousSessionID,
+    failedModel: task2.retryNotification.failedModel,
+    failedError: errorInfo.message,
+    nextModel: `${providerID}/${transformedModelId}`
+  });
+  if (task2.teamRunId && !task2.onSessionCreated) {
+    deps.log("[background-agent] team-mode fallback denied: task has teamRunId but no onSessionCreated; cannot preserve team membership", {
+      taskId: task2.id,
+      teamRunId: task2.teamRunId
+    });
+    throw new TeamModeFallbackError(`team-mode fallback denied: cannot preserve team context for task ${task2.id} (teamRunId=${task2.teamRunId})`);
+  }
+  const rawKey = task2.model ? `${task2.model.providerID}/${task2.model.modelID}` : task2.agent;
+  const key = concurrencyManager.getConcurrencyKey(rawKey);
+  const queue = queuesByKey.get(key) ?? [];
+  const retryInput = {
+    description: task2.description,
+    prompt: task2.prompt,
+    agent: task2.agent,
+    parentSessionId: task2.parentSessionId,
+    parentMessageId: task2.parentMessageId,
+    parentModel: task2.parentModel,
+    parentAgent: task2.parentAgent,
+    parentTools: task2.parentTools,
+    teamRunId: task2.teamRunId,
+    model: nextModel,
+    fallbackChain: task2.fallbackChain,
+    skillContent: task2.skillContent,
+    sessionPermission: task2.sessionPermission,
+    category: task2.category,
+    isUnstableAgent: task2.isUnstableAgent,
+    onSessionCreated: task2.onSessionCreated
+  };
+  if (previousSessionID) {
+    await abortWithTimeout(client3, previousSessionID).catch(() => {});
+  }
+  queue.push({ task: task2, input: retryInput, attemptID: nextAttempt.attemptId, rawConcurrencyKey: rawKey });
+  queuesByKey.set(key, queue);
+  processKey(key);
+  return true;
+}
+
+function pipelineFixture(policy) {
+  const fallbackChain = policy?.fallbackChain;
+  return fallbackChain;
+}
+
+function delegateFixture(input) {
+  const fallbackChain = input.fallbackChain;
+  return fallbackChain;
+}

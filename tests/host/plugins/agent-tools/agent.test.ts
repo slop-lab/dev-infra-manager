@@ -17,6 +17,7 @@ it("tool launch forwards exact arguments and registers tool-owned noninteractive
     const helpers = path.join(home, ".local/share/dim-agent-tools");
     await mkdir(helpers, { recursive: true });
     await copyFile(new URL("../../../../packages/host/plugins/agent-tools/src/assets/opencode-runtime.bash", import.meta.url), path.join(helpers, "opencode-runtime.bash"));
+    await copyFile(new URL("../../../../packages/host/plugins/agent-tools/src/assets/omo-model-availability.mjs", import.meta.url), path.join(helpers, "omo-model-availability.mjs"));
     for (const [tool, version] of [["codex", "0.156.1"], ["opencode", "1.18.31"]]) {
       if (!tool) throw new Error("missing tool");
       const executable = path.join(bin, tool);

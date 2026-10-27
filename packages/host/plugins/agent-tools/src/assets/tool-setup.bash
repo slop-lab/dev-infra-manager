@@ -141,17 +141,7 @@ if (selectedTool === "opencode") {
   omoDirectory = ensureDirectory(path.join(home, ".omo"), "OMO configuration directory")
   const configHome = ensureDirectory(rebaseFromRequestedHome(requestedConfigHome), "XDG configuration directory")
   openCodeDirectory = ensureDirectory(path.join(configHome, "opencode"), "OpenCode configuration directory")
-  const openCodeCache = ensureDirectory(path.join(cacheHome, "opencode"), "OpenCode cache directory")
-  const packagesDirectory = ensureDirectory(path.join(openCodeCache, "packages"), "OpenCode package cache directory")
-  const omoCacheCoordinate = path.join(packagesDirectory, "oh-my-openagent@4.19.4")
-  try {
-    const coordinateStat = fs.lstatSync(omoCacheCoordinate)
-    if (coordinateStat.isSymbolicLink()) {
-      throw new Error(`OMO cache coordinate must not be a symbolic link: ${omoCacheCoordinate}`)
-    }
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error
-  }
+  ensureDirectory(path.join(cacheHome, "opencode"), "OpenCode cache directory")
 }
 const dataHome = ensureDirectory(rebaseFromRequestedHome(requestedDataHome), "XDG data directory")
 const stateHome = ensureDirectory(rebaseFromRequestedHome(requestedStateHome), "XDG state directory")
@@ -230,10 +220,14 @@ else
 fi
 
 if [[ "$selected_tool" = opencode ]]; then
+  availability_helper="$HOME/.local/share/dim-agent-tools/omo-model-availability.mjs"
+  [[ -f "$availability_helper" ]] || availability_helper="$(dirname -- "${BASH_SOURCE[0]}")/omo-model-availability.mjs"
+  node "$availability_helper" "$install_prefix/lib/node_modules/oh-my-openagent"
+
   parser_path="$install_prefix/lib/node_modules/jsonc-parser"
   [[ -d "$parser_path" ]] || fail "JSONC parser installation is missing: $parser_path"
 
-  node - "$parser_path" "$config_dir" "$omo_dir/omo.jsonc" <<'NODE'
+  node - "$parser_path" "$config_dir" "$omo_dir/omo.jsonc" "$install_prefix/lib/node_modules/oh-my-openagent/dist/index.js" <<'NODE'
 const crypto = require("node:crypto")
 const fs = require("node:fs")
 const path = require("node:path")
@@ -242,7 +236,7 @@ const parserPath = process.argv[2]
 const configDir = process.argv[3]
 const omoPath = process.argv[4]
 const { applyEdits, modify, parse, printParseErrorCode } = require(parserPath)
-const exactPlugin = "oh-my-openagent@4.19.4"
+const exactPlugin = require("node:url").pathToFileURL(process.argv[5]).href
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -279,7 +273,7 @@ function setValue(source, propertyPath, value) {
 }
 
 function isOmoPlugin(value) {
-  return typeof value === "string" && /^(oh-my-openagent|oh-my-opencode)(@.*)?$/.test(value)
+  return typeof value === "string" && (/^(oh-my-openagent|oh-my-opencode)(@.*)?$/.test(value) || value === exactPlugin)
 }
 
 function normalizePluginSource(source, plugins, filePath) {
@@ -411,6 +405,13 @@ asset_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$asset_dir/agent.mjs" ]] || fail 'agent launcher asset is missing'
 [[ ! -L "$tool_launcher" && (! -e "$tool_launcher" || -f "$tool_launcher") ]] || fail 'unsafe agent launcher target'
 install -m 0700 "$asset_dir/agent.mjs" "$tool_launcher"
+mkdir -p "$install_prefix/share/dim-agent-tools"
+for helper in opencode-runtime.bash omo-model-availability.mjs; do
+  [[ ! -L "$install_prefix/share/dim-agent-tools/$helper" ]] || fail "unsafe tool helper target: $helper"
+  if [[ "$(realpath -m "$asset_dir/$helper")" != "$(realpath -m "$install_prefix/share/dim-agent-tools/$helper")" ]]; then
+    install -m 0700 "$asset_dir/$helper" "$install_prefix/share/dim-agent-tools/$helper"
+  fi
+done
 if [[ "$selected_tool" = opencode ]]; then
   [[ ! -L "$install_prefix/bin/dim-opencode-server" ]] || fail 'unsafe server launcher target'
   install -m 0700 "$asset_dir/opencode-server.bash" "$install_prefix/bin/dim-opencode-server"
