@@ -25,16 +25,33 @@ repository input snapshots, protected heads and proposal commit/tree identities.
 Listing does not rebuild patches or run project matchers. Opening an exact review,
 approving it or promoting it performs the full evidence and requirement checks;
 a list status is informational and never authorizes a decision.
-Startup reconciliation ignores retained proposal refs whose candidate commit is
-already contained in the selected protected head. Fresh proposal writes and
-explicit review resolution remain available and retain their normal current-state
-checks; the skip prevents old absorbed refs from manufacturing new review or CI
-events after a restart or protected-head change.
-Live proposal notifications durably stage their exact verified review and service
-generation before publishing the review. Recovery finishes accepted preparations
-only for a matching-generation staged action whose policy, refs, repository inputs
-and preparation proofs remain current. Ordinary historical review envelopes and
-prior-generation staged actions do not become new execution authority.
+Startup resumes explicitly journaled accepted actions, not arbitrary retained
+proposal refs. Fresh proposal writes and explicit review resolution remain
+available with their normal current-state checks; old historical refs alone
+cannot manufacture review or CI events after restart or protected-head change.
+Live proposal notifications durably stage a bounded raw job before review creation.
+The job binds the exact service generation, Project and repository, proposal and
+protected refs, candidate commit and tree, protected head, effective policy, and
+import/head authority snapshot. The Git response ends after that fsynced handoff;
+an owned worker performs full review and CI preparation without holding the
+receive response, admits at most four repositories concurrently, and drains
+active work before any dependent attachment closes. Six bounded attempts retry
+transient failures per job; exhausted jobs remain failed without stopping other
+repositories. Reviewer-authenticated
+`GET /v1/projects/PROJECT/repositories/REPOSITORY/review-preparations` reports
+pending, failed, stale, and ready jobs even before a review exists. Only the same
+generation can recover pending or failed work. Candidate-ref, policy, protected-head,
+generation, or authority drift makes the exact job stale instead of preparing a
+different candidate. Completed and stale records remain as replay suppression, so
+ordinary historical refs do not become new execution authority.
+
+Immediately before canonical review publication, the worker rechecks the complete
+raw binding inside the repository mutation lane, stages the existing envelope
+acceptance record, and publishes the review. Pending or failed envelope acceptance
+keeps approval and protected promotion closed until accepted preparation and durable
+completion succeed, including across serving-generation replacement. Explicit
+resolution stages the same blocker before publication and rechecks exact current
+authority after slow acceptance before clearing historical blockers.
 
 ## Conditional security review
 
