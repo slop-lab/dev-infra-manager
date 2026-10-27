@@ -1,3 +1,6 @@
+import { monitorStatus, parseOmoTeamMetadata, type OmoTeamMetadata } from "./monitorMetadata.ts";
+export { parseOmoTeamMetadata, type OmoTeamMetadata } from "./monitorMetadata.ts";
+
 export type MonitorOptions = {
   readonly parentSessionId: string;
   readonly directory: string;
@@ -224,7 +227,6 @@ function number(value: unknown): number | null { return typeof value === "number
 
 class MonitorLimitError extends Error {
   readonly name = "MonitorLimitError";
-  constructor(kind: "request-limit" | "deadline", readonly requestCount: number) { super(kind); }
+  readonly requestCount: number;
+  constructor(kind: "request-limit" | "deadline", requestCount: number) { super(kind); this.requestCount = requestCount; }
 }
-import { monitorStatus, parseOmoTeamMetadata, type OmoTeamMetadata } from "./monitorMetadata.js";
-export { parseOmoTeamMetadata, type OmoTeamMetadata } from "./monitorMetadata.js";

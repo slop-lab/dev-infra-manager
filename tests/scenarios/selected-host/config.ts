@@ -147,7 +147,7 @@ function parseHostProfile(value: unknown, index: number): HostProfile {
   return { name, workspace, source, expectedHostVersion, requiredPlugins, ingress, llm: { configFile, project, route }, ...(monitor === undefined ? {} : { monitor }) };
 }
 
-function parseMonitorProfile(value: unknown, label: string): MonitorProfile {
+export function parseMonitorProfile(value: unknown, label: string): MonitorProfile {
   const entry = object(value, label);
   const required = ["parentSessionId", "directory", "maxSessions", "maxDepth", "maxRequests", "recentMessages", "staleMinutes", "deadlineSeconds", "requestTimeoutSeconds"] as const;
   exactKeys(entry, [...required, "omoMetadataPath"], label, required);
