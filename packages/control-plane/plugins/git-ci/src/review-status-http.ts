@@ -17,10 +17,11 @@ export async function handleReviewCiStatus(context: RepositoryExtensionContext, 
   const projectId = match[1], repositoryId = match[2], reviewId = match[3];
   if (!projectId || !repositoryId || !reviewId) return false;
   try {
-    await context.serialize(async () => {
+    await context.read(async () => {
       const requestRuntime = { ...runtime, authoritativeTargetProofs: new Map() };
       const { target } = await repositoryAccessProvider(context.extensions).authorize({ ...context, runtime: requestRuntime }, request, { projectId, repositoryId });
       const status = await readReviewCiStatus(requestRuntime, target, reviewId);
+      await repositoryAccessProvider(context.extensions).authorize({ ...context, runtime: { ...runtime, authoritativeTargetProofs: new Map() } }, request, { projectId, repositoryId });
       if (status === undefined) sendJson(response, 404, { error: "Review not found" });
       else sendJson(response, 200, status);
     });

@@ -56,7 +56,21 @@ export async function handleWorkspaceCandidateCi(context: RepositoryExtensionCon
     sendNotFound(response); return true;
   }
   try {
-    await context.serialize(async () => {
+    if (request.method === "GET") {
+      const lease = await context.authorizeWorkspaceLease(request, { projectId, repositoryId });
+      const result = await context.read(async () => {
+        const root = join(context.extensionStateDirectory, "workspace-requests");
+        const stored = await optionalRequest(join(root, `${routeRequestId}.request.json`));
+        const completed = await optionalResult(join(root, `${routeRequestId}.result.json`));
+        if (!stored || !completed || stored.projectId !== projectId || stored.repositoryId !== repositoryId || stored.workspaceId !== lease.workspaceId) return;
+        return publishedStatus({ runtime: { ...runtime, authoritativeTargetProofs: new Map() }, request: stored, reviewId: completed.reviewId });
+      });
+      await context.authorizeWorkspaceLease(request, { projectId, repositoryId });
+      if (result === undefined) sendNotFound(response);
+      else sendJson(response, 200, result);
+      return true;
+    }
+    await context.mutate({ projectId, repositoryId }, async () => {
       const lease = await context.authorizeWorkspaceLease(request, { projectId, repositoryId });
       const runtimeWithProofs = { ...runtime, authoritativeTargetProofs: new Map() };
       const root = join(context.extensionStateDirectory, "workspace-requests");
@@ -74,7 +88,7 @@ export async function handleWorkspaceCandidateCi(context: RepositoryExtensionCon
             expectedProtectedHead: existing.expectedProtectedHead, policyDigest: existing.policyDigest };
           if (!isDeepStrictEqual(existing, expected)) return sendJson(response, 409, { error: "workspace CI request identity conflicts" });
           const completed = await optionalResult(resultFile);
-          if (completed !== undefined) { await publish({ response, runtime: runtimeWithProofs, request: existing, reviewId: completed.reviewId }); http.accepted(); return; }
+           if (completed !== undefined) { sendJson(response, 200, await publishedStatus({ runtime: runtimeWithProofs, request: existing, reviewId: completed.reviewId })); http.accepted(); return; }
         }
         const target = await resolveAuthoritativeNativeRepositoryTarget(runtimeWithProofs, {
           projectId, repositoryId, ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }),
@@ -106,15 +120,9 @@ export async function handleWorkspaceCandidateCi(context: RepositoryExtensionCon
         const completed = resultSchema.parse({ schemaVersion: 1, requestId: input.requestId, reviewId: envelope.review.reviewId });
         await writeImmutableReviewRecord(resultFile, completed);
         http.accepted();
-        await publish({ response, runtime: runtimeWithProofs, request: stored, reviewId: completed.reviewId });
+        sendJson(response, 200, await publishedStatus({ runtime: runtimeWithProofs, request: stored, reviewId: completed.reviewId }));
         return;
       }
-      const stored = await optionalRequest(join(root, `${routeRequestId}.request.json`));
-      const completed = await optionalResult(join(root, `${routeRequestId}.result.json`));
-      if (!stored || !completed || stored.projectId !== projectId || stored.repositoryId !== repositoryId || stored.workspaceId !== lease.workspaceId) {
-        sendNotFound(response); return;
-      }
-      await publish({ response, runtime: runtimeWithProofs, request: stored, reviewId: completed.reviewId });
     });
   } catch (error) {
     if (error instanceof WorkspaceWriteAuthorizationError || error instanceof WorkspaceCandidateCiError) sendJson(response, error.status, { error: error.message });
@@ -125,15 +133,17 @@ export async function handleWorkspaceCandidateCi(context: RepositoryExtensionCon
   return true;
 }
 
-async function publish(input: { readonly response: ServerResponse; readonly runtime: GitCiRuntime; readonly request: StoredRequest; readonly reviewId: string }): Promise<void> {
-  const { response, runtime, request, reviewId } = input;
+async function publishedStatus(input: { readonly runtime: GitCiRuntime; readonly request: StoredRequest; readonly reviewId: string }) {
+  const { runtime, request, reviewId } = input;
   const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: request.projectId, repositoryId: request.repositoryId,
     ...(request.protectedRef === undefined ? {} : { protectedRef: request.protectedRef }) });
   const status = await readWorkspaceCiStatus(runtime, target, reviewId);
   if (status === undefined) throw new WorkspaceCandidateCiError(409, "workspace CI review is unavailable");
+  await assertAuthoritativeNativeRepositoryTargetCurrent({ runtime: { ...runtime, authoritativeTargetProofs: new Map() },
+    selector: { projectId: request.projectId, repositoryId: request.repositoryId, ...(request.protectedRef === undefined ? {} : { protectedRef: request.protectedRef }) }, target });
   const scopedStatus = request.generationId === runtime.expectedGenerationId ? status : { ...status, state: "stale" as const, reason: "request-generation-stale" };
-  sendJson(response, 200, { schemaVersion: 1, requestId: request.requestId, candidateRef: request.candidateRef, generationId: request.generationId, currentGenerationId: runtime.expectedGenerationId,
-    candidateCommit: request.candidateCommit, candidateTree: request.candidateTree, protectedRef: target.currentHead.protectedRef, reviewId, status: scopedStatus });
+  return { schemaVersion: 1, requestId: request.requestId, candidateRef: request.candidateRef, generationId: request.generationId, currentGenerationId: runtime.expectedGenerationId,
+    candidateCommit: request.candidateCommit, candidateTree: request.candidateTree, protectedRef: target.currentHead.protectedRef, reviewId, status: scopedStatus };
 }
 
 async function optionalRequest(file: string): Promise<StoredRequest | undefined> {
