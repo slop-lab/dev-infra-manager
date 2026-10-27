@@ -1,4 +1,4 @@
-import { UserError } from "../../workspace.js";
+import { UserError } from "../../errors.js";
 
 /** Operator composition is optional on the selected host, separate from its server runtime. */
 export async function runControlPlaneApplication(args: string[]): Promise<void> {

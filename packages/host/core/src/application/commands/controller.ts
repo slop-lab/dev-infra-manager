@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { ProcessRunner } from "../../workspace.js";
+import { ProcessRunner } from "../../runner.js";
 import { runControllerCli } from "../../controller/cli/index.js";
 import { resolveWorkspaceMetadata } from "../workspace-composition.js";
 
