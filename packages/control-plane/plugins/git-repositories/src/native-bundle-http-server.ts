@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { sendJson } from "./native-bundle-http.js";
+import { RepositoryAccessError } from "./plugin-api.js";
 
 type NativeBundleHttpServerInput = {
   readonly closed: () => boolean;
@@ -13,8 +14,9 @@ export function createNativeBundleHttpServer(input: NativeBundleHttpServerInput)
       sendJson(response, 503, { error: "native Git bundle server is closed" });
       return;
     }
-    void input.handle(request, response).catch(() => {
+    void input.handle(request, response).catch((error: unknown) => {
       if (input.closed() || response.headersSent || response.writableEnded) response.destroy();
+      else if (error instanceof RepositoryAccessError) sendJson(response, error.status, { error: error.message });
       else sendJson(response, 500, { error: "internal server error" });
     });
   });

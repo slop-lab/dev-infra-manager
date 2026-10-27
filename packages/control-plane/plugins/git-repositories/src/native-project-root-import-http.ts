@@ -25,6 +25,7 @@ import { NativeRootImportBundleError } from "./native-root-import-storage.js";
 import { parseAuthoritativeImportedRootPolicy } from "./native-imported-root-policy.js";
 import { handleNativeProjectRootImportFinalizeHttp } from "./native-project-root-import-finalize-http.js";
 import { handleNativeProjectRootImportProofHttp } from "./native-project-root-import-proof-http.js";
+import type { RepositoryExtensionContext } from "./plugin-api.js";
 
 type Credential = { readonly username: string; readonly password: string };
 type Importer = Credential & { readonly hostId: string };
@@ -44,6 +45,8 @@ export type RootImportHttpContext = {
   readonly validatePolicy: (policy: import("./native-imported-root-policy.js").NativeImportedRootPolicy, selector: { readonly projectId: string; readonly repositoryId: string }) => void | Promise<void>;
   readonly reconcilePolicy: (projectId: string, repositoryId: string) => Promise<void>;
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
+  readonly mutate: RepositoryExtensionContext["mutate"];
+  readonly read: RepositoryExtensionContext["read"];
   readonly acquireImport: () => (() => void) | undefined;
 };
 

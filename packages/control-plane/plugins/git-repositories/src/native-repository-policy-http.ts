@@ -36,7 +36,9 @@ export async function handleNativeRepositoryPolicyHttp(context: RootImportHttpCo
       try { policy = parseAuthoritativeImportedRootPolicy(update.policy); }
       catch (error) { throw new NativeProjectRootImportStateError("repository policy is invalid", { cause: error }); }
     }
-    await context.serialize(async () => {
+    const run = update === undefined ? context.read
+      : <Result>(operation: () => Promise<Result>) => context.mutate({ projectId, repositoryId }, operation);
+    await run(async () => {
       const verify = () => verifyLiveImportedRepository({ activated: context.activated, activationTokenDigest: context.activationTokenDigest, expectedGenerationId: context.expectedGenerationId, gitExecutable: context.gitExecutable, gitIdentity: context.gitIdentity, ownerHostId: importer.hostId, projectId, repositoryId, state: context.state, stateDirectory: context.stateDirectory });
       // A retry may follow a committed policy whose branch publication was interrupted.
       // Recover only baselines already authorized by the effective stored policy.

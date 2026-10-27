@@ -5,6 +5,7 @@ import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native
 import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";
 import type { NativeGitRoute } from "./routing.js";
 import type { WorkspaceWriteLeaseScope } from "./native-workspace-write-lifecycle.js";
+import type { RepositoryMutationScope } from "./repository-mutation-queue.js";
 
 export const repositoryExtensionKind = "dim.git-repositories.extension";
 export type RepositoryRuntime = AuthoritativeNativeCandidateRuntime;
@@ -20,7 +21,10 @@ export type RepositoryExtensionContext = {
   readonly reconcileProposals: (projectId: string, repositoryId: string, refs: readonly string[]) => Promise<void>;
   /** Authenticate a current ephemeral workspace writer without granting ref-update authority. */
   readonly authorizeWorkspaceLease: (request: IncomingMessage, selector: { readonly projectId: string; readonly repositoryId: string }) => Promise<WorkspaceWriteLeaseScope>;
+  /** Exclusive against participating mutations, not reads. Callbacks must not acquire another lane/fence. */
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
+  readonly mutate: <Result>(scope: RepositoryMutationScope, operation: () => Promise<Result>) => Promise<Result>;
+  readonly read: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 };
 export type RepositoryAttachment = {
   readonly handle?: (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<boolean>;
@@ -30,6 +34,7 @@ export type RepositoryAttachment = {
   readonly validatePolicy?: (policy: NativeImportedRootPolicy, selector: { readonly projectId: string; readonly repositoryId: string }) => void | Promise<void>;
   readonly activate?: () => Promise<void>;
   readonly healthy?: () => boolean;
+  readonly drain?: () => Promise<void>;
   close(): Promise<void>;
 };
 export type RepositoryExtensionFactory = {
@@ -65,6 +70,7 @@ export * from "./native-proposal-reconciler.js";
 export * from "./native-project-registry-state.js";
 export * from "./promotion-git.js";
 export * from "./repository-ref-state.js";
+export { readEffectiveRepositoryPolicy } from "./repository-policy-state.js";
 export * from "./repository-cas.js";
 export * from "./native-root-read-lifecycle.js";
 export * from "./native-project-root-import-codec.js";
@@ -81,7 +87,7 @@ export * from "./ref-update-policies.js";
 /** Trusted repository read/conversation identity. Does not grant approval or promotion. */
 export type RepositoryAccess = { readonly actorId: string; readonly target: import("./authoritative-native-root-target.js").AuthoritativeNativeRepositoryTarget };
 export type RepositoryAccessProvider = {
-  /** Called while the repository mutation queue is held. Must prove current generation, activation and repository scope. */
+  /** Lock-free live authorization; callers own mutation ordering and final read reauthorization. */
   authorize(context: RepositoryExtensionContext, request: IncomingMessage, selector: { readonly projectId: string; readonly repositoryId: string; readonly protectedRef?: string }): Promise<RepositoryAccess>;
 };
 export class RepositoryAccessError extends Error {

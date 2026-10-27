@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { serveGitBackend } from "./backend.js";
 import {
   nativeBasicAuthorized,
   nativeBasicCredential,
@@ -8,41 +7,27 @@ import {
 import {
   NativeGitBundleHttpError,
   readBoundedJson,
-  sendEmpty,
   sendJson,
   sendNotFound
 } from "./native-bundle-http.js";
-import type { NativeGitBundleState } from "./native-bundle-state.js";
-import { NativeImportedRootInactiveError, NativeImportedRootNotFoundError } from "./native-imported-root-verifier.js";
 import { NativeProjectRootImportStateError } from "./native-project-root-import-codec.js";
-import { RepositoryRefStateError } from "./repository-ref-state.js";
-import { NativeProjectStorageError } from "./native-project-storage.js";
-import { NativeRootImportBundleError } from "./native-root-import-storage.js";
 import type { RootReadOperationGate } from "./native-root-read-lifecycle.js";
-import { workspaceProtectedRefs } from "./candidate-ref-policy.js";
-import type { LiveImportedRoot } from "./native-imported-root-verifier.js";
-import {
-  assertGitExecutableIdentity,
-  assertRegisteredRepository,
-  type GitExecutableIdentity
-} from "./repository.js";
 import type { NativeGitRoute } from "./routing.js";
-import {
-  changedNativeProposalRefs,
-  readNativeProposalRefs,
-  type NativeProposalRefSnapshot
-} from "./native-proposal-reconciler.js";
 import {
   createWorkspaceWriteLeaseRegistry,
 } from "./native-workspace-write-lifecycle.js";
 import {
   parseWorkspaceWriteLeaseRequest,
   verifyAuthoritativeWorkspaceRoot,
-  workspaceWriteLeaseMatchesRoute,
   type WorkspaceWriteLeaseRequest,
   type WorkspaceWriteVerificationInput
 } from "./native-workspace-write-proof.js";
 import type { WorkspaceWriteLeaseScope } from "./native-workspace-write-lifecycle.js";
+import {
+  sendWorkspaceWriteVerificationFailure,
+  serveNativeWorkspaceWriteGit
+} from "./native-workspace-write-serving.js";
+import type { RepositoryExtensionContext } from "./plugin-api.js";
 
 type Issuer = NativeBasicCredential & { readonly hostId: string };
 export type NativeProjectWorkspaceWriteHooks = {
@@ -55,7 +40,8 @@ type WorkspaceWriteServiceInput = WorkspaceWriteVerificationInput & {
   readonly operations: RootReadOperationGate;
   readonly hooks?: NativeProjectWorkspaceWriteHooks;
   readonly reconcileProposalRefs: (projectId: string, repositoryId: string, proposalRefs: readonly string[]) => Promise<void>;
-  readonly serializeReceive: <Result>(operation: () => Promise<Result>) => Promise<Result>;
+  readonly mutate: RepositoryExtensionContext["mutate"];
+  readonly read: RepositoryExtensionContext["read"];
 };
 
 export type NativeProjectWorkspaceWriteService = {
@@ -177,7 +163,7 @@ export function createNativeProjectWorkspaceWriteService(
         try {
           await verifyAuthoritativeWorkspaceRoot(input, projectId, repositoryId, issuer.hostId);
         } catch (error) {
-          if (input.operations.isOpen()) sendVerificationFailure(response, error);
+          if (input.operations.isOpen()) sendWorkspaceWriteVerificationFailure(response, error);
           return true;
         }
         if (!input.operations.isOpen()) return true;
@@ -212,75 +198,17 @@ export function createNativeProjectWorkspaceWriteService(
       }
     },
     async serveGit(request, response, route) {
-      const credential = nativeBasicCredential(request);
-      const lease = credential === undefined ? undefined : leases.authenticate(credential);
-      if (lease === undefined || lease.generationId !== input.expectedGenerationId) return false;
-      if (!workspaceWriteLeaseMatchesRoute(lease, route, input.expectedGenerationId)) {
-        sendNotFound(response);
-        return true;
-      }
-      await input.serializeReceive(async () => {
-        await input.hooks?.beforeVerification?.();
-        if (!input.operations.isOpen()) return true;
-        let verified: LiveImportedRoot;
-        try {
-          verified = await verifyAuthoritativeWorkspaceRoot(input, route.projectId, route.repositoryId, lease.ownerHostId);
-          await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
-          await assertRegisteredRepository({
-            gitExecutable: input.gitExecutable,
-            storageRoot: input.stateDirectory
-          }, { projectId: route.projectId, repositoryId: route.repositoryId });
-        } catch (error) {
-          if (input.operations.isOpen()) sendVerificationFailure(response, error);
-          return;
-        }
-        if (!input.operations.isOpen()) return true;
-        const currentLease = credential === undefined ? undefined : leases.authenticate(credential);
-        if (currentLease === undefined
-          || !workspaceWriteLeaseMatchesRoute(currentLease, route, input.expectedGenerationId)) {
-          sendEmpty(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git"' });
-          return true;
-        }
-        let before: NativeProposalRefSnapshot | undefined;
-        if (request.method === "POST" && route.pathInfo.endsWith("/git-receive-pack")) {
-          before = await readNativeProposalRefs(input, route.projectId, route.repositoryId, lease.workspaceId);
-        }
-        await serveGitBackend({
-          config: { gitExecutable: input.gitExecutable, storageRoot: input.stateDirectory },
-          identity: { role: "writer", username: "workspace-write-lease", workspaceId: lease.workspaceId },
-          route,
-          request,
-          response,
-          protectedRefs: workspaceProtectedRefs(verified.imported.policy),
-          ...(before === undefined ? {} : { afterSuccessfulWrite: async () => {
-            const after = await readNativeProposalRefs(input, route.projectId, route.repositoryId, lease.workspaceId);
-            await input.reconcileProposalRefs(route.projectId, route.repositoryId, changedNativeProposalRefs(before, after));
-          } })
-        });
-      });
-      return true;
+      return serveNativeWorkspaceWriteGit({
+        ...input,
+        authenticateLease: leases.authenticate,
+        ...(input.hooks?.beforeVerification === undefined
+          ? {}
+          : { beforeVerification: input.hooks.beforeVerification })
+      }, { request, response, route });
     }
   };
 }
 
 export class WorkspaceWriteAuthorizationError extends Error {
   constructor(readonly status: 401 | 404 | 409 | 503, message: string, options?: ErrorOptions) { super(message, options); }
-}
-
-function sendVerificationFailure(response: ServerResponse, error: unknown): void {
-  if (error instanceof NativeImportedRootInactiveError) {
-    sendJson(response, 503, { error: "native Git business operations require exact generation activation" });
-    return;
-  }
-  if (error instanceof NativeImportedRootNotFoundError) {
-    sendNotFound(response);
-    return;
-  }
-  if (error instanceof NativeProjectRootImportStateError || error instanceof RepositoryRefStateError
-    || error instanceof NativeRootImportBundleError
-    || error instanceof NativeProjectStorageError) {
-    sendJson(response, 409, { error: "native Project imported root proof is unavailable" });
-    return;
-  }
-  throw error;
 }

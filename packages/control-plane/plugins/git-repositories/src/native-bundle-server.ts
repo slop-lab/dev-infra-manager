@@ -14,6 +14,8 @@ import { initializeNativeGitBundleState } from "./native-bundle-state.js";
 import { createNativeProjectRootImportService } from "./native-project-root-import-http.js";
 import { createNativeProjectRootReadService } from "./native-project-root-read-http.js";
 import { createRootReadOperationGate } from "./native-root-read-lifecycle.js";
+import { createRepositoryMutationQueue } from "./repository-mutation-queue.js";
+import { RepositoryAccessError } from "./plugin-api.js";
 import { createNativeProjectWorkspaceWriteService } from "./native-project-workspace-write-http.js";
 import { parseNativeGitProjectRegistrars } from "./native-project-registrar-http.js";
 import { executeNativeProjectPreparation } from "./native-project-registration.js";
@@ -52,10 +54,12 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
   const attachments: RepositoryAttachment[] = [];
   let closed = false;
   const operations = createRootReadOperationGate(16);
-  let queue = Promise.resolve();
-  const serialize = <Result>(operation: () => Promise<Result>): Promise<Result> => {
-    if (closed) return Promise.reject(new Error("repository service is closed"));
-    const result = queue.then(operation); queue = result.then(() => undefined, () => undefined); return result;
+  const mutations = createRepositoryMutationQueue();
+  const serialize = mutations.exclusive;
+  const read = async <Result>(operation: () => Promise<Result>): Promise<Result> => {
+    const release = closed ? undefined : operations.acquire();
+    if (release === undefined) throw new RepositoryAccessError(503, "repository read service is busy or unavailable");
+    try { return await operation(); } finally { release(); }
   };
   const closeAttachments = async () => {
     const failures: unknown[] = [];
@@ -72,7 +76,7 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
     const context: RepositoryExtensionContext = { runtime, stateDirectory: options.stateDirectory, extensionStateDirectory: join(options.stateDirectory, ".extensions"), signal: shutdown.signal, extensions, knownCredentials, reconcileProposals: async (projectId, repositoryId, refs) => { for (const attachment of attachments) await attachment.onProposals?.(projectId, repositoryId, refs); }, authorizeWorkspaceLease: (request, selector) => {
       if (workspaceWriteService === undefined) throw new Error("workspace lease authorization is unavailable");
       return workspaceWriteService.authorizeWorkspaceLease(request, selector);
-    }, available: () => !closed, serialize };
+    }, available: () => !closed, serialize, mutate: mutations.mutate, read };
     for (const factory of factories) {
       shutdown.signal.throwIfAborted();
       await privateExtensionDirectory(context.extensionStateDirectory);
@@ -88,9 +92,9 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
     for (const imported of readNativeProjectRootImportsFromDatabase(state.database)) await validatePolicy(readEffectiveRepositoryPolicy(state.database, imported.projectId, imported.repositoryId).policy, imported);
     const activate = async () => { if (businessReady) return; activated = true; for (const attachment of attachments) await attachment.activate?.(); businessReady = true; };
     if (activated) await activate();
-    const rootImportService = createNativeProjectRootImportService({ activated: () => businessReady, activationTokenDigest, available: () => !closed, expectedGenerationId: options.expectedGenerationId, stateDirectory: options.stateDirectory, state, importers: config.projectRootImporters, knownCredentials, gitExecutable: config.gitExecutable, gitIdentity, validatePolicy, serialize, async reconcilePolicy(projectId, repositoryId) { for (const attachment of attachments) await attachment.onPolicyChanged?.(projectId, repositoryId); } });
+    const rootImportService = createNativeProjectRootImportService({ activated: () => businessReady, activationTokenDigest, available: () => !closed, expectedGenerationId: options.expectedGenerationId, stateDirectory: options.stateDirectory, state, importers: config.projectRootImporters, knownCredentials, gitExecutable: config.gitExecutable, gitIdentity, validatePolicy, serialize, mutate: mutations.mutate, read, async reconcilePolicy(projectId, repositoryId) { for (const attachment of attachments) await attachment.onPolicyChanged?.(projectId, repositoryId); } });
     const rootReadService = createNativeProjectRootReadService({ activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.projectRootReadIssuers, knownCredentials, now: options.rootReadLeaseClock ?? Date.now, operations, ...(options.rootReadLeaseHooks === undefined ? {} : { hooks: options.rootReadLeaseHooks }), state, stateDirectory: options.stateDirectory });
-    const activeWorkspaceWriteService = createNativeProjectWorkspaceWriteService({ activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.workspaceWriteIssuers, knownCredentials, now: options.workspaceWriteLeaseClock ?? Date.now, operations, reconcileProposalRefs: context.reconcileProposals, serializeReceive: serialize, ...(options.workspaceWriteLeaseHooks === undefined ? {} : { hooks: options.workspaceWriteLeaseHooks }), state, stateDirectory: options.stateDirectory });
+    const activeWorkspaceWriteService = createNativeProjectWorkspaceWriteService({ activated: () => businessReady, activationTokenDigest, expectedGenerationId: options.expectedGenerationId, gitExecutable: config.gitExecutable, gitIdentity, issuers: config.workspaceWriteIssuers, knownCredentials, now: options.workspaceWriteLeaseClock ?? Date.now, operations, reconcileProposalRefs: context.reconcileProposals, mutate: mutations.mutate, read, ...(options.workspaceWriteLeaseHooks === undefined ? {} : { hooks: options.workspaceWriteLeaseHooks }), state, stateDirectory: options.stateDirectory });
     workspaceWriteService = activeWorkspaceWriteService;
     const prepareProject: NativeGitBundleServer["prepareProject"] = (generationId, ownerHostId, input) => serialize(async () => {
       if (!businessReady || generationId !== options.expectedGenerationId) throw new NativeGitBundleServerError("repository preparation requires exact activation");
@@ -105,8 +109,11 @@ export async function configuredNativeGitBundleServer(options: NativeGitBundleSe
     const close = () => closing ??= (async () => {
       closed = true; shutdown.abort(); rootReadService.close(); activeWorkspaceWriteService.close();
       const failures: unknown[] = [];
+      try { await Promise.all([mutations.close(), rootImportService.waitForIdle(), operations.close()]); } catch (error) { failures.push(error); }
+      for (const attachment of attachments) {
+        try { await attachment.drain?.(); } catch (error) { failures.push(error); }
+      }
       try { await closeAttachments(); } catch (error) { failures.push(error); }
-      try { await Promise.all([queue, rootImportService.waitForIdle(), operations.close()]); } catch (error) { failures.push(error); }
       try { if (server.listening) { const stopped = once(server, "close"); server.close(); server.closeAllConnections(); await stopped; } } catch (error) { failures.push(error); }
       try { await state.owner.release(); } catch (error) { failures.push(error); }
       options.signal?.removeEventListener("abort", abort);
