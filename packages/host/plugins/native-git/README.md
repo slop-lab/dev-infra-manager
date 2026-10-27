@@ -159,6 +159,14 @@ The first imported repository becomes the configuration and default working repo
 
 URL imports retain private source intent under `native-project-url-imports/`, alongside immutable draft bundles under `native-project-drafts/`. Retry uses the original artifact and proves its existing protected root even when upstream has moved or the prior response was lost. Changing URL, requested branch or an explicit policy is rejected instead of replacing that initial import. Updating an existing repository is a separate reviewed sync operation.
 
+Project preparation distinguishes a service HTTP rejection from transport loss
+after a write may have reached Native Git. A rejection is final for that request;
+transport loss is reported as an uncertain write and permits only an identical
+intent retry, which replays the durable preparation. The client does not infer a
+timeout cause or automatically submit another preparation. Registrar identity
+attestation includes the serving generation, so stale or mixed `DIM_NATIVE_*`
+selections fail before the preparation POST rather than being cleared or waived.
+
 The project console advertises admitted repositories only after the currently
 selected service proves readiness. A valid service generation update preserves
 their original immutable import receipts; those historical generation IDs do not
