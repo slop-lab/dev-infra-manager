@@ -46,6 +46,20 @@ export interface WorkspaceHostPluginContext extends WorkspaceSourceProviderConte
   hostGateway?(workspace: WorkspaceRecord): Promise<string>;
 }
 
+export type WorkspaceCapabilityAccess =
+  | { readonly kind: "workspace-local" }
+  | { readonly kind: "guest-operation"; readonly operation: string }
+  | { readonly kind: "external" }
+  | { readonly kind: "none" };
+
+export interface WorkspaceCapabilityFact {
+  readonly name: string;
+  readonly description: string;
+  readonly state: "available" | "blocked" | "unavailable";
+  readonly reason?: { readonly code: string; readonly message: string };
+  readonly access: WorkspaceCapabilityAccess;
+}
+
 /** An installed module exports `hostPlugin`. Loading and command routing belong to the host CLI. */
 export interface WorkspaceHostPlugin {
   readonly name: string;
@@ -59,6 +73,7 @@ export interface WorkspaceHostPlugin {
   readonly runtime?: {
     readonly name: string;
     readonly defaultImage?: string;
+    readonly isolation?: "container" | "virtual-machine" | "process";
     create(context: WorkspaceRuntimeFactoryContext): WorkspaceRuntime | Promise<WorkspaceRuntime>;
   };
   /** Optional host execution routing; absent configuration must return undefined. */
@@ -72,6 +87,8 @@ export interface WorkspaceHostPlugin {
     removing?(workspace: WorkspaceRecord, options: { readonly keepData: boolean }, context: WorkspaceRuntimeFactoryContext): Promise<void>;
   };
   workspaceReady?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void>;
+  /** Current owner facts for generic discovery; core never invents a route. */
+  workspaceCapabilities?(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<readonly WorkspaceCapabilityFact[]>;
   readonly workspaceServices?: {
     readonly names: readonly string[];
     resolve(name: string, workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<string | undefined>;
