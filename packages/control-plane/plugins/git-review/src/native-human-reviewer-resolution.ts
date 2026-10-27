@@ -29,8 +29,12 @@ export async function resolveCurrentEnvelope(
   const { input, request, response, reviewer } = context;
   const { projectId, repositoryId } = route;
   const repository = join(dirname(input.runtime.state.database), projectId, `${repositoryId}.git`);
-  const acceptanceHooks: AuthoritativeNativeReviewHooks = { beforePublication: ({ repository, envelope }) =>
-    stageProposalAcceptance(repository, input.runtime.expectedGenerationId, envelope) };
+  const acceptanceHooks: AuthoritativeNativeReviewHooks = { beforePublication: ({ repository, envelope }) => {
+    if (envelope.review.requiredReviewerIds.length > 0 && !envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
+      throw new ReviewerResolutionDenied("reviewer is not required for this review");
+    }
+    return stageProposalAcceptance(repository, input.runtime.expectedGenerationId, envelope);
+  } };
   let body: z.infer<typeof resolveRequestSchema>;
   try {
     body = resolveRequestSchema.parse(await readBoundedJson(request));
@@ -77,6 +81,7 @@ export async function resolveCurrentEnvelope(
             protectedRef: target.currentHead.protectedRef
           }, acceptanceHooks);
         } catch (error) {
+          if (error instanceof ReviewerResolutionDenied) return sendJson(response, 403, { error: error.message });
           if (error instanceof CodeReviewPolicyError) return sendJson(response, 409, { error: error.message });
           if (error instanceof AuthoritativeNativeReviewError) {
             return sendJson(response, 409, { error: "review input snapshot is unavailable" });
@@ -110,6 +115,7 @@ export async function resolveCurrentEnvelope(
       }
       return created;
     } catch (error) {
+      if (error instanceof ReviewerResolutionDenied) return sendJson(response, 403, { error: error.message });
       if (error instanceof CodeReviewPolicyError) return sendJson(response, 409, { error: error.message });
       if (error instanceof AuthoritativeNativeReviewError) {
         return sendJson(response, 409, { error: "review candidate is unavailable" });
@@ -172,3 +178,5 @@ export async function resolveCurrentEnvelope(
   });
   if (completed) sendJson(response, 200, envelope);
 }
+
+class ReviewerResolutionDenied extends CodeReviewPolicyError {}
