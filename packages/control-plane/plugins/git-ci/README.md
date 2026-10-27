@@ -63,6 +63,13 @@ records a generation-scoped delivery intent and may run the same immutable event
 once in the new generation. Duplicate explicit requests share that intent. The
 configured service and destination remain part of both completion and intent
 identity; an intent for another destination cannot override them.
+Every delivery, including an event without a completion marker, requires that
+matching current-generation intent. Old unacknowledged envelopes alone cannot
+authorize work at startup or after a destination change. Explicit ordinary-branch
+merge preparation uses the same accepted-review path to publish its CI intent.
+Live proposal acceptance is journaled before review publication; a same-generation
+restart can finish an interrupted intent publication after rechecking the exact
+review, policy, refs and inputs. Another generation cannot resume that action.
 
 ## Workspace candidate requests
 
