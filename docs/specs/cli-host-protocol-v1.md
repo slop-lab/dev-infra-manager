@@ -63,6 +63,13 @@ The client reserves its own `host` connection-management commands, loopback
 New host commands and flags require no client parser update. Domain JSON printed
 by commands is opaque to the CLI and is not frozen by this protocol.
 
+The file-transfer client also recognizes `cp` to attach operator-machine file
+streams. It still negotiates v1, obtains the immutable identity through
+`workspace.endpoint`, and invokes the host-owned copy command through `command`
+with binary stdin/stdout and no terminal. Operator paths are never sent as paths
+for the selected host to open. This adds no wire operation or v1 field; older
+hosts reject the unsupported command without acquiring copy authority.
+
 `terminal` is a presentation hint, not permission to install host code or approve
 a review. Interactive host actions still require their actual TTY and existing
 authorization/confirmation. Terminal sessions may use a PTY; capability/endpoint
