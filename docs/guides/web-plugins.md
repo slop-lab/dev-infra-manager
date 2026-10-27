@@ -36,6 +36,12 @@ when trusted host controllers are configured. That adapter discovers its own
 feature connection and scope through those controllers. Without an adapter or
 controllers it appears with connection instructions and makes no service calls.
 Browser users cannot select server credential paths.
+An adapter may begin discovery without delaying the shared Web catalog. Native
+Git coalesces concurrent refreshes and returns freshly attested ready controllers
+without waiting for unrelated slow controllers. Initial discovery remains
+unavailable; later refreshes may retain the last successful catalog for
+presentation only. Every operation joins or starts a fresh selected-controller
+describe before checking scope and generation. A completed failure clears availability.
 Configuration and operator connection files must be owned regular mode-0600
 files. Keep their credentials on the Web server.
 
@@ -99,8 +105,9 @@ executable; unrelated backend artifacts and DIM package runtimes are replaced.
 The execution plugin config accepts an absolute `queryConnection` path and an
 optional `operatorConnection`. Query-only connections expose job lists and
 results; cancellation, retry and worker capacity require the operator connection
-and an operator browser role. The Native Git plugin config requires `reviewerConnection`, `projectId` and
-`repositoryIds`; `promoterConnection` enables protected promotion and
+and an operator browser role. The Native Git plugin config requires
+`reviewerConnection` and a `projects` array of `{projectId, repositoryIds}`
+entries (with optional display `name`); `promoterConnection` enables protected promotion and
 `syncConnection` enables upstream fetch, merge proposals and publishing. Each
 connection is a private absolute file path. See the
 [LLM router](../../packages/web/plugins/llm-router/README.md),
@@ -230,8 +237,8 @@ interface WebPluginContext {
 ```
 
 The core fixes each executable and host selector. Commands run without a shell
-as `dim --host SELECTOR ...ARGS --json`, with at most 128 arguments, 4,096
-characters per argument, 32 KiB total UTF-8 argument data, 2 MiB output and a
+as `dim --host SELECTOR ...ARGS --json`, with at most 128 arguments, 96 KiB
+UTF-8 per argument, 128 KiB total UTF-8 argument data, 32 MiB each for stdout and stderr, and a
 30-second default deadline (explicit trusted options may raise it to 180 seconds). NUL arguments and transport overrides `--host`/`--json` are
 rejected. Only reviewed server-side plugin code receives this capability;
 browser inputs cannot select an executable, selector or generic command.
