@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CodeReviewConfig } from "./config.js";
 import type { CodeReviewRuntime as AuthoritativeNativeCandidateRuntime } from "./plugin-api.js";
+import type { RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 export type NativeHumanReviewerHooks = {
   readonly beforeApprovalPublication?: () => void | Promise<void>;
@@ -19,7 +20,8 @@ export type HumanReviewerHttpInput = {
   readonly hooks?: NativeHumanReviewerHooks;
   readonly knownCredentials: readonly Credential[];
   readonly runtime: AuthoritativeNativeCandidateRuntime;
-  readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
+  readonly mutate: RepositoryExtensionContext["mutate"];
+  readonly read: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 };
 
 export type HumanReviewerRequestContext = {

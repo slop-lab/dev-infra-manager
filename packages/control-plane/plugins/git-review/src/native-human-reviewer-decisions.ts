@@ -35,7 +35,7 @@ export async function approveExactReview(
     throw error;
   }
   try {
-    const result = await input.serialize(async () => {
+    const saved = await input.mutate({ projectId: route.projectId, repositoryId: route.repositoryId }, async () => {
       const selected = await inspectExactReview(context, route);
       if (selected === undefined || response.writableEnded) return undefined;
       if (!selected.envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
@@ -47,30 +47,23 @@ export async function approveExactReview(
         return undefined;
       }
       await input.hooks?.beforeApprovalPublication?.();
-      const saved = await approveAuthoritativeNativeReview({
+      return approveAuthoritativeNativeReview({
         repository: selected.target.repository,
         reviewId: route.reviewId,
         reviewerId: reviewer.reviewerId,
         requestId: body.requestId
       });
-      const confirmed = await inspectExactReview(context, route);
-      if (confirmed === undefined || response.writableEnded) return undefined;
-      const decisions = await readAuthoritativeNativeDecisions(confirmed.target.repository, route.reviewId);
-      return {
-        ...saved,
-        status: nativeHumanReviewStatus(
-          confirmed.envelope.review.requiredReviewerIds,
-          confirmed.staleReasons,
-          decisions
-        ),
-        staleReasons: confirmed.staleReasons
-      };
     });
-    if (result !== undefined) {
-      sendJson(response, result.created ? 201 : 200, {
-        ...result.approval,
-        status: result.status,
-        staleReasons: result.staleReasons
+    if (saved !== undefined) {
+      await input.read(async () => {
+        const confirmed = await inspectExactReview(context, route);
+        if (confirmed === undefined || response.writableEnded) return;
+        const decisions = await readAuthoritativeNativeDecisions(confirmed.target.repository, route.reviewId);
+        sendJson(response, saved.created ? 201 : 200, {
+          ...saved.approval,
+          status: nativeHumanReviewStatus(confirmed.envelope.review.requiredReviewerIds, confirmed.staleReasons, decisions),
+          staleReasons: confirmed.staleReasons
+        });
       });
     }
   } catch (error) {
@@ -96,31 +89,26 @@ export async function revokeExactApproval(
     throw error;
   }
   try {
-    const result = await input.serialize(async () => {
+    const saved = await input.mutate({ projectId: route.projectId, repositoryId: route.repositoryId }, async () => {
       const selected = await inspectExactReview(context, route);
       if (selected === undefined || response.writableEnded) return undefined;
-      const saved = await revokeAuthoritativeNativeApproval({
+      return revokeAuthoritativeNativeApproval({
         repository: selected.target.repository,
         reviewId: route.reviewId,
         reviewerId: reviewer.reviewerId,
         approvalId: body.approvalId
       });
-      const decisions = await readAuthoritativeNativeDecisions(selected.target.repository, route.reviewId);
-      return {
-        ...saved,
-        status: nativeHumanReviewStatus(
-          selected.envelope.review.requiredReviewerIds,
-          selected.staleReasons,
-          decisions
-        ),
-        staleReasons: selected.staleReasons
-      };
     });
-    if (result !== undefined) {
-      sendJson(response, result.created ? 201 : 200, {
-        ...result.revocation,
-        status: result.status,
-        staleReasons: result.staleReasons
+    if (saved !== undefined) {
+      await input.read(async () => {
+        const confirmed = await inspectExactReview(context, route);
+        if (confirmed === undefined || response.writableEnded) return;
+        const decisions = await readAuthoritativeNativeDecisions(confirmed.target.repository, route.reviewId);
+        sendJson(response, saved.created ? 201 : 200, {
+          ...saved.revocation,
+          status: nativeHumanReviewStatus(confirmed.envelope.review.requiredReviewerIds, confirmed.staleReasons, decisions),
+          staleReasons: confirmed.staleReasons
+        });
       });
     }
   } catch (error) {

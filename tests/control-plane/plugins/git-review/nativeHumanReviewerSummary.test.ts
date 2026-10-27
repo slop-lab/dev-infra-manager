@@ -33,6 +33,15 @@ it("lists immutable review evidence by its mutable tuple without rebuilding patc
     revision = "a".repeat(64);
     await writeFile(join(f.source, "README.md"), "candidate two\n"); await f.commit();
     await git("/usr/bin/git", ["-C", f.source, "push", "origin", `HEAD:${f.proposalRef}`]);
+    const current = (await git("/usr/bin/git", ["-C", f.source, "rev-parse", "HEAD"])).stdout.trim();
+    await expect.poll(async () => {
+      const response = await fetch(`${f.origin}/v1/projects/project/repositories/main/review-preparations`, { headers });
+      const value: unknown = await response.json();
+      if (typeof value !== "object" || value === null || !("jobs" in value) || !Array.isArray(value.jobs)) return undefined;
+      const job = value.jobs.find((candidate) => typeof candidate === "object" && candidate !== null
+        && Reflect.get(candidate, "candidateCommit") === current);
+      return job === undefined ? undefined : Reflect.get(job, "status");
+    }).toBe("ready");
     inspections.mockClear(); const refs = vi.spyOn(reviewGit, "readAuthoritativeNativeReviewRefs"), beforeDrift = matcherCalls;
     expect((await list()).find(({ reviewId }) => reviewId === envelope.review.reviewId)?.status).toBe("stale");
     expect(refs).toHaveBeenCalledTimes(1); expect(matcherCalls).toBe(beforeDrift); expect(inspections).not.toHaveBeenCalled();

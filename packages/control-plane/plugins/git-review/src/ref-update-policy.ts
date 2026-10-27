@@ -6,6 +6,7 @@ import { reviewChangeMatchers } from "./change-matchers.js";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
 import { readAuthoritativeNativeReviewEnvelopes } from "./authoritative-native-review-store.js";
 import { readAuthoritativeNativeDecisions } from "./authoritative-native-decision-store.js";
+import { hasPendingProposalAcceptance } from "./proposal-acceptance.js";
 
 const revision = createHash("sha256").update(readFileSync(new URL(import.meta.url))).digest("hex");
 const policy: RefUpdatePolicy = {
@@ -20,6 +21,7 @@ const policy: RefUpdatePolicy = {
         || review.proposalRef !== change.proposalRef || review.protectedRef !== target.currentHead.protectedRef
         || review.expectedProtectedHead !== change.expectedCommit || review.candidateCommit !== change.candidateCommit
         || review.candidateTree !== change.candidateTree || envelope.policyDigest !== target.imported.policyDigest) continue;
+      if (await hasPendingProposalAcceptance(target.repository, context.runtime.expectedGenerationId, envelope)) continue;
       if ((await nativeHumanReviewStaleReasons(runtime, target, review)).length > 0) continue;
       const decisions = await readAuthoritativeNativeDecisions(target.repository, review.reviewId);
       const reviewers = decisions.activeApprovals.map(({ reviewerId }) => reviewerId).sort();

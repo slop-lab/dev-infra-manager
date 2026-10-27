@@ -8,6 +8,7 @@ import { controlPlanePlugin, parseGitSyncPolicy } from "../../../../packages/con
 import { readAuthoritativeNativeReviewEnvelopes } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { basic, fixture, git, generationId, record, reviewer, text, token } from "../git-repositories/optionalFeaturesFixture.js";
+import { waitForReadyReview } from "../git-ci/nativeBundleReviewFixture.js";
 const operator = { hostId: "host-a", username: "synchronizer", password: token(20) };
 const foreign = { hostId: "host-b", username: "foreign-synchronizer", password: token(21) };
 const promoter = { hostId: "host-a", username: "promoter", password: token(22) };
@@ -40,8 +41,10 @@ async function synchronizedFixture() {
       const head = async (ref = "refs/heads/main") => (await git("/usr/bin/git", ["--git-dir", join(f.root, "state/project/main.git"), "rev-parse", "--verify", ref])).stdout.trim();
       const upstreamHead = async () => (await git("/usr/bin/git", ["--git-dir", upstream, "rev-parse", "refs/heads/development"])).stdout.trim();
       const resolveReview = async (proposalRef: string) => {
+        const candidateCommit = await head(proposalRef);
+        await waitForReadyReview(join(f.root, "state/project/main.git"), candidateCommit);
         const envelope = (await readAuthoritativeNativeReviewEnvelopes(join(f.root, "state/project/main.git")))
-          .find(({ review }) => review.proposalRef === proposalRef);
+          .find(({ review }) => review.proposalRef === proposalRef && review.candidateCommit === candidateCommit);
         if (!envelope) throw new Error("proposal reconciliation did not create a review");
         return record(envelope.review);
       };

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { publishedReviewNames } from "../git-ci/nativeBundleReviewFixture.js";
+import { publishedReviewNames, waitForReadyReview } from "../git-ci/nativeBundleReviewFixture.js";
 import {
   commit,
   expectRejectedPush,
@@ -9,7 +9,7 @@ import {
   workspaceId,
   writerClone
 } from "./nativeProjectWorkspaceWriteLeaseFixture.js";
-import { cleanupFinalizeFixtures, runGit } from "./nativeRootImportFinalizeFixture.js";
+import { cleanupFinalizeFixtures, runGit, rootRepository } from "./nativeRootImportFinalizeFixture.js";
 
 afterEach(cleanupFinalizeFixtures);
 
@@ -41,6 +41,8 @@ describe("native Project workspace proposal writes", () => {
     await commit(clone, "proposal.txt", "candidate\n");
     await runGit("/usr/bin/git", ["-C", clone, "push", "origin", `HEAD:${proposalRef}`]);
     const proposalBefore = await refValue(fixture.root, proposalRef);
+    if (proposalBefore === undefined) throw new Error("accepted proposal ref is missing");
+    await waitForReadyReview(rootRepository(fixture.root), proposalBefore);
     const envelopesBefore = await publishedReviewNames(fixture.root);
 
     // When / Then

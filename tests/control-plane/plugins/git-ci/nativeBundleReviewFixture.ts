@@ -3,9 +3,11 @@ import { join } from "node:path";
 import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type { AuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-ci/src/plan-schema.js";
 import type { AuthoritativeNativeReviewHooks, CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { readAuthoritativeNativeReviewEnvelopes as readReviewEnvelopes } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { gitCiEnvelope, readAuthoritativeNativeReviewEnvelopes } from "../../../../packages/control-plane/plugins/git-ci/src/plan-store.js";
 import type { NativeHumanReviewerHooks } from "../../../../packages/control-plane/plugins/git-review/src/native-human-reviewer-http.js";
 import type { CiDeliveryPublicationFaults } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-publication.js";
+import { readRawProposalJobs } from "../../../../packages/control-plane/plugins/git-review/src/raw-proposal-journal.js";
 import { authoritativePolicy, matchingRunner } from "../git-repositories/authoritativeNativeCandidateFixture.js";
 import {
   activateFinalizeService,
@@ -80,6 +82,8 @@ export async function nativeBundleReviewFixture(
   await runGit("/usr/bin/git", ["-C", clone, "config", "user.email", "writer@example.invalid"]);
   await addCandidateCommit(clone, "candidate.bin", Buffer.from([0, 255, 1, 254]));
   await runGit("/usr/bin/git", ["-C", clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
+  const initialCommit = (await runGit("/usr/bin/git", ["-C", clone, "rev-parse", "HEAD"])).stdout.trim();
+  await waitForReadyReview(rootRepository(root, repositoryId), initialCommit);
   return { root, clone, service, repositoryId };
 }
 
@@ -90,8 +94,8 @@ export async function addCandidateCommit(clone: string, path: string, contents: 
   await runGit("/usr/bin/git", ["-C", clone, "commit", "-m", path]);
 }
 
-export async function refreshBundleReviewWriter(fixture: NativeBundleReviewFixture): Promise<void> {
-  const lease = await issueWorkspaceLease(fixture.service.origin, fixture.repositoryId);
+export async function refreshBundleReviewWriter(fixture: NativeBundleReviewFixture, servingGeneration = generationId): Promise<void> {
+  const lease = await issueWorkspaceLease(fixture.service.origin, fixture.repositoryId, servingGeneration);
   await runGit("/usr/bin/git", ["-C", fixture.clone, "remote", "set-url", "origin",
     authenticatedRemote(fixture.service.origin, lease, fixture.repositoryId)]);
 }
@@ -111,6 +115,27 @@ export async function publishedReviewEnvelopes(
   return readAuthoritativeNativeReviewEnvelopes(rootRepository(root, repositoryId));
 }
 
+export async function waitForPublishedReview(
+  root: string,
+  candidateCommit: string,
+  repositoryId = "root"
+): Promise<AuthoritativeNativeReviewEnvelope> {
+  const repository = rootRepository(root, repositoryId);
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const ready = (await readRawProposalJobs(repository, generationId))
+      .some(({ binding, state }) => binding.candidateCommit === candidateCommit && state.status === "ready");
+    if (ready) {
+      const envelope = (await readAuthoritativeNativeReviewEnvelopes(repository))
+        .find(({ review }) => review.candidateCommit === candidateCommit);
+      if (envelope !== undefined) return envelope;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new ReviewFixtureError(`preparation not ready: ${JSON.stringify((await readRawProposalJobs(repository, generationId))
+    .filter(({ binding }) => binding.candidateCommit === candidateCommit).map(({ binding, state }) => ({ ref: binding.proposalRef, state })))}`);
+}
+
 export async function createBundleReview(service: RunningService, repositoryId = "root"): Promise<AuthoritativeNativeReviewEnvelope> {
   const extension = service.context.extensions.find(({ kind, name }) => kind === "dim.code-review.service" && name === "default");
   if (!extension || !("create" in extension.value) || typeof extension.value.create !== "function") throw new ReviewFixtureError();
@@ -123,13 +148,13 @@ export async function createBundleReview(service: RunningService, repositoryId =
   return planned;
 }
 
-async function issueWorkspaceLease(origin: string, repositoryId: string): Promise<{ readonly username: string; readonly password: string }> {
+async function issueWorkspaceLease(origin: string, repositoryId: string, servingGeneration = generationId): Promise<{ readonly username: string; readonly password: string }> {
   const response = await fetch(`${origin}/v1/projects/project-a/repositories/${repositoryId}/workspace-write-leases`, {
     method: "POST",
     headers: { authorization: workspaceWriteIssuerAuthorization, "content-type": "application/json" },
     body: JSON.stringify({
       schemaVersion: 1,
-      generationId,
+      generationId: servingGeneration,
       repositoryId,
       workspaceId: reviewWorkspaceId
     })
@@ -152,6 +177,18 @@ function authenticatedRemote(
   url.username = lease.username;
   url.password = lease.password;
   return url.toString();
+}
+
+export async function waitForReadyReview(repository: string, candidateCommit: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const ready = (await readRawProposalJobs(repository, generationId))
+      .some(({ binding, state }) => binding.candidateCommit === candidateCommit && state.status === "ready");
+    if (ready && (await readReviewEnvelopes(repository))
+      .some(({ review: candidate }) => candidate.candidateCommit === candidateCommit)) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new ReviewFixtureError();
 }
 
 class ReviewFixtureError extends Error {

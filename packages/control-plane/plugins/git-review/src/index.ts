@@ -8,13 +8,14 @@ import { acceptReviewPreparations, reviewPreparations, type CodeReviewRuntime } 
 import { createAuthoritativeNativeReview, type AuthoritativeNativeReviewHooks } from "./authoritative-native-review.js";
 import { assertConfiguredHumanReviewers, policyReviewerIds } from "./native-human-reviewer-policy.js";
 import { createNativeHumanReviewerService, type NativeHumanReviewerHooks } from "./native-human-reviewer-http.js";
-import { reconcileNativeProposalRefs, reconcileRegisteredNativeProposals } from "./native-proposal-reconciler.js";
 import { createNativeProposalReconciliationLoop } from "./native-proposal-reconciliation-loop.js";
 import { assertAuthoritativeNativeReviewStore, readAuthoritativeNativeReviewEnvelopes } from "./authoritative-native-review-store.js";
 import { assertAuthoritativeNativeApprovalStore } from "./authoritative-native-approval-store.js";
 import { assertAuthoritativeNativeRevocationStore } from "./authoritative-native-revocation-store.js";
 import { readAuthoritativeNativeDecisions } from "./authoritative-native-decision-store.js";
-import { stageProposalAcceptance, completeProposalAcceptance, recoverProposalAcceptances } from "./proposal-acceptance.js";
+import { recoverProposalAcceptances } from "./proposal-acceptance.js";
+import { captureRawProposalJobs, createRawProposalWorker } from "./raw-proposal-worker.js";
+import { completeMatchingRawProposalJob } from "./raw-proposal-journal.js";
 
 export * from "./config.js";
 export * from "./policy.js";
@@ -26,13 +27,14 @@ export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly re
       const { ownerRequestId, ...selector } = input;
       const envelope = await createAuthoritativeNativeReview(runtime, selector, hooks.review);
       await acceptReviewPreparations(runtime, envelope, ownerRequestId ?? `review:${envelope.review.reviewId}`);
+      await completeMatchingRawProposalJob(join(context.stateDirectory, input.projectId, `${input.repositoryId}.git`), runtime.expectedGenerationId, envelope);
       return envelope;
     };
     const service = {
       name: "code-review" as const,
       createInTransaction,
       async create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string; readonly ownerRequestId?: string }) {
-        return context.serialize(() => createInTransaction(context, input));
+        return context.mutate({ projectId: input.projectId, repositoryId: input.repositoryId }, () => createInTransaction(context, input));
       }
     };
     return {
@@ -80,31 +82,50 @@ export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly re
               await assertAuthoritativeNativeRevocationStore(repository); await readAuthoritativeNativeDecisions(repository);
             }
             let healthy = true;
-            const reconcile = async () => {
-              await recoverProposalAcceptances(runtime, context.stateDirectory);
-              await reconcileRegisteredNativeProposals(runtime, hooks.review);
+            let retryFailed = true;
+            let beginDrain: (() => void) | undefined;
+            const drainStarted = new Promise<void>((resolve) => { beginDrain = resolve; });
+            const publish = async <Result>(scope: { readonly projectId: string; readonly repositoryId: string }, operation: () => Promise<Result>): Promise<Result> => {
+              if (context.available()) {
+                try { return await context.mutate(scope, operation); }
+                catch (error) {
+                  if (context.available() || !(error instanceof Error) || error.message !== "repository service is closed") throw error;
+                }
+              }
+              await drainStarted;
+              return operation();
             };
-            const retry = createNativeProposalReconciliationLoop({ reconcile: () => context.serialize(reconcile), unavailable() { healthy = false; } });
-            const http = createNativeHumanReviewerService({ config, features: context.extensions.filter((entry) => entry.kind === "dim.git-repositories.feature").map((entry) => entry.name).sort(), knownCredentials: context.knownCredentials, runtime, serialize: context.serialize, ...(hooks.humanReviewer === undefined ? {} : { hooks: hooks.humanReviewer }) });
+            const rawWorker = createRawProposalWorker({ context, runtime, publish,
+              unavailable() { healthy = false; }, ...(hooks.review === undefined ? {} : { hooks: hooks.review }) });
+            const reconcileBackground = async () => {
+              const recoverFailed = retryFailed;
+              retryFailed = false;
+              rawWorker.wake(recoverFailed);
+              await recoverProposalAcceptances(runtime, context.stateDirectory, publish);
+            };
+            const retry = createNativeProposalReconciliationLoop({
+              reconcile: reconcileBackground,
+              unavailable() { healthy = false; }
+            });
+            let draining: Promise<void> | undefined;
+            const drain = (): Promise<void> => draining ??= (async () => {
+              beginDrain?.();
+              await retry.close();
+              await rawWorker.drain();
+            })();
+            const http = createNativeHumanReviewerService({ config, features: context.extensions.filter((entry) => entry.kind === "dim.git-repositories.feature").map((entry) => entry.name).sort(), knownCredentials: context.knownCredentials, runtime, mutate: context.mutate, read: context.read, ...(hooks.humanReviewer === undefined ? {} : { hooks: hooks.humanReviewer }) });
             return {
               handle: http.handle,
               validatePolicy(policy) { assertConfiguredHumanReviewers(config, policy, runtime.reviewChangeMatchers); },
-              async activate() { await reconcile(); },
+              async activate() { retry.wake(); },
               async onProposals(projectId, repositoryId, refs) { try {
-                const envelopes = await reconcileNativeProposalRefs(runtime, projectId, repositoryId, refs, {
-                  ...hooks.review, async beforePublication(input) {
-                    await stageProposalAcceptance(input.repository, runtime.expectedGenerationId, input.envelope);
-                    await hooks.review?.beforePublication?.(input);
-                  }
-                });
-                for (const envelope of envelopes) {
-                  await acceptReviewPreparations(runtime, envelope, `proposal:${envelope.review.reviewId}`);
-                  await completeProposalAcceptance(join(context.stateDirectory, projectId, `${repositoryId}.git`), runtime.expectedGenerationId, envelope);
-                }
+                const staged = await captureRawProposalJobs({ runtime, projectId, repositoryId, proposalRefs: refs });
+                if (staged > 0) rawWorker.wake();
               } catch (error) { retry.wake(); throw error; } },
-              onPolicyChanged() { retry.wake(); },
+              onPolicyChanged() { rawWorker.wake(); retry.wake(); },
               healthy: () => healthy,
-              async close() { attached = undefined; await retry.close(); }
+              drain,
+              async close() { attached = undefined; await drain(); }
             };
           }
         })

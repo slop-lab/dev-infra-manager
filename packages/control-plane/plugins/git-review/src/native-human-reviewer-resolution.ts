@@ -1,6 +1,7 @@
 import { CodeReviewPolicyError } from "./policy.js";
-import { createAuthoritativeNativeReview, AuthoritativeNativeReviewError } from "./authoritative-native-review.js";
-import { readAuthoritativeNativeReviewEnvelopes } from "./authoritative-native-review-store.js";
+import { createAuthoritativeNativeReview, AuthoritativeNativeReviewError, type AuthoritativeNativeReviewHooks } from "./authoritative-native-review.js";
+import { dirname, join } from "node:path";
+import { readAuthoritativeNativeReviewEnvelope, readAuthoritativeNativeReviewEnvelopes } from "./authoritative-native-review-store.js";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
 import type { HumanReviewerRequestContext, RepositoryReviewRoute } from "./native-human-reviewer-http-types.js";
 import {
@@ -12,6 +13,8 @@ import {
 } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { z } from "zod";
 import { acceptReviewPreparations } from "./plugin-api.js";
+import { completeProposalAcceptance, failProposalAcceptance, hasPendingProposalAcceptance, stageProposalAcceptance } from "./proposal-acceptance.js";
+import { completeMatchingRawProposalJob } from "./raw-proposal-journal.js";
 
 const resolveRequestSchema = z.object({
   schemaVersion: z.literal(1),
@@ -25,6 +28,9 @@ export async function resolveCurrentEnvelope(
 ): Promise<void> {
   const { input, request, response, reviewer } = context;
   const { projectId, repositoryId } = route;
+  const repository = join(dirname(input.runtime.state.database), projectId, `${repositoryId}.git`);
+  const acceptanceHooks: AuthoritativeNativeReviewHooks = { beforePublication: ({ repository, envelope }) =>
+    stageProposalAcceptance(repository, input.runtime.expectedGenerationId, envelope) };
   let body: z.infer<typeof resolveRequestSchema>;
   try {
     body = resolveRequestSchema.parse(await readBoundedJson(request));
@@ -34,10 +40,8 @@ export async function resolveCurrentEnvelope(
     }
     throw error;
   }
-  await input.serialize(async () => {
+  const envelope = await input.mutate({ projectId, repositoryId }, async () => {
     const runtime = { ...input.runtime, authoritativeTargetProofs: new Map() };
-    const accept = (envelope: Awaited<ReturnType<typeof createAuthoritativeNativeReview>>) =>
-      acceptReviewPreparations(runtime, envelope, `human:${reviewer.reviewerId}:${envelope.review.reviewId}`);
     if (request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId) {
       return sendJson(response, 409, { error: "review generation conflicts with service startup" });
     }
@@ -71,7 +75,7 @@ export async function resolveCurrentEnvelope(
             repositoryId,
             proposalRef: body.proposalRef,
             protectedRef: target.currentHead.protectedRef
-          });
+          }, acceptanceHooks);
         } catch (error) {
           if (error instanceof CodeReviewPolicyError) return sendJson(response, 409, { error: error.message });
           if (error instanceof AuthoritativeNativeReviewError) {
@@ -83,14 +87,15 @@ export async function resolveCurrentEnvelope(
           && !refreshed.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
           return sendJson(response, 403, { error: "reviewer is not required for this review" });
         }
-        await accept(refreshed); return sendJson(response, 200, refreshed);
+        return refreshed;
       }
       if (staleReasons.length !== 0) continue;
       if (envelope.review.requiredReviewerIds.length > 0
         && !envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
         return sendJson(response, 403, { error: "reviewer is not required for this review" });
       }
-      await accept(envelope); return sendJson(response, 200, envelope);
+      await stageProposalAcceptance(repository, input.runtime.expectedGenerationId, envelope);
+      return envelope;
     }
     try {
       const created = await createAuthoritativeNativeReview(runtime, {
@@ -98,12 +103,12 @@ export async function resolveCurrentEnvelope(
         repositoryId,
         proposalRef: body.proposalRef,
         protectedRef: target.currentHead.protectedRef
-      });
+      }, acceptanceHooks);
       if (created.review.requiredReviewerIds.length > 0
         && !created.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
         return sendJson(response, 403, { error: "reviewer is not required for this review" });
       }
-      await accept(created); return sendJson(response, 200, created);
+      return created;
     } catch (error) {
       if (error instanceof CodeReviewPolicyError) return sendJson(response, 409, { error: error.message });
       if (error instanceof AuthoritativeNativeReviewError) {
@@ -112,4 +117,58 @@ export async function resolveCurrentEnvelope(
       throw error;
     }
   });
+  if (envelope === undefined || response.writableEnded) return;
+  try {
+    await acceptReviewPreparations(input.runtime, envelope, `human:${reviewer.reviewerId}:${envelope.review.reviewId}`);
+  } catch (error) {
+    await failProposalAcceptance(repository, input.runtime.expectedGenerationId, envelope);
+    throw error;
+  }
+  const completed = await input.mutate({ projectId, repositoryId }, async () => {
+    if (request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId
+      || !input.runtime.activated() || !exactActivationIsBound(
+        input.runtime.state, input.runtime.expectedGenerationId, input.runtime.activationTokenDigest
+      )) {
+      sendJson(response, 409, { error: "review changed while acceptance completed" });
+      return false;
+    }
+    const runtime = { ...input.runtime, authoritativeTargetProofs: new Map() };
+    let target: Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;
+    try {
+      target = await resolveAuthoritativeNativeRepositoryTarget(runtime, {
+        projectId, repositoryId, protectedRef: envelope.review.protectedRef
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        sendJson(response, 409, { error: "review changed while acceptance completed" });
+        return false;
+      }
+      throw error;
+    }
+    const stored = await readAuthoritativeNativeReviewEnvelope(target.repository, envelope.review.reviewId);
+    if (stored?.envelopeId !== envelope.envelopeId || envelope.policyDigest !== target.imported.policyDigest
+      || (await nativeHumanReviewStaleReasons(runtime, target, envelope.review)).length > 0) {
+      sendJson(response, 409, { error: "review changed while acceptance completed" });
+      return false;
+    }
+    for (const preparation of runtime.reviewPreparations ?? []) {
+      const attachment = envelope.attachments.find(({ kind }) => kind === preparation.name);
+      try {
+        await preparation.assertCurrent?.({ runtime, review: envelope.review,
+          ...(attachment === undefined ? {} : { attachment }) });
+      } catch (error) {
+        if (error instanceof Error) {
+          sendJson(response, 409, { error: "review changed while acceptance completed" });
+          return false;
+        }
+        throw error;
+      }
+    }
+    if (await hasPendingProposalAcceptance(target.repository, input.runtime.expectedGenerationId, envelope)) {
+      await completeProposalAcceptance(target.repository, input.runtime.expectedGenerationId, envelope);
+    }
+    await completeMatchingRawProposalJob(target.repository, input.runtime.expectedGenerationId, envelope);
+    return true;
+  });
+  if (completed) sendJson(response, 200, envelope);
 }

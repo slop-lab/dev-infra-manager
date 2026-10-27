@@ -14,6 +14,7 @@ import type {
   RepositoryReviewRoute
 } from "./native-human-reviewer-http-types.js";
 import { nativeHumanReviewStatus } from "./native-human-reviewer-status.js";
+import { proposalAcceptanceState } from "./proposal-acceptance.js";
 import {
   assertAuthoritativeNativeRepositoryTargetCurrent,
   exactActivationIsBound,
@@ -34,15 +35,19 @@ export async function serveExactReview(
   context: HumanReviewerRequestContext,
   route: ExactReviewRoute
 ): Promise<void> {
-  const selected = await inspectExactReview(context, route);
-  if (selected === undefined) return;
-  const decisions = await readAuthoritativeNativeDecisions(selected.target.repository, route.reviewId);
-  sendJson(context.response, 200, {
-    status: nativeHumanReviewStatus(selected.envelope.review.requiredReviewerIds, selected.staleReasons, decisions),
-    staleReasons: selected.staleReasons,
-    ...selected.envelope,
-    approvals: decisions.approvals,
-    revocations: decisions.revocations
+  await context.input.read(async () => {
+    const selected = await inspectExactReview(context, route);
+    if (selected === undefined) return;
+    const decisions = await readAuthoritativeNativeDecisions(selected.target.repository, route.reviewId);
+    const confirmed = await inspectExactReview(context, route);
+    if (confirmed === undefined || context.response.writableEnded) return;
+    sendJson(context.response, 200, {
+      status: nativeHumanReviewStatus(confirmed.envelope.review.requiredReviewerIds, confirmed.staleReasons, decisions),
+      staleReasons: confirmed.staleReasons,
+      ...confirmed.envelope,
+      approvals: decisions.approvals,
+      revocations: decisions.revocations
+    });
   });
 }
 
@@ -102,7 +107,9 @@ export async function inspectExactReview(
       return undefined;
     }
   }
-  const staleReasons = await nativeHumanReviewStaleReasons(runtime, target, envelope.review);
+  const staleReasons = [...await nativeHumanReviewStaleReasons(runtime, target, envelope.review)];
+  const preparationState = await proposalAcceptanceState(target.repository, input.runtime.expectedGenerationId, envelope);
+  if (preparationState !== "none") staleReasons.push(`proposal-preparation-${preparationState}`);
   try {
     await assertAuthoritativeNativeRepositoryTargetCurrent({
       runtime,
@@ -125,7 +132,7 @@ export async function listReviewSummaries(
 ): Promise<void> {
   const { input, request, response, reviewer } = context;
   const { projectId, repositoryId } = route;
-  await input.serialize(async () => {
+  await input.read(async () => {
     const runtime = { ...input.runtime, authoritativeTargetProofs: new Map() };
     if (request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId) {
       return sendJson(response, 409, { error: "review generation is stale" });
@@ -149,7 +156,8 @@ export async function listReviewSummaries(
     const managedBranches = nativeRepositoryBranches(target.imported.policy);
     const allDecisions = await readAuthoritativeNativeDecisions(target.repository);
     const currentRefs = new Map<string, ReturnType<typeof readAuthoritativeNativeReviewRefs>>();
-    for (const { review } of envelopes) {
+    for (const envelope of envelopes) {
+      const { review } = envelope;
       let branchTarget = branchTargets.get(review.protectedRef);
       if (branchTarget === undefined && Object.hasOwn(managedBranches, review.protectedRef)) {
         try {
@@ -166,7 +174,7 @@ export async function listReviewSummaries(
       const staleReasons = branchTarget === undefined ? ["protected-branch-unmanaged"]
         : review.expectedProtectedHead !== branchTarget.currentHead.commit ? ["protected-head-changed"]
         : review.policyRevision !== branchTarget.imported.policy.policyRevision ? ["policy-changed"]
-        : await nativeHumanReviewSummaryStaleReasons(runtime, branchTarget, review, () => {
+        : [...await nativeHumanReviewSummaryStaleReasons(runtime, branchTarget, review, () => {
           const key = JSON.stringify([
             branchTarget.repository,
             branchTarget.currentHead.protectedRef,
@@ -185,7 +193,9 @@ export async function listReviewSummaries(
             currentRefs.set(key, pending);
           }
           return pending;
-        });
+        })];
+      const preparationState = await proposalAcceptanceState(target.repository, input.runtime.expectedGenerationId, envelope);
+      if (preparationState !== "none") staleReasons.push(`proposal-preparation-${preparationState}`);
       const decisions = {
         approvals: allDecisions.approvals.filter((approval) => approval.reviewId === review.reviewId),
         revocations: allDecisions.revocations.filter((revocation) => revocation.reviewId === review.reviewId),
@@ -203,6 +213,14 @@ export async function listReviewSummaries(
     if (!input.runtime.activated() || !exactActivationIsBound(
       input.runtime.state, input.runtime.expectedGenerationId, input.runtime.activationTokenDigest
     )) return sendJson(response, 503, { error: "human review is unavailable" });
+    for (const branchTarget of branchTargets.values()) {
+      try {
+        await assertAuthoritativeNativeRepositoryTargetCurrent({ runtime: { ...input.runtime, authoritativeTargetProofs: new Map() },
+          selector: { projectId, repositoryId, protectedRef: branchTarget.currentHead.protectedRef }, target: branchTarget });
+      } catch {
+        return sendJson(response, 503, { error: "human review proof is unavailable" });
+      }
+    }
     sendJson(response, 200, summaries);
   });
 }

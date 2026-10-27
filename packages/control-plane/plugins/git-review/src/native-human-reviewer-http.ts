@@ -11,11 +11,13 @@ import type {
 } from "./native-human-reviewer-http-types.js";
 import { listReviewSummaries, serveExactReview } from "./native-human-reviewer-read.js";
 import { resolveCurrentEnvelope } from "./native-human-reviewer-resolution.js";
+import { serveRawProposalJobs } from "./raw-proposal-http.js";
 import { sendJson } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 export type { NativeHumanReviewerHooks, NativeHumanReviewerService } from "./native-human-reviewer-http-types.js";
 
 const repositoryReviewsPattern = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/reviews$/;
+const reviewPreparationsPattern = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/review-preparations$/;
 const resolveReviewPattern = /^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/reviews\/resolve$/;
 const exactReviewPattern = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/reviews\/([0-9a-f]{64})(\/(?:approvals|revocations))?$/;
 
@@ -27,12 +29,15 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
       const listing = request.method === "GET" && url.search === ""
         ? repositoryReviewsPattern.exec(url.pathname)
         : null;
+      const preparations = request.method === "GET" && url.search === ""
+        ? reviewPreparationsPattern.exec(url.pathname)
+        : null;
       const resolve = request.method === "POST" && url.search === "" && resolveReviewPattern.test(url.pathname);
       const match = exactReviewPattern.exec(url.pathname);
       const review = request.method === "GET" && url.search === "" && match !== null && match[4] === undefined;
       const approval = request.method === "POST" && url.search === "" && match?.[4] === "/approvals";
       const revocation = request.method === "POST" && url.search === "" && match?.[4] === "/revocations";
-      if (!identity && listing === null && !resolve && !review && !approval && !revocation) return false;
+      if (!identity && listing === null && preparations === null && !resolve && !review && !approval && !revocation) return false;
       const reviewer = input.config.humanReviewers.find((candidate) => basicAuthorized(request, candidate));
       if (reviewer === undefined) {
         const known = input.knownCredentials.some((credential) => basicAuthorized(request, credential));
@@ -51,6 +56,11 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
         return true;
       }
       const context: HumanReviewerRequestContext = { input, reviewer, request, response };
+      const preparationRoute = repositoryRoute(preparations);
+      if (preparationRoute !== undefined) {
+        await serveRawProposalJobs(context, preparationRoute);
+        return true;
+      }
       const listingRoute = repositoryRoute(listing);
       if (listingRoute !== undefined) {
         await listReviewSummaries(context, listingRoute);
