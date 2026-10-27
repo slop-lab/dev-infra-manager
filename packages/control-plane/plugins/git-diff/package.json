@@ -44,7 +44,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/git-diff": "workspace:0.10.0",
+    "@slop-lab/gs-diff": "workspace:0.10.0",
     "zod": "4.6.6",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0"
   },

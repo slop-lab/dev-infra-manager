@@ -6,7 +6,7 @@ The body `{commit,path,line}` selects an exact committed text line. The response
 server filesystem path is returned. This operation does not approve or promote changes.
 
 Portable request/result validation and bounded line-porcelain parsing come from
-`@slop-lab/git-blame`. This adapter owns Git execution and DIM authorization.
+`@slop-lab/gs-blame`. This adapter owns Git execution and DIM authorization.
 
 The configured repository access provider proves identity, generation, live
 activation and repository membership before and after the bounded read. The commit

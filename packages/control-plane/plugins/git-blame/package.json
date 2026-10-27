@@ -35,7 +35,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/git-blame": "workspace:0.10.0",
+    "@slop-lab/gs-blame": "workspace:0.10.0",
     "zod": "4.6.6",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0"
   },

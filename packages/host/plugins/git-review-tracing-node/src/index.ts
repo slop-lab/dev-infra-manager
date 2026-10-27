@@ -1,10 +1,10 @@
 import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { assertTracePath } from "@slop-lab/dim-git-review-tracing";
-import type { TraceChange } from "@slop-lab/dim-git-review-tracing/plugin-api";
-import { cleanupNodeReviewTraceExecution, createNodeReviewTraceRuntime } from "@slop-lab/dim-git-review-tracing-runtime-node";
 import { executionTaskHandlerKind, type ExecutionTaskHandler } from "@slop-lab/dim-contracts-execution/plugin-api";
+import { assertTracePath } from "@slop-lab/gs-review-tracing";
+import type { TraceChange } from "@slop-lab/gs-review-tracing/plugin-api";
+import { cleanupNodeReviewTraceExecution, createNodeReviewTraceRuntime } from "@slop-lab/gs-review-tracing-node";
 
 const installed = await createNodeReviewTraceRuntime();
 function detectorInput(raw: unknown): { entrypoint: string; changes: readonly TraceChange[] } {

@@ -1,8 +1,8 @@
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
-import { reviewTraceRuntimeExtension } from "@slop-lab/dim-git-review-tracing/plugin-api";
-import { createNodeReviewTraceRuntime } from "@slop-lab/dim-git-review-tracing-runtime-node";
+import { reviewTraceRuntimeExtension } from "@slop-lab/dim-control-plane-plugin-git-review-tracing/plugin-api";
+import { createNodeReviewTraceRuntime } from "@slop-lab/gs-review-tracing-node";
 
-export { createNodeReviewTraceRuntime } from "@slop-lab/dim-git-review-tracing-runtime-node";
+export { createNodeReviewTraceRuntime } from "@slop-lab/gs-review-tracing-node";
 
 export const controlPlanePlugin: ControlPlanePlugin = {
   apiVersion: 1,

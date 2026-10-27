@@ -109,9 +109,7 @@ packages:
   - packages/control-plane/deployment
   - packages/control-plane/plugins/*
   - packages/contracts/*
-  - packages/git-tools/*
-  - packages/git-review-tracing/engine
-  - packages/git-review-tracing/runtimes/node
+  - packages/gs/*
   - packages/cli/core
   - packages/installer
   - packages/web/core
@@ -134,6 +132,7 @@ aggregate_sha="$({
 } | sha256sum | cut -d ' ' -f 1)"
 [[ "$aggregate_sha" =~ ^[0-9a-f]{64}$ ]]
 export DIM_LOCAL_BUILD_VERSION="$source_version-local-$aggregate_sha"
+export GS_BUILD_VERSION="$DIM_LOCAL_BUILD_VERSION"
 printf 'root=%s\naggregate-lock-sha256=%s\n' "$commit" "$aggregate_lock_sha" >"$source_root/.dim-source-state"
 
 echo "[source] install production build dependencies"

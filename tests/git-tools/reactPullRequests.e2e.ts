@@ -9,8 +9,8 @@ if (!executablePath) throw new Error("DIM_CHROMIUM must select the reviewed Chro
 const result = await build({ entryPoints: [fileURLToPath(new URL("./fixtures/controlledPanel.ts", import.meta.url))], bundle: true, format: "esm", platform: "browser", conditions: ["source"], write: false });
 const script = result.outputFiles[0]?.contents; if (!script) throw new Error("Missing portable panel bundle");
 const styles = await Promise.all([
-  readFile(fileURLToPath(new URL("../../packages/git-tools/react-git-pull-requests/src/styles.css", import.meta.url))),
-  readFile(fileURLToPath(new URL("../../packages/git-tools/react-diff/src/styles.css", import.meta.url)))
+  readFile(fileURLToPath(new URL("../../packages/gs/react-pull-requests/src/styles.css", import.meta.url))),
+  readFile(fileURLToPath(new URL("../../packages/gs/react-diff/src/styles.css", import.meta.url)))
 ]);
 const server = createServer((request, response) => {
   response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'");

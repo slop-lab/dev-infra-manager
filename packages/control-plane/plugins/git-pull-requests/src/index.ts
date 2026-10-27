@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { isNativeGitCandidateRef, repositoryExtension, repositoryAccessProvider, RepositoryAccessError, readNativeProjectRegistrations, readBoundedJson, NativeGitBundleHttpError, sendJson, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { codeReviewService, readAuthoritativeNativeReviewRefs } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
-import { appendRevision, assertVersion, currentRevision, markMerged, pullRequestSchema, PullRequestConflict, updatePullRequest } from "@slop-lab/git-pull-requests";
+import { appendRevision, assertVersion, currentRevision, markMerged, pullRequestSchema, PullRequestConflict, updatePullRequest } from "@slop-lab/gs-pull-requests";
 import { PullRequestStore } from "./store.js";
 import { ownedRevisionRefs, pinRevision, revisionRef } from "./revision-pins.js";
 import { pullRequestServiceKind } from "./plugin-api.js";
@@ -35,11 +35,11 @@ export const controlPlanePlugin: ControlPlanePlugin = {
           if (store === undefined || !context.available()) throw new Error("Pull request service unavailable");
           return store.read(scope.projectId, scope.repositoryId, id);
         },
-        async appendComment(context: RepositoryExtensionContext, scope: { projectId: string; repositoryId: string }, id: string, expectedVersion: number, comment: import("@slop-lab/git-discussions").DiscussionComment) {
+  async appendComment(context: RepositoryExtensionContext, scope: { projectId: string; repositoryId: string }, id: string, expectedVersion: number, comment: import("@slop-lab/gs-discussions").DiscussionComment) {
           if (store === undefined || !context.available()) throw new Error("Pull request service unavailable");
           const record = await store.read(scope.projectId, scope.repositoryId, id);
           if (record === undefined) throw new PullRequestConflict("Pull request not found");
-          const { appendComment } = await import("@slop-lab/git-pull-requests");
+    const { appendComment } = await import("@slop-lab/gs-pull-requests");
           const changed = appendComment(record, expectedVersion, comment);
           await store.save(scope.projectId, scope.repositoryId, changed);
           return changed;

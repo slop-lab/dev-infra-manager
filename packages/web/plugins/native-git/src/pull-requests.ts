@@ -1,8 +1,8 @@
 import { createElement as h } from "react";
-import { mountPullRequestPanel, type PullRequestDraft, type PullRequestPanelProps } from "@slop-lab/react-git-pull-requests";
-import type { GitLineAttribution } from "@slop-lab/git-blame";
-import { currentRevision, parsePullRequest, parsePullRequestList, type PullRequest } from "@slop-lab/git-pull-requests";
-import { parseDiffSnapshot, type DiffSnapshot } from "@slop-lab/git-diff";
+import { mountPullRequestPanel, type PullRequestDraft, type PullRequestPanelProps } from "@slop-lab/gs-react-pull-requests";
+import type { GitLineAttribution } from "@slop-lab/gs-blame";
+import { currentRevision, parsePullRequest, parsePullRequestList, type PullRequest } from "@slop-lab/gs-pull-requests";
+import { parseDiffSnapshot, type DiffSnapshot } from "@slop-lab/gs-diff";
 import type { ReviewDto } from "@slop-lab/dim-service-client-native-git";
 import type { WebPluginBrowserContext } from "@slop-lab/dim-web/plugin-api";
 import { reviewCiSummary } from "./review-ci.js";

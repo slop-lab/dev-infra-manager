@@ -2,7 +2,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
-import { currentRevision, parsePullRequest } from "@slop-lab/git-pull-requests";
+import { currentRevision, parsePullRequest } from "@slop-lab/gs-pull-requests";
 import { createNativeGitOperator } from "../../packages/service-clients/native-git/src/operator.js";
 import { controlPlanePlugin as pullRequests } from "../../packages/control-plane/plugins/git-pull-requests/src/index.js";
 import { controlPlanePlugin as mergePolicy } from "../../packages/control-plane/plugins/git-merge-policy/src/index.js";

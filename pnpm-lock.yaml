@@ -296,9 +296,9 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
-      '@slop-lab/git-blame':
+      '@slop-lab/gs-blame':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/blame
+        version: link:../../../gs/blame
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -352,9 +352,9 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
-      '@slop-lab/git-diff':
+      '@slop-lab/gs-diff':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/diff
+        version: link:../../../gs/diff
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -374,12 +374,12 @@ importers:
 
   packages/control-plane/plugins/git-discussions:
     dependencies:
-      '@slop-lab/git-discussions':
+      '@slop-lab/gs-discussions':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/discussions
-      '@slop-lab/git-pull-requests':
+        version: link:../../../gs/discussions
+      '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/pull-requests
+        version: link:../../../gs/pull-requests
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -430,12 +430,12 @@ importers:
 
   packages/control-plane/plugins/git-pull-requests:
     dependencies:
-      '@slop-lab/git-discussions':
+      '@slop-lab/gs-discussions':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/discussions
-      '@slop-lab/git-pull-requests':
+        version: link:../../../gs/discussions
+      '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/pull-requests
+        version: link:../../../gs/pull-requests
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -502,9 +502,9 @@ importers:
 
   packages/control-plane/plugins/git-review-tracing:
     dependencies:
-      '@slop-lab/dim-git-review-tracing':
+      '@slop-lab/gs-review-tracing':
         specifier: workspace:0.10.0
-        version: link:../../../git-review-tracing/engine
+        version: link:../../../gs/review-tracing
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -524,12 +524,12 @@ importers:
 
   packages/control-plane/plugins/git-review-tracing-node:
     dependencies:
-      '@slop-lab/dim-git-review-tracing':
+      '@slop-lab/dim-control-plane-plugin-git-review-tracing':
         specifier: workspace:0.10.0
-        version: link:../../../git-review-tracing/engine
-      '@slop-lab/dim-git-review-tracing-runtime-node':
+        version: link:../git-review-tracing
+      '@slop-lab/gs-review-tracing-node':
         specifier: workspace:0.10.0
-        version: link:../../../git-review-tracing/runtimes/node
+        version: link:../../../gs/review-tracing-node
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -543,12 +543,15 @@ importers:
 
   packages/control-plane/plugins/git-review-tracing-scheduled:
     dependencies:
-      '@slop-lab/dim-git-review-tracing':
+      '@slop-lab/dim-control-plane-plugin-git-review-tracing':
         specifier: workspace:0.10.0
-        version: link:../../../git-review-tracing/engine
+        version: link:../git-review-tracing
       '@slop-lab/dim-service-client-execution':
         specifier: workspace:0.10.0
         version: link:../../../service-clients/execution
+      '@slop-lab/gs-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/review-tracing
     devDependencies:
       '@slop-lab/dim-control-plane-core':
         specifier: workspace:0.10.0
@@ -614,29 +617,7 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/git-review-tracing/engine:
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/git-review-tracing/runtimes/node:
-    dependencies:
-      '@slop-lab/dim-git-review-tracing':
-        specifier: workspace:0.10.0
-        version: link:../../engine
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-
-  packages/git-tools/blame:
+  packages/gs/blame:
     dependencies:
       zod:
         specifier: 4.6.6
@@ -649,7 +630,7 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/git-tools/diff:
+  packages/gs/diff:
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -658,7 +639,7 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/git-tools/discussions:
+  packages/gs/discussions:
     dependencies:
       zod:
         specifier: 4.6.6
@@ -671,9 +652,9 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/git-tools/pull-requests:
+  packages/gs/pull-requests:
     dependencies:
-      '@slop-lab/git-discussions':
+      '@slop-lab/gs-discussions':
         specifier: workspace:0.10.0
         version: link:../discussions
       zod:
@@ -687,9 +668,9 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/git-tools/react-diff:
+  packages/gs/react-diff:
     dependencies:
-      '@slop-lab/git-diff':
+      '@slop-lab/gs-diff':
         specifier: workspace:0.10.0
         version: link:../diff
     devDependencies:
@@ -712,21 +693,21 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  packages/git-tools/react-git-pull-requests:
+  packages/gs/react-pull-requests:
     dependencies:
-      '@slop-lab/git-blame':
+      '@slop-lab/gs-blame':
         specifier: workspace:0.10.0
         version: link:../blame
-      '@slop-lab/git-diff':
+      '@slop-lab/gs-diff':
         specifier: workspace:0.10.0
         version: link:../diff
-      '@slop-lab/git-discussions':
+      '@slop-lab/gs-discussions':
         specifier: workspace:0.10.0
         version: link:../discussions
-      '@slop-lab/git-pull-requests':
+      '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
         version: link:../pull-requests
-      '@slop-lab/react-git-diff':
+      '@slop-lab/gs-react-diff':
         specifier: workspace:0.10.0
         version: link:../react-diff
     devDependencies:
@@ -745,6 +726,28 @@ importers:
       react-dom:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/review-tracing:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/review-tracing-node:
+    dependencies:
+      '@slop-lab/gs-review-tracing':
+        specifier: workspace:0.10.0
+        version: link:../review-tracing
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3
@@ -869,12 +872,12 @@ importers:
       '@slop-lab/dim-contracts-execution':
         specifier: workspace:0.10.0
         version: link:../../../contracts/execution
-      '@slop-lab/dim-git-review-tracing':
+      '@slop-lab/gs-review-tracing':
         specifier: workspace:0.10.0
-        version: link:../../../git-review-tracing/engine
-      '@slop-lab/dim-git-review-tracing-runtime-node':
+        version: link:../../../gs/review-tracing
+      '@slop-lab/gs-review-tracing-node':
         specifier: workspace:0.10.0
-        version: link:../../../git-review-tracing/runtimes/node
+        version: link:../../../gs/review-tracing-node
     devDependencies:
       '@slop-lab/dim-host-core':
         specifier: workspace:0.10.0
@@ -940,9 +943,9 @@ importers:
       '@slop-lab/dim-service-client-native-git':
         specifier: workspace:0.10.0
         version: link:../../../service-clients/native-git
-      '@slop-lab/git-pull-requests':
+      '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/pull-requests
+        version: link:../../../gs/pull-requests
       commander:
         specifier: 14.0.0
         version: 14.0.0
@@ -1089,18 +1092,18 @@ importers:
       '@slop-lab/dim-contracts-operations':
         specifier: workspace:0.10.0
         version: link:../../contracts/operations
-      '@slop-lab/git-blame':
+      '@slop-lab/gs-blame':
         specifier: workspace:0.10.0
-        version: link:../../git-tools/blame
-      '@slop-lab/git-diff':
+        version: link:../../gs/blame
+      '@slop-lab/gs-diff':
         specifier: workspace:0.10.0
-        version: link:../../git-tools/diff
-      '@slop-lab/git-discussions':
+        version: link:../../gs/diff
+      '@slop-lab/gs-discussions':
         specifier: workspace:0.10.0
-        version: link:../../git-tools/discussions
-      '@slop-lab/git-pull-requests':
+        version: link:../../gs/discussions
+      '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
-        version: link:../../git-tools/pull-requests
+        version: link:../../gs/pull-requests
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -1227,21 +1230,21 @@ importers:
       '@slop-lab/dim-service-client-native-git':
         specifier: workspace:0.10.0
         version: link:../../../service-clients/native-git
-      '@slop-lab/git-blame':
+      '@slop-lab/gs-blame':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/blame
-      '@slop-lab/git-diff':
+        version: link:../../../gs/blame
+      '@slop-lab/gs-diff':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/diff
-      '@slop-lab/git-pull-requests':
+        version: link:../../../gs/diff
+      '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/pull-requests
-      '@slop-lab/react-git-diff':
+        version: link:../../../gs/pull-requests
+      '@slop-lab/gs-react-diff':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/react-diff
-      '@slop-lab/react-git-pull-requests':
+        version: link:../../../gs/react-diff
+      '@slop-lab/gs-react-pull-requests':
         specifier: workspace:0.10.0
-        version: link:../../../git-tools/react-git-pull-requests
+        version: link:../../../gs/react-pull-requests
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -1348,12 +1351,6 @@ importers:
       '@slop-lab/dim-control-plane-plugin-webhooks':
         specifier: workspace:*
         version: link:../packages/control-plane/plugins/webhooks
-      '@slop-lab/dim-git-review-tracing':
-        specifier: workspace:*
-        version: link:../packages/git-review-tracing/engine
-      '@slop-lab/dim-git-review-tracing-runtime-node':
-        specifier: workspace:*
-        version: link:../packages/git-review-tracing/runtimes/node
       '@slop-lab/dim-host-core':
         specifier: workspace:*
         version: link:../packages/host/core
@@ -1393,24 +1390,30 @@ importers:
       '@slop-lab/dim-web-plugin-native-git':
         specifier: workspace:*
         version: link:../packages/web/plugins/native-git
-      '@slop-lab/git-blame':
+      '@slop-lab/gs-blame':
         specifier: workspace:*
-        version: link:../packages/git-tools/blame
-      '@slop-lab/git-diff':
+        version: link:../packages/gs/blame
+      '@slop-lab/gs-diff':
         specifier: workspace:*
-        version: link:../packages/git-tools/diff
-      '@slop-lab/git-discussions':
+        version: link:../packages/gs/diff
+      '@slop-lab/gs-discussions':
         specifier: workspace:*
-        version: link:../packages/git-tools/discussions
-      '@slop-lab/git-pull-requests':
+        version: link:../packages/gs/discussions
+      '@slop-lab/gs-pull-requests':
         specifier: workspace:*
-        version: link:../packages/git-tools/pull-requests
-      '@slop-lab/react-git-diff':
+        version: link:../packages/gs/pull-requests
+      '@slop-lab/gs-react-diff':
         specifier: workspace:*
-        version: link:../packages/git-tools/react-diff
-      '@slop-lab/react-git-pull-requests':
+        version: link:../packages/gs/react-diff
+      '@slop-lab/gs-react-pull-requests':
         specifier: workspace:*
-        version: link:../packages/git-tools/react-git-pull-requests
+        version: link:../packages/gs/react-pull-requests
+      '@slop-lab/gs-review-tracing':
+        specifier: workspace:*
+        version: link:../packages/gs/review-tracing
+      '@slop-lab/gs-review-tracing-node':
+        specifier: workspace:*
+        version: link:../packages/gs/review-tracing-node
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3

@@ -33,10 +33,10 @@
     "zod": "4.6.6",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0",
     "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
-    "@slop-lab/git-blame": "workspace:0.10.0",
-    "@slop-lab/git-diff": "workspace:0.10.0",
-    "@slop-lab/git-discussions": "workspace:0.10.0",
-    "@slop-lab/git-pull-requests": "workspace:0.10.0"
+    "@slop-lab/gs-blame": "workspace:0.10.0",
+    "@slop-lab/gs-diff": "workspace:0.10.0",
+    "@slop-lab/gs-discussions": "workspace:0.10.0",
+    "@slop-lab/gs-pull-requests": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

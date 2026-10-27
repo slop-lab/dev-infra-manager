@@ -1,6 +1,6 @@
 import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin-api";
 import type { RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import type { DiffLineAnchor, DiffSnapshot } from "@slop-lab/git-diff";
+import type { DiffLineAnchor, DiffSnapshot } from "@slop-lab/gs-diff";
 
 export type DiffSelector = {
   readonly projectId: string;

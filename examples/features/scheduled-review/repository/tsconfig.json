@@ -11,7 +11,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": [
-      "@slop-lab/dim-git-review-tracing-runtime-node/review-api"
+      "@slop-lab/gs-review-tracing-node/review-api"
     ]
   },
   "include": [

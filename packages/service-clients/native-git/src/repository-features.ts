@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { gitBlameRequestSchema, parseGitLineAttribution } from "@slop-lab/git-blame";
-import { parseDiffSnapshot } from "@slop-lab/git-diff";
-import { discussionAnchorSchema } from "@slop-lab/git-discussions";
-import { parsePullRequest, parsePullRequestList } from "@slop-lab/git-pull-requests";
+import { gitBlameRequestSchema, parseGitLineAttribution } from "@slop-lab/gs-blame";
+import { parseDiffSnapshot } from "@slop-lab/gs-diff";
+import { discussionAnchorSchema } from "@slop-lab/gs-discussions";
+import { parsePullRequest, parsePullRequestList } from "@slop-lab/gs-pull-requests";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
 import { isNativeGitCandidateRef, isNativeGitOrdinaryCandidateRef } from "@slop-lab/dim-contracts-git";
 import { reviewCiStatusSchema } from "@slop-lab/dim-contracts-ci/review-status";

@@ -5,7 +5,7 @@ import {
   commentIsOutdated,
   parseDiscussionAnchor,
   parseDiscussionComment,
-} from "@slop-lab/git-discussions";
+} from "@slop-lab/gs-discussions";
 
 const createdAt = "2026-10-25T00:00:00.000Z";
 

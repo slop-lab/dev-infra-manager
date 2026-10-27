@@ -13,7 +13,7 @@ worker claim, lease renewal, durable journal, cancellation, cleanup and restart
 recovery loop handles CI and detector work. Task-only slots require Docker but
 not Sysbox, KVM, Git credentials or a native Git source. Pull the Node runtime's
 pinned image on that host before accepting work; see the
-[Node runtime](../../../git-review-tracing/runtimes/node/README.md).
+[Node runtime](../../../gs/review-tracing-node/README.md).
 
 The scheduler can run in a different process/container/machine from the native
 Git services. Its worker needs no connection to the repository service. The

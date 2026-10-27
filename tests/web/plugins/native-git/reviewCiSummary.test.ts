@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { pullRequestMergeDisabled } from "../../../../packages/web/plugins/native-git/src/pull-requests.js";
 import { reviewCiSummary } from "../../../../packages/web/plugins/native-git/src/review-ci.js";
-import { parsePullRequest } from "@slop-lab/git-pull-requests";
+import { parsePullRequest } from "@slop-lab/gs-pull-requests";
 
 const common = {
   schemaVersion: 1 as const,

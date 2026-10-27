@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { currentRevision, parsePullRequest, pullRequestSchema, type PullRequest } from "@slop-lab/git-pull-requests";
+import { currentRevision, parsePullRequest, pullRequestSchema, type PullRequest } from "@slop-lab/gs-pull-requests";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
 import type { NativeGitClient } from "./client.js";
 import { parseReviewDto, type ReviewDto } from "./dto.js";

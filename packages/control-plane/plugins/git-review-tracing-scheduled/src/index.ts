@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
-import { assertTracePath, createReadTracker, traceDigest } from "@slop-lab/dim-git-review-tracing";
-import { reviewTraceRuntimeExtension, type ReadRole, type ReadView, type ReviewTraceRuntime } from "@slop-lab/dim-git-review-tracing/plugin-api";
+import { reviewTraceRuntimeExtension } from "@slop-lab/dim-control-plane-plugin-git-review-tracing/plugin-api";
 import { runScheduledTask, taskClientRevision } from "@slop-lab/dim-service-client-execution/tasks";
+import { assertTracePath, createReadTracker, traceDigest } from "@slop-lab/gs-review-tracing";
+import type { ReadRole, ReadView, ReviewTraceRuntime } from "@slop-lab/gs-review-tracing/plugin-api";
 
 type Configuration = { readonly endpoint: string; readonly generationId: string; readonly handlerRevision: string;
   readonly credential: { readonly username: string; readonly password: string } };

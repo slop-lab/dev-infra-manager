@@ -1,7 +1,7 @@
 import { InvalidArgumentError, type Command } from "commander";
 import { UserError } from "@slop-lab/dim-host-core";
 import { print, printList, type JsonFlags } from "@slop-lab/dim-host-core/controller/cli";
-import { currentRevision, parsePullRequest, parsePullRequestList } from "@slop-lab/git-pull-requests";
+import { currentRevision, parsePullRequest, parsePullRequestList } from "@slop-lab/gs-pull-requests";
 import { selectNativeRepository } from "./native-project-selector.js";
 
 type Flags = JsonFlags & { title?: string; source?: string; target?: string; body?: string; expectedVersion?: number; revision?: string; path?: string; side?: string; line?: number };

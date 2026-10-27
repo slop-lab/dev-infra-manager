@@ -10,12 +10,12 @@ closing a request or posting a comment never grants approval or writes a ref.
 
 | Package | Owns |
 | --- | --- |
-| `@slop-lab/git-diff` | Bounded Git patch parsing, structured snapshots and exact line anchors |
-| `@slop-lab/git-discussions` | Discussion/anchor schemas, immutable revision association and list primitives |
-| `@slop-lab/git-pull-requests` | PR/revision lifecycle, optimistic versions and PR-specific pure transitions |
-| `@slop-lab/git-blame` | Bounded line-porcelain parsing and attribution models |
-| `@slop-lab/react-git-diff` | Controlled diff rendering and explicit file, gutter and below-line slots |
-| `@slop-lab/react-git-pull-requests` | Controlled PR forms, revision discussions and optional review/blame callbacks |
+| `@slop-lab/gs-diff` | Bounded Git patch parsing, structured snapshots and exact line anchors |
+| `@slop-lab/gs-discussions` | Discussion/anchor schemas, immutable revision association and list primitives |
+| `@slop-lab/gs-pull-requests` | PR/revision lifecycle, optimistic versions and PR-specific pure transitions |
+| `@slop-lab/gs-blame` | Bounded line-porcelain parsing and attribution models |
+| `@slop-lab/gs-react-diff` | Controlled diff rendering and explicit file, gutter and below-line slots |
+| `@slop-lab/gs-react-pull-requests` | Controlled PR forms, revision discussions and optional review/blame callbacks |
 
 These packages have no DIM, filesystem, account or HTTP dependencies. IDs are
 opaque strings; an adapter may use UUIDs or IDs from another Git service. React

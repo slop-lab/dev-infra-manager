@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
-import { parseGitDiff, parseDiffSnapshot } from "@slop-lab/git-diff";
+import { parseGitDiff, parseDiffSnapshot } from "@slop-lab/gs-diff";
 import { assertGitVersion } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { assertAdvertisedCommits, gitBytes, readTreeFile, utf8 } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { validateDiffAnchor } from "../../../../packages/control-plane/plugins/git-diff/src/plugin-api.js";

@@ -1,7 +1,7 @@
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { gitBytes, type RepositoryExtensionContext, type RepositoryOwnedRef } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { currentRevision, type PullRequest, type PullRequestRevision } from "@slop-lab/git-pull-requests";
+import { currentRevision, type PullRequest, type PullRequestRevision } from "@slop-lab/gs-pull-requests";
 import { PullRequestStore } from "./store.js";
 export function revisionRef(requestId: string, revisionId: string, side: "base" | "head"): string { return `refs/dim/extensions/git-pull-requests/${requestId}/revisions/${revisionId}/${side}`; }
 export async function ownedRevisionRefs(directory: string, selector: { projectId: string; repositoryId: string }): Promise<readonly RepositoryOwnedRef[]> {

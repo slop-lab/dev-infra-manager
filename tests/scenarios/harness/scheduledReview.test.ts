@@ -32,9 +32,9 @@ it("declares the scheduled runtime's required plugins and strictly type-checks i
     await cp(resolveExamplePath(recipe, "repository"), project, { recursive: true });
     const scope = join(project, "node_modules/@slop-lab");
     await mkdir(scope, { recursive: true });
-    await symlink(fileURLToPath(new URL("../../../packages/git-review-tracing/runtimes/node", import.meta.url)), join(scope, "dim-git-review-tracing-runtime-node"), "dir");
+    await symlink(fileURLToPath(new URL("../../../packages/gs/review-tracing-node", import.meta.url)), join(scope, "gs-review-tracing-node"), "dir");
     await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url)),
-      "-p", join(project, "tsconfig.json"), "--noEmit", "--customConditions", "dim-source"]);
+      "-p", join(project, "tsconfig.json"), "--noEmit", "--customConditions", "source"]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

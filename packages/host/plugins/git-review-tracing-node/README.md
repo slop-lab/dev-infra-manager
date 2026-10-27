@@ -19,7 +19,7 @@ node --input-type=module -e 'import {reviewTracingTaskHandler} from "@slop-lab/d
 
 Task-only workers need no Native Git endpoint, Git credentials, Sysbox runtime
 or KVM device. They need Docker access and the exact image documented in the
-[shared Node runtime](../../../git-review-tracing/runtimes/node/README.md). Repository source
+[shared Node runtime](../../../gs/review-tracing-node/README.md). Repository source
 arrives through lease-authorized file read exchanges; it is never mounted or
 cloned on the worker. The control plane records dependency digests and retains
 review and promotion authority.

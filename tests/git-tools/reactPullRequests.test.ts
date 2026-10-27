@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PullRequestPanel } from "@slop-lab/react-git-pull-requests";
-import { parsePullRequest } from "@slop-lab/git-pull-requests";
-import { parseGitDiff } from "@slop-lab/git-diff";
+import { PullRequestPanel } from "@slop-lab/gs-react-pull-requests";
+import { parsePullRequest } from "@slop-lab/gs-pull-requests";
+import { parseGitDiff } from "@slop-lab/gs-diff";
 const base = "a".repeat(40), head = "b".repeat(40), oldRevision = "a22b5dfc-9108-4f40-9684-e68cc7000001", revisionId = "a22b5dfc-9108-4f40-9684-e68cc7000002";
 const pr = parsePullRequest({ schemaVersion: 1, id: "a22b5dfc-9108-4f40-9684-e68cc7000003", version: 2, title: "Portable change", body: "<script>unsafe()</script>", sourceRef: "refs/heads/feature/work", targetRef: "refs/heads/main", state: "open", actorId: "author", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-02T00:00:00.000Z",
   revisions: [{ id: oldRevision, sourceCommit: "c".repeat(40), targetCommit: base, createdAt: "2026-01-01T00:00:00.000Z" }, { id: revisionId, sourceCommit: head, targetCommit: base, createdAt: "2026-01-02T00:00:00.000Z" }],

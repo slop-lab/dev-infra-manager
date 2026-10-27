@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lineAnchor, parseGitDiff, parseDiffSnapshot } from "@slop-lab/git-diff";
+import { lineAnchor, parseGitDiff, parseDiffSnapshot } from "@slop-lab/gs-diff";
 const baseCommit = "a".repeat(40), headCommit = "b".repeat(40);
 const patch = 'diff --git a/a.txt b/a.txt\nindex 111..222 100644\n--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@ title\n same\n-old\n+<script>alert(1)</script>\n\\ No newline at end of file\n';
 describe("portable Git diff", () => {

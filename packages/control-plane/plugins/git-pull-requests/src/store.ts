@@ -3,7 +3,7 @@ import { lstat, mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { syncDirectory } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { pullRequestSchema, PullRequestConflict, type PullRequest } from "@slop-lab/git-pull-requests";
+import { pullRequestSchema, PullRequestConflict, type PullRequest } from "@slop-lab/gs-pull-requests";
 
 const selector = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const maximumRecordBytes = 16 * 1024 * 1024;

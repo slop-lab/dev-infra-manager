@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { parsePullRequest, parsePullRequestList, currentRevision } from "@slop-lab/git-pull-requests";
+import { parsePullRequest, parsePullRequestList, currentRevision } from "@slop-lab/gs-pull-requests";
 import { runNativeGitCli, registerProjectCommands } from "../../../../packages/host/plugins/native-git/src/cli/index.js";
 import { managedProjectFixture } from "./nativeProjectIntegrationFixture.js";
 import { cleanupFinalizeFixtures, generationId, humanReviewer, hostPromoter, humanReviewerAuthorization, workspaceWriteIssuerAuthorization, runGit } from "../../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";

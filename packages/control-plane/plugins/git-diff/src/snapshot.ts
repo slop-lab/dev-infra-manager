@@ -1,4 +1,4 @@
-import { parseGitDiff, type DiffSnapshot } from "@slop-lab/git-diff";
+import { parseGitDiff, type DiffSnapshot } from "@slop-lab/gs-diff";
 import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
 import { repositoryReadHistoryRefs, exactActivationIsBound, resolveAuthoritativeNativeRepositoryTarget, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { assertAdvertisedCommits, gitBytes, readTreeFile, utf8, RepositoryReadError } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";

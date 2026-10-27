@@ -3,7 +3,7 @@ import { mkdtemp, rm, mkdir, symlink, stat, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { parsePullRequest } from "@slop-lab/git-pull-requests";
+import { parsePullRequest } from "@slop-lab/gs-pull-requests";
 import * as repositorySdk from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { PullRequestStore } from "../../../../packages/control-plane/plugins/git-pull-requests/src/store.js";
 const roots: string[] = [];

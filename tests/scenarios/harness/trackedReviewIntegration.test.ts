@@ -6,12 +6,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
-import { createReadTracker } from "@slop-lab/dim-git-review-tracing";
-import { reviewTraceRuntimeExtension, type ReviewTraceRuntime } from "@slop-lab/dim-git-review-tracing/plugin-api";
 import { prepareReviewTracing } from "@slop-lab/dim-control-plane-plugin-git-review-tracing";
+import { reviewTraceRuntimeExtension } from "@slop-lab/dim-control-plane-plugin-git-review-tracing/plugin-api";
 import { createNodeReviewTraceRuntime } from "@slop-lab/dim-control-plane-plugin-git-review-tracing-node";
 import type { CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
+import { createReadTracker } from "@slop-lab/gs-review-tracing";
+import type { ReviewTraceRuntime } from "@slop-lab/gs-review-tracing/plugin-api";
 import { basic, fixture, generationId, git, record, token } from "../../control-plane/plugins/git-repositories/optionalFeaturesFixture.js";
 import { scheduledReviewFixture } from "../../support/scheduled-trace.js";
 
@@ -24,9 +25,9 @@ it("strictly type-checks the standalone TypeScript detector template against its
     await mkdir(scope, { recursive: true });
     // Resolve the repository source export instead of requiring a registry
     // publication or package build just to validate a candidate template.
-    await symlink(fileURLToPath(new URL("../../../packages/git-review-tracing/runtimes/node", import.meta.url)), join(scope, "dim-git-review-tracing-runtime-node"), "dir");
+    await symlink(fileURLToPath(new URL("../../../packages/gs/review-tracing-node", import.meta.url)), join(scope, "gs-review-tracing-node"), "dir");
     await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url)),
-      "-p", join(project, "tsconfig.json"), "--noEmit", "--customConditions", "dim-source"]);
+      "-p", join(project, "tsconfig.json"), "--noEmit", "--customConditions", "source"]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

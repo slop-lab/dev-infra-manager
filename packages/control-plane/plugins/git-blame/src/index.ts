@@ -5,7 +5,7 @@ import {
   parseLinePorcelain,
   type GitBlameRequest,
   type GitLineAttribution,
-} from "@slop-lab/git-blame";
+} from "@slop-lab/gs-blame";
 import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
 import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { repositoryReadHistoryRefs, repositoryExtension, repositoryAccessProvider, RepositoryAccessError, RepositoryReadError, readBoundedJson, sendJson, NativeGitBundleHttpError, assertAdvertisedCommits, gitBytes, readTreeFile, utf8, type RepositoryReadGit } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";

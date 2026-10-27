@@ -1,0 +1,9 @@
+{
+  "name": "@this-project/gs-workspace",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "pnpm --recursive run build", "check": "pnpm --recursive run check" },
+  "engines": { "node": "^24.0.0 || ^26.0.0", "pnpm": ">=10.0.0" },
+  "packageManager": "pnpm@10.13.1"
+}

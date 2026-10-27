@@ -9,7 +9,7 @@ const packages = [
   "control-plane/plugins/git-sync",
   "control-plane/plugins/git-diff", "control-plane/plugins/git-pull-requests",
   "control-plane/plugins/git-discussions", "control-plane/plugins/git-blame",
-  "git-tools/diff", "git-tools/discussions", "git-tools/blame", "git-tools/pull-requests",
+  "gs/diff", "gs/discussions", "gs/blame", "gs/pull-requests",
   "control-plane/plugins/webhooks", "control-plane/plugins/ci-workflows",
   "contracts/git", "contracts/ci", "contracts/execution",
   // The managed pair validates scheduler configuration without loading its runtime.

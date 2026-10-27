@@ -1,8 +1,8 @@
 import { expect, it } from "vitest";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { GitDiff, type DiffLineContext } from "@slop-lab/react-git-diff";
-import { parseGitDiff } from "@slop-lab/git-diff";
+import { GitDiff, type DiffLineContext } from "@slop-lab/gs-react-diff";
+import { parseGitDiff } from "@slop-lab/gs-diff";
 const snapshot = parseGitDiff('diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1 +1 @@\n-old\n+<img src=x onerror=alert(1)>\n', { baseCommit: "a".repeat(40), headCommit: "b".repeat(40) });
 it("renders untrusted source as text and supplies exact anchors to independent extensions", () => {
   const contexts: DiffLineContext[] = [];

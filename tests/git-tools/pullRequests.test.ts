@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { commentIsOutdated } from "@slop-lab/git-discussions";
-import { appendComment, appendRevision, currentRevision, markMerged, parsePullRequest, PullRequestConflict, updatePullRequest } from "@slop-lab/git-pull-requests";
+import { commentIsOutdated } from "@slop-lab/gs-discussions";
+import { appendComment, appendRevision, currentRevision, markMerged, parsePullRequest, PullRequestConflict, updatePullRequest } from "@slop-lab/gs-pull-requests";
 const now = "2026-10-23T00:00:00.000Z";
 function fixture() { return parsePullRequest({ schemaVersion: 1, id: randomUUID(), version: 1, title: "First PR", body: "", sourceRef: "refs/heads/change", targetRef: "refs/heads/main", state: "open", actorId: "alice", createdAt: now, updatedAt: now, revisions: [{ id: randomUUID(), sourceCommit: "a".repeat(40), targetCommit: "b".repeat(40), createdAt: now }], comments: [] }); }
 describe("portable pull requests", () => {

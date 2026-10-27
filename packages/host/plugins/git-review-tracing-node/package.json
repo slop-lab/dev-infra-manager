@@ -26,9 +26,9 @@
     "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts"
   },
   "dependencies": {
-    "@slop-lab/dim-git-review-tracing": "workspace:0.10.0",
-    "@slop-lab/dim-git-review-tracing-runtime-node": "workspace:0.10.0",
-    "@slop-lab/dim-contracts-execution": "workspace:0.10.0"
+    "@slop-lab/dim-contracts-execution": "workspace:0.10.0",
+    "@slop-lab/gs-review-tracing": "workspace:0.10.0",
+    "@slop-lab/gs-review-tracing-node": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-host-core": "0.10.0"

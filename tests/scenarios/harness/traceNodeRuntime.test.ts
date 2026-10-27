@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "vitest";
-import { cleanupNodeReviewTraceExecution, createNodeReviewTraceRuntime } from "../../../packages/git-review-tracing/runtimes/node/src/runtime.js";
+import { cleanupNodeReviewTraceExecution, createNodeReviewTraceRuntime } from "../../../packages/gs/review-tracing-node/src/runtime.js";
 
 const enabled = process.env.DIM_TEST_REVIEW_TRACE_DOCKER === "1";
 describe.skipIf(!enabled)("brokered Node review tracing in Docker", () => {

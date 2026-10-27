@@ -29,13 +29,13 @@
     "zod": "4.6.6",
     "@slop-lab/dim-contracts-operations": "workspace:0.10.0",
     "@slop-lab/dim-service-client-native-git": "workspace:0.10.0",
-    "@slop-lab/git-blame": "workspace:0.10.0",
-    "@slop-lab/git-diff": "workspace:0.10.0",
-    "@slop-lab/git-pull-requests": "workspace:0.10.0",
-    "@slop-lab/react-git-diff": "workspace:0.10.0",
+    "@slop-lab/gs-blame": "workspace:0.10.0",
+    "@slop-lab/gs-diff": "workspace:0.10.0",
+    "@slop-lab/gs-pull-requests": "workspace:0.10.0",
+    "@slop-lab/gs-react-diff": "workspace:0.10.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "@slop-lab/react-git-pull-requests": "workspace:0.10.0"
+    "@slop-lab/gs-react-pull-requests": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-web": "0.10.0"

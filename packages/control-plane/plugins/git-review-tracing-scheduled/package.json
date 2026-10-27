@@ -35,8 +35,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-git-review-tracing": "workspace:0.10.0",
-    "@slop-lab/dim-service-client-execution": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-plugin-git-review-tracing": "workspace:0.10.0",
+    "@slop-lab/dim-service-client-execution": "workspace:0.10.0",
+    "@slop-lab/gs-review-tracing": "workspace:0.10.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

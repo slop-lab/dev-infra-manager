@@ -11,7 +11,7 @@ await copyFile(new URL("../../../../../LICENSE", import.meta.url), new URL("../d
 
 await build({ entryPoints: {
   "pull-requests": new URL("../src/pull-requests.ts", import.meta.url).pathname,
-  "pr-model": new URL(import.meta.resolve("@slop-lab/git-pull-requests")).pathname
+  "pr-model": new URL(import.meta.resolve("@slop-lab/gs-pull-requests")).pathname
 }, outdir: new URL("../dist/assets/", import.meta.url).pathname,
   splitting: true, chunkNames: "pr-model-shared",
   bundle: true, format: "esm", platform: "browser", target: "es2022", minify: true,
@@ -19,6 +19,6 @@ await build({ entryPoints: {
 await build({ entryPoints: [new URL("../src/review-detail.ts", import.meta.url).pathname], outfile: new URL("../dist/assets/review-detail.js", import.meta.url).pathname,
   bundle: true, format: "esm", platform: "browser", target: "es2022", minify: true, legalComments: "eof" });
 
-for (const [source, target] of [["@slop-lab/react-git-diff/styles.css", "git-diff.css"], ["@slop-lab/react-git-pull-requests/styles.css", "pull-requests.css"]] as const) {
+for (const [source, target] of [["@slop-lab/gs-react-diff/styles.css", "git-diff.css"], ["@slop-lab/gs-react-pull-requests/styles.css", "pull-requests.css"]] as const) {
   await copyFile(new URL(import.meta.resolve(source)), new URL(`../dist/assets/${target}`, import.meta.url));
 }

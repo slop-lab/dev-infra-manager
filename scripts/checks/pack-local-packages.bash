@@ -17,6 +17,7 @@ cd "$repo_root"
 echo "[packages] build workspace"
 DIM_LOCAL_BUILD_VERSION="$(bash "$script_dir/local-build-version.bash")"
 export DIM_LOCAL_BUILD_VERSION
+export GS_BUILD_VERSION="$DIM_LOCAL_BUILD_VERSION"
 pnpm run workspace:build >/dev/null
 
 echo "[packages] create pnpm tarballs"

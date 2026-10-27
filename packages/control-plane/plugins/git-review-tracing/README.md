@@ -26,5 +26,5 @@ opaque evidence digest attached to the exact review identity. Evidence is
 recomputed during review creation, freshness checks and promotion; retaining the
 same required reviewers does not make changed evidence reusable.
 
-See the shared [review tracing design](../../../git-review-tracing/engine/README.md) for
+See the shared [review tracing design](../../../gs/review-tracing/README.md) for
 read roles, conditional dependencies, execution bounds and runtime obligations.

@@ -9,11 +9,11 @@ ref never grants another repository, host credential or protected-ref authority.
 
 | Owner | Responsibility | Deliberately excluded |
 | --- | --- | --- |
-| `@slop-lab/git-diff` | Bounded patch parsing, immutable comparisons and line anchors | Git processes, HTTP, storage, credentials and DIM policy |
-| `@slop-lab/git-discussions` | Discussion/anchor schemas and revision-scoped comment primitives | PR lifecycle, optimistic PR versions and authorization |
-| `@slop-lab/git-pull-requests` | PR lifecycle, immutable revisions and versioned PR transitions | Repository access, review approval and Git ref changes |
-| `@slop-lab/git-blame` | Bounded line-porcelain parsing and attribution models | Git execution, repository visibility and filesystem reads |
-| `@slop-lab/react-git-diff`, `@slop-lab/react-git-pull-requests` | Controlled presentation and caller-supplied actions | DIM clients, credentials, account roles and policy decisions |
+| `@slop-lab/gs-diff` | Bounded patch parsing, immutable comparisons and line anchors | Git processes, HTTP, storage, credentials and DIM policy |
+| `@slop-lab/gs-discussions` | Discussion/anchor schemas and revision-scoped comment primitives | PR lifecycle, optimistic PR versions and authorization |
+| `@slop-lab/gs-pull-requests` | PR lifecycle, immutable revisions and versioned PR transitions | Repository access, review approval and Git ref changes |
+| `@slop-lab/gs-blame` | Bounded line-porcelain parsing and attribution models | Git execution, repository visibility and filesystem reads |
+| `@slop-lab/gs-react-diff`, `@slop-lab/gs-react-pull-requests` | Controlled presentation and caller-supplied actions | DIM clients, credentials, account roles and policy decisions |
 | Git repositories control-plane plugin | Registration/import, repository-scoped Git transport, exact owned-ref proofs and protected-ref CAS | Human approval, workflow compilation and worker execution |
 | Git diff, discussions, PR and blame control-plane plugins | Authenticated repository adapters, durable PR history/pins and bounded Git reads | Portable model ownership and implicit grants |
 | Git review control-plane plugin | Exact candidate evidence, trusted reviewer requirements, approvals and revocations | Promotion authority and CI execution |

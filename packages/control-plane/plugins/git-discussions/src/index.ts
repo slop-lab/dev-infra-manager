@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { discussionAnchorSchema } from "@slop-lab/git-discussions";
-import { assertVersion, PullRequestConflict } from "@slop-lab/git-pull-requests";
+import { discussionAnchorSchema } from "@slop-lab/gs-discussions";
+import { assertVersion, PullRequestConflict } from "@slop-lab/gs-pull-requests";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { repositoryExtension, repositoryAccessProvider, RepositoryAccessError, readBoundedJson, NativeGitBundleHttpError, sendJson } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { pullRequestService } from "@slop-lab/dim-control-plane-plugin-git-pull-requests/plugin-api";

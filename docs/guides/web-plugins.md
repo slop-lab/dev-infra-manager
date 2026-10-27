@@ -200,8 +200,8 @@ or turn CLI arguments into a Web API.
 
 ## Reusable Git presentation
 
-The Native Git panel uses the DIM-independent `@slop-lab/react-git-diff` and
-`@slop-lab/react-git-pull-requests` packages. The Web adapter owns service calls,
+The Native Git panel uses the DIM-independent `@slop-lab/gs-react-diff` and
+`@slop-lab/gs-react-pull-requests` packages. The Web adapter owns service calls,
 selection fencing, permission checks and approval confirmations. The components
 receive immutable snapshots and explicit callbacks, so another Git service can
 reuse them without installing DIM. Optional file-toolbar, line-gutter and

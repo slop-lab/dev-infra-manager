@@ -6,9 +6,14 @@ packages:
   - packages/control-plane/deployment
   - packages/control-plane/plugins/*
   - packages/contracts/*
-  - packages/git-tools/*
-  - packages/git-review-tracing/engine
-  - packages/git-review-tracing/runtimes/node
+  - packages/gs/blame
+  - packages/gs/diff
+  - packages/gs/discussions
+  - packages/gs/pull-requests
+  - packages/gs/react-diff
+  - packages/gs/react-pull-requests
+  - packages/gs/review-tracing
+  - packages/gs/review-tracing-node
   - packages/cli/core
   - packages/installer
   - packages/web/core

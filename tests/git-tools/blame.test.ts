@@ -3,7 +3,7 @@ import {
   GitBlameParseError,
   parseGitBlameRequest,
   parseLinePorcelain,
-} from "@slop-lab/git-blame";
+} from "@slop-lab/gs-blame";
 
 const request = {
   commit: "a".repeat(40),

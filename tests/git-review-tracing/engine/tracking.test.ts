@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createReadTracker, evaluateTrackedProject } from "@slop-lab/dim-git-review-tracing";
-import { type ReviewTraceRuntime } from "@slop-lab/dim-git-review-tracing/plugin-api";
+import { createReadTracker, evaluateTrackedProject, traceDigest } from "@slop-lab/gs-review-tracing";
+import { type ReviewTraceRuntime } from "@slop-lab/gs-review-tracing/plugin-api";
 
 const file = (files: Record<string, string>) => async (path: string) => files[path] === undefined ? undefined : Buffer.from(files[path]);
 const runtime = (evaluate: ReviewTraceRuntime["evaluate"]): ReviewTraceRuntime => ({ name: "test", revision: "a".repeat(64), evaluate });
@@ -14,6 +14,9 @@ function check(candidate: Record<string, string>, selected = predicate) {
   return evaluateTrackedProject({ runtime: selected, entrypoint: "check.mjs", changes: [], readBaseFile: file(baseline), readCandidateFile: file(candidate) });
 }
 describe("tracked review predicate dependencies", () => {
+  it("preserves the stored evidence digest domain across package extraction", () => {
+    expect(traceDigest({ stable: true })).toBe("21bf25a22162f7530d8fceed48b20df1a29209fa347e24488c9500db31cb2d75");
+  });
   it("lets target-only unrelated JSON fields change without whole-file review", async () => {
     expect((await check({ ...baseline, "settings.json": '{"safe":true,"label":"new"}' })).matches).toBe(false);
     expect((await check({ ...baseline, "settings.json": '{"safe":false}' })).matches).toBe(true);

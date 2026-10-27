@@ -1,0 +1,44 @@
+{
+  "name": "@slop-lab/gs-review-tracing-node",
+  "version": "0.10.0",
+  "description": "Brokered JavaScript and TypeScript review detector execution in isolated Node containers",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": {
+        "types": "./src/index.ts",
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./review-api": {
+      "source": {
+        "types": "./src/review-api.d.ts"
+      },
+      "types": "./dist/review-api.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "node ../build-package.ts --asset src/assets:assets --asset src/review-api.d.ts:review-api.d.ts",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.8.3"
+  },
+  "dependencies": {
+    "@slop-lab/gs-review-tracing": "workspace:0.10.0"
+  }
+}

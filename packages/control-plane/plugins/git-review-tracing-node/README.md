@@ -6,7 +6,7 @@ control-plane plugins and select `runtime: "node"` in a traced review matcher.
 The plugin configuration is an empty object.
 
 This adapter executes the detector on the control-plane machine using the
-shared [Node runtime](../../../git-review-tracing/runtimes/node/README.md). Its execution host
+shared [Node runtime](../../../gs/review-tracing-node/README.md). Its execution host
 needs Docker and the exact pinned image described there. The runtime package
 owns the detector API, TypeScript support and containment rules.
 
