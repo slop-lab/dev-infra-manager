@@ -10,7 +10,14 @@ The plugin asks each configured controller for its current managed projects,
 ready repositories and available operations through the fixed `dim project console`
 bridge. No private connection paths, service credentials or executables reach the
 browser. Adding projects or repositories appears on **Refresh projects**; one
-unavailable controller does not disable other controllers.
+unavailable or slow controller does not delay catalogs from a freshly attested
+ready controller. Automatic discovery starts without delaying Web plugin startup,
+coalesces concurrent catalog reads, and keeps a previously successful catalog
+visible for presentation while that controller refreshes. Initial discovery and
+completed failures remain unavailable. Presentation is not authorization: every
+operation joins an in-flight describe or starts a new one, then validates the
+fresh scope, operation and generation before dispatch. There is no TTL or reuse
+of completed authorization to skip this check.
 
 Newly connected controllers can discover accessible existing Projects and
 explicitly attach them with configuration and default working repository choices.
