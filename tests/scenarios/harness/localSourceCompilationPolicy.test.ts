@@ -67,14 +67,25 @@ it("publishes and packs every actual owner with one matched local dependency gra
     await copyFile(resolve(repository, "LICENSE"), resolve(root, "LICENSE"));
     await copyFile(resolve(repository, "scripts/packages/publish-package-version.ts"), resolve(root, "scripts/packages/publish-package-version.ts"));
     await copyFile(resolve(repository, "scripts/packages/publish-library.ts"), resolve(root, "scripts/packages/publish-library.ts"));
+    await mkdir(resolve(root, "packages/gs"), { recursive: true });
+    for (const file of ["build-package.ts", "tsconfig.base.json", "LICENSE"]) {
+      await copyFile(resolve(repository, "packages/gs", file), resolve(root, "packages/gs", file));
+    }
     for (const directory of packageDirectories) {
       const relative = directory.replace(/\/dist$/, "");
       const source = resolve(repository, relative), target = resolve(root, relative);
       await cp(source, target, { recursive: true, filter: (entry) => !entry.split("/").includes("node_modules") });
       await symlink(resolve(source, "node_modules"), resolve(target, "node_modules"));
-      const result = spawnSync(process.execPath, [resolve(target, "scripts/build-publish-package.ts")], {
-        cwd: target, encoding: "utf8", env: { ...process.env, DIM_LOCAL_BUILD_VERSION: version }
-      });
+      const gs = relative.startsWith("packages/gs/");
+      const manifest = JSON.parse(await readFile(resolve(target, "package.json"), "utf8")) as { scripts?: { build?: string } };
+      if (gs && typeof manifest.scripts?.build !== "string") throw new Error(`${relative} must declare its own builder`);
+      const result = gs
+        ? spawnSync("/bin/sh", ["-c", manifest.scripts?.build ?? ""], {
+          cwd: target, encoding: "utf8", env: { ...process.env, GS_BUILD_VERSION: version }
+        })
+        : spawnSync(process.execPath, [resolve(target, "scripts/build-publish-package.ts")], {
+          cwd: target, encoding: "utf8", env: { ...process.env, DIM_LOCAL_BUILD_VERSION: version }
+        });
       expect(result.error, `${relative} publisher could not run`).toBeUndefined();
       expect(result.status, `${relative} publisher: ${result.stderr}`).toBe(0);
       const metadata = JSON.parse(await readFile(resolve(root, directory, "package.json"), "utf8")) as {
@@ -85,7 +96,7 @@ it("publishes and packs every actual owner with one matched local dependency gra
       expect(published, `${relative} must expose only built entrypoints`).not.toMatch(/"dim-source"|"\.\/src\//);
       for (const [name, selected] of Object.entries({ ...metadata.dependencies, ...metadata.peerDependencies })) {
         expect(selected, `${relative} must publish registry dependencies`).not.toMatch(/^workspace:/);
-        if (name.startsWith("@slop-lab/dim-")) expect(selected, `${relative} pins ${name}`).toBe(version);
+        if (name.startsWith("@slop-lab/dim-") || name.startsWith("@slop-lab/gs-")) expect(selected, `${relative} pins ${name}`).toBe(version);
       }
     }
     const bundle = resolve(root, "bundle"); await mkdir(bundle);
