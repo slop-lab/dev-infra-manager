@@ -40,6 +40,8 @@ const selectorSchema = z.object({
 export type AuthoritativeNativeReviewHooks = {
   readonly beforeFinalVerification?: () => void | Promise<void>;
   readonly beforePublication?: (input: { readonly repository: string; readonly envelope: AuthoritativeNativeReviewEnvelope }) => void | Promise<void>;
+  readonly publish?: (input: { readonly repository: string; readonly envelope: AuthoritativeNativeReviewEnvelope },
+    publish: () => Promise<AuthoritativeNativeReviewEnvelope>) => Promise<AuthoritativeNativeReviewEnvelope>;
 };
 
 export async function createAuthoritativeNativeReview(
@@ -122,8 +124,11 @@ export async function createAuthoritativeNativeReview(
       candidateCommit: identity.candidateCommit,
       candidateTree: identity.candidateTree
     });
-    await hooks.beforePublication?.({ repository: target.repository, envelope });
-    return saveAuthoritativeNativeReviewEnvelope(target.repository, envelope);
+    const publish = async () => {
+      await hooks.beforePublication?.({ repository: target.repository, envelope });
+      return saveAuthoritativeNativeReviewEnvelope(target.repository, envelope);
+    };
+    return hooks.publish === undefined ? publish() : hooks.publish({ repository: target.repository, envelope }, publish);
   } catch (error) {
     if (error instanceof AuthoritativeNativeReviewError || error instanceof CodeReviewPolicyError) throw error;
     if (error instanceof Error && /changed during review creation/.test(error.message)) {
