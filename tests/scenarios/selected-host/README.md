@@ -6,10 +6,13 @@ or more `--host NAME` arguments are mandatory, and every selected name must have
 an exact profile in a private reviewed configuration file.
 
 The full run creates one uniquely suffixed `dim-smoke-*` workspace per host from
-an explicitly provisioned disposable managed Project at `installedSourceSha`.
+an explicitly provisioned disposable managed Project at the profile's distinct
+`workspaceSourceSha`; `installedSourceSha` remains installation provenance only.
 It verifies the selected host version and required plugins, the exact candidate
 checkout SHA, actual guest Git fetch and ordinary-branch push/readback, guest plugin
-discovery, an actual OpenCode inference that uses a file tool, the owned OpenCode
+discovery, guest SSH setup and persistent host identity, a direct authenticated
+HTTP request through the guest shared stdio service channel, an actual OpenCode
+inference that uses a file tool, the owned OpenCode
 server, an existing shared ingress reaching its HTTP authentication boundary,
 and persistence/reconnection after `recreate`. It discards only the learned
 workspace UUID with `--expect-id`; the workspace discard owns route cleanup.
@@ -51,6 +54,7 @@ key is required and unknown keys are rejected:
       "name": "disposable-devbox",
       "workspace": "dim-smoke-daily-disposable-devbox",
       "source": "dim://dim-smoke-project",
+      "workspaceSourceSha": "89abcdef0123456789abcdef0123456789abcdef",
       "expectedHostVersion": "0.10.0-local-REVIEWED_AGGREGATE",
       "requiredPlugins": [
         "agent-tools",
@@ -59,6 +63,7 @@ key is required and unknown keys are rejected:
         "native-git"
       ],
       "ingress": "shared",
+      "sshPublicKey": "ssh-ed25519 REVIEWED_PUBLIC_KEY dim-smoke@example.invalid",
       "llm": {
         "configFile": "/absolute/host/private/llm/gateway.json",
         "project": "disposable-smoke",
@@ -87,14 +92,26 @@ candidate, with ordinary branch write/delete permission and no application
 work in progress. The runner does not create or delete this operator-owned
 Project: the current public Project API has no deletion capability. Its lifecycle
 cleanup remains an explicit operator/VM-fixture gate, not a claimed runner result.
-Full execution creates with
-`--ref installedSourceSha` and checks the guest checkout against that SHA.
+Full execution creates with the profile's `--ref workspaceSourceSha` and checks
+the guest checkout against that SHA. This commit is the freshly provisioned
+smoke seed and may intentionally differ from `installedSourceSha`.
 `expectedHostVersion` is compared with the selected host's `--version`, not the
 client version. The source SHA is operator-declared provenance, independently
 checked against the acquired candidate; a matching checkout alone does not
 attest the installed host build. Retain the installation manifest mapping that
 SHA to the exact host version with the run evidence. Plugin names are the names returned by `dim plugins`; the four
-capability plugins above are mandatory rather than optional.
+capability plugins above are mandatory rather than optional. A profile may also
+select `kvm`; when it does, the ordinary smoke workspace requires KVM discovery
+to remain blocked with `runtime-grant-required`. Without selected KVM, the smoke
+does not invent a KVM requirement. It never invokes the KVM verification
+operation or claims host delegation. Actual VM-fd effect belongs only to a
+separately authorized `container-kvm` workspace.
+
+`sshPublicKey` is one reviewed OpenSSH public key, not a private key or host
+credential. The smoke configures the guest's loopback SSH service, retains its
+public host key only in memory and requires that identity after recreation. A
+separate installed-host acceptance may drive a real SSH client through
+`dim connect`; this runner never reads or persists a private client key.
 
 `monitor` is optional. Its task identity and bounds are externally supplied;
 the runner does not discover task files, assume a host path or select a parent.
@@ -251,3 +268,42 @@ The monitor fixtures use in-memory responses or disposable loopback HTTP servers
 including the public standalone CLI. They prove classification, recursive
 discovery, OMO/API disagreement preservation, file-growth bounds and evidence
 redaction. They do not establish that any operator's live task was observed.
+
+An explicit source-runtime gate proves actual core discovery and LLM HTTP bytes
+through two fresh stdio helpers inside disposable Docker containers with
+`--network none`. Host targets bind loopback only; the guest also proves that
+host loopback is directly unreachable. No firewall rule is read or changed:
+
+```sh
+IMAGE_EVIDENCE="$(pnpm --dir tests exec tsx scenarios/selected-host/buildRuntimeImage.ts)"
+IMAGE_ID="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.image)' "$IMAGE_EVIDENCE")"
+IMAGE_OWNER="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.owner)' "$IMAGE_EVIDENCE")"
+DIM_SELECTED_HOST_STDIO_IMAGE="$IMAGE_ID" \
+  pnpm --dir tests exec vitest run \
+  scenarios/selected-host/runtimeStdio.test.ts --no-file-parallelism
+```
+
+`buildRuntimeImage.ts` constructs an offline `FROM scratch` image from the
+current Node executable, `/sbin/ip` and their exact dynamic libraries. Its JSON
+records the immutable image ID, unique `dev.dim.test.fixture` owner label and
+Node SHA-256. It does not pull a base image. Retain that JSON with test output.
+The fixture removes each exact named container before opening the next bridge.
+It verifies transport/reopen mechanics, not installed selected-host
+configuration, external ingress, provider inference or VM/KVM effect. Remove
+only the proven owned image after checking its label:
+
+```sh
+test "$(docker image inspect --format '{{ index .Config.Labels "dev.dim.test.fixture" }}' "$IMAGE_ID")" = "$IMAGE_OWNER"
+docker image rm "$IMAGE_ID"
+```
+
+The same gate also creates a Linux bridge device with `172.20.0.1/16` and an HTTP
+shadow at `172.20.0.1:18318` inside a second pair of fresh `--network none`
+containers. It asserts `ip route get 172.20.0.1` resolves as
+`local 172.20.0.1 dev lo`, proves both direct shadow endpoints return the explicit
+`nested-bridge-shadow` marker, then requires generic discovery and LLM model HTTP
+to reach the distinct host-owned named services through stdio. This models the
+kernel route collision caused by a nested bridge; it does not start inner dockerd.
+This collision case needs Docker to grant `NET_ADMIN` inside the disposable test
+container and the reviewed image to contain `ip` from iproute2. Failure to meet
+either prerequisite is a failed runtime gate, not evidence about the channel.
