@@ -11,6 +11,8 @@ dim exec dev -- git status
 dim shell dev
 dim connect dev 3000
 dim forward dev 3000:3000
+dim cp ./input.bin dev:input.bin
+dim cp --recursive dev:reports ./reports
 dim stop dev
 dim start dev
 dim recreate dev
@@ -46,6 +48,22 @@ port; remote ports are integers from 1 to 65535. Forwarding pins workspace
 identity once and rejects a replacement that reuses its name. Closing clients
 or cancelling forwarding closes owned streams and host processes. Neither
 command publishes a Docker port or requires a managed service.
+
+`cp [--recursive] [--overwrite] SOURCE DESTINATION` requires exactly one
+`WORKSPACE:PATH` operand and one operator-machine path. `-` represents one
+regular file on stdin or stdout. The unqualified path belongs to the client even
+when the selected execution host is reached through SSH. Relative guest paths
+resolve from the workspace working directory; absolute guest paths are
+guest-absolute. The destination is exact, directories require `--recursive`,
+and replacement requires `--overwrite`.
+
+Copy streams reserve stdout for payload and stderr for diagnostics. The client
+owns local stat, staging and replacement and rejects unsafe downloaded archive
+entries. The host owns command parsing, workspace lookup and runtime execution,
+pins the immutable workspace identity for the complete transfer, and addresses
+the inspected running runtime rather than following a replacement. Uploads are
+extracted only inside the guest. Recursive copies reject escaping links, hard
+links and special files; archive paths must be relative, normalized and unique.
 
 Optional feature commands are owned by explicitly installed host plugins.
 Native Git owns `dim project` and `dim://` source acquisition; the worker plugin
