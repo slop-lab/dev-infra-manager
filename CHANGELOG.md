@@ -7,8 +7,20 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
-- Repository imports consistently configure `.dim/` review with the connected reviewer, preserve explicit review and CI policies, and report missing review configuration without silently waiving protection.
+- Repository imports consistently configure `.dim/` review with the connected reviewer, preserve explicit review and CI policies, and report missing review configuration without silently waiving protection. Initial preparation honors the operation deadline, attests the serving generation, and distinguishes explicit rejection from an unconfirmed write without blind retries or discarding immutable import intent.
 - CI source acquisition reports bounded authentication, transport and timeout failure codes without exposing read credentials; failed acquisition remains failed required evidence.
+- Add `dim cp` for explicit operator-machine to workspace file transfer through
+  local or SSH-selected hosts. Preserve binary streams, require explicit
+  recursive and overwrite choices, pin workspace/runtime identity, and reject
+  unsafe archive paths, escaping links, hard links and special files without
+  extracting untrusted archives on the host.
+- Materialize repository-independent DIM environment guidance and current
+  workspace discovery automatically. Report immutable identity, runtime and
+  declared isolation, host identity, scoped service/capability access and update
+  freshness without operator credentials or changes to agent/model settings.
+  Distinguish an unreachable bridge or absent workspace KVM grant from host
+  capability; the existing explicit KVM runtime can invoke a fixed in-workspace
+  VM-descriptor verification without acquiring host administration authority.
 
 - Pin production validation and service images to Zod 4.6.6 to reject oversized
   constrained collections before walking their elements, addressing
