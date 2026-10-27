@@ -17,7 +17,8 @@ it.each([false, "empty"] as const)("rejects exit-zero doctor output with failed 
       requiredPlugins: ["agent-tools", "host-llm-router", "external-urls", "native-git"], ingress: "shared",
       llm: { configFile: join(root, "not-read.json"), project: "fixture", route: "default" },
     }] }), { mode: 0o600 });
-    const child = spawn(process.execPath, ["--import", "tsx", script, "--config", config, "--host", "fixture", "--preflight-only", "--json"], {
+    // Ignore only the pinned tsx loader deprecation; application stderr must stay empty.
+    const child = spawn(process.execPath, ["--disable-warning=DEP0205", "--import", "tsx", script, "--config", config, "--host", "fixture", "--preflight-only", "--json"], {
       cwd: new URL("../../", import.meta.url).pathname, env: { PATH: `${bin}:${process.env.PATH ?? ""}`, HOME: root }, stdio: ["ignore", "pipe", "pipe"], timeout: 10_000,
     });
     let stdout = "", stderr = "";
