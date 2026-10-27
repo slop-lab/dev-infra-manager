@@ -43,11 +43,17 @@ export class CopyArchiveReader {
     return entry;
   }
   async file(output: string, size: number, signal?: AbortSignal): Promise<void> {
-    const { createWriteStream } = await import("node:fs");
-    const { finished } = await import("node:stream/promises");
-    const stream = createWriteStream(output, { flags: "wx", mode: 0o600 });
-    try { await this.stream(stream, size, signal); stream.end(); await finished(stream); }
-    finally { stream.destroy(); }
+    const { open } = await import("node:fs/promises");
+    const file = await open(output, "wx", 0o600);
+    try {
+      let remaining = size;
+      while (remaining > 0) {
+        signal?.throwIfAborted();
+        const chunk = await this.take(Math.min(remaining, 64 * 1024));
+        await file.writeFile(chunk);
+        remaining -= chunk.length;
+      }
+    } finally { await file.close(); }
   }
   async stream(output: Writable, size: number, signal?: AbortSignal): Promise<void> {
     let remaining = size;

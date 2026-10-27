@@ -93,6 +93,22 @@ it("rejects hard-linked guest files before emitting a completed download archive
   expect(result.status).toBe(2); expect(result.stderr).toMatch(/hard-linked/);
 });
 
+it("rejects composed and unresolved links and preserves existing upload data", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "dim-copy-links-")); roots.push(root);
+  const destination = path.join(root, "destination"); await writeFile(destination, "old");
+  for (const target of ["dir/up/../outside", "missing", "escape"]) {
+    const result = await guest("receive", destination, archive([
+      { path: ".", type: "directory", mode: 0o700 },
+      { path: "dir", type: "directory", mode: 0o700 },
+      { path: "dir/up", type: "symlink", mode: 0o777, target: ".." },
+      { path: "escape", type: "symlink", mode: 0o777, target }
+    ]), true, true);
+    expect(result.status).toBe(2); expect(result.stderr).toMatch(/unresolved|escaping/);
+    expect(await readFile(destination, "utf8")).toBe("old");
+    expect((await readdir(root)).filter((name) => name.startsWith(".dim-copy-"))).toEqual([]);
+  }
+});
+
 async function guest(direction: "send" | "receive", operand: string, input: Buffer, recursive: boolean, overwrite: boolean) {
   const child = spawn(process.execPath, ["--input-type=commonjs", "-e", workspaceCopyGuest, direction, operand,
     recursive ? "1" : "0", overwrite ? "1" : "0", workspaceCopyMarker, "helper", randomUUID()], { stdio: ["pipe", "pipe", "pipe"] });

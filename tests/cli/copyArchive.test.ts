@@ -4,7 +4,7 @@ import { createServer } from "node:net";
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import test from "node:test";
 import { createCopyArchive, extractCopyArchive } from "../../packages/cli/core/src/copy-archive.js";
 import { CopyArchiveReader, copyArchiveMagic } from "../../packages/cli/core/src/copy-archive-reader.js";
@@ -168,6 +168,31 @@ test("extraction rejects traversal, absolute, escaping symlink, hardlink, and du
       await assert.rejects(extractCopyArchive(archive(entries), path.join(temporary, `output-${Math.random()}`), { overwrite: false }), /unsafe|unsupported|duplicate/);
     }
   } finally { await rm(temporary, { recursive: true, force: true }); }
+});
+
+test("composed and unresolved archive links cannot escape or replace a destination", async () => {
+  const temporary = await root();
+  try {
+    const destination = path.join(temporary, "destination"); await writeFile(destination, "old");
+    for (const target of ["dir/up/../outside", "missing", "escape"]) {
+      await assert.rejects(extractCopyArchive(archive([
+        { path: ".", type: "directory", mode: 0o700 },
+        { path: "dir", type: "directory", mode: 0o700 },
+        { path: "dir/up", type: "symlink", mode: 0o777, target: ".." },
+        { path: "escape", type: "symlink", mode: 0o777, target }
+      ]), destination, { overwrite: true }), /unresolved|escaping/);
+      assert.equal(await readFile(destination, "utf8"), "old");
+      assert.deepEqual((await readdir(temporary)).filter((name) => name.startsWith(".dim-copy-")), []);
+    }
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
+
+test("file open failure rejects before waiting for withheld archive payload", { timeout: 2000 }, async () => {
+  const temporary = await root(); const input = new PassThrough();
+  try {
+    const reader = new CopyArchiveReader(input);
+    await assert.rejects(reader.file(path.join(temporary, "missing", "file"), 1), { code: "ENOENT" });
+  } finally { input.destroy(); await rm(temporary, { recursive: true, force: true }); }
 });
 
 async function consume(input: Readable): Promise<void> { for await (const _chunk of input) continue; }

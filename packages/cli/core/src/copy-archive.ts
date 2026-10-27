@@ -77,6 +77,7 @@ export async function stageCopyArchive(
     const reader = new CopyArchiveReader(input);
     await reader.magic();
     const seen = new Map<string, Entry["type"]>();
+    const links: string[] = [];
     const directoryModes: Array<{ readonly path: string; readonly mode: number }> = [];
     let first = true;
     for (;;) {
@@ -91,7 +92,7 @@ export async function stageCopyArchive(
         if (seen.get(parentEntry === "." ? "." : parentEntry) !== "directory") throw new CliHostProtocolError(`archive parent for '${entry.path}' is not a directory`);
       }
       if (entry.type === "directory") { await mkdir(output, { mode: 0o700 }); directoryModes.push({ path: output, mode: entry.mode }); }
-      else if (entry.type === "symlink") await symlink(entry.target, output);
+      else if (entry.type === "symlink") { await symlink(entry.target, output); links.push(output); }
       else {
         await reader.file(output, entry.size, options.signal);
         await chmod(output, entry.mode);
@@ -99,6 +100,13 @@ export async function stageCopyArchive(
     }
     if (first) throw new CliHostProtocolError("copy archive is empty");
     await reader.end();
+    const canonicalStage = await realpath(stage);
+    for (const link of links) {
+      let resolved: string;
+      try { resolved = await realpath(link); }
+      catch (error) { throw new CliHostProtocolError("unresolved copy archive symlink", { cause: error }); }
+      if (!inside(canonicalStage, resolved)) throw new CliHostProtocolError("escaping copy archive symlink");
+    }
     for (const directory of directoryModes.reverse()) await chmod(directory.path, directory.mode);
   } catch (error) {
     await rm(staging, { recursive: true, force: true });

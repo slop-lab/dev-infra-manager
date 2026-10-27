@@ -27,6 +27,12 @@ test("public cp round trips files and recursive trees through local and SSH sele
     result = await run(["cp", "-", "dev:/stdin.bin"], binary); assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(await readFile(path.join(guest, "stdin.bin")), binary);
 
+    for (const [index, name] of ["1-test", "foo_bar", "foo.bar", "a".repeat(48)].entries()) {
+      result = await run(["cp", local, `${name}:/valid-${index}`]);
+      assert.equal(result.status, 0, result.stderr);
+      result = await run(["cp", `${name}:/valid-${index}`, "-"]);
+      assert.equal(result.status, 0, result.stderr); assert.deepEqual(result.stdout, binary);
+    }
     const tree = path.join(root, "tree"); await mkdir(path.join(tree, "nested"), { recursive: true });
     await writeFile(path.join(tree, "nested", "tool"), "tool"); await chmod(path.join(tree, "nested", "tool"), 0o750);
     await symlink("nested/tool", path.join(tree, "tool-link"));

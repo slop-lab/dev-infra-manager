@@ -104,7 +104,7 @@ function parseCopyRequest(args: readonly string[]): CopyRequest {
 }
 
 function operand(value: string): CopyOperand {
-  const match = /^([a-z][a-z0-9-]{0,31}):(.*)$/.exec(value);
+  const match = /^([a-z0-9][a-z0-9_.-]{0,47}):(.*)$/.exec(value);
   if (match === null) return { kind: "local", path: value };
   if (!match[2] || match[2].includes("\0")) throw new CliHostProtocolError("workspace copy path must be nonempty");
   return { kind: "workspace", name: match[1] ?? "", path: match[2] };

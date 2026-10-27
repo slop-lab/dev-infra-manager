@@ -39,7 +39,7 @@ class Reader{
   async take(length){while(this.buffer.length<length){const next=await this.iterator.next();if(next.done)fail("copy archive ended unexpectedly");const chunk=Buffer.isBuffer(next.value)?next.value:Buffer.from(next.value);this.buffer=Buffer.concat([this.buffer,chunk])}const result=this.buffer.subarray(0,length);this.buffer=this.buffer.subarray(length);return result}
   async start(){if(!(await this.take(magic.length)).equals(magic))fail("invalid copy archive header")}
   async entry(){const length=(await this.take(4)).readUInt32BE();if(length===0)return;if(length>65536)fail("copy archive entry header is too large");this.entries++;this.headers+=length;if(this.entries>maxEntries)fail("copy archive has too many entries");if(this.headers>maxHeaders)fail("copy archive headers exceed their size limit");let entry;try{entry=JSON.parse((await this.take(length)).toString("utf8"))}catch{fail("invalid copy archive entry")}if(entry&&entry.type==="file"&&Number.isSafeInteger(entry.size)&&entry.size>=0){this.payload+=entry.size;if(this.payload>maxPayload)fail("copy archive payload exceeds its size limit")}return entry}
-  async file(output,size){const stream=fs.createWriteStream(output,{flags:"wx",mode:384});let remaining=size;try{while(remaining>0){const chunk=await this.take(Math.min(remaining,65536));remaining-=chunk.length;if(!stream.write(chunk))await new Promise((resolve,reject)=>{stream.once("drain",resolve);stream.once("error",reject)})}stream.end();await new Promise((resolve,reject)=>{stream.once("close",resolve);stream.once("error",reject)})}finally{stream.destroy()}}
+  async file(output,size){const file=await fsp.open(output,"wx",384);let remaining=size;try{while(remaining>0){const chunk=await this.take(Math.min(remaining,65536));await file.writeFile(chunk);remaining-=chunk.length}}finally{await file.close()}}
   async end(){if(this.buffer.length!==0)fail("copy archive has trailing data");for(;;){const next=await this.iterator.next();if(next.done)return;const chunk=Buffer.isBuffer(next.value)?next.value:Buffer.from(next.value);if(chunk.length!==0)fail("copy archive has trailing data")}}
 }
 function validate(entry,first,seen){
@@ -57,13 +57,16 @@ async function receive(){
   await fsp.mkdir(parent,{recursive:true});
   if(!overwrite&&await exists(target))fail("copy destination already exists; use --overwrite");
   await fsp.mkdir(staging,{mode:448});
-  const reader=new Reader(process.stdin);await reader.start();const seen=new Map(),directories=[];let first=true;
+  const reader=new Reader(process.stdin);await reader.start();const seen=new Map(),directories=[],links=[];let first=true;
   for(;;){const entry=await reader.entry();if(entry===undefined)break;validate(entry,first,seen);first=false;
     const output=entry.path==="."?stage:path.join(stage,...entry.path.split("/"));
     if(entry.path!=="."){const parentEntry=path.posix.dirname(entry.path);if(seen.get(parentEntry==="."?".":parentEntry)!=="directory")fail("archive parent is not a directory")}
-    if(entry.type==="directory"){await fsp.mkdir(output,{mode:448});directories.push({path:output,mode:entry.mode})}else if(entry.type==="symlink")await fsp.symlink(entry.target,output);else{await reader.file(output,entry.size);await fsp.chmod(output,entry.mode)}
+    if(entry.type==="directory"){await fsp.mkdir(output,{mode:448});directories.push({path:output,mode:entry.mode})}else if(entry.type==="symlink"){await fsp.symlink(entry.target,output);links.push(output)}else{await reader.file(output,entry.size);await fsp.chmod(output,entry.mode)}
   }
-  if(first)fail("copy archive is empty");await reader.end();for(const directory of directories.reverse())await fsp.chmod(directory.path,directory.mode);
+  if(first)fail("copy archive is empty");await reader.end();
+  const canonicalStage=await fsp.realpath(stage);
+  for(const link of links){let resolved;try{resolved=await fsp.realpath(link)}catch(error){throw new Error("unresolved copy archive symlink",{cause:error})}if(!inside(canonicalStage,resolved))fail("escaping copy archive symlink")}
+  for(const directory of directories.reverse())await fsp.chmod(directory.path,directory.mode);
   if(await exists(target)){if(!overwrite)fail("copy destination already exists; use --overwrite");await fsp.rename(target,backup);backedUp=true}
   try{await fsp.rename(stage,target)}catch(promotionError){if(backedUp){try{await fsp.rename(backup,target);backedUp=false}catch(restorationError){throw new AggregateError([promotionError,restorationError],"copy promotion failed; old destination backup retained at '"+backup+"'")}}throw promotionError}
   await fsp.rm(staging,{recursive:true,force:true});if(backedUp){await fsp.rm(backup,{recursive:true,force:true});backedUp=false}
