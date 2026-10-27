@@ -15,10 +15,12 @@ export function createNativeProposalReconciliationLoop(input: {
   let failures = 0;
   let timer: NodeJS.Timeout | undefined;
   let running = Promise.resolve();
+  let reconciling = false;
 
   const start = (): void => {
-    if (closed || exhausted || !pending || timer !== undefined) return;
+    if (closed || exhausted || reconciling || !pending || timer !== undefined) return;
     pending = false;
+    reconciling = true;
     running = (async () => {
       if (closed) return;
       try {
@@ -41,6 +43,7 @@ export function createNativeProposalReconciliationLoop(input: {
         timer.unref();
       }
     })().finally(() => {
+      reconciling = false;
       if (pending) queueMicrotask(start);
     });
   };

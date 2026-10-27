@@ -7,6 +7,22 @@ afterEach(() => {
 });
 
 describe("native proposal reconciliation loop", () => {
+  it("coalesces wakes during an active attempt instead of preparing the same job concurrently", async () => {
+    // Given a deliberately blocked preparation.
+    const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+    let calls = 0;
+    const loop = createNativeProposalReconciliationLoop({ async reconcile() {
+      calls += 1; entered.resolve(); await release.promise;
+    }, unavailable(error) { throw error; } });
+    loop.wake(); await entered.promise;
+    // When new accepted work wakes the owned worker repeatedly.
+    loop.wake(); loop.wake(); await Promise.resolve();
+    try {
+      // Then only the existing attempt remains active and shutdown drains it.
+      expect(calls).toBe(1);
+    } finally { release.resolve(); await loop.close(); }
+  });
+
   it("fails closed after the bounded retry schedule is exhausted", async () => {
     // Given
     vi.useFakeTimers();
@@ -62,5 +78,28 @@ describe("native proposal reconciliation loop", () => {
     // Then
     expect(reconcile).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops admitting work but drains the active reconciliation when service shutdown aborts", async () => {
+    // Given
+    let finish: (() => void) | undefined;
+    const reconcile = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const loop = createNativeProposalReconciliationLoop({ reconcile, unavailable: vi.fn() });
+    loop.wake();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(reconcile).toHaveBeenCalledOnce();
+
+    // When
+    let closed = false;
+    const close = loop.close().then(() => { closed = true; });
+    await Promise.resolve();
+
+    // Then
+    expect(closed).toBe(false);
+    loop.wake();
+    finish?.();
+    await close;
+    expect(reconcile).toHaveBeenCalledOnce();
   });
 });
