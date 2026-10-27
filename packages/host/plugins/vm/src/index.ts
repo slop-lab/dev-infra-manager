@@ -25,6 +25,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
   name: "vm",
   runtime: {
     name: "vm",
+    isolation: "virtual-machine",
     create(context) {
       const config = readVmHostConfig(context.stateRoot);
       return new IncusWorkspaceRuntime(new IncusMachines(config, context.runner, configuredBudget(config, context.runner), context.cleanupRunner));
