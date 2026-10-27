@@ -82,8 +82,9 @@ selected local or SSH host. Relative guest paths resolve from the workspace
 working directory; `/absolute` paths are absolute inside the guest. The
 destination is exact: `cp` does not append the source basename. Directories
 require `--recursive`. A symlink is retained only when it is contained in a
-recursive directory source and its target stays within that tree. Standalone or
-escaping symlinks, hard links and special files are rejected.
+recursive directory source and its fully resolved target stays within that tree.
+Standalone, escaping, dangling or cyclic symlinks, hard links and special files
+are rejected.
 
 An existing exact destination is preserved unless `--overwrite` is explicit.
 Files are staged and replaced rather than written in place, so shorter content

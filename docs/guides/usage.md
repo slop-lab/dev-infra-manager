@@ -215,8 +215,9 @@ guest filesystem. Destinations are exact and existing data is preserved unless
 `--overwrite` is supplied. Directories require `--recursive`.
 
 Recursive copies preserve ordinary files, executable modes, directories and
-symlinks whose targets remain within the copied tree. Standalone or escaping
-symlinks, hard links and device, socket or FIFO entries are rejected. Downloads
+symlinks whose fully resolved targets remain within the copied tree. Standalone,
+escaping, dangling or cyclic symlinks, hard links and device, socket or FIFO
+entries are rejected. Downloads
 are validated before local replacement: absolute or traversing archive names,
 duplicate entries, escaping links and unsupported types fail without replacing
 the destination. The selected host does not extract an upload onto its own

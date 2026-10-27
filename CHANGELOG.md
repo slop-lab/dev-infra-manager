@@ -12,7 +12,7 @@ is implied by these source changes.
 - Add `dim cp` for explicit operator-machine to workspace file transfer through
   local or SSH-selected hosts. Preserve binary streams, require explicit
   recursive and overwrite choices, pin workspace/runtime identity, and reject
-  unsafe archive paths, escaping links, hard links and special files without
+  unsafe archive paths, escaping or unresolved links, hard links and special files without
   extracting untrusted archives on the host.
 - Materialize repository-independent DIM environment guidance and current
   workspace discovery automatically. Report immutable identity, runtime and

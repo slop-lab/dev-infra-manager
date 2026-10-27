@@ -62,8 +62,9 @@ owns local stat, staging and replacement and rejects unsafe downloaded archive
 entries. The host owns command parsing, workspace lookup and runtime execution,
 pins the immutable workspace identity for the complete transfer, and addresses
 the inspected running runtime rather than following a replacement. Uploads are
-extracted only inside the guest. Recursive copies reject escaping links, hard
-links and special files; archive paths must be relative, normalized and unique.
+extracted only inside the guest. Recursive copies reject escaping, dangling or
+cyclic links after resolving the complete staged tree, plus hard links and special
+files; archive paths must be relative, normalized and unique.
 
 Optional feature commands are owned by explicitly installed host plugins.
 Native Git owns `dim project` and `dim://` source acquisition; the worker plugin
