@@ -8,13 +8,15 @@ import { z } from "zod";
 import type { GitCiConfig } from "./config.js";
 import { authorizeExecution, assertCurrentExecution, readExecutionGrant, recordExecutionEvidence, ExecutionConflictError } from "./execution-evidence.js";
 import { executionCandidateLeaseLifetimeMilliseconds, executionGrantRequestSchema, type ExecutionGrant } from "@slop-lab/dim-contracts-ci/execution";
-import { AuthoritativeRepositoryError, nativeBasicAuthorized, nativeBasicCredential } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { AuthoritativeRepositoryError, nativeBasicAuthorized, nativeBasicCredential, RepositoryAccessError } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { readBoundedJson, sendJson, sendNotFound, NativeGitBundleHttpError } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { serveGitBackend } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import type { NativeGitRoute } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import type { RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 
 type Input = { readonly config: GitCiConfig; readonly runtime: GitCiRuntime;
-  readonly stateDirectory: string; readonly serialize: <T>(operation: () => Promise<T>) => Promise<T>;
+  readonly stateDirectory: string; readonly mutate: RepositoryExtensionContext["mutate"];
+  readonly read: RepositoryExtensionContext["read"]; readonly signal: AbortSignal;
   readonly now?: () => number };
 export type ExecutionHttpService = ReturnType<typeof createExecutionHttpService>;
 export function createExecutionHttpService(input: Input) {
@@ -34,16 +36,22 @@ export function createExecutionHttpService(input: Input) {
       if (!input.runtime.activated() || request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId) {
         sendJson(response, 409, { error: "execution generation is unavailable" }); return true;
       }
+      if (input.signal.aborted) { sendJson(response, 503, { error: "execution authority is unavailable" }); return true; }
       try {
         const body = await readBoundedJson(request);
-        const result = await input.serialize(async () => {
+        const grantRequest = grantRoute ? executionGrantRequestSchema.parse(body) : undefined;
+        const projectId = grantRequest?.event.projectId ?? match?.[1];
+        const repositoryId = grantRequest?.event.repositoryId ?? match?.[2];
+        if (projectId === undefined || repositoryId === undefined) throw new NativeGitBundleHttpError("execution selector is missing");
+        const result = await input.mutate({ projectId, repositoryId }, async () => {
           const runtime = { ...input.runtime, authoritativeTargetProofs: new Map() };
-          if (grantRoute) return authorizeExecution(runtime, executionGrantRequestSchema.parse(body));
-          const projectId = match![1]!;
-          const repositoryId = match![2]!;
-          const grant = await readExecutionGrant(join(input.stateDirectory, projectId, `${repositoryId}.git`), match![3]!);
+          if (grantRequest !== undefined) return authorizeExecution(runtime, grantRequest);
+          const executionId = match?.[3];
+          const action = match?.[4];
+          if (executionId === undefined || action === undefined) throw new NativeGitBundleHttpError("execution route is invalid");
+          const grant = await readExecutionGrant(join(input.stateDirectory, projectId, `${repositoryId}.git`), executionId);
           if (grant === undefined || grant.event.projectId !== projectId || grant.event.repositoryId !== repositoryId) throw new ExecutionConflictError("execution was not found");
-          if (match![4] === "evidence") return recordExecutionEvidence(runtime, grant, body);
+          if (action === "evidence") return recordExecutionEvidence(runtime, grant, body);
           z.object({}).strict().parse(body);
           await assertCurrentExecution(runtime, grant);
           prune();
@@ -66,6 +74,7 @@ export function createExecutionHttpService(input: Input) {
     async serveGit(request: IncomingMessage, response: ServerResponse, route: NativeGitRoute): Promise<boolean> {
       const supplied = nativeBasicCredential(request);
       if (supplied === undefined) return false;
+      if (input.signal.aborted) { response.writeHead(503).end(); return true; }
       prune();
       const lease = leases.get(supplied.username);
       if (lease === undefined) return false;
@@ -74,11 +83,17 @@ export function createExecutionHttpService(input: Input) {
       if (route.operation !== "read" || route.projectId !== lease.grant.event.projectId || !Object.hasOwn(lease.grant.descriptor.inputs, route.repositoryId)) {
         response.writeHead(403).end(); return true;
       }
-      try { await input.serialize(() => assertCurrentExecution({ ...input.runtime, authoritativeTargetProofs: new Map() }, lease.grant)); }
-      catch { response.writeHead(409).end(); return true; }
-      if (lease.expiresAt <= now()) { leases.delete(supplied.username); response.writeHead(401).end(); return true; }
-      await serveGitBackend({ config: { gitExecutable: input.runtime.gitExecutable, storageRoot: input.stateDirectory },
-        identity: { role: "reader", username: "execution-reader" }, route, request, response });
+      try {
+        await input.read(async () => {
+          await assertCurrentExecution({ ...input.runtime, authoritativeTargetProofs: new Map() }, lease.grant);
+          if (lease.expiresAt <= now()) { leases.delete(supplied.username); response.writeHead(401).end(); return; }
+          await serveGitBackend({ config: { gitExecutable: input.runtime.gitExecutable, storageRoot: input.stateDirectory },
+            identity: { role: "reader", username: "execution-reader" }, route, request, response });
+        });
+      } catch (error) {
+        if (response.headersSent) response.destroy();
+        else response.writeHead(error instanceof RepositoryAccessError ? error.status : 409).end();
+      }
       return true;
     }
   };

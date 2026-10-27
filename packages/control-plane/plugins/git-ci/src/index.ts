@@ -48,7 +48,9 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
           state: runtime.state, stateDirectory: context.stateDirectory, generationId: runtime.expectedGenerationId,
           httpClient: options.httpClient ?? createNodeNativeGitAdmissionHttpClient(), serialize: context.serialize,
           ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults }) });
-        const execution = createExecutionHttpService({ config, runtime, stateDirectory: context.stateDirectory, serialize: context.serialize, ...(options.now === undefined ? {} : { now: options.now }) });
+        const execution = createExecutionHttpService({ config, runtime, stateDirectory: context.stateDirectory,
+          mutate: context.mutate, read: context.read, signal: context.signal,
+          ...(options.now === undefined ? {} : { now: options.now }) });
         context.signal.addEventListener("abort", () => { void dispatcher.close(); execution.close(); }, { once: true });
         const attachedRuntime = runtime;
         return { async handle(request, response, url) {
