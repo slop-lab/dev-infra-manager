@@ -19,8 +19,8 @@ export const controlPlanePlugin: ControlPlanePlugin = { apiVersion: 1, name: "gi
       if (request.method !== "POST") { sendJson(response, 405, { error: "Method not allowed" }); return true; }
       try {
         const body = comment.parse(await readBoundedJson(request));
-        await context.serialize(async () => {
-          const selector = { projectId: match[1]!, repositoryId: match[2]! };
+        const selector = { projectId: match[1]!, repositoryId: match[2]! };
+        await context.mutate(selector, async () => {
           const access = await repositoryAccessProvider(context.extensions).authorize(context, request, selector);
           const service = pullRequestService(context.extensions);
           const record = await service.read(context, selector, match[3]!);
