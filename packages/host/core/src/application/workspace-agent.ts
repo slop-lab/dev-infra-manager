@@ -14,6 +14,7 @@ import { openWorkspaceServiceChannel } from "../workspace/serviceChannel.js";
 import { maintainWorkspaceServiceChannel } from "../workspace/serviceChannelReconnect.js";
 import { workspaceServiceEndpoint, workspaceServicePort } from "../workspace/serviceEndpoint.js";
 import { privateJson, parseStoredConfiguration, parseConfiguration, workspaceAgentGeneration, type AgentConfiguration, type StoredAgentConfiguration } from "./workspace-agent-state.js";
+import { deployWorkspaceDiscovery, workspaceDiscovery } from "./workspace-discovery.js";
 export { workspaceAgentGeneration } from "./workspace-agent-state.js";
 
 interface AgentReady { endpoint: string; workspaceId: string }
@@ -81,6 +82,8 @@ async function prepareWorkspacePlugins(record: WorkspaceRecord, context: AgentHo
   const installed = await loadHostPlugins();
   const pluginContext = { ...context, extensions: hostPluginExtensions(installed) };
   for (const plugin of installed) await plugin.workspaceReady?.(record, pluginContext);
+  await deployWorkspaceDiscovery({ workspace: record, plugins: installed,
+    context: { ...pluginContext, generation: await workspaceAgentGeneration() } });
 }
 
 async function agentReady(root: string, config: AgentConfiguration): Promise<AgentReady | undefined> {
@@ -177,6 +180,15 @@ export function createWorkspaceAgentServer(
     const record = await context.store.read(config.workspaceName);
     if (record.id !== config.workspaceId) { json(response, 410, { error: "workspace identity expired" }); return; }
     if (request.method === "GET" && request.url === "/v1/resources") { json(response, 200, record.resources); return; }
+    if (request.method === "GET" && request.url === "/v1/discovery") {
+      if (!record.initialized || record.phase !== "running" || !(await context.runtime.inspect(record))?.running) { json(response, 409, { error: "workspace is not running" }); return; }
+      const installed = await loadHostPlugins();
+      const value = await workspaceDiscovery({ workspace: record, plugins: installed,
+        context: { ...context, extensions: hostPluginExtensions(installed), generation: config.generation }, delivery: "online" });
+      const latest = await context.store.read(config.workspaceName);
+      if (latest.id !== record.id || !latest.initialized || latest.phase !== "running" || !(await context.runtime.inspect(latest))?.running) { json(response, 410, { error: "workspace identity expired" }); return; }
+      json(response, 200, value); return;
+    }
     if (request.method === "POST" && ["/v1/restart", "/v1/recreate"].includes(request.url ?? "")) {
       const body = await readJson(request);
       if (!isObject(body) || Object.keys(body).length) throw new UserError("restart accepts no workspace selector or options");

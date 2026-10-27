@@ -22,7 +22,8 @@ it("guest commands use only scoped routes, preserve resource allocation and reje
     requests.push({ method: request.method ?? "", url: request.url ?? "", body });
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify(request.url === "/v1/resources" ? { cpuCount, memory: "4g", pidsLimit: "512" }
-      : request.url === "/v1/plugins" ? { plugins: [] } : { accepted: true }));
+      : request.url === "/v1/plugins" ? { plugins: [] }
+      : request.url === "/v1/discovery" ? { schemaVersion: 1, workspace: { id: "owned" } } : { accepted: true }));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
@@ -38,10 +39,12 @@ it("guest commands use only scoped routes, preserve resource allocation and reje
     await run("restart"); await run("recreate");
     await run("plugin", "example", "submit", JSON.stringify({ arbitrary: ["plugin-owned", 123] }));
     await run("plugins");
-    expect(requests.slice(-4)).toEqual([
+    expect(JSON.parse((await run("discovery")).stdout)).toEqual({ schemaVersion: 1, workspace: { id: "owned" } });
+    expect((await run("help")).stdout).toContain("discovery");
+    expect(requests.slice(-5)).toEqual([
       { method: "POST", url: "/v1/restart", body: {} }, { method: "POST", url: "/v1/recreate", body: {} },
       { method: "POST", url: "/v1/plugins/example/submit", body: { arbitrary: ["plugin-owned", 123] } },
-      { method: "GET", url: "/v1/plugins", body: null }
+      { method: "GET", url: "/v1/plugins", body: null }, { method: "GET", url: "/v1/discovery", body: null }
     ]);
     const count = requests.length;
     await expect(run("restart", "--workspace", "other")).rejects.toThrow();

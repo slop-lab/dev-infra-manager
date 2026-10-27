@@ -6,6 +6,7 @@ import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { UserError } from "../errors.js";
+import { workspaceEnvironmentSkillAsset, workspaceGuestAssets } from "../workspace/guestAssets.js";
 import { hostPluginHome } from "./host-plugins.js";
 
 export interface AgentConfiguration {
@@ -37,12 +38,8 @@ export function parseConfiguration(value: unknown): AgentConfiguration {
   return { ...config, generation: config.generation };
 }
 export async function workspaceAgentGeneration(): Promise<string> {
-  const hash = createHash("sha256").update("dim-workspace-stdio-bridge-v3\0");
-  const source = fileURLToPath(import.meta.url);
-  for (const file of [source, ...["workspace-agent", "workspace-agent-process", "host-plugins", "workspace-composition"].map((name) => path.join(path.dirname(source), `${name}${path.extname(source)}`))]) {
-    hash.update(file).update("\0").update(await readFile(file)).update("\0");
-  }
-  for (const name of ["serviceChannel", "serviceChannelGuest", "serviceChannelReconnect", "serviceEndpoint"]) hash.update(await readFile(path.join(path.dirname(source), "../workspace", `${name}${path.extname(source)}`)));
+  const hash = createHash("sha256").update("dim-workspace-stdio-bridge-v3\0")
+    .update(await workspaceAgentCodeFingerprint()).update("\0");
   const home = hostPluginHome(); hash.update(home).update("\0");
   try {
     const metadata = await stat(home, { bigint: true }); hash.update(`${metadata.dev}:${metadata.ino}\0`);
@@ -59,6 +56,32 @@ export async function workspaceAgentGeneration(): Promise<string> {
     const file = installed.resolve(name); hash.update(name).update("\0").update(file).update("\0").update(await readFile(file)).update("\0");
   }
   return hash.digest("hex");
+}
+
+export async function workspaceAgentCodeFingerprint(files: readonly string[] = workspaceAgentGenerationInputFiles()): Promise<string> {
+  const hash = createHash("sha256").update("dim-workspace-code-v1\0");
+  for (const file of files) hash.update(file).update("\0").update(await readFile(file)).update("\0");
+  return hash.digest("hex");
+}
+
+export function workspaceAgentGenerationInputFiles(): readonly string[] {
+  const source = fileURLToPath(import.meta.url), application = path.dirname(source), extension = path.extname(source);
+  return [
+    source,
+    ...["workspace-agent", "workspace-agent-process", "workspace-discovery", "host-plugins", "workspace-composition"]
+      .map((name) => path.join(application, `${name}${extension}`)),
+    path.join(application, "../workspace", `guestAssets${extension}`),
+    ...["serviceChannel", "serviceChannelGuest", "serviceChannelReconnect", "serviceEndpoint"]
+      .map((name) => path.join(application, "../workspace", `${name}${extension}`)),
+    ...workspaceGuestAssets().map(({ sourcePath }) => sourcePath),
+    workspaceEnvironmentSkillAsset().sourcePath
+  ];
+}
+
+export async function hostPluginManifestFingerprint(): Promise<string> {
+  const hash = createHash("sha256");
+  try { return hash.update(await readFile(path.join(hostPluginHome(), "plugins.json"))).digest("hex"); }
+  catch (error) { if (!hasCode(error, "ENOENT")) throw error; return hash.update("no-plugins").digest("hex"); }
 }
 function isObject(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
 function hasCode(value: unknown, code: string): boolean { return isObject(value) && value.code === code; }

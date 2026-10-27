@@ -43,6 +43,14 @@ async function main(args) {
     if (rest.length) throw new Error("usage: dim-workspace plugins");
     console.log(JSON.stringify(await request("GET", "/v1/plugins"))); return;
   }
+  if (command === "discovery") {
+    if (rest.length) throw new Error("usage: dim-workspace discovery");
+    console.log(JSON.stringify(await request("GET", "/v1/discovery"))); return;
+  }
+  if (command === "help" || command === "--help" || command === "-h") {
+    if (rest.length) throw new Error("usage: dim-workspace help");
+    console.log("usage: dim-workspace discovery|resources|nproc|restart|recreate|plugins|plugin|session|service"); return;
+  }
   if (command === "plugin") {
     const [plugin, operation, input = "{}"] = rest;
     if (rest.length < 2 || rest.length > 3 || !/^[a-z][a-z0-9-]{0,63}$/.test(plugin ?? "")
@@ -51,7 +59,7 @@ async function main(args) {
     const body = JSON.parse(input);
     console.log(JSON.stringify(await request("POST", `/v1/plugins/${plugin}/${operation}`, body))); return;
   }
-  throw new Error("usage: dim-workspace resources|nproc|restart|recreate|plugins|plugin|session|service");
+  throw new Error("usage: dim-workspace discovery|resources|nproc|restart|recreate|plugins|plugin|session|service");
 }
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */

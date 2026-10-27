@@ -7,10 +7,12 @@ import { request as httpRequest } from "node:http";
 import { cp, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProcessRunner, WorkspaceService, WorkspaceStore, type WorkspaceRuntime } from "@slop-lab/dim-host-core/workspace";
 import { loadHostPlugins } from "../../../packages/host/core/src/application/host-plugins.js";
 import { createWorkspaceAgentServer, ensureWorkspaceAgent, runWorkspaceAgent, workspaceAgentGeneration } from "../../../packages/host/core/src/application/workspace-agent.js";
+import { workspaceAgentCodeFingerprint, workspaceAgentGenerationInputFiles } from "../../../packages/host/core/src/application/workspace-agent-state.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(cleanup.splice(0).map((action) => action())); });
@@ -60,7 +62,7 @@ describe("workspace-scoped agent gateway", () => {
       async exec(_record, command, options) {
         const script = command.at(-1); if (!script) throw new Error("missing guest writer");
         return (await runner.run(process.execPath, ["--input-type=commonjs", "-e", `Object.defineProperty(process,'pid',{value:42});${script}`], {
-          ...options, env: { ...process.env, HOME: home }
+          ...options, cwd: home, env: { ...process.env, HOME: home }
         })).exitCode;
       }
     };
@@ -84,13 +86,21 @@ describe("workspace-scoped agent gateway", () => {
       expect(JSON.parse(await readFile(path.join(guest, "workspace.json"), "utf8"))).toEqual({ endpoint: "http://127.0.0.1:19420/services/workspace", workspaceId: record.id, token: connection.token });
       expect((await stat(path.join(guest, "workspace.json"))).mode & 0o777).toBe(0o600);
       expect(await readFile(path.join(bin, "dim-workspace"), "utf8")).toContain("/v1/plugins");
+      const discovery = JSON.parse(await readFile(path.join(home, ".config/dim/discovery.json"), "utf8"));
+      expect(discovery).toMatchObject({ schemaVersion: 1, delivery: "readiness-cache", workspace: { id: record.id, runtime: record.runtime } });
+      expect(discovery.agent).not.toHaveProperty("mode");
+      const skill = await readFile(path.join(home, ".agents/skills/dim-environment/SKILL.md"), "utf8");
+      expect(skill.startsWith("---\nname: dim-environment\n")).toBe(true);
+      if (process.env.DIM_SKILL_VALIDATOR) await promisify(execFile)("python3", [process.env.DIM_SKILL_VALIDATOR,
+        path.join(home, ".agents/skills/dim-environment")], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
+      await expect(stat(path.join(home, ".dim"))).rejects.toMatchObject({ code: "ENOENT" });
       await expect(promisify(execFile)(process.execPath, [path.join(bin, "dim-workspace"), "plugin", "example", "run", "not-json"], { env: { ...process.env, HOME: home } })).rejects.toThrow(/Unexpected token/);
       const first = await readFile(path.join(directory, "config.json"), "utf8");
       await ensureWorkspaceAgent(record, context);
       expect(await readFile(path.join(directory, "config.json"), "utf8")).toBe(first);
       await rm(path.join(guest, "workspace.json")); await mkdir(path.join(guest, "workspace.json"));
       await expect(ensureWorkspaceAgent(record, context)).rejects.toThrow(/cannot safely prepare/);
-      expect((await readdir(guest)).sort()).toEqual(["workspace.json", "workspace.json.tmp-42"]);
+      expect((await readdir(guest)).sort()).toEqual(["discovery.json", "workspace.json", "workspace.json.tmp-42"]);
       expect(await readFile(path.join(guest, "workspace.json.tmp-42"), "utf8")).toBe("interrupted earlier guest process");
     } finally { fetch.mockRestore(); vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
   });
@@ -144,7 +154,8 @@ it("discovers installed guest integrations without exposing handlers/config and 
     commands:[{name:'dim-example',description:'Example client',secret:'not public'}],
     inspect:async()=>({state:'unconfigured',message:'Ask the operator to configure this integration',token:'not public'}),
     operations:[{name:'submit',description:'Submit scoped data',handle:async(input,workspace)=>({input,workspaceId:workspace.id})}],
-    secret:'not public'}};`);
+    secret:'not public'},workspaceCapabilities:async()=>[{name:'kvm.direct-access',description:'Scoped accelerator',state:'blocked',
+      reason:{code:'operator-grant-required',message:'An operator grant is required'},access:{kind:'none'},secret:'not public'}]};`);
   expect(await (await f.request("/v1/plugins")).json()).toEqual({ plugins: [{ name: "example", description: "Example integration",
     commands: [{ name: "dim-example", description: "Example client" }], operations: [{ name: "submit", description: "Submit scoped data" }],
     state: "unconfigured", message: "Ask the operator to configure this integration" }] });
@@ -156,6 +167,38 @@ it("discovers installed guest integrations without exposing handlers/config and 
   expect((await f.request("/v1/expose", { method: "POST", body: "{}" })).status).toBe(404);
   expect((await f.request("/v1/plugins", { headers: { authorization: "Bearer wrong" } })).status).toBe(403);
   expect((await f.request("/v1/plugins/example/submit", { method: "POST", body: "{}", headers: { origin: "https://foreign.invalid" } })).status).toBe(403);
+  await f.store.write({ ...f.record, source: { ...f.record.source, url: "https://token@example.invalid/root.git", workingDirectory: "docs",
+    checkouts: [{ directory: "docs", source: { url: "https://secret@example.invalid/docs.git", ref: "refs/heads/main", commit: "b".repeat(40) } }] } });
+  const discovery = await (await f.request("/v1/discovery")).json();
+  expect(discovery).toMatchObject({ schemaVersion: 1, delivery: "online",
+    host: { hostname: expect.any(String), version: expect.any(String) },
+    observedAt: expect.any(String),
+    executionEnvironment: { location: "workspace", boundary: "workspace-runtime", runtime: f.record.runtime,
+      runtimeStatus: "running", isolation: { kind: "container", owner: "core" } },
+    authorization: { scope: "workspace", workspaceId: f.record.id, transport: "scoped-bearer", acceptsWorkspaceSelector: false },
+    agent: { guidance: { name: "dim-environment", provenance: "host-core-built-in", refresh: "workspace-readiness" } },
+    freshness: { observedAt: expect.any(String), workspaceUpdatedAt: f.record.updatedAt,
+      bridgeGeneration: "c".repeat(64), pluginManifestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) },
+    pluginSet: ["example"],
+    serviceEndpoints: [{ owner: "core", name: "workspace", endpoint: "http://127.0.0.1:19420/services/workspace", availability: "available", readiness: "online",
+      authorization: { scope: "workspace", workspaceId: f.record.id } }],
+    workspace: { id: f.record.id, runtime: f.record.runtime,
+    source: { workingDirectory: "docs", freshness: { state: "recorded", fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) },
+      checkouts: [{ directory: "docs", ref: "refs/heads/main", commit: "b".repeat(40) }] } },
+    capabilities: [{ owner: "example", name: "kvm.direct-access", state: "blocked",
+      scope: { kind: "workspace", workspaceId: f.record.id }, reason: { code: "operator-grant-required" }, access: { kind: "none" } }],
+    developerCapabilities: [] });
+  expect(JSON.stringify(discovery)).not.toContain("not public");
+  expect(JSON.stringify(discovery)).not.toContain("secret@example.invalid");
+  expect(discovery.agent).not.toHaveProperty("mode");
+  expect((await f.request("/v1/discovery", { headers: { authorization: "Bearer wrong" } })).status).toBe(403);
+  const originalFingerprint = discovery.workspace.source.freshness.fingerprint;
+  await f.store.write({ ...(await f.store.read(f.record.name)), updatedAt: "2026-10-27T04:00:00.000Z",
+    source: { ...(await f.store.read(f.record.name)).source, commit: "c".repeat(40) } });
+  const refreshedSource = await (await f.request("/v1/discovery")).json();
+  expect(refreshedSource.workspace.source).toMatchObject({ commit: "c".repeat(40),
+    freshness: { state: "recorded", recordUpdatedAt: "2026-10-27T04:00:00.000Z" } });
+  expect(refreshedSource.workspace.source.freshness.fingerprint).not.toBe(originalFingerprint);
   f.runtime.inspect = async () => ({ running: false });
   expect((await f.request("/v1/plugins")).status).toBe(409);
   expect((await f.request("/v1/plugins/example/submit", { method: "POST", body: "{}" })).status).toBe(409);
@@ -196,6 +239,48 @@ it("rechecks UUID after a slow plugin request body, before dispatching its opera
   expect(await response).toBe(410);
 });
 
+it("rechecks UUID after slow owner capability discovery", async () => {
+  const f = await fixture();
+  await guestPlugin(f.root, `let started;export const capabilityStarted=new Promise(resolve=>{started=resolve});
+    let release;export const releaseCapability=()=>release();
+    export const hostPlugin={name:'example',workspaceCapabilities:async()=>{started();await new Promise(resolve=>{release=resolve});
+      return [{name:'accelerator',description:'Scoped accelerator',state:'available',access:{kind:'workspace-local'}}]}};`);
+  const installed = await import(pathToFileURL(path.join(f.root, "plugins/node_modules/fixture/index.js")).href);
+  const response = f.request("/v1/discovery");
+  await installed.capabilityStarted;
+  await f.store.write({ ...f.record, id: randomUUID() });
+  installed.releaseCapability();
+  expect((await response).status).toBe(410);
+});
+
+it("keeps discovery available when optional plugin inspection fails", async () => {
+  const f = await fixture();
+  await guestPlugin(f.root, `export const hostPlugin={name:'example',guest:{description:'Optional',inspect:async()=>{throw Error('secret provider detail')}},
+    workspaceCapabilities:async()=>{throw Error('secret capability detail')}};`);
+  const response = await f.request("/v1/discovery");
+  expect(response.status).toBe(200);
+  const value = await response.json();
+  expect(value).toMatchObject({ plugins: [{ owner: "example", state: "unavailable" }], capabilities: [{ owner: "example", name: "provider",
+    state: "unavailable", reason: { code: "provider-failed" }, access: { kind: "none" } }] });
+  expect(JSON.stringify(value)).not.toContain("secret");
+});
+
+it("summarizes only currently available developer capabilities", async () => {
+  const f = await fixture();
+  await guestPlugin(f.root, `export const hostPlugin={name:'example',guest:{description:'Optional',operations:[{name:'verify',description:'Verify',handle:async()=>null}]},
+    workspaceCapabilities:async()=>[{name:'direct-access',description:'Direct access',state:'available',access:{kind:'workspace-local'}},
+      {name:'vm-fd-verification',description:'VM fd',state:'available',reason:{code:'verified',message:'Current fact',token:'nested-reason-secret'},
+        access:{kind:'guest-operation',operation:'verify',token:'nested-access-secret'}},
+      {name:'boot',description:'Boot',state:'blocked',reason:{code:'not-authorized',message:'Not authorized'},access:{kind:'none'}}]};`);
+  const value = await (await f.request("/v1/discovery")).json();
+  expect(value).toMatchObject({ developerCapabilities: [
+    { owner: "example", name: "direct-access", access: { kind: "workspace-local" } },
+    { owner: "example", name: "vm-fd-verification", access: { kind: "guest-operation", operation: "verify" } }
+  ] });
+  expect(JSON.stringify(value)).not.toContain("nested-access-secret");
+  expect(JSON.stringify(value)).not.toContain("nested-reason-secret");
+});
+
 
 it("discovers the installed tools, router and external URLs together over the actual scoped endpoint", async () => {
   const f = await fixture();
@@ -211,12 +296,19 @@ it("discovers the installed tools, router and external URLs together over the ac
   const value: unknown = await response.json();
   if (!value || typeof value !== "object" || !("plugins" in value) || !Array.isArray(value.plugins)) throw new Error("missing discovery list");
   expect(value.plugins.map((entry: { name: string }) => entry.name)).toEqual(["agent-tools", "host-llm-router", "external-urls"]);
+  const discovery: unknown = await (await f.request("/v1/discovery")).json();
+  if (!discovery || typeof discovery !== "object" || !("plugins" in discovery) || !Array.isArray(discovery.plugins)) throw new Error("missing discovery plugins");
+  expect(discovery.plugins.map((entry: { owner: string }) => entry.owner)).toEqual(["agent-tools", "host-llm-router", "external-urls"]);
   const external: unknown = value.plugins[2];
   expect(external).toMatchObject({ state: "unconfigured", commands: [{ name: "dim-expose" }] });
   for (const entry of value.plugins as unknown[]) {
     if (!entry || typeof entry !== "object") throw new Error("invalid integration");
     expect(Object.keys(entry).every((key) => ["name", "description", "commands", "operations", "state", "message"].includes(key))).toBe(true);
   }
+  await writeFile(path.join(f.root, "plugins", "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-agent-tools"] }));
+  const refreshed: unknown = await (await f.request("/v1/discovery")).json();
+  if (!refreshed || typeof refreshed !== "object" || !("plugins" in refreshed) || !Array.isArray(refreshed.plugins)) throw new Error("missing refreshed discovery plugins");
+  expect(refreshed.plugins.map((entry: { owner: string }) => entry.owner)).toEqual(["agent-tools"]);
 });
 
 
@@ -232,6 +324,21 @@ it("fingerprints enabled module bytes and transactional runtime replacement with
   const promoted = await workspaceAgentGeneration(); expect(promoted).not.toBe(updated);
   await writeFile(path.join(home, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: [] }));
   expect(await workspaceAgentGeneration()).not.toBe(promoted);
+});
+
+it("binds discovery implementation and trusted guest assets into the bridge generation", async () => {
+  const names = workspaceAgentGenerationInputFiles().map((file) => path.basename(file));
+  expect(names).toEqual(expect.arrayContaining([
+    "workspace-discovery.ts", "guestAssets.ts", "dim-workspace.mjs", "dim-environment.SKILL.md", "dim-nproc", "dim-workspace-ssh.bash"
+  ]));
+  const root = await mkdtemp(path.join(os.tmpdir(), "dim-discovery-generation-"));
+  try {
+    const discovery = path.join(root, "workspace-discovery.ts");
+    await writeFile(discovery, "export const schemaVersion = 1;\n");
+    const initial = await workspaceAgentCodeFingerprint([discovery]);
+    await writeFile(discovery, "export const schemaVersion = 2;\n");
+    expect(await workspaceAgentCodeFingerprint([discovery])).not.toBe(initial);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 it("replaces an older bridge protocol once, rotates its token and publishes the new guest client centrally", async () => {

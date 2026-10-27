@@ -10,3 +10,7 @@ export function workspaceGuestAssets(): readonly { name: string; sourcePath: str
     name, sourcePath: fileURLToPath(new URL(`../workspace-image-assets/${source}`, import.meta.url)), mode: 0o555
   }));
 }
+
+export function workspaceEnvironmentSkillAsset(): { readonly sourcePath: string } {
+  return { sourcePath: fileURLToPath(new URL("../workspace-image-assets/dim-environment.SKILL.md", import.meta.url)) };
+}
