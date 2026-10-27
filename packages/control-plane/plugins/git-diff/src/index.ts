@@ -23,7 +23,7 @@ export function prepareGitDiff(): PreparedControlPlanePlugin {
             const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/diff$/.exec(url.pathname);
             if (!match || request.method !== "POST" || url.search !== "") return false;
             try {
-              await context.serialize(async () => {
+              await context.read(async () => {
                 await access.authorize(context, request, { projectId: match[1]!, repositoryId: match[2]! });
                 const body = bodySchema.parse(await readBoundedJson(request));
                 const result = await snapshot(context, { projectId: match[1]!, repositoryId: match[2]!, ...body });
