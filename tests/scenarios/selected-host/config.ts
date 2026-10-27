@@ -32,9 +32,11 @@ export type HostProfile = {
   readonly name: string;
   readonly workspace: string;
   readonly source: string;
+  readonly workspaceSourceSha: string;
   readonly expectedHostVersion: string;
   readonly requiredPlugins: readonly string[];
   readonly ingress: string;
+  readonly sshPublicKey: string;
   readonly llm: { readonly configFile: string; readonly project: string; readonly route: string };
   readonly monitor?: MonitorProfile;
 };
@@ -121,18 +123,22 @@ export function ownedPartialWorkspace(claim: { readonly name: string; readonly s
 
 function parseHostProfile(value: unknown, index: number): HostProfile {
   const label = `hosts[${index}]`, entry = object(value, label);
-  exactKeys(entry, ["name", "workspace", "source", "expectedHostVersion", "requiredPlugins", "ingress", "llm", "monitor"], label,
-    ["name", "workspace", "source", "expectedHostVersion", "requiredPlugins", "ingress", "llm"]);
+  exactKeys(entry, ["name", "workspace", "source", "workspaceSourceSha", "expectedHostVersion", "requiredPlugins", "ingress", "sshPublicKey", "llm", "monitor"], label,
+    ["name", "workspace", "source", "workspaceSourceSha", "expectedHostVersion", "requiredPlugins", "ingress", "sshPublicKey", "llm"]);
   const name = string(entry["name"], `${label}.name`);
   const workspace = string(entry["workspace"], `${label}.workspace`);
   const source = string(entry["source"], `${label}.source`);
+  const workspaceSourceSha = string(entry["workspaceSourceSha"], `${label}.workspaceSourceSha`);
   const expectedHostVersion = string(entry["expectedHostVersion"], `${label}.expectedHostVersion`);
   const ingress = string(entry["ingress"], `${label}.ingress`);
+  const sshPublicKey = string(entry["sshPublicKey"], `${label}.sshPublicKey`);
   if (!hostPattern.test(name)) throw new OperatorInputError(`${label}.name is invalid`);
   if (!workspacePattern.test(workspace)) throw new OperatorInputError(`${label}.workspace must use the dim-smoke- ownership namespace`);
   if (!/^dim:\/\/dim-smoke-[a-z0-9][a-z0-9-]{0,37}$/.test(source)) throw new OperatorInputError(`${label}.source must select an operator-provisioned disposable dim://dim-smoke-PROJECT`);
+  if (!shaPattern.test(workspaceSourceSha)) throw new OperatorInputError(`${label}.workspaceSourceSha must be an exact lowercase 40-hex commit`);
   if (!expectedHostVersion.trim()) throw new OperatorInputError(`${label}.expectedHostVersion is required`);
   if (!ingressPattern.test(ingress)) throw new OperatorInputError(`${label}.ingress is invalid`);
+  if (!/^(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-[^ ]+) [A-Za-z0-9+/]+={0,3}(?: [^\r\n]{1,200})?$/.test(sshPublicKey)) throw new OperatorInputError(`${label}.sshPublicKey must be one OpenSSH public key without options`);
   if (!Array.isArray(entry["requiredPlugins"]) || !entry["requiredPlugins"].every((plugin) => typeof plugin === "string")) {
     throw new OperatorInputError(`${label}.requiredPlugins must be a string array`);
   }
@@ -144,7 +150,8 @@ function parseHostProfile(value: unknown, index: number): HostProfile {
   const llm = object(entry["llm"], `${label}.llm`); exactKeys(llm, ["configFile", "project", "route"], `${label}.llm`);
   const configFile = string(llm["configFile"], "LLM config path"), project = string(llm["project"], "LLM project"), route = string(llm["route"], "LLM route");
   if (!path.isAbsolute(configFile) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(project) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(route)) throw new OperatorInputError("invalid explicit LLM attachment selection");
-  return { name, workspace, source, expectedHostVersion, requiredPlugins, ingress, llm: { configFile, project, route }, ...(monitor === undefined ? {} : { monitor }) };
+  return { name, workspace, source, workspaceSourceSha, expectedHostVersion, requiredPlugins, ingress, sshPublicKey,
+    llm: { configFile, project, route }, ...(monitor === undefined ? {} : { monitor }) };
 }
 
 export function parseMonitorProfile(value: unknown, label: string): MonitorProfile {

@@ -10,11 +10,12 @@ it.each([false, "empty"] as const)("rejects exit-zero doctor output with failed 
   try {
     await mkdir(bin);
     const checks = doctor === "empty" ? [] : [{ name: "runtime", ok: false, detail: "PRIVATE_DIAGNOSTIC" }];
-    await writeFile(join(bin, "dim"), `#!${process.execPath}\nconst args=process.argv.slice(2);if(args[0]!=='--host'||args[1]!=='fixture')process.exit(99);const command=args[2];if(command==='--version')console.log('0.10.0');else if(command==='doctor')console.log(${JSON.stringify(JSON.stringify(checks))});else if(command==='plugins')console.log(JSON.stringify(['agent-tools','host-llm-router','external-urls','native-git'].map(name=>({name}))));else if(command==='list')console.log('[]');else process.exit(98);\n`, { mode: 0o700 });
+    await writeFile(join(bin, "dim"), `#!${process.execPath}\nconst args=process.argv.slice(2);if(args[0]!=='--host'||args[1]!=='fixture')process.exit(99);const command=args[2];if(command==='--version')console.log('0.10.0');else if(command==='doctor')console.log(${JSON.stringify(JSON.stringify(checks))});else if(command==='plugins')console.log(JSON.stringify(['agent-tools','host-llm-router','external-urls','native-git','kvm'].map(name=>({name}))));else if(command==='list')console.log('[]');else process.exit(98);\n`, { mode: 0o700 });
     const config = join(root, "targets.json");
     await writeFile(config, JSON.stringify({ schemaVersion: 1, installedSourceSha: "a".repeat(40), hosts: [{
-      name: "fixture", workspace: "dim-smoke-fixture", source: "dim://dim-smoke-fixture", expectedHostVersion: "0.10.0",
+      name: "fixture", workspace: "dim-smoke-fixture", source: "dim://dim-smoke-fixture", workspaceSourceSha: "b".repeat(40), expectedHostVersion: "0.10.0",
       requiredPlugins: ["agent-tools", "host-llm-router", "external-urls", "native-git"], ingress: "shared",
+      sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureSelectedHostKey fixture@example.invalid",
       llm: { configFile: join(root, "not-read.json"), project: "fixture", route: "default" },
     }] }), { mode: 0o600 });
     const child = spawn(process.execPath, ["--import", "tsx", script, "--config", config, "--host", "fixture", "--preflight-only", "--json"], {

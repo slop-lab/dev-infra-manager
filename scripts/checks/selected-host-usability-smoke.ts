@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   for (const profile of selected) {
     if (!input.json) process.stdout.write(`progress\t${profile.name}\tstarting selected-host usability smoke\n`);
     const smokeOptions = input.json ? {} : { onProgress: (step: string, phase: "pass" | "progress" | "incomplete"): void => { process.stdout.write(`${phase}\t${profile.name}\t${step}\n`); } };
-    const monitor = await runHostSmoke(profile, configuration.installedSourceSha, smokeOptions);
+    const monitor = await runHostSmoke(profile, smokeOptions);
     const outcome = monitor !== null && monitorInspection(monitor) !== "inspected" ? "incomplete" : "passed";
     results.push({ host: profile.name, outcome, completion: "not-assessed", monitor });
     if (!input.json && outcome === "incomplete") process.stderr.write(`${profile.name}: configured monitoring is incomplete; runtime checks are not full inspection evidence\n`);

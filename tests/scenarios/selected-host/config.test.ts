@@ -3,6 +3,7 @@ import { OperatorInputError, ownedPartialWorkspace, ownedWorkspaceName, smokeWor
 import { workspaceName } from "../../../packages/host/core/src/workspace/store.js";
 
 const sha = "a".repeat(40);
+const workspaceSourceSha = "b".repeat(40);
 const configuration = {
   schemaVersion: 1,
   installedSourceSha: sha,
@@ -10,9 +11,12 @@ const configuration = {
     name: "devbox",
     workspace: "dim-smoke-daily-devbox",
     source: "dim://dim-smoke-project",
+    workspaceSourceSha,
     expectedHostVersion: "0.10.0-local-reviewed",
     requiredPlugins: ["agent-tools", "host-llm-router", "external-urls", "native-git"],
-    ingress: "shared", llm: { configFile: "/private/llm/gateway.json", project: "smoke", route: "default" }
+    ingress: "shared",
+    sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFreshSelectedHostSmokeKey dim-smoke@example.invalid",
+    llm: { configFile: "/private/llm/gateway.json", project: "smoke", route: "default" }
   }]
 };
 
@@ -34,9 +38,27 @@ describe("parseOperatorArguments", () => {
 
 describe("parseSmokeConfiguration", () => {
   it("Given a complete host profile, when parsed, then required live capabilities remain mandatory", () => {
-    expect(parseSmokeConfiguration(configuration).hosts[0]?.requiredPlugins)
-      .toEqual(["agent-tools", "host-llm-router", "external-urls", "native-git"]);
+    const parsed = parseSmokeConfiguration(configuration);
+    expect(parsed.installedSourceSha).toBe(sha);
+    expect(parsed.hosts[0]).toMatchObject({ workspaceSourceSha,
+      requiredPlugins: ["agent-tools", "host-llm-router", "external-urls", "native-git"] });
   });
+
+  it("Given installed provenance and a different fresh source commit, when parsed, then neither SHA is substituted for the other", () => {
+    const parsed = parseSmokeConfiguration(configuration);
+    expect(parsed.installedSourceSha).not.toBe(parsed.hosts[0]?.workspaceSourceSha);
+  });
+
+  it.each(["workspaceSourceSha", "sshPublicKey"] as const)(
+    "Given a profile missing %s, when parsed, then the live check cannot silently reuse another input",
+    (field) => {
+      const invalid = structuredClone(configuration);
+      const host = invalid.hosts[0];
+      if (host === undefined) throw new Error("configuration fixture has no host");
+      delete host[field];
+      expect(() => parseSmokeConfiguration(invalid)).toThrow(field);
+    }
+  );
 
   it("Given a missing required plugin, when parsed, then the profile fails instead of silently skipping a step", () => {
     const invalid = structuredClone(configuration);

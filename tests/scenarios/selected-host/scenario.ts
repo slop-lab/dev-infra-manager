@@ -9,6 +9,7 @@ import { authenticatedMonitorClient } from "./monitorClient.js";
 import { monitorInspection } from "./monitorCommand.ts";
 import { cleanupOwnedSmokeWorkspace } from "./cleanup.js";
 import { CandidateCiError, verifyWorkspaceCandidateCi } from "./candidateCi.js";
+import { guestLlmChannelProbe, parseLlmChannelEvidence, parseSshHostKey, parseWorkspaceDiscoveryEvidence } from "./runtimeEvidence.js";
 
 type PluginEntry = { readonly name: string; readonly state?: string; readonly commands: readonly string[] };
 type PreflightResult = { readonly ok: boolean; readonly details: readonly string[] };
@@ -49,7 +50,7 @@ export async function preflightHost(profile: HostProfile, installedSourceSha: st
   return { ok: ready, details };
 }
 
-export async function runHostSmoke(selected: HostProfile, installedSourceSha: string, options: SmokeOptions = {}): Promise<MonitorEvidence | null> {
+export async function runHostSmoke(selected: HostProfile, options: SmokeOptions = {}): Promise<MonitorEvidence | null> {
   const profile = { ...selected, workspace: smokeWorkspaceName(selected.workspace) };
   let owned: OwnedWorkspace | undefined;
   let attemptedCreate = false, branchAttempted = false, candidateCommit: string | undefined;
@@ -59,15 +60,24 @@ export async function runHostSmoke(selected: HostProfile, installedSourceSha: st
   try {
     attemptedCreate = true;
     const created = await checked(profile, "workspace creation", [
-      "create", profile.source, profile.workspace, "--ref", installedSourceSha,
+      "create", profile.source, profile.workspace, "--ref", profile.workspaceSourceSha,
       "--git-user-name", "DIM selected-host smoke", "--git-user-email", "dim-smoke@example.invalid", "--json"
     ]);
     owned = ownedWorkspaceName(profile.workspace, json(created.stdout, "created workspace"));
     progress("workspace creation");
 
-    const sourceSha = (await checked(profile, "installed source checkout", ["exec", owned.name, "--", "git", "rev-parse", "HEAD"])).stdout.trim();
-    if (sourceSha !== installedSourceSha) throw new SmokeFailure(profile.name, "candidate checkout", "checkout did not match the operator-declared candidate SHA");
-    progress(`candidate checkout SHA ${installedSourceSha}`);
+    const sourceSha = (await checked(profile, "fresh source checkout", ["exec", owned.name, "--", "git", "rev-parse", "HEAD"])).stdout.trim();
+    if (sourceSha !== profile.workspaceSourceSha) throw new SmokeFailure(profile.name, "candidate checkout", "checkout did not match the fresh workspace source SHA");
+    progress(`fresh workspace source SHA ${profile.workspaceSourceSha}`);
+    const discovery = parseWorkspaceDiscoveryEvidence((await checked(profile, "generic workspace discovery", ["exec", owned.name, "--", "dim-workspace", "discovery"])).stdout,
+      { workspaceId: owned.id, workspaceName: owned.name, workspaceSourceSha: profile.workspaceSourceSha,
+        requiredPlugins: profile.requiredPlugins });
+    progress("authoritative generic discovery through the shared stdio workspace service");
+
+    await checked(profile, "guest SSH setup", ["exec", owned.name, "--", "sh", "-c",
+      "printf '%s\\n' \"$1\" | dim-workspace-ssh setup >/dev/null", "smoke", profile.sshPublicKey]);
+    const sshHostKey = parseSshHostKey((await checked(profile, "guest SSH host key", ["exec", owned.name, "--", "dim-workspace-ssh", "host-key"])).stdout);
+    progress("guest loopback SSH service configured with a persistent host key");
 
     const token = randomBytes(16).toString("hex");
     await checked(profile, "guest Git write", ["exec", owned.name, "--", "sh", "-c",
@@ -95,11 +105,14 @@ export async function runHostSmoke(selected: HostProfile, installedSourceSha: st
     for (const required of profile.requiredPlugins) {
       const plugin = guestPlugins.find(({ name }) => name === required);
       if (plugin === undefined) throw new SmokeFailure(profile.name, "guest plugin discovery", `${required} is not delivered`);
-      if (plugin.state !== "ready") {
+      if (plugin.state !== (required === "kvm" ? "unconfigured" : "ready")) {
         throw new SmokeFailure(profile.name, "guest plugin discovery", "a required guest plugin is not ready for the owned workspace");
       }
     }
     progress("guest plugin discovery");
+
+    parseLlmChannelEvidence((await checked(profile, "shared service channel HTTP", ["exec", owned.name, "--", "node", "-e", guestLlmChannelProbe], 60_000)).stdout);
+    progress("actual guest HTTP request through the shared stdio service channel");
 
     const prompt = `Use your file tools to read selected-host-input.txt. Create selected-host-llm.txt containing exactly the same token and no other text. Do not answer until the file is written.`;
     await checked(profile, "actual LLM and tool execution", ["tools", "run", owned.name, "opencode", "run", prompt], 10 * 60_000);
@@ -142,8 +155,17 @@ export async function runHostSmoke(selected: HostProfile, installedSourceSha: st
     if (recreated.id !== owned.id) throw new SmokeFailure(profile.name, "workspace recreate", "immutable workspace identity changed");
     const retained = (await checked(profile, "recreated Git state", ["exec", owned.name, "--", "cat", "selected-host-llm.txt"])).stdout.trim();
     if (retained !== token) throw new SmokeFailure(profile.name, "recreated Git state", "guest data was not retained");
+    const rediscovered = parsePlugins((await checked(profile, "recreated helper discovery", ["exec", owned.name, "--", "dim-workspace", "plugins"])).stdout);
+    if (!rediscovered.some((plugin) => plugin.name === "native-git" && plugin.state === "ready" && plugin.commands.includes("dim-ci"))) throw new SmokeFailure(profile.name, "recreated helper discovery", "native Git helper did not reconnect after recreation");
+    parseLlmChannelEvidence((await checked(profile, "recreated shared service channel HTTP", ["exec", owned.name, "--", "node", "-e", guestLlmChannelProbe], 60_000)).stdout);
+    const recreatedSshHostKey = parseSshHostKey((await checked(profile, "recreated SSH host key", ["exec", owned.name, "--", "dim-workspace-ssh", "host-key"])).stdout);
+    if (recreatedSshHostKey !== sshHostKey) throw new SmokeFailure(profile.name, "recreated SSH host key", "persistent SSH host identity changed");
+    const recreatedDiscovery = parseWorkspaceDiscoveryEvidence((await checked(profile, "recreated generic workspace discovery", ["exec", owned.name, "--", "dim-workspace", "discovery"])).stdout,
+      { workspaceId: owned.id, workspaceName: owned.name, workspaceSourceSha: profile.workspaceSourceSha,
+        requiredPlugins: profile.requiredPlugins });
+    if (recreatedDiscovery.generation !== discovery.generation) throw new SmokeFailure(profile.name, "recreated generic workspace discovery", "workspace bridge generation changed without an installed source change");
     await waitForAuthenticationBoundary(url);
-    progress("recreate, reconnect and retained data");
+    progress("recreate, reconnect, helper rediscovery, shared-channel HTTP, SSH identity and retained data");
   } finally {
     if (owned === undefined && attemptedCreate) {
       const partial = await dim(profile.name, ["show", profile.workspace, "--json"], true);
