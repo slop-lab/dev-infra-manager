@@ -1,8 +1,10 @@
 import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type { CiDeliveryPublicationFaults } from "./delivery-publication.js";
 import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
-import { repositoryExtension, repositoryExtensionKind } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { reviewPreparationExtension, reviewPreparations } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { readNativeProjectRegistrations, repositoryExtension, repositoryExtensionKind,
+  resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { readVerifiedCiReviewSources, reviewPreparationExtension,
+  reviewPreparations } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { requireWorkflowCompiler, WORKFLOW_COMPILER_EXTENSION, type WorkflowCompiler } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
 import { gitCiConfigSchema } from "./config.js";
@@ -16,8 +18,8 @@ import { handleReviewCiStatus } from "./review-status-http.js";
 import { handleWorkspaceCandidateCi } from "./workspace-candidate-http.js";
 import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
 import { recordExplicitAuthoritativeNativeDeliveryIntent } from "./authoritative-native-delivery-store.js";
-import { gitCiEnvelope } from "./plan-store.js";
-import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { gitCiEnvelope, readVerifiedGitCiDeliveryProjection } from "./plan-store.js";
+import { join } from "node:path";
 
 export type GitCiOptions = {
   readonly httpClient?: NativeGitAdmissionHttpClient;
@@ -44,6 +46,12 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
       async attach(context) {
         compiler = requireWorkflowCompiler(context.extensions, config.compiler);
         runtime = { ...context.runtime, workflowCompiler: compiler, reviewPreparations: reviewPreparations(context.extensions) };
+        for (const registration of readNativeProjectRegistrations(runtime.state)) {
+          const repository = join(context.stateDirectory, registration.projectId, `${registration.repositoryId}.git`);
+          for (const source of await readVerifiedCiReviewSources(repository)) {
+            await readVerifiedGitCiDeliveryProjection(repository, source);
+          }
+        }
         const dispatcher = await createAuthoritativeNativeEventDispatcher({ webhook: config.webhook,
           state: runtime.state, stateDirectory: context.stateDirectory, generationId: runtime.expectedGenerationId,
           httpClient: options.httpClient ?? createNodeNativeGitAdmissionHttpClient(), serialize: context.serialize,
