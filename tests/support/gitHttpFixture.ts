@@ -39,13 +39,17 @@ export async function gitHttpFixture(objectFormat: GitObjectFormat = "sha1"): Pr
     await run(gitExecutable, ["--git-dir", bare, "fetch", source, "refs/heads/main:refs/heads/main"]);
     await run(gitExecutable, ["--git-dir", bare, "config", "http.receivepack", "true"]);
   }
+  const backendFailures: unknown[] = [];
   const server = createServer((request, response) => {
     const route = nativeGitRoute(request);
     if (route === undefined) { response.writeHead(404).end(); return; }
-    void serveGitBackend({ config: { gitExecutable, storageRoot },
+    void serveGitBackend({ config: { gitExecutable, storageRoot }, protectedRefs: ["refs/heads/main", "refs/heads/development"],
       identity: route.operation === "write"
         ? { role: "writer", username: "test-transport", workspaceId: "workspace-a" }
-        : { role: "reader", username: "test-transport" }, route, request, response });
+        : { role: "reader", username: "test-transport" }, route, request, response }).catch((error: unknown) => {
+      backendFailures.push(error);
+      if (!response.headersSent) response.writeHead(503).end(); else response.destroy();
+    });
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -62,6 +66,7 @@ export async function gitHttpFixture(objectFormat: GitObjectFormat = "sha1"): Pr
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       await rm(root, { recursive: true, force: true });
+      if (backendFailures.length) throw new AggregateError(backendFailures, "Git HTTP fixture backend failed");
     }
   };
 }
