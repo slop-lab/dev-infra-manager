@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, chmod, link, lstat, mkdir, mkdtemp, open, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
+import { appendFile, chmod, link, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +14,7 @@ import {
   type AuthoritativeNativeReviewEnvelope
 } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.js";
 import * as storage from "../../../../packages/control-plane/plugins/git-review/src/review-record-storage.js";
+import { installBodyReadCounter } from "./verifiedReviewSourceReadCounter.js";
 
 const roots: string[] = [];
 
@@ -278,30 +278,4 @@ function deferred<Result>(): { readonly promise: Promise<Result>; readonly resol
   const promise = new Promise<Result>((complete) => { resolve = complete; });
   if (resolve === undefined) throw new Error("deferred promise did not initialize");
   return { promise, resolve };
-}
-
-type BodyReadCounter = { readonly bytes: () => number; readonly reset: () => void; readonly restore: () => void };
-
-async function installBodyReadCounter(): Promise<BodyReadCounter> {
-  const handle = await open("/dev/null", "r");
-  const prototype = Object.getPrototypeOf(handle);
-  await handle.close();
-  const original = Reflect.get(prototype, "readFile");
-  if (typeof original !== "function") throw new Error("FileHandle.readFile is unavailable");
-  let bytes = 0;
-  Reflect.set(prototype, "readFile", async function(this: object, ...args: readonly unknown[]): Promise<unknown> {
-    const value = await Reflect.apply(original, this, args);
-    if (typeof value === "string") bytes += Buffer.byteLength(value);
-    else if (Buffer.isBuffer(value)) bytes += value.length;
-    return value;
-  });
-  syncBuiltinESMExports();
-  return {
-    bytes: () => bytes,
-    reset: () => { bytes = 0; },
-    restore: () => {
-      Reflect.set(prototype, "readFile", original);
-      syncBuiltinESMExports();
-    }
-  };
 }
