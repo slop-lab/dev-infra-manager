@@ -1,16 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
-import { link, open, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, link, open, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
 import {
   acknowledgeAuthoritativeNativeDelivery,
-  type AuthoritativeNativePendingDelivery,
+  auditAuthoritativeNativeDeliveryOutbox,
   readPendingAuthoritativeNativeDeliveries,
+  recordExplicitAuthoritativeNativeDeliveryIntent,
   supersedeAuthoritativeNativeDelivery
 } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
 import type { CiDeliveryPublicationFaults } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-publication.js";
-import { nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
+import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import {
   closeFinalizeService,
   cleanupFinalizeFixtures,
@@ -33,7 +34,7 @@ it.each(["beforeFileSync", "beforePublish"] as const)(
     const gate = pauseGate();
     const completion = acknowledgeAuthoritativeNativeDelivery(
       repository,
-      directDelivery(pending),
+      pending,
       { serviceId: binding.serviceId, generationId, executionId: randomUUID() },
       binding,
       publicationFault(faultPoint, gate)
@@ -63,37 +64,90 @@ it.each(["beforeFileSync", "beforePublish"] as const)(
   30_000
 );
 
-it("serializes marker reads behind a supersession paused before publication", async () => {
+it("records a rejection only in the current intent without publishing a marker", async () => {
   // Given
   const fixture = await nativeBundleReviewFixture("marker-supersession");
   const repository = rootRepository(fixture.root);
   const pending = (await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, generationId))[0];
   if (pending === undefined) throw new MarkerStorageFixtureError("pending delivery is missing");
-  const gate = pauseGate();
-  const supersession = supersedeAuthoritativeNativeDelivery(
-    repository, directDelivery(pending), binding, 409, 10_000, { beforePublish: gate.pause }
-  );
-  await gate.entered;
 
   // When
-  const read = readPendingAuthoritativeNativeDeliveries(repository, 10, binding, generationId);
-  const readOutcome = read.then(
-    (value) => ({ ok: true, value } as const),
-    (error: unknown) => ({ ok: false, error } as const)
-  );
-  const state = await Promise.race([
-    readOutcome.then(() => "settled" as const),
-    new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 250))
-  ]);
-  gate.release();
-  await supersession;
-  const observed = await readOutcome;
+  await supersedeAuthoritativeNativeDelivery(repository, pending, binding, 409, 10_000);
 
   // Then
-  expect(state).toBe("pending");
-  if (!observed.ok) throw observed.error;
-  expect(observed.value).not.toContainEqual(expect.objectContaining({ event: pending.event }));
+  await expect(access(join(deliveredRoot(repository), `${pending.event.eventId}.json`)))
+    .rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, generationId))
+    .some(({ event }) => event.eventId === pending.event.eventId)).toBe(false);
 }, 30_000);
+
+it("accepts a deployed generationless superseded marker at startup without blocking a fresh generation intent", async () => {
+  // Given
+  const fixture = await nativeBundleReviewFixture("marker-legacy-superseded");
+  const repository = rootRepository(fixture.root);
+  const pending = (await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, generationId))[0];
+  const envelope = (await publishedReviewEnvelopes(fixture.root))[0];
+  if (pending === undefined || envelope === undefined) {
+    throw new MarkerStorageFixtureError("legacy marker fixture is missing");
+  }
+  await closeFinalizeService(fixture.service);
+  const legacyMarkerPath = join(deliveredRoot(repository), `${pending.event.eventId}.json`);
+  await writeFile(legacyMarkerPath, `${JSON.stringify({
+    schemaVersion: 3,
+    state: "superseded",
+    eventId: pending.event.eventId,
+    eventDigest: pending.eventDigest,
+    serviceId: binding.serviceId,
+    destinationDigest: binding.destinationDigest,
+    rejectionStatus: 409,
+    rejectedAt: 1,
+    retryAfter: Date.now() + 60_000
+  })}\n`, { mode: 0o600 });
+  await link(legacyMarkerPath, join(stagingRoot(repository),
+    `${basename(legacyMarkerPath)}.${randomUUID()}.tmp`));
+  const nextGeneration = "b".repeat(64);
+  await recordExplicitAuthoritativeNativeDeliveryIntent(
+    repository, envelope, nextGeneration, binding, "legacy-marker-next-generation"
+  );
+
+  // When
+  await auditAuthoritativeNativeDeliveryOutbox(repository, binding, nextGeneration);
+  const current = await readPendingAuthoritativeNativeDeliveries(
+    repository, 10, binding, nextGeneration
+  );
+
+  // Then
+  expect(current.some(({ event }) => event.eventId === pending.event.eventId)).toBe(true);
+  expect(await readdir(stagingRoot(repository))).toEqual([]);
+}, 30_000);
+
+it.each(["orphan", "digest"] as const)(
+  "fails the startup audit for a marker with invalid %s provenance",
+  async (invalidPart) => {
+    // Given
+    const fixture = await nativeBundleReviewFixture(`marker-audit-${invalidPart}`);
+    const repository = rootRepository(fixture.root);
+    const pending = (await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, generationId))[0];
+    if (pending === undefined) throw new MarkerStorageFixtureError("audit marker fixture is missing");
+    await closeFinalizeService(fixture.service);
+    const eventId = invalidPart === "orphan" ? "f".repeat(64) : pending.event.eventId;
+    await writeFile(join(deliveredRoot(repository), `${eventId}.json`), `${JSON.stringify({
+      schemaVersion: 3,
+      state: "recorded",
+      eventId,
+      eventDigest: invalidPart === "digest" ? `sha256:${"f".repeat(64)}` : pending.eventDigest,
+      serviceId: binding.serviceId,
+      generationId,
+      destinationDigest: binding.destinationDigest,
+      executionId: randomUUID()
+    })}\n`, { mode: 0o600 });
+
+    // When / Then
+    await expect(auditAuthoritativeNativeDeliveryOutbox(repository, binding, generationId))
+      .rejects.toThrow(/marker|event/i);
+  },
+  30_000
+);
 
 it("discards an uncommitted marker replacement while preserving the canonical completion", async () => {
   // Given
@@ -103,7 +157,7 @@ it("discards an uncommitted marker replacement while preserving the canonical co
   if (pending === undefined) throw new MarkerStorageFixtureError("pending delivery is missing");
   const canonical = await acknowledgeAuthoritativeNativeDelivery(
     repository,
-    directDelivery(pending),
+    pending,
     { serviceId: binding.serviceId, generationId, executionId: randomUUID() },
     binding
   );
@@ -131,7 +185,7 @@ it("serializes marker quota admission and still permits an existing event replac
   if (first === undefined || second === undefined) {
     throw new MarkerStorageFixtureError("two pending deliveries are required");
   }
-  const deliveries = [directDelivery(first), directDelivery(second)] as const;
+  const deliveries = [first, second] as const;
   await closeFinalizeService(fixture.service);
   await fillCapacity(repository, new Set(deliveries.map(({ event }) => event.eventId)), 99_999);
 
@@ -149,21 +203,21 @@ it("serializes marker quota admission and still permits an existing event replac
   const acceptedIndex = outcomes.findIndex(({ status }) => status === "fulfilled");
   const accepted = deliveries[acceptedIndex];
   if (accepted === undefined) throw new MarkerStorageFixtureError("accepted delivery is missing");
-  await expect(acknowledgeAuthoritativeNativeDelivery(repository, accepted,
-    { serviceId: binding.serviceId, generationId, executionId: randomUUID() }, binding)).resolves.toMatchObject({
-    eventId: accepted.event.eventId
-  });
+  const envelope = (await publishedReviewEnvelopes(fixture.root))[0];
+  if (envelope === undefined) throw new MarkerStorageFixtureError("review envelope is missing");
+  const nextGeneration = "b".repeat(64);
+  await recordExplicitAuthoritativeNativeDeliveryIntent(
+    repository, envelope, nextGeneration, binding, "marker-capacity-replacement"
+  );
+  const replacement = (await readPendingAuthoritativeNativeDeliveries(
+    repository, 10, binding, nextGeneration
+  )).find(({ event }) => event.eventId === accepted.event.eventId);
+  if (replacement === undefined) throw new MarkerStorageFixtureError("replacement delivery is missing");
+  await expect(acknowledgeAuthoritativeNativeDelivery(repository, replacement,
+    { serviceId: binding.serviceId, generationId: nextGeneration, executionId: randomUUID() }, binding))
+    .resolves.toMatchObject({ eventId: accepted.event.eventId });
   expect(await readdir(deliveredRoot(repository))).toHaveLength(100_000);
 }, 30_000);
-
-function directDelivery(delivery: AuthoritativeNativePendingDelivery): AuthoritativeNativePendingDelivery {
-  return {
-    createdAt: delivery.createdAt,
-    event: delivery.event,
-    eventDigest: delivery.eventDigest,
-    policyDigest: delivery.policyDigest
-  };
-}
 
 function pauseGate(): {
   readonly entered: Promise<void>;

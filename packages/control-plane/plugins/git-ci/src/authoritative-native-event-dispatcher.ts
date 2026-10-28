@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import {
   acknowledgeAuthoritativeNativeDelivery,
+  auditAuthoritativeNativeDeliveryOutbox,
   readPendingAuthoritativeNativeDeliveries,
   supersedeAuthoritativeNativeDelivery,
   type AuthoritativeNativePendingDelivery
@@ -51,7 +52,11 @@ export async function createAuthoritativeNativeEventDispatcher(
     || timing.minimum > timing.maximum) {
     throw new AuthoritativeNativeEventDeliveryError("authoritative native delivery timing is invalid");
   }
-  await options.serialize(() => pendingDelivery(options, binding));
+  await options.serialize(async () => {
+    await Promise.all(repositoryPaths(options).map((repository) =>
+      auditAuthoritativeNativeDeliveryOutbox(repository, binding, options.generationId)));
+    await pendingDelivery(options, binding);
+  });
   const shutdown = new AbortController();
   let task: Promise<void> | undefined;
   let wakeCurrent: (() => void) | undefined;
@@ -88,7 +93,7 @@ export async function createAuthoritativeNativeEventDispatcher(
         }); } catch (error) {
           if (!(error instanceof AuthoritativeNativeEventRejectedError)) throw error;
           await options.serialize(() => supersedeAuthoritativeNativeDelivery(pending.repository,
-            pending.delivery, binding, error.statusCode, timing.minimum, options.deliveryFaults));
+            pending.delivery, binding, error.statusCode, timing.minimum));
           retry = timing.minimum;
           continue;
         }
@@ -132,8 +137,7 @@ function transientFilesystemError(error: unknown): boolean {
 
 async function pendingDelivery(options: AuthoritativeNativeEventDispatcherOptions,
   binding: ReturnType<typeof authoritativeNativeDeliveryBinding>): Promise<Pending | undefined> {
-  const candidates = await Promise.all(readNativeProjectRegistrations(options.state).map(async (registration) => {
-    const repository = join(options.stateDirectory, registration.projectId, `${registration.repositoryId}.git`);
+  const candidates = await Promise.all(repositoryPaths(options).map(async (repository) => {
     const delivery = (await readPendingAuthoritativeNativeDeliveries(repository, 1, binding, options.generationId))[0];
     return delivery === undefined ? undefined : { repository, delivery };
   }));
@@ -143,6 +147,11 @@ async function pendingDelivery(options: AuthoritativeNativeEventDispatcherOption
       || left.delivery.event.reviewId.localeCompare(right.delivery.event.reviewId)
       || left.delivery.event.jobName.localeCompare(right.delivery.event.jobName)
       || left.delivery.event.eventId.localeCompare(right.delivery.event.eventId))[0];
+}
+
+function repositoryPaths(options: AuthoritativeNativeEventDispatcherOptions): readonly string[] {
+  return readNativeProjectRegistrations(options.state).map((registration) =>
+    join(options.stateDirectory, registration.projectId, `${registration.repositoryId}.git`));
 }
 
 async function deliver(

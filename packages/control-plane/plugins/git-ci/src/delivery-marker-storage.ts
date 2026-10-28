@@ -77,12 +77,27 @@ export async function initializeDeliveryMarkerStorage(repository: string): Promi
   return paths;
 }
 
-export async function readDeliveryMarkers(
+export async function readDeliveryMarker(
+  paths: DeliveryMarkerPaths,
+  expected: ExpectedDelivery
+): Promise<AuthoritativeNativeDeliveryMarker | undefined> {
+  const path = join(paths.delivered, `${expected.event.eventId}.json`);
+  const stored = await readStoredMarkerIfPresent(path);
+  if (stored === undefined) return undefined;
+  if (stored.stat.nlink !== 1 || stored.marker.eventId !== expected.event.eventId
+    || stored.marker.eventDigest !== expected.eventDigest) {
+    throw new AuthoritativeNativeDeliveryStoreError(
+      "authoritative delivery marker does not match its event"
+    );
+  }
+  return stored.marker;
+}
+
+export async function auditDeliveryMarkers(
   paths: DeliveryMarkerPaths,
   events: readonly ExpectedDelivery[]
-): Promise<ReadonlyMap<string, AuthoritativeNativeDeliveryMarker>> {
+): Promise<void> {
   const expected = new Map(events.map((delivery) => [delivery.event.eventId, delivery]));
-  const markers = new Map<string, AuthoritativeNativeDeliveryMarker>();
   const entries = (await readdir(paths.delivered, { withFileTypes: true }))
     .sort((left, right) => left.name.localeCompare(right.name));
   if (entries.length > maximumEvents) {
@@ -93,17 +108,14 @@ export async function readDeliveryMarkers(
       throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker name is invalid");
     }
     const stored = await readStoredMarker(join(paths.delivered, entry.name));
-    if (stored.stat.nlink !== 1) {
-      throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker must be a single-link file");
-    }
     const event = expected.get(stored.marker.eventId);
-    if (entry.name !== `${stored.marker.eventId}.json` || event === undefined
-      || stored.marker.eventDigest !== event.eventDigest) {
-      throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker does not match its event");
+    if (stored.stat.nlink !== 1 || entry.name !== `${stored.marker.eventId}.json`
+      || event === undefined || stored.marker.eventDigest !== event.eventDigest) {
+      throw new AuthoritativeNativeDeliveryStoreError(
+        "authoritative delivery marker does not match its verified event"
+      );
     }
-    markers.set(stored.marker.eventId, stored.marker);
   }
-  return markers;
 }
 
 export async function storeDeliveryMarker(
