@@ -1,5 +1,7 @@
 import type { AuthoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
 import {
+  completeCurrentDeliveryIntent,
+  withCurrentDeliveryIntent,
   type DeliveryIntent
 } from "./authoritative-native-delivery-intent-store.js";
 import type { DeliveryIntentCursor } from "./delivery-intent-catalog.js";
@@ -25,7 +27,7 @@ export type AuthoritativeNativePendingDelivery = {
 
 export async function selectCatalogPendingDeliveries(input: {
   readonly repository: string;
-  readonly paths: DeliveryMarkerPaths & { readonly intents: string };
+  readonly paths: SelectionPaths;
   readonly cursor: DeliveryIntentCursor;
   readonly limit: number;
   readonly binding: AuthoritativeNativeDeliveryBinding;
@@ -41,7 +43,8 @@ export async function selectCatalogPendingDeliveries(input: {
     const candidates = await resolveReviewIntents(input.repository, reviewIntents);
     for (const candidate of candidates) {
       const marker = await readDeliveryMarker(input.paths, candidate);
-      if (!markerSuppressesCurrentIntent(marker, input.binding, input.generationId)) {
+      if (!await reconcileRecordedMarkerIntent({ paths: intentPaths(input.paths), intent: candidate.intent,
+        marker, binding: input.binding, generationId: input.generationId })) {
         selected.push(candidate);
       }
       if (selected.length === input.limit) break;
@@ -52,7 +55,7 @@ export async function selectCatalogPendingDeliveries(input: {
 
 async function selectUnprimedDeliveries(input: {
   readonly repository: string;
-  readonly paths: DeliveryMarkerPaths;
+  readonly paths: SelectionPaths;
   readonly intents: readonly DeliveryIntent[];
   readonly limit: number;
   readonly binding: AuthoritativeNativeDeliveryBinding;
@@ -68,7 +71,8 @@ async function selectUnprimedDeliveries(input: {
   for (const reviewIntents of byReview.values()) {
     for (const candidate of await resolveReviewIntents(input.repository, reviewIntents)) {
       const marker = await readDeliveryMarker(input.paths, candidate);
-      if (!markerSuppressesCurrentIntent(marker, input.binding, input.generationId)) {
+      if (!await reconcileRecordedMarkerIntent({ paths: intentPaths(input.paths), intent: candidate.intent,
+        marker, binding: input.binding, generationId: input.generationId })) {
         candidates.push(candidate);
       }
     }
@@ -92,14 +96,35 @@ function compareDeliveries(left: AuthoritativeNativePendingDelivery,
     || left.event.eventId.localeCompare(right.event.eventId);
 }
 
-function markerSuppressesCurrentIntent(marker: AuthoritativeNativeDeliveryMarker | undefined,
-  binding: AuthoritativeNativeDeliveryBinding, generationId: string): boolean {
-  if (marker === undefined || marker.serviceId !== binding.serviceId
-    || marker.destinationDigest !== binding.destinationDigest) return false;
-  switch (marker.state) {
-    case "recorded":
-      return marker.generationId === generationId;
-    case "superseded":
-      return false;
-  }
+export async function reconcileRecordedMarkerIntent(input: {
+  readonly paths: IntentPaths;
+  readonly intent: DeliveryIntent;
+  readonly marker: AuthoritativeNativeDeliveryMarker | undefined;
+  readonly binding: AuthoritativeNativeDeliveryBinding;
+  readonly generationId: string;
+}): Promise<boolean> {
+  const marker = input.marker;
+  if (marker === undefined || marker.state !== "recorded"
+    || marker.eventId !== input.intent.eventId || marker.eventDigest !== input.intent.eventDigest
+    || marker.serviceId !== input.intent.serviceId || marker.serviceId !== input.binding.serviceId
+    || marker.destinationDigest !== input.intent.destinationDigest
+    || marker.destinationDigest !== input.binding.destinationDigest
+    || marker.generationId !== input.intent.generationId
+    || marker.generationId !== input.generationId) return false;
+  return withCurrentDeliveryIntent(input.paths, input.intent, async (current) => {
+    if (current.state !== "completed") {
+      await completeCurrentDeliveryIntent(input.paths, current, marker.executionId);
+    }
+    return true;
+  });
+}
+
+type IntentPaths = { readonly intents: string; readonly staging: string };
+type SelectionPaths = DeliveryMarkerPaths & {
+  readonly intents: string;
+  readonly intentStaging: string;
+};
+
+function intentPaths(paths: SelectionPaths): IntentPaths {
+  return { intents: paths.intents, staging: paths.intentStaging };
 }

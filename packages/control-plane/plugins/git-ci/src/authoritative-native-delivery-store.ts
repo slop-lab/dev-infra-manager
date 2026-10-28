@@ -17,6 +17,7 @@ import {
   auditDeliveryMarkers,
   initializeDeliveryMarkerStorage,
   parseAuthoritativeNativeDeliveryMarker,
+  readDeliveryMarker,
   storeDeliveryMarker,
   withDeliveryMarkerOperation,
   type AuthoritativeNativeDeliveryMarker,
@@ -29,6 +30,7 @@ import {
   sameAuthoritativeNativeDelivery
 } from "./authoritative-native-delivery-selection.js";
 import {
+  reconcileRecordedMarkerIntent,
   selectCatalogPendingDeliveries,
   type AuthoritativeNativePendingDelivery
 } from "./delivery-intent-catalog-selection.js";
@@ -151,11 +153,18 @@ export async function auditAuthoritativeNativeDeliveryOutbox(repository: string,
           "authoritative delivery intent has no exact verified event during startup audit"
         );
       }
-      return { intent, order: { createdAt: delivery.createdAt, reviewId: delivery.event.reviewId,
+      return { intent, delivery, order: { createdAt: delivery.createdAt, reviewId: delivery.event.reviewId,
         jobName: delivery.event.jobName, eventId: delivery.event.eventId } };
     });
     rememberDeliveryIntentOrders(paths.intents, selections);
     await auditDeliveryMarkers(paths, events);
+    for (const { intent, delivery } of selections) {
+      if (intent.state === "completed" || intent.generationId !== generationId
+        || intent.serviceId !== binding.serviceId
+        || intent.destinationDigest !== binding.destinationDigest) continue;
+      const marker = await readDeliveryMarker(paths, delivery);
+      await reconcileRecordedMarkerIntent({ paths: intentPaths(paths), intent, marker, binding, generationId });
+    }
   });
 }
 
