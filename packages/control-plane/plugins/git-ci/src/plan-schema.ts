@@ -39,6 +39,13 @@ export const authoritativeNativeReviewEnvelopeSchema = z.object({
 export type { AuthoritativeNativeReview, AuthoritativeNativeReviewIdentity };
 export type AuthoritativeNativeReviewEnvelope = z.infer<typeof authoritativeNativeReviewEnvelopeSchema>;
 export type AuthoritativeNativePlanning = z.infer<typeof gitCiPlanningSchema>;
+export type AuthoritativeNativeReviewDeliveryProjection = {
+  readonly reviewId: string;
+  readonly envelopeId: string;
+  readonly createdAt: string;
+  readonly policyDigest: string;
+  readonly events: AuthoritativeNativeReviewEnvelope["events"];
+};
 
 export function createAuthoritativeNativeReviewEnvelope(input: {
   readonly identity: AuthoritativeNativeReviewIdentity;
@@ -53,15 +60,34 @@ export function createAuthoritativeNativeReviewEnvelope(input: {
   if (input.planning.status === "valid") assertSortedUnique(input.planning.jobs.map(jobKey));
   const review = authoritativeNativeReviewSchema.parse({ ...input.identity,
     reviewId: authoritativeNativeReviewDigest(input.identity), createdAt: input.createdAt });
-  const envelopeIdentity = { reviewId: review.reviewId, qualityRevision: input.qualityRevision,
-    policyDigest: input.policyDigest, requiredJobs: input.requiredJobs, planning: input.planning };
-  const envelopeId = domainDigest("dim-native-authoritative-envelope-v2\0", envelopeIdentity);
-  const events = input.planning.status === "valid" ? input.planning.jobs.map((job) => eventFor({
-    review, envelopeId, qualityRevision: input.qualityRevision, job
-  })) : [];
-  return parseAuthoritativeNativeReviewEnvelope({ schemaVersion: 2, envelopeId, review,
+  const projection = createAuthoritativeNativeReviewDeliveryProjection({ review,
     qualityRevision: input.qualityRevision, policyDigest: input.policyDigest,
-    requiredJobs: input.requiredJobs, planning: input.planning, events });
+    requiredJobs: input.requiredJobs, planning: input.planning });
+  return parseAuthoritativeNativeReviewEnvelope({ schemaVersion: 2, envelopeId: projection.envelopeId, review,
+    qualityRevision: input.qualityRevision, policyDigest: input.policyDigest,
+    requiredJobs: input.requiredJobs, planning: input.planning, events: projection.events });
+}
+
+export function createAuthoritativeNativeReviewDeliveryProjection(input: {
+  readonly review: Omit<AuthoritativeNativeReview, "changes" | "patch" | "patchBytes">;
+  readonly qualityRevision: string;
+  readonly policyDigest: string;
+  readonly requiredJobs: readonly z.infer<typeof authoritativeNativeRequiredJobSchema>[];
+  readonly planning: AuthoritativeNativePlanning;
+}): AuthoritativeNativeReviewDeliveryProjection {
+  assertSortedUnique(input.review.requiredReviewerIds);
+  assertSortedUnique(input.requiredJobs.map(jobKey));
+  if (input.planning.status === "valid") assertSortedUnique(input.planning.jobs.map(jobKey));
+  assertPlanningSnapshots(input.review, input.planning);
+  const envelopeId = domainDigest("dim-native-authoritative-envelope-v2\0", {
+    reviewId: input.review.reviewId, qualityRevision: input.qualityRevision,
+    policyDigest: input.policyDigest, requiredJobs: input.requiredJobs, planning: input.planning
+  });
+  const events = input.planning.status === "valid" ? input.planning.jobs.map((job) => eventFor({
+    review: input.review, envelopeId, qualityRevision: input.qualityRevision, job
+  })) : [];
+  return Object.freeze({ reviewId: input.review.reviewId, envelopeId,
+    createdAt: input.review.createdAt, policyDigest: input.policyDigest, events: Object.freeze(events) });
 }
 
 export function parseAuthoritativeNativeReviewEnvelope(input: unknown): AuthoritativeNativeReviewEnvelope {
@@ -96,7 +122,7 @@ export function parseAuthoritativeNativeReviewEnvelope(input: unknown): Authorit
   return envelope;
 }
 
-function eventFor(input: { readonly review: AuthoritativeNativeReview; readonly envelopeId: string;
+function eventFor(input: { readonly review: Omit<AuthoritativeNativeReview, "changes" | "patch" | "patchBytes">; readonly envelopeId: string;
   readonly qualityRevision: string; readonly job: z.infer<typeof plannedJob> }) {
   const eventIdentity = { envelopeId: input.envelopeId, executionKind: input.job.executionKind,
     jobName: input.job.jobName };
@@ -108,6 +134,27 @@ function eventFor(input: { readonly review: AuthoritativeNativeReview; readonly 
     candidateTree: input.review.candidateTree, policyRevision: input.review.policyRevision,
     requiredReviewRevision: input.review.requiredReviewRevision, qualityRevision: input.qualityRevision,
     executionKind: input.job.executionKind, jobName: input.job.jobName, evidenceClass: input.job.evidenceClass, inputs: input.job.inputs });
+}
+
+function assertPlanningSnapshots(
+  review: Omit<AuthoritativeNativeReview, "changes" | "patch" | "patchBytes">,
+  planning: AuthoritativeNativePlanning
+): void {
+  const primary = { commit: review.candidateCommit, tree: review.candidateTree };
+  if (!Object.hasOwn(review.inputs, review.repositoryId)
+    || !isDeepStrictEqual(review.inputs[review.repositoryId], primary)) invalid("primary repository snapshot");
+  const plannedInputs: Record<string, { commit: string; tree: string }> = { [review.repositoryId]: primary };
+  if (planning.status === "valid") for (const job of planning.jobs) {
+    if (!Object.hasOwn(job.inputs, review.repositoryId)
+      || !isDeepStrictEqual(job.inputs[review.repositoryId], primary)) invalid("job primary snapshot");
+    for (const [id, snapshot] of Object.entries(job.inputs)) {
+      if (Object.hasOwn(plannedInputs, id) && !isDeepStrictEqual(plannedInputs[id], snapshot)) {
+        invalid("conflicting repository snapshots");
+      }
+      plannedInputs[id] = snapshot;
+    }
+  }
+  if (!isDeepStrictEqual(plannedInputs, review.inputs)) invalid("review repository snapshot");
 }
 
 function jobKey(job: { readonly executionKind: string; readonly jobName: string }): string {
