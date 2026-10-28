@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { percentileSummary } from "./native-history-metrics.js";
 import type { NativeHistoryCorpusDescriptor } from "./native-history-corpus.js";
+import { seedRetainedHistoryIntents } from "./native-history-intents.js";
 
 type DeliveryStoreModule = typeof import("../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js");
 type BindingModule = typeof import("../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js");
@@ -18,6 +19,7 @@ type MeasurementInput = {
   readonly sourceTree: string;
   readonly repository: string;
   readonly descriptor: NativeHistoryCorpusDescriptor;
+  readonly retainedIntentHistory?: true;
 };
 
 type IdentityEvidence = {
@@ -52,10 +54,16 @@ export async function measureNativeHistory(input: MeasurementInput): Promise<obj
   const service = await fixture.startFinalizeService(serviceRoot);
   try {
     await rm(transientDirectory, { recursive: true, force: true });
+    let retainedIntentCount = 0;
+    if (input.retainedIntentHistory === true) {
+      const envelope = await planStore.readAuthoritativeNativeReviewEnvelope(input.repository, input.descriptor.activeReviewId);
+      assert.ok(envelope, "retained-intent fixture is missing its canonical CI projection");
+      retainedIntentCount = await seedRetainedHistoryIntents({ repository: input.repository, envelope,
+        binding, generationId: fixture.generationId });
+    }
     const idle = await phase({ expectedPending: 0, repository: input.repository, serviceOrigin: service.origin,
       authorization: fixture.workspaceWriteIssuerAuthorization, binding, generationId: fixture.generationId,
       readPending: deliveryStore.readPendingAuthoritativeNativeDeliveries, counter });
-    await rm(transientDirectory, { recursive: true, force: true });
     const activeEnvelope = await planStore.readAuthoritativeNativeReviewEnvelope(
       input.repository, input.descriptor.activeReviewId
     );
@@ -74,7 +82,7 @@ export async function measureNativeHistory(input: MeasurementInput): Promise<obj
       gitPromotionProof: false,
       corpus: input.descriptor,
       controls: { warmSampleCount, pollIntervalMilliseconds, identityCadenceMilliseconds,
-        requestDeadlineMilliseconds, maximumInflightIdentityRequests: 1 },
+        requestDeadlineMilliseconds, maximumInflightIdentityRequests: 1, retainedIntentCount },
       idle,
       active,
       bodyReadScope: "main-thread FileHandle.readFile return bytes during each measured phase; worker and native off-thread reads are not observed",
@@ -107,6 +115,7 @@ async function phase(input: PhaseInput): Promise<object> {
   eventLoop.enable();
   const cpuStart = process.cpuUsage();
   const samples: number[] = [];
+  let coldBodyReadBytes = 0;
   let completed = false;
   try {
     for (let index = 0; index <= warmSampleCount; index += 1) {
@@ -114,6 +123,7 @@ async function phase(input: PhaseInput): Promise<object> {
       const pending = await input.readPending(input.repository, 1, input.binding, input.generationId);
       samples.push(round(performance.now() - started));
       assert.equal(pending.length, input.expectedPending);
+      if (index === 0) coldBodyReadBytes = input.counter.bytes();
       await delay(pollIntervalMilliseconds);
     }
     completed = true;
@@ -132,7 +142,9 @@ async function phase(input: PhaseInput): Promise<object> {
     eventLoop: { count: eventLoop.count, p50Milliseconds: round(eventLoop.percentile(50) / 1e6),
       p95Milliseconds: round(eventLoop.percentile(95) / 1e6), maxMilliseconds: round(eventLoop.max / 1e6) },
     identity: identityEvidence,
-    bodyReadBytes: input.counter.bytes()
+    bodyReadBytes: input.counter.bytes(),
+    coldBodyReadBytes,
+    warmBodyReadBytes: input.counter.bytes() - coldBodyReadBytes
   };
 }
 

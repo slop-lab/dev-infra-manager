@@ -12,14 +12,14 @@ class NativeHistoryCliError extends Error {
 async function main(): Promise<void> {
   const command = process.argv[2];
   if (command === "--help" || command === "-h") {
-    process.stdout.write("Usage: native-history-cli.ts <prepare|measure> SOURCE_TREE CORPUS_DIRECTORY\nSynthetic history only; measure retains canonical corpus and removes fixture transient delivery state.\n");
+    process.stdout.write("Usage: native-history-cli.ts <prepare|measure|measure-intents> SOURCE_TREE CORPUS_DIRECTORY\nSynthetic history only; measure-intents adds 10000 retained completed intents. Measurements retain canonical corpus and remove fixture transient delivery state.\n");
     return;
   }
   const sourceTree = resolve(process.argv[3] ?? defaultSourceTree);
   const corpusDirectory = process.argv[4];
-  if ((command !== "prepare" && command !== "measure") || corpusDirectory === undefined) {
+  if ((command !== "prepare" && command !== "measure" && command !== "measure-intents") || corpusDirectory === undefined) {
     throw new NativeHistoryCliError(
-      "usage: native-history-cli.ts <prepare|measure> SOURCE_TREE CORPUS_DIRECTORY"
+      "usage: native-history-cli.ts <prepare|measure|measure-intents> SOURCE_TREE CORPUS_DIRECTORY"
     );
   }
   if (command === "prepare") {
@@ -28,7 +28,8 @@ async function main(): Promise<void> {
     return;
   }
   const corpus = await readNativeHistoryCorpus(corpusDirectory);
-  const report = await measureNativeHistory({ sourceTree, repository: corpus.repository, descriptor: corpus.descriptor });
+  const report = await measureNativeHistory({ sourceTree, repository: corpus.repository, descriptor: corpus.descriptor,
+    ...(command === "measure-intents" ? { retainedIntentHistory: true } : {}) });
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
