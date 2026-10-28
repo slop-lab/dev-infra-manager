@@ -154,7 +154,12 @@ is implied by these source changes.
   after durable raw-job handoff and prepare reviews/CI asynchronously, exposing
   pending/failed/stale/ready outcomes with crash recovery and generation-safe
   approval/merge gates. Keep unrelated repositories and reads progressing through
-  scoped mutation lanes and bounded background preparation. Avoid duplicate host source-readiness work before authoritative review
+  scoped mutation lanes and bounded background preparation. Stop idle CI delivery
+  polling from rematerializing historical patches: select durable current intents
+  first, resolve exact review/plan/event provenance, and reuse bounded compact
+  projections only while private immutable file versions remain unchanged. Preserve
+  startup audits, current authority checks, crash recovery and stored digest domains.
+  Avoid duplicate host source-readiness work before authoritative review
   operations, and reconcile policy changes without delaying their committed
   response on historical proposals. Keep Native Git Web startup and ready
   controller catalogs responsive when another configured controller is slow;
