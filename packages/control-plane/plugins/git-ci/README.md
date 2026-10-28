@@ -80,11 +80,25 @@ explicit acceptance succeeds. Preparation readiness is not successful CI evidenc
 
 ## Intent-first delivery lookup
 
-The durable intent is the outbox authority. Every poll validates bounded private
-intent records and their filename identities before selecting the current
-generation, service, destination and pending/due-superseded state. No current
-intent means no historical review or CI-plan body materialization. Completed,
-foreign-generation/destination and future-suppressed intents do not trigger work.
+The durable intent is the outbox authority. Startup validates private bounded
+records, filename identities and exact event provenance, then primes a
+process-owned catalog ordered by verified creation/review/job/event metadata.
+Owner publication and replacement update binding/state buckets under the intent
+queue. Warm polling queries the current generation/service/destination bucket,
+not the full retained history, and rereads each selected canonical intent before
+network delivery. No current intent means no historical review or CI-plan body
+materialization. Completed, foreign-generation/destination and future-suppressed
+intents do not trigger work; backward wall-clock movement restores future backoff.
+
+Every catalog reuse verifies the private directory's inode and nanosecond version.
+Namespace changes trigger enumeration; replacement or disappearance of known
+state fails closed. Filesystem watches only accelerate dirty-record detection;
+they do not establish validity. Explicit audits revalidate all canonical records,
+including inactive entries. Catalogs are capped at 4,096 directories, with a
+process-wide 100,000-entry and 512 MiB encoded-data budget. Capacity exhaustion
+fails closed without forgetting known state. Direct unprimed library use may
+resolve the active set once to establish ordering; production startup and
+owner-published records prime it before normal polling.
 
 Selected intents resolve only their referenced review-ID variants and the exact
 CI envelope/event digest. A compact review source is process-issued after full
@@ -102,7 +116,12 @@ plans and marker/event provenance once; inactive history is not reparsed on idle
 ticks. Missing canonical provenance cannot masquerade as an empty durable outbox.
 
 Projection reuse is limited to 1,024 entries and 8 MiB of encoded compact data;
-plan-version attestations survive projection eviction for the source's lifetime.
+concurrent identical cold reads share work, and a paused warm read cannot
+resurrect an evicted entry. Canonical plan-path attestations survive projection
+eviction and different review-source objects for the process lifetime, with
+100,000-entry and 64 MiB encoded limits. Capacity exhaustion fails closed without
+forgetting an immutable version. Coalesced file snapshots are rechecked against
+the canonical path before publication.
 There is no TTL or persisted trusted index, and byte-integrity proofs never
 replace live authorization, policy/ref checks, human decisions or required CI.
 
