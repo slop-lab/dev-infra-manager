@@ -5,10 +5,11 @@ import type { AuthoritativeNativeDeliveryBinding } from "./authoritative-native-
 import {
   completeCurrentDeliveryIntent,
   initializeDeliveryIntentStore,
-  readSelectableDeliveryIntents,
+  readSelectableDeliveryIntentCursor,
+  readVerifiedDeliveryIntents,
+  rememberDeliveryIntentOrders,
   supersedeCurrentDeliveryIntent,
-  withCurrentDeliveryIntent,
-  type DeliveryIntent
+  withCurrentDeliveryIntent
 } from "./authoritative-native-delivery-intent-store.js";
 export { recordExplicitAuthoritativeNativeDeliveryIntent } from "./authoritative-native-delivery-intent-store.js";
 import {
@@ -16,7 +17,6 @@ import {
   auditDeliveryMarkers,
   initializeDeliveryMarkerStorage,
   parseAuthoritativeNativeDeliveryMarker,
-  readDeliveryMarker,
   storeDeliveryMarker,
   withDeliveryMarkerOperation,
   type AuthoritativeNativeDeliveryMarker,
@@ -26,21 +26,16 @@ export { AuthoritativeNativeDeliveryStoreError } from "./delivery-marker-storage
 import {
   resolveAuthoritativeNativeDelivery,
   readVerifiedAuthoritativeNativeDeliveryEvents,
-  sameAuthoritativeNativeDelivery,
-  type AuthoritativeNativeDeliveryProvenance,
-  type ResolvedAuthoritativeNativeDelivery
+  sameAuthoritativeNativeDelivery
 } from "./authoritative-native-delivery-selection.js";
+import {
+  selectCatalogPendingDeliveries,
+  type AuthoritativeNativePendingDelivery
+} from "./delivery-intent-catalog-selection.js";
 
 const maximumEvents = 100_000;
 
-export type AuthoritativeNativePendingDelivery = {
-  readonly createdAt: string;
-  readonly event: ResolvedAuthoritativeNativeDelivery["event"];
-  readonly eventDigest: string;
-  readonly policyDigest: string;
-  readonly intent: DeliveryIntent;
-  readonly provenance: AuthoritativeNativeDeliveryProvenance;
-};
+export type { AuthoritativeNativePendingDelivery } from "./delivery-intent-catalog-selection.js";
 
 export async function readPendingAuthoritativeNativeDeliveries(
   repository: string,
@@ -61,16 +56,14 @@ async function readPendingUnlocked(repository: string, limit: number,
   }
   if (!await deliveryHistoryExists(repository)) return [];
   const paths = await initializeDeliveryStoreUnlocked(repository);
-  const intents = await readSelectableDeliveryIntents(paths.intents, binding, generationId, now);
-  if (intents.length === 0) return [];
-  const candidates = await Promise.all(intents.map(async (intent) => {
-    const delivery = await resolveAuthoritativeNativeDelivery(repository, intent);
-    const marker = await readDeliveryMarker(paths, delivery);
-    if (markerSuppressesCurrentIntent(marker, binding, generationId)) return undefined;
-    return { ...delivery, intent };
-  }));
-  return candidates.filter((candidate): candidate is AuthoritativeNativePendingDelivery => candidate !== undefined)
-    .sort(compareDeliveries).slice(0, limit);
+  const cursor = await readSelectableDeliveryIntentCursor(paths.intents, binding, generationId, now);
+  const selected = await selectCatalogPendingDeliveries({ repository, paths, cursor, limit, binding, generationId });
+  const current: AuthoritativeNativePendingDelivery[] = [];
+  for (const delivery of selected) {
+    current.push(await withCurrentDeliveryIntent(intentPaths(paths), delivery.intent,
+      async (intent) => ({ ...delivery, intent })));
+  }
+  return current;
 }
 
 export async function acknowledgeAuthoritativeNativeDelivery(
@@ -147,8 +140,22 @@ export async function auditAuthoritativeNativeDeliveryOutbox(repository: string,
   await withDeliveryMarkerOperation(repository, async () => {
     if (!await deliveryHistoryExists(repository)) return;
     const paths = await initializeDeliveryStoreUnlocked(repository);
-    await readSelectableDeliveryIntents(paths.intents, binding, generationId, Date.now());
-    await auditDeliveryMarkers(paths, await readVerifiedAuthoritativeNativeDeliveryEvents(repository));
+    const intents = await readVerifiedDeliveryIntents(paths.intents);
+    const events = await readVerifiedAuthoritativeNativeDeliveryEvents(repository);
+    const eventsById = new Map(events.map((delivery) => [delivery.event.eventId, delivery]));
+    const selections = intents.map((intent) => {
+      const delivery = eventsById.get(intent.eventId);
+      if (delivery === undefined || delivery.event.reviewId !== intent.reviewId
+        || delivery.event.envelopeId !== intent.envelopeId || delivery.eventDigest !== intent.eventDigest) {
+        throw new AuthoritativeNativeDeliveryStoreError(
+          "authoritative delivery intent has no exact verified event during startup audit"
+        );
+      }
+      return { intent, order: { createdAt: delivery.createdAt, reviewId: delivery.event.reviewId,
+        jobName: delivery.event.jobName, eventId: delivery.event.eventId } };
+    });
+    rememberDeliveryIntentOrders(paths.intents, selections);
+    await auditDeliveryMarkers(paths, events);
   });
 }
 
@@ -158,26 +165,6 @@ async function initializeDeliveryStoreUnlocked(repository: string): Promise<Deli
   return { ...marker, intents: intent.intents, intentStaging: intent.staging };
 }
 
-
-function compareDeliveries(left: AuthoritativeNativePendingDelivery,
-  right: AuthoritativeNativePendingDelivery): number {
-  return left.createdAt.localeCompare(right.createdAt)
-    || left.event.reviewId.localeCompare(right.event.reviewId)
-    || left.event.jobName.localeCompare(right.event.jobName)
-    || left.event.eventId.localeCompare(right.event.eventId);
-}
-
-function markerSuppressesCurrentIntent(marker: AuthoritativeNativeDeliveryMarker | undefined,
-  binding: AuthoritativeNativeDeliveryBinding, generationId: string): boolean {
-  if (marker === undefined || marker.serviceId !== binding.serviceId
-    || marker.destinationDigest !== binding.destinationDigest) return false;
-  switch (marker.state) {
-    case "recorded":
-      return marker.generationId === generationId;
-    case "superseded":
-      return false;
-  }
-}
 
 async function deliveryHistoryExists(repository: string): Promise<boolean> {
   for (const directory of ["dim-authoritative-reviews", "dim-git-ci-deliveries"]) {
