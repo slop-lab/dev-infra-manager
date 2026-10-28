@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { deterministicPatch, reviewPayloadBytes } from "./native-history-metrics.js";
+import { verifyNativeHistoryCorpus } from "./native-history-corpus-verification.js";
 
 const descriptorName = "native-history-corpus.json";
 const repositoryName = "repository";
@@ -141,6 +142,7 @@ export async function readNativeHistoryCorpus(corpusDirectory: string): Promise<
     const descriptor = descriptorSchema.parse(JSON.parse(await file.readFile("utf8")));
     const repository = join(target, descriptor.repositoryPath);
     await assertPrivateCorpusDirectory(repository);
+    await verifyNativeHistoryCorpus(repository, descriptor);
     return { descriptor, repository };
   } finally {
     await file.close();
