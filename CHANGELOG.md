@@ -160,11 +160,13 @@ is implied by these source changes.
   projections only while private immutable file versions remain unchanged. Preserve
   startup audits, current authority checks, crash recovery and stored digest domains.
   Avoid duplicate host source-readiness work before authoritative review
-  operations, and reconcile policy changes without delaying their committed
+  operations and redundant issuer-identity calls before authenticated workspace
+  readiness, and reconcile policy changes without delaying their committed
   response on historical proposals. Keep Native Git Web startup and ready
   controller catalogs responsive when another configured controller is slow;
   coalesce duplicate discovery, retain last-known catalogs for presentation without
-  flapping, and freshly attest scope/generation before every operation. Lazy-load
+  flapping, and delegate ready-controller operations without a second discovery;
+  the selected host/service freshly attest scope/generation on every invocation. Lazy-load
   installer-only and selected host command graphs and replace the facade with the
   configured CLI while preserving mandatory CLI-host v1 negotiation. Bound CI admission coherently and expose
   safe timeout/stale-acquisition diagnostics instead of generic guest failures.
