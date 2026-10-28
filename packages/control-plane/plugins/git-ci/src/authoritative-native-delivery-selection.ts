@@ -24,8 +24,11 @@ export type ResolvedAuthoritativeNativeDelivery = {
 };
 
 export type VerifiedAuthoritativeNativeDeliveryEvent = {
-  readonly event: { readonly eventId: string };
+  readonly createdAt: string;
+  readonly event: VerifiedGitCiDeliveryProjection["events"][number];
   readonly eventDigest: string;
+  readonly policyDigest: string;
+  readonly provenance: AuthoritativeNativeDeliveryProvenance;
 };
 
 type ProjectionVariant = {
@@ -37,12 +40,104 @@ export async function resolveAuthoritativeNativeDelivery(
   repository: string,
   intent: DeliveryIntent
 ): Promise<ResolvedAuthoritativeNativeDelivery> {
-  const sources = await readVerifiedCiReviewSources(repository, intent.reviewId);
+  const resolved = await resolveAuthoritativeNativeDeliveries(repository, [intent]);
+  const delivery = resolved[0];
+  if (delivery === undefined) {
+    throw new AuthoritativeNativeDeliveryStoreError(
+      "authoritative delivery intent has no exact verified Git CI projection"
+    );
+  }
+  return delivery;
+}
+
+export async function resolveAuthoritativeNativeDeliveries(
+  repository: string,
+  intents: readonly DeliveryIntent[]
+): Promise<readonly ResolvedAuthoritativeNativeDelivery[]> {
+  if (intents.length === 0) return [];
+  const reviewId = intents[0]?.reviewId;
+  if (reviewId === undefined || intents.some((intent) => intent.reviewId !== reviewId)) {
+    throw new AuthoritativeNativeDeliveryStoreError(
+      "authoritative delivery intent batch spans multiple reviews"
+    );
+  }
+  const sources = await readVerifiedCiReviewSources(repository, reviewId);
+  const variants = await readProjectionVariants(repository, sources, reviewId);
+  const deliveries: ResolvedAuthoritativeNativeDelivery[] = [];
+  for (const intent of intents) deliveries.push(resolveIntentFromVariants(intent, variants));
+  await Promise.all(sources.map((source) =>
+    assertVerifiedCiReviewSourceCurrent(repository, source)));
+  return deliveries;
+}
+
+function resolveIntentFromVariants(intent: DeliveryIntent,
+  variants: ReadonlyMap<string, ProjectionVariant>): ResolvedAuthoritativeNativeDelivery {
+  const selected = variants.get(intent.envelopeId);
+  if (selected === undefined) {
+    throw new AuthoritativeNativeDeliveryStoreError(
+      "authoritative delivery intent has no exact verified Git CI projection"
+    );
+  }
+  const event = selected.projection.events.find(({ eventId }) => eventId === intent.eventId);
+  if (event === undefined || event.reviewId !== intent.reviewId
+    || event.envelopeId !== intent.envelopeId) {
+    throw new AuthoritativeNativeDeliveryStoreError(
+      "authoritative delivery intent does not match its verified event"
+    );
+  }
+  const eventDigest = `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`;
+  if (eventDigest !== intent.eventDigest) {
+    throw new AuthoritativeNativeDeliveryStoreError(
+      "authoritative delivery intent event digest is invalid"
+    );
+  }
+  return {
+    createdAt: selected.projection.createdAt,
+    event,
+    eventDigest,
+    policyDigest: selected.projection.policyDigest,
+    provenance: {
+      sourceVersions: selected.sources.map(sourceVersion).sort()
+    }
+  };
+}
+
+export async function readVerifiedAuthoritativeNativeDeliveryEvents(
+  repository: string
+): Promise<readonly VerifiedAuthoritativeNativeDeliveryEvent[]> {
+  const sources = await readVerifiedCiReviewSources(repository);
+  const variants = await readProjectionVariants(repository, sources);
+  const events = new Map<string, VerifiedAuthoritativeNativeDeliveryEvent>();
+  for (const variant of variants.values()) {
+    for (const event of variant.projection.events) {
+      const eventDigest = `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`;
+      const previous = events.get(event.eventId);
+      if (previous !== undefined && previous.eventDigest !== eventDigest) {
+        throw new AuthoritativeNativeDeliveryStoreError(
+          "verified Git CI projections conflict for a delivery event"
+        );
+      }
+      events.set(event.eventId, {
+        createdAt: variant.projection.createdAt,
+        event,
+        eventDigest,
+        policyDigest: variant.projection.policyDigest,
+        provenance: { sourceVersions: variant.sources.map(sourceVersion).sort() }
+      });
+    }
+  }
+  await Promise.all(sources.map((source) =>
+    assertVerifiedCiReviewSourceCurrent(repository, source)));
+  return [...events.values()];
+}
+
+async function readProjectionVariants(repository: string,
+  sources: readonly VerifiedCiReviewSource[], expectedReviewId?: string): Promise<Map<string, ProjectionVariant>> {
   const variants = new Map<string, ProjectionVariant>();
   for (const source of sources) {
     const projection = await readVerifiedGitCiDeliveryProjection(repository, source);
     if (projection === undefined) continue;
-    if (projection.reviewId !== intent.reviewId) {
+    if (expectedReviewId !== undefined && projection.reviewId !== expectedReviewId) {
       throw new AuthoritativeNativeDeliveryStoreError(
         "verified Git CI projection conflicts with its requested review"
       );
@@ -65,60 +160,7 @@ export async function resolveAuthoritativeNativeDelivery(
       sources: [...previous.sources, source]
     });
   }
-  const selected = variants.get(intent.envelopeId);
-  if (selected === undefined) {
-    throw new AuthoritativeNativeDeliveryStoreError(
-      "authoritative delivery intent has no exact verified Git CI projection"
-    );
-  }
-  const event = selected.projection.events.find(({ eventId }) => eventId === intent.eventId);
-  if (event === undefined || event.reviewId !== intent.reviewId
-    || event.envelopeId !== intent.envelopeId) {
-    throw new AuthoritativeNativeDeliveryStoreError(
-      "authoritative delivery intent does not match its verified event"
-    );
-  }
-  const eventDigest = `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`;
-  if (eventDigest !== intent.eventDigest) {
-    throw new AuthoritativeNativeDeliveryStoreError(
-      "authoritative delivery intent event digest is invalid"
-    );
-  }
-  await Promise.all(selected.sources.map((source) =>
-    assertVerifiedCiReviewSourceCurrent(repository, source)));
-  return {
-    createdAt: selected.projection.createdAt,
-    event,
-    eventDigest,
-    policyDigest: selected.projection.policyDigest,
-    provenance: {
-      sourceVersions: selected.sources.map(sourceVersion).sort()
-    }
-  };
-}
-
-export async function readVerifiedAuthoritativeNativeDeliveryEvents(
-  repository: string
-): Promise<readonly VerifiedAuthoritativeNativeDeliveryEvent[]> {
-  const sources = await readVerifiedCiReviewSources(repository);
-  const events = new Map<string, VerifiedAuthoritativeNativeDeliveryEvent>();
-  for (const source of sources) {
-    const projection = await readVerifiedGitCiDeliveryProjection(repository, source);
-    if (projection === undefined) continue;
-    for (const event of projection.events) {
-      const eventDigest = `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`;
-      const previous = events.get(event.eventId);
-      if (previous !== undefined && previous.eventDigest !== eventDigest) {
-        throw new AuthoritativeNativeDeliveryStoreError(
-          "verified Git CI projections conflict for a delivery event"
-        );
-      }
-      events.set(event.eventId, { event, eventDigest });
-    }
-  }
-  await Promise.all(sources.map((source) =>
-    assertVerifiedCiReviewSourceCurrent(repository, source)));
-  return [...events.values()];
+  return variants;
 }
 
 export function sameAuthoritativeNativeDelivery(
