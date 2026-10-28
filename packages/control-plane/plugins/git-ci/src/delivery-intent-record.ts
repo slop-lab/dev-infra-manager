@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { constants, type Stats } from "node:fs";
-import { open } from "node:fs/promises";
+import { constants, type BigIntStats } from "node:fs";
+import { lstat, open } from "node:fs/promises";
 import { z } from "zod";
 
 export const maximumDeliveryIntentBytes = 4 * 1024;
@@ -35,7 +35,17 @@ export const deliveryIntentSchema = z.discriminatedUnion("state", [
 ]);
 
 export type DeliveryIntent = z.infer<typeof deliveryIntentSchema>;
-export type StoredDeliveryIntent = { readonly intent: DeliveryIntent; readonly stat: Stats };
+export type DeliveryIntentRecordVersion = {
+  readonly dev: bigint;
+  readonly ino: bigint;
+  readonly size: bigint;
+  readonly mtimeNs: bigint;
+  readonly ctimeNs: bigint;
+  readonly uid: bigint;
+  readonly mode: bigint;
+  readonly nlink: bigint;
+};
+export type StoredDeliveryIntent = { readonly intent: DeliveryIntent; readonly stat: BigIntStats };
 
 export async function readStoredDeliveryIntent(
   path: string,
@@ -43,32 +53,75 @@ export async function readStoredDeliveryIntent(
 ): Promise<StoredDeliveryIntent> {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
-    const stat = await file.stat();
-    if (!stat.isFile() || stat.uid !== serviceUid() || (stat.mode & 0o777) !== 0o600) {
-      throw new DeliveryIntentRecordError(
-        "authoritative delivery intent must be a caller-owned mode-0600 regular file"
-      );
-    }
-    if (singleLink && stat.nlink !== 1) {
-      throw new DeliveryIntentRecordError(
-        "authoritative delivery intent must be a single-link file"
-      );
-    }
-    if (stat.size > maximumDeliveryIntentBytes) {
+    const before = await file.stat({ bigint: true });
+    assertDeliveryIntentRecord(before, singleLink);
+    if (before.size > BigInt(maximumDeliveryIntentBytes)) {
       throw new DeliveryIntentRecordError("authoritative delivery intent exceeds its storage bound");
     }
     const value: unknown = JSON.parse(await file.readFile("utf8"));
-    return { intent: deliveryIntentSchema.parse(value), stat };
+    const after = await file.stat({ bigint: true });
+    const canonical = await lstat(path, { bigint: true });
+    assertDeliveryIntentRecord(after, singleLink);
+    assertDeliveryIntentRecord(canonical, singleLink);
+    if (!sameDeliveryIntentRecordVersion(
+      deliveryIntentRecordVersion(before), deliveryIntentRecordVersion(after)
+    ) || !sameDeliveryIntentRecordVersion(
+      deliveryIntentRecordVersion(after), deliveryIntentRecordVersion(canonical)
+    )) {
+      throw new DeliveryIntentRecordError(
+        "authoritative delivery intent changed during verified read"
+      );
+    }
+    return { intent: deliveryIntentSchema.parse(value), stat: after };
   } finally {
     await file.close();
   }
 }
 
+export async function inspectDeliveryIntentRecordVersion(
+  path: string,
+  singleLink = false
+): Promise<DeliveryIntentRecordVersion> {
+  const stat = await lstat(path, { bigint: true });
+  assertDeliveryIntentRecord(stat, singleLink);
+  if (stat.size > BigInt(maximumDeliveryIntentBytes)) {
+    throw new DeliveryIntentRecordError("authoritative delivery intent exceeds its storage bound");
+  }
+  return deliveryIntentRecordVersion(stat);
+}
+
+export function deliveryIntentRecordVersion(stat: BigIntStats): DeliveryIntentRecordVersion {
+  return { dev: stat.dev, ino: stat.ino, size: stat.size, mtimeNs: stat.mtimeNs,
+    ctimeNs: stat.ctimeNs, uid: stat.uid, mode: stat.mode, nlink: stat.nlink };
+}
+
+export function deliveryIntentRecordVersionKey(version: DeliveryIntentRecordVersion): string {
+  return [version.dev, version.ino, version.size, version.mtimeNs, version.ctimeNs,
+    version.uid, version.mode, version.nlink].join(":");
+}
+
+export function sameDeliveryIntentRecordIdentityKey(
+  key: string,
+  version: DeliveryIntentRecordVersion
+): boolean {
+  return key.startsWith(`${String(version.dev)}:${String(version.ino)}:`);
+}
+
+export function sameDeliveryIntentRecordVersion(
+  left: DeliveryIntentRecordVersion,
+  right: DeliveryIntentRecordVersion
+): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size
+    && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs
+    && left.uid === right.uid && left.mode === right.mode && left.nlink === right.nlink;
+}
+
 export async function readStoredDeliveryIntentIfPresent(
-  path: string
+  path: string,
+  singleLink = false
 ): Promise<StoredDeliveryIntent | undefined> {
   try {
-    return await readStoredDeliveryIntent(path);
+    return await readStoredDeliveryIntent(path, singleLink);
   } catch (error) {
     if (isCode(error, "ENOENT")) return undefined;
     throw error;
@@ -118,6 +171,20 @@ function serviceUid(): number {
     throw new DeliveryIntentRecordError("authoritative delivery intents require a Linux user identity");
   }
   return uid;
+}
+
+function assertDeliveryIntentRecord(stat: BigIntStats, singleLink: boolean): void {
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== BigInt(serviceUid())
+    || (stat.mode & 0o777n) !== 0o600n) {
+    throw new DeliveryIntentRecordError(
+      "authoritative delivery intent must be a caller-owned mode-0600 regular file"
+    );
+  }
+  if (singleLink && stat.nlink !== 1n) {
+    throw new DeliveryIntentRecordError(
+      "authoritative delivery intent must be a single-link file"
+    );
+  }
 }
 
 function isCode(error: unknown, code: string): boolean {

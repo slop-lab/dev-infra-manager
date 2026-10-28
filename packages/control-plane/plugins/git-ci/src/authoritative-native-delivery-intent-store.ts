@@ -1,31 +1,37 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { open, readdir, unlink } from "node:fs/promises";
+import { lstat, open, readdir, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { ownedReviewDirectory, publishReviewRecord, readReviewJson, replaceReviewRecord } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { ownedReviewDirectory } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import type { AuthoritativeNativeReviewEnvelope } from "./plan-schema.js";
 import type { AuthoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
 import {
   deliveryIntentIdentity,
   deliveryIntentKey,
   deliveryIntentSchema,
-  maximumDeliveryIntentBytes,
   readStoredDeliveryIntent,
   readStoredDeliveryIntentIfPresent,
   sameDeliveryIntentIdentity,
   type DeliveryIntent
 } from "./delivery-intent-record.js";
 import {
-  assertCatalogDeliveryIntentAdditions,
+  assertCatalogDeliveryIntentVersion,
+  assertCatalogDeliveryIntentDirectoryCreation,
   deliveryIntentSelectionOrder,
-  publishCatalogDeliveryIntent,
+  initializeCatalogDeliveryIntents,
   readCatalogDeliveryIntents,
   readCatalogSelectableDeliveryIntents,
+  recoverCatalogDeliveryIntentLink,
   rememberDeliveryIntentSelectionOrder,
   rememberDeliveryIntentSelectionOrders,
   type DeliveryIntentCursor,
   type DeliveryIntentSelectionOrder
 } from "./delivery-intent-catalog.js";
+import {
+  publishCatalogDeliveryIntentAdditions,
+  replaceCatalogDeliveryIntent
+} from "./delivery-intent-catalog-publication.js";
+import { inspectDeliveryIntentDirectory } from "./delivery-intent-directory-version.js";
 
 export type { DeliveryIntent } from "./delivery-intent-record.js";
 
@@ -63,26 +69,19 @@ async function recordExplicitUnlocked(repository: string, envelope: Authoritativ
   });
   for (const candidate of candidates) {
     if (!existingNames.has(candidate.name)) continue;
-    const existing = deliveryIntentSchema.parse(await readReviewJson(join(paths.intents, candidate.name), maximumDeliveryIntentBytes, true));
-    if (!sameDeliveryIntentIdentity(existing, candidate.intent)) throw new DeliveryIntentStoreError("authoritative delivery intent conflicts");
-    rememberDeliveryIntentSelectionOrder(paths.intents, existing, candidate.order);
+    const existing = await readStoredDeliveryIntent(join(paths.intents, candidate.name), true);
+    assertCatalogDeliveryIntentVersion(paths.intents, existing.intent, existing);
+    if (!sameDeliveryIntentIdentity(existing.intent, candidate.intent)) {
+      throw new DeliveryIntentStoreError("authoritative delivery intent conflicts");
+    }
+    rememberDeliveryIntentSelectionOrder(paths.intents, existing.intent, candidate.order);
   }
   const novel = candidates.filter(({ name }) => !existingNames.has(name));
-  assertCatalogDeliveryIntentAdditions(paths.intents, novel);
   if (entries.length + novel.length > maximumEvents) {
     throw new DeliveryIntentStoreError("authoritative delivery intent capacity is exceeded");
   }
-  for (const candidate of novel) {
-    const path = join(paths.intents, candidate.name);
-    try { await publishReviewRecord({ path, serialized: `${JSON.stringify(candidate.intent)}\n`, stagingRoot: paths.staging, faults: {} }); }
-    catch (error) {
-      if (!isCode(error, "EEXIST")) throw error;
-      const existing = deliveryIntentSchema.parse(await readReviewJson(path, maximumDeliveryIntentBytes, true));
-      if (!sameDeliveryIntentIdentity(existing, candidate.intent)) throw new DeliveryIntentStoreError("authoritative delivery intent conflicts");
-    }
-    publishCatalogDeliveryIntent(paths.intents, { name: candidate.name,
-      stored: await readStoredDeliveryIntent(path, true), order: candidate.order });
-  }
+  if (novel.length === 0) return;
+  await publishCatalogDeliveryIntentAdditions(paths, novel);
 }
 
 export async function readSelectableDeliveryIntents(directory: string,
@@ -114,11 +113,10 @@ export async function readVerifiedDeliveryIntents(directory: string): Promise<re
 export async function withCurrentDeliveryIntent<Result>(paths: IntentPaths,
   expected: DeliveryIntent, operation: (current: DeliveryIntent) => Promise<Result>): Promise<Result> {
   return withIntentOperation(repositoryFromIntentDirectory(paths.intents), async () => {
+    await initializeCatalogDeliveryIntents(paths.intents);
     const path = join(paths.intents, `${deliveryIntentKey(expected)}.json`);
     const stored = await readStoredDeliveryIntent(path, true);
-    if (JSON.stringify(stored.intent) !== JSON.stringify(expected)) {
-      throw new DeliveryIntentStoreError("authoritative delivery intent changed before publication");
-    }
+    assertCatalogDeliveryIntentVersion(paths.intents, expected, stored);
     return operation(stored.intent);
   });
 }
@@ -143,21 +141,27 @@ export async function initializeDeliveryIntentStore(repository: string): Promise
 
 async function initializeUnlocked(repository: string): Promise<IntentPaths> {
   const root = join(repository, "dim-git-ci-deliveries"), paths = { intents: join(root, "intents"), staging: join(root, "intent-staging") };
+  const rootExists = await pathExists(root);
+  const intentsExist = rootExists && await pathExists(paths.intents);
+  if (!rootExists || !intentsExist) {
+    assertCatalogDeliveryIntentDirectoryCreation(paths.intents);
+  }
   await ownedReviewDirectory(root);
   await syncDirectory(repository);
-  await ownedReviewDirectory(paths.intents); await ownedReviewDirectory(paths.staging);
+  if (intentsExist) await inspectDeliveryIntentDirectory(paths.intents);
+  else await ownedReviewDirectory(paths.intents);
+  await ownedReviewDirectory(paths.staging);
   await syncDirectory(root);
   await recoverIntentStaging(paths);
+  await initializeCatalogDeliveryIntents(paths.intents);
   return paths;
 }
 
 async function replaceIntentUnlocked(paths: IntentPaths, previous: DeliveryIntent, next: DeliveryIntent): Promise<void> {
   if (!sameDeliveryIntentIdentity(previous, next)) throw new DeliveryIntentStoreError("authoritative delivery intent identity changed");
-  await replaceReviewRecord({ path: join(paths.intents, `${deliveryIntentKey(previous)}.json`), serialized: `${JSON.stringify(next)}\n`, stagingRoot: paths.staging, faults: {} });
   const name = `${deliveryIntentKey(previous)}.json`;
   const order = deliveryIntentSelectionOrder(paths.intents, previous);
-  publishCatalogDeliveryIntent(paths.intents, { name,
-    stored: await readStoredDeliveryIntent(join(paths.intents, name), true),
+  await replaceCatalogDeliveryIntent({ paths, name, next,
     ...(order === undefined ? {} : { order }) });
 }
 
@@ -188,19 +192,21 @@ async function recoverIntentStaging(paths: IntentPaths): Promise<void> {
     const stagedPath = join(paths.staging, entry.name);
     const finalPath = join(paths.intents, finalName);
     const staged = await readStoredDeliveryIntent(stagedPath);
+    let refreshCatalogLink = false;
     assertIntentName(finalName, staged.intent);
-    if (staged.stat.nlink === 2) {
+    if (staged.stat.nlink === 2n) {
       const final = await readStoredDeliveryIntent(finalPath);
       assertIntentName(finalName, final.intent);
-      if (!sameDeliveryIntentIdentity(staged.intent, final.intent) || final.stat.nlink !== 2
+      if (!sameDeliveryIntentIdentity(staged.intent, final.intent) || final.stat.nlink !== 2n
         || staged.stat.dev !== final.stat.dev || staged.stat.ino !== final.stat.ino) {
         throw new DeliveryIntentStoreError("published delivery intent staging identity is invalid");
       }
-    } else if (staged.stat.nlink === 1) {
+      refreshCatalogLink = true;
+    } else if (staged.stat.nlink === 1n) {
       const final = await readStoredDeliveryIntentIfPresent(finalPath);
       if (final !== undefined) {
         assertIntentName(finalName, final.intent);
-        if (!sameDeliveryIntentIdentity(staged.intent, final.intent) || final.stat.nlink !== 1
+        if (!sameDeliveryIntentIdentity(staged.intent, final.intent) || final.stat.nlink !== 1n
           || staged.stat.dev === final.stat.dev && staged.stat.ino === final.stat.ino) {
           throw new DeliveryIntentStoreError("replacement delivery intent staging identity is invalid");
         }
@@ -210,6 +216,11 @@ async function recoverIntentStaging(paths: IntentPaths): Promise<void> {
     }
     await unlink(stagedPath);
     await syncDirectory(paths.staging);
+    if (refreshCatalogLink) {
+      recoverCatalogDeliveryIntentLink(
+        paths.intents, finalName, await readStoredDeliveryIntent(finalPath, true)
+      );
+    }
   }
 }
 
@@ -235,8 +246,14 @@ async function syncDirectory(path: string): Promise<void> {
 }
 
 function repositoryFromIntentDirectory(directory: string): string { return dirname(dirname(directory)); }
+async function pathExists(path: string): Promise<boolean> {
+  try { await lstat(path); return true; }
+  catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+    throw error;
+  }
+}
 function assertIntentName(name: string, intent: DeliveryIntent): void {
   if (name !== `${deliveryIntentKey(intent)}.json`) throw new DeliveryIntentStoreError("authoritative delivery intent staging name is invalid");
 }
-function isCode(error: unknown, code: string): boolean { return error instanceof Error && "code" in error && error.code === code; }
 export class DeliveryIntentStoreError extends Error { readonly name = "DeliveryIntentStoreError"; }

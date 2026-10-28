@@ -1,6 +1,12 @@
-import type { CatalogEntry, DeliveryIntentSelectionOrder } from "./delivery-intent-catalog-index.js";
+import {
+  compareSelectionOrder,
+  type CatalogEntry,
+  type DeliveryIntentSelectionOrder
+} from "./delivery-intent-catalog-index.js";
 import {
   deliveryIntentKey,
+  deliveryIntentRecordVersion,
+  deliveryIntentRecordVersionKey,
   type DeliveryIntent,
   type StoredDeliveryIntent
 } from "./delivery-intent-record.js";
@@ -18,10 +24,29 @@ export function deliveryIntentCatalogEntryBytes(name: string, intent: DeliveryIn
     + (order === undefined ? 0 : Buffer.byteLength(JSON.stringify(order))) + 128;
 }
 
-export function deliveryIntentStoredVersion(stored: StoredDeliveryIntent): string {
-  const stat = stored.stat;
-  return JSON.stringify([stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs,
-    stat.uid, stat.mode, stat.nlink]);
+export function createDeliveryIntentSelectionEntry(entries: ReadonlyMap<string, CatalogEntry>,
+  intent: DeliveryIntent, order: DeliveryIntentSelectionOrder): {
+    readonly current: CatalogEntry;
+    readonly next: CatalogEntry;
+  } {
+  const name = `${deliveryIntentKey(intent)}.json`;
+  const current = entries.get(name);
+  if (current === undefined || JSON.stringify(current.intent) !== JSON.stringify(intent)) {
+    throw new DeliveryIntentCatalogEntryError(
+      "authoritative delivery intent catalog identity is unavailable"
+    );
+  }
+  const selectedOrder = current.order === undefined || compareSelectionOrder(order, current.order) < 0
+    ? order
+    : current.order;
+  return { current, next: { ...current, order: selectedOrder,
+    bytes: deliveryIntentCatalogEntryBytes(name, current.intent, selectedOrder) } };
+}
+
+export function deliveryIntentStoredVersion(
+  stored: StoredDeliveryIntent
+): string {
+  return deliveryIntentRecordVersionKey(deliveryIntentRecordVersion(stored.stat));
 }
 
 export function assertDeliveryIntentCatalogName(name: string, intent: DeliveryIntent): void {

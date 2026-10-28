@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
@@ -12,6 +12,7 @@ import { nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
 import {
   cleanupFinalizeFixtures,
   closeFinalizeService,
+  createFinalizeRoot,
   generationId,
   rootRepository
 } from "../git-repositories/nativeRootImportFinalizeFixture.js";
@@ -42,9 +43,10 @@ it("does not read historical review bodies when no intent belongs to the current
 it("does not read historical review bodies when the outbox has no intents", async () => {
   // Given
   const fixture = await nativeBundleReviewFixture("selective-intent-idle");
-  const repository = rootRepository(fixture.root);
   await closeFinalizeService(fixture.service);
-  await rm(join(repository, "dim-git-ci-deliveries"), { recursive: true, force: true });
+  const repository = await createFinalizeRoot("selective-intent-fresh-empty-store");
+  await cp(join(rootRepository(fixture.root), "dim-authoritative-reviews"),
+    join(repository, "dim-authoritative-reviews"), { recursive: true });
   await corruptFirstReviewBody(repository);
 
   // When
