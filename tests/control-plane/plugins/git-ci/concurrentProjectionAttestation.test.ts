@@ -52,9 +52,11 @@ it("coalesces concurrent cold reads of the same plan", async () => {
     if (directoryChecks === 2) setImmediate(() => secondCallerJoined.resolve());
   });
   vi.spyOn(planFiles, "readGitCiPlanFile").mockImplementation(async (input) => {
-    reads += 1;
-    readStarted.resolve();
-    await releaseRead.promise;
+    if (input.readBody) {
+      reads += 1;
+      readStarted.resolve();
+      await releaseRead.promise;
+    }
     return originalRead(input);
   });
 
@@ -70,6 +72,35 @@ it("coalesces concurrent cold reads of the same plan", async () => {
   const [firstProjection, secondProjection] = await Promise.all([first, second]);
   expect(secondProjection).toBe(firstProjection);
   expect(reads).toBe(1);
+});
+
+it("rejects a plan replacement while cold readers share an earlier file snapshot", async () => {
+  const fixture = await projectionFixture();
+  const firstSource = await reviewSource(fixture, 0), secondSource = await reviewSource(fixture, 1);
+  const originalRead = planFiles.readGitCiPlanFile;
+  const originalDirectoryCheck = planFiles.assertPrivateGitCiPlanDirectory;
+  const snapshotRead = Promise.withResolvers<void>(), releaseRead = Promise.withResolvers<void>();
+  const joined = Promise.withResolvers<void>();
+  let directoryChecks = 0;
+  vi.spyOn(planFiles, "assertPrivateGitCiPlanDirectory").mockImplementation(async (path) => {
+    await originalDirectoryCheck(path);
+    directoryChecks += 1;
+    if (directoryChecks === 2) setImmediate(() => joined.resolve());
+  });
+  vi.spyOn(planFiles, "readGitCiPlanFile").mockImplementation(async (input) => {
+    const record = await originalRead(input);
+    if (input.readBody) { snapshotRead.resolve(); await releaseRead.promise; }
+    return record;
+  });
+  const first = readVerifiedGitCiDeliveryProjection(fixture.repository, firstSource);
+  const firstOutcome = first.then(() => "accepted", () => "rejected");
+  await snapshotRead.promise;
+  await replacePlan(fixture);
+  const second = readVerifiedGitCiDeliveryProjection(fixture.repository, secondSource);
+  const secondOutcome = second.then(() => "accepted", () => "rejected");
+  await joined.promise;
+  releaseRead.resolve();
+  expect(await Promise.all([firstOutcome, secondOutcome])).toEqual(["rejected", "rejected"]);
 });
 
 it("does not let a paused warm hit resurrect an evicted projection", async () => {

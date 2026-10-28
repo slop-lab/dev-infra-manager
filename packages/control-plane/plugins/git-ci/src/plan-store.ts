@@ -98,6 +98,8 @@ export async function readVerifiedGitCiDeliveryProjection(
       policyDigest: record.plan.policyDigest, requiredJobs: record.plan.requiredJobs, planning: record.plan.planning
     });
     await assertVerifiedCiReviewSourceCurrent(repository, source);
+    await readGitCiPlanFile({ path, maximumBytes: maximumPlanBytes,
+      expectedVersion: record.version, readBody: false });
     planAttestations.attest(path, record.version);
     projectionCache.set(source, attachment.id, projection);
     return projection;
