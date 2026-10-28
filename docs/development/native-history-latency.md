@@ -219,24 +219,38 @@ that webhook source still materializes canonical review history during its own
 five-second scan. This checkpoint does not claim every historical-review surface
 is incremental or that the broker's remaining three round trips are free.
 
-Validation on this source passed 218 review/Git-CI tests in 51 files, all 87 CLI
-tests, 12 host-command tests, and five installed-execution fixture scenarios
-including live-owner revocation after warm candidate access. All 63 workspace
-checks, tool checks and recursive package builds passed. A prior broader unit
-run encountered fixture/environment limitations: umask 0077 makes explicit
-public-permission fixtures private (the affected 15 tests pass under subprocess
-umask 0022), and `/usr/bin/chmod` is absent although `/bin/chmod` exists. Neither
-host files nor tests were changed to conceal those limitations. LSP cannot
+Validation includes the review/Git-CI suites, all 87 CLI tests, 12 host-command
+tests, and five installed-execution fixture scenarios including live-owner
+revocation after warm candidate access. All 63 workspace checks, tool checks and
+recursive package builds passed. The full unit run under subprocess umask 0022
+passed 1,898 tests, with eight skips and 20 failures: 19 failures were the
+unchanged control-plane setup fixture cleanup calling absent `/usr/bin/chmod`;
+one Web assertion still required duplicate discovery and was updated to require
+two descriptions, one delegated operation and the same pinned generation. Its
+subsequent focused run passed all 39 Web/source tests. A previous umask-0077 run
+also made explicit public-permission fixtures private; those affected 15 tests
+pass under subprocess umask 0022. No host files were changed to conceal these
+limitations. LSP cannot
 address this isolated worktree from the session's `/workspace/main` request
 root; the strict recursive TypeScript checks cover the changed source instead.
 
-The subsequent adapter regressions passed all 251 active Native Git host tests
-(two existing skips) and 14 Web plugin tests. The Web/host integration executes
+The adapter regressions passed all 251 active Native Git host tests (two existing
+skips) and all 24 Web plugin tests. The Web/host integration executes
 the actual host console and Git service, proves two delegated reads need only
 the initial presentation description, then replaces the private fixture reviewer
 credential and observes HTTP 401 without rediscovery. Eleven readiness cases
 exercise one authenticated HTTP request and reject mismatched host, service,
 generation, Project/repository, ref, object, policy and extra response fields.
+
+The full scenario gate passed 447 tests, with 19 skips and 89 failures in 15
+unchanged harness files. This guest lacks `/usr/bin/bash`, `/usr/bin/stat` and
+`/usr/bin/chmod`, its `tar` is BusyBox rather than GNU, and source-gate/bootstrap
+fixtures require a disposable root/tool environment. Checkout executable-mode
+assumptions also differ under the original private umask. Both nested-Docker
+diagnostic failures (terminated-lane status and executable bits) reproduce in the
+untouched ff4 archive. The affected harness scripts/tests and admin cleanup are
+unchanged from ff4. Consequently the complete normal Ubuntu CI gate is **not**
+claimed green here; the operator must run exact-commit CI before deployment.
 
 Measurement cleanup is bounded to the fixture-owned temporary service state and
 `repository/dim-git-ci-deliveries`; canonical reviews, plans and the descriptor
