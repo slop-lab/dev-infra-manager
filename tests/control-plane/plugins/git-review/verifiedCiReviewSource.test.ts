@@ -53,12 +53,13 @@ describe("verified CI review source provenance", () => {
     expect(onlySource(await readVerifiedCiReviewSources(repository, stored.review.reviewId))).toBe(source);
   });
 
-  it("seeds startup attestations and refuses to transparently refresh a known file version", async () => {
+  it("preloads CI startup attestations and refuses to transparently refresh a known file version", async () => {
     // Given
     const repository = await createRepository();
     const stored = envelope("startup", "2026-10-28T00:00:00.000Z");
     const path = await writeRecord(repository, stored);
     await assertAuthoritativeNativeReviewStore(repository);
+    await readVerifiedCiReviewSources(repository);
     await appendFile(path, "\n", "utf8");
 
     // When / Then
@@ -96,6 +97,7 @@ describe("verified CI review source provenance", () => {
     await writeRecord(repository, first);
     await writeRecord(repository, second);
     await assertAuthoritativeNativeReviewStore(repository);
+    await readVerifiedCiReviewSources(repository);
     const counter = await installBodyReadCounter();
 
     try {

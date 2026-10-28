@@ -6,7 +6,7 @@ import {
   createAuthoritativeNativeReviewEnvelope,
   type AuthoritativeNativeReviewEnvelope
 } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.js";
-import { readVerifiedCiReviewSources } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-store.js";
+import { assertAuthoritativeNativeReviewStore, readVerifiedCiReviewSources } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-store.js";
 
 const roots: string[] = [];
 
@@ -23,6 +23,13 @@ it("fails closed when one compact verified source exceeds its byte budget", asyn
   // When / Then
   await expect(readVerifiedCiReviewSources(repository, stored.review.reviewId))
     .rejects.toThrow("verified CI review source capacity is exhausted");
+});
+
+it("audits valid review-only history independently of optional CI compact-source capacity", async () => {
+  const repository = await createRepository();
+  const stored = oversizedEnvelope();
+  await writeRecord(repository, stored);
+  await expect(assertAuthoritativeNativeReviewStore(repository)).resolves.toBeUndefined();
 });
 
 async function createRepository(): Promise<string> {

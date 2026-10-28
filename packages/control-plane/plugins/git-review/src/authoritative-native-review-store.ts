@@ -11,12 +11,8 @@ import {
   readReviewJson,
   recoverPublishedReviewStaging
 } from "./review-record-storage.js";
-import {
-  readVersionedReviewRecord,
-  type VersionedReviewRecord
-} from "./review-record-version.js";
+import { readVersionedReviewRecord } from "./review-record-version.js";
 import { runReviewStoreOperation } from "./review-store-queue.js";
-import { attestVerifiedCiReviewRecord } from "./verified-ci-review-store.js";
 
 export {
   assertVerifiedCiReviewSourceCurrent,
@@ -95,10 +91,10 @@ async function readSelectedEnvelope(
 }
 
 export async function assertAuthoritativeNativeReviewStore(repository: string): Promise<void> {
-  return runReviewStoreOperation(repository, (repositoryKey) => assertStore(repository, repositoryKey));
+  return runReviewStoreOperation(repository, () => assertStore(repository));
 }
 
-async function assertStore(repository: string, repositoryKey: string): Promise<void> {
+async function assertStore(repository: string): Promise<void> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -107,7 +103,7 @@ async function assertStore(repository: string, repositoryKey: string): Promise<v
     throw error;
   }
   await assertStoreLayout(paths);
-  await readStore(paths, repositoryKey, true);
+  await readStore(paths);
 }
 
 async function assertStoreLayout(paths: StorePaths): Promise<void> {
@@ -127,13 +123,10 @@ async function assertStoreLayout(paths: StorePaths): Promise<void> {
 export async function readAuthoritativeNativeReviewEnvelopes(
   repository: string
 ): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
-  return runReviewStoreOperation(repository, (repositoryKey) => readEnvelopes(repository, repositoryKey));
+  return runReviewStoreOperation(repository, () => readEnvelopes(repository));
 }
 
-async function readEnvelopes(
-  repository: string,
-  repositoryKey: string
-): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
+async function readEnvelopes(repository: string): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -142,7 +135,7 @@ async function readEnvelopes(
     throw error;
   }
   await assertStoreLayout(paths);
-  return readStore(paths, repositoryKey, false);
+  return readStore(paths);
 }
 
 type StorePaths = {
@@ -171,24 +164,10 @@ async function assertPrivateStoreDirectory(path: string): Promise<void> {
   }
 }
 
-async function readStore(
-  paths: StorePaths,
-  repositoryKey: string,
-  seedVerifiedSources: boolean
-): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
+async function readStore(paths: StorePaths): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
   const envelopes: AuthoritativeNativeReviewEnvelope[] = [];
   for (const name of await readRecordNames(paths)) {
-    const record = await readEnvelopeRecord(join(paths.proposals, name), name);
-    envelopes.push(record.envelope);
-    if (seedVerifiedSources) {
-      attestVerifiedCiReviewRecord({
-        repositoryKey,
-        path: record.path,
-        recordName: name,
-        envelope: record.envelope,
-        record: record.record
-      });
-    }
+    envelopes.push(await readEnvelope(paths, name));
   }
   return envelopes;
 }
@@ -214,23 +193,13 @@ async function readRecordNames(paths: StorePaths): Promise<readonly string[]> {
 }
 
 async function readEnvelope(paths: StorePaths, name: string): Promise<AuthoritativeNativeReviewEnvelope> {
-  return (await readEnvelopeRecord(join(paths.proposals, name), name)).envelope;
-}
-
-type EnvelopeRecord = {
-  readonly envelope: AuthoritativeNativeReviewEnvelope;
-  readonly record: VersionedReviewRecord;
-  readonly path: string;
-};
-
-async function readEnvelopeRecord(path: string, name: string): Promise<EnvelopeRecord> {
   const match = recordPattern.exec(name);
-  const record = await readVersionedReviewRecord(path, maximumRecordBytes);
+  const record = await readVersionedReviewRecord(join(paths.proposals, name), maximumRecordBytes);
   const envelope = parseAuthoritativeNativeReviewEnvelope(record.value);
   if (match === null || match[1] !== envelope.review.reviewId || match[2] !== envelope.envelopeId) {
     throw new AuthoritativeNativeReviewStoreError("authoritative native review path conflicts with its identity");
   }
-  return { envelope, record, path };
+  return envelope;
 }
 
 function isCode(error: unknown, code: string): boolean {
