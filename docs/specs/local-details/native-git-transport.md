@@ -274,6 +274,16 @@ Durable delivery intents are enumerated before review/plan materialization.
 Small intent records MUST be private, bounded, schema-valid and bound to their
 filenames before filtering current generation/service/destination and selectable
 state. No matching current intent MUST require no historical patch-body reads.
+Startup and explicit audits validate all canonical intents against verified
+events. A process-owned, bounded binding/state catalog MAY index this validated
+history; owner publications/replacements MUST update it under the intent queue.
+Warm polling MUST NOT sort, parse or stat the entire retained intent history.
+Catalog reuse MUST verify the private directory identity/version; namespace
+changes require reconciliation and known directory replacement fails closed.
+Filesystem notifications are advisory, not authorization or proof of validity.
+Selected canonical intents MUST be reread before network delivery, independently
+of notification delivery. Inactive body changes remain detectable at explicit
+audit/startup; selected changes fail closed at use.
 Selection and acknowledgement MUST resolve the exact CI projection envelope ID
 and event digest, not merely the latest canonical record sharing a review ID.
 Equivalent canonical variants require identical event bytes and retain the
