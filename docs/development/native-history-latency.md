@@ -25,7 +25,7 @@ Later successful reads are not evidence that its unknown cause was fixed.
   verified order metadata under the intent queue. Warm polling neither sorts nor
   rereads all retained history; selected canonical intents are reread before
   delivery. Private directory inode/version checks are authoritative; filesystem
-  notifications are advisory. No current work means no historical review/plan
+  notifications are not required for validity. No current work means no historical review/plan
   materialization. Direct unprimed module use can resolve the active set once;
   production startup and owner publication prime the ordered catalog.
 - Review owns an opaque, frozen `VerifiedCiReviewSource`, obtained only after
@@ -189,23 +189,25 @@ SLO; p95 is the largest of those five observations.
 
 | Measurement | ff4 baseline above | Current source |
 | --- | ---: | ---: |
-| Idle warm p50 / p95 | 5341.473 / 5421.516 ms | 36.711 / 52.335 ms |
-| Active warm p50 / p95 | 5338.128 / 5430.556 ms | 41.477 / 48.704 ms |
-| Idle cold lookup | 5603.344 ms | 36.327 ms |
-| Active cold lookup | 5336.065 ms | 96.111 ms |
+| Idle warm p50 / p95 | 5341.473 / 5421.516 ms | 38.149 / 46.764 ms |
+| Active warm p50 / p95 | 5338.128 / 5430.556 ms | 38.698 / 39.421 ms |
+| Idle cold lookup | 5603.344 ms | 54.060 ms |
+| Active cold lookup | 5336.065 ms | 88.387 ms |
 | Idle main-thread body reads | 4,612,799,730 bytes | 0 bytes |
 | Active main-thread body reads | 4,612,803,348 bytes | 7,589,645 bytes |
-| Idle phase user / system CPU | 19546.093 / 16008.361 ms | 201.429 / 63.868 ms |
-| Active phase user / system CPU | 19335.759 / 15946.705 ms | 227.078 / 79.861 ms |
-| Idle event-loop maximum delay | 1312.817 ms | 11.952 ms |
-| Active event-loop maximum delay | 1330.643 ms | 23.953 ms |
-| Idle unrelated identity maximum | 1313.601 ms | 14.074 ms |
-| Active unrelated identity maximum | 1355.033 ms | 9.796 ms |
+| Idle phase user / system CPU | 19546.093 / 16008.361 ms | 192.424 / 69.627 ms |
+| Active phase user / system CPU | 19335.759 / 15946.705 ms | 239.965 / 74.493 ms |
+| Idle event-loop maximum delay | 1312.817 ms | 11.354 ms |
+| Active event-loop maximum delay | 1330.643 ms | 25.002 ms |
+| Idle unrelated identity maximum | 1313.601 ms | 13.065 ms |
+| Active unrelated identity maximum | 1355.033 ms | 7.317 ms |
 
-Current identity requests were 62 per phase, with no failures. Large active
-body reads include only the selected canonical review and its plan, once;
-subsequent selections verify exact file metadata without rereading patch bytes
-and reread the small canonical intent (3,015 bytes over five warm selections).
+Current identity requests were 62 per phase, with no failures. Targeted tests and
+source tracing establish exact selected review/plan verification rather than a
+full-history loop. The byte counter measures actual main-thread `readFile`
+return bytes but does not attribute them to paths: the active warm total was
+3,015 bytes, consistent with the small canonical intent rereads. It does not by
+itself prove exclusive file-level attribution.
 This measures the lookup surface, not complete service startup: startup still
 audits historical bodies and attached plans. The table measures the core lookup,
 not the subsequent broker/Web adapter changes. No installed
@@ -269,7 +271,13 @@ old generations and mixed historical service/destination bindings. It retains
 them across idle and active phases, then removes only the transient fixture
 delivery directory. This is synthetic history, not new execution authority.
 The report separates cold and warm body-read bytes so one-time catalog loading
-cannot be confused with per-tick history reads.
+cannot be confused with per-tick history reads. Seeding now independently reads
+the actual private records back, validates schema/filename identity, checks count
+and byte totals, and verifies an ordered content fingerprint. The same descriptor
+is checked again after the measured phases, excluding only the exact newly added
+active intent name, and is emitted in the report before transient cleanup.
+Seeding, descriptor checks and explicit intent publication are outside phase
+timers; this remains a polling benchmark, not an acceptance-write benchmark.
 
 ```bash
 pnpm --dir tests exec tsx --conditions=dim-source \
@@ -277,18 +285,28 @@ pnpm --dir tests exec tsx --conditions=dim-source \
   /absolute/path/to/source "$CORPUS_DIRECTORY"
 ```
 
-The ff4 baseline with that load observed idle warm p50/p95
-6306.166/6501.034 ms and active 6296.393/6397.333 ms. Five warm reads consumed
+The verified ff4 baseline with that load observed idle warm p50/p95
+6184.216/6375.365 ms and active 6331.021/6520.815 ms. Five warm reads consumed
 3,876,777,560 bytes idle and 3,876,780,575 bytes active; unrelated identity
-requests had maxima 1421.967 and 1460.895 ms, with no failures. Runs use a shared
+requests had maxima 1541.406 and 1386.563 ms, with no failures. The independently
+verified retained-intent descriptor has 10,000 records, 6,555,557 bytes and
+fingerprint `sha256:417db6125393e3d44a4dd534b63bc3ad86d1c1b9d974cae86730d8f2c3f33a95`.
+Raw JSON evidence is retained at
+`/mnt/dim-tmp/opencode/opencode/native-history-intents-baseline-verified.json`.
+Runs use a shared
 development host, not an isolated production topology or a latency SLO.
 
-Current source with the same 10,000 retained intents observed idle warm p50/p95
-51.418/55.824 ms and active 53.227/61.812 ms. The cold idle catalog load took
-923.028 ms and read 6,555,557 intent bytes once; five warm idle lookups read
-zero body bytes. Active cold lookup took 112.894 ms; five warm lookups read
-only 3,015 bytes of selected canonical intent, not historical reviews or plans.
-Identity maxima were 12.200 ms idle and 9.049 ms active, with 71/63 requests and
-zero failures. Event-loop maxima were 15.753/27.050 ms. The CLI happy path exited
+The corrected indexed source with the same verified 10,000-intent fingerprint
+observed idle warm p50/p95 35.812/36.648 ms and active 48.349/57.215 ms. The cold idle catalog load took
+1074.232 ms and observed 6,555,557 total main-thread read bytes; five warm idle lookups read
+zero body bytes. Active cold lookup took 262.892 ms; five warm lookups read
+3,015 bytes total. These counters are path-unattributed; do not infer exclusive
+intent-file attribution from their totals.
+The same retained descriptor was verified before and after both runs and is
+emitted in each raw report. The corrected report is retained at
+`/mnt/dim-tmp/opencode/opencode/native-history-intents-current-final.json`;
+the zero-retained-intent report is `native-history-current-final.json` alongside it.
+Identity maxima were 14.158 ms idle and 7.857 ms active, with 72/64 requests and
+zero failures. Event-loop maxima were 14.049/23.806 ms. The CLI happy path exited
 zero in tmux; help rendered the modes, and invalid input returned bounded JSON
 diagnostics with exit one.
