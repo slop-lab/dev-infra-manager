@@ -91,7 +91,8 @@ it("keeps concurrent catalog readers on one generation until their shared refres
     expect.objectContaining({ controllers: [expect.objectContaining({ status: "ready", projects: [expect.objectContaining({ projectId: "project-a" })] })] })
   ]));
   expect(await runtime.invoke("reviews.list", { controllerId: "devbox", projectId: "project-a", repositoryId: "public" })).toEqual([]);
-  expect(describeCalls).toBe(3);
+  expect(describeCalls).toBe(2);
+  expect(writes).toHaveLength(1);
   expect(writes[0]).toContain("a".repeat(64));
 });
 
