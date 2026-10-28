@@ -51,10 +51,16 @@ it("completes the matching raw publication acceptance when the shared review ser
   } finally { release.resolve(); await creating?.catch(() => undefined); await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 });
 
-it("keeps a newly published shared review unapprovable when downstream acceptance fails", async () => {
+it.each([false, true])("keeps a shared review unapprovable when downstream acceptance fails (reused=%s)", async (reused) => {
   const f = await candidate({ name: "shared-acceptance", async prepare() { return { inputs: {} }; },
     async accepted() { throw new Error("injected downstream acceptance failure"); } });
   try {
+    if (reused) {
+      const runtime = { ...f.service.context.runtime, authoritativeTargetProofs: new Map(),
+        reviewPreparations: reviewPreparations(f.extensions), reviewChangeMatchers: reviewChangeMatchers(f.extensions) };
+      const canonical = await createAuthoritativeNativeReview(runtime, selector);
+      expect(await proposalAcceptanceState(f.repository, generationId, canonical)).toBe("none");
+    }
     await expect(codeReviewService(f.extensions).create(f.service.context, selector)).rejects.toThrow("injected downstream acceptance failure");
     const envelope = (await readAuthoritativeNativeReviewEnvelopes(f.repository))[0];
     if (envelope === undefined) throw new Error("canonical review missing");
