@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
-import { isTaskAssignment } from "../../../packages/host/plugins/execution-worker/src/client.js";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import * as rootProofGit from "../../../packages/control-plane/plugins/git-repositories/src/native-root-import-proof-git.js";
+import { ExecutionServiceUnavailableError, isTaskAssignment } from "../../../packages/host/plugins/execution-worker/src/client.js";
+import { DatabaseSync } from "node:sqlite";
+import { join } from "node:path";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { StaleExecutionSourceError } from "../../../packages/control-plane/plugins/execution-scheduler/src/ci-source.js";
 import { runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { installedExecutionFixture, type InstalledExecutionFixture } from "./installedExecutionFixture.js";
@@ -45,13 +46,24 @@ it("replays claims and cleaned results while keeping raw diagnostics out of job 
   expect(JSON.stringify(published)).not.toContain(encoded);
 }, 30_000);
 
-it("performs one full imported-root proof for each Git-CI authority request", async () => {
-  const f = current();
-  const proofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
-  const claim = await f.claim();
-  expect(proofs).toHaveBeenCalledTimes(1);
-  await f.worker.candidate(claim);
-  expect(proofs).toHaveBeenCalledTimes(2);
+it("rejects changed live repository ownership after warm Git-CI candidate access", async () => {
+  const f = current(), claim = await f.claim();
+  const candidate = await f.worker.candidate(claim);
+  expect(candidate.username).toMatch(/^execution-/);
+  const head = await f.protectedHead();
+  const database = new DatabaseSync(join(f.native.root, "native-idle.sqlite3"));
+  try {
+    database.prepare("UPDATE native_project_registration SET owner_host_id = ? WHERE project_id = ?")
+      .run("revoked-owner", "project-a");
+    await expect(f.worker.candidate(claim)).rejects.toMatchObject({
+      constructor: ExecutionServiceUnavailableError, code: "unavailable",
+    });
+    expect(await f.protectedHead()).toBe(head);
+  } finally {
+    database.prepare("UPDATE native_project_registration SET owner_host_id = ? WHERE project_id = ?")
+      .run("host-a", "project-a");
+    database.close();
+  }
 }, 30_000);
 
 it("durably retains cleaned results during a Git outage and gates promotion until publication recovers", async () => {
