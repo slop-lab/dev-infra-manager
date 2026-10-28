@@ -14,10 +14,13 @@ unavailable or slow controller does not delay catalogs from a freshly attested
 ready controller. Automatic discovery starts without delaying Web plugin startup,
 coalesces concurrent catalog reads, and keeps a previously successful catalog
 visible for presentation while that controller refreshes. Initial discovery and
-completed failures remain unavailable. Presentation is not authorization: every
-operation joins an in-flight describe or starts a new one, then validates the
-fresh scope, operation and generation before dispatch. There is no TTL or reuse
-of completed authorization to skip this check.
+completed failures remain unavailable. Presentation is not authorization: an
+operation joins an in-flight describe, or discovers an unavailable controller,
+but does not repeat a completed description for an already ready controller.
+It delegates with the pinned generation to the selected host, which reloads
+current project/repository scope and attests its private service roles before
+every invocation. Refresh projects updates presentation; cached presentation
+never authorizes a request or bypasses the host/service's live checks.
 
 Newly connected controllers can discover accessible existing Projects and
 explicitly attach them with configuration and default working repository choices.

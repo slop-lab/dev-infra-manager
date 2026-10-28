@@ -73,7 +73,8 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
       const selected = selectedInput(input), controller = context.controllers.find(({ id }) => id === selected.controllerId);
       const state = states.find(({ controller }) => controller.id === selected.controllerId);
       if (!controller || !state) throw new Error("Controller operation is unavailable");
-      await beginDiscovery(state);
+       if (state.discovery !== undefined) await state.discovery;
+       else if (state.catalog.status !== "ready") await beginDiscovery(state);
       if (state.catalog.status !== "ready" || !state.catalog.operations.some((operation) => operation.name === name)) throw new Error("Controller operation is unavailable");
        state.observed = true;
        const catalog = state.catalog.projects;
