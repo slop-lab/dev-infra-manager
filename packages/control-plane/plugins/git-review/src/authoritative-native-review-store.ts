@@ -11,12 +11,32 @@ import {
   readReviewJson,
   recoverPublishedReviewStaging
 } from "./review-record-storage.js";
+import {
+  readVersionedReviewRecord,
+  type VersionedReviewRecord
+} from "./review-record-version.js";
+import { runReviewStoreOperation } from "./review-store-queue.js";
+import { attestVerifiedCiReviewRecord } from "./verified-ci-review-store.js";
+
+export {
+  assertVerifiedCiReviewSourceCurrent,
+  readVerifiedCiReviewSources,
+  type VerifiedCiReviewSource,
+  type VerifiedCiReviewSummary
+} from "./verified-ci-review-store.js";
 
 export const maximumRecordBytes = 128 * 1024 * 1024;
 const maximumRecords = 100_000;
 const recordPattern = /^([0-9a-f]{64})\.([0-9a-f]{64})\.json$/;
 
 export async function saveAuthoritativeNativeReviewEnvelope(
+  repository: string,
+  envelope: AuthoritativeNativeReviewEnvelope
+): Promise<AuthoritativeNativeReviewEnvelope> {
+  return runReviewStoreOperation(repository, () => saveEnvelope(repository, envelope));
+}
+
+async function saveEnvelope(
   repository: string,
   envelope: AuthoritativeNativeReviewEnvelope
 ): Promise<AuthoritativeNativeReviewEnvelope> {
@@ -46,6 +66,13 @@ export async function readAuthoritativeNativeReviewEnvelope(
   repository: string,
   reviewId: string
 ): Promise<AuthoritativeNativeReviewEnvelope | undefined> {
+  return runReviewStoreOperation(repository, () => readSelectedEnvelope(repository, reviewId));
+}
+
+async function readSelectedEnvelope(
+  repository: string,
+  reviewId: string
+): Promise<AuthoritativeNativeReviewEnvelope | undefined> {
   if (!/^[0-9a-f]{64}$/.test(reviewId)) return undefined;
   const paths = storePaths(repository);
   try {
@@ -68,6 +95,10 @@ export async function readAuthoritativeNativeReviewEnvelope(
 }
 
 export async function assertAuthoritativeNativeReviewStore(repository: string): Promise<void> {
+  return runReviewStoreOperation(repository, (repositoryKey) => assertStore(repository, repositoryKey));
+}
+
+async function assertStore(repository: string, repositoryKey: string): Promise<void> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -76,7 +107,7 @@ export async function assertAuthoritativeNativeReviewStore(repository: string): 
     throw error;
   }
   await assertStoreLayout(paths);
-  await readStore(paths);
+  await readStore(paths, repositoryKey, true);
 }
 
 async function assertStoreLayout(paths: StorePaths): Promise<void> {
@@ -96,6 +127,13 @@ async function assertStoreLayout(paths: StorePaths): Promise<void> {
 export async function readAuthoritativeNativeReviewEnvelopes(
   repository: string
 ): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
+  return runReviewStoreOperation(repository, (repositoryKey) => readEnvelopes(repository, repositoryKey));
+}
+
+async function readEnvelopes(
+  repository: string,
+  repositoryKey: string
+): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -104,7 +142,7 @@ export async function readAuthoritativeNativeReviewEnvelopes(
     throw error;
   }
   await assertStoreLayout(paths);
-  return readStore(paths);
+  return readStore(paths, repositoryKey, false);
 }
 
 type StorePaths = {
@@ -133,9 +171,25 @@ async function assertPrivateStoreDirectory(path: string): Promise<void> {
   }
 }
 
-async function readStore(paths: StorePaths): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
+async function readStore(
+  paths: StorePaths,
+  repositoryKey: string,
+  seedVerifiedSources: boolean
+): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
   const envelopes: AuthoritativeNativeReviewEnvelope[] = [];
-  for (const name of await readRecordNames(paths)) envelopes.push(await readEnvelope(paths, name));
+  for (const name of await readRecordNames(paths)) {
+    const record = await readEnvelopeRecord(join(paths.proposals, name), name);
+    envelopes.push(record.envelope);
+    if (seedVerifiedSources) {
+      attestVerifiedCiReviewRecord({
+        repositoryKey,
+        path: record.path,
+        recordName: name,
+        envelope: record.envelope,
+        record: record.record
+      });
+    }
+  }
   return envelopes;
 }
 
@@ -150,7 +204,7 @@ async function readRecordNames(paths: StorePaths): Promise<readonly string[]> {
     }
     const metadata = await lstat(join(paths.proposals, entry.name));
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.uid !== serviceUid()
-      || (metadata.mode & 0o777) !== 0o600 || metadata.size > maximumRecordBytes) {
+      || (metadata.mode & 0o777) !== 0o600 || metadata.nlink !== 1 || metadata.size > maximumRecordBytes) {
       throw new AuthoritativeNativeReviewStoreError("authoritative native review record is not a bounded private file");
     }
     if (names.length >= maximumRecords) throw new AuthoritativeNativeReviewStoreError("authoritative native review record capacity is exceeded");
@@ -160,12 +214,23 @@ async function readRecordNames(paths: StorePaths): Promise<readonly string[]> {
 }
 
 async function readEnvelope(paths: StorePaths, name: string): Promise<AuthoritativeNativeReviewEnvelope> {
+  return (await readEnvelopeRecord(join(paths.proposals, name), name)).envelope;
+}
+
+type EnvelopeRecord = {
+  readonly envelope: AuthoritativeNativeReviewEnvelope;
+  readonly record: VersionedReviewRecord;
+  readonly path: string;
+};
+
+async function readEnvelopeRecord(path: string, name: string): Promise<EnvelopeRecord> {
   const match = recordPattern.exec(name);
-  const envelope = parseAuthoritativeNativeReviewEnvelope(await readReviewJson(join(paths.proposals, name), maximumRecordBytes));
+  const record = await readVersionedReviewRecord(path, maximumRecordBytes);
+  const envelope = parseAuthoritativeNativeReviewEnvelope(record.value);
   if (match === null || match[1] !== envelope.review.reviewId || match[2] !== envelope.envelopeId) {
     throw new AuthoritativeNativeReviewStoreError("authoritative native review path conflicts with its identity");
   }
-  return envelope;
+  return { envelope, record, path };
 }
 
 function isCode(error: unknown, code: string): boolean {

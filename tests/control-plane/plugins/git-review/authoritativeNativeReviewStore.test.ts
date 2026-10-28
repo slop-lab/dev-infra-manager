@@ -24,27 +24,22 @@ function recordPath(root: string, selected: AuthoritativeNativeReviewEnvelope) {
   return join(root, "dim-authoritative-reviews", "proposals", `${selected.review.reviewId}.${selected.envelopeId}.json`);
 }
 
-it("loads each historical envelope once for listing and fully validates each explicit store audit", async () => {
+it("lists valid history and rejects corruption during an explicit store audit", async () => {
   const root = await repository(), first = envelope("first"), second = envelope("second");
   await saveAuthoritativeNativeReviewEnvelope(root, first);
   await saveAuthoritativeNativeReviewEnvelope(root, second);
-  const reads = vi.spyOn(storage, "readReviewJson");
   expect(await readAuthoritativeNativeReviewEnvelopes(root)).toEqual(expect.arrayContaining([first, second]));
-  expect(reads).toHaveBeenCalledTimes(2);
-  reads.mockClear();
   await assertAuthoritativeNativeReviewStore(root);
-  expect(reads).toHaveBeenCalledTimes(2);
+  await writeFile(recordPath(root, first), "{", "utf8");
+  await expect(assertAuthoritativeNativeReviewStore(root)).rejects.toThrow();
 });
 
 it("publishes an exact new envelope without parsing unrelated corrupt bodies while full inspection rejects them", async () => {
   const root = await repository(), historical = envelope("historical"), selected = envelope("selected");
   await saveAuthoritativeNativeReviewEnvelope(root, historical);
   await writeFile(recordPath(root, historical), "{", "utf8");
-  const reads = vi.spyOn(storage, "readReviewJson");
   expect(await saveAuthoritativeNativeReviewEnvelope(root, selected)).toEqual(selected);
-  expect(reads).not.toHaveBeenCalled();
   expect(await saveAuthoritativeNativeReviewEnvelope(root, selected)).toEqual(selected);
-  expect(reads).toHaveBeenCalledTimes(1);
   await expect(saveAuthoritativeNativeReviewEnvelope(root, historical)).rejects.toThrow();
   await expect(assertAuthoritativeNativeReviewStore(root)).rejects.toThrow();
   await expect(readAuthoritativeNativeReviewEnvelopes(root)).rejects.toThrow();
