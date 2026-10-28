@@ -58,9 +58,11 @@ authority after slow acceptance before clearing historical blockers.
 Git-CI can request a process-issued `VerifiedCiReviewSource` through
 `readVerifiedCiReviewSources(repository, reviewId?)`. It contains a frozen
 canonical summary without changes, patch or patchBytes, not a copied authority
-decision. Full schema and existing digest validation precede issuance. Startup
-seeds these summaries during the normal review audit; selected fallback reads
-work independently of plugin startup order.
+decision. Full schema and existing digest validation precede issuance. Git-CI
+preloads these summaries during its own startup; selected fallback reads work
+independently of plugin startup order. Generic review-store auditing validates
+canonical records without issuing CI capabilities or consuming their capacity,
+so review-only operation remains independent of the optional CI consumer.
 
 Every reuse reopens the canonical path with `O_NOFOLLOW`, validates private
 parent directories and the service-owned mode-0600 single-link regular file, and
