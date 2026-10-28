@@ -145,6 +145,12 @@ Repeat the same command to reconcile a host refresh after a lost response. See
 
 Clients pin the discovery result: subsequent discovery may pass `--expected-generation HASH`, and every `dim project console invoke OPERATION --expected-generation HASH --input JSON --json` must pass it. A changed selection fails before role attestation or mutation and requires reconnecting explicitly. Every invocation reloads the local project catalog and validates the requested project and repository; adding an imported repository needs no Web configuration. The shared `@slop-lab/dim-service-client-native-git` owns HTTP/evidence decoding and operation semantics; this plugin owns controller selection and namespace scope. Review and sync invocations validate current scope once per request, without preparing unrelated repository importer/registrar capabilities. No repository readiness or authorization result is cached across invocations.
 
+Workspace readiness attests the current issuer host, generation, repository,
+protected root and policy in its authenticated response, without a redundant
+issuer-identity round trip first. A broker Git request still proves readiness,
+obtains a fresh scoped lease and invokes the Git endpoint; it does not reuse
+authorization or skip the service's live root checks.
+
 ### Public repository imports
 
 With distinct selected registrar/importer roles available, the console also advertises `projects.create` and `repositories.import`. Projects use their ID as their initial local name. Import a public repository through the same host-owned path from the CLI:

@@ -68,7 +68,7 @@ export async function proveNativeProjectReadiness(
   const selected = selectedRoot ?? { commit: repository.commit, tree: repository.tree };
   const protectedRef = selectedRoot?.protectedRef ?? repository.protectedRef;
   nativeRepositoryBranchPolicy(repository.repositoryPolicy, protectedRef);
-  const generationId = (await attestNativeWorkspaceWriteIssuer(connection, signal, httpClient)).generationId;
+  const generationId = connection.nativeGit.generationId;
   const response = await httpClient.request({
     endpoint: connection.nativeGit.endpoint,
     method: "POST",
