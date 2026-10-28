@@ -1,5 +1,7 @@
 export { readAuthoritativeNativeReviewEnvelope as readGitCiEnvelope, readAuthoritativeNativeReviewEnvelopes as readGitCiEnvelopes } from "./plan-store.js";
 export { gitCiPlanSchema, gitCiEnvelope, saveGitCiPlan } from "./plan-store.js";
+export { readVerifiedGitCiDeliveryProjection } from "./plan-store.js";
+export type { VerifiedGitCiDeliveryProjection } from "./plan-store.js";
 export { createAuthoritativeNativeReviewEnvelope as createGitCiEnvelope, parseAuthoritativeNativeReviewEnvelope as parseGitCiEnvelope } from "./plan-schema.js";
 export type { AuthoritativeNativeReviewEnvelope as GitCiEnvelope, AuthoritativeNativePlanning as GitCiPlanning } from "./plan-schema.js";
 export { gitCiPolicySchema, gitCiPolicy, parseGitCiPolicy, requiredJobsRevision } from "./policy.js";
