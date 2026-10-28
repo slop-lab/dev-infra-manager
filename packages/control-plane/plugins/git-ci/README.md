@@ -78,6 +78,34 @@ review, policy, refs and inputs. Another generation cannot resume that action,
 and an unresolved envelope remains approval/promotion-blocked until a fresh
 explicit acceptance succeeds. Preparation readiness is not successful CI evidence.
 
+## Intent-first delivery lookup
+
+The durable intent is the outbox authority. Every poll validates bounded private
+intent records and their filename identities before selecting the current
+generation, service, destination and pending/due-superseded state. No current
+intent means no historical review or CI-plan body materialization. Completed,
+foreign-generation/destination and future-suppressed intents do not trigger work.
+
+Selected intents resolve only their referenced review-ID variants and the exact
+CI envelope/event digest. A compact review source is process-issued after full
+canonical validation; a bounded CI projection cache rechecks that source and the
+exact private plan file version on every use. Existing review, plan, CI-envelope
+and event digest domains remain unchanged. Matching canonical variants must
+produce identical event bytes; ordering uses the earliest creation time.
+
+Acknowledgement and rejection reread the current canonical intent and selected
+provenance before mutation. A recorded marker is persisted before completing its
+intent. Rejection backoff belongs to the generation-scoped intent; deployed
+schema-v3 generationless rejection markers remain readable but cannot suppress a
+fresh-generation explicit intent. Startup audits historical reviews, attached
+plans and marker/event provenance once; inactive history is not reparsed on idle
+ticks. Missing canonical provenance cannot masquerade as an empty durable outbox.
+
+Projection reuse is limited to 1,024 entries and 8 MiB of encoded compact data;
+plan-version attestations survive projection eviction for the source's lifetime.
+There is no TTL or persisted trusted index, and byte-integrity proofs never
+replace live authorization, policy/ref checks, human decisions or required CI.
+
 ## Workspace candidate requests
 
 A current Native Git workspace lease may request CI for an exact ordinary branch
