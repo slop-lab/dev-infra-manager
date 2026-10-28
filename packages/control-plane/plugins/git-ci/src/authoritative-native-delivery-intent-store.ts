@@ -15,6 +15,17 @@ import {
   sameDeliveryIntentIdentity,
   type DeliveryIntent
 } from "./delivery-intent-record.js";
+import {
+  assertCatalogDeliveryIntentAdditions,
+  deliveryIntentSelectionOrder,
+  publishCatalogDeliveryIntent,
+  readCatalogDeliveryIntents,
+  readCatalogSelectableDeliveryIntents,
+  rememberDeliveryIntentSelectionOrder,
+  rememberDeliveryIntentSelectionOrders,
+  type DeliveryIntentCursor,
+  type DeliveryIntentSelectionOrder
+} from "./delivery-intent-catalog.js";
 
 export type { DeliveryIntent } from "./delivery-intent-record.js";
 
@@ -46,14 +57,18 @@ async function recordExplicitUnlocked(repository: string, envelope: Authoritativ
     const intent = deliveryIntentSchema.parse({ schemaVersion: 1, state: "pending", eventId: event.eventId, eventDigest,
       reviewId: envelope.review.reviewId, envelopeId: envelope.envelopeId, generationId, serviceId: binding.serviceId,
       destinationDigest: binding.destinationDigest, ownerRequestId });
-    return { intent, name: `${deliveryIntentKey(intent)}.json` };
+    const order = { createdAt: envelope.review.createdAt, reviewId: event.reviewId,
+      jobName: event.jobName, eventId: event.eventId } satisfies DeliveryIntentSelectionOrder;
+    return { intent, name: `${deliveryIntentKey(intent)}.json`, order };
   });
   for (const candidate of candidates) {
     if (!existingNames.has(candidate.name)) continue;
     const existing = deliveryIntentSchema.parse(await readReviewJson(join(paths.intents, candidate.name), maximumDeliveryIntentBytes, true));
     if (!sameDeliveryIntentIdentity(existing, candidate.intent)) throw new DeliveryIntentStoreError("authoritative delivery intent conflicts");
+    rememberDeliveryIntentSelectionOrder(paths.intents, existing, candidate.order);
   }
   const novel = candidates.filter(({ name }) => !existingNames.has(name));
+  assertCatalogDeliveryIntentAdditions(paths.intents, novel);
   if (entries.length + novel.length > maximumEvents) {
     throw new DeliveryIntentStoreError("authoritative delivery intent capacity is exceeded");
   }
@@ -65,35 +80,35 @@ async function recordExplicitUnlocked(repository: string, envelope: Authoritativ
       const existing = deliveryIntentSchema.parse(await readReviewJson(path, maximumDeliveryIntentBytes, true));
       if (!sameDeliveryIntentIdentity(existing, candidate.intent)) throw new DeliveryIntentStoreError("authoritative delivery intent conflicts");
     }
+    publishCatalogDeliveryIntent(paths.intents, { name: candidate.name,
+      stored: await readStoredDeliveryIntent(path, true), order: candidate.order });
   }
 }
 
 export async function readSelectableDeliveryIntents(directory: string,
   binding: AuthoritativeNativeDeliveryBinding, generationId: string,
   now: number): Promise<readonly DeliveryIntent[]> {
-  return withIntentOperation(repositoryFromIntentDirectory(directory),
-    () => readSelectableUnlocked(directory, binding, generationId, now));
+  const cursor = await readSelectableDeliveryIntentCursor(directory, binding, generationId, now);
+  if (cursor.kind === "unprimed") return cursor.intents;
+  const intents: DeliveryIntent[] = [];
+  while (true) {
+    const group = cursor.nextGroup();
+    if (group.length === 0) return intents;
+    intents.push(...group);
+  }
 }
 
-async function readSelectableUnlocked(directory: string,
+export async function readSelectableDeliveryIntentCursor(directory: string,
   binding: AuthoritativeNativeDeliveryBinding, generationId: string,
-  now: number): Promise<readonly DeliveryIntent[]> {
-  const intents: DeliveryIntent[] = [];
-  const entries = await readdir(directory, { withFileTypes: true });
-  if (entries.length > maximumEvents) throw new DeliveryIntentStoreError("authoritative delivery intent capacity is exceeded");
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-    if (!entry.isFile() || !recordPattern.test(entry.name)) throw new DeliveryIntentStoreError("authoritative delivery intent name is invalid");
-    const stored = await readStoredDeliveryIntent(join(directory, entry.name), true);
-    if (entry.name !== `${deliveryIntentKey(stored.intent)}.json`) {
-      throw new DeliveryIntentStoreError("authoritative delivery intent path conflicts with its identity");
-    }
-    intents.push(stored.intent);
-  }
-  return intents.filter((intent) => intent.generationId === generationId
-    && intent.serviceId === binding.serviceId
-    && intent.destinationDigest === binding.destinationDigest
-    && intent.state !== "completed"
-    && (intent.state !== "superseded" || intent.retryAfter <= now));
+  now: number): Promise<DeliveryIntentCursor> {
+  return withIntentOperation(repositoryFromIntentDirectory(directory),
+    () => readCatalogSelectableDeliveryIntents(directory, { generationId,
+      serviceId: binding.serviceId, destinationDigest: binding.destinationDigest, now }));
+}
+
+export async function readVerifiedDeliveryIntents(directory: string): Promise<readonly DeliveryIntent[]> {
+  return withIntentOperation(repositoryFromIntentDirectory(directory),
+    () => readCatalogDeliveryIntents(directory));
 }
 
 export async function withCurrentDeliveryIntent<Result>(paths: IntentPaths,
@@ -139,6 +154,27 @@ async function initializeUnlocked(repository: string): Promise<IntentPaths> {
 async function replaceIntentUnlocked(paths: IntentPaths, previous: DeliveryIntent, next: DeliveryIntent): Promise<void> {
   if (!sameDeliveryIntentIdentity(previous, next)) throw new DeliveryIntentStoreError("authoritative delivery intent identity changed");
   await replaceReviewRecord({ path: join(paths.intents, `${deliveryIntentKey(previous)}.json`), serialized: `${JSON.stringify(next)}\n`, stagingRoot: paths.staging, faults: {} });
+  const name = `${deliveryIntentKey(previous)}.json`;
+  const order = deliveryIntentSelectionOrder(paths.intents, previous);
+  publishCatalogDeliveryIntent(paths.intents, { name,
+    stored: await readStoredDeliveryIntent(join(paths.intents, name), true),
+    ...(order === undefined ? {} : { order }) });
+}
+
+export function rememberDeliveryIntentOrder(directory: string, intent: DeliveryIntent,
+  order: DeliveryIntentSelectionOrder): void {
+  rememberDeliveryIntentSelectionOrder(directory, intent, order);
+}
+
+export function rememberDeliveryIntentOrders(directory: string,
+  selections: readonly { readonly intent: DeliveryIntent;
+    readonly order: DeliveryIntentSelectionOrder }[]): void {
+  rememberDeliveryIntentSelectionOrders(directory, selections);
+}
+
+export function readDeliveryIntentOrder(directory: string,
+  intent: DeliveryIntent): DeliveryIntentSelectionOrder | undefined {
+  return deliveryIntentSelectionOrder(directory, intent);
 }
 
 async function recoverIntentStaging(paths: IntentPaths): Promise<void> {
