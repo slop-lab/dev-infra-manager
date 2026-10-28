@@ -270,6 +270,30 @@ event delivery. A selected language plugin compiles the candidate configuration;
 Git-CI verifies bounded configuration/script blobs from exact Git objects.
 Code-review stores only its immutable plan reference.
 
+Durable delivery intents are enumerated before review/plan materialization.
+Small intent records MUST be private, bounded, schema-valid and bound to their
+filenames before filtering current generation/service/destination and selectable
+state. No matching current intent MUST require no historical patch-body reads.
+Selection and acknowledgement MUST resolve the exact CI projection envelope ID
+and event digest, not merely the latest canonical record sharing a review ID.
+Equivalent canonical variants require identical event bytes and retain the
+earliest creation time. Acknowledgement revalidates current intent/provenance and
+persists its marker before intent completion. Rejection backoff remains owned by
+the generation-scoped intent; existing generationless schema-v3 rejection markers
+cannot override a new generation's explicit request.
+
+Review and CI owners MAY retain bounded process-issued compact provenance and
+projections after complete existing schema/digest validation. Reuse MUST recheck
+private directories, `O_NOFOLLOW` file identity, owner/mode/single-link/size bounds
+and nanosecond file versions, including stable FD reads and path agreement.
+Process-issued source proofs MUST be runtime-checked; cached compact values MUST
+be frozen and remain insufficient to grant current authorization. Known immutable-file mutation or replacement fails
+closed. Existing persisted digest domains and data formats remain unchanged.
+Startup audits historical reviews, attached CI plans and marker/event provenance;
+later selected/informational reads validate their own records. Idle delivery
+polling is not a full-body audit of unrelated inactive history. A changed inactive
+record is detected at its next selection/catalog enumeration or startup.
+
 `extensions["git-ci"].ciRepositoryIds` bounds job input selection and includes
 the primary repository. Omitted job selection means the primary repository.
 Plans and descriptors bind one exact commit/tree map. Dependency drift makes
