@@ -92,13 +92,21 @@ intents do not trigger work; backward wall-clock movement restores future backof
 
 Every catalog reuse verifies the private directory's inode and nanosecond version.
 Namespace changes trigger enumeration; replacement or disappearance of known
-state fails closed. Filesystem watches only accelerate dirty-record detection;
-they do not establish validity. Explicit audits revalidate all canonical records,
+state fails closed. No filesystem watch is required: reconciliation checks every
+known file's exact version when the directory namespace changes, and selected
+intents receive stable FD/path checks. Unchanged reads do not rewrite directory
+permissions and invalidate their own snapshots. Explicit audits revalidate all canonical records,
 including inactive entries. Catalogs are capped at 4,096 directories, with a
 process-wide 100,000-entry and 512 MiB encoded-data budget. Capacity exhaustion
 fails closed without forgetting known state. Direct unprimed library use may
 resolve the active set once to establish ordering; production startup and
 owner-published records prime it before normal polling.
+
+Capacity reservations span asynchronous publication. An unresolved extant write
+keeps a named reservation outside selectable buckets until its exact expected
+state or known old state is verified; recovery consumes or releases it once.
+Failed initial catalog loads release only their uncommitted directory slot.
+Missing known storage is an error, not permission to recreate an empty outbox.
 
 Selected intents resolve only their referenced review-ID variants and the exact
 CI envelope/event digest. A compact review source is process-issued after full
@@ -114,6 +122,9 @@ schema-v3 generationless rejection markers remain readable but cannot suppress a
 fresh-generation explicit intent. Startup audits historical reviews, attached
 plans and marker/event provenance once; inactive history is not reparsed on idle
 ticks. Missing canonical provenance cannot masquerade as an empty durable outbox.
+An exact current-generation recorded marker repairs an unfinished intent under
+the same marker-to-intent lock order, without replaying execution. Interrupted
+intent repairs use intent staging, never marker staging.
 
 Projection reuse is limited to 1,024 entries and 8 MiB of encoded compact data;
 concurrent identical cold reads share work, and a paused warm read cannot
