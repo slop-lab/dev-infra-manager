@@ -13,7 +13,7 @@ import { assertAuthoritativeNativeReviewStore, readAuthoritativeNativeReviewEnve
 import { assertAuthoritativeNativeApprovalStore } from "./authoritative-native-approval-store.js";
 import { assertAuthoritativeNativeRevocationStore } from "./authoritative-native-revocation-store.js";
 import { readAuthoritativeNativeDecisions } from "./authoritative-native-decision-store.js";
-import { recoverProposalAcceptances } from "./proposal-acceptance.js";
+import { completeProposalAcceptance, failProposalAcceptance, recoverProposalAcceptances, stageProposalAcceptance } from "./proposal-acceptance.js";
 import { captureRawProposalJobs, createRawProposalWorker } from "./raw-proposal-worker.js";
 import { completeMatchingRawProposalJob } from "./raw-proposal-journal.js";
 
@@ -25,9 +25,22 @@ export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly re
     const createInTransaction = async (context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined; readonly ownerRequestId?: string }) => {
       const runtime: CodeReviewRuntime = { ...context.runtime, authoritativeTargetProofs: new Map(), reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) };
       const { ownerRequestId, ...selector } = input;
-      const envelope = await createAuthoritativeNativeReview(runtime, selector, hooks.review);
-      await acceptReviewPreparations(runtime, envelope, ownerRequestId ?? `review:${envelope.review.reviewId}`);
-      await completeMatchingRawProposalJob(join(context.stateDirectory, input.projectId, `${input.repositoryId}.git`), runtime.expectedGenerationId, envelope);
+      const envelope = await createAuthoritativeNativeReview(runtime, selector, {
+        ...hooks.review,
+        async beforePublication(publication) {
+          await hooks.review?.beforePublication?.(publication);
+          await stageProposalAcceptance(publication.repository, runtime.expectedGenerationId, publication.envelope);
+        }
+      });
+      const repository = join(context.stateDirectory, input.projectId, `${input.repositoryId}.git`);
+      try {
+        await acceptReviewPreparations(runtime, envelope, ownerRequestId ?? `review:${envelope.review.reviewId}`);
+      } catch (error) {
+        await failProposalAcceptance(repository, runtime.expectedGenerationId, envelope);
+        throw error;
+      }
+      await completeProposalAcceptance(repository, runtime.expectedGenerationId, envelope);
+      await completeMatchingRawProposalJob(repository, runtime.expectedGenerationId, envelope);
       return envelope;
     };
     const service = {
