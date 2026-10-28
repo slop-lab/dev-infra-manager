@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 import { readAuthoritativeNativeReviewEnvelope as readReview, readAuthoritativeNativeReviewEnvelopes as readReviews,
   assertAuthoritativeNativeReviewStore as assertReviewStore, type AuthoritativeNativeReviewEnvelope as ReviewEnvelope,
@@ -9,14 +9,19 @@ import { readAuthoritativeNativeReviewEnvelope as readReview, readAuthoritativeN
 import { gitCiPlanningSchema, authoritativeNativeRequiredJobSchema, createAuthoritativeNativeReviewEnvelope,
   createAuthoritativeNativeReviewDeliveryProjection, type AuthoritativeNativeReviewDeliveryProjection,
   type AuthoritativeNativeReviewEnvelope } from "./plan-schema.js";
-import { assertPrivateGitCiPlanDirectory, GitCiPlanFileVersionError, readGitCiPlanFile, sameGitCiPlanFileVersion,
+import { assertPrivateGitCiPlanDirectory, readGitCiPlanFile, sameGitCiPlanFileVersion,
   type GitCiPlanFileVersion } from "./plan-file-version.js";
+import { CoalescedAsyncOperations } from "./coalesced-async-operations.js";
+import { PlanPathAttestations } from "./plan-path-attestations.js";
+import { BoundedProjectionCache } from "./plan-projection-cache.js";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const maximumPlanBytes = 8 * 1024 * 1024;
 const maximumProjectionEntries = 1_024;
 const maximumProjectionBytes = 8 * 1024 * 1024;
+const maximumPlanAttestationEntries = 100_000;
+const maximumPlanAttestationBytes = 64 * 1024 * 1024;
 export const gitCiPlanSchema = z.object({ schemaVersion: z.literal(1),
   projectId: z.string(), repositoryId: z.string(), expectedProtectedHead: objectId,
   candidateCommit: objectId, candidateTree: objectId, policyDigest: digest, qualityRevision: digest,
@@ -27,18 +32,17 @@ function planDigest(plan: GitCiPlan): string {
   return createHash("sha256").update("dim-git-ci-plan-v1\0").update(JSON.stringify(plan)).digest("hex");
 }
 export type VerifiedGitCiDeliveryProjection = AuthoritativeNativeReviewDeliveryProjection;
-type ProjectionCacheEntry = {
-  readonly attachmentId: string;
-  readonly projection: VerifiedGitCiDeliveryProjection;
-  readonly bytes: number;
-};
-type PlanAttestation = {
-  readonly attachmentId: string;
+type LoadedPlan = {
+  readonly plan: GitCiPlan;
   readonly version: GitCiPlanFileVersion;
 };
-const projectionCache = new Map<VerifiedCiReviewSource, ProjectionCacheEntry>();
-const planAttestations = new WeakMap<VerifiedCiReviewSource, PlanAttestation>();
-let projectionCacheBytes = 0;
+const projectionCache = new BoundedProjectionCache<VerifiedCiReviewSource, VerifiedGitCiDeliveryProjection>(
+  maximumProjectionEntries,
+  maximumProjectionBytes
+);
+const planAttestations = new PlanPathAttestations(maximumPlanAttestationEntries, maximumPlanAttestationBytes);
+const planReads = new CoalescedAsyncOperations<string, LoadedPlan>();
+const projectionLoads = new CoalescedAsyncOperations<VerifiedCiReviewSource, VerifiedGitCiDeliveryProjection>();
 export async function saveGitCiPlan(repository: string, input: GitCiPlan): Promise<ReviewAttachment> {
   const plan = gitCiPlanSchema.parse(input), digest = planDigest(plan);
   if (Buffer.byteLength(JSON.stringify(plan)) > maximumPlanBytes) throw new Error("Git CI plan exceeds its storage bound");
@@ -64,46 +68,40 @@ export async function readVerifiedGitCiDeliveryProjection(
   if (attachment === undefined || !/^[0-9a-f]{64}$/.test(attachment.id) || attachment.digest !== attachment.id) {
     throw new Error("Git CI attachment identity is invalid");
   }
-  const root = join(repository, "dim-git-ci-plans");
+  const root = resolve(repository, "dim-git-ci-plans");
   await assertPrivateGitCiPlanDirectory(root);
   const path = join(root, `${attachment.id}.json`);
-  const attestation = planAttestations.get(source);
-  if (attestation !== undefined && attestation.attachmentId !== attachment.id) {
-    throw new Error("Git CI projection attachment changed");
-  }
+  const attestation = planAttestations.expected(path);
   const cached = projectionCache.get(source);
   if (cached !== undefined) {
     if (cached.attachmentId !== attachment.id || attestation === undefined) {
       throw new Error("Git CI projection attestation is unavailable");
     }
     const current = await readGitCiPlanFile({ path, maximumBytes: maximumPlanBytes,
-      expectedVersion: attestation.version, readBody: false });
-    if (!sameGitCiPlanFileVersion(current.version, attestation.version)) throw new Error("Git CI plan version changed");
+      expectedVersion: attestation, readBody: false });
+    if (!sameGitCiPlanFileVersion(current.version, attestation)) throw new Error("Git CI plan version changed");
     await assertVerifiedCiReviewSourceCurrent(repository, source);
-    projectionCache.delete(source);
-    projectionCache.set(source, cached);
-    return cached.projection;
+    projectionCache.touch(source, cached);
+    return cached.value;
   }
-  const record = await readGitCiPlanFile({ path, maximumBytes: maximumPlanBytes,
-    ...(attestation === undefined ? {} : { expectedVersion: attestation.version }), readBody: true });
-  if (record.serialized === undefined) throw new Error("Git CI plan body is unavailable");
-  const plan = gitCiPlanSchema.parse(JSON.parse(record.serialized));
-  assertPlanMatchesSource(plan, attachment, source);
-  const projection = createAuthoritativeNativeReviewDeliveryProjection({
-    review: source.summary.review, qualityRevision: plan.qualityRevision,
-    policyDigest: plan.policyDigest, requiredJobs: plan.requiredJobs, planning: plan.planning
+  return projectionLoads.run(source, async () => {
+    const record = await planReads.run(path, async () => {
+      const expectedVersion = planAttestations.expected(path);
+      const file = await readGitCiPlanFile({ path, maximumBytes: maximumPlanBytes,
+        ...(expectedVersion === undefined ? {} : { expectedVersion }), readBody: true });
+      if (file.serialized === undefined) throw new Error("Git CI plan body is unavailable");
+      return { version: file.version, plan: gitCiPlanSchema.parse(JSON.parse(file.serialized)) };
+    });
+    assertPlanMatchesSource(record.plan, attachment, source);
+    const projection = createAuthoritativeNativeReviewDeliveryProjection({
+      review: source.summary.review, qualityRevision: record.plan.qualityRevision,
+      policyDigest: record.plan.policyDigest, requiredJobs: record.plan.requiredJobs, planning: record.plan.planning
+    });
+    await assertVerifiedCiReviewSourceCurrent(repository, source);
+    planAttestations.attest(path, record.version);
+    projectionCache.set(source, attachment.id, projection);
+    return projection;
   });
-  await assertVerifiedCiReviewSourceCurrent(repository, source);
-  const currentAttestation = planAttestations.get(source);
-  if (currentAttestation !== undefined && (currentAttestation.attachmentId !== attachment.id
-    || !sameGitCiPlanFileVersion(currentAttestation.version, record.version))) {
-    throw new GitCiPlanFileVersionError("Git CI plan version changed before attestation publication");
-  }
-  if (currentAttestation === undefined) {
-    planAttestations.set(source, { attachmentId: attachment.id, version: record.version });
-  }
-  cacheProjection(source, attachment.id, projection);
-  return projection;
 }
 export async function gitCiEnvelope(repository: string, envelope: ReviewEnvelope): Promise<AuthoritativeNativeReviewEnvelope | undefined> {
   const attachments = envelope.attachments.filter(({ kind }) => kind === "git-ci");
@@ -138,24 +136,4 @@ function assertPlanMatchesSource(plan: GitCiPlan, attachment: ReviewAttachment, 
     || plan.candidateCommit !== review.candidateCommit || plan.candidateTree !== review.candidateTree) {
     throw new Error("Git CI plan does not match its reviewed snapshot");
   }
-}
-
-function cacheProjection(source: VerifiedCiReviewSource, attachmentId: string,
-  projection: VerifiedGitCiDeliveryProjection): void {
-  const bytes = Buffer.byteLength(JSON.stringify(projection));
-  if (bytes > maximumProjectionBytes) return;
-  const previous = projectionCache.get(source);
-  if (previous !== undefined) {
-    projectionCache.delete(source);
-    projectionCacheBytes -= previous.bytes;
-  }
-  while (projectionCache.size >= maximumProjectionEntries
-    || projectionCacheBytes + bytes > maximumProjectionBytes) {
-    const oldest = projectionCache.entries().next().value;
-    if (oldest === undefined) break;
-    projectionCache.delete(oldest[0]);
-    projectionCacheBytes -= oldest[1].bytes;
-  }
-  projectionCache.set(source, { attachmentId, projection, bytes });
-  projectionCacheBytes += bytes;
 }
