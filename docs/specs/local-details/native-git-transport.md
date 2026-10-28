@@ -284,6 +284,10 @@ Filesystem notifications are advisory, not authorization or proof of validity.
 Selected canonical intents MUST be reread before network delivery, independently
 of notification delivery. Inactive body changes remain detectable at explicit
 audit/startup; selected changes fail closed at use.
+Asynchronous publications MUST reserve shared capacity before writing. Unresolved
+extant publications retain named, non-selectable reservation ownership until
+canonical verification can consume or release it exactly once. Known missing
+outbox storage MUST NOT be silently forgotten or recreated as empty.
 Selection and acknowledgement MUST resolve the exact CI projection envelope ID
 and event digest, not merely the latest canonical record sharing a review ID.
 Equivalent canonical variants require identical event bytes and retain the
@@ -291,6 +295,9 @@ earliest creation time. Acknowledgement revalidates current intent/provenance an
 persists its marker before intent completion. Rejection backoff remains owned by
 the generation-scoped intent; existing generationless schema-v3 rejection markers
 cannot override a new generation's explicit request.
+Recorded-marker/unfinished-intent crash leftovers MUST reconcile durably without
+replaying execution or causing repeated full-backlog warm scans. Marker and
+intent replacement staging remain distinct ownership domains.
 
 Review and CI owners MAY retain bounded process-issued compact provenance and
 projections after complete existing schema/digest validation. Reuse MUST recheck
