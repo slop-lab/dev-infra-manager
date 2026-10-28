@@ -19,10 +19,15 @@ Later successful reads are not evidence that its unknown cause was fixed.
 
 ## First-cut ownership and verification contract
 
-- Existing durable intent records are the authoritative outbox. Strict private
-  metadata/schema/filename validation precedes filtering by generation, service,
-  destination and pending/due-superseded state. No current work means no historical
-  review or CI-plan materialization.
+- Existing durable intent records are the authoritative outbox. Startup/explicit
+  audits validate private metadata, schemas, filenames and exact event provenance.
+  Owner writes maintain bounded generation/service/destination/state buckets and
+  verified order metadata under the intent queue. Warm polling neither sorts nor
+  rereads all retained history; selected canonical intents are reread before
+  delivery. Private directory inode/version checks are authoritative; filesystem
+  notifications are advisory. No current work means no historical review/plan
+  materialization. Direct unprimed module use can resolve the active set once;
+  production startup and owner publication prime the ordered catalog.
 - Review owns an opaque, frozen `VerifiedCiReviewSource`, obtained only after
   full canonical schema/digest validation. Its compact summary excludes changes,
   patch and patchBytes. Exact file-version checks include device, inode, size,
@@ -50,9 +55,15 @@ Later successful reads are not evidence that its unknown cause was fixed.
   decisions, execution evidence and final protected CAS remain live. There is no
   TTL, persisted cache, new daemon, unverified side index or changed digest domain.
 
-The first checkpoint excludes broad payload-LRU/caller migration, worker parsing,
-broker consolidation and Web transport changes. Those adapters are examined
-separately after the dispatcher checkpoint, rather than obscuring its evidence.
+The core checkpoint excludes broad payload-LRU/caller migration and worker
+parsing. Subsequent adapter commits remove only duplicate validation journeys:
+readiness directly attests the current configured generation and issuer host in
+one authenticated POST, reducing broker CP calls from four to three; it still
+obtains a fresh lease and serves Git through live authority checks. Automatic
+Web invokes a ready selected host without an additional full describe. Host
+invocation reloads current scope and attests private service roles itself; Web
+joins any in-flight refresh and retains the pinned generation. Explicit private
+Web service connections remain direct, with no host credential forwarding.
 
 ## Unchanged installed own-origin sample
 
@@ -108,6 +119,12 @@ CI plans, one valid job per plan, with 61 reviews intentionally lacking CI. The
 private mode-0600 descriptor records the exact content fingerprint, counts and
 sizes. Preparation refuses an existing corpus directory, so baseline/current
 comparisons cannot silently repopulate different bytes.
+
+Before measurement, the reader independently checks the actual review/plan file
+counts, private single-link metadata, byte totals, largest record, job count and
+the original ordered content fingerprint. An unchanged descriptor cannot conceal
+a same-length file mutation. These verification reads occur before phase CPU,
+event-loop and body-read counters start, in both source-tree comparisons.
 
 Each measurement is a new process. It starts an unrelated configured Native Git
 fixture only for the real authenticated
@@ -166,33 +183,41 @@ installed-host acceptance.
 
 ### Current-source comparison
 
-The final pre-review run on 2026-10-28 used the same corpus fingerprint and
+The final source run on 2026-10-28 used the same verified corpus fingerprint and
 controls above. Five warm samples per phase are descriptive, not a production
 SLO; p95 is the largest of those five observations.
 
 | Measurement | ff4 baseline above | Current source |
 | --- | ---: | ---: |
-| Idle warm p50 / p95 | 5341.473 / 5421.516 ms | 35.755 / 41.807 ms |
-| Active warm p50 / p95 | 5338.128 / 5430.556 ms | 35.350 / 47.894 ms |
-| Idle cold lookup | 5603.344 ms | 42.343 ms |
-| Active cold lookup | 5336.065 ms | 68.811 ms |
+| Idle warm p50 / p95 | 5341.473 / 5421.516 ms | 36.711 / 52.335 ms |
+| Active warm p50 / p95 | 5338.128 / 5430.556 ms | 41.477 / 48.704 ms |
+| Idle cold lookup | 5603.344 ms | 36.327 ms |
+| Active cold lookup | 5336.065 ms | 96.111 ms |
 | Idle main-thread body reads | 4,612,799,730 bytes | 0 bytes |
 | Active main-thread body reads | 4,612,803,348 bytes | 7,589,645 bytes |
-| Idle phase user / system CPU | 19546.093 / 16008.361 ms | 177.052 / 51.356 ms |
-| Active phase user / system CPU | 19335.759 / 15946.705 ms | 191.836 / 72.598 ms |
-| Idle event-loop maximum delay | 1312.817 ms | 11.035 ms |
-| Active event-loop maximum delay | 1330.643 ms | 23.298 ms |
-| Idle unrelated identity maximum | 1313.601 ms | 12.785 ms |
-| Active unrelated identity maximum | 1355.033 ms | 9.227 ms |
+| Idle phase user / system CPU | 19546.093 / 16008.361 ms | 201.429 / 63.868 ms |
+| Active phase user / system CPU | 19335.759 / 15946.705 ms | 227.078 / 79.861 ms |
+| Idle event-loop maximum delay | 1312.817 ms | 11.952 ms |
+| Active event-loop maximum delay | 1330.643 ms | 23.953 ms |
+| Idle unrelated identity maximum | 1313.601 ms | 14.074 ms |
+| Active unrelated identity maximum | 1355.033 ms | 9.796 ms |
 
-Current identity requests were 61 idle and 62 active, with no failures. Active
+Current identity requests were 62 per phase, with no failures. Large active
 body reads include only the selected canonical review and its plan, once;
-subsequent selections verify exact file metadata without rereading patch bytes.
+subsequent selections verify exact file metadata without rereading patch bytes
+and reread the small canonical intent (3,015 bytes over five warm selections).
 This measures the lookup surface, not complete service startup: startup still
-audits historical bodies and attached plans. The broker's four control-plane
-calls and Web discovery are unchanged by this checkpoint. No installed
+audits historical bodies and attached plans. The table measures the core lookup,
+not the subsequent broker/Web adapter changes. No installed
 after-result is claimed; exact CI, deployment and installed confirmation remain
 operator-owned.
+
+Other full-payload consumers remain explicit bottlenecks outside the idle
+dispatcher: reviewer list/detail/resolution, protected-update review matching,
+and the optional generic review-created webhook source. In particular, enabling
+that webhook source still materializes canonical review history during its own
+five-second scan. This checkpoint does not claim every historical-review surface
+is incremental or that the broker's remaining three round trips are free.
 
 Validation on this source passed 218 review/Git-CI tests in 51 files, all 87 CLI
 tests, 12 host-command tests, and five installed-execution fixture scenarios
@@ -205,6 +230,14 @@ host files nor tests were changed to conceal those limitations. LSP cannot
 address this isolated worktree from the session's `/workspace/main` request
 root; the strict recursive TypeScript checks cover the changed source instead.
 
+The subsequent adapter regressions passed all 251 active Native Git host tests
+(two existing skips) and 14 Web plugin tests. The Web/host integration executes
+the actual host console and Git service, proves two delegated reads need only
+the initial presentation description, then replaces the private fixture reviewer
+credential and observes HTTP 401 without rediscovery. Eleven readiness cases
+exercise one authenticated HTTP request and reject mismatched host, service,
+generation, Project/repository, ref, object, policy and extra response fields.
+
 Measurement cleanup is bounded to the fixture-owned temporary service state and
 `repository/dim-git-ci-deliveries`; canonical reviews, plans and the descriptor
 remain for the comparison run. Remove the persistent corpus only when both runs
@@ -213,3 +246,35 @@ are complete:
 ```bash
 rm -rf "$CORPUS_DIRECTORY"
 ```
+
+## Retained-intent history load
+
+The additional `measure-intents` mode uses the same canonical corpus and adds
+10,000 valid completed intents referencing its canonical CI event, with distinct
+old generations and mixed historical service/destination bindings. It retains
+them across idle and active phases, then removes only the transient fixture
+delivery directory. This is synthetic history, not new execution authority.
+The report separates cold and warm body-read bytes so one-time catalog loading
+cannot be confused with per-tick history reads.
+
+```bash
+pnpm --dir tests exec tsx --conditions=dim-source \
+  scenarios/latency/native-history-cli.ts measure-intents \
+  /absolute/path/to/source "$CORPUS_DIRECTORY"
+```
+
+The ff4 baseline with that load observed idle warm p50/p95
+6306.166/6501.034 ms and active 6296.393/6397.333 ms. Five warm reads consumed
+3,876,777,560 bytes idle and 3,876,780,575 bytes active; unrelated identity
+requests had maxima 1421.967 and 1460.895 ms, with no failures. Runs use a shared
+development host, not an isolated production topology or a latency SLO.
+
+Current source with the same 10,000 retained intents observed idle warm p50/p95
+51.418/55.824 ms and active 53.227/61.812 ms. The cold idle catalog load took
+923.028 ms and read 6,555,557 intent bytes once; five warm idle lookups read
+zero body bytes. Active cold lookup took 112.894 ms; five warm lookups read
+only 3,015 bytes of selected canonical intent, not historical reviews or plans.
+Identity maxima were 12.200 ms idle and 9.049 ms active, with 71/63 requests and
+zero failures. Event-loop maxima were 15.753/27.050 ms. The CLI happy path exited
+zero in tmux; help rendered the modes, and invalid input returned bounded JSON
+diagnostics with exit one.
