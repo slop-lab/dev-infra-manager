@@ -9,6 +9,8 @@ import { Worker } from "node:worker_threads";
 import { percentileSummary } from "./native-history-metrics.js";
 import type { NativeHistoryCorpusDescriptor } from "./native-history-corpus.js";
 import { seedRetainedHistoryIntents } from "./native-history-intents.js";
+import { verifyRetainedHistoryIntents, type RetainedIntentHistoryDescriptor } from "./native-history-intent-verification.js";
+import { deliveryIntentKey } from "../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
 
 type DeliveryStoreModule = typeof import("../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js");
 type BindingModule = typeof import("../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js");
@@ -54,11 +56,11 @@ export async function measureNativeHistory(input: MeasurementInput): Promise<obj
   const service = await fixture.startFinalizeService(serviceRoot);
   try {
     await rm(transientDirectory, { recursive: true, force: true });
-    let retainedIntentCount = 0;
+    let retainedIntents: RetainedIntentHistoryDescriptor | undefined;
     if (input.retainedIntentHistory === true) {
       const envelope = await planStore.readAuthoritativeNativeReviewEnvelope(input.repository, input.descriptor.activeReviewId);
       assert.ok(envelope, "retained-intent fixture is missing its canonical CI projection");
-      retainedIntentCount = await seedRetainedHistoryIntents({ repository: input.repository, envelope,
+      retainedIntents = await seedRetainedHistoryIntents({ repository: input.repository, envelope,
         binding, generationId: fixture.generationId });
     }
     const idle = await phase({ expectedPending: 0, repository: input.repository, serviceOrigin: service.origin,
@@ -74,6 +76,11 @@ export async function measureNativeHistory(input: MeasurementInput): Promise<obj
     const active = await phase({ expectedPending: 1, repository: input.repository, serviceOrigin: service.origin,
       authorization: fixture.workspaceWriteIssuerAuthorization, binding, generationId: fixture.generationId,
       readPending: deliveryStore.readPendingAuthoritativeNativeDeliveries, counter });
+    if (retainedIntents !== undefined) {
+      const addedNames = activeEnvelope.events.map(({ eventId }) => `${deliveryIntentKey({ eventId,
+        generationId: fixture.generationId, serviceId: binding.serviceId, destinationDigest: binding.destinationDigest })}.json`);
+      retainedIntents = await verifyRetainedHistoryIntents(join(transientDirectory, "intents"), retainedIntents, addedNames);
+    }
     return {
       schemaVersion: 1,
       sourceTree,
@@ -81,11 +88,12 @@ export async function measureNativeHistory(input: MeasurementInput): Promise<obj
       syntheticStorageFixture: true,
       gitPromotionProof: false,
       corpus: input.descriptor,
+      ...(retainedIntents === undefined ? {} : { retainedIntents }),
       controls: { warmSampleCount, pollIntervalMilliseconds, identityCadenceMilliseconds,
-        requestDeadlineMilliseconds, maximumInflightIdentityRequests: 1, retainedIntentCount },
+        requestDeadlineMilliseconds, maximumInflightIdentityRequests: 1, retainedIntentCount: retainedIntents?.recordCount ?? 0 },
       idle,
       active,
-      bodyReadScope: "main-thread FileHandle.readFile return bytes during each measured phase; worker and native off-thread reads are not observed",
+      bodyReadScope: "unattributed main-thread FileHandle.readFile return bytes during each measured phase; worker and native off-thread reads are not observed",
       cleanup: { corpusRetained: true, removedTransientDirectory: "repository/dim-git-ci-deliveries",
         removedServiceFixture: true, credentialsReported: false, responseBodiesReported: false }
     };
