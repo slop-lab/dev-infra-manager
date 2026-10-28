@@ -53,6 +53,31 @@ completion succeed, including across serving-generation replacement. Explicit
 resolution stages the same blocker before publication and rechecks exact current
 authority after slow acceptance before clearing historical blockers.
 
+## Compact immutable provenance
+
+Git-CI can request a process-issued `VerifiedCiReviewSource` through
+`readVerifiedCiReviewSources(repository, reviewId?)`. It contains a frozen
+canonical summary without changes, patch or patchBytes, not a copied authority
+decision. Full schema and existing digest validation precede issuance. Startup
+seeds these summaries during the normal review audit; selected fallback reads
+work independently of plugin startup order.
+
+Every reuse reopens the canonical path with `O_NOFOLLOW`, validates private
+parent directories and the service-owned mode-0600 single-link regular file, and
+checks device/inode/size/UID/mode/link count plus nanosecond mtime/ctime against
+stable FD reads and the path. A known changed, replaced, removed or unsafe record
+fails closed rather than silently refreshing its attestation. Public full-payload
+reads remain separate. Short repository-owned IO operations serialize publication,
+recovery and selection so a live hardlink staging window is not treated as a crash.
+
+The compact registry has explicit process limits: 4,096 repositories, 100,000
+sources, 1 MiB per compact source and 64 MiB of encoded compact source/proof data.
+Exhaustion is explicit and fail-closed; it does not discard canonical records or
+forget old versions to accept a replacement. No patch payload is retained there.
+The proof is only immutable-byte provenance. Current activation/generation,
+storage ownership, policy, refs, reviewer/issuer scope, decisions and protected
+promotion remain freshly checked by their owners.
+
 ## Conditional security review
 
 The operator-imported policy can add reviewers by path or by content. Conditions
