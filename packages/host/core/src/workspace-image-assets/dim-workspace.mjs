@@ -257,17 +257,20 @@ async function stopOwnedProcess(pid, ticks) {
 }
 /** @param {string} name */
 async function serviceOwner(name) {
-  try {
-    const value = await privateJson(path.join(serviceLock(name), "owner.json"));
-    if (!record(value) || typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid < 1
-      || typeof value.ticks !== "string" || typeof value.boot !== "string" || typeof value.nonce !== "string"
-      || typeof value.child !== "number" || typeof value.childTicks !== "string") throw new Error("invalid service owner");
-    return { pid: value.pid, ticks: value.ticks, boot: value.boot, nonce: value.nonce, child: value.child, childTicks: value.childTicks };
-  } catch (error) {
-    // Owner records are advisory: the permanent kernel guard arbitrates startup.
-    // A replaced/removed record cannot identify a current supervisor.
-    if (error instanceof RemovedPrivateFileError || (error instanceof Error && "code" in error && error.code === "ENOENT")) return undefined;
-    throw error;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const value = await privateJson(path.join(serviceLock(name), "owner.json"));
+      if (!record(value) || typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid < 1
+        || typeof value.ticks !== "string" || typeof value.boot !== "string" || typeof value.nonce !== "string"
+        || typeof value.child !== "number" || typeof value.childTicks !== "string") throw new Error("invalid service owner");
+      return { pid: value.pid, ticks: value.ticks, boot: value.boot, nonce: value.nonce, child: value.child, childTicks: value.childTicks };
+    } catch (error) {
+      // Atomic owner publication invalidates the opened inode. Retry the current
+      // path instead of treating a live replacement owner as absent.
+      if (error instanceof RemovedPrivateFileError && attempt < 3) continue;
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
+      throw error;
+    }
   }
 }
 /** @param {string} name */
