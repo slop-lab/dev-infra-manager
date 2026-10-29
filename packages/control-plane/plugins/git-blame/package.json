@@ -36,8 +36,9 @@
   },
   "dependencies": {
     "@slop-lab/gs-blame": "workspace:0.10.0",
-    "zod": "4.6.6",
-    "@slop-lab/dim-contracts-git": "workspace:0.10.0"
+    "@slop-lab/gs-blame-service": "workspace:0.10.0",
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
