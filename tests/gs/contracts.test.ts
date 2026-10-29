@@ -52,5 +52,24 @@ describe("GS-owned portable contracts", () => {
       argv: ["/bin/sh", "ci/check.sh"],
     })).toThrow();
     expect(reviewCiStatusSchema).toBeDefined();
+    expect(reviewCiStatusSchema.parse({
+      schemaVersion: 1,
+      reviewId: "a".repeat(64),
+      candidateCommit: "b".repeat(40),
+      expectedProtectedHead: "c".repeat(40),
+      policy: "enabled",
+      state: "pending",
+      requiredChecks: [{ name: "check", provider: "portable", status: "pending", runId: "run-1" }],
+    })).toMatchObject({ requiredChecks: [{ provider: "portable" }] });
+    expect(() => reviewCiStatusSchema.parse({
+      schemaVersion: 1,
+      reviewId: "a".repeat(64),
+      generationId: "d".repeat(64),
+      candidateCommit: "b".repeat(40),
+      expectedProtectedHead: "c".repeat(40),
+      policy: "enabled",
+      state: "pending",
+      requiredJobs: [{ name: "check", kind: "ordinary-sysbox", status: "pending" }],
+    })).toThrow();
   });
 });

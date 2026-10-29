@@ -1,6 +1,7 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
+import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import type { AuthoritativeNativeReviewEnvelope } from "../../../../packages/gs/ci/src/plan-schema.js";
 import type { AuthoritativeNativeReviewHooks, CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { readAuthoritativeNativeReviewEnvelopes as readReviewEnvelopes } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
@@ -49,7 +50,8 @@ export async function nativeBundleReviewFixture(
   _reservedPromotionHooks?: undefined,
   runner = matchingRunner(),
   candidateLeaseClock?: () => number,
-  repositoryId = "root"
+  repositoryId = "root",
+  workflowCompiler: import("@slop-lab/gs-ci-contracts").WorkflowCompiler = dimWorkflowCompiler,
 ): Promise<NativeBundleReviewFixture> {
   const root = await createFinalizeRoot(label);
   const bundle = await createRootBundle({
@@ -60,7 +62,7 @@ export async function nativeBundleReviewFixture(
   });
   const service = await startFinalizeService(
     root, candidateLeaseClock, undefined, undefined, undefined, undefined, reviewHooks, reviewerHooks,
-    ordinaryIdentityHttpClient, deliveryFaults, nativeOrdinaryAttemptHooks, configOverrides
+    ordinaryIdentityHttpClient, deliveryFaults, nativeOrdinaryAttemptHooks, configOverrides, workflowCompiler,
   );
   await activateFinalizeService(service.origin);
   await service.prepareProject(generationId, importer.hostId, projectInput("project-a", repositoryId));

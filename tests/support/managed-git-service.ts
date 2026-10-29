@@ -32,6 +32,7 @@ export async function configuredManagedGitFixture(options: ManagedGitFixtureOpti
       ...(options.nativeHumanReviewerHooks === undefined ? {} : { humanReviewer: options.nativeHumanReviewerHooks })
     }),
     prepareGitCi(config.ci, {
+      workflowCompiler: options.workflowCompiler ?? dimWorkflowCompiler,
       ...(options.executionReadLeaseClock === undefined ? {} : { now: options.executionReadLeaseClock }),
       ...(options.ordinaryIdentityHttpClient === undefined ? {} : { httpClient: options.ordinaryIdentityHttpClient }),
       ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })

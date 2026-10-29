@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
-import { reviewCiStatusSchema, type ReviewCiJob, type ReviewCiStatus } from "@slop-lab/gs-ci-contracts";
+import { dimReviewCiStatusSchema, type DimReviewCiJob, type DimReviewCiStatus } from "@slop-lab/dim-contracts-ci/review-status";
 import { assertAuthoritativeNativeReviewRefs, readAuthoritativeNativeReviewEnvelope } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { repositoryAccessProvider, RepositoryAccessError, readNativeProjectRootCurrentHeadFromDatabase,
   sendJson, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
@@ -36,14 +36,14 @@ export async function handleReviewCiStatus(context: RepositoryExtensionContext, 
 }
 
 export async function readReviewCiStatus(runtime: GitCiRuntime, target: AuthoritativeNativeRepositoryTarget,
-  reviewId: string): Promise<ReviewCiStatus | undefined> {
+  reviewId: string): Promise<DimReviewCiStatus | undefined> {
   const envelope = await readAuthoritativeNativeReviewEnvelope(target.repository, reviewId);
   if (!envelope || envelope.review.projectId !== target.imported.projectId || envelope.review.repositoryId !== target.imported.repositoryId) return;
   const review = envelope.review;
   const common = { schemaVersion: 1 as const, reviewId, generationId: runtime.expectedGenerationId,
     candidateCommit: review.candidateCommit, expectedProtectedHead: review.expectedProtectedHead };
-  const publish = (status: Pick<ReviewCiStatus, "state" | "policy" | "requiredJobs" | "reason">) =>
-    reviewCiStatusSchema.parse({ ...common, ...status });
+  const publish = (status: Pick<DimReviewCiStatus, "state" | "policy" | "requiredJobs" | "reason">) =>
+    dimReviewCiStatusSchema.parse({ ...common, ...status });
   if (!Object.hasOwn(target.imported.policy.extensions, "git-ci")) return publish({ state: "not-configured", policy: "absent", requiredJobs: [] });
   const policy = gitCiPolicy(target.imported.policy, review.repositoryId);
   const head = readNativeProjectRootCurrentHeadFromDatabase(runtime.state.database, review.projectId, review.repositoryId, review.protectedRef);
@@ -67,7 +67,7 @@ export async function readReviewCiStatus(runtime: GitCiRuntime, target: Authorit
       name, kind: executionKindSchema.parse(provider), status: "failed",
     })), reason: "invalid-plan" });
   }
-  const jobs: ReviewCiJob[] = [];
+  const jobs: DimReviewCiJob[] = [];
   for (const required of policy.requiredJobs) {
     const kind = executionKindSchema.parse(required.provider);
     const event = plan.events.find((entry) => entry.checkName === required.name && entry.provider === required.provider);

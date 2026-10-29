@@ -13,6 +13,7 @@ import type { AuthoritativeNativeReviewHooks } from "../../../../packages/contro
 import type { NativeHumanReviewerHooks } from "../../../../packages/control-plane/plugins/git-review/src/native-human-reviewer-http.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
 import type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit, WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
+import type { WorkflowCompiler } from "@slop-lab/gs-ci-contracts";
 
 export type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit, WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
 
@@ -90,12 +91,13 @@ export async function startFinalizeService(
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
   deliveryFaults?: CiDeliveryPublicationFaults,
   nativeOrdinaryAttemptHooks?: undefined,
-  configOverrides: object = {}
+  configOverrides: object = {},
+  workflowCompiler: WorkflowCompiler = dimWorkflowCompiler,
 ): Promise<RunningService> {
   return startFinalizeServiceForGeneration(
     root, generationId, activationToken, rootReadLeaseClock, rootReadLeaseHooks, workspaceWriteLeaseClock,
     workspaceWriteLeaseHooks, runtimeGit, authoritativeReviewHooks, nativeHumanReviewerHooks, ordinaryIdentityHttpClient,
-    deliveryFaults, nativeOrdinaryAttemptHooks, configOverrides
+    deliveryFaults, nativeOrdinaryAttemptHooks, configOverrides, workflowCompiler,
   );
 }
 
@@ -113,10 +115,11 @@ export async function startFinalizeServiceForGeneration(
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
   deliveryFaults?: CiDeliveryPublicationFaults,
   nativeOrdinaryAttemptHooks?: undefined,
-  configOverrides: object = {}
+  configOverrides: object = {},
+  workflowCompiler: WorkflowCompiler = dimWorkflowCompiler,
 ): Promise<RunningService> {
   const options = {
-    workflowCompiler: dimWorkflowCompiler,
+    workflowCompiler,
     config: parseManagedGitServiceConfig({
       ...idleNativeConfig(),
       ...configOverrides,

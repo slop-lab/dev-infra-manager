@@ -1,7 +1,9 @@
 # @slop-lab/gs-ci-contracts
 
 Portable CI workflow, immutable repository input, check event, evidence-provider
-and review-status schemas. Workflow jobs select a named provider; they do not
+and review-status schemas. Workflow jobs and review status checks select a named
+provider; status exposes `requiredChecks` and optional provider `runId`, not DIM
+generation, worker-kind or execution identifiers. Workflow jobs do not
 declare DIM worker kinds, images, resource profiles, Project identities or
 scheduler generations.
 

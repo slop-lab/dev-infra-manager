@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ReviewCiJob, ReviewCiStatus } from "@slop-lab/gs-ci-contracts";
+import type { DimReviewCiJob, DimReviewCiStatus } from "@slop-lab/dim-contracts-ci/review-status";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { currentExecutionEvidence, ExecutionConflictError } from "./execution-evidence.js";
 import { readAuthoritativeNativeReviewEnvelope } from "@slop-lab/gs-ci";
@@ -7,13 +7,13 @@ import { readReviewCiStatus } from "./review-status-http.js";
 import type { GitCiRuntime } from "./runtime.js";
 
 export async function readWorkspaceCiStatus(runtime: GitCiRuntime, target: AuthoritativeNativeRepositoryTarget, reviewId: string): Promise<{
-  readonly state: ReviewCiStatus["state"]; readonly review: ReviewCiStatus; readonly jobs: readonly ReviewCiJob[];
+  readonly state: DimReviewCiStatus["state"]; readonly review: DimReviewCiStatus; readonly jobs: readonly DimReviewCiJob[];
 } | undefined> {
   const review = await readReviewCiStatus(runtime, target, reviewId);
   if (!review) return;
   const plan = await readAuthoritativeNativeReviewEnvelope(target.repository, reviewId);
   if (review.policy !== "enabled" || !plan || plan.planning.status !== "valid") return { state: "unavailable", review, jobs: [] };
-  const jobs: ReviewCiJob[] = [];
+  const jobs: DimReviewCiJob[] = [];
   for (const event of plan.events) {
     const identity = { name: event.checkName, kind: z.enum(["ordinary-sysbox", "qemu"]).parse(event.provider) };
     try {

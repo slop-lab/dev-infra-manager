@@ -27,9 +27,10 @@ export type GitCiOptions = {
   readonly httpClient?: NativeGitAdmissionHttpClient;
   readonly deliveryFaults?: CiDeliveryPublicationFaults;
   readonly now?: () => number;
+  readonly workflowCompiler?: WorkflowCompiler;
 };
 export function prepareGitCi(config: import("./config.js").GitCiConfig, options: GitCiOptions = {}): PreparedControlPlanePlugin {
-    let compiler: WorkflowCompiler | undefined;
+    let compiler: WorkflowCompiler | undefined = options.workflowCompiler;
     let runtime: GitCiRuntime | undefined;
     const binding = authoritativeNativeDeliveryBinding("ci", config.webhook.endpoint, dimReviewJobAvailableEventCodec);
     const preparation = gitCiPreparation(() => {
@@ -90,7 +91,7 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
     }], requiresExtensions: [{ kind: WORKFLOW_COMPILER_EXTENSION, name: config.compiler },
       { kind: repositoryExtensionKind, name: "code-review" }, { kind: "dim.git-repositories.service", name: "default" }],
       async start(context) {
-        requireWorkflowCompiler(context.extensions, config.compiler);
+        compiler = requireWorkflowCompiler(context.extensions, config.compiler);
         return { async close() {} };
       }
     };

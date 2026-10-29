@@ -10,9 +10,9 @@ export {
 } from "./events.js";
 
 export {
-  reviewCiJobSchema,
+  reviewCiCheckSchema,
   reviewCiStatusSchema,
-  type ReviewCiJob,
+  type ReviewCiCheck,
   type ReviewCiStatus
 } from "./review-status.js";
 

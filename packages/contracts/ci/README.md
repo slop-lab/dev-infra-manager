@@ -3,7 +3,8 @@
 `@slop-lab/dim-contracts-ci` composes DIM execution grants, results,
 credentials, worker placement and scheduler-facing aggregates. It owns the
 legacy DIM execution descriptor/profile and `dim.native.review-job.available`
-wire codec, including the unchanged `dim-job-execution-v2` digest. Portable
+wire codec, generation-bound review-status codec, including the unchanged
+`dim-job-execution-v2` digest. Portable
 workflow, repository-input, check-event and evidence-provider schemas live in
 `@slop-lab/gs-ci-contracts`.
 

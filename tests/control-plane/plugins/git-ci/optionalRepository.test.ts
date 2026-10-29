@@ -9,11 +9,12 @@ import { basic, fixture, generationId, git, reviewer, token } from "../git-repos
 
 it("leaves a human-review-only repository free of CI even when Git CI is installed", async () => {
   let compiled = false;
+  const compiler = { configurationPath: ".dim/ci/runner.yml", revision: "a".repeat(64),
+    compile() { compiled = true; throw new Error("unselected workflow must not be read"); } };
   const prepared = prepareGitCi({ compiler: "dim", grantIssuer: { username: "grants", password: token(20) },
     candidateReader: { username: "candidate", password: token(21) }, resultReporter: { username: "results", password: token(22) },
-    webhook: { username: "webhook", password: token(23), endpoint: "http://127.0.0.1:1/v1/jobs" } });
-  const f = await fixture(true, [workflowCompilerExtension("dim", { configurationPath: ".dim/ci/runner.yml",
-    compile() { compiled = true; throw new Error("unselected workflow must not be read"); } }), ...(prepared.extensions ?? [])]);
+    webhook: { username: "webhook", password: token(23), endpoint: "http://127.0.0.1:1/v1/jobs" } }, { workflowCompiler: compiler });
+  const f = await fixture(true, [workflowCompilerExtension("dim", compiler), ...(prepared.extensions ?? [])]);
   try {
     await mkdir(join(f.source, ".dim/ci"), { recursive: true });
     await writeFile(join(f.source, ".dim/ci/runner.yml"), "invalid workflow deliberately ignored\n");

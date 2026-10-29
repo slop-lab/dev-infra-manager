@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { reviewCiJobSchema, reviewCiStatusSchema, type ReviewCiJob, type ReviewCiStatus } from "@slop-lab/gs-ci-contracts";
+import { dimReviewCiJobSchema, dimReviewCiStatusSchema,
+  type DimReviewCiJob, type DimReviewCiStatus } from "@slop-lab/dim-contracts-ci/review-status";
 import type { CommandResult } from "../web-lifecycle/process.js";
 
 type Receipt = { readonly requestId: string; readonly reviewId: string; readonly candidateRef: string; readonly candidateCommit: string;
-  readonly state: ReviewCiStatus["state"]; readonly review: ReviewCiStatus; readonly jobs: readonly ReviewCiJob[] };
+  readonly state: DimReviewCiStatus["state"]; readonly review: DimReviewCiStatus; readonly jobs: readonly DimReviewCiJob[] };
 export class CandidateCiError extends Error { readonly name = "CandidateCiError"; }
 
 export async function verifyWorkspaceCandidateCi(input: {
@@ -49,7 +50,7 @@ function receipt(source: string): Receipt {
   const state = status.state;
   if (state !== "pending" && state !== "succeeded" && state !== "failed" && state !== "stale" && state !== "unavailable" && state !== "not-configured" && state !== "not-required") throw new CandidateCiError("CI state is unknown; no successful gate is established");
   try { return { requestId: row.requestId, reviewId: row.reviewId, candidateRef: row.candidateRef, candidateCommit: row.candidateCommit,
-    state, review: reviewCiStatusSchema.parse(status.review), jobs: status.jobs.map((job: unknown) => reviewCiJobSchema.parse(job)) }; }
+    state, review: dimReviewCiStatusSchema.parse(status.review), jobs: status.jobs.map((job: unknown) => dimReviewCiJobSchema.parse(job)) }; }
   catch { throw new CandidateCiError("CI evidence metadata is invalid; no successful gate is established"); }
 }
 function object(value: unknown): Record<string, unknown> {

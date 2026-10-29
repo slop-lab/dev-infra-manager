@@ -24,7 +24,10 @@ The durable outbox, intent catalog, marker recovery, capacity reservations,
 projection attestations and plan storage moved here without changing their
 paths, schemas or digest domains. `createCiDeliveryDispatcher` receives typed
 repository enumeration and submit/receipt ports. It does not know HTTP,
-credentials or a DIM coordinator endpoint.
+credentials or a DIM coordinator endpoint. Catalogs are scoped to the
+dispatcher's owner lifetime: `stop()` halts work, while `close()` drains the
+task, releases indexed entries/capacity and makes a later owner perform a cold
+canonical verification without changing warm idle polling behavior.
 
 Persisted `dim-git-ci-*` paths, event names and digest domains remain private
 ABI. DIM keeps `.dim` compiler registration, execution grants/profiles,
