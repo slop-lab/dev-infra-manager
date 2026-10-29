@@ -10,7 +10,7 @@ import type {
   RepositoryTargetSelector,
 } from "@slop-lab/gs-repository-service";
 import type { ReviewFeature } from "@slop-lab/gs-review";
-import type { AuthoritativeNativeReviewEnvelope } from "@slop-lab/gs-review-contracts";
+import type { ReviewEnvelope } from "@slop-lab/gs-review-contracts";
 import { MergeAuthorizationStore, type MergeAuthorization } from "./state.js";
 import {
   assertMergeQualityGuards,
@@ -68,10 +68,11 @@ export class MergePolicyFeature {
     this.#options = options;
     this.#store = options.authorizationStore ?? new MergeAuthorizationStore(options.statePath ?? "");
     this.#ownsStore = options.authorizationStore === undefined;
+    const feature = this;
     this.refUpdatePolicy = {
       name: "merge-policy",
-      revision: featureRevision(options),
-      authorize: (input) => this.#authorizeRefUpdate(input),
+      get revision() { return featureRevision(options); },
+      authorize: (input) => feature.#authorizeRefUpdate(input),
     };
   }
 
@@ -111,7 +112,7 @@ export class MergePolicyFeature {
         false,
       );
       const { review } = selected.envelope;
-      const previous = this.#store.read().find((entry) => entry.authorization.projectId === input.namespaceId
+      const previous = this.#store.read().find((entry) => entry.authorization.namespaceId === input.namespaceId
         && entry.authorization.repositoryId === input.repositoryId
         && entry.authorization.reviewId === input.reviewId && entry.sequence !== undefined);
       if (previous?.sequence !== undefined && selected.target.head.commit === previous.authorization.candidateCommit
@@ -131,10 +132,10 @@ export class MergePolicyFeature {
       }
       const attachments = await this.#qualityEvidence(selected.target, selected.envelope);
       const authorization: MergeAuthorization = {
-        projectId: input.namespaceId,
+        namespaceId: input.namespaceId,
         repositoryId: input.repositoryId,
         reviewId: input.reviewId,
-        generationId: access.authority.authorityEpoch,
+        authorityEpoch: access.authority.authorityEpoch,
         envelopeId: selected.envelope.envelopeId,
         policyDigest: selected.envelope.policyDigest,
         protectedRef: review.protectedRef,
@@ -183,8 +184,8 @@ export class MergePolicyFeature {
     const value = entry?.authorization;
     if (entry === undefined || value === undefined || entry.sequence !== undefined
       || entry.evidenceDigest !== input.change.evidenceDigest
-      || value.projectId !== input.change.namespaceId || value.repositoryId !== input.change.repositoryId
-      || value.generationId !== authority.authorityEpoch || value.policyDigest !== target.policyDigest
+      || value.namespaceId !== input.change.namespaceId || value.repositoryId !== input.change.repositoryId
+      || value.authorityEpoch !== authority.authorityEpoch || value.policyDigest !== target.policyDigest
       || value.protectedRef !== target.head.protectedRef || value.proposalRef !== input.change.proposalRef
       || value.expectedCommit !== input.change.expectedCommit || value.candidateCommit !== input.change.candidateCommit
       || value.candidateTree !== input.change.candidateTree) {
@@ -214,7 +215,7 @@ export class MergePolicyFeature {
 
   async #qualityEvidence(
     target: RepositoryTarget,
-    envelope: AuthoritativeNativeReviewEnvelope,
+    envelope: ReviewEnvelope,
   ): Promise<readonly MergeEvidenceAttachment[]> {
     const reviewAttachments = envelope.attachments;
     assertRequiredMergeQualityGuards({

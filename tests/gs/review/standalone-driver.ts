@@ -5,9 +5,8 @@ import { promisify } from "node:util";
 import { z } from "zod";
 import { repositoryPolicyRevision } from "../../../packages/gs/repository-contracts/src/index.js";
 import { assertGitVersion, initializeRepository } from "../../../packages/gs/repository/src/index.js";
-import { openRepositoryAuthority } from "../../../packages/gs/repository-service/src/index.js";
+import { createGitRepositoryReadService, openRepositoryAuthority } from "../../../packages/gs/repository-service/src/index.js";
 import {
-  createGitRepositoryReadService,
   createReviewFeature,
   defaultReviewChangeMatchers,
 } from "../../../packages/gs/review/src/index.js";
@@ -129,11 +128,17 @@ console.log(JSON.stringify({
   candidateCommit,
   protectedHead,
   initialStatus,
+  reviewNamespace: envelope.review.namespaceId,
+  neutralReviewFields: !("projectId" in envelope.review) && !("workspaceId" in envelope.review)
+    && !("serviceId" in envelope.review),
   approvedStatus,
   revokedStatus,
   promoted,
   crashObserved,
   recoveredSequence: recoveredAuthorization?.sequence,
+  authorizationNamespace: recoveredAuthorization?.authorization.namespaceId,
+  authorizationEpochBound: recoveredAuthorization?.authorization.authorityEpoch
+    === recoveredAuthorization?.recoveryProof?.authorityEpoch,
   restartedStatus,
   providerFailureClosed,
   persistedPathsPreserved,

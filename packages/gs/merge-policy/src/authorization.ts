@@ -38,7 +38,7 @@ export function mergeFinalizedQuery(entry: StoredMergeAuthorization): ProtectedR
   if (proof === undefined) return undefined;
   const authorization = entry.authorization;
   return {
-    namespaceId: authorization.projectId,
+    namespaceId: authorization.namespaceId,
     repositoryId: authorization.repositoryId,
     protectedRef: authorization.protectedRef,
     proposalRef: authorization.proposalRef,

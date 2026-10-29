@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+import { DatabaseSync } from "node:sqlite";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -101,6 +102,11 @@ it.each(["afterIntent", "afterCompareAndSwap"] as const)("recovers only accepted
         hooks: { [interruption]: () => { throw new Error("simulated process interruption"); } } }, "project", "main", f.reviewId))).rejects.toThrow(/simulated process interruption/);
       expect(store.read()[0]?.sequence).toBeUndefined();
     } finally { store.close(); }
+    if (interruption === "afterCompareAndSwap") {
+      const database = new DatabaseSync(join(f.root, "state/.extensions/merge-policy/authorizations.sqlite3"));
+      try { database.prepare("DELETE FROM authorization_recovery").run(); }
+      finally { database.close(); }
+    }
     expect(await head(f)).toBe(interruption === "afterIntent" ? f.initial : f.candidate);
     await f.service.close();
     restarted = await configuredNativeGitBundleServer(f.options);

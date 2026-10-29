@@ -70,11 +70,18 @@ it("keeps non-fast-forward and deletion rejection independent of selected custom
 
 it("requires owned merge authorization at direct CAS and rechecks quality after authorization preparation", async () => {
   let ready = true;
-  const quality: MergeQualityGuard = { name: "build-check", async check() { if (!ready) throw new Error("required build is stale"); return []; } };
+  let qualityRevision = "7".repeat(64);
+  const quality: MergeQualityGuard = { name: "build-check", get revision() { return qualityRevision; },
+    async check() { if (!ready) throw new Error("required build is stale"); return []; } };
   const merge = await mergePlugin.configure({ hostPromoters: [] });
   const owner = repositoryExtension({ name: "build-check", policyName: "build-check", async attach() { return { async close() {} }; } });
   const f = await fixture(true, [...(merge.extensions ?? []), owner, mergeQualityGuardExtension(quality)], undefined, undefined, { "merge-policy": {}, "build-check": {} });
   try {
+    const mergeProvider = refUpdatePolicies(f.service.context.extensions).find(({ name }) => name === "merge-policy");
+    if (mergeProvider === undefined) throw new Error("merge ref policy missing");
+    const initialRevision = mergeProvider.revision;
+    qualityRevision = "8".repeat(64);
+    expect(mergeProvider.revision).not.toBe(initialRevision);
     const input = await candidate(f);
     const extension = f.service.context.extensions.find(({ kind }) => kind === "dim.code-review.service");
     if (!extension) throw new Error("review service missing");

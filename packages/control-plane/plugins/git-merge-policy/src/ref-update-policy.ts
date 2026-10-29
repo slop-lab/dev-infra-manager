@@ -12,10 +12,11 @@ import type { RepositoryTarget } from "@slop-lab/gs-repository-service";
 
 export function mergeRefUpdatePolicyExtension(
   runtimeFor: (context: RepositoryExtensionContext) => DimGsMergeRuntime,
+  revision: () => string,
 ): ControlPlaneExtension {
   return refUpdatePolicyExtension({
     name: "merge-policy",
-    revision: createHash("sha256").update("dim-gs-merge-ref-policy-adapter-v1").digest("hex"),
+    get revision() { return revision(); },
     validate(options) { z.object({}).strict().parse(options); },
     async check({ context, target, change }) {
       const runtime = runtimeFor(context);

@@ -5,8 +5,9 @@ Standalone merge authorization, quality evidence and protected-ref promotion for
 and has no DIM runtime, activation, credential, HTTP or control-plane extension
 dependency.
 
-The exact `dim-merge-policy-*` digest domains and authorization fields remain
-stable persisted ABI. The selected merge provider revision binds the reviewed
+The public authorization uses `namespaceId` and `authorityEpoch`.
+`./dim-legacy-codec` preserves the exact `projectId`/`generationId` stored bytes
+and `dim-merge-policy-*` digest domains. The selected merge provider revision binds the reviewed
 implementation, quality-provider revisions and integration/ref-policy settings.
 Missing quality providers and stale review/approval evidence fail closed.
 

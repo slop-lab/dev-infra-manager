@@ -24,11 +24,15 @@ it("runs the GS review and merge lifecycle with real Git and survives restart wi
     // Then
     expect(report).toMatchObject({
       initialStatus: "pending",
+      reviewNamespace: "tenant",
+      neutralReviewFields: true,
       approvedStatus: "approved",
       revokedStatus: "revoked",
       promoted: { outcome: "already-current", sequence: 1 },
       crashObserved: true,
       recoveredSequence: 1,
+      authorizationNamespace: "tenant",
+      authorizationEpochBound: true,
       restartedStatus: "stale",
       providerFailureClosed: true,
       persistedPathsPreserved: true,

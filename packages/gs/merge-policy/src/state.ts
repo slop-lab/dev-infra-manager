@@ -1,48 +1,25 @@
 import { createHash } from "node:crypto";
 import { chmodSync, lstatSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { z } from "zod";
+import {
+  decodeDimLegacyMergeAuthorization,
+  encodeDimLegacyMergeAuthorization,
+} from "./dim-legacy-codec.js";
+import {
+  mergeAuthorizationSchema,
+  mergeAuthorizationRecoveryProofSchema,
+  type MergeAuthorization,
+  type MergeAuthorizationRecoveryProof,
+  type StoredMergeAuthorization,
+} from "./model.js";
 
-const identifier = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
-const digest = z.string().regex(/^[0-9a-f]{64}$/);
-const attachment = z.object({ kind: z.string(), id: z.string(), digest }).strict().readonly();
-const recoveryProofSchema = z.object({
-  expectedTree: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
-  incarnationId: z.string().min(1),
-  authorityEpoch: digest,
-  ownerPrincipalId: z.string().min(1),
-  refPolicyRevision: digest,
-}).strict().readonly();
+export * from "./model.js";
 
-export const mergeAuthorizationSchema = z.object({
-  projectId: identifier,
-  repositoryId: identifier,
-  reviewId: digest,
-  generationId: digest,
-  envelopeId: digest,
-  policyDigest: digest,
-  protectedRef: z.string(),
-  proposalRef: z.string(),
-  expectedCommit: z.string(),
-  candidateCommit: z.string(),
-  candidateTree: z.string(),
-  approvals: z.array(z.object({ reviewerId: identifier, recordDigest: digest }).strict()).readonly(),
-  attachments: z.array(attachment).readonly(),
-}).strict().readonly();
-
-export type MergeAuthorization = z.infer<typeof mergeAuthorizationSchema>;
-export type MergeAuthorizationRecoveryProof = z.infer<typeof recoveryProofSchema>;
-export type StoredMergeAuthorization = {
-  readonly authorizationId: string;
-  readonly evidenceDigest: string;
-  readonly authorization: MergeAuthorization;
-  readonly recoveryProof?: MergeAuthorizationRecoveryProof;
-  readonly sequence?: number;
-};
-
-export function authorizationIdentity(authorization: MergeAuthorization) {
+export function authorizationIdentity(authorizationInput: MergeAuthorization) {
+  const authorization = mergeAuthorizationSchema.parse(authorizationInput);
+  const legacy = encodeDimLegacyMergeAuthorization(authorization);
   const evidenceDigest = createHash("sha256")
-    .update("dim-merge-policy-evidence-v1\0").update(JSON.stringify(authorization)).digest("hex");
+    .update("dim-merge-policy-evidence-v1\0").update(JSON.stringify(legacy)).digest("hex");
   return {
     authorizationId: createHash("sha256")
       .update("dim-merge-policy-authorization-v1\0").update(evidenceDigest).digest("hex"),
@@ -77,21 +54,20 @@ export class MergeAuthorizationStore {
     }
   }
 
-  close(): void {
-    this.#database.close();
-  }
+  close(): void { this.#database.close(); }
 
   prepare(
     authorizationInput: MergeAuthorization,
     recoveryProofInput?: MergeAuthorizationRecoveryProof,
   ): StoredMergeAuthorization {
     const authorization = mergeAuthorizationSchema.parse(authorizationInput);
-    const recoveryProof = recoveryProofInput === undefined ? undefined : recoveryProofSchema.parse(recoveryProofInput);
+    const recoveryProof = recoveryProofInput === undefined ? undefined
+      : mergeAuthorizationRecoveryProofSchema.parse(recoveryProofInput);
     const identity = authorizationIdentity(authorization);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       this.#database.prepare("INSERT OR IGNORE INTO authorizations(id,evidence,body) VALUES (?,?,?)")
-        .run(identity.authorizationId, identity.evidenceDigest, JSON.stringify(authorization));
+        .run(identity.authorizationId, identity.evidenceDigest, JSON.stringify(encodeDimLegacyMergeAuthorization(authorization)));
       if (recoveryProof !== undefined) {
         this.#database.prepare("INSERT OR IGNORE INTO authorization_recovery(id,body) VALUES (?,?)")
           .run(identity.authorizationId, JSON.stringify(recoveryProof));
@@ -107,6 +83,16 @@ export class MergeAuthorizationStore {
       throw new MergeAuthorizationStoreError("merge authorization recovery proof conflicts");
     }
     return prepared;
+  }
+
+  backfillRecoveryProof(authorizationId: string, proofInput: MergeAuthorizationRecoveryProof): void {
+    const proof = mergeAuthorizationRecoveryProofSchema.parse(proofInput);
+    this.#database.prepare("INSERT OR IGNORE INTO authorization_recovery(id,body) VALUES (?,?)")
+      .run(authorizationId, JSON.stringify(proof));
+    const stored = this.read().find((entry) => entry.authorizationId === authorizationId);
+    if (stored === undefined || JSON.stringify(stored.recoveryProof) !== JSON.stringify(proof)) {
+      throw new MergeAuthorizationStoreError("merge authorization recovery proof conflicts");
+    }
   }
 
   finalize(authorizationId: string, sequence: number): void {
@@ -127,20 +113,17 @@ export class MergeAuthorizationStore {
         || (row.recovery !== null && typeof row.recovery !== "string")) {
         throw new MergeAuthorizationStoreError("invalid merge authorization state");
       }
-      const authorization = mergeAuthorizationSchema.parse(JSON.parse(row.body));
+      const authorization = decodeDimLegacyMergeAuthorization(JSON.parse(row.body));
       const identity = authorizationIdentity(authorization);
       if (identity.authorizationId !== row.id || identity.evidenceDigest !== row.evidence) {
         throw new MergeAuthorizationStoreError("merge authorization digest mismatch");
       }
       const recoveryProof = typeof row.recovery === "string"
-        ? recoveryProofSchema.parse(JSON.parse(row.recovery))
+        ? mergeAuthorizationRecoveryProofSchema.parse(JSON.parse(row.recovery))
         : undefined;
-      return {
-        ...identity,
-        authorization,
+      return { ...identity, authorization,
         ...(recoveryProof === undefined ? {} : { recoveryProof }),
-        ...(typeof row.sequence === "number" ? { sequence: row.sequence } : {}),
-      };
+        ...(typeof row.sequence === "number" ? { sequence: row.sequence } : {}) };
     });
   }
 }

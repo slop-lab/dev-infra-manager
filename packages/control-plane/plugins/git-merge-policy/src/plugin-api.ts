@@ -45,8 +45,8 @@ export function mergeQualityGuards(extensions: readonly ControlPlaneExtension[])
 export function toGsMergeQualityGuards(guards: readonly MergeQualityGuard[]): readonly GsMergeQualityGuard[] {
   return guards.map((guard) => ({
     name: guard.name,
-    revision: guard.revision ?? createHash("sha256")
-      .update("dim-merge-quality-guard-adapter-v1\0").update(guard.name).digest("hex"),
+    get revision() { return guard.revision ?? createHash("sha256")
+      .update("dim-merge-quality-guard-adapter-v1\0").update(guard.name).digest("hex"); },
     check: (input) => guard.check({
       projectId: input.namespaceId,
       repositoryId: input.repositoryId,
