@@ -1,95 +1,94 @@
-# Git service extraction preparation
+# Git service extraction ownership ledger
 
-Base: approved development `c52eec55bbe29fe79b5f9a07db0dc081161a99a3`.
-This is an in-monorepo preparation checkpoint, not a repository launch,
-publication, deployment, or claim that every Git feature is extraction-ready.
+The P2 work builds on the separate production-history latency checkpoint
+`79dc2b64daf45f1ce5c6d400b1aaf5bfe3c9d460`. It completes the ownership cuts
+identified by the earlier extraction preparation. It does not launch an external
+repository, publish packages, deploy services or claim installed performance.
 
-## Observed dependency cuts
+## Implemented dependency cuts
 
-- Repository transport/storage primitives are Node-only, but their current
-  public selectors expose DIM Project/workspace names. Protected-ref orchestration
-  directly loads DIM activation/import proofs and format-12 SQLite records.
-- The repository extension SDK imports the DIM control-plane framework; optional
-  review, merge, PR, CI and sync plugins still depend on that SDK.
-- Git-CI contracts depend on DIM execution contracts; scheduled tracing depends
-  on DIM execution clients. CI does not require the PR plugin.
-- The Native Git service client combines portable models with DIM operation,
-  role-attestation and connection conventions. Host and Web packages are adapters.
-- Six Git model/React libraries are already DIM-independent. The tracing
-  evaluator is neutral except for its DIM runtime-registration wrapper.
+| GS owner | Existing source/behavior moved from | DIM responsibility retained |
+| --- | --- | --- |
+| `repository` | Git storage, executable integrity, transport and protected-ref CAS/recovery ordering | Native import/activation proofs and format-12 journal translation |
+| `repository-service` | Independent SQLite catalog, policy updates, branch baselines, owner exclusion and promotion journal | Project registration and `.dim/repos.yml` interpretation |
+| `repository-contracts` | Git policy, candidate refs and snapshot models in `contracts/git` | Generation-bound admission and Project attachment contracts |
+| `ci-contracts` | Candidate execution descriptors, events, status and workflow semantics in `contracts/ci` | Execution protocol, scheduler and placement contracts |
+| `review-contracts`, `review` | Review construction, Git evidence, immutable records/decisions, currentness, matchers and compact P1 provenance in `git-review` | Credentials, HTTP/CLI, activation and raw proposal acquisition journal |
+| `merge-policy` | Merge preparation, quality authorization and promotion in `git-merge-policy` | Operator presentation and DIM activation binding |
+| `diff-service`, `blame-service` | Immutable Git reads in the matching DIM plugins | HTTP authentication, scope and Project mapping |
+| `pull-request-service`, `discussions-service` | PR storage, revision pins and discussion composition in the matching DIM plugins | Routes, principal authentication and owner activation lifecycle |
+| `ci` | Candidate workflow reads, immutable plan store, evidence checks and indexed delivery outbox in `git-ci` | Workflow registration, scheduler/profile codecs, workers, HTTP and delivery credentials |
+| `sync` | Fetch/propose/publish algorithms in `git-sync` | Remote credential selection, host configuration and route mapping |
+| `client` | Typed Git views, capability checks and exact-revision PR workflow in `service-clients/native-git` | Bounded HTTP transport, private connections, generation attestation, Project mapping and operations |
 
-## Implementation order
+Model, React and tracing packages from the earlier cut remain GS-owned. The
+Node evaluator still implements the canonical `dim:review` detector API and
+retains existing owned-resource identities. These names and persisted marker
+strings are not DIM implementation dependencies or compatibility forwarding
+modules. Scheduled tracing and installation topology remain DIM integrations.
 
-1. Establish the movable `packages/gs/*` owner with GS-only build configuration.
-   Move the portable model/UI libraries and neutral tracing implementation to
-   `@slop-lab/gs-*`; update consumers and artifact composition without aliases.
-2. Move the existing repository initialization, executable verification, CGI
-   backend, routing and atomic Git primitives into `gs-repository`. Public
-   selectors use namespace/repository and principal identity, not DIM records.
-   Keep a DIM translation boundary for existing Project/workspace interfaces.
-3. Extract protected-ref ordering behind target-proof, durable-journal and
-   policy-provider ports plus an explicit serialization boundary. Bind existing
-   DIM proofs/state at the adapter; do not duplicate a scheduler or state engine.
-4. Run a minimal GS HTTP composition outside DIM registration/activation with
-   real Git reads/writes, protected-write denial and repository-scoped grants.
-   Run existing DIM protected-ref, review, PR and sync regressions where affected.
-5. Update ownership, package/build/install metadata and outcome-oriented release
-   notes. Record exact remaining reverse dependencies rather than relabeling
-   DIM-coupled packages as independent.
+## Composition, not a mandatory ladder
 
-## Invariants and verification
+- Repository catalog/promotion has no review, PR, CI or scheduler dependency.
+  Protected promotion still requires an explicitly selected authorizer.
+- Diff and blame compose only repository reads and principal authorization.
+- PR lifecycle works without human review. Review is an injected
+  `ReviewRequest`; discussions explicitly compose PR plus immutable diff.
+- Review/merge compose typed repository authority and optional preparation and
+  quality providers. Authorization policy namespaces cannot silently disappear.
+- CI uses selected typed workflow/execution providers and review capabilities,
+  not PR or DIM worker profiles. Missing/stale required evidence denies promotion.
+- Sync fetch/propose/publish does not require review or CI.
+- The portable client depends on semantic contracts/models, not server feature
+  implementations. DIM adds authentication and generation fencing outside it.
 
-- No GS source, type, runtime or build dependency on DIM packages/frameworks.
-- Preserve existing receive-hook bytes and persisted digest/journal domains;
-  those private storage markers are not permission to depend on DIM code.
-- Preserve intent-before-CAS, exact candidate/tree/base/policy/issuer bindings,
-  fail-closed required providers and recovery that never replays authorization.
-- Standalone hosting does not imply standalone durable protected promotion:
-  any missing independent journal implementation remains an explicit blocker.
-- All test implementations stay in `tests/`; use disposable real Git/HTTP state,
-  strict checks and package builds, not static import checks alone.
-- No changes to prior worktrees, live services, credentials, runtime installation,
-  protected refs, the installer facade or frozen CLI-host v1 fixtures.
+The independent source graph closes within `packages/gs`, its declared external
+dependencies and its own compiler/build configuration. DIM adapters depend
+inward; GS source, types, build scripts and configuration do not import DIM.
 
-## Delivered checkpoint
+## Durable authority and integrity
 
-`packages/gs` now contains nine publishable `@slop-lab/gs-*` packages plus
-private workspace/build tooling. The repository engine owns the actual Git
-initialization, transport, integrity and atomic-update implementations. Public
-selectors are namespace/repository keys and writer identities are principals.
-The four DIM primitive files translate Project/workspace inputs inward; they
-are not an alternative implementation of those Git algorithms.
+The standalone SQLite owner uses a process-lifetime exclusive owner transaction,
+not a PID-file lock. Catalog, policy and protected-ref history validate before
+use. Missing known storage fails closed; another live process cannot recover
+or cancel its intents. Policy replacement uses expected policy/head identity.
+Targets bind incarnation, authority epoch, principal, policy digest, protected
+head and selected provider revision.
 
-Protected-ref ordering is shared through the GS target, journal and policy
-ports. DIM supplies current activation/import/policy proof and translates intents
-back into the unchanged format-12 JSON/digest. Existing serialized callers use
-an explicit already-exclusive binding rather than reacquiring the DIM queue.
-Tracking/evaluator contracts are GS-owned; the `dim.review-tracing.runtime`
-registration port stays in the DIM tracing adapter. Scheduled execution still
-uses the existing DIM task queue and lease client.
+Read gates issue revocable borrowed read authority. Mutation/exclusive gates
+add promotion without reacquiring their already-held serialization boundary.
+Selected ref-update providers receive read authority only. Exact finalized
+lookup matches the complete accepted action identity and returns its durable
+intent and receipt. Merge recovery can finish a missing authorization receipt
+after CAS, but never guesses acceptance from the current Git head or reruns
+an unapplied authorization.
 
-The whole copied GS subtree installs, builds and typechecks outside DIM. A
-separate isolated repository package test performs real Git clone and ordinary
-push, denies protected writes and cross-repository credentials, and rejects hook
-and executable replacement. Its constructor creates no DIM registration,
-activation or state database. These checks do not establish independent durable
-promotion or independence of every existing optional service plugin.
+DIM keeps its format-12 journal and existing digest domains through explicit
+translation. Existing receive-hook bytes, review/evidence identities and P1
+bounded version/provenance/outbox invariants remain intact. PR pin repair runs
+inside owner activation, before business readiness, not through an inactive
+external mutation gate.
 
-## Exact remaining extraction blockers
+## Source history and provenance
 
-| Boundary | Remaining dependency / owner action |
-| --- | --- |
-| Standalone durable promotion | GS has the CAS/recovery algorithm but no independent durable catalog/journal implementation. The current binding is `git-repositories/src/repository-cas.ts` into `repository-ref-state.ts`, import anchors and `bundle_activation`. A future GS owner must supply durable ports and chain validation, not reuse DIM's database format as its required runtime. |
-| Optional service features | The DIM repository `/plugin-api` still imports `ControlPlaneExtension` and carries activation/lease context. Review, merge, PR, diff/blame service, comments, sync and Git-CI bindings still use that SDK. They have not been renamed as independent GS plugins. |
-| Git contracts | `packages/contracts/git` mixes policy/ref models with DIM Project attachment and generation-bound HTTP admission. Split domain contracts from that transport before moving the package; a prefix-only rename would conceal coupling. |
-| CI and execution | `packages/contracts/ci` and the DIM Git-CI implementation still use DIM execution schemas and evidence delivery. Scheduler leases, placement and runtime configuration remain DIM. A future typed check-provider adapter must preserve candidate/base/policy/issuer bindings. CI is not made dependent on PR by this checkpoint. |
-| Caller API | `packages/service-clients/native-git` still combines DIM operations, private role connections, generation attestation and Git/CI views. The host/Web adapters remain DIM-owned consumers of GS models. |
-| Synchronization | Git-owned fetch/proposal/publish logic still uses the DIM repository extension context. `.dim/repos.yml` parsing and Project mapping remain in the DIM host adapter; future GS sync configuration needs explicit translation, not a `.dim` reader. |
-| Detector API naming | The Node evaluator runs without DIM code but still implements the canonical `dim:review` detector module and retains `dim-review-trace-*` / `dev.dim.review-tracing.owner` resource identities. These are not imports or forwarding aliases. Public API renaming and owned-resource transition are not claimed complete by this mechanical boundary extraction. |
-| Deployment and artifact management | DIM admin/installer/deployment still own the Native Git service profile and selected plugin topology. Their source-bundle scripts explicitly map the aggregate artifact version to `GS_BUILD_VERSION`; GS itself has no DIM build dependency. No external repository or release was created. |
+The [export tool](gs-source-export.md) exports an exact committed GS tree plus
+a companion bundle containing the selected original commit and its full,
+unrewritten ancestry. Its manifest records original/export paths, blob IDs,
+modes, SHA-256 digests, package manifests and dependency edges. Moves in this
+branch retain their original monorepo history in that ancestry; no filtered or
+fabricated commit history is substituted. The monorepo lock digest is recorded
+as provenance, not passed off as a standalone GS lockfile.
 
-Independent packages form a dependency graph, not a mandatory ladder: diff and
-blame models do not import discussions/review/CI; PR models depend on discussion
-models but do not require a human-review or CI runtime. Existing DIM optional
-composition tests continue to protect repository-only and review-without-CI
-behavior while these larger adapter cuts remain visible.
+Tests remain central under `tests/gs` and the affected DIM test directories.
+Public drivers exercise real Git hosting, independent durable promotion,
+review/merge crash recovery, optional services and typed CI delivery/restart.
+The export is source-only; standalone dependency resolution/build/check and
+artifact composition are explicit validation steps, not publication.
+
+## Operator delivery boundary
+
+Normal exact-commit DIM CI, artifact deployment and installed confirmation remain
+operator gates. External forge selection, standalone package publication and any
+detector API/resource naming transition are not performed by this change.
+Prior worktrees, user data, protected refs, installer facade and frozen CLI-host
+wire-v1 fixtures are outside the modification scope.

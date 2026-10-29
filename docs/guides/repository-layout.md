@@ -11,6 +11,11 @@ Production packages are grouped by where they run and what they own:
 | `packages/control-plane/deployment` | `@this-project/control-plane-deployment` (private) | Composition artifact for the installer’s fixed service-image profile |
 | `packages/control-plane/admin` | `@slop-lab/dim-control-plane-admin` | Explicit service deployment and operator connection tools |
 | `packages/gs/repository` | `@slop-lab/gs-repository` | Git-owned storage/transport primitives, standalone hosting and protected-ref ordering through typed authority/journal/policy ports |
+| `packages/gs/repository-service` | `@slop-lab/gs-repository-service` | Standalone durable catalog, policy, branch baselines, promotion journal and scoped authority |
+| `packages/gs/{repository-contracts,review-contracts,ci-contracts}` | `@slop-lab/gs-*-contracts` | Neutral repository, review and CI semantic contracts |
+| `packages/gs/{review,merge-policy,ci,sync}` | `@slop-lab/gs-*` | Independently selected review, protected promotion, typed CI and synchronization engines |
+| `packages/gs/{diff-service,blame-service,pull-request-service,discussions-service}` | `@slop-lab/gs-*-service` | Optional authorized Git views, durable PR lifecycle and explicit discussion composition |
+| `packages/gs/client` | `@slop-lab/gs-client` | Portable typed client over an injected bounded semantic transport |
 | `packages/gs/review-tracing-node` | `@slop-lab/gs-review-tracing-node` | Optional brokered JS/TS detector evaluator; DIM registration and scheduled placement remain adapters |
 | `packages/gs/review-tracing` | `@slop-lab/gs-review-tracing` | Neutral tracking, comparison and detector runtime contracts; no DIM extension registration |
 | `packages/contracts/<name>` | `@slop-lab/dim-contracts-<name>` | Shared configuration and wire schemas without service or host implementations |
@@ -36,7 +41,8 @@ client or plugin-framework dependency. The current DIM repository adapter binds
 registration, activation, workspace grants and format-12 durable state to that
 engine. Host and Web adapters connect those services to the portable UI. See
 [Git pull requests](../specs/git-pull-requests.md) and the
-[extraction checkpoint](../development/gs-extraction-prep.md) for remaining cuts.
+[extraction ledger](../development/gs-extraction-prep.md) for the completed cuts
+and operator delivery boundaries.
 The [Git capability map](git-capabilities.md) records the complete library,
 authority, transport, policy and CLI/Web responsibility boundaries and practical
 operator flows. Source manifests stay private; generated `dist` manifests are

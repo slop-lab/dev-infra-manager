@@ -7,13 +7,15 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
-- Prepare Git service extraction through a DIM-independent `@slop-lab/gs-*`
-  source owner. Share repository transport, integrity and protected-ref ordering
-  through typed authority/journal/policy boundaries; retain DIM registration,
-  activation, workspace grants and durable state in adapters. Portable Git
-  models, React presentation and detector evaluation build without DIM runtime
-  registration. Preserve existing stored hook/evidence identities and document
-  the remaining optional-feature, CI, client and standalone-journal boundaries.
+- Make Git services independently composable through DIM-independent
+  `@slop-lab/gs-*` packages. Support standalone durable repository policy and
+  protected promotion, review/merge, optional diff/blame, PR/discussions, CI and
+  synchronization, plus a portable typed client. Require selected policy
+  providers and exact durable evidence; recover accepted promotions without
+  replaying authorization. Keep DIM activation, Project/workspace mapping,
+  credentials, transport and scheduler placement in inward adapters. Preserve
+  stored hook/evidence identities and prepare an offline source export with
+  original history and per-file provenance, without publishing or deploying it.
 
 - Repository imports consistently configure `.dim/` review with the connected reviewer, preserve explicit review and CI policies, and report missing review configuration without silently waiving protection. Initial preparation honors the operation deadline, attests the serving generation, and distinguishes explicit rejection from an unconfirmed write without blind retries or discarding immutable import intent.
 - CI source acquisition reports bounded authentication, transport and timeout failure codes without exposing read credentials; failed acquisition remains failed required evidence.
