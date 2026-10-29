@@ -23,7 +23,7 @@ failures group as follows; repeated assertions are not independent defects.
 | Nested diagnostic mode | executable mode mismatch | `nativeWorkspaceNestedDockerDiagnostic.test.ts` | source copied with reviewed executable modes | Passes in the exact source gate |
 | Native Git owner image | copied removed `core/packages/native-git/...` path | opt-in `storageOwnership.test.ts` | pinned Node image and current monorepo path | Fixed to copy the owning `git-repositories` source; 6/6 pass |
 | Pinned mise smoke drift | expected mandatory mirror, old help/footer, old controller/CLI paths and reconnect accounting without a post-update baseline | `mise-install-smoke.bash` | pinned mise v2026.8.4 in its disposable container | Updated to current optional-provider, selected-host help, independent CLI, and managed-controller contracts; an incomplete client must reconnect after the controller PID changes; smoke passes |
-| Managed controller update | active probe used ordinary state/runtime roots and accepted controller-shaped processes, Node eval modes or units below the install tree | real mise host update with a running managed controller | managed state root, `/dim/managed` runtime identity, private unit metadata and the exact installed host entrypoint as Node's first script argument | Fixed PID and pre-PID systemd probes with focused tests; active update restarts and reconnects while positional, eval and unit lookalikes are rejected |
+| Managed controller update | active probe used ordinary state/runtime roots and accepted controller-shaped processes, Node eval modes or units below the install tree | real mise host update with a running managed controller | managed state root, `/dim/managed` runtime identity, private unit metadata and the exact installed host entrypoint after a bounded set of non-executing Node options | Fixed PID and pre-PID systemd probes with focused tests; active update restarts and reconnects while positional, eval and unit lookalikes are rejected and DIM's source/debug launch options remain detectable |
 | Guest service removal race | `ESRCH: no such process` after live identity validation, possible orphaned child, or owner metadata replaced while opening | parallel guest service cleanup | supervisor exits between identity check and signal, or atomically republishes its owner record | Retry owner publication, recheck captured boot/start identities immediately before same-user workspace signals, and terminate the recorded child after supervisor exit; deterministic regressions and complete source gates pass |
 
 The final source-gate logs supersede the earlier aggregate failure result; no
@@ -32,13 +32,13 @@ assertion, permission guard or test selection was weakened.
 ## Complete source gate
 
 The repository's exact isolated gate was run at executable-source commit
-`693acce40d4db6bbdcc4faa8ac1aaa1096d1627d` using
+`7abc455e74ecb15c3180f568f98a375cd2c10c47` using
 the checked-in wrapper and pinned Debian Bookworm images:
 
 ```sh
-DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-693a-node24 \
+DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-7abc-node24-quiet \
   DIM_SOURCE_NODE_MAJOR=24 bash scripts/checks/source-gate-container.bash
-DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-693a-node26 \
+DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-7abc-node26 \
   DIM_SOURCE_NODE_MAJOR=26 bash scripts/checks/source-gate-container.bash
 ```
 
@@ -46,7 +46,7 @@ Both lanes completed all eight stages: prerequisites, strict checks, package
 build, ordinary tests, executable examples, privileged service fixtures,
 package packs and production dependency audit. Each lane reported:
 
-- unit: 2,027 passed, 5 skipped;
+- unit: 2,029 passed, 5 skipped;
 - CLI: 87 passed;
 - host commands: 12 passed;
 - scenarios: 536 passed, 19 skipped;
@@ -56,6 +56,14 @@ package packs and production dependency audit. Each lane reported:
 The executable-examples stage also reports the scheduled-review recipe at four
 passed and one skipped. That skip is the explicit real-Docker handler case; the
 same case passed separately in the Docker-focused follow-up recorded below.
+
+An initial Node 24 gate run concurrently with Node 26 hit the unrelated
+execution-scheduler reservation-renewal timing test once (HTTP 409 instead of
+200). The exact test passed 20 focused repetitions and its full file passed 10
+repetitions on Node 24; the complete Node 26 gate passed concurrently, and the
+complete Node 24 gate then passed when run alone. The final receipt references
+that quiet complete run. No retry wrapper, timeout increase or assertion change
+was made.
 
 The source-gate container runs as disposable Debian root while ordinary
 permission-sensitive checks were also exercised as the non-root `dim` user.
